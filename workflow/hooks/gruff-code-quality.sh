@@ -34,8 +34,14 @@
 #   node_modules/.bin, bin, .venv/bin, ~/.local/bin, then PATH. It deliberately
 #   does not auto-discover `*/.venv/bin` or build-output directories. Monorepos
 #   with a deliberately managed analyzer in a non-standard location can opt in
-#   explicitly with `GRUFF_TS_BIN`, `GRUFF_PHP_BIN`, `GRUFF_GO_BIN`,
-#   `GRUFF_RS_BIN`, or `GRUFF_PY_BIN`; the value must name an executable file.
+#   explicitly, either per repo in `.goat-flow/config.yaml` under
+#   `hooks.gruff-code-quality.binaries.<lang>` (e.g. `binaries: { py:
+#   strands_agents/.venv/bin/gruff-py }`; the value must be a repo-relative
+#   path that stays inside the repo and names an executable file), or per
+#   machine with `GRUFF_TS_BIN`, `GRUFF_PHP_BIN`, `GRUFF_GO_BIN`,
+#   `GRUFF_RS_BIN`, or `GRUFF_PY_BIN` naming an executable path. The env
+#   override wins over the config entry; either override names the exact
+#   executable - the hook never searches arbitrary subtrees.
 #   Timeout defaults to 60s via `GRUFF_CODE_QUALITY_TIMEOUT_SECONDS`; set
 #   `GRUFF_TS_TIMEOUT_SECONDS`, `GRUFF_PHP_TIMEOUT_SECONDS`,
 #   `GRUFF_GO_TIMEOUT_SECONDS`, `GRUFF_RS_TIMEOUT_SECONDS`, or
@@ -314,23 +320,112 @@ payload_supported_file_paths() {
   done | awk '!seen[$0]++'
 }
 
+# Read the repo-owned analyzer override for one binary from
+# `.goat-flow/config.yaml` (`hooks.gruff-code-quality.binaries.<lang>`). Prints
+# the raw configured value, or nothing when the config or key is absent. The
+# awk pass tracks indentation depth rather than fixed columns so hand-edited
+# indent widths and CRLF files parse; anything that does not match the expected
+# key path fails soft to "not configured".
+config_binary_override() {
+  local root="$1"
+  local binary="$2"
+  local lang="${binary#gruff-}"
+  local config_file="$root/.goat-flow/config.yaml"
+  local value
+  [[ -f "$config_file" ]] || return 0
+  value="$(awk -v lang="$lang" '
+    BEGIN {
+      want[1] = "hooks"
+      want[2] = "gruff-code-quality"
+      want[3] = "binaries"
+      want[4] = lang
+      depth = 0
+    }
+    {
+      sub(/\r$/, "")
+      trimmed = $0
+      sub(/^ */, "", trimmed)
+      if (trimmed == "" || trimmed ~ /^#/) next
+      ind = length($0) - length(trimmed)
+      while (depth > 0 && ind <= lvl[depth]) depth--
+      if (depth == 0 && ind != 0) next
+      if (trimmed !~ /^[A-Za-z0-9_-]+:( |$)/) next
+      key = trimmed
+      sub(/:.*$/, "", key)
+      if (key != want[depth + 1]) next
+      depth++
+      lvl[depth] = ind
+      if (depth == 4) {
+        rest = trimmed
+        sub(/^[A-Za-z0-9_-]+:[ ]*/, "", rest)
+        print rest
+        exit
+      }
+    }
+  ' "$config_file" 2>/dev/null || true)"
+  if [[ "$value" == \"*\" && "$value" == *\" ]]; then
+    value="${value#\"}"
+    value="${value%\"}"
+  elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
+    value="${value#\'}"
+    value="${value%\'}"
+  else
+    value="${value%% \#*}"
+    value="${value%"${value##*[![:space:]]}"}"
+  fi
+  [[ -n "$value" ]] && printf '%s' "$value"
+  return 0
+}
+
+# Resolve a repo-owned config override to an absolute path, or print nothing
+# when the value is not acceptable. Only repo-relative values that stay inside
+# the repo are accepted: machine-specific absolute, home, or drive-letter paths
+# belong in the GRUFF_<LANG>_BIN env override, and rejecting `.`/`..` segments
+# keeps the named executable inside the reviewed repo (the ADR-032 property:
+# configuration names the exact executable, discovery never leaves the repo).
+resolve_config_binary() {
+  local root="$1"
+  local value="${2//\\//}"
+  value="${value#./}"
+  case "$value" in
+    ''|/*|~*|[A-Za-z]:*) return 0 ;;
+  esac
+  case "/$value/" in
+    */../*|*/./*) return 0 ;;
+  esac
+  printf '%s/%s' "$root" "$value"
+}
+
 # Discovery covers each ecosystem's standard install location - package-manager
 # bin dirs (vendor/bin for composer, node_modules/.bin for npm), an in-repo bin/,
 # the root virtualenv (.venv/bin), user-local installs (~/.local/bin), and finally
 # PATH. It deliberately excludes a `*/.venv/bin` subdirectory glob and the
 # `target/debug` build-output dir: auto-executing a name-matched binary from an
 # arbitrary subtree or build artifact on every edit is RCE-shaped for little gain.
-# A per-language `GRUFF_<LANG>_BIN` override is explicit opt-in and therefore safe
-# for monorepos with a deliberately managed analyzer in a non-standard location.
+# A per-language `GRUFF_<LANG>_BIN` env override or a repo-owned
+# `hooks.gruff-code-quality.binaries.<lang>` config entry is explicit opt-in and
+# therefore safe for monorepos with a deliberately managed analyzer in a
+# non-standard location. Env wins over config; an override that is set but
+# invalid resolves to nothing rather than falling back to discovery, so a wrong
+# override fails loudly in the caller's diagnostic instead of silently running
+# a different binary.
 discover_binary() {
   local root="$1"
   local binary="$2"
-  local candidate env_name override
+  local candidate env_name override config_override resolved
   env_name="$(binary_env_name "$binary")"
   override="${!env_name:-}"
   if [[ -n "$override" ]]; then
     if [[ -x "$override" ]]; then
       printf '%s' "$override"
+    fi
+    return 0
+  fi
+  config_override="$(config_binary_override "$root" "$binary")"
+  if [[ -n "$config_override" ]]; then
+    resolved="$(resolve_config_binary "$root" "$config_override")"
+    if [[ -n "$resolved" && -f "$resolved" && -x "$resolved" ]]; then
+      printf '%s' "$resolved"
     fi
     return 0
   fi
@@ -472,6 +567,7 @@ self_test() {
   local payload paths ranges variant report_output report_json first_line
   local help_full help_missing counts
   local tmp output override_path config_error
+  local sample_payload discovered config_path winner
   if ! command -v jq >/dev/null 2>&1; then
     printf 'gruff-code-quality self-test: jq unavailable\n' >&2
     return 1
@@ -537,21 +633,85 @@ self_test() {
   }
 
   tmp="$(mktemp -d)"
-  mkdir -p "$tmp/src" "$tmp/empty-bin" "$tmp/strands_agents/.venv/bin"
+  mkdir -p "$tmp/src" "$tmp/empty-bin" "$tmp/env-bin" "$tmp/strands_agents/.venv/bin" "$tmp/.goat-flow"
+  sample_payload='{"tool_name":"Edit","tool_input":{"file_path":"src/sample.py","changed_ranges":[{"startLine":1,"endLine":1}]}}'
   printf 'rules: {}\n' > "$tmp/.gruff-py.yaml"
   printf 'print("x")\n' > "$tmp/src/sample.py"
-  output="$(PATH="$tmp/empty-bin" process_file '{"tool_name":"Edit","tool_input":{"file_path":"src/sample.py","changed_ranges":[{"startLine":1,"endLine":1}]}}' "$tmp" "src/sample.py" 1 1 2>&1)"
-  [[ "$output" == *".gruff-py.yaml present but gruff-py not found on search paths"* && "$output" == *"GRUFF_PY_BIN"* ]] || {
+  output="$(PATH="$tmp/empty-bin" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"
+  [[ "$output" == *".gruff-py.yaml present but gruff-py not found on search paths"* && "$output" == *"hooks.gruff-code-quality.binaries.py"* && "$output" == *"GRUFF_PY_BIN"* ]] || {
     rm -rf "$tmp"
     printf 'gruff-code-quality self-test: binary-missing diagnostic failed: %s\n' "$output" >&2
     return 1
   }
   printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/strands_agents/.venv/bin/gruff-py"
   chmod +x "$tmp/strands_agents/.venv/bin/gruff-py"
+  # The nested venv binary now exists but no override names it - discovery must
+  # still skip it (ADR-032: no arbitrary-subtree auto-discovery).
+  discovered="$(PATH="$tmp/empty-bin" discover_binary "$tmp" gruff-py)"
+  [[ -z "$discovered" ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: nested venv must not be auto-discovered: %s\n' "$discovered" >&2
+    return 1
+  }
   override_path="$(PATH="$tmp/empty-bin" GRUFF_PY_BIN="$tmp/strands_agents/.venv/bin/gruff-py" discover_binary "$tmp" gruff-py)"
   [[ "$override_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
     rm -rf "$tmp"
     printf 'gruff-code-quality self-test: env binary override failed: %s\n' "$override_path" >&2
+    return 1
+  }
+  output="$(PATH="$tmp/empty-bin" GRUFF_PY_BIN="$tmp/missing-gruff-py" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"
+  [[ "$output" == *"GRUFF_PY_BIN is set but is not executable: $tmp/missing-gruff-py"* ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: invalid env override diagnostic failed: %s\n' "$output" >&2
+    return 1
+  }
+  # Repo-owned config override: quoted value plus CRLF line endings must both
+  # parse, and the resolved path must be the configured nested-venv binary.
+  # These config-driven calls keep the real PATH appended because the parser
+  # needs awk; they never reach the PATH binary search - a present config
+  # override returns from discovery before the standard-location loop.
+  printf 'hooks:\r\n  gruff-code-quality:\r\n    enabled: true\r\n    binaries:\r\n      py: "strands_agents/.venv/bin/gruff-py"\r\n' > "$tmp/.goat-flow/config.yaml"
+  config_path="$(PATH="$tmp/empty-bin:$PATH" discover_binary "$tmp" gruff-py)"
+  [[ "$config_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: config binary override failed: %s\n' "$config_path" >&2
+    return 1
+  }
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/env-bin/gruff-py"
+  chmod +x "$tmp/env-bin/gruff-py"
+  winner="$(PATH="$tmp/empty-bin" GRUFF_PY_BIN="$tmp/env-bin/gruff-py" discover_binary "$tmp" gruff-py)"
+  [[ "$winner" == "$tmp/env-bin/gruff-py" ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: env override must beat config override: %s\n' "$winner" >&2
+    return 1
+  }
+  chmod -x "$tmp/strands_agents/.venv/bin/gruff-py"
+  output="$(PATH="$tmp/empty-bin:$PATH" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"
+  [[ "$output" == *"hooks.gruff-code-quality.binaries.py points at strands_agents/.venv/bin/gruff-py which is not an executable file"* ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: non-executable config override diagnostic failed: %s\n' "$output" >&2
+    return 1
+  }
+  chmod +x "$tmp/strands_agents/.venv/bin/gruff-py"
+  printf 'hooks:\n  gruff-code-quality:\n    binaries:\n      py: missing/gruff-py\n' > "$tmp/.goat-flow/config.yaml"
+  output="$(PATH="$tmp/empty-bin:$PATH" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"
+  [[ "$output" == *"hooks.gruff-code-quality.binaries.py points at missing/gruff-py which does not exist"* ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: missing config override diagnostic failed: %s\n' "$output" >&2
+    return 1
+  }
+  printf 'hooks:\n  gruff-code-quality:\n    binaries:\n      py: /usr/bin/env\n' > "$tmp/.goat-flow/config.yaml"
+  output="$(PATH="$tmp/empty-bin:$PATH" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"
+  [[ "$output" == *"hooks.gruff-code-quality.binaries.py must be a repo-relative path inside the repo, got /usr/bin/env"* ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: absolute config override must be rejected: %s\n' "$output" >&2
+    return 1
+  }
+  printf 'hooks:\n  gruff-code-quality:\n    binaries:\n      py: ../outside/gruff-py\n' > "$tmp/.goat-flow/config.yaml"
+  output="$(PATH="$tmp/empty-bin:$PATH" process_file "$sample_payload" "$tmp" "src/sample.py" 1 1 2>&1)"
+  [[ "$output" == *"hooks.gruff-code-quality.binaries.py must be a repo-relative path inside the repo, got ../outside/gruff-py"* ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: escaping config override must be rejected: %s\n' "$output" >&2
     return 1
   }
   rm -rf "$tmp"
@@ -1127,6 +1287,7 @@ process_file() {
   local allow_cached_fallback="${5:-1}"
   local rel_path abs_path binary binary_path config_file config_rel
   local binary_env binary_override config_error
+  local config_binary config_key resolved_binary
   local ranges help output status suppressed ignored_desc uses_native_regions
   local max_findings floor_rank report_json scope_fields
   local total err warn adv surfaced floored more
@@ -1152,11 +1313,22 @@ process_file() {
   if [[ -z "$binary_path" ]]; then
     binary_env="$(binary_env_name "$binary")"
     binary_override="${!binary_env:-}"
+    config_binary="$(config_binary_override "$root" "$binary")"
+    config_key="hooks.gruff-code-quality.binaries.${binary#gruff-}"
     if [[ -n "$binary_override" ]]; then
       printf 'gruff-code-quality: %s is set but is not executable: %s; skipped\n' "$binary_env" "$binary_override" >&2
+    elif [[ -n "$config_binary" ]]; then
+      resolved_binary="$(resolve_config_binary "$root" "$config_binary")"
+      if [[ -z "$resolved_binary" ]]; then
+        printf 'gruff-code-quality: %s must be a repo-relative path inside the repo, got %s; use %s for machine-specific paths; skipped\n' "$config_key" "$config_binary" "$binary_env" >&2
+      elif [[ ! -e "$resolved_binary" ]]; then
+        printf 'gruff-code-quality: %s points at %s which does not exist; skipped\n' "$config_key" "${resolved_binary#"$root"/}" >&2
+      else
+        printf 'gruff-code-quality: %s points at %s which is not an executable file; skipped\n' "$config_key" "${resolved_binary#"$root"/}" >&2
+      fi
     else
       config_rel="${config_file#"$root"/}"
-      printf 'gruff-code-quality: %s present but %s not found on search paths (%s); set %s to an executable path for non-standard monorepo layouts; skipped\n' "$config_rel" "$binary" "$BINARY_SEARCH_PATHS" "$binary_env" >&2
+      printf 'gruff-code-quality: %s present but %s not found on search paths (%s); set %s in .goat-flow/config.yaml or %s to an executable path for non-standard monorepo layouts; skipped\n' "$config_rel" "$binary" "$BINARY_SEARCH_PATHS" "$config_key" "$binary_env" >&2
     fi
     return 0
   fi

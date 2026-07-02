@@ -2,7 +2,12 @@
  * Footgun and lesson fact extractors for the learning-loop system.
  * Analyzes category-bucket markdown files for evidence quality, entry counts, and stale references.
  */
-import type { SharedFacts, ReadonlyFS, BucketFreshness } from "../../types.js";
+import type {
+  SharedFacts,
+  ReadonlyFS,
+  BucketFreshness,
+  GraduationCandidate,
+} from "../../types.js";
 import type { LoadedConfig } from "../../config/types.js";
 import {
   EVIDENCE_PATTERN,
@@ -179,6 +184,32 @@ function extractMaxEntryDate(body: string): string | null {
   return max;
 }
 
+/**
+ * Collect feedback-loop graduation candidates from one bucket body.
+ *
+ * A line-start `**Recurrence update` marker under an entry heading records that the
+ * mistake happened again after the entry existed; per the feedback-loop doctrine the
+ * prevention should then graduate from prose to a structural gate (preflight check,
+ * CI step, deny pattern). Resolved entries are skipped because their trap is closed.
+ * The result is report-only `stats` data - never a `--check` finding - so the
+ * existing corpus cannot turn the gate into permanent warning noise.
+ *
+ * @param body Bucket markdown body with frontmatter already stripped.
+ * @returns Entries with at least one recurrence marker, in file order.
+ */
+function collectGraduationCandidates(body: string): GraduationCandidate[] {
+  const candidates: GraduationCandidate[] = [];
+  for (const section of body.split(/^(?=##\s)/m)) {
+    const heading = section.match(/^##\s+(?:Footgun|Lesson|Pattern):\s*(.+)/);
+    if (heading?.[1] === undefined) continue;
+    if (/^\*\*Status:\*\*\s*resolved\b/im.test(section)) continue;
+    const recurrenceCount = countMatches(section, /^\*\*Recurrence update\b/gm);
+    if (recurrenceCount === 0) continue;
+    candidates.push({ title: heading[1].trim(), recurrenceCount });
+  }
+  return candidates;
+}
+
 /** Build a per-bucket freshness record from one markdown entry. */
 function buildBucketFreshness(
   entry: MarkdownEntry,
@@ -207,6 +238,7 @@ function buildBucketFreshness(
     sizeBytes: Buffer.byteLength(entry.content, "utf8"),
     lineCount:
       entry.content.split("\n").length - (entry.content.endsWith("\n") ? 1 : 0),
+    graduationCandidates: collectGraduationCandidates(body),
   };
 }
 

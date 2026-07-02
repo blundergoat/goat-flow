@@ -52,7 +52,33 @@ function renderSectionText(name: string, section: BucketSection): string {
     const refs = `${bucket.staleRefs.length}s/${bucket.invalidLineRefs.length}i`;
     return `  ${padRight(display, nameWidth)}  last=${last}  age=${padRight(days, 6)}  band=${padRight(band, 7)}  entries=${bucket.entryCount}  refs=${refs}`;
   });
-  return [header, summary, ...lines, ""].join("\n");
+  return [header, summary, ...lines, ...renderGraduationText(section), ""].join(
+    "\n",
+  );
+}
+
+/** Format one graduation-candidate row shared by the text and Markdown renderers. */
+function graduationRows(section: BucketSection): string[] {
+  const rows: string[] = [];
+  for (const bucket of section.buckets) {
+    for (const candidate of bucket.graduationCandidates) {
+      const noun =
+        candidate.recurrenceCount === 1 ? "recurrence" : "recurrences";
+      rows.push(
+        `${basename(bucket.path)} :: ${candidate.title} (${candidate.recurrenceCount} ${noun})`,
+      );
+    }
+  }
+  return rows;
+}
+
+/** Render graduation candidates only when present, so a clean corpus adds zero noise. */
+function renderGraduationText(section: BucketSection): string[] {
+  if (section.totalGraduationCandidates === 0) return [];
+  return [
+    `  Graduation candidates (recurred after recording - promote to a structural gate or resolve):`,
+    ...graduationRows(section).map((row) => `    - ${row}`),
+  ];
 }
 
 /** Return the last segment of a slash-delimited path. */
@@ -172,7 +198,19 @@ function markdownSection(name: string, section: BucketSection): string {
     `| --- | --- | --- | --- | ---: | ---: | ---: |`,
     ...rows,
     ``,
+    ...markdownGraduation(section),
   ].join("\n");
+}
+
+/** Render the Markdown graduation block only when candidates exist. */
+function markdownGraduation(section: BucketSection): string[] {
+  if (section.totalGraduationCandidates === 0) return [];
+  return [
+    `**Graduation candidates** (recurred after recording - promote to a structural gate or resolve):`,
+    ``,
+    ...graduationRows(section).map((row) => `- ${row}`),
+    ``,
+  ];
 }
 
 /**

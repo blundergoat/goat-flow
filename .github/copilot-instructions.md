@@ -91,7 +91,7 @@ The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-f
 
 ## Definition of Done
 
-MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts) (2) no broken cross-references (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames. If working from a milestone file, tick `- [x]` on each completed task immediately - not at the end. After context compaction or 15+ turns, split work and start a fresh thread between unrelated tasks.
+MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts) (2) no broken cross-references (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames. If working from a milestone file, tick `- [x]` on each completed task immediately - not at the end. After context compaction, at ~60% context, or after 15+ turns, split work and start a fresh thread between unrelated tasks.
 
 ## Artifact Routing
 

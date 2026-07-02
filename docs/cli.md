@@ -122,6 +122,8 @@ npx goat-flow manifest --check            # Fail if manifest disagrees with live
 
 Report learning-loop health: live entry counts by bucket, stale file refs, and `last_reviewed` freshness. Use `--check` in CI - it exits non-zero if any bucket is missing `last_reviewed`, uses a malformed date, contains stale file references, or has a generated `INDEX.md` that no longer matches its bucket content (`index-stale`; a never-generated index is only an advisory warning).
 
+The report also lists **graduation candidates**: active footgun/lesson entries carrying a line-start `**Recurrence update` marker, meaning the recorded mistake happened again after the entry was written. Per the feedback-loop doctrine in [harness-engineering.md](harness-engineering.md), that prevention should be promoted to a structural gate (preflight check, CI step, deny pattern) or the entry resolved. Candidates are report-only: they never appear in `--check` output and never fail the gate, and a corpus without recurrence markers renders nothing extra.
+
 ```bash
 npx goat-flow stats                       # Learning-loop health report
 npx goat-flow stats --check               # CI gate for bucket hygiene + index freshness

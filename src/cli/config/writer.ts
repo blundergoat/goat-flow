@@ -9,7 +9,10 @@ import { dirname, join } from "node:path";
 import { dump, load } from "js-yaml";
 import { writeFileAtomic } from "../server/safe-exec.js";
 
-type HookConfigMap = Record<string, { enabled: boolean }>;
+type HookConfigMap = Record<
+  string,
+  { enabled: boolean; binaries?: Record<string, string> }
+>;
 
 const HOOK_ID_ALIASES = new Map([
   ["gruff-on-change", "gruff-code-quality"],
@@ -60,6 +63,24 @@ function normalizeHookIdentifier(hookIdentifier: string): string {
   return HOOK_ID_ALIASES.get(hookIdentifier) ?? hookIdentifier;
 }
 
+/**
+ * Preserve a valid hook `binaries` override block through managed-block
+ * rewrites; non-string or empty entries are dropped. Without this, a toggle
+ * write would silently delete a user's repo-owned analyzer path overrides.
+ *
+ * @param value - raw `hooks.<id>.binaries` value from parsed YAML
+ * @returns validated language-to-path map, or null when absent or empty
+ */
+function readHookBinaries(value: unknown): Record<string, string> | null {
+  if (!isRecord(value)) return null;
+  const binaries: Record<string, string> = {};
+  for (const [lang, binaryPath] of Object.entries(value)) {
+    if (typeof binaryPath !== "string" || binaryPath.trim() === "") continue;
+    binaries[lang] = binaryPath;
+  }
+  return Object.keys(binaries).length > 0 ? binaries : null;
+}
+
 /** Parse explicitly configured hook states; malformed YAML uses an empty-map fallback. */
 function readRawHooks(text: string): HookConfigMap {
   let parsed: unknown;
@@ -79,7 +100,10 @@ function readRawHooks(text: string): HookConfigMap {
     ) {
       continue;
     }
-    hooks[normalizedHookIdentifier] = { enabled: value.enabled };
+    const binaries = readHookBinaries(value.binaries);
+    hooks[normalizedHookIdentifier] = binaries
+      ? { enabled: value.enabled, binaries }
+      : { enabled: value.enabled };
   }
   return hooks;
 }
@@ -212,7 +236,7 @@ export function setHookEnabled(
   const path = configPath(projectPath);
   const text = readConfigText(projectPath);
   const hooks = readRawHooks(text);
-  hooks[hookId] = { enabled };
+  hooks[hookId] = { ...hooks[hookId], enabled };
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(
     path,

@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-06-19
+last_reviewed: 2026-07-03
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -234,3 +234,13 @@ last_reviewed: 2026-06-19
 **Prevention:** For hook rules that classify write-capable CLI commands, build the regression set as a grammar matrix before mirror fanout: direct incident form, global flags before topic, inherited flags after topic, short flag forms, shell wrappers, pipeline consumers such as `xargs`, write-method API forms, and read-only allow controls. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment`).
 
 **Note (2026-06-02):** ADR-028 was amended to allow `gh issue comment` and `gh pr comment` through the hook (other `gh` writes still blocked). The specific block this lesson originally described no longer applies to comments, but the methodological lesson - test the CLI grammar matrix, not only the incident command - stands. The grammar matrix in the self-test now covers both blocked (`gh pr review`, `gh workflow run`, `gh api ... -X POST -f body=...`) and allowed (`gh issue comment`, `gh pr comment`) cases, so the prevention rule still has live coverage.
+
+## Lesson: Restricted-PATH hook fixtures break helpers that shell out
+
+**Status:** active | **Created:** 2026-07-03
+
+**What happened:** The gruff-code-quality self-test isolates binary discovery with `PATH="$tmp/empty-bin"` so a system-installed `gruff-py` cannot leak into assertions. The new repo-owned config override (`hooks.gruff-code-quality.binaries.<lang>`) parses `.goat-flow/config.yaml` with `awk`. Under the restricted PATH, `awk` was not found; the command substitution's `2>/dev/null || true` swallowed the failure, the parser returned empty, and the config-override self-test failed with an empty value while the production code path was actually correct.
+
+**Root cause:** Restricted-PATH fixtures constrain every external command in the function under test, not just the binary the fixture means to hide. A helper that shells out (`awk`, `sed`, `git`) silently degrades when the fixture PATH omits it, and fail-soft error handling converts the missing tool into a wrong answer instead of a visible error.
+
+**Prevention:** When a hook self-test restricts PATH to hide one binary, first check which branch of the code under test can reach a PATH lookup for that binary. If the branch short-circuits earlier (env/config override present returns before the PATH search), append the real PATH - `PATH="$tmp/empty-bin:$PATH"` - so shell-out helpers keep working; keep the bare restricted PATH only for assertions that genuinely exercise PATH-based discovery. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `they never reach the PATH binary search`), (search: `config_binary_override`).

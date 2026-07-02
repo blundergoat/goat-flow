@@ -57,6 +57,9 @@ jobs:
       - name: GOAT Flow Audit
         run: node dist/cli/cli.js audit .
 
+      - name: Learning-loop stats check
+        run: node dist/cli/cli.js stats . --check
+
       - name: Shellcheck
         run: |
           sudo apt-get install -y shellcheck

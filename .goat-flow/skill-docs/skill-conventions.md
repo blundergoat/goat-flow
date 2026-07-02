@@ -136,7 +136,7 @@ When all milestones reach `complete` or `human-verification-pending`, the plan e
 
 Plan and milestone files are verification artifacts. Agents MUST NOT delete, archive, or include self-destruct instructions in them.
 
-Use `.goat-flow/logs/sessions/` for session summaries. Compact at ~60% context.
+Use `.goat-flow/logs/sessions/` for session summaries. Compact at ~60% context or after 15+ turns.
 
 Sub-agents: one objective, structured return, 5-call budget.
 

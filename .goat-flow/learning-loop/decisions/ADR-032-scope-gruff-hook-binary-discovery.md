@@ -5,6 +5,7 @@
 **Author(s):** Matthew Hansen
 **Ticket/Context:** 1.8.0 user report "F7" - gruff hook auto-executes repo-local binaries
 **Updated:** 2026-06-09 - explicit per-language analyzer binary overrides accepted for non-standard monorepos
+**Updated:** 2026-07-03 - repo-owned config override `hooks.gruff-code-quality.binaries.<lang>` in `.goat-flow/config.yaml` accepted alongside the env override (field report: healthkit's `strands_agents/.venv/bin/gruff-py` required every session to export `GRUFF_PY_BIN`)
 
 ## Context
 
@@ -53,6 +54,21 @@ exception: `GRUFF_TS_BIN`, `GRUFF_PHP_BIN`, `GRUFF_GO_BIN`, `GRUFF_RS_BIN`, and
 `GRUFF_PY_BIN` may point at an executable analyzer path outside the standard
 locations. This preserves the security property because the hook does not search
 arbitrary subtrees; a user or configured environment names the exact executable.
+
+The repo-owned form of the same exception is
+`hooks.gruff-code-quality.binaries.<lang>` in `.goat-flow/config.yaml` (e.g.
+`py: strands_agents/.venv/bin/gruff-py`), so one committed entry covers every
+agent and session instead of each runtime exporting an env var. The env
+override wins over config. Config values must be repo-relative, resolve inside
+the repo root, and name an executable regular file - machine-specific absolute
+or home paths stay env-only. The trust level is unchanged: a committed config
+entry is the same repo-owned surface as the committed hook script it points
+the analyzer selection at, and the hook still never searches arbitrary
+subtrees. An override that is set but invalid resolves to nothing with a
+specific diagnostic instead of falling back to discovery, so a wrong override
+fails loudly rather than silently running a different binary. Toggle writes
+preserve the block (`setHookEnabled` spreads the existing entry), and the
+config reader/writer carry `binaries` through managed-block rewrites.
 
 The change applies to all five shipped copies: `workflow/hooks/`, `.claude/hooks/`,
 `.github/hooks/`, `.codex/hooks/`, `.agents/hooks/`. It is locked by a regression
