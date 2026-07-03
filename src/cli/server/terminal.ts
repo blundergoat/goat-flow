@@ -325,7 +325,15 @@ class TerminalManager {
     }
   }
 
-  /** Create a new terminal session for the requested runner and project. */
+  /**
+   * Create a terminal session for the requested runner and project.
+   *
+   * A slot is reserved synchronously - a `starting` placeholder lands in the
+   * session map before any async work - so the MAX_SESSIONS cap holds even when
+   * the dashboard fires several launches at once (a user double-clicking "Run",
+   * or opening two runner tabs together). The reservation becomes a live
+   * session once the PTY spawns, or is released if any startup step fails.
+   */
   async create(
     prompt: string,
     projectPath: string,
@@ -335,13 +343,72 @@ class TerminalManager {
     const activeSessions = Array.from(this.sessions.values()).filter(
       (s) => s.status !== "terminated",
     ).length;
+    // Cap is a hard ceiling: refuse once every slot is occupied.
     if (activeSessions >= MAX_SESSIONS) {
       throw new Error(
         `Maximum ${MAX_SESSIONS} concurrent sessions. Kill an existing session first.`,
       );
     }
 
+    // Reserve the slot synchronously, before any await. This placeholder counts
+    // toward the cap immediately (its status is not "terminated"), so a burst of
+    // concurrent creates that all clear the check above can't each slip a
+    // session in while one of them is parked on the loadNodePty() await.
+    const id = randomUUID();
+    const session: TerminalSession = {
+      id,
+      status: "starting",
+      createdAt: new Date().toISOString(),
+      projectPath,
+      cwd: projectPath,
+      targetPath: projectPath,
+      runner,
+      lastInputAt: Date.now(),
+      pty: null,
+      ws: null,
+      idleTimer: null,
+      detachBuffer: [],
+      detachBufferSize: 0,
+    };
+    this.sessions.set(id, session);
+
+    try {
+      return await this.startReservedSession(
+        session,
+        prompt,
+        projectPath,
+        options,
+      );
+    } catch (err) {
+      // Any failure between reservation and activation frees the slot, so a
+      // failed launch never permanently holds one of the MAX_SESSIONS slots.
+      this.releaseReservedSession(session);
+      throw err;
+    }
+  }
+
+  /**
+   * Launch the runner into an already-reserved session and promote it to
+   * `active`. Runs after `create` has parked a `starting` placeholder in the
+   * session map; anything thrown here is cleaned up by `create`'s catch. Kept
+   * separate from `create` so slot reservation stays synchronous while the
+   * spawn - which awaits node-pty - happens under the concurrency guard.
+   *
+   * @param session - the reserved session to launch and mutate to active
+   * @param prompt - launch prompt delivered to the runner once it is ready
+   * @param projectPath - requested working directory, validated here before spawn
+   * @param options - optional explicit target path for the launched agent
+   * @returns the create response describing the now-active session
+   */
+  private async startReservedSession(
+    session: TerminalSession,
+    prompt: string,
+    projectPath: string,
+    options: { targetPath?: string },
+  ): Promise<CreateResponse> {
+    const { id, runner } = session;
     const cliPath = this.runnerPaths.get(runner);
+    // Runner binary missing: bail so create() releases the reserved slot.
     if (!cliPath) {
       console.warn(
         `[terminal] Runner "${runner}" not found. Available: ${[...this.runnerPaths.keys()].join(", ")}`,
@@ -355,7 +422,6 @@ class TerminalManager {
     );
     const nodePty = await this.loadNodePty();
 
-    const id = randomUUID();
     const spawnSpec = buildTerminalSpawnSpec(runner, cliPath, prompt);
 
     console.log(
@@ -369,32 +435,41 @@ class TerminalManager {
       env: spawnSpec.env,
     });
 
+    // A concurrent kill()/DELETE may have cancelled this reservation while we
+    // were awaiting loadNodePty() - e.g. the user closed the launching tab. If
+    // the session was dropped from the map or marked terminated, kill the PTY we
+    // just spawned so it can't outlive its session, and abort instead of
+    // resurrecting a deleted session (which would leak an untracked runner).
+    if (this.sessions.get(id) !== session || session.status === "terminated") {
+      try {
+        pty.kill();
+      } catch {
+        /* already dead */
+      }
+      this.sessions.delete(id);
+      throw new Error("Terminal session was cancelled during startup");
+    }
+
+    // PTY is live: promote the reservation to a real session and swap the
+    // placeholder paths for the validated ones.
+    session.status = "active";
+    session.projectPath = validatedTarget;
+    session.cwd = validatedCwd;
+    session.targetPath = validatedTarget;
+    session.pty = pty;
+    session.lastInputAt = Date.now();
+
     let hasInitialInputSent = false;
     let initialInputTimer: ReturnType<typeof setTimeout> | null = null;
     const initialInputLatestDueAt =
       Date.now() + INITIAL_PROMPT_FALLBACK_DELAY_MS;
     let initialInputDueAt = 0;
 
-    const session: TerminalSession = {
-      id,
-      status: "active",
-      createdAt: new Date().toISOString(),
-      projectPath: validatedTarget,
-      cwd: validatedCwd,
-      targetPath: validatedTarget,
-      runner,
-      lastInputAt: Date.now(),
-      pty,
-      ws: null,
-      idleTimer: null,
-      detachBuffer: [],
-      detachBufferSize: 0,
-    };
-
     /** Send the launch prompt through the PTY, avoiding shell/native argv limits. */
     const sendInitialInput = (): void => {
       if (!spawnSpec.initialInput || hasInitialInputSent) return;
       const pty = session.pty;
+      // Session already gone or PTY missing: nothing to type the prompt into.
       if (session.status === "terminated" || !pty) return;
       hasInitialInputSent = true;
       if (initialInputTimer) {
@@ -421,6 +496,7 @@ class TerminalManager {
       );
       const nextDueAt = now + boundedDelayMs;
       if (initialInputTimer) {
+        // A later or equal reschedule is redundant unless a reset is forced.
         if (!reset && initialInputDueAt <= nextDueAt) return;
         clearTimeout(initialInputTimer);
       }
@@ -433,6 +509,7 @@ class TerminalManager {
       scheduleInitialInput(INITIAL_PROMPT_AFTER_OUTPUT_DELAY_MS, {
         reset: true,
       });
+      // Browser attached: stream live; otherwise buffer for the next reconnect.
       if (session.ws) {
         this.resetIdleTimer(session);
         sendMessage(session.ws, { type: "output", data });
@@ -449,6 +526,7 @@ class TerminalManager {
         initialInputTimer = null;
         initialInputDueAt = 0;
       }
+      // Tell the attached browser the runner exited so the UI can reflect it.
       if (session.ws) {
         sendMessage(session.ws, {
           type: "exit",
@@ -459,7 +537,6 @@ class TerminalManager {
       this.clearIdleTimer(session);
     });
 
-    this.sessions.set(id, session);
     this.resetIdleTimer(session);
     scheduleInitialInput(INITIAL_PROMPT_FALLBACK_DELAY_MS);
 
@@ -468,6 +545,26 @@ class TerminalManager {
       status: session.status,
       wsUrl: `/ws/terminal/${id}`,
     };
+  }
+
+  /**
+   * Release a reserved session after a failed launch: clear any idle timer,
+   * kill the PTY if one was spawned before the failure, and drop the
+   * placeholder from the session map so the freed slot is reusable at once.
+   *
+   * @param session - the reserved session whose slot is being freed
+   */
+  private releaseReservedSession(session: TerminalSession): void {
+    this.clearIdleTimer(session);
+    // A PTY exists only if spawn succeeded but a later step failed; kill it.
+    if (session.pty) {
+      try {
+        session.pty.kill();
+      } catch {
+        /* already dead */
+      }
+    }
+    this.sessions.delete(session.id);
   }
 
   /**
@@ -635,12 +732,18 @@ class TerminalManager {
   /** Tear down a terminal session; swallows kill/close races because either side may already be gone. */
   private killSession(session: TerminalSession): void {
     this.clearIdleTimer(session);
-    if (session.pty && session.status !== "terminated") {
+    // Mark the session dead even if its PTY hasn't spawned yet - a "starting"
+    // reservation cancelled mid-launch has no PTY to kill, but flagging it
+    // terminated lets the in-flight startReservedSession see the cancellation
+    // and tear down whatever it spawns instead of leaking an untracked runner.
+    if (session.status !== "terminated") {
       session.status = "terminated";
-      try {
-        session.pty.kill();
-      } catch {
-        /* already dead */
+      if (session.pty) {
+        try {
+          session.pty.kill();
+        } catch {
+          /* already dead */
+        }
       }
     }
     if (session.ws) {

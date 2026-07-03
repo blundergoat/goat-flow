@@ -81,6 +81,30 @@ function readHookBinaries(value: unknown): Record<string, string> | null {
   return Object.keys(binaries).length > 0 ? binaries : null;
 }
 
+/**
+ * Parse one raw `hooks.<id>` YAML entry into its canonical id and state.
+ * Returns null for malformed entries (no boolean `enabled`) so the caller
+ * can skip them - a user's hand-edited config never crashes a toggle write.
+ *
+ * @param hookId - raw hook key as written in config.yaml (may be a legacy alias)
+ * @param value - raw YAML value under that key
+ * @returns canonical id plus validated state, or null when the entry is malformed
+ */
+function readHookEntry(
+  hookId: string,
+  value: unknown,
+): { id: string; state: HookConfigMap[string] } | null {
+  // Entry without a boolean `enabled` is malformed -> ignore it entirely.
+  if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
+  const binaries = readHookBinaries(value.binaries);
+  return {
+    id: normalizeHookIdentifier(hookId),
+    state: binaries
+      ? { enabled: value.enabled, binaries }
+      : { enabled: value.enabled },
+  };
+}
+
 /** Parse explicitly configured hook states; malformed YAML uses an empty-map fallback. */
 function readRawHooks(text: string): HookConfigMap {
   let parsed: unknown;
@@ -89,21 +113,22 @@ function readRawHooks(text: string): HookConfigMap {
   } catch {
     return {};
   }
+  // No parseable hooks section -> registry defaults apply for everything.
   if (!isRecord(parsed) || !isRecord(parsed.hooks)) return {};
   const hooks: HookConfigMap = {};
   for (const [hookId, value] of Object.entries(parsed.hooks)) {
-    if (!isRecord(value) || typeof value.enabled !== "boolean") continue;
-    const normalizedHookIdentifier = normalizeHookIdentifier(hookId);
+    const entry = readHookEntry(hookId, value);
+    // Malformed entry -> skip; the hook falls back to its registry default.
+    if (!entry) continue;
+    // A legacy alias normalizing onto an id that already appeared -> first
+    // occurrence wins so canonical entries beat their aliases.
     if (
-      normalizedHookIdentifier !== hookId &&
-      Object.prototype.hasOwnProperty.call(hooks, normalizedHookIdentifier)
+      entry.id !== hookId &&
+      Object.prototype.hasOwnProperty.call(hooks, entry.id)
     ) {
       continue;
     }
-    const binaries = readHookBinaries(value.binaries);
-    hooks[normalizedHookIdentifier] = binaries
-      ? { enabled: value.enabled, binaries }
-      : { enabled: value.enabled };
+    hooks[entry.id] = entry.state;
   }
   return hooks;
 }

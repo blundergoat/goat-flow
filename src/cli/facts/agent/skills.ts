@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 import {
-  SKILL_NAMES,
+  getSkillNames,
   AUDIT_VERSION as SKILL_VERSION,
 } from "../../constants.js";
 import { getTemplatePath } from "../../paths.js";
@@ -207,12 +207,15 @@ function scanExpectedSkills(
   let outdatedCount = 0;
   let adaptCommentCount = 0;
 
-  for (const skill of SKILL_NAMES) {
+  // Walk every canonical skill this agent should have installed - the counts
+  // built here become the found/missing numbers the user sees in audit output.
+  for (const skill of getSkillNames()) {
     const requiredFiles = getExpectedSkillFiles(skill);
     const missingFiles = requiredFiles.filter(
       (relativeFile) =>
         !fs.exists(`${agent.skillsDir}/${skill}/${relativeFile}`),
     );
+    // Any required file absent -> the whole skill counts as missing.
     if (missingFiles.length > 0) {
       missing.push(skill);
       continue;

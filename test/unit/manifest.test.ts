@@ -28,7 +28,7 @@ import type {
   ObservedFacts,
 } from "../../src/cli/manifest/types.js";
 import { ManifestValidationError } from "../../src/cli/manifest/types.js";
-import { AUDIT_VERSION, SKILL_NAMES } from "../../src/cli/constants.js";
+import { AUDIT_VERSION, getSkillNames } from "../../src/cli/constants.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
@@ -36,7 +36,7 @@ import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
 /** Build a fixture ManifestJson whose static facts match the provided observed. */
 function fixtureJson(
   overrides: Partial<ManifestJson["facts"]> = {},
-  skillsCanonical: string[] = [...SKILL_NAMES],
+  skillsCanonical: string[] = [...getSkillNames()],
 ): ManifestJson {
   return {
     description: "fixture",
@@ -81,7 +81,7 @@ function fixtureObserved(
   return {
     views: ["quality", "about", "home"],
     presetsCount: 3,
-    skills: [...SKILL_NAMES],
+    skills: [...getSkillNames()],
     setupChecks: 12,
     agentChecks: 4,
     harnessChecks: 16,
@@ -126,7 +126,7 @@ function fixtureAgent(
 // composeManifest: derivation + shape
 // ---------------------------------------------------------------------------
 describe("composeManifest", () => {
-  it("derives skill facts from observed SKILL_NAMES", () => {
+  it("derives skill facts from observed getSkillNames()", () => {
     const json = fixtureJson();
     const observedSkills = ["goat", "goat-debug", "goat-qa"];
     const observed = fixtureObserved({
@@ -366,7 +366,7 @@ describe("validateManifest (drifted count)", () => {
     );
   });
 
-  it("throws on skills.canonical drift from SKILL_NAMES", () => {
+  it("throws on skills.canonical drift from getSkillNames()", () => {
     const json = fixtureJson({}, ["goat", "goat-debug"]);
     const observed = fixtureObserved();
     assert.throws(
@@ -414,11 +414,11 @@ describe("loadManifest (real repo)", () => {
   it("resolves without throwing and returns correct derived values", () => {
     resetManifestCache();
     const manifestJson = loadManifest();
-    assert.equal(manifestJson.facts.skills.total, SKILL_NAMES.length);
+    assert.equal(manifestJson.facts.skills.total, getSkillNames().length);
     assert.equal(manifestJson.facts.skills.dispatcher, "goat");
     assert.equal(
       manifestJson.facts.skills.functional_count,
-      SKILL_NAMES.length - 1,
+      getSkillNames().length - 1,
     );
     assert.equal(manifestJson.facts.checks.setup, SETUP_CHECKS.length);
     assert.equal(manifestJson.facts.checks.agent, AGENT_CHECKS.length);

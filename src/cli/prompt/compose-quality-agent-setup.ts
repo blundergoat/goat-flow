@@ -539,7 +539,7 @@ function appendOutputFormat(
     "- Evidence quality: `OBSERVED` (verified in code/output) or `INFERRED` (state what's missing)",
   );
   lines.push(
-    "- If prior report context was provided, current findings only use `delta_tag: new | persisted`; `resolved` belongs in derived diff output, not the current finding list.",
+    "- `delta_tag` handling follows the JSON report contract below - do not restate it here.",
   );
   lines.push("");
   appendRatingSections(lines);

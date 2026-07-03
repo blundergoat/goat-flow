@@ -27,7 +27,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { checkDrift } from "../../src/cli/audit/check-drift.js";
 import { createFS } from "../../src/cli/facts/fs.js";
-import { SKILL_NAMES } from "../../src/cli/constants.js";
+import { getSkillNames } from "../../src/cli/constants.js";
 import {
   getInstalledSkillRoots,
   getSkillFiles,
@@ -167,12 +167,12 @@ export function setupFixture(): string {
       SHARED_STUB,
     );
   }
-  for (const name of SKILL_NAMES) {
+  for (const name of getSkillNames()) {
     writeSkillFiles(root, join("workflow", "skills"), name);
   }
   // Project installed copies of skill files
   for (const agentDir of getInstalledSkillRoots()) {
-    for (const name of SKILL_NAMES) {
+    for (const name of getSkillNames()) {
       writeSkillFiles(root, agentDir, name);
     }
   }
@@ -495,7 +495,7 @@ export {
   sep,
   checkDrift,
   createFS,
-  SKILL_NAMES,
+  getSkillNames,
   getInstalledSkillRoots,
   getSkillFiles,
 };

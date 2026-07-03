@@ -14,7 +14,7 @@ import {
   it,
   rmSync,
   setupFixture,
-  SKILL_NAMES,
+  getSkillNames,
 } from "./audit-drift.helpers.ts";
 
 describe("checkDrift: clean fixture", () => {
@@ -35,7 +35,7 @@ describe("checkDrift: clean fixture", () => {
     assert.equal(report.status, "pass");
     assert.deepEqual(report.findings, []);
     const expectedSkillComparisons =
-      SKILL_NAMES.reduce(
+      getSkillNames().reduce(
         (total, name) => total + getSkillFiles(name).length,
         0,
       ) * getInstalledSkillRoots().length;

@@ -1,145 +1,104 @@
-# Git Commit Instructions
+# Git Commit Message Standard
 
-Canonical commit conventions for this repository - one file for humans and agents. IDEs auto-read
-`.github/copilot-instructions.md` (and `CLAUDE.md` / `AGENTS.md`), not this file, so the essential
-rules are summarised in those instruction files under **## Commit Messages** with a pointer here
-for the full reference. See ADR-031.
+This standard covers commit message text only. It does not define branch naming, staging, when to
+commit, release workflow, quality gates, or which files belong in a commit.
 
-## Branch Prefix (read the branch first)
+## Message Format
 
-**Before writing the subject, read the current branch** (`git branch --show-current`). If the
-branch is `feat/<digits>...` - leading digits right after `feat/`, e.g. `feat/123_add-cache` - the
-subject MUST start with `#<digits> ` followed by the conventional-commit format:
+Preferred subject format:
 
 ```
-#123 feat(audit): add drift cache
+type(scope): subject
 ```
 
-If the branch has no `feat/<digits>` prefix (e.g. `dev`, `main`, `hotfix/foo`,
-`feat/no-number-slug`), do NOT add a `#` prefix - use the plain `type(scope): subject` format. The
-number comes from the branch name only - never invent an issue number from the diff.
+If a project uses ticket or issue prefixes, place the real project identifier before the
+conventional subject:
 
-## Commit Message Format
+```
+ABC-123 type(scope): subject
+#123 type(scope): subject
+```
 
-Conventional commit format: `type(scope): subject`. Lowercase after the colon,
-imperative mood, no trailing period, subject ≤72 characters.
+Do not invent issue numbers, ticket keys, or tracking identifiers. If the project omits scopes, use
+`type: subject` and keep the same subject-line rules.
+
+Full message shape:
 
 ```
 type(scope): subject
 
-Body explaining *why* this change is needed (the diff already shows what).
-- bullet per axis when the change touches more than one area
-- name files, behaviours, or commands by their real identifiers
+Body explaining why the change is needed.
+- bullet each distinct behaviour, file family, or compatibility concern
+- name files, behaviours, APIs, commands, or versions by their real identifiers
 ```
 
-Separate the subject from the body with a blank line. On a `feat/<digits>` branch, prepend
-`#<digits> ` to the subject line (see **Branch Prefix** above).
+Separate the subject from the body with a blank line.
 
-### Picking a `type`
+## Types
 
 | Type | Use for |
-|------|---------|
-| `feat` | New user- or agent-visible behaviour |
-| `fix` | Bug fix, regression, or incorrect behaviour |
-| `refactor` | Internal change with no behaviour change |
-| `test` | Adding or fixing tests only |
-| `chore` | Version bumps, dependency updates, tooling |
+| ---- | ------- |
+| `feat` | New user-visible or system-visible behaviour |
+| `fix` | Bug fix, regression fix, or incorrect behaviour |
 | `docs` | Documentation-only changes |
-| `security` | Security hardening, deny-policy, or sandbox change |
+| `refactor` | Internal restructuring with no intended behaviour change |
+| `test` | Adding, changing, or repairing tests only |
+| `perf` | Performance change with no intended behaviour change |
+| `build` | Build system, packaging, or generated artifact flow |
+| `ci` | Continuous integration or automation config |
+| `chore` | Maintenance work that does not fit another type |
+| `security` | Security hardening, policy, or sandbox change |
+| `revert` | Reverting an earlier change |
 
-Pick the scope from the area that actually changed (`dashboard`, `audit-command`,
-`guardrails`, `learning-loop`, `quality`, `ci`, `version`, …). One scope per
-commit - if scopes diverge, split the commit.
+## Scope
 
-## Subject-Line Rules (the part agents get wrong)
+Pick the scope from the area a reader would search for: `auth`, `api`, `ui`, `cli`, `docs`, `deps`,
+`ci`, `config`, or the project-specific subsystem name.
 
-**Avoid weak verbs that paraphrase the diff:** *enhance, improve, streamline,
-clarify, update, tweak, polish*. They tell the reader nothing the diff did not.
+Use one scope per message. When the change spans several areas, choose the most useful domain-level
+scope and put the details in the body.
 
-**Use concrete verbs naming the actual change:** *add, remove, replace, rename,
-fix, deny, allow, gate, skip, harden, cache, invalidate, log, retry*.
+## Subject Rules
 
-**One observable change per subject.** If the subject contains "and", names two
-axes, or starts to read like a release-note paragraph - either split the commit
-or move the second axis into a bulleted body.
+Subject lines are optimized for `git log`, changelogs, and bisect notes.
 
-### Bad → Good rewrites
+- Use imperative mood: `add`, `remove`, `fix`, `rename`, `replace`.
+- Keep the subject at 72 characters or less.
+- Use lowercase after the colon unless the word is a proper noun, identifier, or API name.
+- Do not end the subject with a period.
+- Name the observable change, not the quality aspiration.
+- Keep the subject to one observable change; put secondary axes in the body.
+
+Avoid weak verbs that paraphrase the diff: *enhance, improve, streamline, clarify, update, tweak,
+polish*. They usually say that something changed without saying what changed.
+
+Prefer concrete verbs that name the actual edit: *add, remove, replace, rename, fix, deny, allow,
+gate, skip, harden, cache, invalidate, log, retry, bump*.
+
+## Rewrites
+
+These rewrites preserve the intent of real weak subjects while making the message useful without
+opening the diff.
 
 ```
 BAD:  feat(guardrails): enhance command checks for combined shell flags and git push scenarios
 GOOD: feat(guardrails): deny `bash -lc` chains and protected-branch git push
 
 BAD:  refactor(docs): streamline artifact routing instructions and enhance clarity
-GOOD: refactor(docs): move artifact routing rules from CLAUDE.md to artifact-routing.md
+GOOD: refactor(docs): move artifact routing rules to artifact-routing.md
 
-BAD:  chore(version): bump goat-flow reference version to 1.3.1 across documentation and scripts
-GOOD: chore(version): bump reference version to 1.3.1 in CLAUDE.md, AGENTS.md, and bump-version.sh
+BAD:  chore(version): update reference version to 1.3.1 across documentation and scripts
+GOOD: chore(version): bump reference version to 1.3.1 in docs and scripts
 ```
 
-On a `feat/<digits>` branch the good subjects above gain an issue prefix, e.g.
-`#123 feat(guardrails): deny protected-branch git push`.
+## Body Rules
 
-## When a Body Is Required
+Write a body when the subject alone does not explain the decision. Common cases:
 
-Write a body (blank line + bullets) when **any** of these are true:
+- The motivation is not obvious from the diff.
+- The change touches multiple behaviours under one scope.
+- Compatibility, security, migration, platform, or performance context matters.
+- A version bump, dependency change, or rename would be hard to understand from the subject alone.
 
-- The subject names more than one axis (touches multiple files, scopes, or behaviours).
-- The change has a non-obvious motivation (perf, OS-specific bug, prior incident, compliance).
-- The change is hard to bisect from the subject alone (version bumps, cross-cutting renames).
-
-Body template - name the *why* first, then bullet each axis:
-
-```
-fix(dashboard): speed up home audit load on Windows
-
-- replace shell-specific dashboard build steps with cross-platform Node fs calls
-- skip deny hook self-tests during dashboard summary audits
-- keep full deny hook validation for deeper audit/quality flows
-- add regression coverage for the faster /api/audit path
-```
-
-If the answer to "why now?" is not in the body, the body is incomplete.
-
-## Before Committing
-
-1. `bash scripts/preflight-checks.sh` - single quality gate. Runs typecheck,
-   ESLint, Prettier, fast tests, shellcheck on `scripts/*.sh` and installed
-   hook dirs, deny-hook self-tests, version consistency, ADR enforcement,
-   doc/code drift, and link integrity. Must pass.
-2. `npm run test:full` - additionally required when changes touch setup,
-   installer, runtime, drift, or dashboard code (preflight runs the fast
-   suite only).
-
-If preflight fails, fix the underlying issue. Do not bypass with `--no-verify`.
-
-## Branch Workflow
-
-- `main` is for stable releases. Never push directly.
-- `dev` is the active development branch. PRs target `dev`.
-- Feature branches branch from `dev` for isolated work; when named `feat/<digits>_<slug>`,
-  prefix commit subjects with `#<digits>` (see **Branch Prefix** above).
-
-## What Not To Commit
-
-- `dist/` (build output, gitignored)
-- `node_modules/` (gitignored)
-- `.claude/settings.local.json` (user-specific, gitignored)
-- `.claude/projects/`, `.claude/worktrees/` (session data, gitignored)
-- `.goat-flow/logs/sessions/*.md`, `.goat-flow/logs/quality/*.json|*.md`,
-  `.goat-flow/logs/events/*.jsonl`, `.goat-flow/logs/critiques/*.md`,
-  `.goat-flow/logs/review/*.txt|*.json|*.md`, `.goat-flow/logs/security/*.md|*.json`
-  (workspace-local runtime state, gitignored)
-- Files containing secrets or credentials
-
-Committed under `.goat-flow/`: `.goat-flow/architecture.md`,
-`.goat-flow/code-map.md`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/config.yaml`,
-`.goat-flow/learning-loop/decisions/`, `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`,
-`.goat-flow/skill-docs/`, and the `.goat-flow/plans/`,
-`.goat-flow/scratchpad/`, `.goat-flow/logs/` directory anchors.
-
-## Version Bumps
-
-Use `bash scripts/bump-version.sh <patch|minor|major|X.Y.Z>` to bump
-`package.json`, docs, templates, and mirrors in one step. `AUDIT_VERSION`
-derives from `package.json` automatically. Do not edit `package.json` version
-alone - it will fail the version-consistency preflight gate.
+The body should explain why the change exists and name the real affected surfaces. Do not restate
+the diff mechanically.

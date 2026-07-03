@@ -1,4 +1,7 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+/* No remote web fonts by design: the dashboard is a local, offline-capable
+   page that can drive shell agents, so it must never load from an external
+   origin. Typography degrades to the installed / system fonts named in
+   --font-body and --font-mono below. */
 
 /* ═══════════════════════════════════════════════════════════
    GOAT Flow Dashboard - Design Tokens & Component Styles
@@ -2465,11 +2468,10 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   Plans and Coming Soon Pages
+   Plans Page
    ═══════════════════════════════════════════════════════════ */
 .gf-page-head,
-.gf-tasks-page,
-.gf-coming-soon-page {
+.gf-tasks-page {
   min-width: 0;
 }
 .gf-tasks-page {
@@ -2762,29 +2764,6 @@ body {
   border-radius: inherit;
   background: var(--status-pass);
 }
-.gf-coming-soon-page {
-  display: grid;
-  place-items: start center;
-  padding: 72px 28px;
-}
-.gf-coming-soon-panel {
-  width: min(620px, 100%);
-  padding: 28px 0;
-}
-.gf-coming-soon-panel h1 {
-  margin: 6px 0 8px;
-  color: var(--text-primary);
-  font-size: 28px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-.gf-coming-soon-panel p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1.6;
-}
-
 /* ═══════════════════════════════════════════════════════════
    Setup Page
    ═══════════════════════════════════════════════════════════ */

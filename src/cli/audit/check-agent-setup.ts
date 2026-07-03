@@ -6,7 +6,7 @@
 import type { AuditFailure, BuildCheck, AuditContext } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import type { ReadonlyFS } from "../types.js";
-import { AUDIT_VERSION, SKILL_NAMES } from "../constants.js";
+import { AUDIT_VERSION, getSkillNames } from "../constants.js";
 import { collectCodexWorkspaceRootEntries } from "../facts/agent/settings.js";
 import { agentDenyMechanism } from "./check-agent-deny-mechanism.js";
 import {
@@ -37,7 +37,8 @@ function agentArtifactsExist(
   const skillsDir = profile.skills_dir.replace(/\/$/, "");
   try {
     const entries = fs.listDir(skillsDir);
-    if (entries.some((e) => SKILL_NAMES.includes(e))) return true;
+    // Any canonical skill folder present -> this agent has a goat-flow install.
+    if (entries.some((e) => getSkillNames().includes(e))) return true;
   } catch {
     // listDir may throw if the directory doesn't exist
   }

@@ -717,9 +717,4 @@ interface Window {
   __GOAT_FLOW_PRESETS__?: Preset[];
   Terminal?: new (options: Record<string, unknown>) => XTermInstance;
   FitAddon?: { FitAddon: new () => FitAddonInstance };
-  jsyaml?: { load(text: string): unknown };
-  renderMarkdown?: (
-    text: string,
-    opts?: { frontmatter?: "strip" | "passthrough"; breaks?: boolean },
-  ) => { html: string; frontmatter: Record<string, unknown> | null };
 }
