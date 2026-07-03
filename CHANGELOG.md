@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.13.0 - Unreleased
+## v1.13.0 - 2026-07-04
 
 Guardrail false-positive precision, per-repo gruff analyzer configuration, preflight robustness, dashboard learning-loop visibility, learning-loop feedback closure, and documentation consistency.
 
