@@ -642,6 +642,8 @@ run_full() {
   expect_block shell 'rm -rf $(echo /etc)' "command-substitution rm target"
   expect_allow shell 'rm -rf "node_modules"' "quoted safe node_modules removal"
   expect_allow shell 'rm -rf "./dist"' "quoted safe scoped dist removal"
+  expect_allow shell 'rm -rf /tmp/build-cache' "tmp build cleanup"
+  expect_block shell 'rm -rf /tmp/build-cache/../../etc' "tmp build traversal"
   expect_block shell "find / -name node -exec rm -rf {} +" "find exec recursive rm"
   expect_block shell 'find . -name "*.log" -delete' "find delete"
   expect_block shell 'find . -exec rm -rf {} \;' "find exec recursive rm semicolon"

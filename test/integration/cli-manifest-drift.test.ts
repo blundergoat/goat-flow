@@ -88,6 +88,18 @@ describe("CLI diagnostics under manifest drift", () => {
     assert.match(res.stdout, /\d+\.\d+\.\d+/);
   });
 
+  it("status exits 0 with an error state instead of crashing under skill-dir drift", () => {
+    const res = runDriftedCli(["status", ".", "--format", "json"]);
+    assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+    const payload = JSON.parse(res.stdout) as {
+      state?: string;
+      details?: string;
+    };
+    assert.equal(payload.state, "error");
+    // Missing details would leave users with an error badge and no next clue.
+    assert.match(payload.details ?? "", /manifest|drift/i);
+  });
+
   it("manifest --check still fails loudly with the actionable drift error", () => {
     const res = runDriftedCli(["manifest", "--check"]);
     // The command that exists to catch drift must keep catching it.

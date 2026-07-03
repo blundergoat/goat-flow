@@ -8,6 +8,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { dump, load } from "js-yaml";
 import { writeFileAtomic } from "../server/safe-exec.js";
+import { readHookBinaries } from "./reader.js";
 
 type HookConfigMap = Record<
   string,
@@ -61,24 +62,6 @@ function readConfigText(projectPath: string): string {
 /** Map legacy hook ids to canonical ids so old config entries keep their state. */
 function normalizeHookIdentifier(hookIdentifier: string): string {
   return HOOK_ID_ALIASES.get(hookIdentifier) ?? hookIdentifier;
-}
-
-/**
- * Preserve a valid hook `binaries` override block through managed-block
- * rewrites; non-string or empty entries are dropped. Without this, a toggle
- * write would silently delete a user's repo-owned analyzer path overrides.
- *
- * @param value - raw `hooks.<id>.binaries` value from parsed YAML
- * @returns validated language-to-path map, or null when absent or empty
- */
-function readHookBinaries(value: unknown): Record<string, string> | null {
-  if (!isRecord(value)) return null;
-  const binaries: Record<string, string> = {};
-  for (const [lang, binaryPath] of Object.entries(value)) {
-    if (typeof binaryPath !== "string" || binaryPath.trim() === "") continue;
-    binaries[lang] = binaryPath;
-  }
-  return Object.keys(binaries).length > 0 ? binaries : null;
 }
 
 /**

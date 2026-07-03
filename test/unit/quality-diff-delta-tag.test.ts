@@ -14,12 +14,16 @@ import assert from "node:assert/strict";
 import { buildQualityDiff } from "../../src/cli/quality/history.js";
 import type { QualityHistoryEntry } from "../../src/cli/quality/history.js";
 import { renderQualityDiffText } from "../../src/cli/quality/history-render.js";
+import type {
+  SavedQualityFinding,
+  SavedQualityReport,
+} from "../../src/cli/quality/schema.js";
 
 /** Build one saved finding row with sane defaults. */
 function finding(
   id: string,
   deltaTag: "new" | "persisted" | null,
-): Record<string, unknown> {
+): SavedQualityFinding {
   return {
     id,
     type: "framework_flaw",
@@ -38,42 +42,47 @@ function finding(
 function entry(
   id: string,
   runDate: string,
-  findings: Record<string, unknown>[],
+  findings: SavedQualityFinding[],
   priorReportId: string | null,
 ): QualityHistoryEntry {
+  const report: SavedQualityReport = {
+    report_kind: "goat-flow-quality-report",
+    goat_flow_version: "1.13.0",
+    agent: "claude",
+    project_path: "/tmp/example",
+    run_date: runDate,
+    audit_status: "pass",
+    scope: "consumer",
+    rubric_version: "1.13.0",
+    quality_mode: "agent-setup",
+    prior_report_id: priorReportId,
+    scores: {
+      setup: {
+        total: 60,
+        accuracy: 15,
+        relevance: 15,
+        completeness: 15,
+        friction: 15,
+      },
+      system: {
+        total: 60,
+        usefulness: 15,
+        signal_to_noise: 15,
+        adaptability: 15,
+        learnability: 15,
+      },
+    },
+    findings,
+  };
   return {
     id,
+    path: `/tmp/example/.goat-flow/logs/quality/${id}.json`,
+    date: runDate,
+    time: "0900",
     agent: "claude",
-    report: {
-      report_kind: "goat-flow-quality-report",
-      goat_flow_version: "1.13.0",
-      agent: "claude",
-      project_path: "/tmp/example",
-      run_date: runDate,
-      audit_status: "pass",
-      scope: "consumer",
-      rubric_version: "1.13.0",
-      quality_mode: "agent-setup",
-      prior_report_id: priorReportId,
-      scores: {
-        setup: {
-          total: 60,
-          accuracy: 15,
-          relevance: 15,
-          completeness: 15,
-          friction: 15,
-        },
-        system: {
-          total: 60,
-          usefulness: 15,
-          signal_to_noise: 15,
-          adaptability: 15,
-          learnability: 15,
-        },
-      },
-      findings,
-    },
-  } as never;
+    randomId: id.slice(-5),
+    report,
+  };
 }
 
 const FROM_ID = "2026-06-01-0900-claude-aaaaa";

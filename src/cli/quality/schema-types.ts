@@ -152,8 +152,7 @@ export interface SavedQualityReport extends Omit<QualityReport, "findings"> {
  * @template T - the report shape returned on success (`QualityReport` or `SavedQualityReport`).
  */
 export type ParseResult<T> =
-  | { ok: true; report: T }
-  | { ok: false; error: string };
+  { ok: true; report: T } | { ok: false; error: string };
 
 /** Parse strictness switch for current emissions versus legacy history files. */
 export interface QualityReportParseOptions {

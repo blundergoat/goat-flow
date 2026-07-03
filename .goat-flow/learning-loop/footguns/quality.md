@@ -1,6 +1,6 @@
 ---
 category: quality
-last_reviewed: 2026-06-11
+last_reviewed: 2026-07-04
 ---
 
 ## Footgun: Quality reviews disappear when the agent skips the final JSON write
@@ -119,6 +119,21 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 ## Resolved Entries
 
 ---
+
+## Footgun: CI gates run only on pull_request, so direct pushes and merges bypass format/lint/test enforcement
+
+**Status:** resolved | **Created:** 2026-07-04 | **Resolved:** 2026-07-04 | **Evidence:** ACTUAL_MEASURED
+**hallucination-risk:** high
+
+**Symptoms:** `bash scripts/preflight-checks.sh` failed on a clean checkout of `dev` even though CI was green and a prior-day preflight passed. Observed 2026-07-04: `FAIL 75 checks` with `Prettier (17 unformatted files)` on files last touched weeks earlier with no red build anywhere.
+
+**Why it happened:** `.github/workflows/ci.yml` declared only a `pull_request` trigger for `[main, dev]` - there was no `push:` trigger. Commits made directly to `main` or `dev`, including `Merge branch 'main' into dev` merge commits, never ran `npm run format:check`, shellcheck, or the test job, so gate-breaking state accumulated on those branches and surfaced later on whoever ran preflight. The hallucination risk cuts both ways: a reviewer who sees the `format:check` step concludes "CI enforces formatting" (that reads the job, not the trigger), and a reviewer who sees the failure assumes the CI check is missing (a 2026-07-04 quality assessment claimed "no enforcement point exists" without reading the workflow).
+
+**Evidence:** Incident: 17 files under `src/` and `test/` failed Prettier on `dev` after the 2026-07-04 main-into-dev merge; they were last touched by direct-to-main commits between 2026-05-31 and 2026-07-03, none of which triggered CI. The format gate step existed in the workflow the whole time (search: `npm run format:check`).
+
+**Fix:** `.github/workflows/ci.yml` (search: `push:`) now declares both `push` and `pull_request` triggers for `[main, dev]` (2026-07-04, human-approved), so direct pushes and merge commits run the same gates as PRs. The 17 files were formatted via `npm run format` in the same change; preflight returned `PASS 75 checks`.
+
+**Prevention:** When verifying an enforcement claim about CI, read the workflow's `on:` trigger block, not just its steps - a present gate step proves nothing about when it runs. Running `bash scripts/preflight-checks.sh` before pushing remains the local belt-and-braces.
 
 ## Footgun: Metric checks inflated harness concern scores to 100% even when the capability was absent
 

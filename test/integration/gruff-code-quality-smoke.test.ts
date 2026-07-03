@@ -567,6 +567,68 @@ describe("gruff-code-quality hook", () => {
     assert.deepEqual(readInvocations(root), ["src/sample.py"]);
   });
 
+  it("uses compact and commented config binary override forms", () => {
+    const fixtures = [
+      {
+        name: "inline map",
+        slug: "inline-map",
+        configLines: [
+          "hooks:",
+          "  gruff-code-quality:",
+          "    enabled: true",
+          "    binaries: { py: strands_agents/.venv/bin/gruff-py }",
+          "",
+        ],
+      },
+      {
+        name: "quoted value with comment",
+        slug: "quoted-comment",
+        configLines: [
+          "hooks:",
+          "  gruff-code-quality:",
+          "    enabled: true",
+          "    binaries:",
+          '      py: "strands_agents/.venv/bin/gruff-py" # analyzer',
+          "",
+        ],
+      },
+    ];
+
+    // Each config shape is what users may paste into the dashboard-managed file.
+    for (const fixture of fixtures) {
+      const root = makeRoot();
+      writeMockGruffBinary(
+        root,
+        "strands_agents/.venv/bin",
+        "gruff-py",
+        "config.rule",
+      );
+      writeFileSync(join(root, ".gruff-py.yaml"), "rules: {}\n");
+      mkdirSync(join(root, ".goat-flow"), { recursive: true });
+      writeFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        fixture.configLines.join("\n"),
+      );
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", `${fixture.slug}.py`), "a\nb\nc\n");
+
+      const result = runHook(
+        root,
+        {
+          tool_name: "Edit",
+          tool_input: {
+            file_path: `src/${fixture.slug}.py`,
+            changed_ranges: [{ startLine: 3, endLine: 3 }],
+          },
+        },
+        "/usr/bin:/bin",
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, /config\.rule - changed line finding/u);
+    }
+  });
+
   it("exits silently for fail-soft skip cases", () => {
     const root = makeRoot();
     writeMockGruff(root);

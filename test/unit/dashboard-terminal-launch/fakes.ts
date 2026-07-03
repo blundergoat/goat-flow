@@ -49,9 +49,7 @@ function createTimerHandle(id: number): FakeTimerHandle {
 /** Read the fake scheduler id from a timeout/interval handle without depending on real timer objects. */
 function readTimerId(
   handle:
-    | ReturnType<typeof setTimeout>
-    | ReturnType<typeof setInterval>
-    | undefined,
+    ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | undefined,
 ): number | null {
   if (handle === undefined) return null;
   const id = Number(handle);
@@ -111,9 +109,7 @@ function scheduleFakeTimer(
 function clearFakeTimer(
   state: FakeTimerState,
   handle:
-    | ReturnType<typeof setTimeout>
-    | ReturnType<typeof setInterval>
-    | undefined,
+    ReturnType<typeof setTimeout> | ReturnType<typeof setInterval> | undefined,
 ): void {
   const id = readTimerId(handle);
   if (id === null) return;

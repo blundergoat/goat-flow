@@ -26,22 +26,11 @@ interface StateFS {
 
 /** Recognised adoption states for a project. */
 type ProjectStateName =
-  | "bare"
-  | "partial"
-  | "v0.9"
-  | "outdated"
-  | "current"
-  | "error";
+  "bare" | "partial" | "v0.9" | "outdated" | "current" | "error";
 
 /** Recommended next action for a given project state. */
 type ProjectAction =
-  | "setup"
-  | "migration"
-  | "upgrade"
-  | "fix"
-  | "audit"
-  | "incomplete"
-  | "none";
+  "setup" | "migration" | "upgrade" | "fix" | "audit" | "incomplete" | "none";
 
 /** Classification result for a single project directory. */
 interface ProjectState {
@@ -100,12 +89,13 @@ function collectOldSkills(fs: StateFS): string[] {
 /** Build the detail message for a current-but-incomplete installation. */
 function buildIncompleteDetails(
   installedSkills: string[],
+  canonicalSkills: readonly string[],
   hasInstructionFile: boolean,
   hasPreamble: boolean,
   hasConventions: boolean,
 ): string {
   const missing: string[] = [];
-  const missingSkills = getSkillNames().filter(
+  const missingSkills = canonicalSkills.filter(
     (skill) => !installedSkills.includes(skill),
   );
 
@@ -139,6 +129,16 @@ function agentInstructionFiles(): Record<string, string> {
   );
 }
 
+/** Convert manifest/probe exceptions into a user-facing project state. */
+function buildProbeErrorState(error: unknown): ProjectState {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    state: "error",
+    action: "fix",
+    details: `Could not read goat-flow manifest while classifying project state: ${message}`,
+  };
+}
+
 /** Classify a project's GOAT Flow adoption state. */
 // eslint-disable-next-line complexity -- intentional branchy state machine; each branch maps one adoption state.
 export function classifyProjectState(
@@ -146,17 +146,26 @@ export function classifyProjectState(
   agentId?: string,
 ): ProjectState {
   const hasConfig = fs.exists(".goat-flow/config.yaml");
-  const installedSkills = collectInstalledSkills(fs);
+  let canonicalSkills: readonly string[];
+  let installedSkills: string[];
+  let oldSkills: string[];
+  let hasInstructionFile: boolean;
+  try {
+    canonicalSkills = getSkillNames();
+    installedSkills = collectInstalledSkills(fs);
+    oldSkills = collectOldSkills(fs);
+    // A specific agent was requested (e.g. the dashboard filtering by Claude)
+    // -> check that agent's instruction file only; otherwise accept any agent's.
+    const agentInstructionFile = agentId
+      ? agentInstructionFiles()[agentId]
+      : undefined;
+    hasInstructionFile = agentInstructionFile
+      ? fs.exists(agentInstructionFile)
+      : hasAnyInstructionFile(fs);
+  } catch (error) {
+    return buildProbeErrorState(error);
+  }
   const currentSkillCount = installedSkills.length;
-  const oldSkills = collectOldSkills(fs);
-  // A specific agent was requested (e.g. the dashboard filtering by Claude)
-  // -> check that agent's instruction file only; otherwise accept any agent's.
-  const agentInstructionFile = agentId
-    ? agentInstructionFiles()[agentId]
-    : undefined;
-  const hasInstructionFile = agentInstructionFile
-    ? fs.exists(agentInstructionFile)
-    : hasAnyInstructionFile(fs);
   const hasPreamble = fs.exists(".goat-flow/skill-docs/skill-preamble.md");
   const hasConventions = fs.exists(
     ".goat-flow/skill-docs/skill-conventions.md",
@@ -191,7 +200,7 @@ export function classifyProjectState(
       // A "healthy" classification here does not guarantee per-agent audit passes.
       // Run `goat-flow audit` for authoritative validation.
       const isHealthy =
-        currentSkillCount === getSkillNames().length &&
+        currentSkillCount === canonicalSkills.length &&
         hasInstructionFile &&
         hasPreamble &&
         hasConventions;
@@ -211,6 +220,7 @@ export function classifyProjectState(
         action: "incomplete",
         details: buildIncompleteDetails(
           installedSkills,
+          canonicalSkills,
           hasInstructionFile,
           hasPreamble,
           hasConventions,
@@ -243,7 +253,7 @@ export function classifyProjectState(
     return {
       state: "partial",
       action: "setup",
-      details: `${currentSkillCount}/${getSkillNames().length} canonical skills found but no .goat-flow/ config - run setup to complete installation`,
+      details: `${currentSkillCount}/${canonicalSkills.length} canonical skills found but no .goat-flow/ config - run setup to complete installation`,
     };
   }
   // Other AI instructions exist (Copilot rules etc.) but no goat-flow at all.

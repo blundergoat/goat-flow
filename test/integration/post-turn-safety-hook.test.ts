@@ -25,6 +25,8 @@ const TEST_GITHUB_TOKEN = `ghp_${"abcdefghijklmnopqrsttestuvwxyzABCD"}`;
 const TEST_NPM_TOKEN = `npm_${"123456789012345678901234567890123456"}`;
 const TEST_SLACK_TOKEN = `xoxb-${"1234567890-1234567890-abcdef"}`;
 const TEST_API_TOKEN = `sk-${"12345678901234567890123456789012"}`;
+const TEST_CLIENT_SECRET = ["7Hk9Lm2Qr8Tv5Wx1Zb4Nc6", "Df"].join("");
+const TEST_INI_PASSWORD = ["S3cr3tP4ssw0rd", "X"].join("");
 const TEST_PRIVATE_KEY_HEADER = ["-----BEGIN", "OPENSSH PRIVATE KEY-----"].join(
   " ",
 );
@@ -182,19 +184,19 @@ describe("post-turn-safety hook", () => {
       {
         name: "bare hardcoded client secret",
         path: "config.yaml",
-        content: "client_secret: 7Hk9Lm2Qr8Tv5Wx1Zb4Nc6Df\n",
+        content: `client_secret: ${TEST_CLIENT_SECRET}\n`,
         pattern: /credential assignment \(client_secret\)/u,
       },
       {
         name: "ini password",
         path: "app.ini",
-        content: "password=S3cr3tP4ssw0rdX\n",
+        content: `password=${TEST_INI_PASSWORD}\n`,
         pattern: /credential assignment \(password\)/u,
       },
       {
         name: "quoted opaque password",
         path: "settings.yaml",
-        content: 'password: "S3cr3tP4ssw0rdX"\n',
+        content: `password: "${TEST_INI_PASSWORD}"\n`,
         pattern: /credential assignment \(password\)/u,
       },
     ];

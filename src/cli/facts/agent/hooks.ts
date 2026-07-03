@@ -162,8 +162,7 @@ function enrichDenyFromSettings(
   if (!hasDenyPatterns || !settingsParsed) return;
   /** Permissions object from the parsed settings */
   const perms = (settingsParsed as Record<string, unknown>).permissions as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   /** Raw deny array from permissions */
   const rawDeny = perms?.deny;
   if (!Array.isArray(rawDeny)) return;

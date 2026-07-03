@@ -73,6 +73,14 @@ last_reviewed: 2026-06-01
 **What happened:** A quote-first title used to collapse the anchor to a bare kind prefix.
 
 **Prevention:** Keep the full heading for quote-first titles.
+
+## Lesson: "Don't say 'trust me'" keeps anchors safe
+
+**Created:** 2026-05-12
+
+**What happened:** A mixed-quote title used to break the generated search payload.
+
+**Prevention:** Escape quote payloads in the formatter.
 `;
 
 const PATTERN_BUCKET = `---
@@ -161,7 +169,7 @@ describe("parseBucket", () => {
 
   it("parses lesson entries with hooks from What happened", () => {
     const entries = parseBucket(fs, LESSONS_DIR, "lessons");
-    assert.equal(entries.length, 2);
+    assert.equal(entries.length, 3);
     assert.equal(entries[0]?.title, "Agents must read before writing");
     assert.equal(entries[0]?.hook, "The agent edited a file it never read.");
   });
@@ -209,9 +217,9 @@ describe("formatIndex", () => {
   after(() => rmSync(root, { recursive: true, force: true }));
 
   // Anchors normally wrap in double quotes; quote-first titles keep their
-  // embedded quotes and wrap in single quotes instead (M04, 1.13.0).
+  // embedded quotes and switch/escape wrappers as needed (M04, 1.13.0).
   const ROW_SCHEMA =
-    /^- \[[^\]]+\]\([^)]+\.md\) \(search: ("[^"]+"|'[^']*"[^']*')\) - .+$/;
+    /^- \[[^\]]+\]\([^)]+\.md\) \(search: ("(?:[^"\\]|\\.)+"|'[^']*"[^']*')\) - .+$/;
 
   it("renders the unified row schema with generated frontmatter for every bucket", () => {
     const buckets: Array<[IndexBucket, string]> = [
@@ -263,6 +271,17 @@ describe("formatIndex", () => {
     assert.match(
       content,
       /\(search: '## Lesson: "Double check" means read the files again'\)/,
+    );
+  });
+
+  it("escapes mixed quote anchors in rendered rows", () => {
+    const content = formatIndex(
+      "lessons",
+      parseBucket(fs, LESSONS_DIR, "lessons"),
+    );
+    assert.match(
+      content,
+      /\(search: "## Lesson: \\"Don't say 'trust me'\\" keeps anchors safe"\)/,
     );
   });
 

@@ -155,10 +155,7 @@ export interface BucketFreshness {
 
 /** Learning-loop artifact kinds in the order the retrieval and stats pipelines understand. */
 export type LearningLoopEntryKind =
-  | "footgun"
-  | "lesson"
-  | "pattern"
-  | "decision";
+  "footgun" | "lesson" | "pattern" | "decision";
 
 /** Compact parsed learning-loop entry used by bounded prompt retrieval. */
 export interface LearningLoopEntryFact {

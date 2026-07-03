@@ -14,8 +14,7 @@ import type { AgentId } from "../types.js";
 import type { ClientMessage, Runner } from "./types.js";
 
 type DecodeResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string; path: string };
+  { ok: true; value: T } | { ok: false; error: string; path: string };
 
 /** Terminal-create payload after optional text fields and runner selection are normalised. */
 interface TerminalCreateBody {

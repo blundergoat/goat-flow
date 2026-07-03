@@ -55,8 +55,12 @@ rm_is_safely_scoped() {
     # can't prove it stays in the project, and the "*/*" slash-scoped allow
     # below would otherwise wave it through. Demand an explicit literal path.
     [[ "$target" == '$'* || "$target" == '`'* ]] && return 1
+    # Dot traversal makes the path shown in review differ from what rm deletes.
+    case "/$target/" in
+      */../*|*/./*) return 1 ;;
+    esac
     # Scratch dirs under /tmp/build-* are the one absolute location we allow.
-    [[ "$target" =~ ^/tmp/build-[a-zA-Z0-9._-] ]] && continue
+    [[ "$target" =~ ^/tmp/build-[a-zA-Z0-9._-]+(/[a-zA-Z0-9._-]+)*$ ]] && continue
     # Absolute paths could reach anywhere on the machine -> block.
     [[ "$target" == /* ]] && return 1
     # Home-relative paths (~/...) reach the user's personal files -> block.

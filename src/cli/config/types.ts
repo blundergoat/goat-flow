@@ -24,10 +24,7 @@ interface GoatFlowSkillsConfig {
 
 /** Durable learning-loop directories that future automatic capture may target. */
 export type LearningLoopAutoCaptureTarget =
-  | "lessons"
-  | "footguns"
-  | "patterns"
-  | "decisions";
+  "lessons" | "footguns" | "patterns" | "decisions";
 
 /** Programmatic learning-loop capture policy; disabled until explicitly opted in. */
 interface LearningLoopConfig {

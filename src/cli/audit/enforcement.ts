@@ -9,11 +9,7 @@ import type { AuditScope, CheckResult } from "./types.js";
 
 /** Non-gating strength labels for evidence the local audit can observe about an agent. */
 export type EnforcementCapabilityStatus =
-  | "hard"
-  | "limited"
-  | "soft"
-  | "missing"
-  | "unknown";
+  "hard" | "limited" | "soft" | "missing" | "unknown";
 
 type EnforcementCapabilitySource =
   | "local-settings"

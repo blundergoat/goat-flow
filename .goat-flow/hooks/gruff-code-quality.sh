@@ -334,6 +334,26 @@ config_binary_override() {
   local value
   [[ -f "$config_file" ]] || return 0
   value="$(awk -v lang="$lang" '
+    function trim_value(s) {
+      sub(/^[[:space:]]+/, "", s)
+      sub(/[[:space:]]+#.*$/, "", s)
+      sub(/[[:space:]]+$/, "", s)
+      return s
+    }
+    function inline_map_value(rest, map_body, pattern, value) {
+      rest = trim_value(rest)
+      # Users may paste the documented one-line form: binaries: { py: path }.
+      if (rest !~ /^\{.*\}$/) return ""
+      map_body = rest
+      sub(/^\{[[:space:]]*/, "", map_body)
+      sub(/[[:space:]]*\}$/, "", map_body)
+      pattern = "(^|,)[[:space:]]*" lang "[[:space:]]*:[[:space:]]*"
+      # A different language in the inline map belongs to another analyzer.
+      if (!match(map_body, pattern)) return ""
+      value = substr(map_body, RSTART + RLENGTH)
+      sub(/[[:space:]]*,[[:space:]]*[A-Za-z0-9_-]+[[:space:]]*:.*$/, "", value)
+      return trim_value(value)
+    }
     BEGIN {
       want[1] = "hooks"
       want[2] = "gruff-code-quality"
@@ -345,32 +365,54 @@ config_binary_override() {
       sub(/\r$/, "")
       trimmed = $0
       sub(/^ */, "", trimmed)
+      # Blank/comment lines do not change the hook settings the user sees.
       if (trimmed == "" || trimmed ~ /^#/) next
       ind = length($0) - length(trimmed)
+      # Moving back up the YAML tree means the previous nested key is done.
       while (depth > 0 && ind <= lvl[depth]) depth--
+      # Nested content without a matching parent is outside the hook block.
       if (depth == 0 && ind != 0) next
+      # Only plain key/value rows participate in this tiny config reader.
       if (trimmed !~ /^[A-Za-z0-9_-]+:( |$)/) next
       key = trimmed
       sub(/:.*$/, "", key)
+      # Skip sibling keys until the requested hooks/gruff/binaries path resumes.
       if (key != want[depth + 1]) next
       depth++
       lvl[depth] = ind
+      # Inline binaries maps keep the override visible in compact config files.
+      if (depth == 3) {
+        rest = trimmed
+        sub(/^[A-Za-z0-9_-]+:[ ]*/, "", rest)
+        inline_value = inline_map_value(rest)
+        # A matching inline value lets the edited file run the configured tool.
+        if (inline_value != "") {
+          print inline_value
+          exit
+        }
+      }
+      # Block-style language rows name the exact analyzer the hook should run.
       if (depth == 4) {
         rest = trimmed
         sub(/^[A-Za-z0-9_-]+:[ ]*/, "", rest)
-        print rest
+        print trim_value(rest)
         exit
       }
     }
   ' "$config_file" 2>/dev/null || true)"
+  # YAML comments are for humans; strip them before quote cleanup.
+  value="${value%% \#*}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  # Double-quoted values should resolve to the path the user typed.
   if [[ "$value" == \"*\" && "$value" == *\" ]]; then
     value="${value#\"}"
     value="${value%\"}"
+  # Single-quoted values get the same user-facing path cleanup.
   elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
     value="${value#\'}"
     value="${value%\'}"
   else
-    value="${value%% \#*}"
     value="${value%"${value##*[![:space:]]}"}"
   fi
   [[ -n "$value" ]] && printf '%s' "$value"
@@ -675,6 +717,22 @@ self_test() {
   [[ "$config_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
     rm -rf "$tmp"
     printf 'gruff-code-quality self-test: config binary override failed: %s\n' "$config_path" >&2
+    return 1
+  }
+  printf 'hooks:\n  gruff-code-quality:\n    enabled: true\n    binaries: { py: strands_agents/.venv/bin/gruff-py }\n' > "$tmp/.goat-flow/config.yaml"
+  inline_config_path="$(PATH="$tmp/empty-bin:$PATH" discover_binary "$tmp" gruff-py)"
+  # The compact dashboard-friendly YAML form must run the same analyzer.
+  [[ "$inline_config_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: inline config binary override failed: %s\n' "$inline_config_path" >&2
+    return 1
+  }
+  printf 'hooks:\n  gruff-code-quality:\n    enabled: true\n    binaries:\n      py: "strands_agents/.venv/bin/gruff-py" # analyzer\n' > "$tmp/.goat-flow/config.yaml"
+  commented_config_path="$(PATH="$tmp/empty-bin:$PATH" discover_binary "$tmp" gruff-py)"
+  # Inline comments should stay readable without becoming part of the path.
+  [[ "$commented_config_path" == "$tmp/strands_agents/.venv/bin/gruff-py" ]] || {
+    rm -rf "$tmp"
+    printf 'gruff-code-quality self-test: commented config binary override failed: %s\n' "$commented_config_path" >&2
     return 1
   }
   printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/env-bin/gruff-py"

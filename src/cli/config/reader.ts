@@ -286,7 +286,9 @@ function mergeHooks(value: unknown, merged: GoatFlowConfig): void {
  * @param value - raw `hooks.<id>.binaries` value from parsed YAML
  * @returns validated language-to-path map, or null when absent or empty
  */
-function readHookBinaries(value: unknown): Record<string, string> | null {
+export function readHookBinaries(
+  value: unknown,
+): Record<string, string> | null {
   if (!isRecord(value)) return null;
   const binaries: Record<string, string> = {};
   for (const [lang, binaryPath] of Object.entries(value)) {
