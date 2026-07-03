@@ -35,7 +35,11 @@ export interface IndexEntry {
   title: string;
   /** Bucket-relative source file name the row links to (INDEX.md sits in the same directory). */
   sourceFile: string;
-  /** Grep needle for the `(search: "...")` anchor - heading line, cut before any embedded quote. */
+  /**
+   * Grep needle for the row's `(search: ...)` anchor - the heading line, cut before an embedded
+   * double quote UNLESS that cut would collapse it to a useless `## Lesson:`-style prefix
+   * (quote-first titles keep the full heading; the renderer switches wrapper quotes for them).
+   */
   anchor: string;
   /** One-sentence routing hook extracted mechanically from the entry body. */
   hook: string;
@@ -96,10 +100,32 @@ function baseName(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
-/** Cut a heading line before any embedded double quote so the search needle stays greppable. */
+/**
+ * A needle reduced to hashes plus an optional `<Kind>:` label. Such a needle matches EVERY entry
+ * of that kind in the file, so a cold agent grepping it lands on the wrong heading.
+ */
+const DEGENERATE_NEEDLE = /^#{1,2}\s*(?:[A-Za-z-]+:)?$/;
+
+/**
+ * Build the grep needle for one heading line.
+ *
+ * A user retrieving a lesson follows the INDEX row's `(search: ...)` anchor into the bucket
+ * file, so the needle must land on exactly one heading. Headings with an embedded double quote
+ * are cut before the quote to keep the needle copy-pasteable - but for quote-FIRST titles (e.g.
+ * `## Lesson: "Double check" means read the files`) that cut collapses to the bare `## Lesson:`
+ * prefix shared by every entry. Those keep the full heading line instead, and the renderer
+ * wraps them in single quotes (M04, 1.13.0).
+ *
+ * @param headingLine - verbatim `## <Kind>: ...` or ADR `# ...` heading line
+ * @returns the needle to embed in the row's `(search: ...)` anchor
+ */
 function searchNeedle(headingLine: string): string {
   const quote = headingLine.indexOf('"');
-  return quote === -1 ? headingLine : headingLine.slice(0, quote).trimEnd();
+  // No embedded double quote -> the whole heading is already a safe needle.
+  if (quote === -1) return headingLine;
+  const cut = headingLine.slice(0, quote).trimEnd();
+  // Cutting collapsed the needle to shared boilerplate -> keep the full heading.
+  return DEGENERATE_NEEDLE.test(cut) ? headingLine : cut;
 }
 
 /**

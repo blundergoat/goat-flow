@@ -1,14 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "scripts/*.mjs",
-    "test/**/*.test.ts"
-  ],
-  "project": [
-    "src/**/*.ts",
-    "scripts/**/*.mjs",
-    "test/**/*.ts"
-  ],
+  "entry": ["scripts/*.mjs", "test/**/*.test.ts"],
+  "project": ["src/**/*.ts", "scripts/**/*.mjs", "test/**/*.ts"],
   "ignore": [
     "src/dashboard/app.ts",
     "src/dashboard/dashboard-app-data-loading-fragments.ts",
@@ -20,12 +13,10 @@
     "src/dashboard/dashboard-app-state-fragments.ts",
     "src/dashboard/dashboard-custom-prompts-actions.ts",
     "src/dashboard/dashboard-custom-prompts.ts",
-    "src/dashboard/markdown.ts",
     "src/dashboard/dashboard-model-readers.ts",
     "src/dashboard/dashboard-projects.ts",
     "src/dashboard/dashboard-prompts.ts",
     "src/dashboard/dashboard-readers.ts",
-    "src/dashboard/dashboard-setup-quality.ts",
     "src/dashboard/dashboard-terminal-connect.ts",
     "src/dashboard/dashboard-terminal-paste.ts",
     "src/dashboard/dashboard-terminal-runtime.ts",
@@ -33,19 +24,14 @@
     "src/dashboard/globals.d.ts"
   ],
   "ignoreIssues": {
-    "test/**": [
-      "exports",
-      "types"
-    ]
+    "test/**": ["exports", "types"]
   },
-  "ignoreBinaries": [
-    "diff",
-    "where",
-    "which"
-  ],
+  "ignoreBinaries": ["diff", "where", "which"],
   "ignoreDependencies": [
     "@stryker-mutator/core",
+    "@tailwindcss/browser",
     "@xterm/addon-fit",
-    "@xterm/xterm"
+    "@xterm/xterm",
+    "alpinejs"
   ]
 }

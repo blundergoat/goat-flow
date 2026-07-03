@@ -33,7 +33,7 @@ import {
   PROFILES,
   renderAuditSarif,
   SETUP_CHECKS,
-  SKILL_NAMES,
+  getSkillNames,
 } from "../../src.js";
 import {
   completeInstruction,
@@ -684,7 +684,7 @@ export {
   HARNESS_CHECKS,
   extractBacktickPaths,
   AUDIT_VERSION,
-  SKILL_NAMES,
+  getSkillNames,
   PROFILES,
   composeSetup,
   extractProjectFacts,

@@ -256,8 +256,11 @@ else
     now_ms() { echo $(( $(date +%s) * 1000 )); }
 fi
 fmt_elapsed() {
-    # one-decimal seconds, e.g. 5.1s, 0.0s
+    # one-decimal seconds, e.g. 5.1s, 0.0s. now_ms is wall clock, which can
+    # step backwards mid-run (WSL2/NTP correction), so clamp negative deltas
+    # to 0.0s instead of rendering "-1.0s" in the evidence output.
     local ms=$(( $1 ))
+    if (( ms < 0 )); then ms=0; fi
     local secs=$(( ms / 1000 ))
     local frac=$(( (ms % 1000) / 100 ))
     printf '%d.%ds' "$secs" "$frac"

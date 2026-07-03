@@ -100,6 +100,23 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
   renderSection("Persisted", diff.persisted);
   renderSection("Stuck", diff.stuck);
 
+  // Agent-vs-deterministic contradictions only render when present - most
+  // diffs agree, and an always-on empty section would bury the real four.
+  if (diff.deltaTagDisagreements.length > 0) {
+    lines.push(
+      `Delta-tag disagreements (${diff.deltaTagDisagreements.length}) - agent's claimed delta_tag vs the deterministic id diff:`,
+    );
+    for (const row of diff.deltaTagDisagreements) {
+      lines.push(
+        `${row.id} | ${row.severity} | agent said "${row.agentTag}", deterministic diff says "${row.deterministic}" | ${row.summary}`,
+      );
+    }
+    lines.push(
+      "Positional finding ids stay the source of truth; treat disagreements as a methodology signal about the agent's continuity claims.",
+    );
+    lines.push("");
+  }
+
   lines.push(
     "Stuck counter resets on history gaps. For strict persistence tracking, ensure at least one quality run lands within every 30-day window.",
   );

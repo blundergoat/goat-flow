@@ -320,15 +320,6 @@ function dashboardPromptBrowserStateFragment(): DashboardAppFragment {
       return dashboardFlatPresetOrder(this);
     },
 
-    /**
-     * Escaped, optionally search-highlighted HTML for the prompt preview.
-     * Escapes user-facing content before injecting <mark> tags so the preview
-     * stays safe when rendered via x-html.
-     */
-    get highlightedPromptHtml(): string {
-      return dashboardHighlightedPromptHtml(this);
-    },
-
     /** Adapt a preset prompt to the syntax expected by the selected runner. */
     adaptPrompt(prompt: string, runner?: RunnerId): string {
       return dashboardAdaptPrompt(this, prompt, runner);
@@ -624,16 +615,6 @@ function dashboardAuditAndNavigationActionsFragment(): DashboardAppFragment {
     },
 
     // -- Navigation --
-    comingSoonMeta(view: string): { title: string; desc: string } | null {
-      const meta: Record<string, { title: string; desc: string }> = {};
-      return meta[view] ?? null;
-    },
-
-    /** Return whether a requested dashboard view is still routed to the coming-soon panel. */
-    isComingSoonView(view?: string): boolean {
-      return this.comingSoonMeta(view ?? this.activeView) !== null;
-    },
-
     /** Toggle and persist the collapsed state of the dashboard side navigation. */
     toggleSideNav() {
       this.sideNavCollapsed = !this.sideNavCollapsed;

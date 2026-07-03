@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.12.1"
+goat-flow-reference-version: "1.13.0"
 ---
 # Critique Rubric Examples (Reference Pack)
 

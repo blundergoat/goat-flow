@@ -1,6 +1,6 @@
 {
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.12.1",
+  "version": "1.13.0",
 
   "required_files": [
     ".goat-flow/.gitignore",
@@ -297,7 +297,6 @@
     "_note": "Static facts only. Derived facts (check counts, skill names, version, presets count) are computed by src/cli/manifest/manifest.ts at load time. `goat-flow manifest --check` validates static facts against observed state (src/dashboard/views/*.html).",
     "dashboard_views": [
       "about",
-      "coming-soon",
       "home",
       "hooks",
       "projects",

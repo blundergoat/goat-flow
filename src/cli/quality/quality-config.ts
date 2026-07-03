@@ -25,12 +25,7 @@ export type ArtifactSource =
 
 /** Rubric subtype selected after detection; each subtype owns a separate score profile. */
 export type ArtifactSubtype =
-  | "workflow"
-  | "dispatcher"
-  | "report"
-  | "playbook"
-  | "index"
-  | "meta";
+  "workflow" | "dispatcher" | "report" | "playbook" | "index" | "meta";
 
 /** Stable metric keys used by scoring output, fixtures, and config overrides. */
 export type MetricName =

@@ -27,8 +27,7 @@ export function checkDenyPatterns(
       return { gitCommitBlocked: false, gitPushBlocked: false };
     /** Permissions object from the parsed settings */
     const permissions = parsed.permissions as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     /** Raw deny array from permissions */
     const rawDeny = permissions?.deny;
     /** Deny patterns as a string array, filtering non-strings for safety */
@@ -117,8 +116,7 @@ export function extractSettingsFacts(
     if (isSettingsValid && parsed) {
       /** Permissions object from the parsed settings */
       const perms = (parsed as Record<string, unknown>).permissions as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       /** Raw deny array from permissions */
       const denyArr = perms?.deny;
       hasDenyPatterns =
@@ -174,8 +172,7 @@ function checkReadDenyCoversSecrets(
   if (!hasDenyPatterns || !parsed) return false;
   /** Permissions object from the parsed settings */
   const perms = (parsed as Record<string, unknown>).permissions as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   /** Raw deny array from permissions */
   const denyArr = perms?.deny;
   if (!Array.isArray(denyArr)) return false;

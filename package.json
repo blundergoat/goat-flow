@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.12.1",
+  "version": "1.13.0",
   "description": "AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot - setup audits, guardrails, structured skills, deny hooks, and persistent learning loops.",
   "author": "Matthew Hansen (https://www.blundergoat.com)",
   "license": "MIT",
@@ -73,7 +73,7 @@
     "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "prepublishOnly": "npm run publish:check",
-    "publish:check": "npm run build && npm run check-versions && npm run check-package-links"
+    "publish:check": "npm run check-versions && npm run check-instruction-parity && npm run build && npm run check-package-links && npm run test:full"
   },
   "keywords": [
     "goat-flow",
@@ -108,7 +108,6 @@
   ],
   "dependencies": {
     "js-yaml": "^4.1.0",
-    "markdown-it": "^14.1.1",
     "ws": "^8.20.1"
   },
   "optionalDependencies": {
@@ -117,12 +116,13 @@
   "devDependencies": {
     "@blundergoat/gruff-ts": "^0.3.0",
     "@stryker-mutator/core": "^9.6.1",
+    "@tailwindcss/browser": "^4.3.2",
     "@types/js-yaml": "^4.0.9",
-    "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.6.0",
     "@types/ws": "^8.18.1",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "alpinejs": "^3.15.12",
     "eslint": "^10.1.0",
     "knip": "^6.0.2",
     "prettier": "^3.8.1",

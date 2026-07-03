@@ -1,6 +1,14 @@
 /**
  * Canonical cross-module constants for skills and version-aligned aliases.
- * Keep definitions here so detection, prompts, and audit checks stay in sync.
+ *
+ * Everything the CLI knows about "which skills exist" funnels through this
+ * module so detection, prompts, and audit checks stay in sync. The skill
+ * lists come from `workflow/manifest.json` and are read LAZILY on first use:
+ * a user whose install has drifted (say, a stray folder under
+ * `workflow/skills/`) must still be able to run `goat-flow --help` or
+ * `goat-flow --version` to orient themselves - only the commands that
+ * actually need the skill list (audit, setup, manifest checks) should
+ * surface the drift error.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -37,6 +45,7 @@ function readObservedSkillDirs(): string[] {
 function readCanonicalSkillNames(): readonly string[] {
   const manifest = readSkillsManifest();
   const canonical = manifest.skills?.canonical;
+  // Manifest schema broken (not a string array) -> fail with the exact reason.
   if (
     !Array.isArray(canonical) ||
     canonical.some((name) => typeof name !== "string")
@@ -49,6 +58,8 @@ function readCanonicalSkillNames(): readonly string[] {
   const observed = readObservedSkillDirs();
   const missingDirs = canonical.filter((name) => !observed.includes(name));
   const extraDirs = observed.filter((name) => !canonical.includes(name));
+  // Manifest and on-disk skill folders disagree -> name every offender so the
+  // user can fix the drift instead of guessing.
   if (missingDirs.length > 0 || extraDirs.length > 0) {
     const findings: string[] = [];
     if (missingDirs.length > 0) {
@@ -69,6 +80,7 @@ function readCanonicalSkillNames(): readonly string[] {
 function readStaleSkillNames(): readonly string[] {
   const manifest = readSkillsManifest();
   const staleNames = manifest.skills?.stale_names;
+  // Manifest schema broken (not a string array) -> fail with the exact reason.
   if (
     !Array.isArray(staleNames) ||
     staleNames.some((name) => typeof name !== "string")
@@ -80,14 +92,51 @@ function readStaleSkillNames(): readonly string[] {
   return staleNames;
 }
 
-/** Canonical list of all GOAT Flow skill names. */
-export const SKILL_NAMES = readCanonicalSkillNames();
+/** Cache for {@link getSkillNames} - the manifest is static for a process's lifetime. */
+let cachedSkillNames: readonly string[] | undefined;
 
-/** Deprecated skill names retained for migration and drift detection. */
-export const STALE_SKILL_NAMES = readStaleSkillNames();
+/** Cache for {@link getStaleSkillNames} - same lifetime rule as the canonical list. */
+let cachedStaleSkillNames: readonly string[] | undefined;
+
+/**
+ * Canonical list of all GOAT Flow skill names - what `goat-flow audit` and
+ * setup expect to find installed (e.g. under `.claude/skills/`).
+ *
+ * Lazy + cached: the first caller pays the manifest read and drift
+ * validation. Diagnostic commands that never ask for the list keep working
+ * when the manifest has drifted - a user typing `goat-flow --help` after a
+ * botched upgrade still gets help instead of a crash.
+ *
+ * @returns canonical skill names in manifest order
+ * @throws Error when `workflow/manifest.json` is invalid or drifts from `workflow/skills/`
+ */
+export function getSkillNames(): readonly string[] {
+  // First call in this process -> read and validate the manifest now.
+  cachedSkillNames ??= readCanonicalSkillNames();
+  return cachedSkillNames;
+}
+
+/**
+ * Deprecated skill names retained so audit/setup can flag leftovers from
+ * older installs (e.g. a `.claude/skills/goat-test/` dir from a version the
+ * user upgraded away from) instead of treating them as unknown files.
+ *
+ * Lazy + cached for the same reason as {@link getSkillNames}: reading the
+ * manifest at import time would crash `--help`/`--version` under drift.
+ *
+ * @returns stale (retired) skill names from the manifest
+ * @throws Error when `workflow/manifest.json` has an invalid stale_names list
+ */
+export function getStaleSkillNames(): readonly string[] {
+  // First call in this process -> read and validate the manifest now.
+  cachedStaleSkillNames ??= readStaleSkillNames();
+  return cachedStaleSkillNames;
+}
 
 /**
  * Current audit version - derived from package.json so it stays in sync automatically.
  * Skills embed this as `goat-flow-skill-version: X` in their YAML frontmatter.
+ * (Reads the CLI's own package.json, which always ships with the package -
+ * unlike the skills manifest this is not a drift surface, so eager is safe.)
  */
 export const AUDIT_VERSION = getPackageVersion();

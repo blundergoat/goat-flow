@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import {
   buildTerminalSpawnSpec,
+  MAX_SESSIONS,
   pickWindowsRunnerPath,
   resolveCLIPath,
   TerminalManager,
@@ -539,5 +540,100 @@ describe("terminal exports", () => {
       events.map((event) => event.eventKind),
       ["terminal.send", "terminal.send", "prompt.send"],
     );
+  });
+});
+
+describe("terminal session concurrency cap", () => {
+  it("never exceeds MAX_SESSIONS when creates race around loadNodePty", async () => {
+    const manager = makeManager();
+    const internals = managerInternals(manager);
+    internals.runnerPaths.set("claude", "/usr/local/bin/claude");
+    // Each spawn hands back a fresh fake PTY so every racing create can finish.
+    internals.nodePtyModule = {
+      spawn: () => makeSpawnedPty().pty,
+    };
+    internals.nodePtyAvailable = true;
+
+    try {
+      // Fire more creates than the cap in one synchronous burst: every call
+      // runs its cap check before any of them awaits loadNodePty - the exact
+      // interleaving a check-then-act guard lets slip past MAX_SESSIONS.
+      const attempts = MAX_SESSIONS + 3;
+      const results = await Promise.allSettled(
+        Array.from({ length: attempts }, () =>
+          // Empty prompt: no initial-input timer is armed, so no real timer
+          // outlives the assertions in this timer-free concurrency test.
+          manager.create("", PROJECT_ROOT, "claude"),
+        ),
+      );
+
+      const created = results.filter((r) => r.status === "fulfilled").length;
+      const rejected = results.filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected",
+      );
+
+      // The cap is a hard ceiling; concurrency must not admit extra sessions.
+      assert.equal(manager.list().length, MAX_SESSIONS);
+      assert.equal(created, MAX_SESSIONS);
+      assert.equal(rejected.length, attempts - MAX_SESSIONS);
+      // Overflow creates fail with the visible cap message, not a stray crash.
+      for (const rejection of rejected) {
+        const message =
+          rejection.reason instanceof Error ? rejection.reason.message : "";
+        assert.match(message, /Maximum \d+ concurrent sessions/);
+      }
+    } finally {
+      manager.shutdown();
+    }
+  });
+
+  it("frees the reserved slot when a create fails path validation", async () => {
+    const manager = makeManager();
+    const internals = managerInternals(manager);
+    internals.runnerPaths.set("claude", "/usr/local/bin/claude");
+    internals.nodePtyModule = { spawn: () => makeSpawnedPty().pty };
+    internals.nodePtyAvailable = true;
+
+    // A rejected launch (bad project path) must not leave a permanent
+    // "starting" session wedged in one of the MAX_SESSIONS slots.
+    await assert.rejects(
+      manager.create("", "/definitely/missing/goat-flow/project", "claude"),
+      /Local path validation failed/,
+    );
+    assert.equal(manager.list().length, 0);
+  });
+
+  it("kills the PTY and frees the slot when a starting session is deleted mid-launch", async () => {
+    const manager = makeManager();
+    const internals = managerInternals(manager);
+    internals.runnerPaths.set("claude", "/usr/local/bin/claude");
+    // Track whether the PTY spawned after the delete gets torn down.
+    let spawnedKilled = false;
+    internals.nodePtyModule = {
+      spawn: () => {
+        const spawned = makeSpawnedPty();
+        const originalKill = spawned.pty.kill;
+        spawned.pty.kill = () => {
+          spawnedKilled = true;
+          originalKill();
+        };
+        return spawned.pty;
+      },
+    };
+    internals.nodePtyAvailable = true;
+
+    // create() registers the "starting" reservation synchronously, then parks
+    // on `await loadNodePty()` - so the session is deletable before its PTY exists.
+    const createPromise = manager.create("", PROJECT_ROOT, "claude");
+    const startingId = manager.list()[0]?.id;
+    assert.ok(startingId, "expected a starting reservation to be listed");
+    // Simulate DELETE /api/terminal/<id> arriving mid-launch.
+    assert.equal(manager.kill(startingId), true);
+
+    // The resumed launch must abort and tear down the PTY, not resurrect the
+    // deleted session as an untracked runner.
+    await assert.rejects(createPromise, /cancelled during startup/);
+    assert.equal(manager.list().length, 0);
+    assert.equal(spawnedKilled, true);
   });
 });

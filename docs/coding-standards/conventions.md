@@ -7,7 +7,7 @@ Documentation framework for AI coding agent workflows. Two parts:
 - **Markdown docs** (`docs/`, `workflow/`, `workflow/setup/`): framework documentation and agent templates
 - **Shell scripts** (`scripts/`, `workflow/hooks/`): maintenance, preflight checks, guardrail hooks
 
-Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-yaml`, `markdown-it`, `ws`.
+Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-yaml`, `ws`.
 
 ## Architecture
 
@@ -77,7 +77,7 @@ npx goat-flow quality . --agent claude       # Generate quality-assessment promp
 - AUDIT_VERSION lives in `src/cli/constants.ts`, derived from `package.json` at runtime (single source of truth)
 - Skill frontmatter must embed AUDIT_VERSION - CI enforces this in the "Skill template versions" step
 - `ReadonlyFS` interface for filesystem access -- auditor never writes to disk
-- Minimal runtime dependencies (js-yaml, markdown-it, ws). Dev-only: typescript, tsx, @types/node
+- Minimal runtime dependencies (js-yaml, ws). Dev-only: typescript, tsx, @types/node
 
 ## DO
 

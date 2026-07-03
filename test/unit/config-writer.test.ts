@@ -87,6 +87,34 @@ describe("config writer", () => {
     });
   });
 
+  it("preserves hook binaries overrides through toggle writes", () => {
+    withTempProject((root) => {
+      const configPath = join(root, ".goat-flow", "config.yaml");
+      writeFileSync(
+        configPath,
+        [
+          'version: "1.8.0"',
+          "hooks:",
+          "  gruff-code-quality:",
+          "    enabled: true",
+          "    binaries:",
+          "      py: strands_agents/.venv/bin/gruff-py",
+          "",
+        ].join("\n"),
+      );
+
+      setHookEnabled(root, "gruff-code-quality", false);
+      setHookEnabled(root, "deny-dangerous", true);
+
+      const next = readFileSync(configPath, "utf-8");
+      assert.match(next, /gruff-code-quality:\n {4}enabled: false/u);
+      assert.match(
+        next,
+        /binaries:\n {6}py: strands_agents\/\.venv\/bin\/gruff-py/u,
+      );
+    });
+  });
+
   it("ignores unsafe top-level block keys instead of constructing a regex", () => {
     withTempProject((root) => {
       const configPath = join(root, ".goat-flow", "config.yaml");

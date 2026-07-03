@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-06-12
+last_reviewed: 2026-07-03
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -22,6 +22,16 @@ last_reviewed: 2026-06-12
 **Root cause:** The test generated dangerous fixture content by storing the exact dangerous strings in the source file. That made the repository source itself look like changed secret material, even though the test only needed the dangerous value inside a temporary repo at runtime.
 
 **Prevention:** Secret-scanner tests should construct secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner, but the committed source does not contain contiguous token/private-key patterns. After adding or editing scanner fixtures, run the scanner against the current repo, not only against temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`) and `workflow/hooks/post-turn-safety.sh` (search: `scan_line`).
+
+## Lesson: Bash case patterns need syntax proof for template delimiters
+
+**Status:** active | **Created:** 2026-06-19
+
+**What happened:** While adding `post-turn-safety` false-positive coverage for Twig/Jinja/ERB interpolation delimiters, the first Bash `case` pattern used unescaped `<`, `>`, `{`, and `}` tokens. The focused runtime tests then failed before scanner logic ran with `syntax error near unexpected token '<'`, and ShellCheck flagged the brace literals after the parse error was fixed.
+
+**Root cause:** I treated delimiter strings as inert glob text inside a Bash `case` arm. In shell syntax, redirection-looking characters and brace literals still need quoting or escaping for a clean parser/static-analysis pass, even when the surrounding intent is just pattern matching.
+
+**Prevention:** For hook scanner changes that add template or shell delimiter patterns, run `bash -n` and ShellCheck before trusting behavior tests, and escape delimiter metacharacters in `case` arms. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_reference_or_interpolation`) and `test/integration/post-turn-safety-hook.test.ts` (search: `template interpolations`).
 
 ## Lesson: Generated hook templates need template-safe ShellCheck annotations
 
@@ -224,3 +234,13 @@ last_reviewed: 2026-06-12
 **Prevention:** For hook rules that classify write-capable CLI commands, build the regression set as a grammar matrix before mirror fanout: direct incident form, global flags before topic, inherited flags after topic, short flag forms, shell wrappers, pipeline consumers such as `xargs`, write-method API forms, and read-only allow controls. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment`).
 
 **Note (2026-06-02):** ADR-028 was amended to allow `gh issue comment` and `gh pr comment` through the hook (other `gh` writes still blocked). The specific block this lesson originally described no longer applies to comments, but the methodological lesson - test the CLI grammar matrix, not only the incident command - stands. The grammar matrix in the self-test now covers both blocked (`gh pr review`, `gh workflow run`, `gh api ... -X POST -f body=...`) and allowed (`gh issue comment`, `gh pr comment`) cases, so the prevention rule still has live coverage.
+
+## Lesson: Restricted-PATH hook fixtures break helpers that shell out
+
+**Status:** active | **Created:** 2026-07-03
+
+**What happened:** The gruff-code-quality self-test isolates binary discovery with `PATH="$tmp/empty-bin"` so a system-installed `gruff-py` cannot leak into assertions. The new repo-owned config override (`hooks.gruff-code-quality.binaries.<lang>`) parses `.goat-flow/config.yaml` with `awk`. Under the restricted PATH, `awk` was not found; the command substitution's `2>/dev/null || true` swallowed the failure, the parser returned empty, and the config-override self-test failed with an empty value while the production code path was actually correct.
+
+**Root cause:** Restricted-PATH fixtures constrain every external command in the function under test, not just the binary the fixture means to hide. A helper that shells out (`awk`, `sed`, `git`) silently degrades when the fixture PATH omits it, and fail-soft error handling converts the missing tool into a wrong answer instead of a visible error.
+
+**Prevention:** When a hook self-test restricts PATH to hide one binary, first check which branch of the code under test can reach a PATH lookup for that binary. If the branch short-circuits earlier (env/config override present returns before the PATH search), append the real PATH - `PATH="$tmp/empty-bin:$PATH"` - so shell-out helpers keep working; keep the bare restricted PATH only for assertions that genuinely exercise PATH-based discovery. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `they never reach the PATH binary search`), (search: `config_binary_override`).

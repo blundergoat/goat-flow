@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-04
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -139,6 +139,12 @@ last_reviewed: 2026-06-14
 **Root cause:** Runtime truth from a filter callback does not always carry through to a later indexed `Record<string, T>` lookup strongly enough for TypeScript to discharge `undefined`. The refactor was logically correct, but the type proof at the final lookup site was incomplete. Formatting drift surfaced because the new helper signature changed line wrapping and the file had not yet been reflowed.
 
 **Fix:** Add the explicit proof at the indexed lookup site (`agents[id]!` or a typed-entry helper), run Prettier on the touched TypeScript file, and rerun the exact failing gates.
+
+**Recurrence 2026-07-04:** While addressing PR #54 review feedback, the first
+`npm run typecheck` caught `TS4104` after `classifyProjectState` assigned the
+readonly result of `getSkillNames()` to a mutable `string[]`. The fix was to
+keep the manifest-derived list readonly through the local variable and helper
+parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalSkills: readonly string[]`).
 
 **Prevention:**
 1. After refactoring manifest/registry code that filters ids and then indexes a `Record`, run `npm run typecheck` even if the focused unit tests already pass.

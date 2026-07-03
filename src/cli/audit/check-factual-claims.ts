@@ -12,7 +12,7 @@
  * files legitimately discuss historical counts in prose - excluded.
  */
 import type { AuditContext, ContentFinding } from "./types.js";
-import { SKILL_NAMES } from "../constants.js";
+import { getSkillNames } from "../constants.js";
 import { SETUP_CHECKS } from "./check-goat-flow.js";
 import { AGENT_CHECKS } from "./check-agent-setup.js";
 import { HARNESS_CHECKS } from "./harness/index.js";
@@ -161,7 +161,7 @@ const COUNT_CHECKS: CountClaimCheck[] = [
     rule: "skill-count-drift",
     pattern: /\b(\d+)\s+skills?\b/gi,
     /** Return the live skills count. */
-    actual: () => SKILL_NAMES.length,
+    actual: () => getSkillNames().length,
     label: "skills",
     scopedTo: [".goat-flow/", "ai-docs/"],
   },

@@ -1,4 +1,4 @@
-# Copilot Instructions - v1.12.1 (2026-06-11)
+# Copilot Instructions - v1.13.0 (2026-06-11)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash scripts + TypeScript CLI auditor.
 
 goat-flow is a harness - guardrails, memory, and workflows for AI coding agents. Five concerns drive every design decision: **Context** (what you read), **Constraints** (what you may never do), **Verification** (how work is checked), **Recovery** (how state survives failure), **Feedback loop** (how mistakes become permanent fixes).
@@ -60,7 +60,7 @@ When a goat-* skill is active, its Step 0 replaces READ and selects the skill's 
 
 ### READ
 MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` when the task involves architecture, policy, or setup work. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
-BAD: "The CLI has 20 audit checks" (guessed without reading)
+BAD: "The CLI has 30 audit checks" (guessed without reading)
 GOOD: Read check-goat-flow.ts → 16 setup checks, check-agent-setup.ts → 4 agent checks (20 total)
 
 ### SCOPE
@@ -91,7 +91,7 @@ The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-f
 
 ## Definition of Done
 
-MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts) (2) no broken cross-references (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames. If working from a milestone file, tick `- [x]` on each completed task immediately - not at the end. After context compaction or 15+ turns, split work and start a fresh thread between unrelated tasks.
+MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts) (2) no broken cross-references (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames. If working from a milestone file, tick `- [x]` on each completed task immediately - not at the end. After context compaction, at ~60% context, or after 15+ turns, split work and start a fresh thread between unrelated tasks.
 
 ## Artifact Routing
 

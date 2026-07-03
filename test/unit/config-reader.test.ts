@@ -63,6 +63,44 @@ toolchain:
   });
 });
 
+describe("config merges hook binaries overrides", () => {
+  it("carries binaries entries into the normalized hook config", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+hooks:
+  gruff-code-quality:
+    enabled: true
+    binaries:
+      py: strands_agents/.venv/bin/gruff-py
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.equal(result.valid, true);
+    assert.deepStrictEqual(result.config.hooks["gruff-code-quality"], {
+      enabled: true,
+      binaries: { py: "strands_agents/.venv/bin/gruff-py" },
+    });
+  });
+
+  it("fails validation when a binaries entry is not a string path", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+hooks:
+  gruff-code-quality:
+    enabled: true
+    binaries:
+      py: 3
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.equal(result.valid, false);
+    assert.ok(
+      result.errors.some(
+        (error) => error.path === "hooks.gruff-code-quality.binaries.py",
+      ),
+      JSON.stringify(result.errors),
+    );
+  });
+});
+
 describe("config ignores removed plan-checkbox guard settings", () => {
   it("treats legacy plan-guard config as an unknown top-level key", () => {
     const yaml = `

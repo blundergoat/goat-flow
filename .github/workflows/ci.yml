@@ -1,6 +1,8 @@
 name: CI
 
 on:
+  push:
+    branches: [main, dev]
   pull_request:
     branches: [main, dev]
 
@@ -57,13 +59,34 @@ jobs:
       - name: GOAT Flow Audit
         run: node dist/cli/cli.js audit .
 
+      - name: Learning-loop stats check
+        run: node dist/cli/cli.js stats . --check
+
+      # Shell surfaces mirror scripts/preflight-checks.sh. Installed hook
+      # mirrors under .goat-flow/hooks/ are gitignored local state and do not
+      # exist in a fresh checkout, so CI validates the committed workflow/
+      # sources instead (same exclusions as preflight: SC2016 only for hook
+      # modules whose sed patterns intentionally use single quotes).
       - name: Shellcheck
         run: |
           sudo apt-get install -y shellcheck
-          shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh
+          shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
+          shellcheck --exclude=SC2001,SC2016 workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh
 
       - name: Shell syntax
-        run: bash -n scripts/*.sh
+        run: bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh
+
+      - name: Instruction parity
+        run: node scripts/check-instruction-parity.mjs
+
+      - name: Path integrity
+        run: bash scripts/check-path-integrity.sh .
+
+      - name: Version consistency (shared script)
+        run: npm run check-versions
+
+      - name: Package links
+        run: npm run check-package-links
 
       - name: Version consistency
         run: |
@@ -80,8 +103,9 @@ jobs:
             exit 1
           fi
 
-          # Instruction file headers
-          for f in CLAUDE.md AGENTS.md GEMINI.md; do
+          # Instruction file headers (current agent surfaces; AGENTS.md is
+          # shared by Codex and Antigravity - list it once)
+          for f in CLAUDE.md AGENTS.md .github/copilot-instructions.md; do
             if [ -f "$f" ]; then
               header_version=$(head -1 "$f" | grep -oE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | sed 's/^v//' || true)
               if [ -n "$header_version" ] && [ "$header_version" != "$pkg_version" ]; then

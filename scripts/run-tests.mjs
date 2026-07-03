@@ -50,6 +50,7 @@ function listTestFiles(dir = "test") {
 function isSlowTest(path) {
   return (
     /^test\/integration\/audit-drift[^/]*\.test\.ts$/u.test(path) ||
+    path === "test/integration/cli-manifest-drift.test.ts" ||
     path === "test/integration/main-guard.test.ts" ||
     path === "test/integration/audit-quality.test.ts" ||
     /^test\/integration\/dashboard[^/]*\.test\.ts$/u.test(path) ||

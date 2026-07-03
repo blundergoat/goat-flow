@@ -22,6 +22,7 @@ import {
 import {
   renderStatsText,
   renderStatsJson,
+  renderStatsMarkdown,
 } from "../../src/cli/stats/render.js";
 import type {
   LoadedConfig,
@@ -156,6 +157,76 @@ describe("goat-flow stats - happy path", () => {
 
     const json = JSON.parse(renderStatsJson(report));
     assert.equal(json.footguns.totalEntries, expectedFootgunEntries);
+  });
+});
+
+describe("goat-flow stats - graduation candidates", () => {
+  /** Fixture with recurrence markers on one active footgun, one resolved footgun, and one lesson. */
+  function loadRecurrenceReport() {
+    return loadReport({
+      footguns: {
+        "hooks.md":
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n\n**Recurrence update (2026-04-17):** happened again after recording.\n\n## Resolved Entries\n\n## Footgun: closed trap\n\n**Status:** resolved | **Created:** 2026-04-01 | **Resolved:** 2026-04-02 | **Evidence:** ACTUAL_MEASURED\n\nBody.\n\n**Recurrence update (2026-04-01):** recurred before the fix landed.\n",
+      },
+      lessons: {
+        "verification.md":
+          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: beta\n\nBody.\n\n**Recurrence update (2026-04-10):** first repeat.\n\n**Recurrence update (2026-04-15):** second repeat.\n\n## Lesson: quiet\n\nBody without recurrences.\n",
+      },
+    });
+  }
+
+  it("lists active entries with recurrence updates and skips resolved entries", () => {
+    const report = loadRecurrenceReport();
+
+    assert.equal(report.footguns.totalGraduationCandidates, 1);
+    assert.deepEqual(report.footguns.buckets[0].graduationCandidates, [
+      { title: "alpha", recurrenceCount: 1 },
+    ]);
+    assert.equal(report.lessons.totalGraduationCandidates, 1);
+    assert.deepEqual(report.lessons.buckets[0].graduationCandidates, [
+      { title: "beta", recurrenceCount: 2 },
+    ]);
+  });
+
+  it("renders candidates in text and markdown with per-entry recurrence counts", () => {
+    const report = loadRecurrenceReport();
+
+    const text = renderStatsText(report);
+    assert.ok(text.includes("Graduation candidates"));
+    assert.ok(text.includes("hooks.md :: alpha (1 recurrence)"));
+    assert.ok(text.includes("verification.md :: beta (2 recurrences)"));
+    assert.ok(
+      !text.includes("closed trap"),
+      "resolved entries must not surface as graduation candidates",
+    );
+
+    const markdown = renderStatsMarkdown(report);
+    assert.ok(markdown.includes("**Graduation candidates**"));
+    assert.ok(markdown.includes("verification.md :: beta (2 recurrences)"));
+  });
+
+  it("stays report-only: --check passes while candidates exist", () => {
+    const verdict = checkStats(loadRecurrenceReport());
+    assert.equal(verdict.status, "pass");
+    assert.deepEqual(verdict.findings, []);
+    assert.deepEqual(verdict.warnings, []);
+  });
+
+  it("renders no graduation section when no entry has recurrence updates", () => {
+    const report = loadReport({
+      footguns: {
+        "hooks.md":
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
+      },
+      lessons: {
+        "verification.md":
+          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: beta\n\nBody.\n",
+      },
+    });
+    assert.equal(report.footguns.totalGraduationCandidates, 0);
+    assert.equal(report.lessons.totalGraduationCandidates, 0);
+    assert.ok(!renderStatsText(report).includes("Graduation candidates"));
+    assert.ok(!renderStatsMarkdown(report).includes("Graduation candidates"));
   });
 });
 

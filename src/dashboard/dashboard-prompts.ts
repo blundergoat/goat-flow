@@ -347,20 +347,6 @@ function dashboardFlatPresetOrder(ctx: DashboardPromptsContext): string[] {
   return ctx.filteredPresets.map((p) => p.id);
 }
 
-/** Return escaped, optionally search-highlighted HTML for the prompt preview. */
-function dashboardHighlightedPromptHtml(ctx: DashboardPromptsContext): string {
-  const prompt = ctx.adaptPrompt(ctx.selectedPreset?.prompt ?? "");
-  const escaped = prompt
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-  const query = ctx.presetSearch.trim();
-  if (!query) return escaped;
-  const qEscaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(qEscaped, "gi");
-  return escaped.replace(re, "<mark>$&</mark>");
-}
-
 /** Adapt a preset prompt to the syntax expected by the selected runner. */
 function dashboardAdaptPrompt(
   ctx: DashboardPromptsContext,

@@ -16,6 +16,9 @@ export interface BucketSection {
   totalEntries: number;
   totalStaleRefs: number;
   totalInvalidLineRefs: number;
+  /** Active entries with `**Recurrence update` markers across all buckets.
+   *  Feedback-loop graduation candidates: report-only, never a `--check` failure. */
+  totalGraduationCandidates: number;
   bands: { fresh: number; aging: number; stale: number; unknown: number };
   buckets: BucketFreshness[];
   formatDiagnostic: string | null;
@@ -102,6 +105,10 @@ function buildSection(
     totalEntries: side.entryCount,
     totalStaleRefs: side.staleRefs.length,
     totalInvalidLineRefs,
+    totalGraduationCandidates: side.buckets.reduce(
+      (sum, bucket) => sum + bucket.graduationCandidates.length,
+      0,
+    ),
     bands,
     buckets: side.buckets,
     formatDiagnostic: side.formatDiagnostic,

@@ -24,10 +24,7 @@ interface GoatFlowSkillsConfig {
 
 /** Durable learning-loop directories that future automatic capture may target. */
 export type LearningLoopAutoCaptureTarget =
-  | "lessons"
-  | "footguns"
-  | "patterns"
-  | "decisions";
+  "lessons" | "footguns" | "patterns" | "decisions";
 
 /** Programmatic learning-loop capture policy; disabled until explicitly opted in. */
 interface LearningLoopConfig {
@@ -38,7 +35,15 @@ interface LearningLoopConfig {
 }
 
 /** One togglable goat-flow hook entry from `.goat-flow/config.yaml`. */
-type GoatFlowHookConfig = Record<"enabled", boolean>;
+interface GoatFlowHookConfig {
+  enabled: boolean;
+  /**
+   * Repo-relative analyzer binary overrides keyed by language suffix (e.g.
+   * `py: strands_agents/.venv/bin/gruff-py`). Consumed at runtime by the hook
+   * script itself; carried here so config round-trips preserve the block.
+   */
+  binaries?: Record<string, string>;
+}
 
 /** Stable boolean keys retained because they mirror `.goat-flow/config.yaml`. */
 type GoatFlowConfigBooleanFields = Record<"telemetry", boolean>;

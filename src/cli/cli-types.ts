@@ -58,11 +58,7 @@ export const HOOK_SUBCOMMANDS = new Set<string>([
  * first positional to one of these, and dispatch routes on the chosen member.
  */
 export type QualitySubcommand =
-  | "prompt"
-  | "history"
-  | "diff"
-  | "validate"
-  | "candidacy";
+  "prompt" | "history" | "diff" | "validate" | "candidacy";
 
 /**
  * One resolved input to `quality candidacy`, distinguishing the two ways a caller can supply it.

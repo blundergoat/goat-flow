@@ -10,11 +10,7 @@ type AuditCheckImpact = "none" | "scope-fail" | "score-only";
 type AuditCheckEvidenceKind = "semantic" | "structural";
 type AuditCheckAssurance = "full" | "limited";
 type EnforcementCapabilityStatus =
-  | "hard"
-  | "limited"
-  | "soft"
-  | "missing"
-  | "unknown";
+  "hard" | "limited" | "soft" | "missing" | "unknown";
 type EnforcementCapabilitySource =
   | "local-settings"
   | "local-hook"
@@ -44,12 +40,7 @@ interface AuditFailure {
 /** Evidence provenance emitted for each registered audit check. */
 interface AuditCheckProvenance {
   source_type:
-    | "spec"
-    | "vendor_docs"
-    | "paper"
-    | "incident"
-    | "community"
-    | "unknown";
+    "spec" | "vendor_docs" | "paper" | "incident" | "community" | "unknown";
   source_urls: string[];
   verified_on: string;
   normative_level: "MUST" | "SHOULD" | "BEST_PRACTICE";
@@ -363,8 +354,7 @@ interface TerminalRefs {
   awaitingInputTimer?: ReturnType<typeof setTimeout> | undefined;
   pasteSubmitTimer?: ReturnType<typeof setTimeout> | undefined;
   pasteSubmitQueue?:
-    | Array<{ data: string; shouldDelaySubmit: boolean }>
-    | undefined;
+    Array<{ data: string; shouldDelaySubmit: boolean }> | undefined;
   pasteSubmitOutputTail?: string | undefined;
   pasteSubmitAwaitingCommit?: boolean;
   pasteSubmitFallbackSubmitted?: boolean;
@@ -717,9 +707,4 @@ interface Window {
   __GOAT_FLOW_PRESETS__?: Preset[];
   Terminal?: new (options: Record<string, unknown>) => XTermInstance;
   FitAddon?: { FitAddon: new () => FitAddonInstance };
-  jsyaml?: { load(text: string): unknown };
-  renderMarkdown?: (
-    text: string,
-    opts?: { frontmatter?: "strip" | "passthrough"; breaks?: boolean },
-  ) => { html: string; frontmatter: Record<string, unknown> | null };
 }

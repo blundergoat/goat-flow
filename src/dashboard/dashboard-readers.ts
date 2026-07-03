@@ -309,8 +309,7 @@ function applyAuditCheckOptionalFields(
   status: AuditStatus,
 ): void {
   const type = readEnumValue(rawCheck.type, AUDIT_CHECK_TYPES) as
-    | NonNullable<AuditCheck["type"]>
-    | undefined;
+    NonNullable<AuditCheck["type"]> | undefined;
   if (type) check.type = type;
   if (rawCheck.acknowledged === true) check.acknowledged = true;
   const acknowledged = check.acknowledged === true;

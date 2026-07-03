@@ -22,9 +22,18 @@ const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const HOOK_PATH = resolve(PROJECT_ROOT, "workflow/hooks/post-turn-safety.sh");
 const TEST_AWS_ACCESS_KEY = `AKIA${"1234567890ABCDEF"}`;
 const TEST_GITHUB_TOKEN = `ghp_${"abcdefghijklmnopqrsttestuvwxyzABCD"}`;
+const TEST_NPM_TOKEN = `npm_${"123456789012345678901234567890123456"}`;
 const TEST_SLACK_TOKEN = `xoxb-${"1234567890-1234567890-abcdef"}`;
 const TEST_API_TOKEN = `sk-${"12345678901234567890123456789012"}`;
+const TEST_CLIENT_SECRET = ["7Hk9Lm2Qr8Tv5Wx1Zb4Nc6", "Df"].join("");
+const TEST_INI_PASSWORD = ["S3cr3tP4ssw0rd", "X"].join("");
 const TEST_PRIVATE_KEY_HEADER = ["-----BEGIN", "OPENSSH PRIVATE KEY-----"].join(
+  " ",
+);
+const TEST_RSA_PRIVATE_KEY_HEADER = ["-----BEGIN", "RSA PRIVATE KEY-----"].join(
+  " ",
+);
+const TEST_RSA_PRIVATE_KEY_FOOTER = ["-----END", "RSA PRIVATE KEY-----"].join(
   " ",
 );
 
@@ -116,6 +125,153 @@ function assertHookBlocks(
 }
 
 describe("post-turn-safety hook", () => {
+  describe("must-block fixtures", () => {
+    const fixtures = [
+      {
+        name: "full merge conflict",
+        path: "src/conflict.txt",
+        content: [
+          "<<<<<<< HEAD",
+          "left",
+          "=======",
+          "right",
+          ">>>>>>> branch",
+          "",
+        ].join("\n"),
+        pattern: /merge conflict marker/u,
+      },
+      {
+        name: "AWS access key",
+        path: ".env",
+        content: `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`,
+        pattern: /AWS access key/u,
+      },
+      {
+        name: "GitHub token",
+        path: "tokens.env",
+        content: `GITHUB_TOKEN=${TEST_GITHUB_TOKEN}\n`,
+        pattern: /GitHub token/u,
+      },
+      {
+        name: "npm token",
+        path: "tokens.env",
+        content: `NPM_TOKEN=${TEST_NPM_TOKEN}\n`,
+        pattern: /npm token/u,
+      },
+      {
+        name: "Slack token",
+        path: "tokens.env",
+        content: `SLACK_BOT_TOKEN=${TEST_SLACK_TOKEN}\n`,
+        pattern: /Slack token/u,
+      },
+      {
+        name: "OpenAI token",
+        path: "tokens.env",
+        content: `OPENAI_API_KEY=${TEST_API_TOKEN}\n`,
+        pattern: /API token/u,
+      },
+      {
+        name: "RSA private key block",
+        path: "private.pem",
+        content: [
+          TEST_RSA_PRIVATE_KEY_HEADER,
+          "MIIEpAIBAAKCAQEA1234567890abcdef",
+          TEST_RSA_PRIVATE_KEY_FOOTER,
+          "",
+        ].join("\n"),
+        pattern: /private key block/u,
+      },
+      {
+        name: "bare hardcoded client secret",
+        path: "config.yaml",
+        content: `client_secret: ${TEST_CLIENT_SECRET}\n`,
+        pattern: /credential assignment \(client_secret\)/u,
+      },
+      {
+        name: "ini password",
+        path: "app.ini",
+        content: `password=${TEST_INI_PASSWORD}\n`,
+        pattern: /credential assignment \(password\)/u,
+      },
+      {
+        name: "quoted opaque password",
+        path: "settings.yaml",
+        content: `password: "${TEST_INI_PASSWORD}"\n`,
+        pattern: /credential assignment \(password\)/u,
+      },
+    ];
+
+    for (const fixture of fixtures) {
+      it(`blocks ${fixture.name}`, () => {
+        withTempRepo((root) => {
+          writeFile(root, fixture.path, fixture.content);
+
+          assertHookBlocks(root, fixture.pattern);
+        });
+      });
+    }
+  });
+
+  describe("must-pass fixtures", () => {
+    const fixtures = [
+      {
+        name: "Symfony env and parameter references",
+        path: "config/packages/secrets.yaml",
+        content: [
+          "secret: '%env(APP_SECRET)%'",
+          'secret: "%env(APP_SECRET)%"',
+          "password: '%database_password%'",
+          "secret: '%mercure_jwt_secret%'",
+          "client_secret: '%env(string:key:xero_client_secret:json:aws_secret:ENV_AWSPROD_EU_XERO)%'",
+          "private_key: '%env(string:key:braintree_private_key:json:aws_secret:ENV_AWSPROD_EU_BRAINTREE)%'",
+          "bearer_token: '%env(API_TOKEN)%'",
+          "",
+        ].join("\n"),
+      },
+      {
+        name: "human-readable credential prose",
+        path: "translations/security.yaml",
+        content: [
+          "password: 'Please enter your password'",
+          "token: 'Your verification token has expired'",
+          "secret: 'Keep this secret safe at all times'",
+          "",
+        ].join("\n"),
+      },
+      {
+        name: "template interpolations",
+        path: "config/templates.yaml",
+        content: [
+          'api_key: "${API_TOKEN}"',
+          'password: "$(secretctl read database_password)"',
+          "secret: '{{ vault.secret }}'",
+          "client_secret: '<%= ENV.fetch(\"CLIENT_SECRET\") %>'",
+          "",
+        ].join("\n"),
+      },
+      {
+        name: "Markdown setext heading",
+        path: "docs.md",
+        content: "Section\n=======\n",
+      },
+      {
+        name: "inline allow comment",
+        path: ".env",
+        content: `API_KEY=${TEST_API_TOKEN} # goat-flow-allow-secret\n`,
+      },
+    ];
+
+    for (const fixture of fixtures) {
+      it(`allows ${fixture.name}`, () => {
+        withTempRepo((root) => {
+          writeFile(root, fixture.path, fixture.content);
+
+          assertHookAllows(root);
+        });
+      });
+    }
+  });
+
   it("blocks high-confidence secrets in untracked text files", () => {
     withTempRepo((root) => {
       writeFile(root, ".env", `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`);
@@ -136,7 +292,11 @@ describe("post-turn-safety hook", () => {
 
   it("blocks merge conflict markers in changed text", () => {
     withTempRepo((root) => {
-      writeFile(root, "src/conflict.txt", "<<<<<<< HEAD\nleft\n=======\n");
+      writeFile(
+        root,
+        "src/conflict.txt",
+        "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> branch\n",
+      );
 
       assertHookBlocks(root, /merge conflict marker/u);
     });

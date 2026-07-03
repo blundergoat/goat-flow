@@ -84,11 +84,7 @@ export interface AuditConcern {
 
 /** Canonical five-concern keys used by harness audit rollups. */
 export type AuditConcernKey =
-  | "context"
-  | "constraints"
-  | "verification"
-  | "recovery"
-  | "feedback_loop";
+  "context" | "constraints" | "verification" | "recovery" | "feedback_loop";
 
 /** Stable `harness` JSON field retained for existing CLI and dashboard consumers. */
 type AuditHarnessJsonField = Record<"harness", boolean>;

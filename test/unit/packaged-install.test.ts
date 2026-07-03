@@ -27,7 +27,7 @@ import {
 import { ManifestValidationError } from "../../src/cli/manifest/types.js";
 import { validateProvenance } from "../../src/cli/audit/provenance-types.js";
 import { isPackagedInstall } from "../../src/cli/paths.js";
-import { SKILL_NAMES } from "../../src/cli/constants.js";
+import { getSkillNames } from "../../src/cli/constants.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
@@ -61,7 +61,7 @@ function makeDriftedInputs(): {
     required_files: [],
     required_dirs: [],
     skills: {
-      canonical: [...SKILL_NAMES],
+      canonical: [...getSkillNames()],
       stale_names: [],
     },
     agents: {} as ManifestJson["agents"],
@@ -72,7 +72,7 @@ function makeDriftedInputs(): {
   const observed: ObservedFacts = {
     views: [], // packaged install: src/ not shipped
     presetsCount: 0,
-    skills: SKILL_NAMES,
+    skills: getSkillNames(),
     setupChecks: SETUP_CHECKS.length,
     agentChecks: AGENT_CHECKS.length,
     harnessChecks: HARNESS_CHECKS.length,

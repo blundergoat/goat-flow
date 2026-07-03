@@ -270,9 +270,32 @@ function mergeHooks(value: unknown, merged: GoatFlowConfig): void {
   for (const [hookId, hookValue] of Object.entries(value)) {
     if (!isRecord(hookValue)) continue;
     if (typeof hookValue.enabled !== "boolean") continue;
-    hooks[hookId] = { enabled: hookValue.enabled };
+    const binaries = readHookBinaries(hookValue.binaries);
+    hooks[hookId] = binaries
+      ? { enabled: hookValue.enabled, binaries }
+      : { enabled: hookValue.enabled };
   }
   merged.hooks = hooks;
+}
+
+/**
+ * Narrow a hook `binaries` override block to non-empty string values; entries of
+ * any other shape are dropped. Returns null when nothing valid remains so
+ * callers can omit the key entirely instead of carrying an empty object.
+ *
+ * @param value - raw `hooks.<id>.binaries` value from parsed YAML
+ * @returns validated language-to-path map, or null when absent or empty
+ */
+export function readHookBinaries(
+  value: unknown,
+): Record<string, string> | null {
+  if (!isRecord(value)) return null;
+  const binaries: Record<string, string> = {};
+  for (const [lang, binaryPath] of Object.entries(value)) {
+    if (typeof binaryPath !== "string" || binaryPath.trim() === "") continue;
+    binaries[lang] = binaryPath;
+  }
+  return Object.keys(binaries).length > 0 ? binaries : null;
 }
 
 /** Pass through the raw quality config block; full validation lives in quality-config.ts. */
@@ -544,8 +567,41 @@ function validateHooksField(
       if (typeof hookValue.enabled !== "boolean") {
         pushError(errors, `hooks.${hookId}.enabled`, "must be a boolean");
       }
+      if ("binaries" in hookValue) {
+        validateHookBinaries(
+          hookValue.binaries,
+          `hooks.${hookId}.binaries`,
+          errors,
+        );
+      }
     }
   });
+}
+
+/**
+ * Validate a hook `binaries` override block: an object mapping language
+ * suffixes to non-empty string paths. The hook script enforces the
+ * repo-relative and executability rules at runtime; config validation only
+ * guards the YAML shape so typos surface in `config-parses`.
+ *
+ * @param value - raw `hooks.<id>.binaries` value from parsed YAML
+ * @param path - dot-separated config path used in emitted issues
+ * @param errors - error accumulator for validation issues
+ */
+function validateHookBinaries(
+  value: unknown,
+  path: string,
+  errors: ValidationIssue[],
+): void {
+  if (!isRecord(value)) {
+    pushError(errors, path, "must be an object");
+    return;
+  }
+  for (const [lang, binaryPath] of Object.entries(value)) {
+    if (typeof binaryPath !== "string" || binaryPath.trim() === "") {
+      pushError(errors, `${path}.${lang}`, "must be a non-empty string path");
+    }
+  }
 }
 
 /** Validate the telemetry field when present. */

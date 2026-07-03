@@ -14,8 +14,7 @@ import {
 
 const RUNNERS = new Set(["claude", "codex", "antigravity", "copilot"]);
 type DecodeResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; error: string; path: string };
+  { ok: true; value: T } | { ok: false; error: string; path: string };
 
 /** Return the decoded value after asserting the route accepted the payload. */
 function assertDecodeOk<T>(result: DecodeResult<T>): T {

@@ -18,9 +18,7 @@ const GIT_COMMIT_INSTRUCTIONS_PATH = "docs/coding-standards/git-commit.md";
 type CommitSubjectKind = "conventional" | "ticket-prefixed" | "free-form";
 
 type CommitGuidanceStatus =
-  | CommitSubjectKind
-  | "mixed"
-  | "insufficient-history";
+  CommitSubjectKind | "mixed" | "insufficient-history";
 
 /** Subject-style tallies from the recent commit sample used to choose a dominant convention. */
 interface CommitConventionCounts {

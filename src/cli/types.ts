@@ -113,6 +113,18 @@ export interface ProjectSignals {
   formatterGaps: string[];
 }
 
+/** One active learning-loop entry whose recorded mistake recurred after being written.
+ *  Surfaced by `goat-flow stats` as a feedback-loop graduation candidate: per
+ *  `docs/harness-engineering.md`, a mistake that repeats after being recorded should
+ *  move up the stack from prose to a structural gate (preflight check, CI step, deny
+ *  pattern). Report-only data - never a `stats --check` failure. */
+export interface GraduationCandidate {
+  /** Entry heading text without the `## Footgun:` / `## Lesson:` / `## Pattern:` prefix. */
+  title: string;
+  /** Count of line-start `**Recurrence update` markers under this entry's heading. */
+  recurrenceCount: number;
+}
+
 /** Per-bucket learning-loop freshness + health record used by `goat-flow stats`. */
 export interface BucketFreshness {
   /** Relative path of the bucket file */
@@ -136,14 +148,14 @@ export interface BucketFreshness {
   sizeBytes: number;
   /** Total line count of the bucket file. */
   lineCount: number;
+  /** Active entries with `**Recurrence update` markers - the recorded mistake happened
+   *  again, so the prevention should graduate to a structural gate or the entry resolve. */
+  graduationCandidates: GraduationCandidate[];
 }
 
 /** Learning-loop artifact kinds in the order the retrieval and stats pipelines understand. */
 export type LearningLoopEntryKind =
-  | "footgun"
-  | "lesson"
-  | "pattern"
-  | "decision";
+  "footgun" | "lesson" | "pattern" | "decision";
 
 /** Compact parsed learning-loop entry used by bounded prompt retrieval. */
 export interface LearningLoopEntryFact {

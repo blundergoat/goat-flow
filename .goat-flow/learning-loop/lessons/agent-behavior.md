@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-06-13
+last_reviewed: 2026-07-03
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -323,5 +323,17 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Prevention:**
 1. Keep scratch work inside the repo - use `.goat-flow/scratchpad/` (gitignored), never `cd /tmp`. The persistent Bash cwd must not leave the repo tree while a cwd-relative guard is active.
 2. A repeated `git repository root unavailable` (or `Guard cannot start`) block on every Bash means the shell cwd is outside the repo. Do not retry or disable the guard - ask the user to type `!cd <repo>` to reset the persisted cwd, and keep working through Read/Edit/Write meanwhile.
+
+---
+
+## Lesson: Absence claims need untruncated searches
+
+**Created:** 2026-07-03
+
+**What happened:** While assessing loop coverage, `grep -n "stats\|quality\|audit\|index" scripts/preflight-checks.sh | head -20` showed no `stats` hit, and the analysis claimed `stats --check` ran in no local gate. The `head -20` had truncated the match list; preflight's Learning-Loop Schema section already ran `node dist/cli/cli.js stats . --check`. The user's "double check" instruction exposed the false absence claim before it shaped the fix.
+
+**Root cause:** A multi-pattern grep piped through `head` answers "what appears early", not "does X appear at all". The absence conclusion was drawn from a presence-oriented, truncated probe.
+
+**Prevention:** Before claiming a pattern is absent from a file or repo, rerun the exact single pattern with no `head`/`tail` truncation (or `grep -c`). Treat any `| head` output as a sample, never as evidence of absence. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
 
 ---
