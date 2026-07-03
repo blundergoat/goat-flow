@@ -1,10 +1,20 @@
 /**
  * Classify a project's goat-flow adoption state by probing for config files,
- * skill directories, and AI instruction markers. Used by both the dashboard
- * `/api/projects/status` endpoint and the `goat-flow status` CLI command.
+ * skill directories, and AI instruction markers.
+ *
+ * This is what decides the status badge a user sees next to each project in
+ * the dashboard project list, and the state printed by `goat-flow status` -
+ * e.g. a user opens the dashboard and asks "which of my repos still need
+ * setup or an upgrade?". Used by the dashboard `/api/projects/status`
+ * endpoint and the `goat-flow status` CLI command.
  */
-import { AUDIT_VERSION, SKILL_NAMES, STALE_SKILL_NAMES } from "./constants.js";
+import {
+  AUDIT_VERSION,
+  getSkillNames,
+  getStaleSkillNames,
+} from "./constants.js";
 import { getAgentProfiles } from "./agents/registry.js";
+import type { AgentProfile } from "./types.js";
 
 /** Minimal filesystem interface needed for project state detection. */
 interface StateFS {
@@ -43,29 +53,47 @@ interface ProjectState {
 
 const CURRENT_VERSION_FAMILY = AUDIT_VERSION.split(".").slice(0, 2).join(".");
 
-const AGENT_PROFILES = getAgentProfiles();
-const INSTRUCTION_FILES = AGENT_PROFILES.map(
-  (profile) => profile.instructionFile,
-);
-const SKILL_ROOTS = [
-  ...new Set(AGENT_PROFILES.map((profile) => profile.skillsDir)),
-];
+/** Cache for {@link agentProfiles} - manifest-backed and static per process. */
+let cachedAgentProfiles: AgentProfile[] | undefined;
+
+/**
+ * Agent profiles, read lazily so merely importing this module never touches
+ * the manifest. This module sits on the CLI's hot import path: if it read the
+ * manifest at import time, a drifted install would crash `goat-flow --help`
+ * before the user could see any guidance (the bug M03/1.13.0 fixed).
+ */
+function agentProfiles(): AgentProfile[] {
+  // First call in this process -> load profiles from the manifest now.
+  cachedAgentProfiles ??= getAgentProfiles();
+  return cachedAgentProfiles;
+}
+
+/** Instruction files (CLAUDE.md, AGENTS.md, ...) across all supported agents. */
+function instructionFiles(): string[] {
+  return agentProfiles().map((profile) => profile.instructionFile);
+}
+
+/** Distinct skill install roots (.claude/skills, .agents/skills, ...) across agents. */
+function skillRoots(): string[] {
+  return [...new Set(agentProfiles().map((profile) => profile.skillsDir))];
+}
+
 /** Collect canonical skills found in any supported skill root. */
 function collectInstalledSkills(fs: StateFS): string[] {
-  return SKILL_NAMES.filter((skill) =>
-    SKILL_ROOTS.some((root) => fs.exists(`${root}/${skill}/SKILL.md`)),
+  return getSkillNames().filter((skill) =>
+    skillRoots().some((root) => fs.exists(`${root}/${skill}/SKILL.md`)),
   );
 }
 
 /** Check whether any supported top-level instruction file exists. */
 function hasAnyInstructionFile(fs: StateFS): boolean {
-  return INSTRUCTION_FILES.some((file) => fs.exists(file));
+  return instructionFiles().some((file) => fs.exists(file));
 }
 
 /** Collect deprecated skill directories still present in the project. */
 function collectOldSkills(fs: StateFS): string[] {
-  return STALE_SKILL_NAMES.filter((skill) =>
-    SKILL_ROOTS.some((root) => fs.exists(`${root}/${skill}/SKILL.md`)),
+  return getStaleSkillNames().filter((skill) =>
+    skillRoots().some((root) => fs.exists(`${root}/${skill}/SKILL.md`)),
   );
 }
 
@@ -77,21 +105,26 @@ function buildIncompleteDetails(
   hasConventions: boolean,
 ): string {
   const missing: string[] = [];
-  const missingSkills = SKILL_NAMES.filter(
+  const missingSkills = getSkillNames().filter(
     (skill) => !installedSkills.includes(skill),
   );
 
+  // Some canonical skills are absent -> name them so the user knows exactly
+  // what a re-run of setup will add.
   if (missingSkills.length > 0) {
     missing.push(`missing skills: ${missingSkills.join(", ")}`);
   }
+  // No agent instruction file -> agents in this project run without rules.
   if (!hasInstructionFile) {
     missing.push(
       "missing instruction file (CLAUDE.md / AGENTS.md / .github/copilot-instructions.md)",
     );
   }
+  // Skill preamble missing -> installed skills can't compose their shared header.
   if (!hasPreamble) {
     missing.push("missing .goat-flow/skill-docs/skill-preamble.md");
   }
+  // Skill conventions missing -> same problem for the shared conventions half.
   if (!hasConventions) {
     missing.push("missing .goat-flow/skill-docs/skill-conventions.md");
   }
@@ -99,10 +132,12 @@ function buildIncompleteDetails(
   return `Config says current goat-flow ${CURRENT_VERSION_FAMILY}.x but install is incomplete: ${missing.join("; ")}`;
 }
 
-/** Map from agentId to that agent's instruction file. */
-const AGENT_INSTRUCTION_FILE = Object.fromEntries(
-  AGENT_PROFILES.map((profile) => [profile.id, profile.instructionFile]),
-);
+/** Map from agentId to that agent's instruction file (lazy - see {@link agentProfiles}). */
+function agentInstructionFiles(): Record<string, string> {
+  return Object.fromEntries(
+    agentProfiles().map((profile) => [profile.id, profile.instructionFile]),
+  );
+}
 
 /** Classify a project's GOAT Flow adoption state. */
 // eslint-disable-next-line complexity -- intentional branchy state machine; each branch maps one adoption state.
@@ -114,10 +149,14 @@ export function classifyProjectState(
   const installedSkills = collectInstalledSkills(fs);
   const currentSkillCount = installedSkills.length;
   const oldSkills = collectOldSkills(fs);
-  const hasInstructionFile =
-    agentId && AGENT_INSTRUCTION_FILE[agentId]
-      ? fs.exists(AGENT_INSTRUCTION_FILE[agentId])
-      : hasAnyInstructionFile(fs);
+  // A specific agent was requested (e.g. the dashboard filtering by Claude)
+  // -> check that agent's instruction file only; otherwise accept any agent's.
+  const agentInstructionFile = agentId
+    ? agentInstructionFiles()[agentId]
+    : undefined;
+  const hasInstructionFile = agentInstructionFile
+    ? fs.exists(agentInstructionFile)
+    : hasAnyInstructionFile(fs);
   const hasPreamble = fs.exists(".goat-flow/skill-docs/skill-preamble.md");
   const hasConventions = fs.exists(
     ".goat-flow/skill-docs/skill-conventions.md",
@@ -125,6 +164,8 @@ export function classifyProjectState(
   const hasAIInstructions =
     fs.exists(".github/instructions") || hasInstructionFile;
 
+  // A .goat-flow/config.yaml exists -> the project was set up at some point;
+  // everything in this branch is "installed, but which version / how healthy?".
   if (hasConfig) {
     const configContent = fs.readFile(".goat-flow/config.yaml");
     const versionMatch = configContent?.match(
@@ -132,6 +173,8 @@ export function classifyProjectState(
     );
     const version = versionMatch?.[1];
 
+    // Config file present but unparseable version -> shown as an error state
+    // in the dashboard; setup regenerates a clean config.
     if (!version) {
       return {
         state: "error",
@@ -141,15 +184,19 @@ export function classifyProjectState(
       };
     }
 
+    // Version matches the current family -> project is up to date; the only
+    // remaining question is whether the install is complete.
     if (version.startsWith(`${CURRENT_VERSION_FAMILY}.`)) {
       // Skill check is OR-union across roots - fast pre-check only.
       // A "healthy" classification here does not guarantee per-agent audit passes.
       // Run `goat-flow audit` for authoritative validation.
       const isHealthy =
-        currentSkillCount === SKILL_NAMES.length &&
+        currentSkillCount === getSkillNames().length &&
         hasInstructionFile &&
         hasPreamble &&
         hasConventions;
+      // Everything present -> dashboard shows "current"; suggest audit as
+      // the deeper per-agent check.
       if (isHealthy) {
         return {
           state: "current",
@@ -180,6 +227,9 @@ export function classifyProjectState(
     };
   }
 
+  // No config from here down: the project was never (fully) set up.
+  // Retired skill names found -> user is on a pre-1.0 layout; the dashboard
+  // offers migration rather than plain setup.
   if (oldSkills.length > 0) {
     return {
       state: "v0.9",
@@ -187,13 +237,16 @@ export function classifyProjectState(
       details: `Old skill names found (${oldSkills.join(", ")})`,
     };
   }
+  // Some current skills but no config -> a half-finished install (e.g. setup
+  // was interrupted); show the found/total count so the user sees progress.
   if (currentSkillCount > 0) {
     return {
       state: "partial",
       action: "setup",
-      details: `${currentSkillCount}/${SKILL_NAMES.length} canonical skills found but no .goat-flow/ config - run setup to complete installation`,
+      details: `${currentSkillCount}/${getSkillNames().length} canonical skills found but no .goat-flow/ config - run setup to complete installation`,
     };
   }
+  // Other AI instructions exist (Copilot rules etc.) but no goat-flow at all.
   if (hasAIInstructions) {
     return {
       state: "partial",

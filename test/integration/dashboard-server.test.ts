@@ -53,7 +53,9 @@ describe("dashboard HTML", () => {
     assert.match(html, /__GOAT_FLOW_AGENTS__/);
     assert.match(html, /__GOAT_FLOW_RUNNER_IDS__/);
     assert.match(html, /__GOAT_FLOW_PRESETS__/);
-    assert.match(html, /alpinejs@3/i);
+    // Alpine and Tailwind ship vendored locally (1.13.0/M02) - no CDN origins.
+    assert.match(html, /\/assets\/alpine\.js/);
+    assert.match(html, /\/assets\/tailwind\.js/);
     assert.match(html, /\/assets\/dashboard-readers\.js/);
     assert.match(html, /\/assets\/dashboard-setup-quality\.js/);
     assert.match(html, /\/assets\/dashboard-projects\.js/);

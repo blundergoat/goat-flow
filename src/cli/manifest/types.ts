@@ -4,7 +4,7 @@
  * `workflow/manifest.json` is the on-disk form. `loadManifest()` returns a
  * resolved `Manifest` where every `facts` field has been computed against
  * canonical code sources (SETUP_CHECKS, AGENT_CHECKS, HARNESS_CHECKS,
- * SKILL_NAMES, preset catalog JSON) or validated against observed on-disk
+ * getSkillNames(), preset catalog JSON) or validated against observed on-disk
  * state (dashboard views).
  *
  * Derived values are never written into the JSON - they are computed at load
@@ -101,7 +101,7 @@ interface ManifestJsonFacts {
   dashboard_views: string[];
 }
 
-/** Resolved skill facts derived from `src/cli/constants.ts` `SKILL_NAMES`. */
+/** Resolved skill facts derived from `src/cli/constants.ts` `getSkillNames()`. */
 export interface SkillFacts {
   total: number;
   names: readonly string[];

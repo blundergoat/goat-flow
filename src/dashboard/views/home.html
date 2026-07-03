@@ -315,11 +315,10 @@
       return this.learningIndexRows().length > 0;
     },
     learningIndexButtonDisabled() {
-      return this.setupBlocked() || this.indexRegenerating || !this.learningIndexAvailable();
+      return this.indexRegenerating || !this.learningIndexAvailable();
     },
     learningIndexButtonLabel() {
       if (this.indexRegenerating) return 'Regenerating...';
-      if (this.setupBlocked()) return 'Setup first';
       if (!this.learningIndexAvailable()) return 'No indexes';
       return 'Regenerate index';
     },
@@ -330,13 +329,11 @@
       return 'not installed';
     },
     learningLoopReady() {
-      if (this.setupBlocked()) return false;
       const summary = this.learningSummary();
       return Boolean(summary && summary.status !== 'unavailable');
     },
     learningLoopNaText() {
-      if (this.setupMissing()) return 'No learning-loop records yet.';
-      if (this.setupBlocked()) return 'Finish setup to unlock learning-loop health.';
+      if (this.setupBlocked()) return 'No learning-loop records yet - setup creates them.';
       return 'No learning-loop files found for this project.';
     },
     learningBucketMax() {
@@ -368,14 +365,12 @@
       return parts.join(', ');
     },
     learningPillTone() {
-      if (this.setupBlocked()) return 'na';
       const summary = this.learningSummary();
       if (!summary || summary.status === 'unavailable') return 'na';
       if (this.learningIndexCount('stale') > 0 || this.learningIndexCount('missing') > 0) return 'warn';
       return summary.status === 'fresh' ? 'ok' : 'warn';
     },
     learningPillValue() {
-      if (this.setupBlocked()) return 'Setup first';
       const summary = this.learningSummary();
       if (!summary || summary.status === 'unavailable') return 'N/A';
       if (this.learningIndexCount('stale') > 0) return 'Index stale';
@@ -383,9 +378,10 @@
       return summary.status === 'fresh' ? 'Fresh' : 'Needs review';
     },
     learningPillDetail() {
-      if (this.setupBlocked()) return 'created by setup';
       const summary = this.learningSummary();
-      if (!summary || summary.status === 'unavailable') return 'no learning-loop files';
+      if (!summary || summary.status === 'unavailable') {
+        return this.setupBlocked() ? 'created by setup' : 'no learning-loop files';
+      }
       const stale = summary.staleCount || 0;
       const oversized = summary.oversizedCount || 0;
       const fg = typeof summary.footgunCount === 'number' ? summary.footgunCount : null;
@@ -1150,7 +1146,7 @@
             <button
               type="button"
               class="gf-btn gf-btn-sm gf-btn-secondary loop-regen-btn"
-              x-show="!setupBlocked()"
+              x-show="learningLoopReady()"
               @click="regenerateLearningLoopIndex()"
               :disabled="learningIndexButtonDisabled()"
               x-text="learningIndexButtonLabel()"

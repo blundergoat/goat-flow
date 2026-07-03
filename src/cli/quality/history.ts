@@ -58,6 +58,19 @@ export interface QualityDiffFindingRow {
   summary: string;
 }
 
+/**
+ * One finding where the agent's self-reported `delta_tag` contradicts the
+ * deterministic id-based diff class. Surfaced as a methodology signal: the
+ * agent either found a real continuity the id algorithm missed, or tagged
+ * sloppily - either way the user should see it, not have it silently ignored.
+ */
+interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
+  /** What the agent claimed when writing the report. */
+  agentTag: "new" | "persisted";
+  /** What the positional-id diff derived for the same finding. */
+  deterministic: "new" | "persisted";
+}
+
 /** Diff result for two same-agent, same-mode quality-history entries. */
 export interface QualityDiffResult {
   from: QualityHistoryEntry;
@@ -68,6 +81,14 @@ export interface QualityDiffResult {
   newFindings: QualityDiffFindingRow[];
   persisted: QualityDiffFindingRow[];
   stuck: QualityDiffFindingRow[];
+  /**
+   * Agent-vs-deterministic `delta_tag` contradictions. Only populated when
+   * this diff's source report IS the baseline the newer report was tagged
+   * against (`to.report.prior_report_id === from.id`) - against any other
+   * pair the agent's tags describe a different comparison and disagreement
+   * would be noise.
+   */
+  deltaTagDisagreements: QualityDeltaTagDisagreementRow[];
 }
 
 /** Return the numeric rank for one finding severity. */
@@ -656,6 +677,40 @@ export function buildQualityDiff(
     })
     .sort(diffRowSort);
 
+  // Agent-claimed delta_tags are only comparable when this diff's source IS
+  // the baseline the agent tagged against; a user diffing any other pair
+  // would see false "disagreements" about a comparison the agent never made.
+  const baselineMatches = targetEntry.report.prior_report_id === sourceEntry.id;
+  const deltaTagDisagreements: QualityDeltaTagDisagreementRow[] =
+    !baselineMatches
+      ? []
+      : [...toMap.values()]
+          .flatMap((finding) => {
+            // Finding carries no agent tag -> nothing to cross-check.
+            if (
+              finding.delta_tag !== "new" &&
+              finding.delta_tag !== "persisted"
+            ) {
+              return [];
+            }
+            const deterministic = fromMap.has(finding.id)
+              ? ("persisted" as const)
+              : ("new" as const);
+            // Agent and deterministic diff agree -> no signal to surface.
+            if (finding.delta_tag === deterministic) return [];
+            return [
+              {
+                id: finding.id,
+                severity: finding.severity,
+                type: finding.type,
+                summary: finding.summary,
+                agentTag: finding.delta_tag,
+                deterministic,
+              },
+            ];
+          })
+          .sort(diffRowSort);
+
   return {
     ok: true,
     diff: {
@@ -671,6 +726,7 @@ export function buildQualityDiff(
       newFindings,
       persisted,
       stuck,
+      deltaTagDisagreements,
     },
   };
 }

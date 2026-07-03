@@ -5,7 +5,7 @@
  * installed copies inside a consumer project (or the goat-flow repo
  * itself when run on its own root):
  *
- *   - Per-skill SKILL.md for every name in SKILL_NAMES:
+ *   - Per-skill SKILL.md for every name in getSkillNames():
  *       workflow/skills/<name>/SKILL.md  vs
  *       .claude/skills/<name>/SKILL.md
  *       .agents/skills/<name>/SKILL.md
@@ -24,7 +24,7 @@
  *       workflow/skills/playbooks/release-notes.md          vs .goat-flow/skill-docs/playbooks/release-notes.md
  *       workflow/skills/playbooks/skill-quality-testing.md  vs .goat-flow/skill-docs/skill-quality-testing/README.md
  *   - Orphan directories under .claude/skills or .agents/skills whose
- *     name is not in SKILL_NAMES. Names that appear in manifest.stale_names
+ *     name is not in getSkillNames(). Names that appear in manifest.stale_names
  *     are reported as deprecated instead of a plain orphan.
  *
  * Comparison is semantic: YAML frontmatter is parsed and compared
@@ -38,7 +38,7 @@ import { posix as pathPosix, resolve as resolvePath } from "node:path";
 import { load } from "js-yaml";
 import { isDeepStrictEqual } from "node:util";
 import type { ReadonlyFS } from "../types.js";
-import { SKILL_NAMES } from "../constants.js";
+import { getSkillNames } from "../constants.js";
 import { getTemplatePath } from "../paths.js";
 import {
   getInstalledSkillRoots,
@@ -287,7 +287,9 @@ function compareSkills(
 ): number {
   let checked = 0;
   const skillRoots = getInstalledSkillRoots().filter((dir) => fs.exists(dir));
-  for (const name of SKILL_NAMES) {
+  // Compare each canonical skill's template against every installed copy so
+  // drift shows up no matter which agent's folder went stale.
+  for (const name of getSkillNames()) {
     for (const relativeFile of getSkillFiles(name)) {
       const templateRel = `workflow/skills/${name}/${relativeFile}`;
       const template = readTemplate(templateRoot, templateRel);
@@ -374,7 +376,7 @@ function compareSharedFiles(
  * from unexpected orphans so cleanup messaging stays actionable.
  */
 function findOrphans(fs: ReadonlyFS, findings: DriftFinding[]): void {
-  const canonical = new Set<string>(SKILL_NAMES);
+  const canonical = new Set<string>(getSkillNames());
   const stale = getStaleSkillNames();
   for (const agentDir of getInstalledSkillRoots()) {
     if (!fs.exists(agentDir)) continue;

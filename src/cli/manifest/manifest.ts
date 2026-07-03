@@ -13,7 +13,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { SKILL_NAMES } from "../constants.js";
+import { getSkillNames } from "../constants.js";
 import { SETUP_CHECKS } from "../audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../audit/check-agent-setup.js";
 import { HARNESS_CHECKS } from "../audit/harness/index.js";
@@ -172,7 +172,7 @@ function countPresetsFromSource(): number {
   return raw.length;
 }
 
-/** Compute derived skill facts from `SKILL_NAMES` and the manifest's stale list. */
+/** Compute derived skill facts from `getSkillNames()` and the manifest's stale list. */
 function computeSkills(
   names: readonly string[],
   staleNames: readonly string[],
@@ -218,7 +218,7 @@ function sameSortedSet(
  *  static facts (`dashboard_views`) would always trip against empty observed
  *  values. That fact was validated at publish time - here we trust the
  *  manifest and skip it. Preset count is derived from the shipped preset
- *  catalog, and skill-canonical drift is still checked because `SKILL_NAMES`
+ *  catalog, and skill-canonical drift is still checked because `getSkillNames()`
  *  ships in `dist/`.
  *
  * @param json - Parsed manifest JSON from `workflow/manifest.json`.
@@ -249,7 +249,7 @@ export function validateManifest(
 
   if (!sameSortedSet(json.skills.canonical, observed.skills)) {
     findings.push(
-      `skills.canonical drift: manifest declares [${[...json.skills.canonical].sort().join(", ")}]; SKILL_NAMES exports [${[...observed.skills].sort().join(", ")}].`,
+      `skills.canonical drift: manifest declares [${[...json.skills.canonical].sort().join(", ")}]; getSkillNames() returns [${[...observed.skills].sort().join(", ")}].`,
     );
   }
 
@@ -302,7 +302,7 @@ export function composeManifest(
 /**
  * Return the canonical template-file list for one skill.
  *
- * @param name - Canonical skill name from `SKILL_NAMES`.
+ * @param name - Canonical skill name from `getSkillNames()`.
  * @returns `SKILL.md` plus manifest-declared reference files for that skill.
  */
 export function getSkillFiles(name: string): string[] {
@@ -344,7 +344,7 @@ export function loadManifest(): Manifest {
   const observed: ObservedFacts = {
     views: readDashboardViewNames(),
     presetsCount: countPresetsFromSource(),
-    skills: SKILL_NAMES,
+    skills: getSkillNames(),
     setupChecks: SETUP_CHECKS.length,
     agentChecks: AGENT_CHECKS.length,
     harnessChecks: HARNESS_CHECKS.length,
@@ -416,10 +416,10 @@ export function renderManifestMarkdown(manifest: Manifest): string {
     `| Total checks | ${manifest.facts.checks.total} | derived: sum of above |`,
   );
   lines.push(
-    `| Skills (total) | ${manifest.facts.skills.total} | derived: \`SKILL_NAMES.length\` |`,
+    `| Skills (total) | ${manifest.facts.skills.total} | derived: \`getSkillNames().length\` |`,
   );
   lines.push(
-    `| Skills (functional) | ${manifest.facts.skills.functional_count} | derived: \`SKILL_NAMES\` minus dispatcher |`,
+    `| Skills (functional) | ${manifest.facts.skills.functional_count} | derived: \`getSkillNames()\` minus dispatcher |`,
   );
   lines.push(
     `| Dispatcher | \`${manifest.facts.skills.dispatcher}\` | architectural constant |`,

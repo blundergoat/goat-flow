@@ -2,7 +2,8 @@
  * Renders parsed learning-loop entries into the generated INDEX.md content. The output is a pure
  * function of the entry list: fixed frontmatter (`generated: true`, no `last_reviewed`), a fixed
  * header that points maintainers at `goat-flow index` and `goat-flow stats --check`, and one row
- * per entry in the shared `- [Title](file) (search: "...") - hook` schema. No counts, dates, or
+ * per entry in the shared `- [Title](file) (search: "...") - hook` schema (single-quote wrapped
+ * when the anchor itself contains a double quote - see {@link quoteAnchor}). No counts, dates, or
  * other clock-derived values may appear here - `index-fresh` string-compares a regeneration
  * against the on-disk file, so any nondeterminism reads as permanent staleness.
  */
@@ -52,7 +53,21 @@ export function formatIndex(
       ? ["_No active entries._"]
       : entries.map(
           (entry) =>
-            `- [${entry.title}](${entry.sourceFile}) (search: "${entry.anchor}") - ${entry.hook}`,
+            `- [${entry.title}](${entry.sourceFile}) (search: ${quoteAnchor(entry.anchor)}) - ${entry.hook}`,
         );
   return [...header, ...rows].join("\n") + "\n";
+}
+
+/**
+ * Wrap one anchor for its `(search: ...)` slot: double quotes normally, single quotes when the
+ * anchor itself contains a double quote (quote-first titles keep their full heading - M04,
+ * 1.13.0). Without the switch, a quote-first row would render as `(search: "## Lesson: "..."")`
+ * and the needle a user copies out of it would be ambiguous.
+ *
+ * @param anchor - grep needle from {@link IndexEntry.anchor}
+ * @returns the quoted `(search: ...)` payload
+ */
+function quoteAnchor(anchor: string): string {
+  // Anchor embeds a double quote -> single-quote wrapper keeps the row unambiguous.
+  return anchor.includes('"') ? `'${anchor}'` : `"${anchor}"`;
 }

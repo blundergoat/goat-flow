@@ -42,7 +42,7 @@ export {
 } from "../src/cli/audit/render.js";
 export { renderAuditSarif } from "../src/cli/audit/sarif.js";
 export { parseCLIArgs } from "../src/cli/cli.js";
-export { AUDIT_VERSION, SKILL_NAMES } from "../src/cli/constants.js";
+export { AUDIT_VERSION, getSkillNames } from "../src/cli/constants.js";
 export { PROFILES } from "../src/cli/detect/agents.js";
 export {
   buildDenyRegistration,

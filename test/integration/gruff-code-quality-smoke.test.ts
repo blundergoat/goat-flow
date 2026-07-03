@@ -522,6 +522,51 @@ describe("gruff-code-quality hook", () => {
     assert.deepEqual(readInvocations(root), ["src/sample.py"]);
   });
 
+  // Fixture purpose: names a nested-venv analyzer only in .goat-flow/config.yaml to cover repo-owned overrides.
+  it("uses a repo-owned config binaries override for a non-standard monorepo gruff binary", () => {
+    const root = makeRoot();
+    writeMockGruffBinary(
+      root,
+      "strands_agents/.venv/bin",
+      "gruff-py",
+      "config.rule",
+    );
+    writeFileSync(join(root, ".gruff-py.yaml"), "rules: {}\n");
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        "hooks:",
+        "  gruff-code-quality:",
+        "    enabled: true",
+        "    binaries:",
+        "      py: strands_agents/.venv/bin/gruff-py",
+        "",
+      ].join("\n"),
+    );
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "sample.py"), "a\nb\nc\n");
+
+    const result = runHook(
+      root,
+      {
+        tool_name: "Edit",
+        tool_input: {
+          file_path: "src/sample.py",
+          changed_ranges: [{ startLine: 3, endLine: 3 }],
+        },
+      },
+      "/usr/bin:/bin",
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      result.stdout,
+      /\[warning\] src\/sample\.py:3 config\.rule - changed line finding/,
+    );
+    assert.deepEqual(readInvocations(root), ["src/sample.py"]);
+  });
+
   it("exits silently for fail-soft skip cases", () => {
     const root = makeRoot();
     writeMockGruff(root);

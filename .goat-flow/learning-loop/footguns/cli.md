@@ -13,7 +13,7 @@ last_reviewed: 2026-05-25
 
 **Evidence:**
 - `src/cli/install-invocation.ts` (search: `toBashPath`) - forward-slashes installer argv on win32.
-- `src/cli/prompt/compose-quality-agent-report.ts` (search: `toShellProjectPath`) - posix.join + forward-slash for `QUALITY_DIR` Bash snippets, plus matching test `shell-quotes quality report paths in agent-setup prompt snippets`.
+- `src/cli/prompt/compose-quality-common.ts` (search: `toShellProjectPath`) - posix.join + forward-slash for `QUALITY_DIR` Bash snippets (moved here from `compose-quality-agent-report.ts` when the report contract was centralised in 1.13.0).
 - `src/cli/prompt/compose-setup.ts` (search: `displayTemplatePath`) - forward-slashes packaged-template references; fixes 6 `composeSetup routing` tests.
 - `src/cli/paths.ts` (search: `getCliCommand`) - forward-slashes the `node dist/cli/cli.js` re-run hint.
 - `src/cli/audit/check-agent-deny-runtime.ts` (search: `evidencePath`) - forward-slashes 3 audit-evidence emission sites.

@@ -19,7 +19,7 @@
  */
 import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
-import { SKILL_NAMES } from "../constants.js";
+import { getSkillNames } from "../constants.js";
 import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
 
 /**
@@ -413,8 +413,11 @@ function resolveTargets(ctx: AuditContext): string[] {
     ...STATIC_QUALITY_TARGETS,
     ...listDecisionMarkdown(ctx),
   ]);
+  // Every installed copy of every canonical skill file is a quality target -
+  // this is what makes `goat-flow audit` inspect the skills the user's agents
+  // actually load, not just the templates.
   for (const agentDir of getInstalledSkillRoots()) {
-    for (const name of SKILL_NAMES) {
+    for (const name of getSkillNames()) {
       for (const relativeFile of getSkillFiles(name)) {
         targets.add(`${agentDir}/${name}/${relativeFile}`);
       }

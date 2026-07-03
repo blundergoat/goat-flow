@@ -28,10 +28,6 @@ maps to a real view.
 
 Overview landing page. Shows an active-sessions strip, a four-pill rollup for install, harness, learning-loop, and quality status, plus a priority-driven Next Action card based on the latest audit and quality history. The agent grid compares harness health across supported agents and expands per-agent details, including an advisory enforcement matrix for hard, limited, soft, missing, and unknown local enforcement evidence. The lower row summarizes install state with a health ring and lists recent lesson entries. Run a new audit or re-audit after changes without leaving the page; the healthy state still presents a Next Action card rather than replacing actions with a banner.
 
-### Coming Soon
-
-Shared placeholder view for manifest-backed destinations that do not yet have a dedicated page. It renders destination-specific title and copy from dashboard metadata rather than appearing as a primary rail item.
-
 ### Plans
 
 Plans milestone browser for the selected project (route ID `plans`). Surfaces

@@ -12,7 +12,7 @@ import type {
   ProjectStructure,
   ReadonlyFS,
 } from "../../src.js";
-import { AUDIT_VERSION, SKILL_NAMES } from "../../src.js";
+import { AUDIT_VERSION, getSkillNames } from "../../src.js";
 
 const HEALTHY_GOAT_FLOW_GITIGNORE = [
   "*",
@@ -130,7 +130,7 @@ export function stubAgentFacts(
     settings: { exists: true, valid: true, parsed: {}, hasDenyPatterns: true },
     skills: {
       installedDirs: [],
-      found: [...SKILL_NAMES],
+      found: [...getSkillNames()],
       missing: [],
       allPresent: true,
       versions: {},
@@ -206,7 +206,7 @@ export const STUB_STRUCTURE: ProjectStructure = {
     ".goat-flow/plans/",
   ],
   skills: {
-    canonical: [...SKILL_NAMES],
+    canonical: [...getSkillNames()],
     stale_names: ["goat-audit", "goat-investigate"],
   },
   agents: {},

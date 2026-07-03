@@ -264,12 +264,33 @@ export function serveDashboard(
     /** Check browser Origin headers for side-effectful dashboard routes. */
     function originAllowed(req: IncomingMessage): boolean {
       const origin = req.headers.origin;
+      // No Origin header (non-browser client) can't be cross-origin, so allow it.
       if (!origin) return true;
       const addr = server.address();
       if (!addr || typeof addr === "string") return false;
       return (
         origin === `http://127.0.0.1:${addr.port}` ||
         origin === `http://localhost:${addr.port}`
+      );
+    }
+
+    /**
+     * Check the browser Host header against this server's own loopback address
+     * for WebSocket upgrades. A page on another origin can script an upgrade but
+     * cannot forge the Host the browser sends, so a mismatched Host is the
+     * DNS-rebinding shape we refuse. When the address isn't known yet we don't
+     * block on Host grounds - the token/Origin checks still apply.
+     *
+     * @param req - incoming upgrade request whose Host header is validated
+     * @returns true when Host is loopback for this port, or the address is unknown
+     */
+    function hostAllowed(req: IncomingMessage): boolean {
+      const addr = server.address();
+      // Address not bound yet: fall through to the token/Origin gates instead.
+      if (!addr || typeof addr === "string") return true;
+      const host = req.headers.host;
+      return (
+        host === `127.0.0.1:${addr.port}` || host === `localhost:${addr.port}`
       );
     }
 
@@ -297,12 +318,9 @@ export function serveDashboard(
       url: URL,
     ): boolean {
       if (!url.pathname.startsWith("/ws/terminal/")) return false;
-      const host = req.headers.host;
-      const addr = server.address();
-      if (addr && typeof addr !== "string") {
-        const allowed = [`127.0.0.1:${addr.port}`, `localhost:${addr.port}`];
-        if (!host || !allowed.includes(host)) return true;
-      }
+      // A foreign Host (DNS-rebinding shape) is refused before anything else.
+      if (!hostAllowed(req)) return true;
+      // No valid dashboard token means the caller isn't this local browser.
       if (!tokenMatches(dashboardToken, readDashboardToken(req, url))) {
         return true;
       }
@@ -410,13 +428,23 @@ export function serveDashboard(
     server.on("upgrade", (req, socket, head) => {
       const url = new URL(req.url ?? "/", `http://127.0.0.1`);
 
-      // Live reload WebSocket (dev mode)
+      // Live reload WebSocket (dev mode). Dev-only, but a page on another origin
+      // must not open even this benign reload socket into the local server, so
+      // it clears the same Host/Origin allowlist the terminal upgrade uses. No
+      // token here: the injected reload client carries none, and demanding one
+      // would break the dev dashboard's auto-refresh.
       if (url.pathname === "/ws/livereload" && devMode) {
+        // Hostile Host or Origin: drop the socket before the reload handshake.
+        if (!hostAllowed(req) || !originAllowed(req)) {
+          socket.destroy();
+          return;
+        }
         void (async () => {
           try {
             const wss = await getLiveReloadWSS();
             wss.handleUpgrade(req, socket, head, (ws: WsWebSocket) => {
               liveReloadClients.add(ws);
+              // A browser tab closing drops it from the reload broadcast set.
               ws.on("close", () => {
                 liveReloadClients.delete(ws);
               });

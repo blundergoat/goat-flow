@@ -98,7 +98,7 @@ npx goat-flow quality diff --agent claude
 npx goat-flow quality diff 2026-04-01-0900-claude-aaaaa:2026-04-15-1000-claude-bbbbb --format json
 ```
 
-`quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from positional finding ids. `stuck` is a subset of persisted high-severity findings and resets after history gaps longer than 30 days.
+`quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from positional finding ids - those ids are the source of truth. The agent-reported `delta_tag` on each finding is consumed as a cross-check, not a classification: when the diff pair matches the newer report's `prior_report_id` baseline, findings whose `delta_tag` contradicts the deterministic class are listed in a `Delta-tag disagreements` section (`deltaTagDisagreements` in JSON output) as a methodology signal about the agent's continuity claims. `stuck` is a subset of persisted high-severity findings and resets after history gaps longer than 30 days.
 
 ### `goat-flow quality validate <path-to-report>`
 
@@ -121,6 +121,8 @@ npx goat-flow manifest --check            # Fail if manifest disagrees with live
 ### `goat-flow stats [--check] [--format json|markdown]`
 
 Report learning-loop health: live entry counts by bucket, stale file refs, and `last_reviewed` freshness. Use `--check` in CI - it exits non-zero if any bucket is missing `last_reviewed`, uses a malformed date, contains stale file references, or has a generated `INDEX.md` that no longer matches its bucket content (`index-stale`; a never-generated index is only an advisory warning).
+
+The report also lists **graduation candidates**: active footgun/lesson entries carrying a line-start `**Recurrence update` marker, meaning the recorded mistake happened again after the entry was written. Per the feedback-loop doctrine in [harness-engineering.md](harness-engineering.md), that prevention should be promoted to a structural gate (preflight check, CI step, deny pattern) or the entry resolved. Candidates are report-only: they never appear in `--check` output and never fail the gate, and a corpus without recurrence markers renders nothing extra.
 
 ```bash
 npx goat-flow stats                       # Learning-loop health report

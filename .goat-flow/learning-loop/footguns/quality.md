@@ -12,8 +12,8 @@ last_reviewed: 2026-06-11
 **Why it happens:** `goat-flow quality . --agent <id>` composes a prompt that instructs the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json`. The write is the agent's responsibility, not the CLI's. If the agent emits the JSON inline as a fenced code block, or forgets the save step, or writes to a different path, nothing persists. The target directory is gitignored, so there is no git-side hint that the save was skipped.
 
 **Evidence:**
-- `src/cli/prompt/compose-quality-agent-report.ts` (search: `Write it as a file to`) - the prompt ends with an explicit instruction to write the file rather than emit a fenced JSON block.
-- `src/cli/prompt/compose-quality-agent-report.ts` (search: `Wrote quality report to`) - the prompt requires a single-line confirmation that references the saved filename.
+- `src/cli/prompt/compose-quality-common.ts` (search: `Write it as a file to`) - the prompt ends with an explicit instruction to write the file rather than emit a fenced JSON block (contract centralised here in 1.13.0).
+- `src/cli/prompt/compose-quality-common.ts` (search: `Wrote quality report to`) - the prompt requires a single-line confirmation that references the saved filename.
 - `src/cli/quality/history-render.ts` (search: `No saved quality history`) - `history` and `diff` only read files that were actually written to disk.
 
 **Prevention:**

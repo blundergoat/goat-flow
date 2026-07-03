@@ -65,6 +65,14 @@ last_reviewed: 2026-06-01
 **What happened:** The agent edited a file it never read. The fix was re-reading.
 
 **Prevention:** Read first.
+
+## Lesson: "Double check" means read the files again
+
+**Created:** 2026-05-11
+
+**What happened:** A quote-first title used to collapse the anchor to a bare kind prefix.
+
+**Prevention:** Keep the full heading for quote-first titles.
 `;
 
 const PATTERN_BUCKET = `---
@@ -153,9 +161,18 @@ describe("parseBucket", () => {
 
   it("parses lesson entries with hooks from What happened", () => {
     const entries = parseBucket(fs, LESSONS_DIR, "lessons");
-    assert.equal(entries.length, 1);
+    assert.equal(entries.length, 2);
     assert.equal(entries[0]?.title, "Agents must read before writing");
     assert.equal(entries[0]?.hook, "The agent edited a file it never read.");
+  });
+
+  it("keeps the full heading as the anchor for quote-first titles", () => {
+    const entries = parseBucket(fs, LESSONS_DIR, "lessons");
+    // A quote-first title must NOT collapse to the shared `## Lesson:` prefix.
+    assert.equal(
+      entries[1]?.anchor,
+      '## Lesson: "Double check" means read the files again',
+    );
   });
 
   it("parses pattern entries with hooks from Context", () => {
@@ -191,7 +208,10 @@ describe("formatIndex", () => {
   const fs = createFS(root);
   after(() => rmSync(root, { recursive: true, force: true }));
 
-  const ROW_SCHEMA = /^- \[[^\]]+\]\([^)]+\.md\) \(search: "[^"]+"\) - .+$/;
+  // Anchors normally wrap in double quotes; quote-first titles keep their
+  // embedded quotes and wrap in single quotes instead (M04, 1.13.0).
+  const ROW_SCHEMA =
+    /^- \[[^\]]+\]\([^)]+\.md\) \(search: ("[^"]+"|'[^']*"[^']*')\) - .+$/;
 
   it("renders the unified row schema with generated frontmatter for every bucket", () => {
     const buckets: Array<[IndexBucket, string]> = [
@@ -232,6 +252,17 @@ describe("formatIndex", () => {
     assert.equal(
       rows.every((row) => ROW_SCHEMA.test(row.replace(/^[^:]+: /, ""))),
       true,
+    );
+  });
+
+  it("wraps quote-containing anchors in single quotes in rendered rows", () => {
+    const content = formatIndex(
+      "lessons",
+      parseBucket(fs, LESSONS_DIR, "lessons"),
+    );
+    assert.match(
+      content,
+      /\(search: '## Lesson: "Double check" means read the files again'\)/,
     );
   });
 

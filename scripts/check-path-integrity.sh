@@ -183,6 +183,22 @@ if [[ -d "$docs_dir" ]]; then
     done < <(find "$docs_dir" -type f -name '*.md' -print0 2>/dev/null)
 fi
 
+# ── 9. No maintainer-local absolute paths in publishable files ─────
+# Anything under src/ or docs/ (and package.json) ships to npm, so a
+# `/home/<user>/...` string there leaks the maintainer's private directory
+# layout to every consumer. Comments count too - provenance notes must cite
+# projects, not local filesystem locations.
+for leak_target in src docs package.json; do
+    lpath="${root}/${leak_target}"
+    # Skip surfaces that don't exist in this project (consumers may lack src/).
+    [[ -e "$lpath" ]] || continue
+    while IFS= read -r match; do
+        # grep emitted nothing for this target -> nothing leaked.
+        [[ -z "$match" ]] && continue
+        err "maintainer-local path in publishable file: ${match}"
+    done < <(grep -rnE '/home/[a-zA-Z0-9_-]+/' "$lpath" 2>/dev/null || true)
+done
+
 # ── Result ──────────────────────────────────────────────────────────
 if [[ "$errors" -gt 0 ]]; then
     echo "Path integrity: ${errors} error(s) found" >&2

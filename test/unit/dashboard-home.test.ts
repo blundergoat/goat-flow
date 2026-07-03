@@ -44,6 +44,16 @@ type HomeModel = {
   harnessPillTone(): string;
   /** Return the Home harness pill headline value. */
   harnessPillValue(): string;
+  /** Return true when the regenerate-index button should be disabled. */
+  learningIndexButtonDisabled(): boolean;
+  /** Return true when the learning-loop panel shows real data instead of the NA state. */
+  learningLoopReady(): boolean;
+  /** Return the NA-state explanation for the learning-loop panel. */
+  learningLoopNaText(): string;
+  /** Return the Home learning-loop pill detail text. */
+  learningPillDetail(): string;
+  /** Return the Home learning-loop pill headline value. */
+  learningPillValue(): string;
   /** Return the recommendation summary for one agent card. */
   recommendationSummary(agent: Record<string, unknown>): string;
   /** Return the Home next-action preview command or description. */
@@ -563,6 +573,61 @@ describe("Home harness summary", () => {
     assert.equal(home.enforcementBadgeClass(rows[0]!), "pass");
     assert.equal(home.enforcementBadge(rows[1]!), "Unk");
     assert.equal(home.enforcementBadgeClass(rows[1]!), "skipped");
+  });
+});
+
+describe("Home learning loop", () => {
+  const partialSetupScopes = {
+    setup: {
+      status: "fail",
+      checks: [
+        { id: "config-parses", status: "pass" },
+        { id: "post-turn-hook", status: "fail" },
+      ],
+    },
+  };
+
+  it("shows learning-loop data when setup is incomplete", () => {
+    const home = loadHomeModel({
+      scopes: partialSetupScopes,
+      agentScores: [],
+      learningLoop: {
+        status: "fresh",
+        recordCount: 12,
+        footgunCount: 5,
+        lessonCount: 7,
+        staleCount: 0,
+        invalidLineRefCount: 0,
+        oversizedCount: 0,
+        indexes: [
+          {
+            bucket: "footguns",
+            state: "fresh",
+            entryCount: 5,
+            indexPath: ".goat-flow/learning-loop/footguns/INDEX.md",
+          },
+        ],
+      },
+    });
+    assert.equal(home.learningLoopReady(), true);
+    assert.equal(home.learningPillValue(), "Fresh");
+    assert.equal(home.learningPillDetail(), "5 footguns, 7 lessons");
+    assert.equal(home.learningIndexButtonDisabled(), false);
+  });
+
+  it("keeps the NA state pointing at setup when no learning-loop files exist", () => {
+    const home = loadHomeModel({
+      scopes: partialSetupScopes,
+      agentScores: [],
+      learningLoop: null,
+    });
+    assert.equal(home.learningLoopReady(), false);
+    assert.equal(
+      home.learningLoopNaText(),
+      "No learning-loop records yet - setup creates them.",
+    );
+    assert.equal(home.learningPillValue(), "N/A");
+    assert.equal(home.learningPillDetail(), "created by setup");
   });
 });
 

@@ -5,9 +5,11 @@ on:
     paths:
       - "CLAUDE.md"
       - "AGENTS.md"
-      - "GEMINI.md"
+      - ".github/copilot-instructions.md"
+      - ".github/skills/**"
+      - ".github/hooks/**"
       - ".claude/**"
-      - ".gemini/**"
+      - ".codex/**"
       - ".goat-flow/learning-loop/footguns/**"
       - ".goat-flow/learning-loop/lessons/**"
       - "docs/**"
@@ -22,9 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Check CLAUDE.md / GEMINI.md line count
+      - name: Check instruction file line counts
         run: |
-          for f in CLAUDE.md GEMINI.md; do
+          for f in CLAUDE.md .github/copilot-instructions.md; do
             if [ -f "$f" ]; then
               LINES=$(wc -l < "$f")
               echo "$f: $LINES lines"
@@ -40,7 +42,7 @@ jobs:
       - name: Check router table references exist
         run: |
           # Check all instruction file router tables
-          for INST in CLAUDE.md AGENTS.md GEMINI.md; do
+          for INST in CLAUDE.md AGENTS.md .github/copilot-instructions.md; do
             if [ ! -f "$INST" ]; then continue; fi
             echo "Checking $INST router table..."
             grep -oP '`[^`]+`' "$INST" | tr -d '`' | while read -r ref; do
@@ -66,7 +68,7 @@ jobs:
             done
             echo "All 7 Claude skills present"
           fi
-          # Check shared skills (Codex + Gemini)
+          # Check shared skills (Codex + Antigravity)
           if [ -d ".agents/skills" ]; then
             for skill in $EXPECTED_SKILLS; do
               if [ ! -f ".agents/skills/$skill/SKILL.md" ]; then
@@ -75,6 +77,16 @@ jobs:
               fi
             done
             echo "All 7 shared skills present"
+          fi
+          # Check Copilot skills
+          if [ -d ".github/skills" ]; then
+            for skill in $EXPECTED_SKILLS; do
+              if [ ! -f ".github/skills/$skill/SKILL.md" ]; then
+                echo "::error::Missing Copilot skill: .github/skills/$skill/SKILL.md"
+                exit 1
+              fi
+            done
+            echo "All 7 Copilot skills present"
           fi
 
       - name: Check local CLAUDE.md file sizes
@@ -96,7 +108,8 @@ jobs:
 
       - name: Validate settings.json
         run: |
-          for f in .claude/settings.json .gemini/settings.json; do
+          # Current agent hook/settings JSON surfaces (Gemini retired, ADR-030)
+          for f in .claude/settings.json .codex/hooks.json .github/hooks/hooks.json; do
             if [ -f "$f" ]; then
               python3 -c "import json; json.load(open('$f'))" 2>&1 || {
                 echo "::error::$f is not valid JSON. Anti-pattern AP5."
