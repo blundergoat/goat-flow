@@ -46,13 +46,13 @@ function entry(
     agent: "claude",
     report: {
       report_kind: "goat-flow-quality-report",
-      goat_flow_version: "1.12.1",
+      goat_flow_version: "1.13.0",
       agent: "claude",
       project_path: "/tmp/example",
       run_date: runDate,
       audit_status: "pass",
       scope: "consumer",
-      rubric_version: "1.12.1",
+      rubric_version: "1.13.0",
       quality_mode: "agent-setup",
       prior_report_id: priorReportId,
       scores: {

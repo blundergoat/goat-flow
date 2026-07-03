@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # post-turn-safety.sh
-# goat-flow-hook-version: 1.12.1
+# goat-flow-hook-version: 1.13.0
 #
 # Purpose:
 #   Universal Stop-event safety guard for supported agents. This hook checks
