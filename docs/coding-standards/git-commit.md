@@ -1,7 +1,9 @@
 # Git Commit Message Standard
 
 This standard covers commit message text only. It does not define branch naming, staging, when to
-commit, release workflow, quality gates, or which files belong in a commit.
+commit, release workflow, quality gates, or which files belong in a commit. It can require
+commit-message prefixes derived from an existing branch name; that does not define which branch
+names a project must use.
 
 ## Message Format
 
@@ -11,6 +13,16 @@ Preferred subject format:
 type(scope): subject
 ```
 
+When the current branch is `feat/<digits>`, prefix the subject with `#<digits> `,
+using the number from the branch name only:
+
+```
+#123 feat(audit): add drift cache
+```
+
+On any other branch, do not add a branch-derived issue prefix. Do not invent issue numbers, ticket
+keys, or tracking identifiers.
+
 If a project uses ticket or issue prefixes, place the real project identifier before the
 conventional subject:
 
@@ -19,8 +31,7 @@ ABC-123 type(scope): subject
 #123 type(scope): subject
 ```
 
-Do not invent issue numbers, ticket keys, or tracking identifiers. If the project omits scopes, use
-`type: subject` and keep the same subject-line rules.
+If the project omits scopes, use `type: subject` and keep the same subject-line rules.
 
 Full message shape:
 
