@@ -147,7 +147,7 @@ Write artifacts immediately. Do NOT invoke/ask about `/goat-critique`; run it on
 
 For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.active` to that slug in the same batch. Write one milestone per `.goat-flow/plans/<active>/M*.md` file.
 
-**Filename format:** start with `M` so dashboard and task tooling discover it; use a readable slug, e.g. `Milestone-prove-api-integration.md`.
+**Filename format:** start with `M` plus a zero-padded number so dashboard and task tooling discover and order it; use a readable slug, e.g. `M01-prove-api-integration.md`.
 
 **File format:** use the Phase 1 milestone field set plus title and Status, ending with Testing Gate (static/contract + automated + manual + acceptance) and Mid-implementation proof.
 
