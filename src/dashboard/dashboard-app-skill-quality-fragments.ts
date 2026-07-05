@@ -125,7 +125,7 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
         // Server-side scoring errors become a toast instead of replacing the current report.
         if (error) {
           this.showToast(error, true);
-        // The response still matches the visible project, runner, and selected skill.
+          // The response still matches the visible project, runner, and selected skill.
         } else if (
           this.projectPath === requestProjectPath &&
           this.activeRunner === requestRunner &&
@@ -279,16 +279,16 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
         const packagedAs =
           report.artifact.kind === "skill" ? "skill" : "reference";
         title = `Packaged as ${packagedAs}, reads like ${detectedShape}`;
-      // High-confidence subtype mismatch is shown before metric counts because it changes next action.
+        // High-confidence subtype mismatch is shown before metric counts because it changes next action.
       } else if (cls.confidence >= 0.85 && detected !== report.subtype) {
         title = `This reads as a ${detected}, not a ${report.subtype}`;
-      // Failing metrics mean the user needs a stronger verdict than warning copy.
+        // Failing metrics mean the user needs a stronger verdict than warning copy.
       } else if (failCount > 0) {
         const tail = isHardVerdict
           ? "block ship"
           : "- needs review before keeping";
         title = `${failCount} failing metric${failCount > 1 ? "s" : ""} ${tail}`;
-      // Warnings are non-blocking, so the banner keeps the artifact reviewable.
+        // Warnings are non-blocking, so the banner keeps the artifact reviewable.
       } else if (warnCount > 0) {
         title = `${warnCount} non-blocking warning${warnCount > 1 ? "s" : ""}`;
       } else {

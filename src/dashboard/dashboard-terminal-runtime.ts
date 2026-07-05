@@ -1,15 +1,29 @@
 /**
- * Dashboard terminal availability, xterm asset loading, and session launch helpers.
+ * Manage dashboard terminal availability, session refresh, xterm assets, and launches.
+ * Use when a Workspace user opens, reconnects, clears, or sends prompts to browser-backed runners.
+ * Helpers guard stale sessions and loading failures so the UI shows modals/toasts instead of
+ * leaving a disconnected terminal pane.
+ */
+/**
+ * Send a prompt to an existing terminal session for the current project.
+ * Use when a user targets a running session instead of starting a new one.
+ *
+ * @param ctx - terminal dashboard state; missing active session means the helper opens/binds the target
+ * @param prompt - prompt text to send; empty text still focuses/opens the session without useful input
+ * @param target - server session to receive the prompt; wrong-project sessions are rejected for the user
+ * @returns nothing; connection failures appear as toasts
  */
 async function dashboardSendToProjectTarget(
   ctx: DashboardTerminalContext,
   prompt: string,
   target: ServerSessionInfo,
 ): Promise<void> {
+  // Wrong-project sends would paste a prompt into a session the user is not viewing.
   if (target.projectPath !== ctx.projectPath) {
     ctx.showToast("Target session is not in this project", true);
     return;
   }
+  // Locally bound sessions can be focused immediately in the Workspace terminal.
   if (ctx.isSessionBoundLocally(target.id)) {
     ctx.activeSessionId = target.id;
     ctx.activeView = "workspace";
@@ -18,13 +32,21 @@ async function dashboardSendToProjectTarget(
     await ctx.openServerSession(target);
   }
   const prepared = ctx.adaptPrompt(prompt, target.runner);
-  /** Retry a project-scoped send until the target terminal is ready. */
+  /**
+   * Retry delivery until the browser WebSocket is ready.
+   * Use after opening a saved session because the visible terminal may still be connecting.
+   *
+   * @param attempts - retry count; high values mean the terminal never became ready
+   * @returns nothing; timeout appears as a toast instead of dropping the prompt silently
+   */
   const deliver = async (attempts: number): Promise<void> => {
     const refs = ctx._terminalRefs[ctx.activeSessionId ?? ""];
+    // Open sockets can receive the prompt immediately.
     if (refs?.ws && refs.ws.readyState === WebSocket.OPEN) {
       ctx.sendToTerminal(prepared, { adapt: false });
       return;
     }
+    // After repeated retries, tell the user the terminal could not connect.
     if (attempts > 20) {
       ctx.showToast("Could not connect to terminal", true);
       return;
@@ -35,12 +57,19 @@ async function dashboardSendToProjectTarget(
   await deliver(0);
 }
 
-/** Refresh terminal feature availability from the health endpoint. */
+/**
+ * Refresh terminal feature availability from the health endpoint.
+ * Use when the dashboard starts so Workspace can enable terminal actions only for runnable agents.
+ *
+ * @param ctx - terminal dashboard state; failed health checks disable terminal actions
+ * @returns nothing; session count refresh is scheduled afterward
+ */
 async function dashboardCheckTerminalAvailable(
   ctx: DashboardTerminalContext,
 ): Promise<void> {
   try {
     const res = await dashboardFetch("/api/health");
+    // Healthy responses may advertise runners, platform hints, and idle timeout.
     if (res.ok) {
       const payload = readRecord(await res.json(), "Health response");
       ctx.availableRunners = Array.isArray(payload.availableRunners)
@@ -57,7 +86,9 @@ async function dashboardCheckTerminalAvailable(
           ? payload.idleTimeoutMinutes
           : 480;
       const [firstRunner] = ctx.availableRunners;
+      // Pick the first runnable agent so launch buttons have a valid default.
       if (firstRunner) ctx.activeRunner = firstRunner;
+      // Workspace/setup views are likely to launch a terminal, so warm assets in the background.
       if (
         ctx.terminalAvailable &&
         (ctx.activeView === "workspace" || ctx.activeView === "setup")
@@ -66,15 +97,23 @@ async function dashboardCheckTerminalAvailable(
       }
     }
   } catch {
+    // Health failures mean terminal controls should stay disabled for the user.
     ctx.terminalAvailable = false;
   }
   void ctx.updateSessionCount();
 }
 
-/** Refresh terminal session state from the server. */
+/**
+ * Debounce a terminal session refresh from the server.
+ * Use after launches, reconnects, and cleanup so counters update without request bursts.
+ *
+ * @param ctx - terminal dashboard state; stale refreshes update the same session list
+ * @returns promise for the pending refresh; existing promise means a refresh is already scheduled
+ */
 async function dashboardUpdateSessionCount(
   ctx: DashboardTerminalContext,
 ): Promise<void> {
+  // Reuse an in-flight refresh so rapid UI events do not spam the sessions endpoint.
   if (sessionRefreshPromise) return sessionRefreshPromise;
   sessionRefreshPromise = new Promise<void>((resolve) => {
     sessionRefreshDebounceTimer = setTimeout(() => {
@@ -88,6 +127,13 @@ async function dashboardUpdateSessionCount(
   return sessionRefreshPromise;
 }
 
+/**
+ * Refresh terminal session state from the server immediately.
+ * Use behind the debounced public refresh so local ended sessions reconcile with backend truth.
+ *
+ * @param ctx - terminal dashboard state; failed refreshes leave current local state in place
+ * @returns nothing; stale local sessions may be marked ended
+ */
 async function dashboardUpdateSessionCountImpl(
   ctx: DashboardTerminalContext,
 ): Promise<void> {
@@ -96,6 +142,7 @@ async function dashboardUpdateSessionCountImpl(
     const payload = readRecord(await res.json(), "Terminal sessions response");
     ctx.terminalSessionCount =
       typeof payload.activeCount === "number" ? payload.activeCount : 0;
+    // Server max sessions controls when the UI shows the max-sessions modal.
     if (typeof payload.maxSessions === "number") {
       ctx.serverMaxSessions = payload.maxSessions;
     }
@@ -109,7 +156,9 @@ async function dashboardUpdateSessionCountImpl(
           }))
       : [];
     const activeIds = new Set(ctx.serverSessions.map((session) => session.id));
+    // Local sessions absent from the server are marked ended so the UI stops showing them as reconnectable.
     for (const session of ctx.sessions) {
+      // Ended, connected, or server-known sessions remain visible in their current state.
       if (session.ended || session.connected || activeIds.has(session.id)) {
         continue;
       }
@@ -120,11 +169,17 @@ async function dashboardUpdateSessionCountImpl(
       ctx._forgetSavedSession(session.id);
     }
   } catch {
-    /* ignore */
+    // Session refresh is best-effort; keep the visible terminal state if the endpoint fails.
   }
 }
 
-/** Clear non-active (terminated/starting) terminal sessions, preserving running ones. */
+/**
+ * Clear recent inactive terminal sessions while preserving running backend sessions.
+ * Use when the user clicks the clear/recent-session cleanup action in Workspace.
+ *
+ * @param ctx - terminal dashboard state; endpoint failures show a toast and keep current rows
+ * @returns nothing; cleared count appears as a toast
+ */
 async function dashboardEndAllSessions(
   ctx: DashboardTerminalContext,
 ): Promise<void> {
@@ -143,6 +198,7 @@ async function dashboardEndAllSessions(
         .map((session) => session.id),
     );
     const localRecentCount = ctx.recentTerminalSessions.length;
+    // Delete inactive backend sessions so stale recent rows disappear from the UI.
     for (const session of inactive) {
       await dashboardFetch(`/api/terminal/${session.id}`, {
         method: "DELETE",
@@ -150,7 +206,9 @@ async function dashboardEndAllSessions(
     }
     ctx.recentTerminalSessions = [];
     const keptRefs: typeof ctx._terminalRefs = {};
+    // Keep terminal bindings only for sessions still active on the server.
     for (const id of Object.keys(ctx._terminalRefs)) {
+      // Active sessions stay reconnectable after cleanup.
       if (activeIds.has(id)) {
         const active = ctx._terminalRefs[id];
         if (active) keptRefs[id] = active;
@@ -162,17 +220,22 @@ async function dashboardEndAllSessions(
     }
     ctx._terminalRefs = keptRefs;
     const keptProjects: typeof ctx._projectSessions = {};
+    // Preserve per-project saved sessions only when the backend still reports them active.
     for (const key of Object.keys(ctx._projectSessions)) {
       const kept = (ctx._projectSessions[key] ?? []).filter((s) =>
         activeIds.has(s.sessionId),
       );
+      // Empty project session lists are pruned so reconnect buttons do not show stale choices.
       if (kept.length > 0) keptProjects[key] = kept;
     }
     ctx._projectSessions = keptProjects;
+    // Project active-session pointers fall back to a kept session or disappear.
     for (const key of Object.keys(ctx._projectActiveSession)) {
       const activeSessionForProject = ctx._projectActiveSession[key];
+      // Pointers to removed sessions need a replacement before the user reconnects.
       if (activeSessionForProject && !activeIds.has(activeSessionForProject)) {
         const projectSessions = keptProjects[key];
+        // A remaining session becomes the project's reconnect default.
         if (projectSessions?.[0]) {
           ctx._projectActiveSession[key] = projectSessions[0].sessionId;
         } else {
@@ -181,10 +244,13 @@ async function dashboardEndAllSessions(
       }
     }
     ctx.sessions = ctx.sessions.filter((s) => activeIds.has(s.id));
+    // If the visible session was cleared, select no active local session.
     if (ctx.activeSessionId && !activeIds.has(ctx.activeSessionId)) {
       ctx.activeSessionId = null;
     }
+    // Preset run badges complete when their session disappeared during cleanup.
     for (const [presetId, state] of Object.entries(ctx.promptRunStates)) {
+      // Only running presets with no matching local session are marked pass.
       if (
         state === "running" &&
         !ctx.sessions.some((s) => s.presetId === presetId)
@@ -205,7 +271,12 @@ async function dashboardEndAllSessions(
   }
 }
 
-/** Load the xterm.js globals on demand before any terminal view is rendered. */
+/**
+ * Remove xterm asset tags after a failed load.
+ * Use so the next explicit terminal launch can retry cleanly instead of reusing broken tags.
+ *
+ * @returns nothing; missing tags mean there is nothing to remove
+ */
 function removeXtermAssetElements(): void {
   document
     .querySelector('link[rel="stylesheet"][href="/assets/xterm.css"]')
@@ -214,10 +285,19 @@ function removeXtermAssetElements(): void {
   document.querySelector('script[src="/assets/addon-fit.js"]')?.remove();
 }
 
+/**
+ * Wait for a stylesheet or script asset to load.
+ * Use when xterm assets may already be loading from another terminal action.
+ *
+ * @param element - asset element to observe; already-loaded elements resolve immediately
+ * @param label - user/debug label for failures; empty labels make timeout messages unclear
+ * @returns promise that resolves on load or rejects on timeout/error
+ */
 function waitForAssetElement(
   element: HTMLLinkElement | HTMLScriptElement,
   label: string,
 ): Promise<void> {
+  // Already-loaded assets can be reused for the next terminal without waiting.
   if (element.dataset["loaded"] === "true") return Promise.resolve();
   return new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => {
@@ -242,11 +322,17 @@ function waitForAssetElement(
   });
 }
 
-/** Load xterm CSS once, reusing an existing tag so reconnects do not duplicate assets. */
+/**
+ * Load xterm CSS once.
+ * Use before rendering a terminal so reconnects and repeated launches reuse the same stylesheet.
+ *
+ * @returns promise that resolves when terminal CSS is ready
+ */
 async function loadXtermStylesheet(): Promise<void> {
   const existing = document.querySelector<HTMLLinkElement>(
     'link[rel="stylesheet"][href="/assets/xterm.css"]',
   );
+  // Existing stylesheet tags are reused so the document does not accumulate duplicate assets.
   if (existing) {
     await waitForAssetElement(existing, "xterm.css");
     return;
@@ -259,11 +345,19 @@ async function loadXtermStylesheet(): Promise<void> {
   await loaded;
 }
 
-/** Load one xterm script asset, waiting for existing tags when another tab started first. */
+/**
+ * Load one xterm script asset.
+ * Use for xterm core and the fit addon while sharing any script tag already in progress.
+ *
+ * @param src - script URL; empty would create an unusable asset tag
+ * @param label - user/debug label for failures; empty labels make timeout messages unclear
+ * @returns promise that resolves when the script is ready
+ */
 async function loadXtermScript(src: string, label: string): Promise<void> {
   const existing = document.querySelector<HTMLScriptElement>(
     `script[src="${src}"]`,
   );
+  // Existing script tags may still be loading, so wait for them instead of appending another.
   if (existing) {
     await waitForAssetElement(existing, label);
     return;
@@ -275,10 +369,19 @@ async function loadXtermScript(src: string, label: string): Promise<void> {
   await loaded;
 }
 
+/**
+ * Load xterm core and addons for the dashboard terminal.
+ * Use before opening or reconnecting a Workspace terminal.
+ *
+ * @param ctx - terminal dashboard state; already-loaded state returns immediately
+ * @returns nothing; failed loads reset asset tags so the next launch can retry
+ */
 async function dashboardLoadXterm(
   ctx: DashboardTerminalContext,
 ): Promise<void> {
+  // Loaded assets can be reused for all later terminal sessions.
   if (ctx._xtermLoaded) return;
+  // Share one load promise so concurrent launches wait on the same assets.
   if (!xtermLoadPromise) {
     xtermLoadPromise = (async () => {
       await loadXtermStylesheet();
@@ -293,16 +396,24 @@ async function dashboardLoadXterm(
     await xtermLoadPromise;
     ctx._xtermLoaded = true;
   } catch (err) {
+    // Failed asset tags are removed so explicit relaunch can try again.
     xtermLoadPromise = null;
     removeXtermAssetElements();
     throw err;
   }
 }
 
-/** Warm xterm.js in the background so the first launch does less visible work. */
+/**
+ * Warm xterm assets in the background.
+ * Use after health confirms terminals are available so the first launch feels faster.
+ *
+ * @param ctx - terminal dashboard state; unavailable or already-loaded terminals do nothing
+ * @returns nothing; background failures are surfaced later on explicit launch
+ */
 async function dashboardWarmXterm(
   ctx: DashboardTerminalContext,
 ): Promise<void> {
+  // If terminal launch is unavailable or already warm, the user does not need background work.
   if (!ctx.terminalAvailable || ctx._xtermLoaded) return;
   try {
     await ctx.loadXterm();
@@ -311,7 +422,17 @@ async function dashboardWarmXterm(
   }
 }
 
-/** Launch a preset prompt in the selected runner. */
+/**
+ * Launch a preset or custom prompt in the selected runner.
+ * Use when the user clicks a dashboard prompt button and expects a Workspace terminal to open.
+ *
+ * @param ctx - terminal dashboard state; active launch blocks duplicate clicks
+ * @param prompt - prompt text to send; empty launches a terminal with only launch context
+ * @param runner - optional runner override; absent uses the active runner
+ * @param label - optional visible prompt label; absent falls back to preset/custom text
+ * @param options - launch metadata; empty values use current project and custom prompt defaults
+ * @returns nothing; launch failures show modal/toast feedback
+ */
 async function dashboardLaunchPreset(
   ctx: DashboardTerminalContext,
   prompt: string,
@@ -323,6 +444,7 @@ async function dashboardLaunchPreset(
     targetPath?: string | null;
   } = {},
 ): Promise<void> {
+  // A launch is already in progress, so ignore duplicate button clicks.
   if (ctx.launching) return;
   const preset =
     (options.presetId
@@ -337,14 +459,17 @@ async function dashboardLaunchPreset(
   const promptLabel = label || preset?.name || "Custom prompt";
   const presetId = preset?.id || options.presetId || null;
   const runnerResolved = runner || ctx.activeRunner;
+  // Preset badges show running state while the terminal session is active.
   if (presetId) ctx.promptRunStates[presetId] = "running";
   let adapted = ctx.adaptPrompt(prompt, runnerResolved);
   adapted +=
     "\n\n" + dashboardGlobalLaunchContext(ctx, runnerResolved, preset ?? null);
+  // Investigator role opens read-only guidance from the user's configured perspective.
   if (ctx.userRole === "investigator") {
     adapted =
       "You are in investigator mode. Read-only - investigate, plan, and review only. Do NOT make any code changes.\n\n" +
       adapted;
+  // Tester role focuses the runner on QA/test work instead of implementation changes.
   } else if (ctx.userRole === "tester") {
     adapted =
       "You are in tester mode. Test-focused - generate test plans, verify coverage, run QA analysis. Do NOT make code changes beyond test files.\n\n" +
@@ -358,20 +483,32 @@ async function dashboardLaunchPreset(
   });
 }
 
-/** Drop a session id from every project's saved list, pruning empty entries. */
+/**
+ * Forget a saved session id across every project.
+ * Use when the server proves a session ended so reconnect metadata stops pointing at it.
+ *
+ * @param ctx - terminal dashboard state; missing session maps mean there is nothing to prune
+ * @param sessionId - session id to remove; empty ids do not match normal saved sessions
+ * @returns nothing; saved project session maps update in place
+ */
 function dashboardForgetSavedSession(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
+  // A session can be saved under multiple project keys after navigation, so prune every list.
   for (const [path, list] of Object.entries(ctx._projectSessions)) {
     const filtered = list.filter((sv) => sv.sessionId !== sessionId);
+    // Empty saved lists should disappear so reconnect controls do not show stale projects.
     if (filtered.length === 0) {
       Reflect.deleteProperty(ctx._projectSessions, path);
+    // Changed lists keep only sessions the user can still reconnect.
     } else if (filtered.length !== list.length) {
       ctx._projectSessions[path] = filtered;
     }
+    // Active-session pointers must move off the forgotten session.
     if (ctx._projectActiveSession[path] === sessionId) {
       const first = filtered[0];
+      // Remaining saved session becomes the reconnect default.
       if (first) {
         ctx._projectActiveSession[path] = first.sessionId;
       } else {
