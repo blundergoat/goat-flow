@@ -22,7 +22,11 @@ Enforcement is partial: static tools may flag mechanical items (missing doc comm
 
 These are the comments we want, all in plain English from the UI/user perspective. Rules 1-4 are mandatory whenever their construct exists and are **not** subject to any "omit by default" rule. Rule 5 is mandatory at flow entry points and hard-to-reconstruct junctions, but not on every method. If you are unsure whether one of the first four applies, it does.
 
-1. **Doc comment on every class/file (3-8 lines) and every method (1-3 lines).** Say what it does, **when to use it from the user's perspective**, and how it fits the bigger user-facing process. A class/file also names the screen, flow, or capability it serves.
+1. **Doc comment on every file/module or class boundary (3-8 lines) and every method (1-3 lines).**
+   Say what it does, **when to use it from the user's perspective**, and how it fits the bigger
+   user-facing process. A class/file boundary also names the screen, flow, or capability it serves.
+   For PHP class files, the class PHPDoc is the file/class boundary comment; do not also add a
+   separate top-of-file PHPDoc above `declare`, `namespace`, or `use`.
 2. **Self-documenting names in the user's vocabulary.** Every variable and method named for what the user sees and does - `$data` -> `$overdueInvoices`, `handleSubmit` -> `sendRebookingRequest` - not internal mechanics. If the UI says "appointment", the code does not say "booking".
 3. **A context line above every `if`, every loop (`for` / `foreach` / `while`), and every null/empty check.** One brief plain-English line: what is happening here and what it means for the user.
 4. **Null/empty meaning on every `@param` and `@returns` / `@return`.** Say what an absent, null, or empty value means on screen - "no folder chosen yet", "the user sees the empty state, not an error" - since the signature cannot.
@@ -31,7 +35,7 @@ These are the comments we want, all in plain English from the UI/user perspectiv
 Alongside these: **tighten** verbose comments to plain English but **never delete a `@param` / `@returns`** while doing so (trimming cuts words, not contract); **verified rationale only** (no guessed "for performance", no hedging like `probably` / `should be fine`); wrap ~110 chars (hard max 120); a `YYYY-MM-DD` date or trigger on every TODO / FIXME / HACK; and never write markdown/emoji, commented-out code, secrets, or line-number references. A comment that no longer matches the code is deleted or rewritten on sight - incorrect is worse than missing.
 
 ```text
-Class / file / method?              -> doc comment (3-8 / 1-3 lines): what, UI when-to-use, bigger-picture fit
+File/module, class, or method?      -> doc comment (3-8 / 1-3 lines): what, UI when-to-use, bigger-picture fit
 if / for / foreach / while / null-empty check?  -> context line: what happens + what it means for the user
 @param / @returns?                  -> real meaning + what null/empty/absent means on screen
 Naming anything?                    -> self-documenting, in the words the user sees
@@ -86,7 +90,17 @@ The doc says what it does, when to use it, and why it matters to a busy practice
 
 ## Doc Comments and Tags (tiers 1 and 4)
 
-Every function/method and every class/file carries one - trivial and private units included. Size to the unit: 1-3 lines for a method, 3-8 for a class/file (tags excluded). The description orients a product-minded reader: what this does, when to use it (and when not to) from the UI/user perspective, and where it sits in the user's flow.
+Every function/method and every file/module or class boundary carries one - trivial and private
+units included. Size to the unit: 1-3 lines for a method, 3-8 for a file/module or class boundary
+(tags excluded). The description orients a product-minded reader: what this does, when to use it
+(and when not to) from the UI/user perspective, and where it sits in the user's flow.
+
+PHP class files are the exception to "file plus class": do not write both. In a normal one-class
+PHP file, the class PHPDoc carries the file-level description and the class contract together. A
+separate file PHPDoc is used only for PHP files without a class, such as procedural scripts,
+bootstrap/config files, or generated entry files. TypeScript, JavaScript, Python, Go, Rust, and
+similar module-oriented files may still have a file/module comment when the file itself is the
+useful boundary, especially when it contains several functions, exports, or classes.
 
 Why mandatory even on a private one-liner: the doc comment is a verification surface. An agent can produce code that superficially works while misunderstanding the requirement; stated intent lets a reviewer diff promise against implementation - a doc that promises a sort the body never performs is a review signal.
 
@@ -217,7 +231,9 @@ const raw: any = await client.invoke(params);
 The WHEN and WHY rules are portable; syntax is not. Defer to each language, then apply the house layout.
 
 - **TypeScript / JavaScript.** JSDoc for contracts; plain `//` inline.
-- **PHP.** PHPDoc (`/** ... */`) for contracts, with null/empty meaning on `@param` / `@return`; `//` inline.
+- **PHP.** PHPDoc (`/** ... */`) for contracts, with null/empty meaning on `@param` / `@return`;
+  `//` inline. In class files, put the 3-8 line file/class description on the class PHPDoc only.
+  Use a top-of-file PHPDoc only for PHP files without a class.
 - **Python.** PEP 257 docstrings; `#` inline.
 - **Go.** godoc syntax for exported AND private identifiers; `//` inline.
 - **Rust.** rustdoc (`///` and `//!`) for public AND private items; `//` inline.
@@ -239,7 +255,10 @@ Comments ship with code and get indexed. Never include secrets, tokens, API keys
 
 Before claiming a code change is done, check names and comments. **[static]** = mechanical, linter-checkable; **[judge]** = semantic, for a review-judge or human reviewer.
 
-1. **[static]+[judge] Every class/file (3-8 lines) and method (1-3 lines) has a doc comment.** Sizes and the blank separator line are mechanical; UI when-to-use, bigger-picture fit, real parameter/return meaning, and non-restated types are semantic.
+1. **[static]+[judge] Every file/module or class boundary (3-8 lines) and method (1-3 lines) has a
+   doc comment.** Sizes and the blank separator line are mechanical; UI when-to-use, bigger-picture
+   fit, real parameter/return meaning, and non-restated types are semantic. PHP class files must
+   not duplicate a top-of-file PHPDoc and a class PHPDoc for the same boundary.
 2. **[static]+[judge] Every `if`, loop, and null/empty check has one brief context line above it** that translates the moment into user meaning rather than restating mechanics.
 3. **[judge] Every `@param` / `@returns` states what null/empty/absent means for the user**, and no tag was deleted while tightening a verbose comment.
 4. **[judge] Names are self-documenting in the product's vocabulary** - identifiers match the words the user sees wherever a UI exists.
