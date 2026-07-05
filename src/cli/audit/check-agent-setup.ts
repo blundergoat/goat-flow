@@ -411,7 +411,7 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
       // Missing version means the user cannot tell whether this mirror matches the release.
       if (version === null) {
         noVersion.push(`${agentFacts.agent.id}:${name}`);
-      // Mismatched version means the installed skill may carry old workflow rules.
+        // Mismatched version means the installed skill may carry old workflow rules.
       } else if (version !== AUDIT_VERSION) {
         mismatch.push(`${agentFacts.agent.id}:${name} (${version})`);
       }

@@ -3,9 +3,9 @@ goat-flow-reference-version: "1.13.1"
 ---
 # Code Comments
 
-Use this when writing or editing source code in any language, before naming an identifier or adding a comment, docstring, or annotation. The primary reader is the coding agent doing the work; the beneficiary is the human maintainer who later reads the code cold - often someone who knows the product well and the codebase not at all. Write every comment and name in plain English from the UI/user perspective: say what the user did, sees, or gets next, never restate the mechanics the code already shows.
+Use this before naming an identifier or adding/editing a comment, docstring, or annotation. Write for the coding agent and the maintainer who later reads the code cold. Use plain English from the UI/user perspective: what the user did, sees, or gets next, never mechanics already shown by code.
 
-This project wants a specific, consistent set of comments - the standard below is not a menu to weigh but the house style every file meets. Portable across TypeScript, Python, Go, Rust, PHP, and shell: defer to each language's docstring SYNTAX (JSDoc, PHPDoc, PEP 257, godoc, rustdoc), while this playbook owns the WHEN/WHY decision plus the house layout conventions (tag separator, blank line before tags, ~110-char wrap) that override language defaults.
+House style is mandatory. It applies across TypeScript, Python, Go, Rust, PHP, and shell: defer to each language's docstring syntax, while this playbook owns when/why to comment plus tag separators, blank lines before tags, and ~110-char wrapping.
 
 ## Availability Check
 
@@ -16,7 +16,7 @@ This is a discipline reference, not a runnable tool. Load it when:
 - Editing existing code that contains comments - to decide keep / tighten / rewrite / delete.
 - Authoring a TODO / FIXME / HACK marker, or reviewing a diff that changes comments.
 
-Enforcement is partial: static tools may flag mechanical items (missing doc comments, marker expiry) but not the `[judge]` semantic checks. The gate below is the spec; do not claim more enforcement than the project runs.
+Enforcement is partial: static tools may flag mechanical items, not `[judge]` semantic checks. Do not claim more enforcement than the project runs.
 
 ## The Comment Standard
 
@@ -32,7 +32,7 @@ These are the comments we want, all in plain English from the UI/user perspectiv
 4. **Null/empty meaning on every `@param` and `@returns` / `@return`.** Say what an absent, null, or empty value means on screen - "no folder chosen yet", "the user sees the empty state, not an error" - since the signature cannot.
 5. **A user-journey anchor at flow entry points and non-obvious triggers.** Add a concrete example of what the user did to arrive here when the trigger is hard to reconstruct.
 
-Alongside these: **tighten** verbose comments to plain English but **never delete a `@param` / `@returns`** while doing so (trimming cuts words, not contract); **verified rationale only** (no guessed "for performance", no hedging like `probably` / `should be fine`); wrap ~110 chars (hard max 120); a `YYYY-MM-DD` date or trigger on every TODO / FIXME / HACK; and never write markdown/emoji, commented-out code, secrets, or line-number references. A comment that no longer matches the code is deleted or rewritten on sight - incorrect is worse than missing.
+Also: tighten verbose comments without deleting `@param` / `@returns`; use verified rationale only; wrap ~110 chars (hard max 120); put a `YYYY-MM-DD` date or trigger on every TODO / FIXME / HACK; and never write markdown/emoji, commented-out code, secrets, or line-number references. Delete or rewrite stale comments on sight - incorrect is worse than missing.
 
 ```text
 File/module, class, or method?      -> doc comment (3-8 / 1-3 lines): what, UI when-to-use, bigger-picture fit
@@ -86,7 +86,7 @@ public function emailOverdueInvoiceReminders(Practice $practice, array $selected
 }
 ```
 
-The doc says what it does, when to use it, and why it matters to a busy practice; the name and its arguments read in the user's words; every tag says what empty/null means on screen; a journey anchor shows how the user got here; and each `if`, the `foreach`, and the null check carry their user meaning.
+The doc states what, when, and why; names use the user's words; tags explain empty/null screen meaning; the journey anchor shows entry context; each branch and loop carries user meaning.
 
 ## Doc Comments and Tags (tiers 1 and 4)
 
@@ -102,7 +102,7 @@ bootstrap/config files, or generated entry files. TypeScript, JavaScript, Python
 similar module-oriented files may still have a file/module comment when the file itself is the
 useful boundary, especially when it contains several functions, exports, or classes.
 
-Why mandatory even on a private one-liner: the doc comment is a verification surface. An agent can produce code that superficially works while misunderstanding the requirement; stated intent lets a reviewer diff promise against implementation - a doc that promises a sort the body never performs is a review signal.
+Even private one-liners need this verification surface: stated intent lets a reviewer compare promise with implementation.
 
 - **Real descriptions, not restated types**, in the language's structured form (JSDoc, PHPDoc, PEP 257, godoc, rustdoc). Every `@param` / `@returns` carries meaning **and** its null/empty/absent consequence for the user.
 - **Hyphen-separate each tag's subject from its description** (`@param value - parsed JSON ...`), with a **blank ` *` line between the description block and the tags**.
@@ -119,7 +119,7 @@ function trimDir(path: string | undefined): string | null {
 }
 ```
 
-After - renamed into the user's terms, with when-to-use and the null meaning stated:
+After - renamed into the user's terms, with when-to-use and null meaning:
 
 ```ts
 /**
@@ -141,7 +141,7 @@ function trimTrailingDirectorySlash(directoryPath: string | undefined): string |
 
 ## Context Comments (tier 3)
 
-Above every `if`, every loop (`for` / `foreach` / `while`; one line above a chained `.filter().map()` pipeline too), and every null/empty check or fallback (`?? default`, `empty()`, early return on missing data), write one brief plain-English line: what is happening, and what it means from the UI/user perspective. Equivalent branch/default constructs (`else`, `switch` / `case`, `match`, ternary, default return) follow the same rule when they choose a user-visible path.
+Above every `if`, loop (`for` / `foreach` / `while`; also chained `.filter().map()`), and null/empty fallback (`?? default`, `empty()`, early return on missing data), write one brief line: what happens and what it means to the user. Equivalent constructs (`else`, `switch` / `case`, `match`, ternary, default return) follow the same rule when they choose a user-visible path.
 
 The line must translate, not restate. `// check if invoice is paid` is banned; "Paid invoices are locked - the user gets a read-only view instead of the edit form" earns its place because that consequence is visible nowhere in the condition. In an `if` chain, each branch gets its own line - here, what each project state tells the user to do next:
 
@@ -241,15 +241,15 @@ The WHEN and WHY rules are portable; syntax is not. Defer to each language, then
 
 ## Security
 
-Comments ship with code and get indexed. Never include secrets, tokens, API keys, customer or patient identifiers, internal-only URLs, production hostnames, account IDs, or infrastructure topology; redact any found while editing. User-journey anchors describe a generic user ("the practitioner"), never a real one.
+Comments ship with code and get indexed. Never include secrets, tokens, API keys, customer/patient identifiers, internal URLs, production hostnames, account IDs, or infrastructure topology; redact any found while editing. User-journey anchors describe generic users, never real people.
 
 ## Troubleshooting
 
 **A linter rejects the house doc format.** Keep `@param name - desc` / `@returns value - desc`; suppress the specific rule with rationale rather than restating types.
 
-**A context line on every branch feels like noise.** The cure is better content, not omission: state the user consequence. A branch with no stateable user meaning is a naming or design smell worth surfacing - not a licence to restate mechanics.
+**A context line on every branch feels like noise.** State the user consequence. A branch with no user meaning is a naming or design smell, not permission to restate mechanics.
 
-**No UI exists (library, daemon, build tool).** Use the nearest consumer's perspective - the developer calling the API, the operator reading the log - in the same plain-English, outcome-focused register.
+**No UI exists (library, daemon, build tool).** Use the nearest consumer's perspective: the developer calling the API or the operator reading the log.
 
 ## Verification Gate
 

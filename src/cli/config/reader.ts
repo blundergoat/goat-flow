@@ -762,7 +762,7 @@ function validateSkillsField(
       // Install must be "all" or a list so setup has a clear selection.
       if (install !== "all" && !Array.isArray(install)) {
         pushError(errors, "skills.install", 'must be "all" or an array');
-      // Explicit lists need item-level validation for actionable errors.
+        // Explicit lists need item-level validation for actionable errors.
       } else if (Array.isArray(install)) {
         validateSkillInstallList(install, errors);
       }

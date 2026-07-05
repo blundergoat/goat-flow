@@ -469,7 +469,7 @@ async function dashboardLaunchPreset(
     adapted =
       "You are in investigator mode. Read-only - investigate, plan, and review only. Do NOT make any code changes.\n\n" +
       adapted;
-  // Tester role focuses the runner on QA/test work instead of implementation changes.
+    // Tester role focuses the runner on QA/test work instead of implementation changes.
   } else if (ctx.userRole === "tester") {
     adapted =
       "You are in tester mode. Test-focused - generate test plans, verify coverage, run QA analysis. Do NOT make code changes beyond test files.\n\n" +
@@ -501,7 +501,7 @@ function dashboardForgetSavedSession(
     // Empty saved lists should disappear so reconnect controls do not show stale projects.
     if (filtered.length === 0) {
       Reflect.deleteProperty(ctx._projectSessions, path);
-    // Changed lists keep only sessions the user can still reconnect.
+      // Changed lists keep only sessions the user can still reconnect.
     } else if (filtered.length !== list.length) {
       ctx._projectSessions[path] = filtered;
     }

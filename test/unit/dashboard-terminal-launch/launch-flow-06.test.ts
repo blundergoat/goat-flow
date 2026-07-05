@@ -264,13 +264,13 @@ describe("dashboard terminal launch flow", () => {
 
   it("maps awaiting-input sessions into the workspace waiting state", () => {
     const source = readFileSync(WORKSPACE_VIEW_PATH, "utf-8");
-    assert.match(source, /awaitingInput: s\.awaitingInput === true/);
-    assert.match(source, /waitingForRunner: s\.connected === true/);
-    assert.match(source, /return s\.awaitingInput === true \|\|/);
-    assert.match(source, /s\.waitingForRunner === true/);
+    assert.match(source, /awaitingInput: session\.awaitingInput === true/);
+    assert.match(source, /waitingForRunner: session\.connected === true/);
+    assert.match(source, /return session\.awaitingInput === true \|\|/);
+    assert.match(source, /session\.waitingForRunner === true/);
     assert.match(
       source,
-      /this\.allSessions\(\)\.filter\(s => this\.sessionIsWaiting\(s\)\)/,
+      /this\.allSessions\(\)\.filter\(session => this\.sessionIsWaiting\(session\)\)/,
     );
   });
 
@@ -278,7 +278,7 @@ describe("dashboard terminal launch flow", () => {
     const source = readFileSync(WORKSPACE_VIEW_PATH, "utf-8");
     assert.match(
       source,
-      /const inactive = this\.serverSessions\.filter\(s => s\.status !== 'active'\)/,
+      /const inactive = this\.serverSessions\.filter\(session => session\.status !== 'active'\)/,
     );
     assert.match(
       source,
@@ -295,7 +295,7 @@ describe("dashboard terminal launch flow", () => {
     assert.match(source, /runningSessions\(\) \{/);
     assert.match(
       source,
-      /s\.status === 'active' && !this\.sessionIsWaiting\(s\)/,
+      /session\.status === 'active' && !this\.sessionIsWaiting\(session\)/,
     );
     assert.match(
       source,
@@ -323,7 +323,7 @@ describe("dashboard terminal launch flow", () => {
     //     left-rail share one source of truth.
     assert.match(
       workspace,
-      /sessionIsWaiting\(s\) \{[\s\S]{0,200}s\.awaitingInput === true/,
+      /sessionIsWaiting\(session\) \{[\s\S]{0,250}session\.awaitingInput === true/,
     );
     // app.ts must define terminalAwaitingInput off the same field.
     assert.match(
@@ -332,7 +332,7 @@ describe("dashboard terminal launch flow", () => {
     );
     // localSessionRows passes awaitingInput through unchanged so the rail
     // and meters see the same value the header sees.
-    assert.match(workspace, /awaitingInput: s\.awaitingInput === true/);
+    assert.match(workspace, /awaitingInput: session\.awaitingInput === true/);
   });
 
   it("warms xterm when the workspace or setup view opens", () => {
