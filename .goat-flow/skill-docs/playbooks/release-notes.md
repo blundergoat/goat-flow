@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.0"
+goat-flow-reference-version: "1.13.1"
 ---
 # Release Notes
 

@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-07-03
+last_reviewed: 2026-07-05
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -72,6 +72,18 @@ last_reviewed: 2026-07-03
 **Root cause:** The corpus over-indexed on dangerous block cases plus a few canonical allow cases. Parser regressions surface as false positives on benign-but-structurally-varied input (operators inside substitutions, arithmetic, redirects on allowlisted reads), which the curated allow set did not vary.
 
 **Prevention:** For guardrail parsers, vary shell *structure* in the allow corpus, not just verbs: substitutions with/without inner operators, quoted vs unquoted, arithmetic expansion, process substitution, and redirects (`2>&1`, `2>/dev/null`, redirect-to-other-file) on allowlisted-readable files - each paired with its dangerous counterpart. A green smoke run proves only the cases present. Also: when a report fingers a downstream rule (a catch-all), trace the token that rule sees back to the tokenizer before relaxing it - here the catch-all was correct and the orphan `$(` was manufactured upstream by the segment splitter. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`), (search: `arithmetic expansion`), (search: `.env.example read with stderr dup`); root-cause anchor in `.goat-flow/learning-loop/footguns/deny-dangerous.md` (search: `track substitution depth`).
+
+---
+
+## Lesson: Interpreter-pipe tests need flag-operand and producer-language controls
+
+**Status:** active | **Created:** 2026-07-05
+
+**What happened:** A review of the local-data-to-interpreter pipe fix found two gaps after the full self-test was green. `cat script.js | node --require ./package.json` returned exit 0 even though Node executed stdin as the program, because the classifier treated the path-shaped `--require` operand as a script file. `printf x | sed '1e echo SED_EXECUTED' | python3 -c ...` also returned exit 0 while the producer executed a command, because `sed`/`awk` were included in a "read-only producer" allowlist.
+
+**Root cause:** The added grammar matrix covered bare interpreters, `-`, `/dev/stdin`, `python -m`, non-path flag values, downloader latching, and script-file allows, but it did not include path-shaped interpreter flag operands or command-capable producer languages. The test corpus proved the intended examples, not the edges where "path-shaped" and "read-only" assumptions break.
+
+**Prevention:** Every interpreter-pipe exemption needs paired controls for (1) a flag operand that looks like a script path but is not positional code, (2) a real script path after that same flag, and (3) producer tools that can execute commands before emitting bytes. Run those controls through the live dispatcher path before declaring the self-test enough. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `interpreter_option_action`), (search: `is_local_data_pipe_source`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `node require flag operand is not a script file`), (search: `sed producer with shell escape stays blocked`), (search: `local data pipe to node script after require flag`).
 
 ---
 

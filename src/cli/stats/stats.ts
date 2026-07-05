@@ -9,7 +9,11 @@ import { DECISION_META_FILES } from "../facts/shared/decision-files.js";
 import type { SharedFacts, BucketFreshness, ReadonlyFS } from "../types.js";
 import type { IndexFreshness } from "./index-freshness.js";
 
-/** Aggregated per-surface view over one learning-loop directory (footguns or lessons). */
+/**
+ * Aggregated per-surface view over one learning-loop directory.
+ * Use when `goat-flow stats` shows users whether memory records are fresh enough to trust.
+ * Invariant: totals and bucket rows come from the same `SharedFacts` read so CLI and checks agree.
+ */
 export interface BucketSection {
   path: string;
   exists: boolean;

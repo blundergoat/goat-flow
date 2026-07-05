@@ -177,7 +177,7 @@ last_reviewed: 2026-06-14
 
 **Evidence:**
 - `src/dashboard/views/workspace.html` (search: `runningSessions()`) excludes `sessionIsWaiting(s)` from the running meter after the 2026-05-19 fix. Before that, `meterRunning()` counted every `status === 'active'` session, including waiting sessions.
-- `src/dashboard/views/workspace.html` (search: `waitingForRunner: s.connected === true`) maps local loading/no-output sessions into the same waiting path used by the rail and meters.
+- `src/dashboard/views/workspace.html` (search: `waitingForRunner: session.connected === true`) maps local loading/no-output sessions into the same waiting path used by the rail and meters.
 - `src/dashboard/dashboard-terminal.ts` (search: `dashboardNextAwaitingInputState`) keeps awaiting-input state latched across transient spinner/status redraws instead of clearing it on every non-empty output chunk.
 - `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `excludes waiting sessions from the Workspace running meter`) pins the meter split, and `test/unit/dashboard-terminal-launch/launch-flow-04.test.ts` (search: `"\r✻ Thinking…"`) pins redraw preservation.
 - `src/cli/server/terminal.ts` (search: `WebSocket close means browser detach`) treats browser WebSocket close as detach; `src/dashboard/dashboard-terminal-connect.ts` (search: `Handle the terminal WebSocket closing`) must not convert that detach into local `ended=true` unless `exit`, `shutdown`, a terminal-ending error, or a session refresh proves the backend session is gone.

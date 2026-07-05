@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.13.1 - 2026-07-05
+
+Patch release for deny-dangerous interpreter-pipe precision and comment-playbook clarity.
+
+- **`deny-dangerous` local-data interpreter pipes are more precise** - Read-only local producers such as `cat`, `tail`, `jq`, `rg`, `grep`, `printf`, and `echo` can feed inline interpreter snippets or checked-in interpreter script files where stdin stays data, while command-capable producers such as `sed` and `awk`, raw interpreter stdin, `-`, `/dev/stdin`, `python -m ...`, shell consumers, downloader pipelines, and unlisted upstream producers remain blocked.
+- **Code-comment playbook states the desired comment types up front** - `code-comments.md` now makes the user-perspective standard explicit: 3-8 line class/file descriptions, 1-3 line method descriptions, self-documenting UI vocabulary names, concise comments that keep `@param` / `@return` contracts, null/empty meaning on tags, user-journey anchors at flow entry points, and brief context lines above branches, loops, and null/empty checks.
+
 ## v1.13.0 - 2026-07-04
 
 Guardrail false-positive precision, per-repo gruff analyzer configuration, preflight robustness, dashboard learning-loop visibility, learning-loop feedback closure, and documentation consistency.

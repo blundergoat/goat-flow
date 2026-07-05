@@ -15,7 +15,7 @@ type HookConfigMap = Record<
   { enabled: boolean; binaries?: Record<string, string> }
 >;
 
-const HOOK_ID_ALIASES = new Map([
+const HOOK_IDENTIFIER_ALIASES = new Map([
   ["gruff-on-change", "gruff-code-quality"],
   ["guard-destructive-shell", "deny-dangerous"],
   ["guard-secret-paths", "deny-dangerous"],
@@ -61,7 +61,7 @@ function readConfigText(projectPath: string): string {
 
 /** Map legacy hook ids to canonical ids so old config entries keep their state. */
 function normalizeHookIdentifier(hookIdentifier: string): string {
-  return HOOK_ID_ALIASES.get(hookIdentifier) ?? hookIdentifier;
+  return HOOK_IDENTIFIER_ALIASES.get(hookIdentifier) ?? hookIdentifier;
 }
 
 /**
@@ -196,10 +196,21 @@ function removablePrefixStart(
   return prefixStart;
 }
 
+/**
+ * Remove one top-level config block from YAML text while preserving the rest of the file.
+ * Use when a deprecated dashboard or hook setting should disappear from the user's config.
+ *
+ * @param text - existing config file text; empty text means there is no visible block to remove
+ * @param key - top-level config key to remove; empty cannot match a user-facing config block
+ * @returns config text without the block, or the original text when the block is absent
+ */
 function removeTopLevelBlockFromText(text: string, key: string): string {
   const lines = text.replace(/\s*$/u, "\n").split("\n");
   const range = topLevelBlockRange(lines, key);
+
+  // If the user never had this block, their config stays exactly as it was.
   if (!range) return text;
+
   const prefixStart = removablePrefixStart(lines, range.start, key);
   return [...lines.slice(0, prefixStart), ...lines.slice(range.end)]
     .join("\n")
@@ -253,12 +264,26 @@ export function setHookEnabled(
   );
 }
 
+/**
+ * Remove one hook override from `.goat-flow/config.yaml`.
+ * Use when the user clears a hook toggle and should return to the registry default.
+ *
+ * @param projectPath - project whose config is edited; empty means no project config can be found
+ * @param hookId - canonical hook id to remove; empty cannot match a visible hook toggle
+ * @returns nothing; absent config or absent hook entries leave the user's config unchanged
+ */
 export function removeHookConfig(projectPath: string, hookId: string): void {
   const path = configPath(projectPath);
+
+  // No config file means there is no saved user override to remove.
   if (!existsSync(path)) return;
+
   const text = readConfigText(projectPath);
   const hooks = readRawHooks(text);
+
+  // If this hook was never overridden, the registry default already controls the UI.
   if (!Object.prototype.hasOwnProperty.call(hooks, hookId)) return;
+
   Reflect.deleteProperty(hooks, hookId);
   writeFileAtomic(
     path,

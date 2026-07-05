@@ -551,8 +551,10 @@ class TerminalManager {
    * Release a reserved session after a failed launch: clear any idle timer,
    * kill the PTY if one was spawned before the failure, and drop the
    * placeholder from the session map so the freed slot is reusable at once.
+   * Reports PTY cleanup errors as process warnings because the launch failure was already shown to the user.
    *
-   * @param session - the reserved session whose slot is being freed
+   * @param session - the reserved session whose slot is being freed; missing PTY means no terminal reached the UI
+   * @returns nothing; the reserved slot disappears so the user can start another terminal
    */
   private releaseReservedSession(session: TerminalSession): void {
     this.clearIdleTimer(session);
@@ -560,8 +562,12 @@ class TerminalManager {
     if (session.pty) {
       try {
         session.pty.kill();
-      } catch {
-        /* already dead */
+      } catch (error) {
+        // Cleanup warnings go to the operator while the UI still gets its freed terminal slot.
+        process.emitWarning(
+          error instanceof Error ? error : new Error(String(error)),
+          "GoatFlowTerminalCleanupWarning",
+        );
       }
     }
     this.sessions.delete(session.id);

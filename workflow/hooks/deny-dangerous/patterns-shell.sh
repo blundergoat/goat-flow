@@ -190,12 +190,24 @@ is_interpreter_command() {
   esac
 }
 
+# Is this pipeline stage a benign local data producer? Curated allowlist of
+# read-only text/JSON tools, so `tail -1 log | python3 -c ...` is recognised
+# as local-data-into-fixed-code instead of being blocked like a downloader
+# pipe. Deliberately kept as an allowlist rather than "anything that is not a
+# known downloader": the downloader latch in check_pipeline_shell_consumers
+# only names known fetchers (curl/wget/fetch/http), so dropping this check
+# would fail OPEN for every network tool it doesn't name (ssh, nc, aria2c,
+# browser-use, ...). Unknown and command-capable producers (sed/awk shell
+# escapes, ssh, nc, aria2c, direct browser-use, ...) fail closed and the
+# interpreter-pipe block stands. Each stage is still policy-checked as its own
+# segment by check_destructive_segment; this list only decides "local data vs
+# possibly-remote content" for the interpreter-pipe exemption.
 is_local_data_pipe_source() {
   local c
   c=$(normalize_command_candidate "$1")
   c="${c#"${c%%[![:space:]]*}"}"
   case "$(first_word_base "$c")" in
-    cat|printf|echo) return 0 ;;
+    cat|tac|head|tail|grep|egrep|fgrep|rg|sort|uniq|cut|tr|wc|nl|jq|yq|column|paste|comm|join|printf|echo) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -229,6 +241,172 @@ is_inline_interpreter_command() {
     esac
   done
   return 1
+}
+
+script_file_word_is_safe() {
+  local word="$1"
+  word=$(strip_shell_quotes_for_path_scan "$word")
+  # "-" and process/device paths make stdin (or another fd) the program.
+  [[ "$word" == "-" ]] && return 1
+  case "$word" in
+    /dev/*|/proc/*) return 1 ;;
+  esac
+  # Unresolved expansions can point anywhere, including /dev/stdin.
+  [[ "$word" == '$'* || "$word" == '`'* ]] && return 1
+  # Require a slash or a script extension so bare words never pass.
+  [[ "$word" == */* ]] && return 0
+  case "$word" in
+    *.py|*.js|*.mjs|*.cjs|*.rb|*.pl|*.ts) return 0 ;;
+  esac
+  return 1
+}
+
+interpreter_option_action() {
+  local base="$1"
+  local word="$2"
+  INTERPRETER_OPTION_ACTION="reject"
+  case "$word" in
+    --)
+      INTERPRETER_OPTION_ACTION="stop"
+      return 0
+      ;;
+  esac
+  [[ "$word" == -?* ]] || {
+    INTERPRETER_OPTION_ACTION="positional"
+    return 0
+  }
+
+  case "$base" in
+    python|python3)
+      case "$word" in
+        -c|-c?*|-m|-m?*)
+          INTERPRETER_OPTION_ACTION="reject"
+          ;;
+        -W|-X|--check-hash-based-pycs)
+          INTERPRETER_OPTION_ACTION="skip_next"
+          ;;
+        -W?*|-X?*|--check-hash-based-pycs=*|--*=*)
+          INTERPRETER_OPTION_ACTION="skip"
+          ;;
+        --help|--version|-h|-V)
+          INTERPRETER_OPTION_ACTION="skip"
+          ;;
+        *)
+          if [[ "$word" =~ ^-[bBdEhiIOqRsSuvVxO]+$ ]]; then
+            INTERPRETER_OPTION_ACTION="skip"
+          fi
+          ;;
+      esac
+      ;;
+    node)
+      case "$word" in
+        -e|-e?*|-p|-p?*|--eval|--eval=*|--print|--print=*)
+          INTERPRETER_OPTION_ACTION="reject"
+          ;;
+        -r|--require|--import|--loader|--experimental-loader|--input-type|--conditions|-C|--env-file|--env-file-if-exists|--inspect-port|--icu-data-dir|--openssl-config|--redirect-warnings|--diagnostic-dir|--cpu-prof-dir|--heap-prof-dir|--snapshot-blob|--test-reporter|--test-name-pattern)
+          INTERPRETER_OPTION_ACTION="skip_next"
+          ;;
+        -r?*|-C?*|--require=*|--import=*|--loader=*|--experimental-loader=*|--input-type=*|--conditions=*|--env-file=*|--env-file-if-exists=*|--inspect-port=*|--icu-data-dir=*|--openssl-config=*|--redirect-warnings=*|--diagnostic-dir=*|--cpu-prof-dir=*|--heap-prof-dir=*|--snapshot-blob=*|--test-reporter=*|--test-name-pattern=*|--*=*)
+          INTERPRETER_OPTION_ACTION="skip"
+          ;;
+        --help|--version|-h|-v|--check|--watch|--test|--inspect|--inspect-brk|--trace-*|--throw-deprecation|--enable-source-maps|--preserve-symlinks|--preserve-symlinks-main|--experimental-*|--no-*|--prof|--zero-fill-buffers)
+          INTERPRETER_OPTION_ACTION="skip"
+          ;;
+      esac
+      ;;
+    perl)
+      case "$word" in
+        -e|-e?*|-E|-E?*)
+          INTERPRETER_OPTION_ACTION="reject"
+          ;;
+        -I|-M|-m)
+          INTERPRETER_OPTION_ACTION="skip_next"
+          ;;
+        -I?*|-M?*|-m?*|--*=*)
+          INTERPRETER_OPTION_ACTION="skip"
+          ;;
+        -c|-w|-d|-T|-U|-W|-X|-v|--help|--version)
+          INTERPRETER_OPTION_ACTION="skip"
+          ;;
+      esac
+      ;;
+    ruby)
+      case "$word" in
+        -e|-e?*)
+          INTERPRETER_OPTION_ACTION="reject"
+          ;;
+        -I|-r|-E|-K|--encoding|--external-encoding|--internal-encoding)
+          INTERPRETER_OPTION_ACTION="skip_next"
+          ;;
+        -I?*|-r?*|-E?*|-K?*|--encoding=*|--external-encoding=*|--internal-encoding=*|--*=*)
+          INTERPRETER_OPTION_ACTION="skip"
+          ;;
+        -c|-w|-d|-v|--help|--version)
+          INTERPRETER_OPTION_ACTION="skip"
+          ;;
+      esac
+      ;;
+  esac
+}
+
+# Does this interpreter invocation run a script FILE (python x.py,
+# node tools/build.mjs), leaving piped stdin as plain data? Fail-closed: the
+# first positional word after known option parsing must be path-shaped (contain
+# a slash or a script extension), which rejects stdin-as-program spellings
+# ("-", /dev/stdin, /dev/fd/*, /proc/*), unresolved $/backtick expansions,
+# module execution (`python -m code` runs stdin as a REPL program), and
+# path-looking flag values (`node --require ./setup.js`, `python3 -W ./x`).
+is_script_file_interpreter_command() {
+  local c="$1"
+  local -a words=()
+  local base i word options_done action
+  c=$(normalize_command_candidate "$c")
+  c="${c#"${c%%[![:space:]]*}"}"
+  split_shell_words_into words "$c"
+  [[ "${#words[@]}" -gt 1 ]] || return 1
+
+  base="${words[0]##*/}"
+  case "$base" in
+    python|python3|node|perl|ruby) ;;
+    *) return 1 ;;
+  esac
+
+  options_done=0
+  for ((i = 1; i < ${#words[@]}; i++)); do
+    word="${words[$i]}"
+    if [[ "$options_done" -eq 0 ]]; then
+      interpreter_option_action "$base" "$word"
+      action="$INTERPRETER_OPTION_ACTION"
+      case "$action" in
+        stop)
+          options_done=1
+          continue
+          ;;
+        skip)
+          continue
+          ;;
+        skip_next)
+          i=$((i + 1))
+          [[ "$i" -lt "${#words[@]}" ]] || return 1
+          continue
+          ;;
+        reject)
+          return 1
+          ;;
+        positional) ;;
+      esac
+    fi
+    script_file_word_is_safe "$word"
+    return $?
+  done
+  return 1
+}
+
+# Piped bytes stay DATA when the interpreter's program comes from somewhere
+# else: an inline code flag (python -c, node -e) or a checked-in script file.
+# Bare interpreters and stdin-path spellings execute the pipe as the program.
+interpreter_treats_stdin_as_data() {
+  is_inline_interpreter_command "$1" || is_script_file_interpreter_command "$1"
 }
 
 strip_sql_literals_inside_double_quotes() {
@@ -299,17 +477,21 @@ check_pipeline_shell_consumers() {
   local pipe_index
   local previous_part
   local saw_downloader_pipe_source=0
+  local all_upstream_pipe_sources_local=1
   IFS='|' read -ra pipeline_parts <<< "$pipe_scan"
   for ((pipe_index = 1; pipe_index < ${#pipeline_parts[@]}; pipe_index++)); do
     previous_part="${pipeline_parts[$((pipe_index - 1))]}"
     if is_downloader_pipe_source "$previous_part"; then
       saw_downloader_pipe_source=1
     fi
+    if ! is_local_data_pipe_source "$previous_part"; then
+      all_upstream_pipe_sources_local=0
+    fi
     if is_shell_command "${pipeline_parts[$pipe_index]}"; then
       block "Pipe to shell. Download or inspect first, then run; to feed a local script, redirect from a file (cmd < file) instead of piping." || return $?
     fi
     if is_interpreter_command "${pipeline_parts[$pipe_index]}"; then
-      if [[ "${depth:-0}" -eq 0 && "$saw_downloader_pipe_source" -eq 0 ]] && is_local_data_pipe_source "$previous_part" && is_inline_interpreter_command "${pipeline_parts[$pipe_index]}"; then
+      if [[ "${depth:-0}" -eq 0 && "$saw_downloader_pipe_source" -eq 0 && "$all_upstream_pipe_sources_local" -eq 1 ]] && interpreter_treats_stdin_as_data "${pipeline_parts[$pipe_index]}"; then
         continue
       fi
       block "Pipe to interpreter. Download or inspect first, then run; to feed local data to inline interpreter code, redirect from a file (cmd < file) instead of piping." || return $?

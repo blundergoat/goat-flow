@@ -41,6 +41,13 @@ function verificationDetails(
 
 type AgentFacts = AuditContext["agents"][number];
 
+/**
+ * Detect the universal safety hook that is helpful but not full project validation.
+ * Use when audit output needs to explain why a user sees partial post-turn evidence.
+ *
+ * @param agentFacts - agent audit facts; missing post-turn path means no safety hook is installed
+ * @returns `true` when the registered hook is `post-turn-safety.sh`, otherwise `false`
+ */
 function isPostTurnSafetyHook(agentFacts: AgentFacts): boolean {
   return (
     agentFacts.hooks.postTurnRegisteredPath?.endsWith("post-turn-safety.sh") ??
@@ -48,11 +55,19 @@ function isPostTurnSafetyHook(agentFacts: AgentFacts): boolean {
   );
 }
 
+/**
+ * Explain the post-turn hook state shown in verification audit details.
+ * Use when a user opens harness evidence and needs to know whether validation runs after a turn.
+ *
+ * @param agentFacts - agent audit facts; absent hook fields become missing or not-applicable user messages
+ * @returns reason plus expected/actual labels for the audit details table
+ */
 function postTurnHookReason(agentFacts: AgentFacts): {
   reason: string;
   expected?: string;
   actual?: string;
 } {
+  // Unsupported agents should not look broken for a hook event they cannot run.
   if (agentFacts.agent.supportsPostTurnHook === false) {
     return {
       reason: "post-turn hook not applicable",
@@ -60,6 +75,8 @@ function postTurnHookReason(agentFacts: AgentFacts): {
       actual: "no post-turn hook event",
     };
   }
+
+  // Missing hooks leave users without post-turn verification evidence.
   if (!agentFacts.hooks.postTurnExists) {
     return {
       reason: "post-turn hook missing",
@@ -67,7 +84,10 @@ function postTurnHookReason(agentFacts: AgentFacts): {
       actual: "missing",
     };
   }
+
+  // A hook without validation can only provide support evidence, not a reliable verification gate.
   if (!agentFacts.hooks.postTurnHasValidation) {
+    // The safety hook is useful, so the UI distinguishes it from an empty custom hook.
     if (isPostTurnSafetyHook(agentFacts)) {
       return {
         reason:
@@ -82,6 +102,8 @@ function postTurnHookReason(agentFacts: AgentFacts): {
       actual: "no validation logic",
     };
   }
+
+  // Hooks that hide failures make the user-visible verification signal advisory only.
   if (agentFacts.hooks.postTurnSwallowsFailures) {
     return {
       reason: "post-turn hook always exits 0",
@@ -89,6 +111,7 @@ function postTurnHookReason(agentFacts: AgentFacts): {
       actual: "always exits 0",
     };
   }
+
   return {
     reason: "post-turn hook reports failures honestly",
     expected: "validation failures are reported",
@@ -129,6 +152,14 @@ function collectPostTurnHookFinding(
   return true;
 }
 
+/**
+ * Classify post-turn findings that block trustworthy verification.
+ * Use when audit needs to decide whether the user can rely on post-turn checks.
+ * Invariant: phrases must stay aligned with `collectPostTurnHookFinding` output.
+ *
+ * @param finding - rendered finding text; empty text means there is no blocking post-turn evidence
+ * @returns `true` when the finding describes missing validation or swallowed failures
+ */
 function isBlockingPostTurnHookFinding(finding: string): boolean {
   return (
     finding.includes("no validation logic") ||

@@ -1,108 +1,268 @@
-<!-- ═══ Workspace View ═══ -->
+<!--
+  Workspace view for active and recent dashboard terminal sessions.
+  Use when a user opens a runner, switches between sessions, or resumes work from terminal output.
+  The Alpine helpers translate raw local/server session state into labels, meters, and click actions.
+-->
 <div
   x-show="activeView === 'workspace'"
   x-cloak
   style="height: calc(100vh - 3.5rem); overflow: hidden"
   x-data="{
 	    collapsedSessionTooltip: null,
+      /**
+       * Build table rows for terminal sessions launched from this browser tab.
+       * Use when the Workspace screen merges local launches with server-known sessions.
+       *
+       * @returns active local session rows, or an empty list when this tab has no running terminals
+       */
 	    localSessionRows() {
-	      return this.sessions.filter((s) => !s.ended).map((s) => ({
-	        id: s.id,
+        // Ended local sessions move out of the active list so the user sees only live rows here.
+	      return this.sessions.filter((session) => !session.ended).map((session) => ({
+	        id: session.id,
 	        status: 'active',
-	        createdAt: new Date(s.startTime).toISOString(),
-	        projectPath: s.projectPath,
-	        cwd: s.cwd,
-	        targetPath: s.targetPath,
-	        runner: s.runner,
-	        lastInputAt: s.lastInputTime,
-	        awaitingInput: s.awaitingInput === true,
-	        waitingForRunner: s.connected === true && s.ended !== true && s.awaitingInput !== true && s.loadingPhase !== 'ready' && s.loadingPhase !== 'error' && ((s.outputTail || '').length === 0),
-	        age: Math.max(0, Math.floor((Date.now() - s.startTime) / 1000)),
-	        idleDuration: Math.max(0, Math.floor((Date.now() - s.lastInputTime) / 1000)),
-	        projectName: this.displayNameFor(s.projectPath)
+	        createdAt: new Date(session.startTime).toISOString(),
+	        projectPath: session.projectPath,
+	        cwd: session.cwd,
+	        targetPath: session.targetPath,
+	        runner: session.runner,
+	        lastInputAt: session.lastInputTime,
+	        awaitingInput: session.awaitingInput === true,
+	        waitingForRunner: session.connected === true && session.ended !== true && session.awaitingInput !== true && session.loadingPhase !== 'ready' && session.loadingPhase !== 'error' && ((session.outputTail || '').length === 0),
+	        age: Math.max(0, Math.floor((Date.now() - session.startTime) / 1000)),
+	        idleDuration: Math.max(0, Math.floor((Date.now() - session.lastInputTime) / 1000)),
+	        projectName: this.displayNameFor(session.projectPath)
 	      }));
 	    },
+      /**
+       * Merge all active terminal rows the Workspace can show.
+       * Use when meters, rails, and lists need one de-duplicated active-session source.
+       *
+       * @returns active sessions across local and server sources, or an empty list when none are running
+       */
 	    allSessions() {
-	      const rows = [...this.localSessionRows(), ...this.currentProjectSessions, ...this.otherProjectSessions].filter(s => s.status === 'active');
+        // Only active sessions belong in the main Workspace rail.
+	      const rows = [...this.localSessionRows(), ...this.currentProjectSessions, ...this.otherProjectSessions].filter(session => session.status === 'active');
 	      const seen = new Set();
-	      return rows.filter((s) => {
-	        if (seen.has(s.id)) return false;
-	        seen.add(s.id);
+        // Server and local state can describe the same session, so duplicate ids are hidden from the user.
+	      return rows.filter((session) => {
+	        if (seen.has(session.id)) return false;
+	        seen.add(session.id);
 	        return true;
 	      });
 	    },
+      /**
+       * Return recent ended sessions for the compact Workspace history.
+       * Use when the user wants to re-open context without cluttering the active rail.
+       *
+       * @returns up to four recent sessions, or an empty list when there is no history yet
+       */
 	    recentSessions() {
-	      const inactive = this.serverSessions.filter(s => s.status !== 'active');
+        // Server sessions that are no longer active become recent history rows.
+	      const inactive = this.serverSessions.filter(session => session.status !== 'active');
 	      const rows = [...this.recentTerminalSessions, ...inactive];
 	      const seen = new Set();
-	      return rows.filter((s) => {
-	        if (seen.has(s.id)) return false;
-	        seen.add(s.id);
+        // Recent local and server rows can overlap, so duplicate ids are shown once.
+	      return rows.filter((session) => {
+	        if (seen.has(session.id)) return false;
+	        seen.add(session.id);
 	        return true;
 	      }).slice(0, 4);
 	    },
-	    sessionIsWaiting(s) {
-	      return s.awaitingInput === true || s.waitingForRunner === true || (typeof s.idleDuration === 'number' && this.idleTimeoutMinutes > 0 && s.idleDuration >= Math.floor(this.idleTimeoutMinutes * 0.85) * 60);
+      /**
+       * Decide whether a terminal session needs user attention.
+       * Use for badges, meters, and rail status so idle or awaiting sessions are visible.
+       *
+       * @param session - terminal session row; missing waiting fields mean the row is treated as not waiting
+       * @returns `true` when the user should inspect or continue the session
+       */
+	    sessionIsWaiting(session) {
+	      return session.awaitingInput === true || session.waitingForRunner === true || (typeof session.idleDuration === 'number' && this.idleTimeoutMinutes > 0 && session.idleDuration >= Math.floor(this.idleTimeoutMinutes * 0.85) * 60);
 	    },
-	    sessionTone(s) { return this.sessionIsWaiting(s) ? 'waiting' : (s.status === 'active' ? 'running' : 'recent'); },
-	    sessionGlyph(s) { return this.sessionIsWaiting(s) ? '!' : (s.status === 'active' ? '●' : '○'); },
-	    sessionStatusLabel(s) { return this.sessionIsWaiting(s) ? 'Waiting' : (s.status === 'active' ? 'Running' : 'Recent'); },
-	    sessionPipTone(s) {
-	      const local = this.sessions.find((item) => item.id === s.id);
+      /**
+       * Choose the rail tone for a session row.
+       * Use when the Workspace colors a row as waiting, running, or recent.
+       *
+       * @param session - terminal session row; missing status falls back to recent
+       * @returns session tone class shown in the Workspace rail
+       */
+	    sessionTone(session) { return this.sessionIsWaiting(session) ? 'waiting' : (session.status === 'active' ? 'running' : 'recent'); },
+      /**
+       * Choose the compact glyph for a session row.
+       * Use when the rail is collapsed and users need a quick status symbol.
+       *
+       * @param session - terminal session row; missing status falls back to the recent glyph
+       * @returns visible glyph for waiting, running, or recent state
+       */
+	    sessionGlyph(session) { return this.sessionIsWaiting(session) ? '!' : (session.status === 'active' ? '●' : '○'); },
+      /**
+       * Choose the readable status label for a session row.
+       * Use in tooltips and full-width Workspace rows.
+       *
+       * @param session - terminal session row; missing status falls back to Recent
+       * @returns user-facing status label
+       */
+	    sessionStatusLabel(session) { return this.sessionIsWaiting(session) ? 'Waiting' : (session.status === 'active' ? 'Running' : 'Recent'); },
+      /**
+       * Choose the small status pip tone for a session row.
+       * Use when local launch state needs to override server status for the user.
+       *
+       * @param session - terminal session row; missing local row falls back to server-derived tone
+       * @returns pip tone class for error, waiting, running, or idle
+       */
+	    sessionPipTone(session) {
+	      const local = this.sessions.find((item) => item.id === session.id);
+        // Local launch errors take priority because the browser saw the failure first.
 	      if (local && local.loadingPhase === 'error') return 'error';
-	      if (this.sessionIsWaiting(s)) return 'waiting';
-	      if (s.status === 'active') return 'running';
+        // Waiting sessions need attention even if they are still technically active.
+	      if (this.sessionIsWaiting(session)) return 'waiting';
+        // Active sessions without waiting signals are shown as running.
+	      if (session.status === 'active') return 'running';
 	      return 'idle';
 	    },
+      /**
+       * Return sessions that need user input or attention.
+       * Use when the Workspace header shows the waiting-session meter.
+       *
+       * @returns waiting sessions, or an empty list when no session needs attention
+       */
 	    waitingSessions() {
-	      return this.allSessions().filter(s => this.sessionIsWaiting(s));
+	      return this.allSessions().filter(session => this.sessionIsWaiting(session));
 	    },
+      /**
+       * Return active sessions that are not waiting.
+       * Use when the Workspace header shows the running-session meter.
+       *
+       * @returns running sessions, or an empty list when no active terminal is progressing
+       */
 	    runningSessions() {
-	      return this.allSessions().filter(s => s.status === 'active' && !this.sessionIsWaiting(s));
+	      return this.allSessions().filter(session => session.status === 'active' && !this.sessionIsWaiting(session));
 	    },
+      /**
+       * Count running sessions for the Workspace header meter.
+       *
+       * @returns running-session count, or zero when nothing is progressing
+       */
 	    meterRunning() { return this.runningSessions().length; },
+      /**
+       * Count recent sessions for the Workspace header meter.
+       *
+       * @returns recent-session count, or zero when there is no recent history
+       */
 	    meterRecent() { return this.recentSessions().length; },
+      /**
+       * Count waiting sessions for the Workspace header meter.
+       *
+       * @returns waiting-session count, or zero when nothing needs attention
+       */
 	    meterWaiting() { return this.waitingSessions().length; },
-	    ageLabel(s) {
-	      const m = Math.floor((s.age || 0) / 60);
-	      const h = Math.floor(m / 60);
-	      return h > 0 ? h + 'h ' + (m % 60) + 'm' : m + 'm';
+      /**
+       * Format a session age for compact Workspace rows.
+       * Use when users compare how long terminals have been running.
+       *
+       * @param session - terminal session row; missing age displays as zero minutes
+       * @returns compact age label such as `3m` or `1h 12m`
+       */
+	    ageLabel(session) {
+	      const minutes = Math.floor((session.age || 0) / 60);
+	      const hours = Math.floor(minutes / 60);
+        // Sessions older than an hour need both hours and remaining minutes for scanning.
+	      return hours > 0 ? hours + 'h ' + (minutes % 60) + 'm' : minutes + 'm';
 	    },
-	    sessionMeta(s) {
-	      return [s.projectName || projectName, s.runner, this.ageLabel(s)].filter(Boolean).join(' · ');
+      /**
+       * Build the full metadata line for a session row.
+       * Use when the Workspace list shows project, runner, and age together.
+       *
+       * @param session - terminal session row; empty fields are omitted from the visible metadata
+       * @returns metadata text, or an empty string when no metadata is available
+       */
+	    sessionMeta(session) {
+	      return [session.projectName || this.projectName, session.runner, this.ageLabel(session)].filter(Boolean).join(' · ');
 	    },
-	    sessionProjectAgeMeta(s) {
-	      return [s.projectName || projectName, this.ageLabel(s)].filter(Boolean).join(' · ');
+      /**
+       * Build project and age metadata without runner name.
+       * Use in compact surfaces where the runner is shown elsewhere.
+       *
+       * @param session - terminal session row; empty fields are omitted from the visible metadata
+       * @returns project-age metadata, or an empty string when no metadata is available
+       */
+	    sessionProjectAgeMeta(session) {
+	      return [session.projectName || this.projectName, this.ageLabel(session)].filter(Boolean).join(' · ');
 	    },
-	    sessionTooltipMeta(s) {
-	      return [s.runner, this.ageLabel(s)].filter(Boolean).join(' · ');
+      /**
+       * Build tooltip metadata for a collapsed session button.
+       * Use when the rail is narrow and the user hovers a session glyph.
+       *
+       * @param session - terminal session row; empty fields are omitted from the tooltip
+       * @returns tooltip metadata, or an empty string when runner and age are unavailable
+       */
+	    sessionTooltipMeta(session) {
+	      return [session.runner, this.ageLabel(session)].filter(Boolean).join(' · ');
 	    },
-	    sessionAgentClass(s) {
-	      return 'workspace-agent-' + (s.runner || 'unknown');
+      /**
+       * Choose the runner-specific class for a session row.
+       * Use when Workspace styling distinguishes Codex, Claude, Copilot, and other runners.
+       *
+       * @param session - terminal session row; missing runner uses the unknown class
+       * @returns CSS class for the session runner
+       */
+	    sessionAgentClass(session) {
+	      return 'workspace-agent-' + (session.runner || 'unknown');
 	    },
-	    showCollapsedSessionTooltip(event, s) {
+      /**
+       * Show the collapsed-rail tooltip beside a session button.
+       * Use when the user hovers a compact Workspace session.
+       *
+       * @param event - hover event from the session button; missing rail falls back to the button rectangle
+       * @param session - terminal session row; empty title or metadata still shows the available fields
+       * @returns nothing; tooltip state is updated for the UI
+       */
+	    showCollapsedSessionTooltip(event, session) {
 	      const rail = event.currentTarget.closest('.workspace-session-collapsed');
 	      const buttonRect = event.currentTarget.getBoundingClientRect();
 	      const railRect = rail ? rail.getBoundingClientRect() : buttonRect;
 	      this.collapsedSessionTooltip = {
-	        id: s.id,
-	        title: this.sessionTitleFor(s),
-	        meta: this.sessionTooltipMeta(s),
+	        id: session.id,
+	        title: this.sessionTitleFor(session),
+	        meta: this.sessionTooltipMeta(session),
 	        top: buttonRect.top - railRect.top + (buttonRect.height / 2)
 	      };
 	    },
-	    hideCollapsedSessionTooltip(s) {
-	      if (!this.collapsedSessionTooltip || this.collapsedSessionTooltip.id === s.id) {
+      /**
+       * Hide the collapsed-rail tooltip when the user leaves a session button.
+       * Use so stale hover text does not remain beside another session.
+       *
+       * @param session - terminal session row; missing tooltip means there is nothing visible to hide
+       * @returns nothing; tooltip state is cleared when it belongs to this row
+       */
+	    hideCollapsedSessionTooltip(session) {
+        // Empty tooltip state means there is already no hover detail on screen.
+	      if (!this.collapsedSessionTooltip || this.collapsedSessionTooltip.id === session.id) {
 	        this.collapsedSessionTooltip = null;
 	      }
 	    },
+      /**
+       * Position the collapsed-rail tooltip next to its session button.
+       * Use when Alpine binds inline style for the visible tooltip.
+       *
+       * @returns CSS position object, or top zero when no tooltip is visible
+       */
 	    collapsedSessionTooltipStyle() {
 	      return { top: (this.collapsedSessionTooltip ? this.collapsedSessionTooltip.top : 0) + 'px' };
 	    },
-	    openSession(s) {
-	      if (this.confirmEndSessionId === s.id) return;
-	      if (this.isSessionBoundLocally(s.id)) this.activeSessionId = s.id;
-	      else this.openServerSession(s);
+      /**
+       * Open a Workspace session from the rail or recent list.
+       * Use when the user clicks a session to inspect output or continue work.
+       *
+       * @param session - terminal session row; confirming end state blocks accidental navigation
+       * @returns nothing; the selected local or server session becomes active
+       */
+	    openSession(session) {
+        // A pending end confirmation means the click belongs to confirmation, not navigation.
+	      if (this.confirmEndSessionId === session.id) return;
+        // Local sessions can be activated immediately because this browser already owns them.
+	      if (this.isSessionBoundLocally(session.id)) this.activeSessionId = session.id;
+        // Server sessions need the reconnect flow so terminal output attaches first.
+	      else this.openServerSession(session);
 	    }
 	  }"
 >

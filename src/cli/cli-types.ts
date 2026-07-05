@@ -105,13 +105,16 @@ export const REMOVED_COMMANDS: Record<string, string> = {
 
 export const VALID_FORMATS = ["json", "text", "markdown", "sarif"] as const;
 
-/** Fully resolved CLI options including the dispatched command. */
+/**
+ * Fully resolved CLI options including the dispatched command.
+ * Use after parsing user arguments so handlers can act on the command the user requested.
+ */
 export interface ParsedCLI extends CLIOptions {
   command: Command;
   includeHarness: boolean;
   checkDrift: boolean;
   checkContent: boolean;
-  untrustedTarget: boolean;
+  isTargetUntrusted: boolean;
   auditDetails: boolean;
   shouldCheck: boolean;
   shouldApply: boolean;

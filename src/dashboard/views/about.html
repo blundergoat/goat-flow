@@ -1,4 +1,8 @@
-<!-- ═══ About View ═══ -->
+<!--
+  About view for the dashboard help and orientation content.
+  Use when a user wants to understand goat-flow concepts, checks, hooks, skills, and learning-loop records.
+  The small Alpine helper keeps the table of contents aligned with the section currently on screen.
+-->
 <div
   x-show="activeView === 'about'"
   x-cloak
@@ -6,12 +10,21 @@
   x-data="{
     sections: ['concepts','audit','skills','hooks','learning-loop','execution-loop','five-concerns','quicklinks'],
     activeToc: 'concepts',
-    onScroll(e) {
-      const root = e.target;
+    /**
+     * Update the active table-of-contents item while the user scrolls About.
+     * Use when a long help page should keep navigation context visible.
+     *
+     * @param event - scroll event from the About panel; missing sections keep the first item selected
+     * @returns nothing; `activeToc` changes the highlighted navigation item
+     */
+    onScroll(event) {
+      const root = event.target;
       const scroll = root.scrollTop + 120;
       let active = this.sections[0];
+      // Each documented section can become active once it reaches the reading position.
       for (const id of this.sections) {
         const el = document.getElementById('about-' + id);
+        // Missing sections are skipped so the table of contents still highlights the nearest valid item.
         if (el && el.offsetTop - root.offsetTop <= scroll) active = id;
       }
       this.activeToc = active;

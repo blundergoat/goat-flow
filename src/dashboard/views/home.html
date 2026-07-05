@@ -1,3 +1,8 @@
+<!--
+  Home view for the dashboard command center.
+  Use when a user opens a project and needs setup status, agent health, terminal activity, and next action.
+  The Alpine helpers turn audit, quality, and terminal state into the cards and labels users scan first.
+-->
 <div class="home-scroll" x-show="activeView === 'home'" x-cloak>
   <div
     class="home-page"
@@ -10,33 +15,121 @@
       recovery: 'Recovery',
       feedback_loop: 'Feedback'
     },
+    /**
+     * Return the setup audit scope shown by the Home setup card.
+     * Use before any setup-derived count so missing audit data still renders a clear blocked state.
+     *
+     * @returns setup scope, or a failing empty scope when no audit report is loaded
+     */
     setupScope() { return report?.scopes?.setup || { status: 'fail', checks: [] }; },
+    /**
+     * Return setup checks from the current audit report.
+     * Use when Home needs install counts, status badges, or setup completeness.
+     *
+     * @returns setup checks, or an empty list when setup has not been audited yet
+     */
     setupChecks() { return this.setupScope().checks || []; },
+    /**
+     * Count setup checks shown to the user.
+     *
+     * @returns number of setup checks, or zero when there is no setup audit yet
+     */
     setupTotal() { return this.setupChecks().length; },
+    /**
+     * Count setup checks that are passing.
+     * Use when the Home card says how much setup work is installed.
+     *
+     * @returns passing setup count, or zero when no checks pass
+     */
     setupPassed() { return this.setupChecks().filter((check) => check.status === 'pass').length; },
+    /**
+     * Decide whether setup is fully complete.
+     * Use before trusting harness and quality signals on Home.
+     *
+     * @returns `true` when every setup check is passing, otherwise `false`
+     */
     setupComplete() { return this.setupTotal() > 0 && this.setupPassed() === this.setupTotal(); },
+    /**
+     * Decide whether setup blocks the next user action.
+     *
+     * @returns `true` when setup is incomplete or missing
+     */
     setupBlocked() { return !this.setupComplete(); },
+    /**
+     * Decide whether setup has started but still needs work.
+     *
+     * @returns `true` when at least one setup check passes but the full setup is not complete
+     */
     setupPartial() { return this.setupPassed() > 0 && !this.setupComplete(); },
+    /**
+     * Decide whether setup has no passing checks yet.
+     *
+     * @returns `true` when the user has not installed any detected setup components
+     */
     setupMissing() { return this.setupPassed() === 0; },
+    /**
+     * Decide whether Home should show placeholder agent cards.
+     * Use before the first audit creates per-agent scores.
+     *
+     * @returns `true` when no agent score rows are available yet
+     */
     showPreviewAgents() { return this.agentScores().length === 0; },
+    /**
+     * Return active terminal sessions for the current project.
+     * Use when Home shows the live-session summary and primary session action.
+     *
+     * @returns active current-project sessions, or an empty list when none are running
+     */
     activeSessions() { return currentProjectSessions.filter((session) => session.status === 'active'); },
+    /**
+     * Return the first active session for the Home hero action.
+     * Use when one click should reopen the most relevant running terminal.
+     *
+     * @returns primary active session, or `null` when there is no terminal to reopen
+     */
     primarySession() { return this.activeSessions()[0] || null; },
+    /**
+     * Return the visible title for a terminal session.
+     * Use when Home names the session the user can reopen.
+     *
+     * @param session - terminal session row; missing session means the fallback label is shown
+     * @returns session title shown to the user
+     */
     sessionLabel(session) {
+      // No active session exists, so Home uses a neutral fallback label.
       if (!session) return 'session';
       return sessionTitleFor(session);
     },
+    /**
+     * Format the age of a terminal session for the Home card.
+     * Use when users decide whether a running session is fresh or stale.
+     *
+     * @param session - terminal session row; missing session displays as zero minutes
+     * @returns compact session age label
+     */
     sessionAge(session) {
+      // No session means there is no live runtime age to show.
       if (!session) return '0m';
       const seconds = typeof session.age === 'number'
         ? session.age
         : Math.max(0, Math.floor((Date.now() - new Date(session.createdAt).getTime()) / 1000));
       const minutes = Math.max(0, Math.floor(seconds / 60));
       const hours = Math.floor(minutes / 60);
+      // Sessions older than an hour need hours plus remaining minutes for quick scanning.
       if (hours > 0) return hours + 'h ' + (minutes % 60) + 'm';
       return minutes + 'm';
     },
+    /**
+     * Open the selected terminal session from Home.
+     * Use when the user clicks back into a running session.
+     *
+     * @param session - terminal session row; missing session means there is nothing to open
+     * @returns nothing; the Workspace view receives the selected session
+     */
     openSession(session) {
+      // No session is selected, so the Home card leaves the user in place.
       if (!session) return;
+      // Browser-owned sessions can be activated immediately in Workspace.
       if (isSessionBoundLocally(session.id)) {
         activeSessionId = session.id;
         activeView = 'workspace';
@@ -45,124 +138,329 @@
       }
       openServerSession(session);
     },
+    /**
+     * End the primary active terminal session from Home.
+     * Use when the user wants to stop the currently highlighted session.
+     *
+     * @returns nothing; no action happens when there is no primary session
+     */
     endPrimarySession() {
       const session = this.primarySession();
+      // With no active primary session, there is no terminal to end.
       if (session) endServerSession(session.id);
     },
+    /**
+     * Return the age of the current audit in whole hours.
+     * Use when Home decides whether cached audit data is stale.
+     *
+     * @returns audit age in hours, or zero when no audit timestamp exists
+     */
     auditAgeHours() {
+      // No audit timestamp means Home cannot treat the result as stale by age.
       if (!lastAuditTime) return 0;
       return Math.max(0, Math.floor((Date.now() - new Date(lastAuditTime).getTime()) / 3600000));
     },
+    /**
+     * Build the audit age label shown on Home.
+     * Use when users need to know whether they are reading cached or fresh audit data.
+     *
+     * @returns audit age text, with cached state called out when relevant
+     */
     auditAgeText() {
       const prefix = auditCached ? 'cached - ' : 'audited ';
       return prefix + formatAuditAge(lastAuditTime);
     },
+    /**
+     * Decide whether cached audit data is stale enough to warn the user.
+     *
+     * @returns `true` when cached audit data is older than one day
+     */
     auditStale() { return Boolean(auditCached && this.auditAgeHours() > 24); },
+    /**
+     * Return per-agent score rows from the audit report.
+     *
+     * @returns agent score rows, or an empty list before an audit runs
+     */
     agentScores() { return report?.agentScores || []; },
+    /**
+     * Return the number of agent columns Home should render.
+     *
+     * @returns column count from one to four so the agent grid stays stable
+     */
     agentColumnCount() { return Math.min(Math.max(this.homeAgents().length, 1), 4); },
+    /**
+     * Return agent rows or preview cards for the Home agent grid.
+     * Use before setup/audit data exists so users still see supported agents.
+     *
+     * @returns audited agent rows, or preview rows when no scores exist yet
+     */
     homeAgents() {
+      // Once audit data exists, Home shows real agent health instead of preview cards.
       if (!this.showPreviewAgents()) return this.agentScores();
       return supportedAgents.map((agent) => ({ preview: true, id: agent.id, name: agent.name }));
     },
+    /**
+     * Return the display name for an agent card.
+     *
+     * @param agent - agent row or preview row; missing names fall back to id or Agent
+     * @returns user-facing agent label
+     */
     agentDisplayName(agent) { return agent?.name || agent?.id || 'Agent'; },
+    /**
+     * Calculate the score shown on an agent card.
+     * Use when Home needs one percentage across harness or setup audit checks.
+     *
+     * @param agent - agent audit row; preview or missing checks return no score
+     * @returns agent score percentage, `100` for all-skipped checks, or `null` before scoring exists
+     */
     agentScore(agent) {
+      // Preview agents are placeholders, so they do not have a score yet.
       if (agent?.preview) return null;
       const harnessChecks = agent?.harness?.checks || [];
+      // Harness checks are the strongest score source once they exist.
       if (harnessChecks.length > 0) {
         const scored = harnessChecks.filter((check) => check.status !== 'skipped');
+        // If every harness check is skipped, there is nothing scored against the agent.
         if (scored.length === 0) return 100;
         const passed = scored.filter((check) => check.status === 'pass').length;
         return Math.round((passed / scored.length) * 100);
       }
       const agentChecks = agent?.agent?.checks || [];
+      // Setup checks provide an early score before full harness scoring exists.
       if (agentChecks.length > 0) {
         const scored = agentChecks.filter((check) => check.status !== 'skipped');
+        // If every setup check is skipped, there is nothing scored against the agent.
         if (scored.length === 0) return 100;
         const passed = scored.filter((check) => check.status === 'pass').length;
         return Math.round((passed / scored.length) * 100);
       }
       return null;
     },
+    /**
+     * Convert an agent score into a visible grade.
+     *
+     * @param score - score percentage; `null` or `NaN` means the card shows no grade yet
+     * @returns letter grade or a dash when no score is available
+     */
     gradeFor(score) {
+      // Missing scores should not imply a failing grade before audit data exists.
       if (score === null || Number.isNaN(score)) return '-';
+      // A-grade agents are ready for normal use.
       if (score >= 90) return 'A';
+      // B-grade agents are healthy with minor follow-up.
       if (score >= 80) return 'B';
+      // C-grade agents need attention before users rely on them.
       if (score >= 70) return 'C';
+      // D-grade agents are barely usable and should be repaired.
       if (score >= 60) return 'D';
       return 'F';
     },
+    /**
+     * Convert an agent score into the tone used by cards and bars.
+     *
+     * @param score - score percentage; `null` or `NaN` means the neutral tone is shown
+     * @returns tone class for neutral, ok, warn, or bad status
+     */
     toneForScore(score) {
+      // Missing scores use the neutral tone until audit data arrives.
       if (score === null || Number.isNaN(score)) return 'na';
+      // Strong scores read as healthy on the Home dashboard.
       if (score >= 80) return 'ok';
+      // Mid-range scores warn users without marking the agent as broken.
       if (score >= 70) return 'warn';
       return 'bad';
     },
+    /**
+     * Choose the CSS class for an agent card.
+     *
+     * @param agent - agent row or preview row; preview cards are disabled until audit data exists
+     * @returns card tone class, or empty string for healthy cards
+     */
     agentCardClass(agent) {
+      // Preview cards are disabled because there is no audited status to act on yet.
       if (agent?.preview) return 'disabled';
       const tone = this.toneForScore(this.agentScore(agent));
       return tone === 'ok' ? '' : tone;
     },
+    /**
+     * Return one concern result for an agent card.
+     * Use when Home renders the five concern bars and details.
+     *
+     * @param agent - agent audit row; missing concerns produce a failing empty concern
+     * @param key - concern id shown in the UI; empty or unknown keys use the fallback concern
+     * @returns concern result for the UI, or a failing empty concern when data is missing
+     */
     concern(agent, key) { return agent?.concerns?.[key] || { status: 'fail', score: 0, findings: [], recommendations: [], howToFix: [] }; },
+    /**
+     * Return the percentage shown for one concern bar.
+     * Use when Home renders concern progress for an agent.
+     *
+     * @param agent - agent audit row; preview rows return no score
+     * @param key - concern id shown in the UI; missing concern data falls back to fail or pass state
+     * @returns concern percentage, or `null` for preview rows
+     */
     concernScore(agent, key) {
+      // Preview cards do not have concern results yet.
       if (agent?.preview) return null;
       const item = this.concern(agent, key);
+      // Numeric concern scores are the most precise value to show.
       if (typeof item.score === 'number') return Math.round(item.score);
       return item.status === 'pass' ? 100 : 0;
     },
+    /**
+     * Return the CSS width for a concern bar.
+     * Use when Home draws a minimum-visible bar even for very low scores.
+     *
+     * @param agent - agent audit row; preview rows produce an empty bar
+     * @param key - concern id shown in the UI; missing data uses the fallback score
+     * @returns CSS percentage width for the concern bar
+     */
     concernWidth(agent, key) {
       const score = this.concernScore(agent, key);
       return score === null ? '0%' : Math.max(6, score) + '%';
     },
+    /**
+     * Return the text shown inside or near a concern percentage.
+     *
+     * @param agent - agent audit row; preview rows show a dash
+     * @param key - concern id shown in the UI; missing data uses the fallback score
+     * @returns concern percentage text, or a dash when there is no score
+     */
     concernPctText(agent, key) {
       const score = this.concernScore(agent, key);
       return score === null ? '-' : String(score);
     },
+    /**
+     * Return the tone class for one concern bar.
+     *
+     * @param agent - agent audit row; preview rows use the neutral tone
+     * @param key - concern id shown in the UI; missing data uses the fallback score
+     * @returns tone class for the concern score
+     */
     concernToneClass(agent, key) { return this.toneForScore(this.concernScore(agent, key)); },
     expandedAgentBreakdowns: {},
+    /**
+     * Decide whether all concern bars are fully passing.
+     * Use when Home can collapse detailed findings for a healthy agent.
+     *
+     * @param agent - agent audit row; preview or missing concerns cannot count as passing
+     * @returns `true` when every concern passes at 100 percent
+     */
     agentAllConcernsPassing(agent) {
+      // Preview and incomplete agent rows keep details available instead of claiming health.
       if (agent?.preview || !agent?.concerns) return false;
       return this.concernKeys.every((key) => {
         const item = this.concern(agent, key);
         return item.status === 'pass' && this.concernScore(agent, key) >= 100;
       });
     },
+    /**
+     * Decide whether an agent detail breakdown should be open.
+     * Use when Home hides detailed rows for fully healthy agents unless the user expands them.
+     *
+     * @param agent - agent audit row; missing ids cannot use saved expanded state
+     * @returns `true` when the user should see detailed concern rows
+     */
     agentBreakdownOpen(agent) {
       return !this.agentAllConcernsPassing(agent) || this.expandedAgentBreakdowns[agent.id] === true;
     },
+    /**
+     * Toggle an agent's detailed concern breakdown.
+     * Use when the user expands or collapses a healthy agent card.
+     *
+     * @param agent - agent audit row; missing id means no row can be toggled
+     * @returns nothing; expanded state is stored by agent id
+     */
     toggleAgentBreakdown(agent) {
+      // Without an agent id, the UI has no stable row to expand.
       if (!agent?.id) return;
       this.expandedAgentBreakdowns[agent.id] = !this.expandedAgentBreakdowns[agent.id];
     },
+    /**
+     * Summarize an agent card's most important next action.
+     * Use when Home needs one short line before detailed findings.
+     *
+     * @param agent - agent audit row; preview rows show expected setup surfaces instead
+     * @returns summary text for recommendations, integrity issues, warnings, or all-passing state
+     */
     recommendationSummary(agent) {
+      // Preview cards tell users what will be checked after setup.
       if (agent?.preview) return 'Skills, hooks, instruction file';
-      const recs = Object.values(agent?.concerns || {}).reduce((total, concern) => total + (concern.recommendations || []).length, 0);
+      const recommendationCount = Object.values(agent?.concerns || {}).reduce((total, concern) => total + (concern.recommendations || []).length, 0);
       const integrity = this.integrityFailCount(agent);
       const warnings = this.scoreOnlyWarningCount(agent);
-      if (recs === 0 && integrity === 0 && warnings === 0) return 'All checks passing';
+      // No issues means the agent card can give a simple passing summary.
+      if (recommendationCount === 0 && integrity === 0 && warnings === 0) return 'All checks passing';
+      // Integrity failures are highest priority because they affect trust in the report.
       if (integrity > 0) return integrity + ' integrity issue' + (integrity === 1 ? '' : 's');
+      // Score warnings temper the grade even when they do not fail the audit.
       if (warnings > 0) return warnings + ' score warning' + (warnings === 1 ? '' : 's');
-      return recs + ' recommendation' + (recs === 1 ? '' : 's');
+      return recommendationCount + ' recommendation' + (recommendationCount === 1 ? '' : 's');
     },
+    /**
+     * Count score-only warnings for an agent card.
+     *
+     * @param agent - agent audit row; missing harness checks mean no warnings are shown
+     * @returns number of score-only warnings
+     */
     scoreOnlyWarningCount(agent) {
       return (agent?.harness?.checks || []).filter((check) => check.status === 'fail' && check.impact === 'score-only').length;
     },
+    /**
+     * Count concern integrity failures for an agent card.
+     *
+     * @param agent - agent audit row; missing concerns mean there are no integrity failures to show
+     * @returns number of integrity failures across concerns
+     */
     integrityFailCount(agent) {
       return Object.values(agent?.concerns || {}).reduce((total, concern) => total + (concern.integrityFail || 0), 0);
     },
+    /**
+     * Check whether one setup check passes.
+     *
+     * @param id - setup check id; empty or unknown ids return false
+     * @returns `true` when the setup check exists and passes
+     */
     setupCheckPass(id) { return this.setupChecks().some((check) => check.id === id && check.status === 'pass'); },
+    /**
+     * Check whether every audited agent passes a named setup check.
+     * Use when the install checklist needs all selected agents to be ready.
+     *
+     * @param id - agent setup check id; empty or unknown ids return false
+     * @returns `true` when at least one agent exists and every agent passes the check
+     */
     allAgentsPassCheck(id) {
       const agents = this.agentScores();
       return agents.length > 0 && agents.every((agent) =>
         (agent.agent?.checks || []).some((check) => check.id === id && check.status === 'pass')
       );
     },
+    /**
+     * Return the visible failure text for a setup or agent check.
+     *
+     * @param check - audit check row; missing check means there is no failure detail to show
+     * @returns failure message, fix text, or an empty string when none exists
+     */
     failureText(check) {
       return check?.failure?.message || check?.failure?.howToFix || '';
     },
+    /**
+     * Return failure detail for a setup check on Home.
+     *
+     * @param id - setup check id; empty or passing checks return no detail
+     * @returns failure text shown in the setup checklist, or an empty string
+     */
     setupCheckDetail(id) {
       const check = this.setupChecks().find((item) => item.id === id && item.status === 'fail');
       return this.failureText(check);
     },
+    /**
+     * Return failure detail for an agent setup check.
+     * Use active runner first so the user sees the most relevant repair detail.
+     *
+     * @param id - agent check id; empty or passing checks return no detail
+     * @returns failure text shown in the install checklist, or an empty string
+     */
     agentCheckDetail(id) {
       const agents = this.agentScores();
       const active = agents.find((agent) => agent.id === activeRunner);
@@ -172,6 +470,12 @@
         .find((item) => item.id === id && item.status === 'fail');
       return this.failureText(check);
     },
+    /**
+     * Return the most relevant verification-gate failure detail.
+     * Use when the install checklist groups config and agent settings into one row.
+     *
+     * @returns first visible verification-gate detail, or an empty string when all pass
+     */
     verificationGateDetail() {
       return [
         this.setupCheckDetail('config-version'),
@@ -179,6 +483,12 @@
         this.agentCheckDetail('agent-settings')
       ].find((detail) => detail) || '';
     },
+    /**
+     * Build the install checklist shown on Home.
+     * Use when the user wants the shortest path to a trustworthy harness setup.
+     *
+     * @returns checklist rows with labels, pass state, and visible repair details
+     */
     installChecks() {
       return [
         { label: 'Agent instruction files present', ok: this.allAgentsPassCheck('agent-instruction'), detail: this.agentCheckDetail('agent-instruction') },
@@ -188,73 +498,175 @@
         { label: 'Verification gates configured', ok: this.setupCheckPass('config-parses') && this.setupCheckPass('config-version') && this.allAgentsPassCheck('agent-settings'), detail: this.verificationGateDetail() }
       ];
     },
+    /**
+     * Calculate the install checklist percentage for the readiness ring.
+     *
+     * @returns install checklist score, or `null` when no checklist rows exist
+     */
     installChecklistScore() {
       const checks = this.installChecks();
+      // No checklist rows means Home cannot calculate install readiness yet.
       if (checks.length === 0) return null;
       const passed = checks.filter((check) => check.ok).length;
       return Math.round((passed / checks.length) * 100);
     },
+    /**
+     * Return the icon shown for an install checklist row.
+     *
+     * @param check - install checklist row; missing or failing rows show the failure icon
+     * @returns check or cross entity for the row
+     */
     installCheckIcon(check) { return check.ok ? '&#10003;' : '&#10005;'; },
+    /**
+     * Return the tone for the setup/install pill.
+     *
+     * @returns ok, warn, or bad based on setup completeness
+     */
     installPillTone() {
+      // Complete setup is safe to present as passing.
       if (this.setupComplete()) return 'ok';
       return this.setupPartial() ? 'warn' : 'bad';
     },
+    /**
+     * Return the visible value for the setup/install pill.
+     *
+     * @returns Passing, Partial, or Not installed
+     */
     installPillValue() {
+      // Complete setup gets the strongest user-facing label.
       if (this.setupComplete()) return 'Passing';
       return this.setupPartial() ? 'Partial' : 'Not installed';
     },
+    /**
+     * Return setup progress detail for the install pill.
+     *
+     * @returns component count text, or audit placeholder when setup has no checks
+     */
     installPillDetail() {
+      // With no setup checks, the user needs to run or wait for audit components.
       if (this.setupTotal() === 0) return 'audit components';
       return this.setupPassed() + ' of ' + this.setupTotal() + ' components';
     },
+    /**
+     * Calculate the average agent harness score for Home.
+     * Use when setup is complete and the readiness ring can include harness health.
+     *
+     * @returns average harness score, or `null` when no agent has a score yet
+     */
     harnessAverage() {
       const scores = this.agentScores().map((agent) => this.agentScore(agent)).filter((score) => score !== null && !Number.isNaN(score));
+      // No agent scores means harness health is not ready to contribute to readiness.
       if (scores.length === 0) return null;
       return Math.round(scores.reduce((total, score) => total + score, 0) / scores.length);
     },
+    /**
+     * Calculate the readiness score shown in the Home ring.
+     * Use when users need one high-level measure across install and harness health.
+     *
+     * @returns readiness percentage, or `null` when there are no usable component scores
+     */
     readinessScore() {
       const scores = [];
       const installScore = this.installChecklistScore();
+      // Install readiness can contribute as soon as the setup checklist exists.
       if (installScore !== null && !Number.isNaN(installScore)) scores.push(installScore);
       const harnessScore = this.harnessAverage();
+      // Harness readiness contributes only after setup is complete enough to trust the score.
       if (this.setupComplete() && harnessScore !== null && !Number.isNaN(harnessScore)) scores.push(harnessScore);
+      // With no component scores, Home shows a placeholder instead of inventing readiness.
       if (scores.length === 0) return null;
       return Math.round(scores.reduce((total, score) => total + score, 0) / scores.length);
     },
+    /**
+     * Return the tone for the readiness ring.
+     *
+     * @returns tone class derived from the readiness score
+     */
     ringTone() { return this.toneForScore(this.readinessScore()); },
+    /**
+     * Return the CSS color for the readiness ring.
+     * Use when Home draws the ring around the readiness number.
+     *
+     * @returns CSS color token for the current readiness tone
+     */
     ringColor() {
       const tone = this.ringTone();
+      // Healthy readiness uses the passing status color.
       if (tone === 'ok') return 'var(--status-pass)';
+      // Warning readiness uses the waiting status color.
       if (tone === 'warn') return 'var(--status-waiting)';
+      // Bad readiness uses the danger status color.
       if (tone === 'bad') return 'var(--status-danger)';
       return 'rgba(148, 163, 184, 0.25)';
     },
+    /**
+     * Return CSS variables for the readiness ring.
+     *
+     * @returns ring color and value, with zero value when readiness is unavailable
+     */
     ringStyle() {
       const value = this.readinessScore();
       return { '--ring-color': this.ringColor(), '--ring-value': value === null ? '0%' : value + '%' };
     },
+    /**
+     * Return the label printed inside the readiness ring.
+     *
+     * @returns readiness label text
+     */
     ringLabel() {
       return 'READINESS';
     },
+    /**
+     * Return the number printed inside the readiness ring.
+     *
+     * @returns readiness score text, or dashes when unavailable
+     */
     ringNumber() {
       const value = this.readinessScore();
       return value === null ? '--' : String(value);
     },
+    /**
+     * Decide whether the readiness ring should show a percent sign.
+     *
+     * @returns `true` when a readiness score is available
+     */
     ringShowPct() {
       return this.readinessScore() !== null;
     },
+    /**
+     * Return the install-versus-harness breakdown under readiness.
+     *
+     * @returns compact readiness component text with placeholders for unavailable scores
+     */
     ringBreakdown() {
       const installScore = this.installChecklistScore();
       const harnessScore = this.setupComplete() ? this.harnessAverage() : null;
       const fmt = (value) => value === null || Number.isNaN(value) ? '--' : value + '%';
       return 'Install ' + fmt(installScore) + ' / Harness ' + fmt(harnessScore);
     },
+    /**
+     * Count A-grade agents without blocking harness failures.
+     *
+     * @returns number of strong agents shown in the Home harness summary
+     */
     atAGrade() { return this.agentScores().filter((agent) => this.agentScore(agent) >= 90 && !this.harnessAgentFailed(agent)).length; },
+    /**
+     * Return agents with blocking harness failures.
+     *
+     * @returns failing agent rows, or an empty list when harness checks are clear
+     */
     harnessBlockingFailures() {
       return this.agentScores().filter((agent) => this.harnessAgentFailed(agent));
     },
+    /**
+     * Find the weakest concern area across visible agent cards.
+     * Use when Home summarizes where the user should look first.
+     *
+     * @returns concern label, `none`, or `pending` when no agent scores exist
+     */
     widestGap() {
       const agents = this.agentScores();
+      // No agent scores means Home cannot compare concern gaps yet.
       if (agents.length === 0) return 'pending';
       const gaps = this.concernKeys.map((key) => {
         const values = agents.map((agent) => this.concernScore(agent, key)).filter((score) => score !== null);
@@ -264,121 +676,270 @@
       const gap = gaps[0];
       return gap && gap.avg < 90 ? this.concernLabel(gap.key) : 'none';
     },
+    /**
+     * Return the user-facing label for a concern key.
+     *
+     * @param key - concern key; missing or unknown keys display as the raw key
+     * @returns concern label shown in Home summaries
+     */
     concernLabel(key) {
+      // Verification is support-only while setup is blocked, so label it honestly.
       if (key === 'verification' && this.setupBlocked()) return 'Verification support';
       return this.concernLabels[key] || key;
     },
+    /**
+     * Build the metadata sentence for the agent health section.
+     * Use when Home explains whether setup, harness, or concern gaps need attention.
+     *
+     * @returns section summary shown above the agent cards
+     */
     sectionMeta() {
+      // Before audit, preview cards explain what will appear after setup.
       if (this.showPreviewAgents()) return 'preview - audit will populate after install';
+      // Incomplete setup means concern details are raw and not fully trustworthy yet.
       if (this.setupBlocked()) return 'setup incomplete - raw details only';
       const total = this.agentScores().length;
       const failing = this.harnessBlockingFailures().length;
       const gap = this.widestGap();
       const gapText = gap !== 'none' && gap !== 'pending' ? ' - widest gap is ' + gap : '';
+      // Blocking harness failures take priority over grade summaries.
       if (failing > 0) return failing + ' of ' + total + ' agents need fixes' + gapText + ' - click for details';
       return this.atAGrade() + ' of ' + total + ' at A' + gapText + ' - click for details';
     },
+    /**
+     * Return the tone for the harness health pill.
+     *
+     * @returns neutral, bad, warn, or ok based on setup and harness state
+     */
     harnessPillTone() {
+      // Setup must finish before harness scores are trustworthy.
       if (this.setupBlocked() || this.agentScores().length === 0) return 'na';
+      // Blocking harness failures make the pill bad regardless of average score.
       if (this.harnessBlockingFailures().length > 0) return 'bad';
       return this.toneForScore(this.harnessAverage());
     },
+    /**
+     * Return the value shown in the harness health pill.
+     *
+     * @returns setup, needs-work, unavailable, or passing label for the user
+     */
     harnessPillValue() {
+      // Users should finish setup before interpreting harness health.
       if (this.setupBlocked()) return 'Setup first';
+      // Any blocking harness failure needs repair before a passing label.
       if (this.harnessBlockingFailures().length > 0) return 'Needs work';
       const avg = this.harnessAverage();
+      // No average means no audit has populated harness score rows yet.
       if (avg === null) return 'N/A';
       return avg >= 90 ? 'Passing' : 'Needs work';
     },
+    /**
+     * Return the detail text below the harness health pill.
+     *
+     * @returns short guidance about setup, audit, failures, grades, or concern gaps
+     */
     harnessPillDetail() {
+      // Setup-blocked projects should not invite users to trust harness grades yet.
       if (this.setupBlocked()) return 'finish setup before trusting harness';
       const total = this.agentScores().length;
+      // With no agent rows, the next user action is to run audit.
       if (total === 0) return 'run audit after setup';
       const failing = this.harnessBlockingFailures().length;
       const gap = this.widestGap();
       const gapText = gap !== 'none' && gap !== 'pending' ? ' - ' + gap + ' low' : '';
+      // Failures are more urgent than grade counts.
       if (failing > 0) return failing + ' of ' + total + ' agents have failing checks' + gapText;
       return this.atAGrade() + ' of ' + total + ' agents at A' + gapText;
     },
+    /**
+     * Return the learning-loop summary from the current audit report.
+     *
+     * @returns learning-loop summary, or `null` before audit data is available
+     */
     learningSummary() { return report?.learningLoop || null; },
+    /**
+     * Return generated learning-loop index entries.
+     *
+     * @returns index entries, or an empty list when the audit has no index data
+     */
     learningIndexEntries() {
       const entries = this.learningSummary()?.indexes;
       return Array.isArray(entries) ? entries : [];
     },
+    /**
+     * Return visible learning-loop index rows.
+     *
+     * @returns index rows that belong to a bucket, or an empty list when none exist
+     */
     learningIndexRows() {
       return this.learningIndexEntries().filter((entry) => entry.state !== 'no-bucket');
     },
+    /**
+     * Count learning-loop indexes in one state.
+     *
+     * @param state - index state shown by the UI; unknown states count as zero
+     * @returns number of matching index entries
+     */
     learningIndexCount(state) {
       return this.learningIndexEntries().filter((entry) => entry.state === state).length;
     },
+    /**
+     * Decide whether learning indexes are available to regenerate.
+     *
+     * @returns `true` when at least one visible learning-loop index row exists
+     */
     learningIndexAvailable() {
       return this.learningIndexRows().length > 0;
     },
+    /**
+     * Decide whether the regenerate-index button should be disabled.
+     *
+     * @returns `true` while regenerating or when no indexes exist
+     */
     learningIndexButtonDisabled() {
       return this.indexRegenerating || !this.learningIndexAvailable();
     },
+    /**
+     * Return the label for the regenerate-index button.
+     *
+     * @returns button label that reflects loading and empty-index states
+     */
     learningIndexButtonLabel() {
+      // While regeneration runs, the button shows progress instead of inviting another click.
       if (this.indexRegenerating) return 'Regenerating...';
+      // Without indexes, regeneration would have nothing visible to update.
       if (!this.learningIndexAvailable()) return 'No indexes';
       return 'Regenerate index';
     },
+    /**
+     * Return the visible label for an index freshness state.
+     *
+     * @param state - index freshness state; unknown or empty values show as not installed
+     * @returns state label shown in the learning-loop table
+     */
     learningIndexStateLabel(state) {
+      // Fresh indexes are ready for agent retrieval.
       if (state === 'fresh') return 'fresh';
+      // Stale indexes need regeneration before users trust retrieval.
       if (state === 'stale') return 'stale';
+      // Missing indexes explain why memory lookup may be unavailable.
       if (state === 'missing') return 'missing';
       return 'not installed';
     },
+    /**
+     * Decide whether learning-loop data is available for this project.
+     *
+     * @returns `true` when audit found learning-loop records
+     */
     learningLoopReady() {
       const summary = this.learningSummary();
       return Boolean(summary && summary.status !== 'unavailable');
     },
+    /**
+     * Return the empty-state text for learning-loop cards.
+     *
+     * @returns setup-specific or project-specific empty-state copy
+     */
     learningLoopNaText() {
+      // Before setup, the user needs setup to create the expected memory structure.
       if (this.setupBlocked()) return 'No learning-loop records yet - setup creates them.';
       return 'No learning-loop files found for this project.';
     },
+    /**
+     * Return the largest learning-loop bucket size for bar scaling.
+     *
+     * @returns at least one so empty bars do not divide by zero
+     */
     learningBucketMax() {
       const counts = this.learningIndexRows().map((entry) => entry.entryCount || 0);
       return Math.max(1, ...counts);
     },
+    /**
+     * Return the width for a learning-loop bucket bar.
+     *
+     * @param entry - learning-loop index row; zero or missing counts show an empty bar
+     * @returns CSS percentage width for the bucket bar
+     */
     learningBarWidth(entry) {
       const count = entry.entryCount || 0;
+      // Empty buckets should not show a misleading visible bar.
       if (count <= 0) return '0%';
       return Math.max(5, Math.round((count / this.learningBucketMax()) * 100)) + '%';
     },
+    /**
+     * Return the tone for a learning-loop bucket bar.
+     *
+     * @param entry - learning-loop index row; unknown states use the neutral tone
+     * @returns tone class for fresh, stale, or unavailable index state
+     */
     learningBarTone(entry) {
+      // Fresh buckets are healthy memory sources.
       if (entry.state === 'fresh') return 'ok';
+      // Stale buckets need regeneration.
       if (entry.state === 'stale') return 'warn';
       return 'na';
     },
+    /**
+     * Build the detailed learning-loop status sentence.
+     *
+     * @returns active-entry and freshness detail text, or an empty string before data exists
+     */
     learningLoopStatusDetail() {
       const summary = this.learningSummary();
+      // Without a summary, the learning card has no detail to render.
       if (!summary) return '';
       const total = this.learningIndexRows().reduce((acc, entry) => acc + (entry.entryCount || 0), 0);
       const parts = [total + ' active entries'];
+      // Stale records warn users that retrieval may cite old context.
       if (summary.staleCount > 0) parts.push(summary.staleCount + ' stale');
+      // Oversized records warn users that memory may be hard to scan.
       if (summary.oversizedCount > 0) parts.push(summary.oversizedCount + ' oversized');
+      // Bad references warn users that cited evidence may not resolve.
       if (summary.invalidLineRefCount > 0) parts.push(summary.invalidLineRefCount + ' bad refs');
       const indexStale = this.learningIndexCount('stale');
       const indexMissing = this.learningIndexCount('missing');
+      // Stale indexes make agent retrieval less reliable.
       if (indexStale > 0) parts.push(indexStale + ' stale index' + (indexStale === 1 ? '' : 'es'));
+      // Missing indexes explain why retrieval may not find memory entries.
       if (indexMissing > 0) parts.push(indexMissing + ' missing index' + (indexMissing === 1 ? '' : 'es'));
       return parts.join(', ');
     },
+    /**
+     * Return the tone for the learning-loop health pill.
+     *
+     * @returns neutral, warning, or ok tone based on memory and index freshness
+     */
     learningPillTone() {
       const summary = this.learningSummary();
+      // Without learning-loop data, Home shows the memory pill as unavailable.
       if (!summary || summary.status === 'unavailable') return 'na';
+      // Stale or missing indexes warn users that retrieval may miss current lessons.
       if (this.learningIndexCount('stale') > 0 || this.learningIndexCount('missing') > 0) return 'warn';
       return summary.status === 'fresh' ? 'ok' : 'warn';
     },
+    /**
+     * Return the value text for the learning-loop health pill.
+     *
+     * @returns freshness or index status shown in the Home memory card
+     */
     learningPillValue() {
       const summary = this.learningSummary();
+      // No summary means the user has no memory health signal yet.
       if (!summary || summary.status === 'unavailable') return 'N/A';
+      // Stale generated indexes are more actionable than stale records alone.
       if (this.learningIndexCount('stale') > 0) return 'Index stale';
+      // Missing generated indexes tell the user regeneration is needed.
       if (this.learningIndexCount('missing') > 0) return 'Index missing';
       return summary.status === 'fresh' ? 'Fresh' : 'Needs review';
     },
+    /**
+     * Return the detail text below the learning-loop pill.
+     *
+     * @returns memory count and freshness details, or setup/empty guidance
+     */
     learningPillDetail() {
       const summary = this.learningSummary();
+      // Before records exist, Home tells the user whether setup or missing files are the blocker.
       if (!summary || summary.status === 'unavailable') {
         return this.setupBlocked() ? 'created by setup' : 'no learning-loop files';
       }
@@ -389,67 +950,133 @@
       const parts = fg !== null && ls !== null
         ? [fg + ' footguns', ls + ' lessons']
         : [summary.recordCount + ' records'];
+      // Stale records need review before agents cite them as current memory.
       if (stale > 0) parts.push(stale + ' stale');
+      // Oversized records need trimming before they are easy to reuse.
       if (oversized > 0) parts.push(oversized + ' oversized');
+      // Bad refs tell the user memory evidence may not resolve.
       if (summary.invalidLineRefCount > 0) parts.push(summary.invalidLineRefCount + ' bad refs');
       const indexStale = this.learningIndexCount('stale');
       const indexMissing = this.learningIndexCount('missing');
+      // Stale indexes need regeneration before retrieval is current.
       if (indexStale > 0) parts.push(indexStale + ' stale index' + (indexStale === 1 ? '' : 'es'));
+      // Missing indexes explain why memory lookup may be incomplete.
       if (indexMissing > 0) parts.push(indexMissing + ' missing index' + (indexMissing === 1 ? '' : 'es'));
       return parts.join(', ');
     },
+    /**
+     * Return the oldest learning-loop review date.
+     *
+     * @returns oldest review date, or `null` when no learning summary exists
+     */
     learningOldest() {
       const summary = this.learningSummary();
       return summary?.oldestLastReviewed || null;
     },
+    /**
+     * Return the learning-loop buckets that need the most attention.
+     *
+     * @returns bucket summaries, or an empty list when no buckets need action
+     */
     learningTopBuckets() {
       const summary = this.learningSummary();
       return summary?.topBucketsNeedingAction || [];
     },
+    /**
+     * Convert the latest quality report date and time into a Date.
+     * Use when Home shows the age of the latest saved quality assessment.
+     *
+     * @returns report timestamp, or `null` when no dated quality report exists
+     */
     qualityLatestDate() {
+      // Without a saved report date, Home cannot calculate quality age.
       if (!homeQualityLatest?.date) return null;
       const time = homeQualityLatest.time || '0000';
       const hour = time.slice(0, 2) || '00';
       const minute = time.slice(2, 4) || '00';
       return new Date(homeQualityLatest.date + 'T' + hour + ':' + minute + ':00');
     },
+    /**
+     * Return the tone for the quality-history pill.
+     *
+     * @returns neutral, warning, bad, or ok based on setup and latest quality findings
+     */
     qualityPillTone() {
+      // Setup must finish before quality history is meaningful.
       if (this.setupBlocked()) return 'na';
+      // Loading state is neutral because the latest report is still being fetched.
       if (homeQualityLoading) return 'na';
+      // No saved quality assessment means the user should run one.
       if (!homeQualityLatest) return 'warn';
+      // Blockers make quality status bad.
       if (homeQualityLatest.blockerCount > 0) return 'bad';
+      // Major findings warn without showing the blocker tone.
       if (homeQualityLatest.majorCount > 0) return 'warn';
       return 'ok';
     },
+    /**
+     * Return the visible value for the quality-history pill.
+     *
+     * @returns quality status label shown on Home
+     */
     qualityPillValue() {
+      // Setup comes first because quality reports depend on a usable harness.
       if (this.setupBlocked()) return 'Setup first';
+      // Loading tells the user the latest quality history is still being read.
       if (homeQualityLoading) return 'Loading';
+      // No saved report means Home cannot summarize quality yet.
       if (!homeQualityLatest) return 'N/A';
+      // Blockers are the strongest quality warning.
       if (homeQualityLatest.blockerCount > 0) return 'Blockers';
+      // Major findings need attention even without blockers.
       if (homeQualityLatest.majorCount > 0) return 'Attention';
       return 'Recent';
     },
+    /**
+     * Return detail text for the quality-history pill.
+     *
+     * @returns report age and finding count, or setup/loading/empty guidance
+     */
     qualityPillDetail() {
+      // Quality should not be trusted before setup finishes.
       if (this.setupBlocked()) return 'finish setup before quality';
+      // While loading, Home shows a placeholder instead of stale quality text.
       if (homeQualityLoading) return '--';
+      // No report means the next user action is to run quality.
       if (!homeQualityLatest) return 'no saved assessment';
       const date = this.qualityLatestDate();
       const age = date ? formatAuditAge(date) : 'recently';
+      // Blocker counts are shown before major counts because they require immediate attention.
       if (homeQualityLatest.blockerCount > 0) return age + ', ' + homeQualityLatest.blockerCount + ' blocker' + (homeQualityLatest.blockerCount === 1 ? '' : 's');
+      // Major counts are shown when there are no blockers.
       if (homeQualityLatest.majorCount > 0) return age + ', ' + homeQualityLatest.majorCount + ' major';
       return age + ', 0 blockers';
     },
+    /**
+     * Decide the next recommended Home action.
+     * Use when the large Home action card chooses setup, harness, quality, or healthy workflow.
+     *
+     * @returns priority key for the next action card
+     */
     nextPriority() {
+      // Setup is always first because later signals depend on installed harness pieces.
       if (!this.setupComplete()) return 'setup';
       const harnessFail = this.agentScores().some((agent) => this.harnessAgentFailed(agent));
+      // Harness failures are next because they compromise deterministic checks.
       if (harnessFail) return 'harness';
       const concernFail = this.agentScores().some((agent) =>
         Object.values(agent.concerns || {}).some((item) => item?.status === 'fail')
       );
       const qualityFail = Boolean((homeQualityLatest?.blockerCount || 0) > 0 || (homeQualityLatest?.majorCount || 0) > 0);
+      // Concern, quality, or missing quality data means the user should refresh assessment work.
       if (concernFail || qualityFail || !homeQualityLatest) return 'completeness';
       return 'healthy';
     },
+    /**
+     * Return the agent id most relevant to the next repair action.
+     *
+     * @returns failing agent id, or the active runner when no specific failure exists
+     */
     failingAgent() {
       const scores = this.agentScores();
       const failing = scores.find((agent) =>
@@ -458,64 +1085,133 @@
       );
       return failing?.id || activeRunner;
     },
+    /**
+     * Decide whether one agent has a blocking harness failure.
+     *
+     * @param agent - agent audit row; missing statuses count as not failed
+     * @returns `true` when setup, harness, or integrity status fails
+     */
     harnessAgentFailed(agent) {
       return agent.agent?.status === 'fail' || agent.harness?.status === 'fail' || this.integrityFailCount(agent) > 0;
     },
+    /**
+     * Return the first agent with a blocking harness failure.
+     *
+     * @returns failing agent id, or active runner when no blocking harness failure exists
+     */
     failingHarnessAgent() {
       const failing = this.agentScores().find((agent) => this.harnessAgentFailed(agent));
       return failing?.id || activeRunner;
     },
+    /**
+     * Return the eyebrow label for the next action card.
+     *
+     * @returns short uppercase action category
+     */
     nextEyebrow() {
       const priority = this.nextPriority();
+      // Partial setup is repair work; missing setup is a first-run path.
       if (priority === 'setup') return this.setupPartial() ? 'FIX FIRST' : 'GET STARTED';
+      // Harness failures should be fixed before broader quality work.
       if (priority === 'harness') return 'FIX FIRST';
+      // Completeness means the project is usable but needs quality refresh.
       if (priority === 'completeness') return 'RECOMMENDED';
       return 'NEXT ACTION';
     },
+    /**
+     * Return the title for the next action card.
+     *
+     * @returns user-facing title for the recommended next action
+     */
     nextTitle() {
       const priority = this.nextPriority();
+      // Setup action title reflects whether the user is finishing or starting setup.
       if (priority === 'setup') return this.setupPartial() ? 'Finish goat-flow setup' : 'Install goat-flow for ' + agentName(activeRunner);
+      // Harness action title points directly at deterministic failures.
       if (priority === 'harness') return 'Fix the failing harness checks';
+      // Completeness action title sends the user to quality assessment.
       if (priority === 'completeness') return 'Run a fresh quality assessment';
       return 'Run a skill or pick up active session';
     },
+    /**
+     * Return explanatory detail for the next action card.
+     *
+     * @returns guidance sentence that explains why the action is recommended
+     */
     nextDetail() {
       const priority = this.nextPriority();
+      // Setup detail explains whether this is completion work or first install.
       if (priority === 'setup') {
+        // Partial setup tells the user exactly how many setup components remain.
         if (this.setupPartial()) return 'This project has ' + this.setupPassed() + ' of ' + this.setupTotal() + ' setup components. Finish setup before trusting harness and quality signals.';
         return 'Creates config, skills, hooks, lessons, and instruction files for this project.';
       }
+      // Harness detail tells users to repair deterministic setup and integrity gaps.
       if (priority === 'harness') return 'Use the current audit findings to repair instruction, skill, and integrity gaps.';
+      // Completeness detail points users at quality history and stale findings.
       if (priority === 'completeness') return 'Refresh quality history and turn the largest stale findings into concrete next work.';
       return 'The Home checks are healthy. Use the review preset to inspect the next implementation change.';
     },
+    /**
+     * Return the command preview for the next action card.
+     *
+     * @returns command or generated-prompt label, or `null` for healthy explore flow
+     */
     nextActionCommand() {
       const priority = this.nextPriority();
+      // Setup uses a generated prompt rather than a raw shell command.
       if (priority === 'setup') return 'Generated setup prompt for ' + agentName(activeRunner);
+      // Harness repair shows the audit command users can recognize.
       if (priority === 'harness') return '$ npx goat-flow audit . --harness --agent ' + this.failingHarnessAgent();
+      // Quality refresh shows the assessment command for the active runner.
       if (priority === 'completeness') return '$ npx goat-flow quality . --agent ' + activeRunner;
       return null;
     },
+    /**
+     * Return the primary button label for the next action card.
+     *
+     * @returns button copy matched to the recommended priority
+     */
     nextPrimaryLabel() {
       const priority = this.nextPriority();
+      // Setup label changes depending on whether the terminal can run the prompt directly.
       if (priority === 'setup') return this.setupPartial() ? 'Fix with ' + agentName(activeRunner) : (terminalAvailable ? 'Run with ' + agentName(activeRunner) : 'Open Setup');
+      // Harness failures launch a fix prompt with the active runner.
       if (priority === 'harness') return 'Fix with ' + agentName(activeRunner);
+      // Completeness means the user should run a quality assessment.
       if (priority === 'completeness') return 'Run assessment';
       return 'Explore codebase';
     },
+    /**
+     * Return the secondary button label for the next action card.
+     *
+     * @returns setup, prompts, or fallback navigation label
+     */
     nextSecondaryLabel() {
       const priority = this.nextPriority();
+      // Setup and harness work both have a Setup view fallback.
       if (priority === 'setup') return 'Setup wizard';
+      // Harness users may need setup details before launching a fix.
       if (priority === 'harness') return 'Open Setup';
+      // Completeness and healthy states can browse prompt options.
       if (priority === 'completeness') return 'View prompts';
       return 'View prompts';
     },
+    /**
+     * Run the primary next action from Home.
+     * Use when the user accepts the recommendation card.
+     *
+     * @returns promise that settles after navigation, prompt launch, or quality generation starts
+     */
     async runPrimaryAction() {
       const priority = this.nextPriority();
+      // Setup either launches a generated setup prompt in terminal or opens the Setup wizard.
       if (priority === 'setup') {
+        // If terminal launch is available, run setup directly for the selected runner.
         if (terminalAvailable) {
           const setupTarget = activeRunner;
           const setupPrompt = await generateSetupPromptForAgent(setupTarget);
+          // If prompt generation fails, stay on Home so the user can choose another route.
           if (!setupPrompt) return;
           await launchPreset(setupPrompt, activeRunner, 'Setup ' + agentName(setupTarget) + ' via ' + agentName(activeRunner), { cwdPath: projectPath, targetPath: projectPath });
           activeView = 'workspace';
@@ -526,12 +1222,14 @@
         detectStack();
         return;
       }
+      // Harness repair launches a focused fix prompt in Workspace.
       if (priority === 'harness') {
         launchPreset(this.harnessFixPrompt(), activeRunner, 'Harness fix ' + agentName(this.failingHarnessAgent()));
         activeView = 'workspace';
         workspacePanel = 'terminal';
         return;
       }
+      // Completeness starts a fresh quality run and opens the Quality view.
       if (priority === 'completeness') {
         qualityAgent = activeRunner;
         activeView = 'quality';
@@ -540,13 +1238,21 @@
         return;
       }
       const preset = presets.find((item) => item.id === 'explore');
+      // Healthy projects use the Explore preset when it is available.
       if (preset) launchPreset(preset.prompt, activeRunner, preset.label, { presetId: preset.id });
       else launchInTerminal('/goat', activeRunner, { promptLabel: 'Explore codebase', cwdPath: projectPath, targetPath: projectPath });
       activeView = 'workspace';
       workspacePanel = 'terminal';
     },
+    /**
+     * Run the secondary next action from Home.
+     * Use when the user wants navigation instead of launching the primary action.
+     *
+     * @returns nothing; active view changes to Setup or Prompts
+     */
     runSecondaryAction() {
       const priority = this.nextPriority();
+      // Setup and harness secondary actions both lead to setup details.
       if (priority === 'setup' || priority === 'harness') {
         activeView = 'setup';
         detectStack();
@@ -554,44 +1260,99 @@
       }
       activeView = 'prompts';
     },
+    /**
+     * Return a concise concern finding summary for an agent.
+     *
+     * @param agent - agent audit row; missing concern data uses the fallback concern
+     * @param key - concern key shown in the card; verification has special setup-blocked copy
+     * @returns finding summary shown in the expanded concern row
+     */
     formatConcernSummary(agent, key) {
       const item = this.concern(agent, key);
       const findings = item.findings || [];
+      // Verification is support-only until setup finishes, so make that limitation explicit.
       if (key === 'verification' && this.setupBlocked()) return 'Setup incomplete; verification evidence is support-only until setup finishes.';
+      // Passing-but-tempered concerns can still show the first advisory finding.
       if (item.status === 'pass' && this.concernScore(agent, key) < 100 && findings.length > 0) return findings[0];
+      // Fully passing concerns should not show stale warning copy.
       if (item.status === 'pass') return 'No active findings';
+      // Failing concerns show the first concrete finding when available.
       if (findings.length > 0) return findings[0];
       return 'Concern needs attention';
     },
+    /**
+     * Return the recommended fix text for one concern.
+     *
+     * @param agent - agent audit row; missing fix data falls back to a no-detail message
+     * @param key - concern key shown in the card; empty keys use fallback concern data
+     * @returns recommendation and fix text for the expanded concern row
+     */
     formatConcernFix(agent, key) {
       const item = this.concern(agent, key);
       const rec = (item.recommendations || [])[0];
       const fix = (item.howToFix || [])[0];
+      // When both recommendation and fix exist, show them together as the user's repair path.
       if (rec && fix) return rec + ' Fix: ' + fix;
       return rec || fix || 'No fix detail supplied';
     },
+    /**
+     * Return the small badge text for an audit check.
+     *
+     * @param check - audit check row; missing display status falls back to raw status
+     * @returns short badge label for pass, warning, info, skipped, or fail states
+     */
     checkBadge(check) {
       const status = check.displayStatus || check.status;
+      // Passing checks get the shortest positive label.
       if (status === 'pass') return 'OK';
+      // Warnings need attention without full failure language.
       if (status === 'warn') return 'Warn';
+      // Informational checks provide context only.
       if (status === 'info') return 'Info';
+      // Skipped checks explain absent evidence without implying failure.
       if (status === 'skipped') return 'Skip';
       return 'Fix';
     },
+    /**
+     * Return the badge class for an audit check.
+     *
+     * @param check - audit check row; missing display status falls back to raw status
+     * @returns status class for the check badge
+     */
     checkBadgeClass(check) {
       return check.displayStatus || check.status;
     },
+    /**
+     * Return the audit impact detail for a check row.
+     * Use when expanded details explain why a check affects score or status.
+     *
+     * @param check - audit check row; missing optional fields show the least severe detail
+     * @returns user-facing impact tags joined for display
+     */
     checkImpactDetail(check) {
       const parts = [];
+      // Scope failures change the audit status and need the strongest label.
       if (check.impact === 'scope-fail') parts.push('fails audit status');
+      // Score-only failures temper the grade without failing the whole scope.
       else if (check.impact === 'score-only') parts.push('score-only signal');
       else parts.push('no failing impact');
+      // Metric checks are evidence inputs rather than direct setup blockers.
       if (check.type === 'metric') parts.push('metric evidence');
+      // Acknowledged advisories should be visible but not surprise the user.
       if (check.acknowledged) parts.push('acknowledged advisory');
+      // Structural checks have lower assurance than runtime evidence.
       if (check.evidenceKind === 'structural') parts.push('structural smoke');
+      // Limited assurance tells users not to over-trust the check.
       if (check.assurance === 'limited') parts.push('limited assurance');
       return parts.join(' · ');
     },
+    /**
+     * Build the expanded check list for an agent scope.
+     *
+     * @param agent - agent audit row; missing scope data yields an empty details list
+     * @param scope - audit scope key; unknown scopes yield an empty details list
+     * @returns check detail rows for expanded agent cards
+     */
     detailList(agent, scope) {
       return (agent?.[scope]?.checks || []).map((check) => ({
         id: check.id,
@@ -606,24 +1367,56 @@
         detail: (check.failure?.message || check.failure?.howToFix || '') ? (check.failure?.message || check.failure?.howToFix) + ' - ' + this.checkImpactDetail(check) : this.checkImpactDetail(check)
       }));
     },
+    /**
+     * Return enforcement capability rows for an agent.
+     *
+     * @param agent - agent audit row; missing enforcement data yields an empty list
+     * @returns enforcement rows shown in the expanded agent card
+     */
     enforcementRows(agent) {
       return agent?.enforcement?.capabilities || [];
     },
+    /**
+     * Return the compact enforcement badge label.
+     *
+     * @param row - enforcement capability row; unknown status shows Unk
+     * @returns short badge label for enforcement strength
+     */
     enforcementBadge(row) {
+      // Hard enforcement is the strongest user-facing protection.
       if (row.status === 'hard') return 'Hard';
+      // Limited enforcement works but carries caveats.
       if (row.status === 'limited') return 'Lim';
+      // Soft enforcement warns but may not block.
       if (row.status === 'soft') return 'Soft';
+      // Missing enforcement needs repair.
       if (row.status === 'missing') return 'Miss';
       return 'Unk';
     },
+    /**
+     * Return the badge class for enforcement strength.
+     *
+     * @param row - enforcement capability row; unknown status uses skipped styling
+     * @returns badge class for enforcement strength
+     */
     enforcementBadgeClass(row) {
+      // Hard enforcement maps to pass styling.
       if (row.status === 'hard') return 'pass';
+      // Missing enforcement maps to failure styling.
       if (row.status === 'missing') return 'fail';
+      // Unknown enforcement is skipped rather than failed.
       if (row.status === 'unknown') return 'skipped';
       return 'warn';
     },
+    /**
+     * Build a repair prompt for failing harness checks.
+     * Use when the user clicks the Home harness fix action.
+     *
+     * @returns prompt text for the selected runner, including current project and finding context
+     */
     harnessFixPrompt() {
       const scores = this.agentScores();
+      // Without scores, the prompt tells the agent to audit before editing.
       if (scores.length === 0) {
         return [
           '/goat-plan re-run goat-flow audit for ' + activeRunner,
@@ -644,14 +1437,21 @@
       const target = this.failingHarnessAgent();
       const agent = scores.find((item) => item.id === target) || scores[0];
       const findings = [];
+      // The selected failing agent contributes setup, harness, and concern findings to the prompt.
       if (agent) {
+        // Agent setup failures tell the repair agent what installation surface is broken.
         for (const check of (agent.agent?.checks || [])) {
+          // Failed setup checks become prompt bullets for the repair agent.
           if (check.status === 'fail') findings.push('agent/' + check.id + ': ' + (check.failure?.message || check.failure?.howToFix || 'check failed'));
         }
+        // Blocking harness failures tell the repair agent what deterministic checks failed.
         for (const check of (agent.harness?.checks || [])) {
+          // Only unacknowledged non-metric failures should drive the repair prompt.
           if (check.status === 'fail' && check.type !== 'metric' && !check.acknowledged) findings.push('harness/' + check.id + ': ' + (check.failure?.message || check.failure?.howToFix || 'check failed'));
         }
+        // Failed concerns add user-facing quality context when check rows are not enough.
         for (const [key, concern] of Object.entries(agent.concerns || {})) {
+          // Failed concern summaries give the repair agent the user-visible problem area.
           if (concern.status === 'fail') findings.push(key + ': ' + ((concern.findings || []).slice(0, 2).join('; ') || 'check failed'));
         }
       }
