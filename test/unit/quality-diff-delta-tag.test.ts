@@ -47,13 +47,13 @@ function entry(
 ): QualityHistoryEntry {
   const report: SavedQualityReport = {
     report_kind: "goat-flow-quality-report",
-    goat_flow_version: "1.13.0",
+    goat_flow_version: "1.13.1",
     agent: "claude",
     project_path: "/tmp/example",
     run_date: runDate,
     audit_status: "pass",
     scope: "consumer",
-    rubric_version: "1.13.0",
+    rubric_version: "1.13.1",
     quality_mode: "agent-setup",
     prior_report_id: priorReportId,
     scores: {

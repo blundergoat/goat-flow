@@ -484,7 +484,7 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
     // `--untrusted-target` keeps the deny check static for a checkout you do not
     // trust; otherwise the property is omitted, leaving the default unchanged.
     // (The dashboard separately audits selected targets at "static".)
-    ...(options.untrustedTarget
+    ...(options.isTargetUntrusted
       ? { denyMechanismEvidenceLevel: "static" as const }
       : {}),
   });

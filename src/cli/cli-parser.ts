@@ -668,7 +668,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     includeHarness: parsedFlag(parsedValues, "harness"),
     checkDrift: parsedFlag(parsedValues, "check-drift"),
     checkContent: parsedFlag(parsedValues, "check-content"),
-    untrustedTarget: parsedFlag(parsedValues, "untrusted-target"),
+    isTargetUntrusted: parsedFlag(parsedValues, "untrusted-target"),
     auditDetails: !parsedFlag(parsedValues, "no-audit-details"),
     shouldCheck: parsedFlag(parsedValues, "check"),
     shouldApply: parsedFlag(parsedValues, "apply"),

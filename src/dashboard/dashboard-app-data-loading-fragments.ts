@@ -1,29 +1,45 @@
 /**
- * Data-loading and detection fragments of the dashboard Alpine app. dashboardMergeAppFragments
- * stitches these into one app object. These fragments own the async methods that talk to the
- * dashboard server - installed-agent detection, plans/tasks, hooks, stack detection, setup-prompt
- * generation, and the quality surfaces. Each method is a thin `this`-bound shim over a shared
- * `dashboard*` helper that holds the real fetch/parse logic and its error handling, so the fragments
- * stay small and the network behaviour lives in one place per concern.
+ * Load server-backed dashboard state into Alpine fragments.
+ * Use when the user changes project, runner, hook filters, plans, setup prompts, or quality views.
+ * These helpers keep stale responses from overwriting the screen after the user switches context.
+ * Empty or failed responses recover into visible empty states, banners, or toasts instead of
+ * breaking the dashboard app.
  */
 
-/** Confirm disabling a guarded hook before removing that safety surface. */
+/**
+ * Confirm a hook toggle before disabling a guarded safety surface.
+ * Use when the user clicks a hook switch that would remove protection.
+ *
+ * @param hook - hook row being toggled; missing confirm metadata means no dialog is required
+ * @param shouldEnable - next desired state; `false` means the user may be removing protection
+ * @returns whether the toggle may continue; `false` means the hook row stays unchanged
+ */
 function dashboardConfirmHookToggle(
   hook: HookState,
   shouldEnable: boolean,
 ): boolean {
+  // Enabling is always safe to proceed, and hooks without confirm prompts do not interrupt the user.
   if (shouldEnable || !hook.requiresConfirmDialog) return true;
   return window.confirm(
     `Disabling ${hook.name} removes the guardrail. Continue?`,
   );
 }
 
-/** Replace one hook row after the server accepts a toggle request. */
+/**
+ * Replace one hook row after the server accepts a toggle.
+ * Use so the Hooks table reflects the saved guardrail state immediately.
+ *
+ * @param ctx - dashboard state to update; missing hook rows leave the table unchanged
+ * @param hook - saved hook row returned by the server; empty agent state still renders as unavailable
+ * @param shouldEnable - requested state used for toast copy; `false` tells the user it was disabled
+ * @returns nothing; visible hook state and toast update in place
+ */
 function dashboardApplyHookToggleResult(
   ctx: DashboardAppContext,
   hook: HookState,
   shouldEnable: boolean,
 ): void {
+  // Replace only the toggled row so other hook rows keep their current UI state.
   ctx.hooksState = ctx.hooksState.map((item: HookState) =>
     item.id === hook.id ? hook : item,
   );
@@ -31,15 +47,22 @@ function dashboardApplyHookToggleResult(
 }
 
 /**
- * Persist one hook toggle. Stale project responses are ignored, and request failures recover into
- * the Hooks banner/toast because guardrail rows must remain visible when a save fails.
+ * Persist one hook toggle.
+ * Use when the user enables, disables, or resyncs a guardrail row in the Hooks view.
+ *
+ * @param ctx - dashboard state; missing current project means stale responses are ignored
+ * @param hook - hook row being saved; non-togglable hooks leave the row unchanged
+ * @param shouldEnable - desired hook state; `false` may require user confirmation
+ * @returns nothing; failures show in the Hooks banner/toast and keep rows visible
  */
 async function dashboardToggleHookState(
   ctx: DashboardAppContext,
   hook: HookState,
   shouldEnable: boolean,
 ): Promise<void> {
+  // Non-togglable hooks or an active save mean the user cannot start another change yet.
   if (!hook.togglable || ctx.hookSavingId) return;
+  // Cancelled confirmation leaves the guardrail row unchanged.
   if (!dashboardConfirmHookToggle(hook, shouldEnable)) return;
   ctx.hookSavingId = hook.id;
   ctx.hooksError = "";
@@ -55,7 +78,9 @@ async function dashboardToggleHookState(
     );
     const payload = readRecord(await res.json(), "Hook toggle response");
     const error = readErrorMessage(payload);
+    // Server-side hook failures are shown as user-facing save errors.
     if (error) throw new Error(error);
+    // The user switched projects while saving, so this response belongs to an old screen.
     if (ctx.projectPath !== requestProjectPath) return;
     dashboardApplyHookToggleResult(
       ctx,
@@ -63,15 +88,25 @@ async function dashboardToggleHookState(
       shouldEnable,
     );
   } catch (err) {
+    // The user switched projects while the save failed, so do not toast over the new screen.
     if (ctx.projectPath !== requestProjectPath) return;
     ctx.hooksError = err instanceof Error ? err.message : String(err);
     ctx.showToast(ctx.hooksError || "Hook update failed", true);
   } finally {
+    // Clear the saving spinner only for the hook row that started this request.
     if (ctx.hookSavingId === hook.id) ctx.hookSavingId = null;
   }
 }
 
-/** Return whether a quality request still belongs to the current project and runner. */
+/**
+ * Check whether a quality response still belongs to the visible project and runner.
+ * Use before applying async quality data that may race with user navigation.
+ *
+ * @param ctx - dashboard state at response time; missing project/runner mismatch means stale data
+ * @param projectPath - project path captured when the request started; empty never matches a real project
+ * @param runner - runner captured when the request started; empty would not match a supported runner
+ * @returns whether the response may update the screen
+ */
 function dashboardIsCurrentQualityRequest(
   ctx: DashboardAppContext,
   projectPath: string,
@@ -80,7 +115,13 @@ function dashboardIsCurrentQualityRequest(
   return ctx.projectPath === projectPath && ctx.activeRunner === runner;
 }
 
-/** Load the latest home-page quality summary and recover failures into the shared toast channel. */
+/**
+ * Load the Home page's latest quality-history summary.
+ * Use so the Home dashboard can show the most recent agent-setup review for the selected runner.
+ *
+ * @param ctx - dashboard state to update; stale project/runner responses are ignored
+ * @returns nothing; missing history leaves the Home quality summary empty
+ */
 async function dashboardGenerateHomeQualitySummary(
   ctx: DashboardAppContext,
 ): Promise<void> {
@@ -93,17 +134,20 @@ async function dashboardGenerateHomeQualitySummary(
       `/api/quality/history?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestAgent)}&mode=agent-setup&limit=1`,
     );
     const payload = readRecord(await res.json(), "Home quality response");
+    // The user switched project or runner before the quality summary returned.
     if (
       !dashboardIsCurrentQualityRequest(ctx, requestProjectPath, requestAgent)
     )
       return;
     const error = readErrorMessage(payload);
+    // Endpoint errors appear as toasts instead of replacing the Home summary.
     if (error) {
       ctx.showToast(error, true);
     } else {
       ctx.homeQualityLatest = readQualityHistoryLatest(payload.latest);
     }
   } catch (err) {
+    // Late failures for another project/runner should not interrupt the current Home view.
     if (
       !dashboardIsCurrentQualityRequest(ctx, requestProjectPath, requestAgent)
     )
@@ -111,17 +155,26 @@ async function dashboardGenerateHomeQualitySummary(
     const msg = err instanceof Error ? err.message : String(err);
     ctx.showToast(msg || "Home quality loading failed", true);
   }
+  // Only the request still matching the visible Home view may clear the loading state.
   if (dashboardIsCurrentQualityRequest(ctx, requestProjectPath, requestAgent)) {
     ctx.homeQualityLoading = false;
   }
 }
 
-/** Convert a raw skill-inventory payload into valid skill artifact rows. */
+/**
+ * Read skill artifacts from the inventory payload.
+ * Use after `/api/skill-quality/inventory` returns so the Skills tab only lists usable skill rows.
+ *
+ * @param payload - raw inventory response; missing `artifacts` means the Skills tab shows an empty list
+ * @returns valid skill artifacts; empty array means no skill reports are available to select
+ */
 function dashboardReadSkillQualityArtifacts(
   payload: JsonRecord,
 ): SkillQualityArtifact[] {
+  // Missing or non-array artifacts mean there are no selectable skills in this response.
   return Array.isArray(payload.artifacts)
     ? payload.artifacts.filter(
+        // Keep only complete skill rows so the UI never renders broken chips.
         (artifact): artifact is SkillQualityArtifact =>
           isRecord(artifact) &&
           artifact.kind === "skill" &&
@@ -133,15 +186,23 @@ function dashboardReadSkillQualityArtifacts(
     : [];
 }
 
-/** Clear a selected skill-quality report when the refreshed inventory no longer contains it. */
+/**
+ * Clear the selected skill report when refreshed inventory no longer contains it.
+ * Use after a re-audit so the details pane does not show a report for a removed skill.
+ *
+ * @param ctx - dashboard state; missing selection means there is nothing to prune
+ * @returns nothing; removed selections return the details pane to empty state
+ */
 function dashboardPruneMissingSkillQualitySelection(
   ctx: DashboardAppContext,
 ): void {
+  // No skill is selected, so the details pane is already empty.
   if (!ctx.skillQualitySelectedId) return;
   const stillExists = ctx.skillQualityArtifacts.some(
     (artifact: SkillQualityArtifact) =>
       artifact.id === ctx.skillQualitySelectedId,
   );
+  // The selected skill still exists, so the user can keep viewing its report.
   if (stillExists) return;
   ctx.skillQualitySelectedId = null;
   ctx.skillQualityReport = null;

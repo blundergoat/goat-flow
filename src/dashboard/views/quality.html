@@ -114,23 +114,77 @@
               feedback_loop: { label: 'Feedback Loop' }
             },
             concernKeys: ['context', 'constraints', 'verification', 'recovery', 'feedback_loop'],
+            /**
+             * Choose the score color used by the deterministic baseline card.
+             * Use when the user scans quality scores before reading detailed findings.
+             *
+             * @param score - percentage shown in the UI; empty or low values use the danger color
+             * @returns CSS color token for the score band
+             */
             scoreColor(score) { return score >= 80 ? 'var(--status-pass)' : score >= 70 ? 'var(--status-waiting)' : score >= 60 ? 'var(--orange-400)' : 'var(--status-danger)' },
-            agentScore(agent) { if (!agent?.harness) return null; const scored = agent.harness.checks.filter(c => c.status !== 'skipped'); return scored.length ? Math.round(scored.filter(c => c.status === 'pass').length / scored.length * 100) : null; },
-            toGrade(s) { if (s >= 90) return 'A'; if (s >= 80) return 'B'; if (s >= 70) return 'C'; if (s >= 60) return 'D'; return 'F'; },
-            get selectedAgent() {
-              return report?.agentScores?.find(a => a.id === qualityAgent) || null;
+            /**
+             * Calculate an agent harness score from visible audit checks.
+             * Use when the Quality view needs one percentage for the selected agent card.
+             *
+             * @param agent - audit row for one agent; missing harness means the user sees no score yet
+             * @returns score percentage, or `null` when no scored checks are available
+             */
+            agentScore(agent) {
+              // Agents without harness data are not audited enough for a score.
+              if (!agent?.harness) return null;
+              // Skipped checks are support context, not part of the score the user sees.
+              const scored = agent.harness.checks.filter(check => check.status !== 'skipped');
+              return scored.length ? Math.round(scored.filter(check => check.status === 'pass').length / scored.length * 100) : null;
             },
+            /**
+             * Convert a numeric score into the visible report-card grade.
+             * Use when dashboard users compare agents quickly.
+             *
+             * @param score - score percentage; empty or below passing bands falls through to F
+             * @returns letter grade shown in the Quality card
+             */
+            toGrade(score) {
+              // A-grade scores show the agent is in the strongest visible band.
+              if (score >= 90) return 'A';
+              // B-grade scores are strong enough for normal use with minor follow-up.
+              if (score >= 80) return 'B';
+              // C-grade scores warn the user that quality needs attention.
+              if (score >= 70) return 'C';
+              // D-grade scores show the agent is barely usable and needs repair.
+              if (score >= 60) return 'D';
+              return 'F';
+            },
+            /**
+             * Return the audit row for the currently selected quality agent.
+             * Use when the user switches the agent filter on the Quality view.
+             *
+             * @returns selected agent row, or `null` when the audit has not produced that row yet
+             */
+            get selectedAgent() {
+              return report?.agentScores?.find(agent => agent.id === qualityAgent) || null;
+            },
+            /**
+             * Summarize the selected agent's next quality action.
+             * Use when the user needs one line before opening detailed findings.
+             *
+             * @param agent - selected audit row; missing row means the agent has not been audited yet
+             * @returns concise recommendation summary for the visible Quality card
+             */
             recommendationSummary(agent) {
+              // No row means the selected agent has no audit result to summarize.
               if (!agent) return 'Not audited';
+              // Setup-only rows show install progress until concern scoring exists.
               if (!agent.concerns) {
-                const passed = agent.agent.checks.filter(c => c.status === 'pass').length;
+                const passed = agent.agent.checks.filter(check => check.status === 'pass').length;
                 return `${passed}/${agent.agent.checks.length} installed`;
               }
-              const recs = this.concernKeys.reduce((n, k) => n + (agent.concerns[k]?.recommendations?.length || 0), 0);
-              const warnings = (agent.harness?.checks || []).filter(c => c.status === 'fail' && c.impact === 'score-only').length;
-              if (recs === 0 && warnings === 0) return 'All checks passing';
+              const recommendationCount = this.concernKeys.reduce((total, key) => total + (agent.concerns[key]?.recommendations?.length || 0), 0);
+              const warnings = (agent.harness?.checks || []).filter(check => check.status === 'fail' && check.impact === 'score-only').length;
+              // With no recommendations or score warnings, the card can say the agent is clear.
+              if (recommendationCount === 0 && warnings === 0) return 'All checks passing';
+              // Score-only warnings are surfaced before recommendations because they temper the grade.
               if (warnings > 0) return `${warnings} score warning${warnings !== 1 ? 's' : ''}`;
-              return `${recs} recommendation${recs !== 1 ? 's' : ''}`;
+              return `${recommendationCount} recommendation${recommendationCount !== 1 ? 's' : ''}`;
             }
           }"
           style="padding: 16px 20px"
