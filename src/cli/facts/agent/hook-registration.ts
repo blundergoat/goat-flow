@@ -58,20 +58,31 @@ function extractHookPathsFromCommand(command: string): string[] {
   return pathCandidates;
 }
 
-/** Return the preferred shell-script path referenced by a list of hook commands. */
+/**
+ * Return the preferred shell-script path referenced by a list of hook commands.
+ * Use when audit needs one readable hook target for the user's agent setup evidence.
+ *
+ * @param commands - hook command strings from agent config; empty means no hook path can be shown
+ * @returns preferred hook script path, or `null` when commands do not reference a known script
+ */
 function preferredHookPathFromCommands(commands: string[]): string | null {
   const paths: string[] = [];
+
+  // Every command may reference a hook script the user expects audit to recognize.
   for (const command of commands) {
     const candidates = extractHookPathsFromCommand(command);
+
+    // Candidate paths are de-duplicated so audit reports one preferred hook target.
     for (const candidate of candidates) pushUniquePath(paths, candidate);
   }
-  const preferred =
+
+  return (
     paths.find((path) => path.endsWith("/post-turn-safety.sh")) ??
     paths.find((path) => path.endsWith("/deny-dangerous.sh")) ??
     paths.find((path) => path.endsWith("/guard-repository-writes.sh")) ??
     paths.find((path) => !path.endsWith("/plan-checkbox-guard.sh")) ??
-    null;
-  return preferred;
+    null
+  );
 }
 
 /** Return the parsed `hooks` object from settings when it exists. */

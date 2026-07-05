@@ -9,10 +9,8 @@
  * `goat-flow quality --agent <id>` gets the fully-explained variant, because
  * agent-setup runs are the ones cold agents follow with no other context).
  */
-import {
-  appendQualityReportContract,
-  type ReportContractInput,
-} from "./compose-quality-common.js";
+import { appendQualityReportContract } from "./compose-quality-common.js";
+import type { ReportContractInput } from "./compose-quality-common.js";
 
 /**
  * Append the full-detail JSON report contract block to an agent-setup prompt.

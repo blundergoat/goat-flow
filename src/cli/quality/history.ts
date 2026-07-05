@@ -71,7 +71,11 @@ interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
   deterministic: "new" | "persisted";
 }
 
-/** Diff result for two same-agent, same-mode quality-history entries. */
+/**
+ * Diff result for two same-agent, same-mode quality-history entries.
+ * Use when a user asks whether a quality run resolved, introduced, or carried findings forward.
+ * Invariant: both entries must be comparable before these buckets are rendered to the CLI.
+ */
 export interface QualityDiffResult {
   from: QualityHistoryEntry;
   to: QualityHistoryEntry;

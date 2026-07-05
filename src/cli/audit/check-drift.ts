@@ -553,13 +553,24 @@ function removeHookEntries(
   hooks[event] = next;
 }
 
+/**
+ * Parse the installed hook template before optional dashboard toggles are applied.
+ * Use when Copilot users need drift checks to account for enabled or disabled optional hooks.
+ * Swallows malformed JSON as a fallback so users still get the normal template drift comparison.
+ *
+ * @param template - hook config JSON from the template; invalid or empty JSON means drift falls back to the raw template
+ * @returns parsed hook config, or `null` when the template cannot safely drive user-facing drift output
+ */
 function parsedHookTemplate(template: string): Record<string, unknown> | null {
   let config: unknown;
   try {
     config = JSON.parse(template);
   } catch {
+    // Malformed templates should not invent drift; users see the original template comparison instead.
     return null;
   }
+
+  // Non-object JSON cannot hold hook events, so it is ignored for optional toggle comparison.
   return isRecord(config) ? config : null;
 }
 
@@ -588,11 +599,15 @@ function applyExplicitHookToggles(
   config: Record<string, unknown>,
   agent: AgentProfile,
 ): boolean {
-  let changed = false;
+  let hasHookToggleChanged = false;
+
+  // Each registered hook may add or remove a user-visible Copilot toggle entry.
   for (const spec of listHookSpecs()) {
-    changed = applyExplicitHookToggle(fs, config, agent, spec) || changed;
+    hasHookToggleChanged =
+      applyExplicitHookToggle(fs, config, agent, spec) || hasHookToggleChanged;
   }
-  return changed;
+
+  return hasHookToggleChanged;
 }
 
 /**
@@ -607,13 +622,17 @@ function expectedHookConfig(
   agent: AgentProfile,
   template: string,
 ): string {
+  // Non-Copilot agents do not use the JSON hook registry, so users see the plain template comparison.
   if (agentId !== "copilot" || !isAgentId(agentId)) return template;
 
   const config = parsedHookTemplate(template);
+
+  // If the template cannot be parsed, the safest user-facing result is the unmodified template.
   if (config === null) return template;
 
   const hasHookConfigChanged = applyExplicitHookToggles(fs, config, agent);
 
+  // Without explicit toggles, the installed file should match the manifest template exactly.
   if (!hasHookConfigChanged) return template;
   return `${JSON.stringify(config, null, 2)}\n`;
 }

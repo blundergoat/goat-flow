@@ -420,12 +420,16 @@ export interface ReportContractInput {
   runDate: string;
 }
 
-/** Per-surface presentation switches for {@link appendQualityReportContract}. */
+/**
+ * Per-surface presentation switches for the quality report contract block.
+ * Use when CLI and dashboard prompt surfaces need the same report schema with different verbosity.
+ * Invariant: option names stay internal so user-facing JSON field names do not drift.
+ */
 export interface ReportContractOptions {
   /** `full` = agent-setup verbosity with explanations; `compact` = focused-mode terseness. */
   detail: "full" | "compact";
   /** Prepend a `---` section separator (focused prompts end with the contract). */
-  leadingSeparator?: boolean;
+  hasLeadingSeparator?: boolean;
   /** Finding `type` shown in the JSON sample; defaults to `setup_quality`. */
   sampleFindingType?: (typeof QUALITY_FINDING_TYPES)[number];
 }
@@ -471,7 +475,7 @@ export function appendQualityReportContract(
   };
 
   // Focused prompts place the contract as the final section -> visually separate it.
-  if (opts.leadingSeparator) {
+  if (opts.hasLeadingSeparator) {
     lines.push("---");
     lines.push("");
   }
@@ -662,7 +666,7 @@ export function appendFocusedReportContract(
 ): void {
   appendQualityReportContract(lines, input, {
     detail: "compact",
-    leadingSeparator: true,
+    hasLeadingSeparator: true,
     sampleFindingType: "framework_flaw",
   });
 }

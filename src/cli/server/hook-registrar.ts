@@ -345,12 +345,15 @@ function removeLegacyAgentHookScripts(
   }
 }
 
+/**
+ * Read a managed hook script from the workflow template tree.
+ * Use when enabling a hook so the selected project receives the same script the dashboard describes.
+ *
+ * @param script - managed script path under `workflow/hooks`; empty cannot resolve to an installable hook
+ * @returns script contents written into the user's project
+ */
 function hookScriptContent(script: string): string {
-  const source = readFileSync(
-    getTemplatePath(`workflow/hooks/${script}`),
-    "utf-8",
-  );
-  return source;
+  return readFileSync(getTemplatePath(`workflow/hooks/${script}`), "utf-8");
 }
 
 function copyHookScripts(
@@ -520,21 +523,43 @@ function reconcileHook(
   }
 }
 
+/**
+ * Disable and remove one hook that used to exist in older installs.
+ * Use during hook reconciliation so users do not keep stale controls for removed hooks.
+ *
+ * @param projectPath - project being cleaned; empty means no project hook files can be found
+ * @param spec - removed hook descriptor; empty script lists mean only config state is cleared
+ * @returns nothing; stale files and agent registrations are removed when present
+ */
 function pruneRemovedHookTombstone(projectPath: string, spec: HookSpec): void {
   const profiles = getAgentProfiles();
+
+  // Each agent may have old registration state or old hook scripts from a previous release.
   for (const agent of profiles) {
+    // Supported agents keep an explicit disabled state so the dashboard no longer offers the hook.
     if (isSupportedAgent(agent) && hookConfigExists(projectPath, agent)) {
       writeAgentHookState(projectPath, agent, spec, false);
     }
+
+    // Legacy script files are removed so future audits do not report dead hook artifacts.
     if (agent.hooksDir) removeHookScripts(projectPath, agent, spec);
   }
 }
 
+/**
+ * Remove all tombstoned hook artifacts from a project.
+ * Use during reconciliation after a user upgrades from an older hook set.
+ *
+ * @param projectPath - project being cleaned; empty means there are no hook files or config blocks to edit
+ * @returns nothing; removed hooks disappear from config, gitignore, and agent hook folders
+ */
 function pruneRemovedHookTombstones(projectPath: string): void {
+  // Every tombstone clears both agent hook state and goat-flow config overrides.
   for (const spec of REMOVED_HOOK_TOMBSTONES) {
     pruneRemovedHookTombstone(projectPath, spec);
     removeHookConfig(projectPath, spec.id);
   }
+
   removeTopLevelConfigBlock(projectPath, "plan-guard");
   removeGoatFlowGitignoreEntry(projectPath, "logs/plan-guard-state.json");
 }

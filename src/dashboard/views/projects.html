@@ -6,40 +6,85 @@
   x-data="{
     projectSearch: '',
     confirmRemovePath: null,
-    stateBadge(project) {
-      if (project.action === 'audit') return 'gf-badge-pass';
-      if (project.action === 'upgrade') return 'gf-badge-warn';
-      if (project.action === 'migration') return 'gf-badge-high';
-      if (project.action === 'setup') return 'gf-badge-ap';
-      if (project.action === 'fix') return 'gf-badge-ap';
+    /**
+     * Choose the badge style shown beside a saved project in the Projects view.
+     * Use when a user scans the project list and needs the recommended next step to read visually.
+     *
+     * @param projectRow - saved dashboard project; missing or empty `action` means the UI has no specific next step yet
+     * @returns CSS badge class for the project action, or a muted badge when the action is unknown
+     */
+    projectActionBadgeClass(projectRow) {
+      // Ready to audit, so the UI shows a positive next-step badge.
+      if (projectRow.action === 'audit') return 'gf-badge-pass';
+
+      // A newer version exists, so the UI nudges the user with a warning badge.
+      if (projectRow.action === 'upgrade') return 'gf-badge-warn';
+
+      // Migration work is outstanding, so the UI raises the attention level.
+      if (projectRow.action === 'migration') return 'gf-badge-high';
+
+      // Setup is incomplete, so the UI points the user at the setup flow.
+      if (projectRow.action === 'setup') return 'gf-badge-ap';
+
+      // The audit found repair work, so the UI highlights an actionable fix state.
+      if (projectRow.action === 'fix') return 'gf-badge-ap';
+
       return 'gf-badge-muted';
     },
+    /**
+     * Return the Projects table rows matching the user's search text.
+     * Use while the user types in the filter box above a longer saved-project list.
+     *
+     * @returns matching project rows, or every sorted row when the search box is empty
+     */
     get filteredProjects() {
-      const q = this.projectSearch.toLowerCase().trim();
-      const list = this.sortedProjectsList;
-      if (!q) return list;
-      return list.filter(p => {
-        const name = this.displayNameFor(p.path);
-        return name.toLowerCase().includes(q) || (p.state || '').toLowerCase().includes(q) || (p.action || '').toLowerCase().includes(q);
+      const searchText = this.projectSearch.toLowerCase().trim();
+      const visibleProjects = this.sortedProjectsList;
+
+      // Empty search means the user wants the normal sorted Projects table.
+      if (!searchText) return visibleProjects;
+
+      // Each row is checked against the same visible fields the user can scan in the table.
+      return visibleProjects.filter(projectRow => {
+        const visibleName = this.displayNameFor(projectRow.path);
+        return visibleName.toLowerCase().includes(searchText) || (projectRow.state || '').toLowerCase().includes(searchText) || (projectRow.action || '').toLowerCase().includes(searchText);
       });
     },
-    stateCounts() {
+    /**
+     * Count saved projects by the recommended action shown in the summary bar.
+     * Use when the user scans the Projects header before opening individual rows.
+     *
+     * @returns action counts for visible summary chips, with `unknown` for rows that have no action yet
+     */
+    projectActionCounts() {
       const counts = {};
-      for (const p of this.projectsList) {
-        const key = p.action || 'unknown';
+      // Each saved row contributes to the summary the user sees above the table.
+      for (const projectRow of this.projectsList) {
+        const key = projectRow.action || 'unknown';
         counts[key] = (counts[key] || 0) + 1;
       }
       return counts;
     },
-    doAction(project) {
-      if (project.action === 'audit') {
-        this.projectPath = project.path; this.activeView = 'home'; this.runAudit();
-      } else if (project.action === 'setup') {
-        this.projectPath = project.path; this.activeView = 'setup'; this.detectStack();
-      } else if (project.action === 'migration' || project.action === 'upgrade') {
-        this.projectPath = project.path; this.activeView = 'setup'; this.detectStack();
+    /**
+     * Open the dashboard flow that matches a project's recommended action.
+     * Use when the user clicks the action button in a Projects table row.
+     *
+     * @param projectRow - saved dashboard project; missing action falls back to the audit flow
+     * @returns nothing; navigation and audit/setup state update the visible dashboard view
+     */
+    openProjectRecommendedAction(projectRow) {
+      // Audit-ready projects open Home and start an audit for that workspace.
+      if (projectRow.action === 'audit') {
+        this.projectPath = projectRow.path; this.activeView = 'home'; this.runAudit();
+      } else if (projectRow.action === 'setup') {
+        // Setup gaps open the Setup view so the user can install missing harness pieces.
+        this.projectPath = projectRow.path; this.activeView = 'setup'; this.detectStack();
+      } else if (projectRow.action === 'migration' || projectRow.action === 'upgrade') {
+        // Migration and upgrade actions also start in Setup because the user needs environment detection first.
+        this.projectPath = projectRow.path; this.activeView = 'setup'; this.detectStack();
       } else {
-        this.projectPath = project.path; this.activeView = 'home'; this.runAudit();
+        // Unknown actions fall back to audit so the user gets fresh project guidance.
+        this.projectPath = projectRow.path; this.activeView = 'home'; this.runAudit();
       }
     }
   }"
@@ -94,7 +139,7 @@
       ></span>
       <span style="opacity: 0.4">&#8212;</span>
       <template
-        x-for="[action, count] in Object.entries(stateCounts())"
+        x-for="[action, count] in Object.entries(projectActionCounts())"
         :key="'sum-' + action"
       >
         <span>
@@ -254,14 +299,14 @@
                     font-size: 11px;
                     font-weight: 600;
                   "
-                  :class="stateBadge(project)"
+                  :class="projectActionBadgeClass(project)"
                   x-text="project.state"
                 ></span>
               </td>
               <!-- Action (clickable button) -->
               <td class="gf-td">
                 <button
-                  @click="doAction(project)"
+                  @click="openProjectRecommendedAction(project)"
                   style="
                     background: none;
                     border: none;
