@@ -176,7 +176,7 @@
        * @returns metadata text, or an empty string when no metadata is available
        */
 	    sessionMeta(session) {
-	      return [session.projectName || projectName, session.runner, this.ageLabel(session)].filter(Boolean).join(' · ');
+	      return [session.projectName || this.projectName, session.runner, this.ageLabel(session)].filter(Boolean).join(' · ');
 	    },
       /**
        * Build project and age metadata without runner name.
@@ -186,7 +186,7 @@
        * @returns project-age metadata, or an empty string when no metadata is available
        */
 	    sessionProjectAgeMeta(session) {
-	      return [session.projectName || projectName, this.ageLabel(session)].filter(Boolean).join(' · ');
+	      return [session.projectName || this.projectName, this.ageLabel(session)].filter(Boolean).join(' · ');
 	    },
       /**
        * Build tooltip metadata for a collapsed session button.

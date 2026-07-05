@@ -303,6 +303,19 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  it("uses the Alpine projectName getter for Workspace metadata fallbacks", () => {
+    const source = readFileSync(WORKSPACE_VIEW_PATH, "utf-8");
+    assert.match(
+      source,
+      /sessionMeta\(session\) \{[\s\S]{0,180}session\.projectName \|\| this\.projectName/,
+    );
+    assert.match(
+      source,
+      /sessionProjectAgeMeta\(session\) \{[\s\S]{0,180}session\.projectName \|\| this\.projectName/,
+    );
+    assert.doesNotMatch(source, /session\.projectName \|\| projectName/);
+  });
+
   it("wires all four Workspace waiting surfaces to a single awaitingInput field", () => {
     // All Workspace waiting surfaces derive from LocalSession.awaitingInput
     // so the header dot, pill, left-rail style, and meter count cannot drift

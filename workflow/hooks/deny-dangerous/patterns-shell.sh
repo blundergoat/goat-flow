@@ -477,17 +477,21 @@ check_pipeline_shell_consumers() {
   local pipe_index
   local previous_part
   local saw_downloader_pipe_source=0
+  local all_upstream_pipe_sources_local=1
   IFS='|' read -ra pipeline_parts <<< "$pipe_scan"
   for ((pipe_index = 1; pipe_index < ${#pipeline_parts[@]}; pipe_index++)); do
     previous_part="${pipeline_parts[$((pipe_index - 1))]}"
     if is_downloader_pipe_source "$previous_part"; then
       saw_downloader_pipe_source=1
     fi
+    if ! is_local_data_pipe_source "$previous_part"; then
+      all_upstream_pipe_sources_local=0
+    fi
     if is_shell_command "${pipeline_parts[$pipe_index]}"; then
       block "Pipe to shell. Download or inspect first, then run; to feed a local script, redirect from a file (cmd < file) instead of piping." || return $?
     fi
     if is_interpreter_command "${pipeline_parts[$pipe_index]}"; then
-      if [[ "${depth:-0}" -eq 0 && "$saw_downloader_pipe_source" -eq 0 ]] && is_local_data_pipe_source "$previous_part" && interpreter_treats_stdin_as_data "${pipeline_parts[$pipe_index]}"; then
+      if [[ "${depth:-0}" -eq 0 && "$saw_downloader_pipe_source" -eq 0 && "$all_upstream_pipe_sources_local" -eq 1 ]] && interpreter_treats_stdin_as_data "${pipeline_parts[$pipe_index]}"; then
         continue
       fi
       block "Pipe to interpreter. Download or inspect first, then run; to feed local data to inline interpreter code, redirect from a file (cmd < file) instead of piping." || return $?
