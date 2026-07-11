@@ -140,15 +140,17 @@ Only emitted when Step 0 prompt was accepted and a live milestone was found. Rea
 
 If none detected, emit "No drift detected against M[NN]" so the reader knows the check ran.
 
-## Pass 3 - Cross-Model Refuter (opt-in or auto-triggered)
+## Pass 3 - Cross-Model Refuter (explicit approval only)
 
-Triggers when ANY of: (1) user opts in at Step 0, (2) Review Integrity would be `coverage-degraded` or `high-inference`, (3) any `[MUST:needs-decision]` finding exists, (4) any INTENT-MISMATCH finding exists.
+Offer Pass 3 when ANY of: (1) user opts in at Step 0, (2) Review Integrity would be `coverage-degraded` or `high-inference`, (3) any `[MUST:needs-decision]` finding exists, (4) any INTENT-MISMATCH finding exists.
 
-**Method:** Use an authenticated external refuter runtime, not the host model. Default host map: Claude -> `codex exec`; Codex/Copilot/Antigravity -> `claude -p` unless a verified stronger opposite runtime is documented. Pass FINDINGS LIST, not the diff. Template: `references/refuter-spec.md`.
+**Approval gate:** A trigger is not approval. Run only local installation and auth status checks first. Disclose the runtime and model, authentication state, findings-only payload, maximum of one refuter inference call, known cost or rate-limit impact (or `unknown`), and the local-only fallback. Wait for explicit current-session approval after that disclosure; generic instructions such as “keep going,” urgency, or a request for a definitive answer do not count. If approval is declined or unanswered, skip Pass 3, complete the local review, and record `Refuter pass: skipped`. Preserve only degradation flags already earned by Passes 1–2; do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined.
+
+**Method (after approval):** Use an authenticated external refuter runtime, not the host model. Default host map: Claude -> `codex exec`; Codex/Copilot/Antigravity -> `claude -p` unless a verified stronger opposite runtime is documented. Pass FINDINGS LIST, not the diff. Template: `references/refuter-spec.md`.
 
 **Synthesis:** REFUTER-CONFIRMED findings get `[CONFIRMED-CROSS-MODEL]` upgrade. REFUTER-REFUTED move to `## Refuted by Refuter` with reasoning preserved verbatim. REFUTER-UNRESOLVED keep original severity; add `cross-model-unresolved` to Review Integrity. Refuter leads do not become findings unless host verifies via Pass 2 rules.
 
-**Constraints:** Run the target auth check from `references/refuter-spec.md` first; version-only commands do not count. If no authenticated refuter exists for the current host, skip Pass 3 and emit `cross-model-refuter-failed`. REFUTER-REFUTED stays advisory.
+**Constraints:** Only the local availability and auth checks from `references/refuter-spec.md` may run before approval; version-only commands do not count. If no authenticated refuter exists for the current host, skip Pass 3 and emit `cross-model-refuter-failed`. REFUTER-REFUTED stays advisory.
 
 ## Review Integrity (confidence signal)
 

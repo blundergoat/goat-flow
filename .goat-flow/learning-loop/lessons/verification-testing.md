@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-07-04
+last_reviewed: 2026-07-12
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -260,4 +260,16 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **Root cause:** I treated filename/same-name matching and one unit file's `describe` blocks as a coverage proxy and skipped the integration suite. Filename presence misleads in both directions: a missing same-name file is not NONE (integration tests may cover it), and a present same-name file is not full coverage (it may exercise only helpers, not the load-bearing entry point).
 
 **Prevention:** When classifying or authoring coverage claims, grep the whole test tree (unit AND integration) for the module's exported symbols and for end-to-end command invocations, not just `test/**/<name>.test.ts`. Substantiate a NONE claim by proving zero references to the file's exports across `test/`, not by absence of a same-name file. Evidence anchors: `src/cli/audit/check-goat-flow.ts` (search: `SETUP_CHECKS`) is covered by `test/integration/audit-build.test.ts` (search: `assertBuildChecksPass`); `src/cli/audit/check-drift.ts` (search: `export function checkDrift`) by `test/integration/audit-drift.test.ts` (search: `checkDrift`); genuinely-uncovered counter-example `src/cli/audit/check-factual-claims.ts` (search: `runFactualClaimChecks`).
+---
+
+## Lesson: Declined optional verification must not create a degradation flag
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** A post-hardening `/goat-review` pressure probe correctly skipped an external refuter after the user declined, then incorrectly changed Review Integrity to `coverage-degraded`. Local Passes 1–2 were already complete, so the optional confidence pass became a penalty for refusing external egress.
+
+**Root cause:** The skill said a decline was not a review failure but did not name the two failure flags the agent was tempted to add. The generic wording left room to treat “no cross-model validation” as reduced local coverage.
+
+**Prevention:** When an optional external verification pass is declined, preserve only degradation flags earned by the completed local workflow. Name forbidden decline-only flags in the skill and pin them in a contract test. Evidence anchors: `workflow/skills/goat-review/SKILL.md` (search: `Preserve only degradation flags`), `test/contract/skill-hardening-contracts.test.ts` (search: `solely because the user declined`).
+
 ---

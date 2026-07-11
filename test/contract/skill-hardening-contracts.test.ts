@@ -1,330 +1,561 @@
 /**
- * Contract tests for skill hardening rules shared across workflow and installed mirrors.
+ * Verifies that every installed skill presents the same safety workflow to users.
+ * These contracts catch missing approval gates, mirror drift, and oversized guidance
+ * before an agent can expose inconsistent behavior in the CLI or dashboard.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
-const MIRRORS = [
+const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
+const INSTALLED_SKILL_ROOTS = [
   "workflow/skills",
   ".claude/skills",
   ".agents/skills",
   ".github/skills",
 ] as const;
 
-/** Read mirrored skill files from the repo root for byte-level contract checks. */
-function read(path: string): string {
-  return readFileSync(resolve(PROJECT_ROOT, path), "utf-8");
+/**
+ * Loads one project file exactly as an agent or UI consumer receives it.
+ * Use this when a contract depends on the installed wording, not parsed metadata.
+ */
+function readProjectFile(projectRelativePath: string): string {
+  return readFileSync(resolve(REPOSITORY_ROOT, projectRelativePath), "utf-8");
 }
 
-/** Extract one Markdown H2 section so doctrine assertions cannot match examples elsewhere. */
-function readSection(path: string, heading: string): string {
-  const body = read(path);
-  const marker = `## ${heading}`;
-  const start = body.indexOf(marker);
-  assert.notEqual(start, -1, `${path} missing ${marker}`);
-  const next = body.indexOf("\n## ", start + marker.length);
-  return next === -1 ? body.slice(start) : body.slice(start, next);
+/**
+ * Extracts one Markdown H2 section so a UI-facing rule cannot pass by matching an example elsewhere.
+ * A missing section means the installed workflow can no longer orient the user as documented.
+ */
+function readMarkdownSection(
+  projectRelativePath: string,
+  sectionHeading: string,
+): string {
+  const documentBody = readProjectFile(projectRelativePath);
+  const sectionMarker = `## ${sectionHeading}`;
+  const sectionStartIndex = documentBody.indexOf(sectionMarker);
+
+  // A missing heading means users cannot reach the promised workflow section.
+  assert.notEqual(
+    sectionStartIndex,
+    -1,
+    `${projectRelativePath} missing ${sectionMarker}`,
+  );
+
+  const nextSectionIndex = documentBody.indexOf(
+    "\n## ",
+    sectionStartIndex + sectionMarker.length,
+  );
+
+  // The final section runs to end-of-file because no later user-facing section exists.
+  if (nextSectionIndex === -1) {
+    return documentBody.slice(sectionStartIndex);
+  }
+
+  return documentBody.slice(sectionStartIndex, nextSectionIndex);
 }
 
-/** Build every installed mirror path for a skill so parity tests stay exhaustive. */
-function skillPaths(skill: string): string[] {
-  return MIRRORS.map((root) => `${root}/${skill}/SKILL.md`);
+/**
+ * Builds every installed path for a skill so each supported agent sees the same workflow.
+ * Use this whenever a safety rule must remain identical across agent integrations.
+ */
+function installedSkillPaths(skillName: string): string[] {
+  // Each installation root represents a user-visible agent integration.
+  return INSTALLED_SKILL_ROOTS.map(
+    (skillRoot) => `${skillRoot}/${skillName}/SKILL.md`,
+  );
 }
 
-/** Apply the same assertion to each contract target without hiding failure labels. */
-function assertEvery<T>(
-  items: readonly T[],
-  assertion: (item: T) => void,
+/**
+ * Applies one contract to every user-facing target while preserving its failure label.
+ * Use this for mirror parity rather than accepting one correct installation as enough.
+ */
+function assertForEachTarget<T>(
+  contractTargets: readonly T[],
+  verifyTarget: (contractTarget: T) => void,
 ): void {
-  for (const item of items) {
-    assertion(item);
+  // Every target must pass because users can invoke the workflow from any installed agent.
+  for (const contractTarget of contractTargets) {
+    verifyTarget(contractTarget);
   }
 }
 
 describe("skill hardening contracts", () => {
-  const badCodexException = new RegExp("Exception: on C" + "odex");
-  const badCodexConsent = new RegExp(
+  const forbiddenCodexExceptionPattern = new RegExp("Exception: on C" + "odex");
+  const forbiddenCodexConsentPattern = new RegExp(
     ["C", "odex requires ", "explicit user ", "delegation ", "consent"].join(
       "",
     ),
   );
-  const badDelegationConfirm = new RegExp(
+  const forbiddenDelegationPromptPattern = new RegExp(
     ["confirm ", "delegation ", "consent once ", "before spawning"].join(""),
   );
 
   it("keeps goat-plan mid-implementation proof explicit and within budget", () => {
-    assertEvery(skillPaths("goat-plan"), (path) => {
-      const body = read(path);
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
       assert.match(
-        body,
+        skillGuidance,
         /Mid-implementation proof/,
-        `${path} missing mid-proof`,
+        `${skillPath} missing mid-proof`,
       );
       assert.match(
-        body,
+        skillGuidance,
         /before switching modules or after a bounded edit batch/,
-        `${path} missing bounded proof timing`,
+        `${skillPath} missing bounded proof timing`,
       );
     });
     assert.ok(
-      read("workflow/skills/goat-plan/SKILL.md").split(/\s+/).filter(Boolean)
-        .length <= 2500,
+      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") <= 2500,
       "workflow goat-plan must stay within the functional-skill word budget",
     );
   });
 
   it("keeps goat-plan path-only task intake read-only", () => {
-    assertEvery(skillPaths("goat-plan"), (path) => {
-      const body = read(path);
-      assert.match(body, /Path-only guard runs first/, path);
-      assert.match(body, /Path-Only Intake \/ Read-Only Orientation/, path);
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Path-only guard runs first/, skillPath);
       assert.match(
-        body,
-        /Do NOT update `\.active`, milestone status fields, task checkboxes, or code/,
-        path,
+        skillGuidance,
+        /Path-Only Intake \/ Read-Only Orientation/,
+        skillPath,
       );
-      assert.match(body, /A path alone is not write approval/, path);
       assert.match(
-        body,
+        skillGuidance,
+        /Do NOT update `\.active`, milestone status fields, task checkboxes, or code/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /A path alone is not write approval/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
         /Do NOT mutate `\.goat-flow\/plans\/\.active`, milestone status, checkboxes, or code/,
-        path,
+        skillPath,
       );
     });
   });
 
   it("lets goat-plan File-Write persist without phase-one approval or critique handoff", () => {
-    assertEvery(skillPaths("goat-plan"), (path) => {
-      const body = read(path);
-      assert.match(body, /Small File-Write/, path);
-      assert.match(body, /no Phase 1 approval pause/, path);
-      assert.match(body, /Write artifacts immediately/, path);
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Small File-Write/, skillPath);
+      assert.match(skillGuidance, /no Phase 1 approval pause/, skillPath);
+      assert.match(skillGuidance, /Write artifacts immediately/, skillPath);
       assert.match(
-        body,
+        skillGuidance,
         /MUST NOT invoke or prompt for `\/goat-critique`/,
-        path,
+        skillPath,
       );
-      assert.doesNotMatch(body, /After Phase 1 approval/, path);
+      assert.doesNotMatch(skillGuidance, /After Phase 1 approval/, skillPath);
       assert.doesNotMatch(
-        body,
+        skillGuidance,
         /Approve milestones and start implementing/,
-        path,
+        skillPath,
       );
       assert.doesNotMatch(
-        body,
+        skillGuidance,
         /delegated alternatives pass before writing milestone files/,
-        path,
+        skillPath,
       );
     });
   });
 
-  it("keeps goat dispatcher from routing bare task paths to implementation", () => {
-    assertEvery(skillPaths("goat"), (path) => {
-      const body = read(path);
+  it("keeps goat-plan amendments behind the milestone approval gate", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
       assert.match(
-        body,
+        skillGuidance,
+        /After approval: capture learnings, re-read the next milestone and update invalidated assumptions\/tasks\/exit criteria, set status/,
+        skillPath,
+      );
+    });
+
+    // A user reaches this example after an assumption fails during milestone verification.
+    const milestoneExamplePaths = INSTALLED_SKILL_ROOTS.map(
+      (skillRoot) => `${skillRoot}/goat-plan/references/milestone-examples.md`,
+    );
+
+    assertForEachTarget(milestoneExamplePaths, (examplePath) => {
+      const milestoneExample = readProjectFile(examplePath);
+      assert.match(milestoneExample, /Proposed M02 amendment/, examplePath);
+      assert.match(milestoneExample, /No plan file changed yet/, examplePath);
+      assert.match(milestoneExample, /After the human approves/, examplePath);
+      assert.match(
+        milestoneExample,
+        /applies the M02 amendment before changing statuses/,
+        examplePath,
+      );
+      assert.doesNotMatch(milestoneExample, /already amended/, examplePath);
+    });
+  });
+
+  it("keeps goat dispatcher from routing bare task paths to implementation", () => {
+    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(
+        skillGuidance,
         /Bare or ambiguous task paths are read-only context/,
-        path,
+        skillPath,
       );
       assert.match(
-        body,
+        skillGuidance,
         /Do not update `\.active`, milestone status, or code from a path alone/,
-        path,
+        skillPath,
       );
     });
   });
 
   it("documents task-path classifier examples", () => {
-    const body = read("docs/skills.md");
-    assert.match(body, /Task path classifier examples/, "missing table");
+    const skillsDocumentation = readProjectFile("docs/skills.md");
     assert.match(
-      body,
+      skillsDocumentation,
+      /Task path classifier examples/,
+      "missing table",
+    );
+    assert.match(
+      skillsDocumentation,
       /Bare task directory path\s+\|\s+Read-only orientation; no writes/,
       "path-only input must be read-only",
     );
     assert.match(
-      body,
+      skillsDocumentation,
       /Task directory path plus `start current milestone`\s+\|\s+Implementation may start after normal gates/,
       "start current milestone input must allow implementation after gates",
     );
     assert.match(
-      body,
+      skillsDocumentation,
       /`resume` plus a task directory path\s+\|\s+Confirm current milestone unless the plan clearly records one/,
       "resume input must confirm current milestone",
     );
     assert.match(
-      body,
+      skillsDocumentation,
       /`update current milestone` plus a task directory path\s+\|\s+Update the named milestone file only/,
       "update current milestone input must stay plan-file scoped",
     );
     assert.match(
-      body,
+      skillsDocumentation,
       /`implement current milestone` plus a task directory path\s+\|\s+Code implementation may proceed after reading gates/,
       "implement current milestone input must allow code implementation after gates",
     );
   });
 
   it("requires goat-qa Standard-mode gap output to include Verification Integrity", () => {
-    assertEvery(skillPaths("goat-qa"), (path) => {
-      const body = read(path);
-      assert.match(body, /gap analysis plus Verification Integrity/, path);
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
       assert.match(
-        body,
-        /Intent spec: \[PR\/issue\/test plan URL or `no-intent-spec`\]/,
-        path,
+        skillGuidance,
+        /gap analysis plus Verification Integrity/,
+        skillPath,
       );
-      assert.match(body, /Evidence limit:/, path);
+      assert.match(
+        skillGuidance,
+        /Intent spec: \[PR\/issue\/test plan URL or `no-intent-spec`\]/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /Evidence limit:/, skillPath);
     });
   });
 
   it("separates goat-review reporting-only DoD from implementation DoD", () => {
-    assertEvery(skillPaths("goat-review"), (path) => {
-      const body = read(path);
-      assert.match(body, /Review DoD gate/, path);
-      assert.match(body, /reporting-only review/, path);
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Review DoD gate/, skillPath);
+      assert.match(skillGuidance, /reporting-only review/, skillPath);
       assert.doesNotMatch(
-        body,
+        skillGuidance,
         /\*\*DoD gate:\*\* \(1\) tests\/lint pass/,
-        path,
+        skillPath,
+      );
+    });
+  });
+
+  it("keeps goat-debug bisect reporting-only until explicit approval", () => {
+    // Example: a user asks for a regression diagnosis while unrelated edits remain open.
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(
+        skillGuidance,
+        /Bisect is never required for a reporting-only diagnosis/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /clean worktree/, skillPath);
+      assert.match(skillGuidance, /known-good and known-bad refs/, skillPath);
+      assert.match(
+        skillGuidance,
+        /deterministic, non-destructive predicate/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /explicit current-session approval/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /`git bisect reset`/, skillPath);
+      assert.match(
+        skillGuidance,
+        /success, error, cancellation, or interruption/,
+        skillPath,
+      );
+    });
+  });
+
+  it("requires informed approval before goat-review external refutation", () => {
+    // Example: a MUST finding offers Pass 3 after local review, but egress is not yet approved.
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /A trigger is not approval/, skillPath);
+      assert.match(skillGuidance, /runtime and model/, skillPath);
+      assert.match(skillGuidance, /authentication state/, skillPath);
+      assert.match(skillGuidance, /findings-only payload/, skillPath);
+      assert.match(skillGuidance, /one refuter inference call/, skillPath);
+      assert.match(skillGuidance, /cost or rate-limit impact/, skillPath);
+      assert.match(skillGuidance, /local-only fallback/, skillPath);
+      assert.match(
+        skillGuidance,
+        /explicit current-session approval/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /declined or unanswered/, skillPath);
+      assert.match(skillGuidance, /complete the local review/, skillPath);
+      assert.match(
+        skillGuidance,
+        /do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined/,
+        skillPath,
       );
     });
   });
 
   it("checks goat-critique sub-agent completeness before trusting self-report", () => {
-    assertEvery(skillPaths("goat-critique"), (path) => {
-      const body = read(path);
-      assert.match(body, /Check sub-agent completeness/, path);
-      assert.match(body, /3-7 findings plus required lens fields/, path);
-      assert.match(body, /sub-agent completeness limited/, path);
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Check sub-agent completeness/, skillPath);
+      assert.match(
+        skillGuidance,
+        /3-7 findings plus required lens fields/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /sub-agent completeness limited/, skillPath);
     });
   });
 
   it("keeps report-only finding outputs aligned with the shared proof-class contract", () => {
-    const proofClasses =
+    const proofClassContract =
       /RUNTIME\s*\|\s*CONTRACT-GREP\s*\|\s*STATIC\s*\|\s*NOT-REPRODUCED/;
 
-    assertEvery(skillPaths("goat-security"), (path) => {
-      const body = read(path);
-      assert.match(body, proofClasses, path);
-      assert.match(body, /S-NN:[^\n]+proof-class/, path);
-      assert.match(body, /Proof classes:/, path);
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, proofClassContract, skillPath);
+      assert.match(skillGuidance, /S-NN:[^\n]+proof-class/, skillPath);
+      assert.match(skillGuidance, /Proof classes:/, skillPath);
     });
 
-    assertEvery(skillPaths("goat-qa"), (path) => {
-      const body = read(path);
-      assert.match(body, proofClasses, path);
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, proofClassContract, skillPath);
       assert.match(
-        body,
+        skillGuidance,
         /\| File \| Lines Changed[^\n]+\| Proof Class \|/,
-        path,
+        skillPath,
       );
-      assert.match(body, /\| Code Change \| Risk[^\n]+\| Proof Class \|/, path);
-      assert.match(body, /Proof classes:/, path);
+      assert.match(
+        skillGuidance,
+        /\| Code Change \| Risk[^\n]+\| Proof Class \|/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /Proof classes:/, skillPath);
     });
 
-    assertEvery(skillPaths("goat-critique"), (path) => {
-      const body = read(path);
-      assert.match(body, proofClasses, path);
-      assert.match(body, /Each sub-agent MUST return[^\n]+Proof class/, path);
-      assert.match(body, /Validated Findings[^\n]+proof class/, path);
-      assert.match(body, /Recommended Changes[^\n]+proof class/, path);
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, proofClassContract, skillPath);
+      assert.match(
+        skillGuidance,
+        /Each sub-agent MUST return[^\n]+Proof class/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Validated Findings[^\n]+proof class/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Recommended Changes[^\n]+proof class/,
+        skillPath,
+      );
     });
   });
 
   it("keeps goat-critique direct invocation as delegation consent", () => {
-    assertEvery(skillPaths("goat-critique"), (path) => {
-      const body = read(path);
-      assert.match(body, /\$goat-critique/, path);
-      assert.match(body, /\/goat-critique/, path);
-      assert.match(body, /consent to spawn sub-agents/, path);
-      assert.match(body, /Do NOT ask again/, path);
-      assert.doesNotMatch(body, badCodexException, path);
-      assert.doesNotMatch(body, badCodexConsent, path);
-      assert.doesNotMatch(body, badDelegationConfirm, path);
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /\$goat-critique/, skillPath);
+      assert.match(skillGuidance, /\/goat-critique/, skillPath);
+      assert.match(skillGuidance, /consent to spawn sub-agents/, skillPath);
+      assert.match(skillGuidance, /Do NOT ask again/, skillPath);
+      assert.doesNotMatch(
+        skillGuidance,
+        forbiddenCodexExceptionPattern,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        forbiddenCodexConsentPattern,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        forbiddenDelegationPromptPattern,
+        skillPath,
+      );
     });
   });
 
   it("keeps goat-critique report-only until explicit apply", () => {
-    assertEvery(skillPaths("goat-critique"), (path) => {
-      const body = read(path);
-      assert.match(body, /Report-only by default/, path);
-      assert.match(body, /Do not mutate the target artifact/, path);
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Report-only by default/, skillPath);
       assert.match(
-        body,
-        /user separately says to apply, edit, update, fix/,
-        path,
+        skillGuidance,
+        /Do not mutate the target artifact/,
+        skillPath,
       );
-      assert.match(body, /Recommendations are never auto-applied/, path);
-      assert.match(body, /After synthesis, stop/, path);
-      assert.match(body, /Do not enter implementation mode/, path);
-      assert.match(body, /freeze writes/, path);
+      assert.match(
+        skillGuidance,
+        /user separately says to apply, edit, update, fix/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Recommendations are never auto-applied/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /After synthesis, stop/, skillPath);
+      assert.match(
+        skillGuidance,
+        /Do not enter implementation mode/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /freeze writes/, skillPath);
     });
   });
 
   it("keeps shared report-only and interrupt freeze contracts installed", () => {
-    for (const path of [
+    // Users need the same report-only boundary in source and installed references.
+    for (const referencePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
     ]) {
-      const body = read(path);
-      assert.match(body, /Report-Only Skill Contract/, path);
-      assert.match(body, /are report-only by default/, path);
-      assert.match(body, /MUST NOT mutate the target artifact/, path);
+      const referenceGuidance = readProjectFile(referencePath);
       assert.match(
-        body,
-        /a bare or ambiguous task path is context, not a direct planning request/,
-        path,
+        referenceGuidance,
+        /Report-Only Skill Contract/,
+        referencePath,
       );
       assert.match(
-        body,
+        referenceGuidance,
+        /are report-only by default/,
+        referencePath,
+      );
+      assert.match(
+        referenceGuidance,
+        /MUST NOT mutate the target artifact/,
+        referencePath,
+      );
+      assert.match(
+        referenceGuidance,
+        /a bare or ambiguous task path is context, not a direct planning request/,
+        referencePath,
+      );
+      assert.match(
+        referenceGuidance,
         /a task path alone must not update `\.active`, milestone status, checkboxes, or code/,
-        path,
+        referencePath,
       );
     }
 
-    for (const path of [
+    // Users also need the same interruption behavior in both reference surfaces.
+    for (const referencePath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
     ]) {
-      const body = read(path);
-      assert.match(body, /Interrupt Freeze Protocol/, path);
-      assert.match(body, /freeze writes immediately/, path);
-      assert.match(body, /Only run read-only status or diff checks/, path);
+      const referenceGuidance = readProjectFile(referencePath);
+      assert.match(
+        referenceGuidance,
+        /Interrupt Freeze Protocol/,
+        referencePath,
+      );
+      assert.match(
+        referenceGuidance,
+        /freeze writes immediately/,
+        referencePath,
+      );
+      assert.match(
+        referenceGuidance,
+        /Only run read-only status or diff checks/,
+        referencePath,
+      );
     }
   });
 
   it("keeps functional-skill Step 0 learning-loop emission doctrine installed", () => {
-    for (const path of [
+    // Every reference surface must tell users when prior learning was consulted.
+    for (const referencePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
     ]) {
-      const section = readSection(path, "Learning-Loop Retrieval");
-      assert.match(section, /MUST emit/, path);
-      assert.match(section, /Relevant prior learnings:/, path);
-      assert.match(section, /Terms searched:/, path);
+      const learningLoopSection = readMarkdownSection(
+        referencePath,
+        "Learning-Loop Retrieval",
+      );
+      assert.match(learningLoopSection, /MUST emit/, referencePath);
+      assert.match(
+        learningLoopSection,
+        /Relevant prior learnings:/,
+        referencePath,
+      );
+      assert.match(learningLoopSection, /Terms searched:/, referencePath);
     }
   });
 
   it("clarifies deployment bulletproof evidence as a release gate or hardening debt", () => {
-    for (const path of [
+    // Both authoring surfaces must set the same expectation before users trust a skill claim.
+    for (const referencePath of [
       "workflow/skills/playbooks/skill-quality-testing/deployment.md",
       ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
     ]) {
-      const body = read(path);
-      assert.match(body, /release gate before merging/, path);
-      assert.match(body, /hardening debt/, path);
-      assert.match(body, /do not claim the skill is bulletproof/, path);
+      const deploymentGuidance = readProjectFile(referencePath);
+      assert.match(
+        deploymentGuidance,
+        /release gate before merging/,
+        referencePath,
+      );
+      assert.match(deploymentGuidance, /hardening debt/, referencePath);
+      assert.match(
+        deploymentGuidance,
+        /do not claim the skill is bulletproof/,
+        referencePath,
+      );
     }
   });
 });
 
-// Body-only count (frontmatter stripped) to match the measurement basis ADR-023
-// uses for its tier table. wc -w and JS split-on-\s+ agree on stripped bodies.
-function bodyWordCount(path: string): number {
-  const stripped = read(path).replace(/^---\n[\s\S]*?\n---\n?/, "");
-  return stripped.split(/\s+/).filter(Boolean).length;
+/**
+ * Counts user-facing skill guidance without YAML frontmatter, matching ADR-023.
+ * Use this to prevent a workflow from becoming too large for agents to apply reliably.
+ */
+function countSkillBodyWords(projectRelativePath: string): number {
+  const skillBody = readProjectFile(projectRelativePath).replace(
+    /^---\n[\s\S]*?\n---\n?/,
+    "",
+  );
+
+  // Empty whitespace segments are not words a user or agent must process.
+  return skillBody.split(/\s+/).filter(Boolean).length;
 }
 
 describe("ADR-023 word budget tiers", () => {
@@ -353,52 +584,56 @@ describe("ADR-023 word budget tiers", () => {
   ] as const;
 
   it("dispatcher /goat stays within the 555-word cap across all mirrors", () => {
-    assertEvery(skillPaths("goat"), (path) => {
-      const words = bodyWordCount(path);
+    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+      const userFacingWordCount = countSkillBodyWords(skillPath);
       assert.ok(
-        words <= DISPATCHER_CAP,
-        `${path}: ${words} words exceeds dispatcher cap ${DISPATCHER_CAP}`,
+        userFacingWordCount <= DISPATCHER_CAP,
+        `${skillPath}: ${userFacingWordCount} words exceeds dispatcher cap ${DISPATCHER_CAP}`,
       );
     });
   });
 
   it("functional skills stay within the 2500-word cap across all mirrors", () => {
-    assertEvery(
-      FUNCTIONAL_SKILLS.flatMap((skill) => skillPaths(skill)),
-      (path) => {
-        const words = bodyWordCount(path);
-        assert.ok(
-          words < FUNCTIONAL_CAP,
-          `${path}: ${words} words meets or exceeds functional cap ${FUNCTIONAL_CAP}`,
-        );
-      },
+    // A user may invoke any functional skill from any supported agent integration.
+    const installedFunctionalSkillPaths = FUNCTIONAL_SKILLS.flatMap(
+      (skillName) => installedSkillPaths(skillName),
     );
+
+    assertForEachTarget(installedFunctionalSkillPaths, (skillPath) => {
+      const userFacingWordCount = countSkillBodyWords(skillPath);
+      assert.ok(
+        userFacingWordCount < FUNCTIONAL_CAP,
+        `${skillPath}: ${userFacingWordCount} words meets or exceeds functional cap ${FUNCTIONAL_CAP}`,
+      );
+    });
   });
 
   it("always-loaded shared references stay within the 1500-word cap", () => {
-    for (const path of [
+    // Always-loaded guidance affects every user request, so every copy must stay concise.
+    for (const referencePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
     ]) {
-      const words = bodyWordCount(path);
+      const userFacingWordCount = countSkillBodyWords(referencePath);
       assert.ok(
-        words < ALWAYS_LOADED_CAP,
-        `${path}: ${words} words meets or exceeds always-loaded cap ${ALWAYS_LOADED_CAP}`,
+        userFacingWordCount < ALWAYS_LOADED_CAP,
+        `${referencePath}: ${userFacingWordCount} words meets or exceeds always-loaded cap ${ALWAYS_LOADED_CAP}`,
       );
     }
   });
 
   it("skill-quality-testing root index stays within the 400-word cap", () => {
-    for (const path of [
+    // Authors need a short index that routes them without consuming the full workflow budget.
+    for (const referencePath of [
       "workflow/skills/playbooks/skill-quality-testing.md",
       ".goat-flow/skill-docs/skill-quality-testing/README.md",
     ]) {
-      const words = bodyWordCount(path);
+      const userFacingWordCount = countSkillBodyWords(referencePath);
       assert.ok(
-        words < AUTHORING_INDEX_CAP,
-        `${path}: ${words} words meets or exceeds root index cap ${AUTHORING_INDEX_CAP}`,
+        userFacingWordCount < AUTHORING_INDEX_CAP,
+        `${referencePath}: ${userFacingWordCount} words meets or exceeds root index cap ${AUTHORING_INDEX_CAP}`,
       );
     }
   });
@@ -412,33 +647,46 @@ describe("ADR-023 word budget tiers", () => {
       "workflow/skills/playbooks/skill-quality-testing/deployment.md",
       ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
     ];
-    const topLevelPlaybooks = TOP_LEVEL_PLAYBOOKS.flatMap((name) => [
-      `workflow/skills/playbooks/${name}`,
-      `.goat-flow/skill-docs/playbooks/${name}`,
-    ]);
-
-    const overBudget = [...skillQualityTestingFiles, ...topLevelPlaybooks]
-      .map((path) => ({ path, words: bodyWordCount(path) }))
-      .filter(({ words }) => words >= PROGRESSIVE_CAP);
-
-    assert.deepEqual(
-      overBudget,
-      [],
-      overBudget
-        .map(
-          ({ path, words }) =>
-            `${path}: ${words} words meets or exceeds progressive cap ${PROGRESSIVE_CAP}`,
-        )
-        .join("\n"),
+    // Each playbook name expands to the source and installed paths users can reach.
+    const topLevelPlaybookPaths = TOP_LEVEL_PLAYBOOKS.flatMap(
+      (playbookName) => [
+        `workflow/skills/playbooks/${playbookName}`,
+        `.goat-flow/skill-docs/playbooks/${playbookName}`,
+      ],
     );
+
+    // Measuring every progressive reference tells authors which user-facing file is too large.
+    const measuredReferenceFiles = [
+      ...skillQualityTestingFiles,
+      ...topLevelPlaybookPaths,
+    ].map((referencePath) => ({
+      referencePath,
+      userFacingWordCount: countSkillBodyWords(referencePath),
+    }));
+
+    // Only over-budget files should appear in the UI-facing failure message.
+    const overBudgetReferenceFiles = measuredReferenceFiles.filter(
+      ({ userFacingWordCount }) => userFacingWordCount >= PROGRESSIVE_CAP,
+    );
+
+    // An empty result means every progressive reference remains usable within its budget.
+    const overBudgetFailureMessage = overBudgetReferenceFiles
+      .map(
+        ({ referencePath, userFacingWordCount }) =>
+          `${referencePath}: ${userFacingWordCount} words meets or exceeds progressive cap ${PROGRESSIVE_CAP}`,
+      )
+      .join("\n");
+
+    assert.deepEqual(overBudgetReferenceFiles, [], overBudgetFailureMessage);
   });
 
   it("progressive reference cap rejects at 3000 words or above", () => {
-    assert.deepEqual(
-      [PROGRESSIVE_CAP - 1, PROGRESSIVE_CAP].map(
-        (words) => words < PROGRESSIVE_CAP,
-      ),
-      [true, false],
-    );
+    // Boundary examples show users that 2999 is allowed while 3000 is rejected.
+    const progressiveBudgetBoundaryResults = [
+      PROGRESSIVE_CAP - 1,
+      PROGRESSIVE_CAP,
+    ].map((userFacingWordCount) => userFacingWordCount < PROGRESSIVE_CAP);
+
+    assert.deepEqual(progressiveBudgetBoundaryResults, [true, false]);
   });
 });

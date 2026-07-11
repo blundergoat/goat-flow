@@ -1,6 +1,6 @@
 ---
 category: deny-dangerous
-last_reviewed: 2026-06-11
+last_reviewed: 2026-07-12
 ---
 
 **Scope:** Traps in the `deny-dangerous` guardrail's shell-grammar policy parser - command/segment splitting, substitution and heredoc handling, secret-path and `git`/`gh` write classification, and structured-payload parsing. Hook install / launch / registration / config-drift plumbing lives in [hooks.md](hooks.md).
@@ -181,19 +181,19 @@ last_reviewed: 2026-06-11
 **Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
 **hallucination-risk:** high - `Read(**/.env*)` (settings.json or a Codex TOML profile) looks like a blanket secret-read deny but binds only file-read paths; a Bash payload (`cat .env`, `source .env`, `base64 ~/.aws/credentials`) is not bound by it and silently succeeds unless the Bash hook blocks it.
 
-**Symptoms:** Before the Bash-side sentinel was added, `goat-flow audit --harness` reported `deny-covers-secrets: pass` while a live Bash probe returned exit 0. Expected is now exit 2 with `BLOCKED: Secret-file access ...`, verified by the runtime probe below.
+**Symptoms:** Before the Bash-side sentinel was added, `goat-flow audit --harness` reported `deny-covers-secrets: pass` while a live Bash probe returned exit 0. Expected is now exit 2 with `BLOCKED: Secret-file access ...`, verified by the context-specific recipes below.
 
 **Why it happens:** Settings/config file-read deny entries are tool-scoped. Claude/Gemini `Read(...)` patterns bind the Read tool; Codex TOML permission profiles bind filesystem access. An agent using the Bash tool to run `cat .env` is not protected by file-read intent alone. Two coverage layers are required: file-read deny for the file tool path AND Bash-hook regex for shell.
 
 **Evidence:**
 - `.claude/settings.json` (search: `"Read(**/.env*)"`) - tool-scoped deny patterns, not applied to Bash. `.goat-flow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`) - Bash-side sentinel added 2026-04-19, blocking `cat .env`, `source .env`, `cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials`, and `.pem/.key/.pfx` across hook-capable agents.
 - `src/cli/audit/harness/check-constraints.ts` (search: `bashDenyCoversSecrets`) - harness now requires BOTH `readDenyCoversSecrets` (settings/Codex permission file-read coverage) AND `bashDenyCoversSecrets` (Bash hook pattern) before classifying an agent as covered.
-- `src/cli/facts/agent/hooks.ts` (search: `detectBashDenyCoversSecrets`) - fact derivation scans the deny hook file for the active secret sentinel plus family markers for `.env*`, `.env.example` parity, normalized `./` / `../` / `~/` roots, `.ssh/`, `.aws/`, `secrets/`, credentials, and `.pem/.key/.pfx`. Runtime probe: `bash .goat-flow/hooks/deny-dangerous/patterns-paths.sh --check="cat .env"` now returns exit 2 with `BLOCKED: Secret-file access blocked`.
+- `src/cli/facts/agent/hooks.ts` (search: `detectBashDenyCoversSecrets`) - fact derivation scans the deny hook file for the active secret sentinel plus family markers for `.env*`, `.env.example` parity, normalized `./` / `../` / `~/` roots, `.ssh/`, `.aws/`, `secrets/`, credentials, and `.pem/.key/.pfx`. Direct-terminal probe outside a registered agent hook: `bash .goat-flow/hooks/deny-dangerous/patterns-paths.sh --check="cat .env"` returns exit 2 with `BLOCKED: Secret-file access blocked`.
 
 **Prevention:**
 1. For any new secret-path family added to the harness, extend BOTH `checkReadDenyCoversSecrets` in `src/cli/facts/agent/settings.ts` AND `detectBashDenyCoversSecrets` in `src/cli/facts/agent/hooks.ts`. A settings-only addition creates a false-pass; a hook-regex refactor without detector coverage, a false-fail.
 2. Every hook `--self-test` must include `run_case "cat <secret>" "cat <secret>" 2` assertions; a structural PASS without live probes reopens the gap.
-3. When reviewing a new agent's deny setup, run a runtime probe explicitly (e.g. `bash <hook> 'cat .env'`). Static inspection cannot distinguish tool-scoped from shell-scoped deny.
+3. In an agent session with the PreToolUse hook registered, run `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke` (or `--self-test=full`); do not put a direct secret-read `--check` payload in the agent's shell command because the outer hook can intercept it first. In a manual terminal outside an agent hook, the direct `patterns-paths.sh --check="cat .env"` probe remains valid and should exit 2. Static inspection cannot distinguish tool-scoped from shell-scoped deny.
 
 ---
 

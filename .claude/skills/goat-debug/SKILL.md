@@ -66,7 +66,7 @@ Write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, C
 
 **Output:** Minimal failing case (literal command, input, or steps), removed variables list (proves they don't matter), updated hypothesis set (categories ruled out by minimisation).
 
-**Optional bisect path:** If the failure is a regression from a known-good ref, run `git bisect` with the repro as predicate - binary search across commits instead of inputs.
+**Optional bisect path (state-mutating):** Bisect is never required for a reporting-only diagnosis. In reporting-only or no-write mode, describe the option but do not run it. Otherwise require a clean worktree, validate known-good and known-bad refs plus a deterministic, non-destructive predicate at both endpoints, disclose the commands and rollback, then wait for explicit current-session approval. Urgency, an outage, or broad permission to diagnose does not override these gates. A dirty worktree stops this path; an isolated worktree is a separately approved option, not an automatic workaround. After approval, run only the diagnostic predicate. Run `git bisect reset` on success, error, cancellation, or interruption; on resumption, reset before any other repository work.
 
 **Hypothesis ranking:** After minimisation, rank surviving hypotheses by cost and likelihood:
 
@@ -167,6 +167,7 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 - Universal constraints from skill-preamble.md apply.
 - MUST verify fix doesn't violate architecture constraints
 - MUST run D1.5 minimisation before presenting D2 diagnosis unless reproduction is already minimal
+- MUST NOT run `git bisect` in reporting-only or no-write mode, or without explicit approval, a clean worktree, validated refs and predicate, and a reset plan
 - MUST include Debug Integrity section in every diagnose-mode report
 
 ## Output Format

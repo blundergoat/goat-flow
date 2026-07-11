@@ -145,12 +145,12 @@ Exit criteria (evidence from this session):
 
 Assumptions:
 - [x] Provider returns a replacement refresh token (validated - observed in the provider response during the spike)
-- [ ] Session store handles concurrent refresh atomically - INVALIDATED: two parallel refreshes raced and one restored a stale token. M02 scope updated to add a per-session lock before wiring the login flow.
+- [ ] Session store handles concurrent refresh atomically - INVALIDATED: two parallel refreshes raced and one restored a stale token. Proposed M02 amendment: add a per-session lock before wiring the login flow. No plan file changed yet.
 
 M01 complete. Approve to proceed with M02, or adjust?
 ```
 
-The agent stops here and waits. It does not set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. The invalidated assumption has already amended M02's scope per the Milestone Retrospective protocol in `skill-conventions.md` - the plan is never changed silently.
+The agent stops here and waits. It does not amend M02, set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. After the human approves the proposed amendment, the agent re-reads M02, applies the M02 amendment before changing statuses, records the assumption evidence, then sets M01 to `complete` and M02 to `in-progress`. It may touch M02 code only after those plan updates.
 
 ## Worked Example - Kill-Criteria-Triggered Stop
 
