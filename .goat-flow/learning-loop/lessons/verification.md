@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-12
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -321,3 +321,15 @@ last_reviewed: 2026-06-14
 **Root cause:** Treated the installed Copilot hook config as the only file needing the UX copy change. The workflow template is the parity source for installed agent configs, so any installed hook-message change needs the template change in the same patch.
 
 **Prevention:** When changing `.github/hooks/hooks.json`, grep `workflow/hooks/agent-config/` for the same hook payload and update the matching template before the first preflight run. Evidence anchor: `scripts/preflight-checks.sh` (search: `Agent Config Parity`).
+
+---
+
+## Lesson: Quality diff compares saved report IDs, not report file paths
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** During final quality-report verification, I passed two JSON file paths to `quality diff`. The CLI exited 2 because an explicit comparison is one colon-delimited `<from-id>:<to-id>` argument; selecting the latest same-agent reports with `--agent codex --mode agent-setup` then completed successfully.
+
+**Root cause:** I inferred a conventional two-path diff interface instead of reading the command contract before the auxiliary close-out check.
+
+**Prevention:** Run `goat-flow quality diff --agent <id> --mode <mode>` for the latest matching pair, or pass one `<from-id>:<to-id>` argument as documented in `docs/cli.md` (search: `quality diff [<from-id>:<to-id>]`). Do not pass report filesystem paths.

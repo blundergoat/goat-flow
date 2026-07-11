@@ -5,6 +5,7 @@
 - **Agent commits and pushes are always user-operated** - Coding agents now refuse every `git commit` and `git push` request, while allowed GitHub issue and pull-request comments require direct current-session user intent or an explicit local approval mechanism; forwarded or pasted third-party content is never authorization.
 - **State-mutating diagnostics and external refuters require informed approval** - `goat-debug` now keeps bisect read-only until the user approves validated refs, a non-destructive predicate, clean checkout state, and reset handling; `goat-review` now discloses the external runtime, findings payload, one-call cap, cost impact, and local fallback before asking to send review evidence outside the current agent, while a declined call leaves the completed local review intact.
 - **Planning transitions and local-state guidance are unambiguous** - Milestone examples now wait for human approval before amending the next plan, scratchpad paths resolve under `.goat-flow/`, and secret-hook verification uses the sanctioned self-test inside agent sessions.
+- **Quality-report closeout uses the supported comparison contract** - The learning loop now records that `quality diff` compares saved report IDs through one `<from-id>:<to-id>` argument, or selects the latest matching pair with `--agent` and `--mode`, instead of accepting two report file paths.
 
 ## v1.13.1 - 2026-07-05
 
