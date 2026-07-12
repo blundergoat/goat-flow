@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-06-13
+last_reviewed: 2026-07-13
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -112,9 +112,9 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 
 **Symptoms:** A playbook appears in `workflow/skills/playbooks/` and `.goat-flow/skill-docs/playbooks/`, but one parity, audit, prompt, install, or docs surface is not enrolled. The playbook works locally until template-vs-installed drift or missing setup context surfaces later.
 
-**Why it happens:** `workflow/manifest.json` is the nominal source of truth, but playbooks are still hand-enumerated across template, installed copy, manifest required files and directory prose, installer copy lines, both README indexes, `scripts/preflight-checks.sh`, `test/integration/preamble-sync.test.ts`, `test/integration/audit-build.test.ts`, `src/cli/audit/check-goat-flow.ts`, `src/cli/audit/check-drift.ts`, `workflow/setup/03-install-skills.md`, `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, and sometimes `knip.json`.
+**Why it happens:** `workflow/manifest.json` is the nominal source of truth, but playbooks are still hand-enumerated across template, installed copy, manifest required files and directory prose, installer copy lines, both README indexes, `scripts/preflight-checks.sh`, `test/integration/preamble-sync.test.ts`, `test/integration/audit-build.test.ts`, `src/cli/audit/check-goat-flow.ts`, `src/cli/audit/check-artifact-integrity.ts`, `workflow/setup/03-install-skills.md`, `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, and sometimes `knip.json`.
 
-**Evidence:** `code-comments.md` and `observability.md` initially shipped without full parity enrollment; the gap was closed when later playbooks forced updates to `scripts/preflight-checks.sh` (search: `if [[ -f workflow/skills/playbooks/code-comments.md`), `src/cli/audit/check-drift.ts` (search: `template: "workflow/skills/playbooks/code-comments.md"`), and `test/integration/preamble-sync.test.ts` (search: `template and installed code-comments.md match`). The 2026-05-25 gruff-code-quality addition also proved package-surface coupling when preflight exposed a Knip dependency classification issue.
+**Evidence:** `code-comments.md` and `observability.md` initially shipped without full parity enrollment; the gap was closed when later playbooks forced updates to `scripts/preflight-checks.sh` (search: `if [[ -f workflow/skills/playbooks/code-comments.md`), `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), and `test/integration/preamble-sync.test.ts` (search: `template and installed code-comments.md match`). The 2026-05-25 gruff-code-quality addition also proved package-surface coupling when preflight exposed a Knip dependency classification issue.
 
 **Prevention:** When adding a playbook, grep the new filename through every surface above before declaring done. Then run `bash scripts/preflight-checks.sh`; the output must name the new playbook in parity rows. Run `npm test`; `preamble-sync.test.ts` must include the new playbook. If the playbook documents a CLI-only package, run `npx knip --no-progress` and only add `ignoreDependencies` after real npm-script or shell usage still leaves Knip unable to see it.
 

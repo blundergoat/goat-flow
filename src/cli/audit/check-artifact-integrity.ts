@@ -5,13 +5,7 @@
  * The checker compares canonical workflow sources with the selected project mirrors.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import {
-  dirname,
-  posix as pathPosix,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
+import { dirname, posix as pathPosix, relative, resolve, sep } from "node:path";
 import { load } from "js-yaml";
 import { COMMANDS, REMOVED_COMMANDS } from "../cli-types.js";
 import { getSkillNames } from "../constants.js";
@@ -241,6 +235,7 @@ export function findDuplicateArtifactIds(
 
   // Only repeated values are ambiguous to the user; unique actions need no finding.
   for (const [identifier, count] of occurrences) {
+    // A single declaration still gives the user one unambiguous action.
     if (count < 2) continue;
     findings.push({
       kind: "content",
@@ -313,6 +308,7 @@ function duplicateSkillIdentityFindings(
 
   // Group usable names so collisions report every source the maintainer must reconcile.
   for (const identity of identities) {
+    // A missing name already has its own actionable frontmatter finding.
     if (identity.name === null) continue;
     const paths = pathsByName.get(identity.name) ?? [];
     paths.push(identity.path);
@@ -323,6 +319,7 @@ function duplicateSkillIdentityFindings(
 
   // Duplicate frontmatter names make one command select multiple competing contracts.
   for (const [skillName, skillPaths] of pathsByName) {
+    // One source for a name is the expected user-facing command contract.
     if (skillPaths.length < 2) continue;
     findings.push({
       kind: "content",
@@ -347,15 +344,56 @@ function checkSkillIdentities(templateRoot: string): DriftFinding[] {
     templateRoot,
     alignmentFindings,
   );
-  return [
-    ...alignmentFindings,
-    ...duplicateSkillIdentityFindings(identities),
-  ];
+  return [...alignmentFindings, ...duplicateSkillIdentityFindings(identities)];
 }
 
 /** Remove fragments and titles before resolving a local Markdown destination. */
 function normalizeMarkdownTarget(rawTarget: string): string {
   return rawTarget.trim().split(/[?#]/u, 1)[0] ?? "";
+}
+
+/**
+ * Map an installed or relative resource path back to its workflow source.
+ * Use when the audit needs the exact canonical file behind user-facing guidance.
+ */
+function canonicalResourceTarget(
+  sourcePath: string,
+  normalizedTarget: string,
+): string {
+  const mappedSharedFile = SHARED_ARTIFACT_MIRRORS.find(
+    (sharedFile) => sharedFile.installed === normalizedTarget,
+  );
+
+  // Exact mappings own renamed installs such as skill-quality-testing/README.md.
+  if (mappedSharedFile !== undefined) return mappedSharedFile.template;
+  // Installed playbook paths map back to their canonical workflow source.
+  if (normalizedTarget.startsWith(".goat-flow/skill-docs/playbooks/")) {
+    return normalizedTarget.replace(
+      ".goat-flow/skill-docs/playbooks/",
+      "workflow/skills/playbooks/",
+    );
+  }
+  // Installed authoring-method paths map into the nested workflow playbook pack.
+  if (
+    normalizedTarget.startsWith(".goat-flow/skill-docs/skill-quality-testing/")
+  ) {
+    return normalizedTarget.replace(
+      ".goat-flow/skill-docs/skill-quality-testing/",
+      "workflow/skills/playbooks/skill-quality-testing/",
+    );
+  }
+  // A private references path belongs to the skill directory that teaches it.
+  if (normalizedTarget.startsWith("references/")) {
+    const skillRootMatch = sourcePath.match(/^(workflow\/skills\/[^/]+)\//u);
+    return pathPosix.join(
+      skillRootMatch?.[1] ?? dirname(sourcePath),
+      normalizedTarget,
+    );
+  }
+  // Ordinary Markdown links are relative to the file that presents them to the user.
+  return pathPosix.normalize(
+    pathPosix.join(dirname(sourcePath), normalizedTarget),
+  );
 }
 
 /**
@@ -373,45 +411,7 @@ function resolveResourceReference(
   rawTarget: string,
 ): ResourceReference {
   const normalizedTarget = normalizeMarkdownTarget(rawTarget);
-  let canonicalTarget: string;
-
-  // Exact mirror mappings own renamed installs such as skill-quality-testing/README.md.
-  const mappedSharedFile = SHARED_ARTIFACT_MIRRORS.find(
-    (sharedFile) => sharedFile.installed === normalizedTarget,
-  );
-
-  // Installed playbook paths map back to their canonical workflow source.
-  if (mappedSharedFile !== undefined) {
-    canonicalTarget = mappedSharedFile.template;
-  } else if (
-    normalizedTarget.startsWith(".goat-flow/skill-docs/playbooks/")
-  ) {
-    canonicalTarget = normalizedTarget.replace(
-      ".goat-flow/skill-docs/playbooks/",
-      "workflow/skills/playbooks/",
-    );
-  } else if (
-    normalizedTarget.startsWith(".goat-flow/skill-docs/skill-quality-testing/")
-  ) {
-    // Installed authoring-method paths map into the nested workflow playbook pack.
-    canonicalTarget = normalizedTarget.replace(
-      ".goat-flow/skill-docs/skill-quality-testing/",
-      "workflow/skills/playbooks/skill-quality-testing/",
-    );
-  } else if (normalizedTarget.startsWith("references/")) {
-    const skillRootMatch = sourcePath.match(
-      /^(workflow\/skills\/[^/]+)\//u,
-    );
-    canonicalTarget = pathPosix.join(
-      skillRootMatch?.[1] ?? dirname(sourcePath),
-      normalizedTarget,
-    );
-  } else {
-    // Ordinary Markdown links are relative to the file that presents them to the user.
-    canonicalTarget = pathPosix.normalize(
-      pathPosix.join(dirname(sourcePath), normalizedTarget),
-    );
-  }
+  const canonicalTarget = canonicalResourceTarget(sourcePath, normalizedTarget);
 
   const absoluteTemplateRoot = resolve(templateRoot);
   const absoluteTarget = resolve(templateRoot, canonicalTarget);
@@ -429,6 +429,46 @@ function resolveResourceReference(
     targetPath: targetWithinTemplate.split(sep).join("/"),
     rawTarget,
   };
+}
+
+/**
+ * Extract deterministic local targets from one non-example Markdown line.
+ * Use so the file-level scanner handles fence state separately from link grammar.
+ *
+ * @param line - one canonical Markdown line; empty means no resource can be taught
+ * @returns local link and reference-pack paths; empty excludes remote, in-page, and templated targets
+ */
+function resourceTargetsFromLine(line: string): string[] {
+  const resourceTargets: string[] = [];
+
+  // Markdown links expose explicit local resources in indexes and related-reference sections.
+  for (const linkMatch of line.matchAll(
+    /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu,
+  )) {
+    const rawTarget = linkMatch[1] ?? "";
+
+    // Remote, in-page, and templated destinations are not package-file dependencies.
+    if (
+      rawTarget.length === 0 ||
+      /^(?:https?:|mailto:|#)/iu.test(rawTarget) ||
+      /[<>{}*]/u.test(rawTarget)
+    ) {
+      continue;
+    }
+    resourceTargets.push(rawTarget);
+  }
+
+  // Skill contracts often name their reference pack in code spans instead of Markdown links.
+  for (const codeMatch of line.matchAll(
+    /`((?:references\/|\.goat-flow\/skill-docs\/(?:playbooks|skill-quality-testing)\/)[A-Za-z0-9._/-]+\.md)`/gu,
+  )) {
+    const rawTarget = codeMatch[1];
+
+    // An unmatched capture carries no resource path for the audit to resolve.
+    if (rawTarget === undefined) continue;
+    resourceTargets.push(rawTarget);
+  }
+  return resourceTargets;
 }
 
 /**
@@ -458,36 +498,9 @@ function extractResourceReferences(
 
     // Example bodies are intentionally non-resolving until the user supplies their values.
     if (isInsideFence) continue;
-    const rawTargets: string[] = [];
-
-    // Markdown links expose explicit local resources in indexes and related-reference sections.
-    for (const linkMatch of line.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu)) {
-      const rawTarget = linkMatch[1] ?? "";
-
-      // Remote, in-page, and templated destinations are not package-file dependencies.
-      if (
-        rawTarget.length === 0 ||
-        /^(?:https?:|mailto:|#)/iu.test(rawTarget) ||
-        /[<>{}*]/u.test(rawTarget)
-      ) {
-        continue;
-      }
-      rawTargets.push(rawTarget);
-    }
-
-    // Skill contracts often name their reference pack in code spans instead of Markdown links.
-    for (const codeMatch of line.matchAll(
-      /`((?:references\/|\.goat-flow\/skill-docs\/(?:playbooks|skill-quality-testing)\/)[A-Za-z0-9._/-]+\.md)`/gu,
-    )) {
-      const rawTarget = codeMatch[1];
-
-      // An unmatched capture carries no resource path for the audit to resolve.
-      if (rawTarget === undefined) continue;
-      rawTargets.push(rawTarget);
-    }
 
     // Resolve every taught target once so repeated references do not create noisy duplicate findings.
-    for (const rawTarget of rawTargets) {
+    for (const rawTarget of resourceTargetsFromLine(line)) {
       const reference = resolveResourceReference(
         templateRoot,
         sourcePath,
@@ -518,10 +531,7 @@ function checkResourceReferences(templateRoot: string): DriftFinding[] {
   // Every canonical skill file can teach another resource in its own pack.
   for (const skillName of getSkillNames()) {
     sourcePaths.push(
-      ...listTemplateMarkdown(
-        templateRoot,
-        `workflow/skills/${skillName}`,
-      ),
+      ...listTemplateMarkdown(templateRoot, `workflow/skills/${skillName}`),
     );
   }
 
@@ -654,6 +664,7 @@ function checkSharedFileSets(
 
   // Every shared canonical document needs an explicit installed destination.
   for (const sharedRoot of TEMPLATE_SHARED_ROOTS) {
+    // Each canonical file below this root needs one explicit user-facing destination.
     for (const canonicalPath of listTemplateMarkdown(
       templateRoot,
       sharedRoot,
@@ -697,6 +708,7 @@ function checkCommandIdentifiers(): DriftFinding[] {
 
   // An ID cannot be both runnable and retired without giving users contradictory routing.
   for (const command of COMMANDS) {
+    // Commands absent from the retired registry remain ordinary active actions.
     if (!Object.hasOwn(REMOVED_COMMANDS, command)) continue;
     findings.push({
       kind: "content",

@@ -213,8 +213,7 @@ describe("checkDrift: artifact integrity", () => {
       assert.equal(
         findings.some(
           (finding) =>
-            finding.path ===
-            ".agents/skills/goat/references/retired.md",
+            finding.path === ".agents/skills/goat/references/retired.md",
         ),
         true,
         `expected stale skill-reference finding, got ${JSON.stringify(findings)}`,
@@ -222,8 +221,7 @@ describe("checkDrift: artifact integrity", () => {
       assert.equal(
         findings.some(
           (finding) =>
-            finding.path ===
-            ".goat-flow/skill-docs/playbooks/retired.md",
+            finding.path === ".goat-flow/skill-docs/playbooks/retired.md",
         ),
         true,
         `expected stale shared-reference finding, got ${JSON.stringify(findings)}`,

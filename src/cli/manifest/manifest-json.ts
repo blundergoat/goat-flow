@@ -23,6 +23,7 @@ function duplicateValues(values: readonly string[]): string[] {
 
   // Each repeated declaration would make the installer or command owner ambiguous.
   for (const value of values) {
+    // A second occurrence creates a duplicate users cannot distinguish during setup.
     if (seen.has(value)) duplicates.add(value);
     seen.add(value);
   }
@@ -43,9 +44,7 @@ function isCommittedSkillReference(referencePath: string): boolean {
   }
 
   // Only committed Markdown inside the skill's reference pack can be mirrored safely.
-  return /^references\/[A-Za-z0-9][A-Za-z0-9._/-]*\.md$/u.test(
-    referencePath,
-  );
+  return /^references\/[A-Za-z0-9][A-Za-z0-9._/-]*\.md$/u.test(referencePath);
 }
 
 /**
@@ -94,6 +93,7 @@ function validateOneSkillReference(
 
   // Every declared file must stay within the committed reference pack, never logs, plans, or scratchpad.
   for (const referencePath of referencePaths) {
+    // A safe committed path is ready for the installer and needs no finding.
     if (isCommittedSkillReference(referencePath)) continue;
     findings.push(
       `skills.references.${skillName} path ${referencePath} must be a committed \`references/\` path ending in .md with no traversal.`,
@@ -117,6 +117,7 @@ function canonicalPathFindings(json: ManifestJson): string[] {
     ["required_files", json.required_files],
     ["required_dirs", json.required_dirs],
   ] as const) {
+    // Each duplicate in this required set needs its own actionable path finding.
     for (const duplicatePath of duplicateValues(manifestPaths)) {
       findings.push(
         `${pathListName} contains duplicate canonical path ${duplicatePath}.`,
@@ -154,6 +155,7 @@ function skillIdentifierFindings(json: ManifestJson): string[] {
 
   // A skill cannot be both installable and retired in the same release contract.
   for (const staleName of json.skills.stale_names) {
+    // A retired-only name does not conflict with the commands users can install.
     if (!canonicalNames.has(staleName)) continue;
     findings.push(
       `skill identifier ${staleName} appears in both skills.canonical and skills.stale_names.`,

@@ -1,6 +1,18 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-05-31
+last_reviewed: 2026-07-12
+---
+
+## Lesson: Artifact scanners need explicit mirror maps and command grammar controls
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** The first live M01 artifact-integrity audit failed two valid files after focused fixtures were green. References to the installed `.goat-flow/skill-docs/skill-quality-testing/README.md` were resolved by directory convention to a nonexistent canonical `skill-quality-testing/README.md`, even though the explicit mirror maps that installed README from `skill-quality-testing.md`. The removed-command scanner also treated prose saying "goat-flow check IDs" as an invocation of the retired `check` command.
+
+**Root cause:** I validated common path and token shapes without pressure-testing the repository's exceptional source/install mapping or a producer-language prose control. The implementation had the authoritative mirror table and CLI registry available but used a naming convention and a broad word-boundary regex instead.
+
+**Prevention:** Artifact reference resolution must consult the exact installed-to-canonical mirror map before applying path conventions. Removed-command checks must distinguish executable code-span/shell grammar from product prose, with paired positive and negative fixtures. Run the live combined audit after focused tests because real documentation supplies exceptions synthetic fixtures miss. Evidence anchors: `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), `src/cli/audit/check-factual-claims.ts` (search: `REMOVED_COMMAND_CHECKS`), and `test/integration/audit-drift-artifact-integrity.test.ts` (search: `resolves installed shared-document paths`).
+
 ---
 
 ## Lesson: Audit check skip semantics need both unit and integration fixture updates

@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-20
 **Status:** Accepted
-**Updated:** 2026-05-18 - Path references amended for the v1.6.0 `skill-reference/` and `skill-playbooks/` split; obsolete line citation retargeted to the current deployment playbook anchor. 2026-06-08 - Installed skill-quality-testing index path clarified after the `.goat-flow/skill-docs/skill-quality-testing/` layout split.
+**Updated:** 2026-05-18 - Path references amended for the v1.6.0 `skill-reference/` and `skill-playbooks/` split; obsolete line citation retargeted to the current deployment playbook anchor. 2026-06-08 - Installed skill-quality-testing index path clarified after the `.goat-flow/skill-docs/skill-quality-testing/` layout split. 2026-07-13 - Shared mirror registry anchor retargeted after the artifact-integrity extraction.
 **Milestone:** Quality-report follow-up (reports 1-4, persistent MAJOR finding across four runs)
 
 ## Context
@@ -70,7 +70,7 @@ The installed `.goat-flow/skill-docs/skill-quality-testing/README.md` file becom
 ## Consequences
 
 - The workflow source `workflow/skills/playbooks/skill-quality-testing.md` remains the short index template; the installed index is `.goat-flow/skill-docs/skill-quality-testing/README.md`. Three new topical files ship under `.goat-flow/skill-docs/skill-quality-testing/` (installed) and `workflow/skills/playbooks/skill-quality-testing/` (template).
-- Drift-check plumbing grows: `scripts/preflight-checks.sh`, `src/cli/audit/check-drift.ts` `SHARED_FILES` array, `workflow/install-goat-flow.sh`, `workflow/manifest.json`, and the `test/integration/audit-drift.test.ts` + `test/integration/preamble-sync.test.ts` fixture lists each gain the three new pairs.
+- Drift-check plumbing grows: `scripts/preflight-checks.sh`, the `SHARED_ARTIFACT_MIRRORS` registry in `src/cli/audit/check-artifact-integrity.ts`, `workflow/install-goat-flow.sh`, `workflow/manifest.json`, and the `test/integration/audit-drift-artifact-integrity.test.ts` + `test/integration/preamble-sync.test.ts` fixture lists each gain the three new pairs.
 - `src/cli/audit/check-content-quality.ts` picks up the three new files so content-quality lint applies to the split content the same way it applied to the monolith.
 - Agents consulting skill-quality-testing guidance now read the short installed index at `.goat-flow/skill-docs/skill-quality-testing/README.md`, then load only the topical file their skill type needs (often just one).
 - The budget rule's new home is `deployment.md` (`.goat-flow/skill-docs/skill-quality-testing/deployment.md` (search: `Token budget met per the four-tier model`)). Cross-references that previously pointed at the old `skill-quality-testing.md` budget line are forward-compatible through the workflow template filename, but installed-surface cross-references should target `README.md` or `deployment.md` directly.

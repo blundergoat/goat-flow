@@ -54,6 +54,12 @@ Aggregate-mode nuance:
 - The audit report always includes these 4 registered agent-scope checks.
 - Without `--agent <id>`, only `agent-instruction` can actively fail; the other 3 agent-scope checks are effectively no-ops until the audit is scoped to a concrete agent.
 
+## Optional Drift and Content Scopes
+
+`--check-drift` keeps the 20 build checks and adds canonical-package integrity. It compares skill, shared-document, hook, and agent mirrors, then validates the complete artifact graph: skill frontmatter names match their directory commands; command and artifact IDs are unique; manifest skill references stay inside committed `references/` packs; local Markdown resources resolve; and source-only or stale installed skill/playbook files fail with both the affected path and canonical owner. These checks do not add registered build-check IDs, so they appear under the separate `drift` report field.
+
+`--check-content` scans current user guidance for factual drift, including invocations of commands the parser has removed. Removed top-level commands are matched only when written as a code-span or shell-style invocation, so prose such as "goat-flow check IDs" is not treated as a command. Historical learning-loop records remain outside this current-guidance scan. Content findings appear under the separate `content` report field.
+
 ## Harness Checks
 
 `npx goat-flow audit . --harness` adds **17** deterministic harness-completeness checks on top of the 20 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
@@ -84,6 +90,8 @@ Aggregate-mode nuance:
 |---------|-----------------|-------|
 | `npx goat-flow audit .` | 16 setup + 4 agent = 20 build checks | Structural install gate only |
 | `npx goat-flow audit . --agent <id>` | Same 20 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
+| `npx goat-flow audit . --check-drift` | 20 build checks + artifact drift/integrity | Validates canonical sources, installed mirrors, IDs, frontmatter, and referenced resources |
+| `npx goat-flow audit . --check-content` | 20 build checks + factual/content drift | Validates current documentation claims and removed-command examples |
 | `npx goat-flow audit . --harness` | 20 build + 17 harness = 37 checks | Adds harness completeness, still deterministic |
 
 Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx goat-flow quality`.
