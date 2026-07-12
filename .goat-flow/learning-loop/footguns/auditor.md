@@ -90,6 +90,36 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 ---
 
+## Footgun: Selected-agent drift can leak unselected agent surfaces
+
+**Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
+
+Running `audit --agent codex --check-drift` against a Codex-only consumer failed because drift still compared Claude and Copilot hook registrations. The audit orchestrator had selected one agent for setup and harness checks, but `checkDrift` rebuilt the full manifest-owned agent inventory internally. A selected-agent audit therefore reported phantom missing files that the user never installed.
+
+**Evidence:**
+- `src/cli/audit/audit.ts` (search: `agentFilter: ctx.agentFilter`) passes the selected agent into drift instead of dropping the caller's scope.
+- `src/cli/audit/check-drift.ts` (search: `selectedInstalledSkillRoots`) filters agent-owned skills, orphan scans, and hook registrations while leaving shared references and central hook policy global.
+- `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `limits hook drift to the selected agent`) reproduces the Codex-only consumer and fails if another agent leaks back into the report.
+
+**Prevention:** Any new drift surface must declare whether it is agent-owned or shared. Apply `agentFilter` to agent-owned files and keep shared framework assets global; prove both with a single-agent consumer fixture.
+
+---
+
+## Footgun: Extractor diagnostics can encode valid empty state
+
+**Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
+
+A fresh consumer with valid but empty footgun and lesson directories failed the Feedback Loop concern. The shared extractor used `formatDiagnostic` for both malformed metadata and the valid messages `Footgun directory exists but contains 0 entries` and `Lesson directory exists but contains 0 entries`; the harness treated every non-null diagnostic as failure even though its own contract says zero entries are a valid PASS.
+
+**Evidence:**
+- `src/cli/audit/harness/check-feedback-loop.ts` (search: `EMPTY_LEARNING_LOOP_DIAGNOSTICS`) distinguishes the two valid first-run messages from actionable format failures.
+- `test/integration/audit-quality.test.ts` (search: `accepts extractor diagnostics that only report zero learning-loop entries`) pins the empty-install behavior without suppressing malformed-bucket diagnostics.
+- `test/integration/setup-quality-lifecycle.test.ts` (search: `consumer setup to quality-report lifecycle`) proves a newly installed consumer reaches a passing selected-agent harness before any incident entries exist.
+
+**Prevention:** Do not interpret a general-purpose diagnostic field as an error flag. Classify each documented diagnostic state at the consuming boundary, and keep a fresh-install fixture beside malformed-metadata coverage.
+
+---
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.

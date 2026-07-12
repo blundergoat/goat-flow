@@ -18,7 +18,8 @@ const PARENT_SIGNAL_EXIT_CODES = new Map([
 
 /**
  * Parse the internal runner contract used by preflight and its focused tests.
- * Use only behind preflight; empty options or command input produce a clear usage error.
+ * Use only behind preflight; it throws a usage error before invalid Tests work begins.
+ * Explicit branches preserve distinct timeout, progress, and command guidance for the operator.
  *
  * @param {string[]} commandLineArguments - runner options followed by `--` and a child command; empty is invalid
  * @returns {{
@@ -136,6 +137,7 @@ function displayCommand(childCommand, childArguments) {
 /**
  * Stop the complete child process group so timed-out verification cannot leak into the next run.
  * Use for timeout and parent termination; a missing PID means startup failed before work began.
+ * It swallows an already-finished process error because user-visible cleanup already succeeded.
  *
  * @param {import("node:child_process").ChildProcess} childProcess - spawned verification process
  * @param {NodeJS.Signals} stopSignal - graceful or forced signal chosen by the runner
@@ -208,6 +210,7 @@ function writeOperatorHeartbeat(
 /**
  * Run one captured verification command with bounded progress and process-group cleanup.
  * Use for first-run and retry Tests paths so users receive one consistent result contract.
+ * It spawns and owns the child group because one result must preserve output, signals, and status.
  *
  * @param {ReturnType<typeof parseRunnerOptions>} runnerOptions - validated command, timing, and progress contract
  * @returns {Promise<{
@@ -219,18 +222,20 @@ function runCapturedCommand(runnerOptions) {
   return new Promise((resolveCommand) => {
     const commandStartedAt = Date.now();
     const capturedOutputChunks = [];
-    let commandTimedOut = false;
-    let commandStartupFailed = false;
+    let hasCommandTimedOut = false;
+    let hasCommandFailedToStart = false;
 
     // Null timers and child results mean that no matching operator event has happened yet.
-    let parentStopSignal = null;
+    let preflightStopSignal = null;
     let timeoutTimer = null;
-    let forceKillTimer = null;
-    let forcedResultTimer = null;
+    let forceStopTimer = null;
+    let resultDeadlineTimer = null;
     let heartbeatTimer = null;
-    let commandResultDelivered = false;
-    let observedChildExitCode = null;
-    let observedChildExitSignal = null;
+    let hasReturnedResultToPreflight = false;
+    let observedCommandExitCode = null;
+    let observedCommandExitSignal = null;
+
+    // Preflight supplies an argv array and no shell, so user-entered test text cannot become shell syntax.
     const childProcess = spawn(
       runnerOptions.childCommand,
       runnerOptions.childArguments,
@@ -255,29 +260,29 @@ function runCapturedCommand(runnerOptions) {
       cleanupDeadlineReached = false,
     ) {
       // A prior close or deadline already gave the developer a result, so late events are ignored.
-      if (commandResultDelivered) {
+      if (hasReturnedResultToPreflight) {
         return;
       }
-      commandResultDelivered = true;
+      hasReturnedResultToPreflight = true;
 
       // Completed work no longer needs the original timeout.
       if (timeoutTimer !== null) {
         clearTimeout(timeoutTimer);
       }
       // A normal close before escalation cancels the pending force kill.
-      if (forceKillTimer !== null) {
-        clearTimeout(forceKillTimer);
+      if (forceStopTimer !== null) {
+        clearTimeout(forceStopTimer);
       }
       // A normal close after SIGKILL cancels the fallback result deadline.
-      if (forcedResultTimer !== null) {
-        clearTimeout(forcedResultTimer);
+      if (resultDeadlineTimer !== null) {
+        clearTimeout(resultDeadlineTimer);
       }
       // Once a result is ready, the user no longer needs liveness heartbeats.
       if (heartbeatTimer !== null) {
         clearInterval(heartbeatTimer);
       }
-      process.off("SIGINT", handleParentInterrupt);
-      process.off("SIGTERM", handleParentTermination);
+      process.off("SIGINT", handlePreflightInterrupt);
+      process.off("SIGTERM", handlePreflightTermination);
 
       const renderedCommand = displayCommand(
         runnerOptions.childCommand,
@@ -300,7 +305,7 @@ function runCapturedCommand(runnerOptions) {
       let finalStatus = childExitCode ?? 1;
 
       // Timeout is a stable preflight contract, including its status and one precise explanation.
-      if (commandTimedOut) {
+      if (hasCommandTimedOut) {
         finalStatus = 124;
         capturedOutputChunks.push(
           Buffer.from(
@@ -308,16 +313,16 @@ function runCapturedCommand(runnerOptions) {
           ),
         );
         // Parent termination is preserved after cleanup so callers still receive the conventional status.
-      } else if (parentStopSignal !== null) {
+      } else if (preflightStopSignal !== null) {
         // An unknown parent signal still returns failure rather than presenting a successful preflight.
-        finalStatus = PARENT_SIGNAL_EXIT_CODES.get(parentStopSignal) ?? 1;
+        finalStatus = PARENT_SIGNAL_EXIT_CODES.get(preflightStopSignal) ?? 1;
         capturedOutputChunks.push(
           Buffer.from(
-            `\n[preflight] command stopped after parent ${parentStopSignal}: ${renderedCommand}\n`,
+            `\n[preflight] command stopped after parent ${preflightStopSignal}: ${renderedCommand}\n`,
           ),
         );
         // A startup failure has no useful child code, so the user receives one explicit status 1 result.
-      } else if (commandStartupFailed) {
+      } else if (hasCommandFailedToStart) {
         finalStatus = 1;
         // A signal-only close is otherwise a failed verification with the signal named for the user.
       } else if (childExitCode === null) {
@@ -340,44 +345,46 @@ function runCapturedCommand(runnerOptions) {
     /** Request graceful cleanup, then force the group and return even if an escaped pipe stays open. */
     function stopRunningCommand() {
       stopChildProcessGroup(childProcess, "SIGTERM");
-      forceKillTimer = setTimeout(() => {
+      forceStopTimer = setTimeout(() => {
         stopChildProcessGroup(childProcess, "SIGKILL");
 
         // A normal close during SIGKILL already delivered the result, so no fallback timer is needed.
-        if (commandResultDelivered) {
+        if (hasReturnedResultToPreflight) {
           return;
         }
-        forcedResultTimer = setTimeout(() => {
+        resultDeadlineTimer = setTimeout(() => {
           deliverCommandResult(
-            observedChildExitCode,
-            observedChildExitSignal,
+            observedCommandExitCode,
+            observedCommandExitSignal,
             true,
           );
         }, FORCED_RESULT_DELAY_MS);
-        forcedResultTimer.unref();
+        resultDeadlineTimer.unref();
       }, FORCE_KILL_DELAY_MS);
-      forceKillTimer.unref();
+      forceStopTimer.unref();
     }
 
     /** Preserve parent termination intent while still cleaning up the child process group first. */
     function handleParentStopSignal(stopSignal) {
       // The first parent signal owns cleanup; repeated signals must not create duplicate timers.
-      if (parentStopSignal !== null || commandTimedOut) {
+      if (preflightStopSignal !== null || hasCommandTimedOut) {
         return;
       }
-      parentStopSignal = stopSignal;
+      preflightStopSignal = stopSignal;
       stopRunningCommand();
     }
 
-    const handleParentInterrupt = () => handleParentStopSignal("SIGINT");
-    const handleParentTermination = () => handleParentStopSignal("SIGTERM");
-    process.once("SIGINT", handleParentInterrupt);
-    process.once("SIGTERM", handleParentTermination);
+    /** Preserve a developer's Ctrl+C request while preflight cleans up its active Tests command. */
+    const handlePreflightInterrupt = () => handleParentStopSignal("SIGINT");
+    /** Preserve a terminal or CI stop request while preflight cleans up its active Tests command. */
+    const handlePreflightTermination = () => handleParentStopSignal("SIGTERM");
+    process.once("SIGINT", handlePreflightInterrupt);
+    process.once("SIGTERM", handlePreflightTermination);
 
     // Remember the direct child's status even when an escaped descendant delays the later close event.
     childProcess.once("exit", (childExitCode, childExitSignal) => {
-      observedChildExitCode = childExitCode;
-      observedChildExitSignal = childExitSignal;
+      observedCommandExitCode = childExitCode;
+      observedCommandExitSignal = childExitSignal;
     });
 
     // Configured pipes retain both child channels; absent streams mean startup failed before output existed.
@@ -388,7 +395,7 @@ function runCapturedCommand(runnerOptions) {
       capturedOutputChunks.push(chunk),
     );
     childProcess.once("error", (error) => {
-      commandStartupFailed = true;
+      hasCommandFailedToStart = true;
       capturedOutputChunks.push(
         Buffer.from(
           `\n[preflight] command failed to start: ${String(error.message || error)}\n`,
@@ -400,10 +407,10 @@ function runCapturedCommand(runnerOptions) {
     if (runnerOptions.timeoutSeconds > 0) {
       timeoutTimer = setTimeout(() => {
         // Parent termination already owns cleanup and must retain its conventional exit status.
-        if (parentStopSignal !== null) {
+        if (preflightStopSignal !== null) {
           return;
         }
-        commandTimedOut = true;
+        hasCommandTimedOut = true;
         stopRunningCommand();
       }, runnerOptions.timeoutSeconds * 1_000);
     }

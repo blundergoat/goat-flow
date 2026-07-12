@@ -272,10 +272,39 @@ describe("zero-entry fresh install", () => {
       `feedback_loop should pass: ${JSON.stringify(feedbackLoop)}`,
     );
   });
+
+  // A fresh consumer has valid learning-loop directories before its first real incident is recorded.
+  it("accepts extractor diagnostics that only report zero learning-loop entries", () => {
+    const check = HARNESS_CHECKS.find(
+      (candidate) => candidate.id === "feedback-loop-active",
+    );
+    assert.ok(check, "feedback-loop-active check must exist");
+    const sharedFacts = makeSharedFacts();
+    sharedFacts.footguns.entryCount = 0;
+    sharedFacts.footguns.buckets = [];
+    sharedFacts.footguns.formatDiagnostic =
+      "Footgun directory exists but contains 0 entries";
+    sharedFacts.lessons.entryCount = 0;
+    sharedFacts.lessons.buckets = [];
+    sharedFacts.lessons.formatDiagnostic =
+      "Lesson directory exists but contains 0 entries";
+
+    const result = check.run(
+      makeCtx({
+        facts: {
+          ...makeCtx().facts,
+          shared: sharedFacts,
+        },
+      }),
+    );
+
+    assert.equal(result.status, "pass", JSON.stringify(result));
+  });
 });
 
 describe("harness scoring honesty", () => {
-  // A user can accidentally restore a file where recovery expects a directory after a broken backup.
+  // A user can restore a file where recovery expects a directory after a broken backup.
+  // The fixture writes those invalid paths, audits them, then removes its temporary project.
   it("fails setup and recovery when required storage paths are files", async () => {
     const projectRoot = await mkdtemp(
       join(tmpdir(), "goat-flow-recovery-storage-"),

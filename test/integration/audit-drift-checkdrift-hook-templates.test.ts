@@ -95,6 +95,29 @@ describe("checkDrift: hook templates", () => {
     }
   });
 
+  // This fixture writes hook copies, removes Copilot's config, and proves Codex stays drift-clean.
+  it("limits hook drift to the selected agent", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      rmSync(join(root, ".github", "hooks", "hooks.json"), { force: true });
+
+      const report = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+        agentFilter: "codex",
+      });
+      assert.equal(
+        report.status,
+        "pass",
+        `Codex drift included another agent: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("reports post-turn safety hook content drift", () => {
     const root = setupFixture();
     try {

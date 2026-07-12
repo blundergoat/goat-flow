@@ -23,6 +23,7 @@ const PREFLIGHT_RUNNER_PATH = join(
   "scripts",
   "preflight-command-runner.mjs",
 );
+const CHILD_FAILURE_STATUS = 7;
 const fixtureProcessIds = new Set<number>();
 
 /** Captured runner evidence; empty streams mean that channel produced nothing for the user. */
@@ -44,7 +45,7 @@ interface PreflightRunnerFixture {
   timeoutSeconds?: number;
   heartbeatSeconds?: number;
   progressLabel?: string;
-  exposeProgress?: boolean;
+  shouldExposeProgress?: boolean;
   parentStopAfterMs?: number;
 }
 
@@ -77,7 +78,7 @@ function runPreflightRunnerFixture(
   ];
 
   // Interactive callers expose descriptor 3, so progress bypasses captured child output.
-  if (fixture.exposeProgress !== false) {
+  if (fixture.shouldExposeProgress !== false) {
     runnerArguments.push("--progress-fd", "3");
   }
   runnerArguments.push("--", childCommand, ...childArguments);
@@ -137,6 +138,7 @@ function runPreflightRunnerFixture(
 /**
  * Report whether a fixture process is still alive after the runner claims cleanup.
  * A missing process means the user can safely rerun preflight without leaked work.
+ * It throws unexpected process errors instead of misreporting successful cleanup.
  *
  * @param processId - fixture PID; zero or absent is never registered by these tests
  * @returns true while the process exists; false after cleanup removes it
@@ -159,14 +161,14 @@ function fixtureProcessIsAlive(processId: number): boolean {
  * Empty cleanup never waits forever; false tells the test exactly which process leaked.
  *
  * @param processId - child or grandchild PID shown by the fixture output
- * @param timeoutMs - maximum wait; zero means perform one immediate check
+ * @param cleanupTimeoutMs - maximum wait; zero means perform one immediate check
  * @returns true once the process disappears, or false when the bounded wait expires
  */
 async function waitForFixtureProcessExit(
   processId: number,
-  timeoutMs = 1_500,
+  cleanupTimeoutMs = 1_500,
 ): Promise<boolean> {
-  const cleanupDeadline = Date.now() + timeoutMs;
+  const cleanupDeadline = Date.now() + cleanupTimeoutMs;
 
   // Cleanup gets a short bounded grace period instead of holding the test suite indefinitely.
   while (Date.now() <= cleanupDeadline) {
@@ -275,7 +277,7 @@ describe("preflight Tests-phase progress", () => {
 
   it("keeps non-interactive output deterministic without a progress descriptor", async () => {
     const runnerResult = await runPreflightRunnerFixture({
-      exposeProgress: false,
+      shouldExposeProgress: false,
       heartbeatSeconds: 0.02,
       childSource:
         'setTimeout(() => process.stdout.write("CI_CAPTURE\\n"), 100);',
@@ -294,12 +296,12 @@ describe("preflight Tests-phase progress", () => {
         process.stdout.write("${standardOutputFailureMarker}\\n");
         setTimeout(() => {
           process.stderr.write("${standardErrorFailureMarker}\\n");
-          process.exit(7);
+          process.exit(${CHILD_FAILURE_STATUS});
         }, 20);
       `,
     });
 
-    assert.equal(runnerResult.status, 7);
+    assert.equal(runnerResult.status, CHILD_FAILURE_STATUS);
     assert.equal(
       runnerResult.capturedOutput.split(standardOutputFailureMarker).length - 1,
       1,
@@ -311,6 +313,7 @@ describe("preflight Tests-phase progress", () => {
     assert.equal(runnerResult.runnerErrorOutput, "");
   });
 
+  // This fixture reproduces a test tree that ignores graceful stop and keeps a worker alive.
   it("times out with exit 124 and removes the whole child process group", async () => {
     const timeoutFixtureSource = String.raw`
       const { spawn } = require("node:child_process");
@@ -353,6 +356,7 @@ describe("preflight Tests-phase progress", () => {
     "returns after escalation when an escaped descendant retains the capture pipe",
     { skip: process.platform === "win32" },
     async () => {
+      // This fixture reproduces a helper that escapes the test group while retaining its output.
       const escapedPipeFixtureSource = String.raw`
         const { spawn } = require("node:child_process");
         process.on("SIGTERM", () => {});
@@ -406,6 +410,7 @@ describe("preflight Tests-phase progress", () => {
     );
   });
 
+  // This fixture reproduces a worker that remains active when the user closes preflight.
   it("cleans the child process group before returning a parent termination", async () => {
     const parentStopFixtureSource = String.raw`
       const { spawn } = require("node:child_process");

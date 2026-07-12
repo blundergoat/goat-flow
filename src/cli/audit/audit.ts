@@ -647,6 +647,17 @@ function shouldRunDriftCheck(
   return options.shouldRunAutoDrift !== false && shouldAutoRunDrift(ctx);
 }
 
+/**
+ * Run drift for the selected audit scope while preserving profiler attribution.
+ * Use after structural checks so users see stale content for only the agent they requested.
+ *
+ * @param ctx - target audit context; a null agent filter means inspect every installed runtime
+ * @param fs - read-only selected-target filesystem; empty projects yield setup findings elsewhere
+ * @param projectPath - selected target shown in audit output; empty paths are rejected before this layer
+ * @param options - audit switches; omitted drift keeps this result null unless auto-drift applies
+ * @param profileScope - profiler label for aggregate, per-agent, or single-user audit work
+ * @returns drift report for the chosen scope, or null when the user did not request drift
+ */
 function computeDriftWithProfile(
   ctx: AuditContext,
   fs: ReadonlyFS,
@@ -654,9 +665,10 @@ function computeDriftWithProfile(
   options: AuditOptions,
   profileScope: string,
 ): ReturnType<typeof checkDrift> | null {
+  // Without an explicit or automatic drift request, the user receives no stale-copy section.
   if (!shouldRunDriftCheck(ctx, options)) return null;
   return span(options.profile, `${profileScope} drift`, () =>
-    checkDrift({ fs, projectPath }),
+    checkDrift({ fs, projectPath, agentFilter: ctx.agentFilter }),
   );
 }
 

@@ -154,6 +154,8 @@ interface CheckDriftOptions {
    * at runtime so consumer projects work out of the box.
    */
   templateRoot?: string;
+  /** Selected agent whose installed mirrors should be compared; null or absent checks every installed agent. */
+  agentFilter?: AgentId | null;
 }
 
 /**
@@ -273,26 +275,48 @@ function getStaleSkillNames(): Set<string> {
   return new Set(loadManifest().facts.skills.stale_names);
 }
 
-/** Compare installed skills against their workflow templates for drift.
- *
- *  The manifest declares every supported agent's `skills_dir`, but a given
- *  consumer project may only have installed one agent (e.g. only `.claude/`).
- *  Iterating over absent agent roots reports phantom drift ("file missing")
- *  for every uninstalled tree. Filter to roots present on disk so single-
- *  agent installs report honest results. */
+/**
+ * Return installed skill roots in the scope the user selected for audit.
+ * Use an agent filter for one runtime; an empty result leaves missing-install reporting to agent checks.
+ */
+function selectedInstalledSkillRoots(
+  fs: ReadonlyFS,
+  agentFilter: AgentId | null | undefined,
+): string[] {
+  // A selected runtime should not make the user repair mirrors for agents they did not audit.
+  const candidateSkillRoots = agentFilter
+    ? [loadManifest().agents[agentFilter]?.skills_dir]
+    : getInstalledSkillRoots();
+
+  // Absent roots belong to setup checks; drift compares only copies the user actually installed.
+  return candidateSkillRoots.filter(
+    (skillRoot): skillRoot is string =>
+      skillRoot !== undefined && fs.exists(skillRoot),
+  );
+}
+
+/**
+ * Compare installed skill copies with the templates users receive on setup or upgrade.
+ * Use an agent filter to keep a selected-runtime audit from reporting another runtime's drift.
+ */
 function compareSkills(
   fs: ReadonlyFS,
   templateRoot: string,
   findings: DriftFinding[],
+  agentFilter: AgentId | null | undefined,
 ): number {
   let checked = 0;
-  const skillRoots = getInstalledSkillRoots().filter((dir) => fs.exists(dir));
+  const skillRoots = selectedInstalledSkillRoots(fs, agentFilter);
+
   // Compare each canonical skill's template against every installed copy so
   // drift shows up no matter which agent's folder went stale.
   for (const name of getSkillNames()) {
+    // Every manifest-listed reference belongs to the same skill users invoke.
     for (const relativeFile of getSkillFiles(name)) {
       const templateRel = `workflow/skills/${name}/${relativeFile}`;
       const template = readTemplate(templateRoot, templateRel);
+
+      // A missing source template means every future consumer install would be incomplete.
       if (template === null) {
         findings.push({
           kind: "missing",
@@ -302,9 +326,12 @@ function compareSkills(
         continue;
       }
 
+      // Each selected mirror must carry the same user-facing skill contract.
       for (const agentDir of skillRoots) {
         const installedRel = `${agentDir}/${name}/${relativeFile}`;
         checked++;
+
+        // Missing installed content tells the user exactly which selected mirror needs repair.
         if (!fs.exists(installedRel)) {
           findings.push({
             kind: "missing",
@@ -314,7 +341,11 @@ function compareSkills(
           continue;
         }
         const installed = fs.readFile(installedRel);
+
+        // An unreadable copy is handled by filesystem/setup evidence instead of inventing a content diff.
         if (installed === null) continue;
+
+        // Different skill text means the selected agent would follow a stale workflow.
         if (!skillContentsEquivalent(template, installed)) {
           findings.push({
             kind: "content",
@@ -368,37 +399,45 @@ function compareSharedFiles(
 }
 
 /**
- * Find installed skill directories that are no longer canonical.
- *
- * This branch-heavy scan exists because agent skill roots can contain editor
- * files, docs, or partially-created directories. The SKILL.md guard avoids
- * false positives. The function reports deprecated manifest names separately
- * from unexpected orphans so cleanup messaging stays actionable.
+ * Find non-canonical skills in the mirrors selected for audit.
+ * Use the SKILL.md marker to ignore editor files while keeping cleanup guidance actionable.
  */
-function findOrphans(fs: ReadonlyFS, findings: DriftFinding[]): void {
+function findOrphans(
+  fs: ReadonlyFS,
+  findings: DriftFinding[],
+  agentFilter: AgentId | null | undefined,
+): void {
   const canonical = new Set<string>(getSkillNames());
   const stale = getStaleSkillNames();
-  for (const agentDir of getInstalledSkillRoots()) {
-    if (!fs.exists(agentDir)) continue;
+
+  // Only the runtime mirrors in this audit can produce user-visible orphan findings.
+  for (const agentDir of selectedInstalledSkillRoots(fs, agentFilter)) {
+    // Each directory entry may be a skill, documentation file, or editor artifact.
     for (const entry of fs.listDir(agentDir)) {
+      // Canonical skills are expected and need no cleanup guidance.
       if (canonical.has(entry)) continue;
       const fullPath = `${agentDir}/${entry}`;
+
       // Only flag real skill directories. listDir returns files too
       // (.DS_Store, README.md, etc.); a skill is identified by SKILL.md.
       if (!fs.exists(`${fullPath}/SKILL.md`)) continue;
+
+      // Known retired skills get the migration-specific message users can act on.
       if (stale.has(entry)) {
         findings.push({
           kind: "deprecated",
           path: fullPath,
           message: `deprecated skill still installed: ${entry} at ${fullPath}`,
         });
-      } else {
-        findings.push({
-          kind: "orphan",
-          path: fullPath,
-          message: `orphan directory in ${agentDir}: ${entry} (not a canonical goat-flow skill)`,
-        });
+        continue;
       }
+
+      // Unknown skill directories are kept separate from named deprecations.
+      findings.push({
+        kind: "orphan",
+        path: fullPath,
+        message: `orphan directory in ${agentDir}: ${entry} (not a canonical goat-flow skill)`,
+      });
     }
   }
 }
@@ -674,18 +713,32 @@ function compareHookArtifact(
   }
 }
 
-/** Compare installed hook scripts against their workflow templates. */
+/**
+ * Compare hook artifacts for the runtime scope the user selected.
+ * Use a filter to avoid asking Codex users to repair another agent's uninstalled config.
+ */
 function compareHooks(
   fs: ReadonlyFS,
   templateRoot: string,
   findings: DriftFinding[],
   checkedHookArtifacts: Set<string>,
+  agentFilter: AgentId | null | undefined,
 ): number {
   let checked = 0;
   const manifest = loadManifest();
+
+  // Every selected agent contributes its own hook launcher and runtime files.
   for (const [agentId, agent] of Object.entries(manifest.agents)) {
+    // A selected-agent audit must not require hook artifacts owned by another runtime.
+    if (agentFilter && agentId !== agentFilter) continue;
+
+    // Hookless agents have no local artifacts for drift to compare.
     if (!agent.hooks_dir || !agent.hooks) continue;
+
+    // An uninstalled hook root belongs to agent setup checks, not content drift.
     if (!fs.exists(agent.hooks_dir)) continue;
+
+    // Each declared hook file must match what setup would install for this runtime.
     for (const hookFile of agent.hooks) {
       const templateRel = hookTemplateRel(agentId, agent, hookFile);
       const installedRel = pathPosix.join(agent.hooks_dir, hookFile);
@@ -703,6 +756,8 @@ function compareHooks(
             : expectedHookScript(fs, hookFile, template),
       );
     }
+
+    // Copilot's shared registry is compared once because it is not always listed with scripts.
     if (agentId === "copilot" && agent.hook_config_file) {
       const templateRel = "workflow/hooks/agent-config/copilot-hooks.json";
       const installedRel = agent.hook_config_file;
@@ -780,21 +835,31 @@ function compareRegistryHookScripts(
  * @returns Drift status, findings, and count of compared template/install pairs.
  */
 export function checkDrift(options: CheckDriftOptions): DriftReport {
-  const { fs } = options;
+  const { fs, agentFilter } = options;
+
+  // Consumer runs use the package templates when the caller does not supply a test fixture root.
   const templateRoot = options.templateRoot ?? getTemplatePath("");
   const findings: DriftFinding[] = [];
   let checked = 0;
   const checkedHookArtifacts = new Set<string>();
-  checked += compareSkills(fs, templateRoot, findings);
+  checked += compareSkills(fs, templateRoot, findings, agentFilter);
   checked += compareSharedFiles(fs, templateRoot, findings);
-  checked += compareHooks(fs, templateRoot, findings, checkedHookArtifacts);
+  checked += compareHooks(
+    fs,
+    templateRoot,
+    findings,
+    checkedHookArtifacts,
+    agentFilter,
+  );
   checked += compareRegistryHookScripts(
     fs,
     templateRoot,
     findings,
     checkedHookArtifacts,
   );
-  findOrphans(fs, findings);
+  findOrphans(fs, findings, agentFilter);
+
+  // Any mismatch means setup or upgrade would give the user a different workflow than this checkout.
   return {
     status: findings.length === 0 ? "pass" : "fail",
     findings,
