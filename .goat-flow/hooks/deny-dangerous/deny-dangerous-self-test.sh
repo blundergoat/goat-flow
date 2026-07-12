@@ -2,13 +2,11 @@
 
 # deny-dangerous-self-test.sh
 #
-# Purpose:
-#   Central self-test runner for the goat-flow deny-dangerous hook
-#   (shell, writes,
-#   paths). Drives each hook with curated commands that
-#   MUST block and MUST allow, exercises the Copilot and Antigravity
-#   JSON payload shapes end-to-end, and verifies the fail-closed
-#   behaviour when .goat-flow/hooks/deny-dangerous is missing from the project.
+# Runs the hook safety checks maintainers use before releasing policy changes.
+# Use it after editing a guardrail to confirm safe developer commands still work
+# while destructive, secret-reading, and repository-writing requests stay blocked.
+# The smoke mode covers release essentials; full mode exercises every supported
+# agent payload and recovery path before users receive the installed hook.
 #
 #   Each deny hook re-execs into this script when invoked with
 #   `--self-test[=mode]`, so `deny-dangerous.sh --self-test` runs the full
@@ -615,6 +613,8 @@ run_smoke() {
   run_common_dependency_checks
 }
 
+# Run the complete policy corpus before a maintainer accepts a hook release.
+# It protects users from both blocked safe commands and newly allowed unsafe commands.
 run_full() {
   run_smoke
   expect_real_linked_worktree_uses_worktree_policy_store
@@ -774,6 +774,31 @@ run_full() {
   expect_allow writes "git status # git push" "git push in shell comment"
   expect_allow writes 'grep "git push origin main" docs/' "quoted git push search literal"
   expect_allow writes "rg -n 'gh issue comment 1 --body hi' .goat-flow/learning-loop/footguns" "quoted gh write search literal"
+
+  # A maintainer may pipe search evidence through a pager; quoted policy words stay data.
+  expect_allow writes \
+    "rg -n 'git commit|git push' workflow/hooks/deny-dangerous | head -n 10" \
+    "single-quoted repository alternation in read-only pipeline"
+  expect_allow writes \
+    'rg -n "git commit|git push" workflow/hooks/deny-dangerous | head -n 10' \
+    "double-quoted repository alternation in read-only pipeline"
+  expect_allow writes \
+    'rg -n git\ commit\|git\ push workflow/hooks/deny-dangerous | head -n 10' \
+    "escaped repository alternation in read-only pipeline"
+  expect_allow writes "git status || true" "repository read with command-list fallback"
+  expect_allow writes \
+    "printf '%s\\n' \"\$(rg -n 'git commit|git push' workflow/hooks/deny-dangerous | head -n 1)\"" \
+    "repository alternation inside command substitution"
+
+  # Real repository-write stages stay blocked even when they use the same words and shell shapes.
+  expect_block writes "printf message | git commit -F -" "top-level pipeline commit remains blocked"
+  expect_block writes "printf message | git push origin main" "top-level pipeline push remains blocked"
+  expect_block writes "true || git commit -m x" "command-list commit remains blocked"
+  expect_block writes 'echo "$(git push origin main)"' "nested push remains blocked"
+  expect_block writes \
+    'publish_release() { git commit -m x; }; publish_release' \
+    "function-body commit remains blocked"
+  expect_block writes 'git -c alias.publish="push origin main" publish' "aliased push remains blocked"
 
   expect_copilot_block shell "rm -rf /" "rm -rf"
   expect_copilot_block paths "cat .env" ".env read"

@@ -1,7 +1,9 @@
 # patterns-writes.sh
 #
-# Repository and GitHub write policy extracted from writes.sh.
-# Sourced by deny-dangerous.sh; not executable on its own.
+# Protects the developer's repository and GitHub project from agent-authored writes.
+# Use through deny-dangerous.sh when an agent proposes a shell command that may
+# change history, publish work, or mutate remote project state.
+# Read-only status and search evidence remain available to the developer.
 # shellcheck shell=bash disable=SC2034,SC2154,SC2317,SC2319
 
 __goat_git_rest=""
@@ -258,40 +260,53 @@ is_gh_write_operation() {
   return 1
 }
 
+# Check each executable pipeline stage before the developer lets an agent run it.
+# Quoted search text stays evidence; real repository or GitHub write stages are refused.
 check_repository_segment() {
-  local cmd="$1"
-  local depth="${2:-0}"
-  prepare_segment_context "$cmd" "$depth" || return $?
-  cmd="$CMD_TRIMMED"
+  local developer_command="$1"
+  local policy_depth="${2:-0}"
+  prepare_segment_context "$developer_command" "$policy_depth" || return $?
+  developer_command="$CMD_TRIMMED"
 
-  if is_unredirected_unpiped_read_only "$cmd"; then
+  # A plain read-only command gives the developer evidence without changing project state.
+  if is_unredirected_unpiped_read_only "$developer_command"; then
     return 0
   fi
 
-  local repo_scan="${CMD_TRIMMED//||/__GOAT_OR__}"
-  local -a pipe_parts
-  local pipe_part
-  IFS='|' read -ra pipe_parts <<< "$repo_scan"
-  for pipe_part in "${pipe_parts[@]}"; do
-    local git_candidate
-    git_candidate=$(normalize_git_policy_candidate "$pipe_part")
-    if is_git_push "$git_candidate"; then
+  local -a repository_pipeline_stages=()
+  local repository_pipeline_stage=""
+  split_top_level_pipeline_stages_into repository_pipeline_stages "$developer_command"
+
+  # Every real stage is checked so a safe producer cannot hide a repository write downstream.
+  for repository_pipeline_stage in "${repository_pipeline_stages[@]}"; do
+    local repository_write_candidate=""
+    repository_write_candidate=$(normalize_git_policy_candidate "$repository_pipeline_stage")
+
+    # Remote publication is always left to the developer, regardless of wrappers or pipeline position.
+    if is_git_push "$repository_write_candidate"; then
       block "git push is not allowed. Ask the user to push manually." || return $?
     fi
-    if is_git_commit "$git_candidate"; then
+
+    # History creation is always left to the developer, even when an agent was asked to prepare it.
+    if is_git_commit "$repository_write_candidate"; then
       block "git commit is not allowed. Ask the user to commit manually." || return $?
     fi
-    if is_git_destructive "$git_candidate"; then
-      block "Destructive git operation (--no-verify / reset --hard / clean -f). Remove the flag, stash first, or run manually." || return $?
+
+    # Destructive history or cleanup flags require a manual developer decision and recovery plan.
+    if is_git_destructive "$repository_write_candidate"; then
+      block \
+        "Destructive git operation (--no-verify / reset --hard / clean -f). Remove the flag, stash first, or run manually." ||
+        return $?
     fi
   done
 
-  local gh_scan="${CMD_TRIMMED//||/__GOAT_OR__}"
-  local -a gh_pipe_parts
-  IFS='|' read -ra gh_pipe_parts <<< "$gh_scan"
-  for pipe_part in "${gh_pipe_parts[@]}"; do
-    if is_gh_write_operation "$pipe_part"; then
-      block "GitHub write via gh is not allowed. Draft the content or command and wait for explicit user approval." || return $?
+  # Remote project stages are checked separately so read-only Git evidence does not mask a GitHub mutation.
+  for repository_pipeline_stage in "${repository_pipeline_stages[@]}"; do
+    # A GitHub mutation is drafted for the developer instead of being sent without approval.
+    if is_gh_write_operation "$repository_pipeline_stage"; then
+      block \
+        "GitHub write via gh is not allowed. Draft the content or command and wait for explicit user approval." ||
+        return $?
     fi
   done
 

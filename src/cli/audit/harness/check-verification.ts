@@ -193,6 +193,7 @@ const hooksRegistered: HarnessCheck = {
   name: "Hook registrations in sync",
   concern: "verification",
   type: "integrity",
+  evidenceKind: "structural",
   provenance: verificationProvenance(
     "integrity",
     [
@@ -274,6 +275,7 @@ const commitGuidance: HarnessCheck = {
   name: "Commit guidance present",
   concern: "verification",
   type: "advisory",
+  evidenceKind: "structural",
   provenance: verificationProvenance("advisory", [
     "docs/harness-audit.md",
     "docs/coding-standards/git-commit.md",
@@ -488,6 +490,7 @@ const postTurnHookIntegrity: HarnessCheck = {
   name: "Post-turn hook integrity",
   concern: "verification",
   type: "metric",
+  evidenceKind: "structural",
   provenance: verificationProvenance("metric", [
     "docs/harness-audit.md",
     ".goat-flow/learning-loop/footguns/hooks.md",
@@ -530,10 +533,11 @@ const postTurnHookIntegrity: HarnessCheck = {
       );
     }
     const result = pass(findings, details);
+    // A universal safety guard helps the user, but it is not project-specific validation.
     if (safetyOnlyAgents.length > 0) {
       result.limits = [
         ...(result.limits ?? []),
-        `Post-turn safety is universal changed-content scanning only for ${safetyOnlyAgents.join(", ")}; it does not prove build, test, lint, typecheck, or format checks ran.`,
+        `Post-turn safety is universal changed-content scanning only for ${safetyOnlyAgents.join(", ")}; it is a guardrail, not project validation.`,
       ];
     }
     return result;

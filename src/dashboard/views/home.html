@@ -380,21 +380,25 @@
      * Summarize an agent card's most important next action.
      * Use when Home needs one short line before detailed findings.
      *
-     * @param agent - agent audit row; preview rows show expected setup surfaces instead
-     * @returns summary text for recommendations, integrity issues, warnings, or all-passing state
+     * @param agent - agent audit row; missing concerns contribute no issues or evidence limits
+     * @returns summary for the card; all-passing appears only when no issue or evidence boundary exists
      */
     recommendationSummary(agent) {
       // Preview cards tell users what will be checked after setup.
       if (agent?.preview) return 'Skills, hooks, instruction file';
+      // Missing concern data contributes no actions or evidence boundaries to the card.
       const recommendationCount = Object.values(agent?.concerns || {}).reduce((total, concern) => total + (concern.recommendations || []).length, 0);
-      const integrity = this.integrityFailCount(agent);
-      const warnings = this.scoreOnlyWarningCount(agent);
-      // No issues means the agent card can give a simple passing summary.
-      if (recommendationCount === 0 && integrity === 0 && warnings === 0) return 'All checks passing';
+      const evidenceLimitCount = Object.values(agent?.concerns || {}).reduce((total, concern) => total + (Array.isArray(concern.limits) ? concern.limits.length : 0), 0);
+      const integrityIssueCount = this.integrityFailCount(agent);
+      const scoreWarningCount = this.scoreOnlyWarningCount(agent);
+      // e.g. a user sees 100% on Home but still needs to know project validation was not executed.
+      if (recommendationCount === 0 && integrityIssueCount === 0 && scoreWarningCount === 0 && evidenceLimitCount > 0) return evidenceLimitCount + ' evidence limit' + (evidenceLimitCount === 1 ? '' : 's');
+      // No issues or evidence boundaries means the agent card can give a simple passing summary.
+      if (recommendationCount === 0 && integrityIssueCount === 0 && scoreWarningCount === 0) return 'All checks passing';
       // Integrity failures are highest priority because they affect trust in the report.
-      if (integrity > 0) return integrity + ' integrity issue' + (integrity === 1 ? '' : 's');
+      if (integrityIssueCount > 0) return integrityIssueCount + ' integrity issue' + (integrityIssueCount === 1 ? '' : 's');
       // Score warnings temper the grade even when they do not fail the audit.
-      if (warnings > 0) return warnings + ' score warning' + (warnings === 1 ? '' : 's');
+      if (scoreWarningCount > 0) return scoreWarningCount + ' score warning' + (scoreWarningCount === 1 ? '' : 's');
       return recommendationCount + ' recommendation' + (recommendationCount === 1 ? '' : 's');
     },
     /**
@@ -1261,23 +1265,31 @@
       activeView = 'prompts';
     },
     /**
-     * Return a concise concern finding summary for an agent.
+     * Return the first evidence boundary or finding shown when a user expands one Home concern.
+     * Use after an audit so a passing score does not look stronger than its recorded evidence.
      *
-     * @param agent - agent audit row; missing concern data uses the fallback concern
-     * @param key - concern key shown in the card; verification has special setup-blocked copy
-     * @returns finding summary shown in the expanded concern row
+     * @param agent - agent audit row; missing concern data shows the fallback attention state
+     * @param key - concern key shown in the card; an empty key uses fallback concern data
+     * @returns summary for the expanded row; empty evidence shows the normal clean or attention state
      */
     formatConcernSummary(agent, key) {
-      const item = this.concern(agent, key);
-      const findings = item.findings || [];
+      const concernResult = this.concern(agent, key);
+      const visibleFindings = concernResult.findings || [];
+      const evidenceLimits = Array.isArray(concernResult.limits) ? concernResult.limits : [];
       // Verification is support-only until setup finishes, so make that limitation explicit.
       if (key === 'verification' && this.setupBlocked()) return 'Setup incomplete; verification evidence is support-only until setup finishes.';
+      // e.g. the user expanded a 100% Verification row and needs to know the audit did not run project tests.
+      if (concernResult.status === 'pass' && evidenceLimits.length > 0) {
+        const remainingLimitCount = evidenceLimits.length - 1;
+        const remainingLimitLabel = remainingLimitCount > 0 ? ` (+${remainingLimitCount} more)` : '';
+        return `Evidence limit: ${evidenceLimits[0]}${remainingLimitLabel}`;
+      }
       // Passing-but-tempered concerns can still show the first advisory finding.
-      if (item.status === 'pass' && this.concernScore(agent, key) < 100 && findings.length > 0) return findings[0];
+      if (concernResult.status === 'pass' && this.concernScore(agent, key) < 100 && visibleFindings.length > 0) return visibleFindings[0];
       // Fully passing concerns should not show stale warning copy.
-      if (item.status === 'pass') return 'No active findings';
+      if (concernResult.status === 'pass') return 'No active findings';
       // Failing concerns show the first concrete finding when available.
-      if (findings.length > 0) return findings[0];
+      if (visibleFindings.length > 0) return visibleFindings[0];
       return 'Concern needs attention';
     },
     /**

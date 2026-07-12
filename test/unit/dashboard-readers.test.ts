@@ -1,5 +1,7 @@
 /**
- * Unit tests for browser-local dashboard payload readers.
+ * Browser-local dashboard reader tests for audit, agent, and task payloads.
+ * They protect fields the Home and Quality views use after the API response crosses into classic scripts.
+ * Use when wire contracts change so evidence limits and status metadata cannot disappear before rendering.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -61,6 +63,7 @@ type HelperContext = {
           details?: Record<string, unknown>;
         }[];
       } | null;
+      concerns: Record<string, { limits: string[] }> | null;
       enforcement: {
         capabilities: {
           id: string;
@@ -482,6 +485,50 @@ describe("dashboard payload readers", () => {
     );
     const expectedTwoPassesOutOfFourScore = 50;
     assert.equal(score, expectedTwoPassesOutOfFourScore);
+  });
+
+  it("preserves concern limits and treats older missing limits as an empty list", () => {
+    const report = loadHelpers().readDashboardReport({
+      status: "pass",
+      target: "/repo",
+      overall: { status: "pass" },
+      scopes: {
+        setup: scope(),
+        agent: scope(),
+        harness: scope(),
+      },
+      learningLoop: null,
+      recentLessons: [],
+      agentScores: [
+        {
+          id: "claude",
+          name: "Claude Code",
+          agent: scope(),
+          harness: scope(),
+          concerns: {
+            verification: {
+              status: "pass",
+              score: 100,
+              limits: ["Project validation was not executed."],
+            },
+            recovery: {
+              status: "pass",
+              score: 100,
+            },
+          },
+          enforcement: null,
+        },
+      ],
+    });
+
+    assert.deepEqual(
+      Array.from(report.agentScores[0]?.concerns?.verification?.limits ?? []),
+      ["Project validation was not executed."],
+    );
+    assert.deepEqual(
+      Array.from(report.agentScores[0]?.concerns?.recovery?.limits ?? []),
+      [],
+    );
   });
 
   it("preserves advisory enforcement matrix rows", () => {

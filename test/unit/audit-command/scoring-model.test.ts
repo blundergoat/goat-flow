@@ -1,7 +1,7 @@
 /**
- * Audit scoring model: how acknowledged vs unacknowledged advisory failures affect a concern's status and
- * scope.failures, the CheckResult/structured-details contract for dashboard consumers, deny-covers-secrets
- * pass/fail conditions, and that each renderer (json, markdown, sarif, text) handles details consistently.
+ * Audit scoring model: how acknowledged vs unacknowledged failures affect the operator-facing audit result.
+ * It protects concern scores, machine-readable evidence limits, and structured check details consumed by the
+ * CLI and dashboard. Renderer checks keep the same evidence usable in JSON without changing legacy output.
  */
 import {
   INSTRUCTION_FILES,
@@ -12,6 +12,7 @@ import {
   completeInstruction,
   computeHarness,
   describe,
+  getRepoAudit,
   it,
   makeCtx,
   makeReportWithDetails,
@@ -401,13 +402,33 @@ describe("Audit scoring model", () => {
     const metric = scope.checks.find(
       (c) => c.id === "post-turn-hook-integrity",
     )!;
+    const verificationCheckIds = new Set([
+      "hooks-registered",
+      "commit-guidance",
+      "evidence-before-claims",
+      "post-turn-hook-integrity",
+    ]);
+    const verificationChecks = scope.checks.filter((check) =>
+      verificationCheckIds.has(check.id),
+    );
 
     assert.equal(metric.status, "skipped");
     assert.equal(metric.displayStatus, "skipped");
     assert.equal(metric.impact, "none");
+    assert.equal(metric.evidenceKind, "structural");
+    assert.deepEqual(
+      verificationChecks.map((check) => check.evidenceKind),
+      ["structural", "structural", "structural", "structural"],
+    );
     assert.equal(concerns.verification.status, "pass");
     assert.equal(concerns.verification.score, 100);
     assert.equal(concerns.verification.metrics, 1);
+    assert.ok(
+      concerns.verification.limits.includes(
+        "This audit inspected verification guidance and hook configuration; it did not execute project build, test, lint, typecheck, or format commands.",
+      ),
+      JSON.stringify(concerns.verification.limits),
+    );
     assert.equal(
       concerns.verification.limits.some((limit) =>
         limit.includes("No post-turn hooks installed"),
@@ -466,7 +487,13 @@ describe("Audit scoring model", () => {
     );
     assert.ok(
       concerns.verification.limits.some((limit) =>
-        limit.includes("does not prove build, test, lint, typecheck"),
+        limit.includes("it is a guardrail, not project validation"),
+      ),
+      JSON.stringify(concerns.verification.limits),
+    );
+    assert.ok(
+      concerns.verification.limits.some((limit) =>
+        limit.includes("did not execute project build, test, lint"),
       ),
       JSON.stringify(concerns.verification.limits),
     );
@@ -475,6 +502,12 @@ describe("Audit scoring model", () => {
         finding.includes("post-turn hook runs validation"),
       ),
       false,
+    );
+    assert.equal(
+      concerns.verification.limits.filter((limit) =>
+        limit.includes("did not execute project build, test, lint"),
+      ).length,
+      1,
     );
   });
 
@@ -532,6 +565,67 @@ describe("Audit scoring model", () => {
 });
 
 describe("Audit scoring model", () => {
+  it("keeps empty recovery storage valid while disclosing that resumability was not demonstrated", () => {
+    const ctx = makeCtx({
+      fs: stubFS({
+        listDir: () => [],
+      }),
+    });
+    const { scope, concerns } = computeHarness(ctx);
+    const recoveryCheckIds = new Set(["milestone-tracking", "session-logs"]);
+    const recoveryChecks = scope.checks.filter((check) =>
+      recoveryCheckIds.has(check.id),
+    );
+
+    assert.equal(concerns.recovery.status, "pass");
+    assert.equal(concerns.recovery.score, 100);
+    assert.deepEqual(
+      recoveryChecks.map((check) => check.evidenceKind),
+      ["structural", "structural"],
+    );
+    assert.deepEqual(
+      recoveryChecks.map((check) => check.assurance),
+      ["limited", "limited"],
+    );
+    assert.ok(
+      concerns.recovery.limits.includes(
+        "Recovery storage is available, but this audit did not validate the current objective, completed work, last verification, next action, or end-to-end resumability.",
+      ),
+      JSON.stringify(concerns.recovery.limits),
+    );
+  });
+
+  it("keeps unrelated concern scores, statuses, and limits unchanged", () => {
+    const { concerns } = computeHarness(makeCtx());
+
+    assert.deepEqual(
+      {
+        status: concerns.context.status,
+        score: concerns.context.score,
+        limits: concerns.context.limits,
+      },
+      { status: "fail", score: 40, limits: [] },
+    );
+    assert.deepEqual(
+      {
+        status: concerns.constraints.status,
+        score: concerns.constraints.score,
+        limits: concerns.constraints.limits,
+      },
+      { status: "fail", score: 75, limits: [] },
+    );
+    assert.deepEqual(
+      {
+        status: concerns.feedback_loop.status,
+        score: concerns.feedback_loop.score,
+        limits: concerns.feedback_loop.limits,
+      },
+      { status: "pass", score: 100, limits: [] },
+    );
+  });
+});
+
+describe("Audit scoring model", () => {
   it("non-json audit renderers ignore structured details", () => {
     const { scope } = computeHarness(makeCtx());
     const reportWithDetails = makeReportWithDetails(scope);
@@ -556,6 +650,23 @@ describe("Audit scoring model", () => {
       renderAuditSarif(reportWithDetails),
       renderAuditSarif(reportWithoutDetails),
     );
+  });
+
+  it("keeps evidence limits adjacent to passing concerns in terminal and Markdown output", () => {
+    const report = getRepoAudit({ agentFilter: "codex", harness: true });
+    assertExists(report.concerns);
+    const terminalOutput = renderAuditText(report);
+    const markdownOutput = renderAuditMarkdown(report);
+    const evidenceLimits = [
+      ...report.concerns.verification.limits,
+      ...report.concerns.recovery.limits,
+    ];
+
+    // Both text formats show every machine-readable boundary without changing the concern's PASS label.
+    for (const evidenceLimit of evidenceLimits) {
+      assert.ok(terminalOutput.includes(`Limit: ${evidenceLimit}`));
+      assert.ok(markdownOutput.includes(`*Limit:* ${evidenceLimit}`));
+    }
   });
 });
 

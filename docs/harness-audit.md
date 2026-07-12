@@ -27,6 +27,14 @@ Each harness check carries a `type` tag that determines whether (and how) a fail
 - `metric` checks never affect concern status.
 - Overall harness `status` is `pass` iff every concern's `status` is `pass`.
 
+### Evidence limits on passing concerns
+
+A passing status and 100 score mean the configured structural checks passed; they do not claim that the audit executed project commands or proved a complete recovery handoff. The machine-readable `concerns.<key>.limits` array records those non-gating evidence boundaries without changing status or score.
+
+Terminal and Markdown output label each entry as `Limit`. Home and Quality label it `Evidence limit` beside the affected passing concern, and all four quality-prompt modes include the same compact audit summary. Older payloads without `limits` remain valid and show no evidence-limit message.
+
+Verification states that the audit inspected guidance and hook configuration without executing build, test, lint, typecheck, or format commands. Recovery states that storage exists without proving the current objective, completed work, last verification, next action, or end-to-end resumability.
+
 ### Acknowledging an advisory check
 
 ```yaml
@@ -103,7 +111,7 @@ Verification loops are consistently reported as the single highest-impact harnes
 - `hooks-registered` - hook registrations and hook files are in sync (no registered-but-missing, no exists-but-unregistered) for each agent
 - `commit-guidance` - commit guidance is present at the canonical `docs/coding-standards/git-commit.md`. Old GitHub commit-guidance locations are reported as misplaced with a prompt to move the content.
 - `evidence-before-claims` - metric. Present agent instruction files carry the Hallucination red-flags clauses and the pointer to `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`). Missing coverage lowers the concern score but does not fail the harness scope in v1.7.0.
-- `post-turn-hook-integrity` - metric. For agents whose manifest declares a post-turn event, reports whether the registered post-turn hook is the universal safety guard or a custom hook with literal validation commands, and whether validation hooks exit 0 unconditionally or mask failures. Missing or masked hooks lower the concern score without failing the harness scope. Agents without a post-turn event are skipped as not applicable. Safety-only hooks pass with a `limits` caveat that no build/test/lint validation ran.
+- `post-turn-hook-integrity` - metric. For agents whose manifest declares a post-turn event, reports whether the registered post-turn hook is the universal safety guard or a custom hook with literal validation commands, and whether validation hooks exit 0 unconditionally or mask failures. Missing or masked hooks lower the concern score without failing the harness scope. Agents without a post-turn event are skipped as not applicable. Safety-only hooks carry a guardrail-specific caveat; the Verification concern separately states that the audit itself did not execute project validation.
 
 **Not checked here:** project test-command configuration, lint command presence, Ask First quality, verification effectiveness. The shipped `post-turn-safety` hook is universal changed-content safety scanning, not project validation. goat-flow no longer ships a project-validation Stop hook; audit still does not judge whether project-specific commands are sufficient.
 
@@ -122,7 +130,7 @@ Agents that run for minutes or hours need durable state. Without recovery mechan
 - `milestone-tracking` - `.goat-flow/plans/` directory exists. Does not score task count, checkbox completion, milestone status, testing gates, roadmap progress, or recency. Empty, planned, active, and long-term roadmap files are valid local workflow state.
 - `session-logs` - `.goat-flow/logs/sessions/` directory exists. Does not count entries.
 
-**Not checked here:** entry counts, recency, content quality of task or session files. A fresh install passes.
+**Not checked here:** entry counts, recency, content quality of task or session files, current objective, completed work, last verification, next action, or end-to-end resumability. A fresh install passes with the Recovery evidence limit.
 
 
 

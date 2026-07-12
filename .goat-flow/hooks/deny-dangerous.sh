@@ -4,10 +4,10 @@
 # deny-dangerous.sh
 # goat-flow-hook-version: 1.13.1
 #
-# Single goat-flow PreToolUse guardrail dispatcher. It contains the shared
-# payload parser/normalizer and sources policy modules from the committed
-# .goat-flow/hooks/deny-dangerous/ store, then runs destructive-shell, secret-path, and
-# repository-write checks in one process.
+# Checks an agent's proposed shell command before the developer lets it run.
+# Use this dispatcher from an agent hook to keep safe evidence gathering available
+# while destructive actions, secret reads, and repository writes remain blocked.
+# It gives every supported agent the same policy result and recovery message.
 
 set -uo pipefail
 
@@ -1624,95 +1624,124 @@ normalize_command_candidate() {
   printf '%s' "$c"
 }
 
+# Split a developer's command at executable top-level boundaries before policy checks.
+# Pipeline mode also separates real pipe stages while preserving quoted search text.
 split_command_segments_into() {
   local -n __goat_split_out__="$1"
-  local input="$2"
+  local developer_command="$2"
+  local split_pipeline_stages="${3:-0}"
   __goat_split_out__=()
-  local current=""
-  local char=""
-  local next=""
-  local in_single=0
-  local in_double=0
-  local escaped=0
-  local subst_depth=0
-  local i=0
+  local current_policy_stage=""
+  local command_character=""
+  local next_command_character=""
+  local in_single_quote=0
+  local in_double_quote=0
+  local previous_character_escaped=0
+  local command_substitution_depth=0
+  local command_index=0
 
-  for ((i = 0; i < ${#input}; i++)); do
-    char="${input:i:1}"
+  # Each character extends the stage the developer submitted or closes a real shell boundary.
+  for ((command_index = 0; command_index < ${#developer_command}; command_index++)); do
+    command_character="${developer_command:command_index:1}"
 
-    if [[ "$escaped" -eq 1 ]]; then
-      current+="$char"
-      escaped=0
+    # An escaped character is user data, so a protected-looking pipe stays inside the current stage.
+    if [[ "$previous_character_escaped" -eq 1 ]]; then
+      current_policy_stage+="$command_character"
+      previous_character_escaped=0
       continue
     fi
 
-    if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
-      current+="$char"
-      escaped=1
+    # Outside single quotes, a backslash protects the user's next search or path character.
+    if [[ "$in_single_quote" -eq 0 && "$command_character" == "\\" ]]; then
+      current_policy_stage+="$command_character"
+      previous_character_escaped=1
       continue
     fi
 
-    if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
-      if [[ "$in_double" -eq 1 ]]; then
-        in_double=0
+    # Double-quoted text remains one user value instead of becoming executable pipeline stages.
+    if [[ "$in_single_quote" -eq 0 && "$command_character" == '"' ]]; then
+      # Closing quotes return later shell operators to executable policy scope.
+      if [[ "$in_double_quote" -eq 1 ]]; then
+        in_double_quote=0
       else
-        in_double=1
+        in_double_quote=1
       fi
-      current+="$char"
+      current_policy_stage+="$command_character"
       continue
     fi
 
-    if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
-      if [[ "$in_single" -eq 1 ]]; then
-        in_single=0
+    # Single-quoted patterns remain search data even when they name protected operations.
+    if [[ "$in_double_quote" -eq 0 && "$command_character" == "'" ]]; then
+      # Closing quotes return later shell operators to executable policy scope.
+      if [[ "$in_single_quote" -eq 1 ]]; then
+        in_single_quote=0
       else
-        in_single=1
+        in_single_quote=1
       fi
-      current+="$char"
+      current_policy_stage+="$command_character"
       continue
     fi
 
-    if [[ "$in_single" -eq 0 && "$in_double" -eq 0 ]]; then
-      next="${input:i+1:1}"
-      # Command/process substitution openers ( $(  <(  >( ) start a no-split
-      # region: control operators inside them are not top-level chain
-      # separators. check_command_substitutions recurses into the interior, so
-      # those operators are still policy-checked at the correct level. Plain
-      # (...) subshells are deliberately NOT tracked here - they are not
-      # recursed into elsewhere, so they must stay splittable to avoid a
-      # (cmd && rm -rf /) bypass.
-      if [[ "$next" == '(' && ( "$char" == '$' || "$char" == '<' || "$char" == '>' ) ]]; then
-        current+="$char$next"
-        subst_depth=$((subst_depth + 1))
-        i=$((i + 1))
+    # Only unquoted operators can change what the agent would execute for the developer.
+    if [[ "$in_single_quote" -eq 0 && "$in_double_quote" -eq 0 ]]; then
+      next_command_character="${developer_command:command_index+1:1}"
+
+      # Command/process substitution openers are checked recursively, so inner pipes stay out of this stage list.
+      if [[ "$next_command_character" == '(' ]] &&
+         [[ "$command_character" == '$' || "$command_character" == '<' || "$command_character" == '>' ]]; then
+        current_policy_stage+="$command_character$next_command_character"
+        command_substitution_depth=$((command_substitution_depth + 1))
+        command_index=$((command_index + 1))
         continue
       fi
-      if [[ "$subst_depth" -gt 0 ]]; then
-        if [[ "$char" == '(' ]]; then
-          subst_depth=$((subst_depth + 1))
-        elif [[ "$char" == ')' ]]; then
-          subst_depth=$((subst_depth - 1))
+
+      # Inner substitution operators stay together until the recursive policy pass evaluates them.
+      if [[ "$command_substitution_depth" -gt 0 ]]; then
+        # Nested parentheses keep the substitution open until its matching close.
+        if [[ "$command_character" == '(' ]]; then
+          command_substitution_depth=$((command_substitution_depth + 1))
+        # The matching close lets subsequent outer operators affect the developer's command.
+        elif [[ "$command_character" == ')' ]]; then
+          command_substitution_depth=$((command_substitution_depth - 1))
         fi
-        current+="$char"
+        current_policy_stage+="$command_character"
         continue
       fi
-      if [[ "$char$next" == "&&" || "$char$next" == "||" ]]; then
-        __goat_split_out__+=("$current")
-        current=""
-        i=$((i + 1))
+
+      # Command-list operators start a new action without creating empty pipeline stages.
+      if [[ "$command_character$next_command_character" == "&&" ||
+            "$command_character$next_command_character" == "||" ]]; then
+        __goat_split_out__+=("$current_policy_stage")
+        current_policy_stage=""
+        command_index=$((command_index + 1))
         continue
       fi
-      if [[ "$char" == ";" || "$char" == $'\n' ]]; then
-        __goat_split_out__+=("$current")
-        current=""
+
+      # A real top-level pipe exposes the next executable stage to repository policy.
+      if [[ "$split_pipeline_stages" -eq 1 && "$command_character" == "|" ]]; then
+        __goat_split_out__+=("$current_policy_stage")
+        current_policy_stage=""
+        continue
+      fi
+
+      # Semicolons and newlines start the next action the agent wants to run.
+      if [[ "$command_character" == ";" || "$command_character" == $'\n' ]]; then
+        __goat_split_out__+=("$current_policy_stage")
+        current_policy_stage=""
         continue
       fi
     fi
 
-    current+="$char"
+    current_policy_stage+="$command_character"
   done
 
-  __goat_split_out__+=("$current")
+  __goat_split_out__+=("$current_policy_stage")
+}
+
+# Split a proposed shell command into the real pipeline stages repository policy must inspect.
+# Use it when quoted or escaped pipes may be search text rather than executable boundaries.
+split_top_level_pipeline_stages_into() {
+  split_command_segments_into "$1" "$2" 1
 }
 
 block() {

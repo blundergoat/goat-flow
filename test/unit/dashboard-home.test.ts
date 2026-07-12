@@ -1,5 +1,7 @@
 /**
- * Unit tests for the Home dashboard summary object embedded in home.html.
+ * Dashboard summary tests for the Home and Quality views users scan after an audit.
+ * They execute Alpine helpers in a browser-shaped VM and pin the labels shown beside concern scores.
+ * Use when audit presentation changes so passing scores cannot hide evidence limits.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -15,6 +17,13 @@ const HOME_VIEW_PATH = resolve(
   "dashboard",
   "views",
   "home.html",
+);
+const QUALITY_VIEW_PATH = resolve(
+  PROJECT_ROOT,
+  "src",
+  "dashboard",
+  "views",
+  "quality.html",
 );
 const SETUP_QUALITY_PATH = resolve(
   PROJECT_ROOT,
@@ -62,6 +71,13 @@ type HomeModel = {
   runPrimaryAction(): Promise<void> | void;
   /** Return the section metadata text for the Home harness summary. */
   sectionMeta(): string;
+};
+
+type QualityBaselineModel = {
+  /** Return evidence-limit text shown under one Quality concern score. */
+  concernEvidenceLimitSummary(concern: Record<string, unknown> | null): string;
+  /** Return the baseline-card action summary for one audited agent. */
+  recommendationSummary(agent: Record<string, unknown> | null): string;
 };
 
 type LaunchPresetCall = {
@@ -152,6 +168,29 @@ function loadHomeRuntime(
   runInContext(`globalThis.__home = ({${body}\n});`, context);
   const runtimeContext = context as HomeRuntimeContext;
   return { home: runtimeContext.__home, context: runtimeContext };
+}
+
+/** Load the Quality baseline-card helpers a user triggers by opening the Quality view. */
+function loadQualityBaselineModel(): QualityBaselineModel {
+  const source = readFileSync(QUALITY_VIEW_PATH, "utf-8");
+  const startMarker = 'x-data="{\n            concernMeta:';
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, "quality.html should contain baseline x-data");
+  const bodyStart = start + 'x-data="{'.length;
+  const bodyEnd = source.indexOf('\n          }"', bodyStart);
+  assert.notEqual(
+    bodyEnd,
+    -1,
+    "quality.html baseline x-data should be extractable",
+  );
+  const body = source.slice(bodyStart, bodyEnd);
+  const context = createContext({
+    report: { agentScores: [] },
+    qualityAgent: "claude",
+  });
+  runInContext(`globalThis.__quality = ({${body}\n});`, context);
+  return (context as typeof context & { __quality: QualityBaselineModel })
+    .__quality;
 }
 
 /** Load setup-prompt helpers into a VM so request-ordering can be tested without a browser. */
@@ -560,6 +599,64 @@ describe("Home harness summary", () => {
     assert.equal(
       home.formatConcernSummary(agent, "verification"),
       "No post-turn hooks installed",
+    );
+  });
+
+  it("shows a passing concern's evidence limit instead of a clean-state summary", () => {
+    const evidenceLimit =
+      "This audit did not execute project build, test, lint, typecheck, or format commands.";
+    const home = loadHomeModel({
+      scopes: {
+        setup: {
+          status: "pass",
+          checks: [{ id: "config-parses", status: "pass" }],
+        },
+      },
+      agentScores: [],
+    });
+    const agent = {
+      concerns: {
+        verification: concern("pass", 100, {
+          limits: [evidenceLimit, "Runtime receipts were not inspected."],
+        }),
+      },
+    };
+
+    assert.equal(
+      home.formatConcernSummary(agent, "verification"),
+      `Evidence limit: ${evidenceLimit} (+1 more)`,
+    );
+    assert.equal(home.recommendationSummary(agent), "2 evidence limits");
+  });
+
+  it("shows the same evidence-limit vocabulary beside Quality concern scores", () => {
+    const evidenceLimit = "End-to-end resumability was not demonstrated.";
+    const quality = loadQualityBaselineModel();
+    const qualitySource = readFileSync(QUALITY_VIEW_PATH, "utf-8");
+
+    assert.equal(
+      quality.concernEvidenceLimitSummary({ limits: [evidenceLimit] }),
+      `Evidence limit: ${evidenceLimit}`,
+    );
+    assert.equal(quality.concernEvidenceLimitSummary({}), "");
+    assert.equal(
+      quality.recommendationSummary({
+        concerns: {
+          context: concern("pass", 100),
+          constraints: concern("pass", 100),
+          verification: concern("pass", 100, {
+            limits: [evidenceLimit],
+          }),
+          recovery: concern("pass", 100),
+          feedback_loop: concern("pass", 100),
+        },
+        harness: { checks: [] },
+      }),
+      "1 evidence limit",
+    );
+    assert.match(
+      qualitySource,
+      /x-text="concernEvidenceLimitSummary\(selectedAgent\.concerns\[ck\]\)"/,
     );
   });
 

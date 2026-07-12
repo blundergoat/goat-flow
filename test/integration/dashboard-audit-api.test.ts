@@ -427,14 +427,35 @@ describe("dashboard /api/audit", () => {
       claude.concerns,
       "Dashboard report agentScores[].concerns",
     );
+    // Every concern card receives the arrays it needs before Home or Quality chooses what to show.
     for (const concern of Object.values(concerns)) {
       const entry = expectRecord(concern, "Harness concern");
       assert.match(String(entry.status), /^(pass|fail)$/);
       assert.equal(typeof entry.score, "number");
       assert.ok(Array.isArray(entry.findings));
+      assert.ok(Array.isArray(entry.limits));
       assert.ok(Array.isArray(entry.recommendations));
       assert.ok(Array.isArray(entry.howToFix));
     }
+
+    const verification = expectRecord(
+      concerns.verification,
+      "Dashboard Verification concern",
+    );
+    const recovery = expectRecord(
+      concerns.recovery,
+      "Dashboard Recovery concern",
+    );
+    assert.ok(
+      (verification.limits as unknown[]).some((limit) =>
+        String(limit).includes("did not execute project build, test, lint"),
+      ),
+    );
+    assert.ok(
+      (recovery.limits as unknown[]).some((limit) =>
+        String(limit).includes("end-to-end resumability"),
+      ),
+    );
   });
 
   it("with quality=true uses dashboard-summary facts without changing the shared report surface", async () => {

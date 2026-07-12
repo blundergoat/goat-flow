@@ -1,19 +1,8 @@
 /**
- * Cross-surface contract tests for the quality report JSON contract (M15,
- * 1.13.0).
- *
- * A user can be asked to write a quality report from three surfaces: the CLI
- * agent-setup prompt (`goat-flow quality --agent <id>`), the CLI focused
- * prompts (process/harness/skills modes), and the dashboard's Quality launch
- * prompt. All three must demand the same required fields, or
- * `goat-flow quality validate`/`history`/`diff` will reject or mis-read
- * reports depending on where the run started.
- *
- * The two CLI surfaces render through ONE shared builder
- * (`appendQualityReportContract`), so these tests mostly guard its options
- * wiring. The dashboard is compiled as an isolated browser script and cannot
- * import that builder - its mirror in `dashboard-setup-quality.ts` is pinned
- * here at source-text level instead.
+ * Cross-surface quality-prompt contract for CLI and dashboard users.
+ * It keeps report fields, audit evidence limits, and validation instructions consistent across every mode.
+ * Use when prompt composition changes so a report launched from one screen is not weaker than another.
+ * The dashboard mirror stays source-pinned because its classic script cannot import the CLI builder.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -50,7 +39,12 @@ const REQUIRED_FINDING_FIELDS = [
   "delta_tag",
 ] as const;
 
-/** Build a minimal QualityInput for a composer run. */
+const PROJECT_VALIDATION_LIMIT =
+  "This audit inspected verification guidance and hook configuration; it did not execute project build, test, lint, typecheck, or format commands.";
+const RECOVERY_RESUMABILITY_LIMIT =
+  "Recovery storage is available, but this audit did not validate the current objective, completed work, last verification, next action, or end-to-end resumability.";
+
+/** Build the prompt input a user gets before any audit evidence is available. */
 function makeInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
   return {
     agent: "claude",
@@ -63,7 +57,57 @@ function makeInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
   };
 }
 
-/** Assert one rendered prompt (or source text) carries the whole contract. */
+/** Build one complete concern so prompt tests can vary only the evidence limits users need to see. */
+function auditConcern(limits: string[] = []) {
+  return {
+    status: "pass" as const,
+    score: 100,
+    findings: [],
+    limits,
+    recommendations: [],
+    howToFix: [],
+    integrityPass: 1,
+    integrityFail: 0,
+    advisoryPass: 0,
+    advisoryFail: 0,
+    advisoryAcknowledged: 0,
+    metrics: 0,
+  };
+}
+
+/** Build the passing audit a user sees when structural scores need explicit evidence limits. */
+function makeLimitedAuditReport(): NonNullable<QualityInput["auditReport"]> {
+  const emptyScope = {
+    status: "pass" as const,
+    checks: [],
+    failures: [],
+    summary: {},
+  };
+  return {
+    command: "audit",
+    status: "pass",
+    target: "/tmp/example-project",
+    harness: true,
+    scopes: {
+      setup: emptyScope,
+      agent: emptyScope,
+      harness: emptyScope,
+    },
+    concerns: {
+      context: auditConcern(),
+      constraints: auditConcern(),
+      verification: auditConcern([PROJECT_VALIDATION_LIMIT]),
+      recovery: auditConcern([RECOVERY_RESUMABILITY_LIMIT]),
+      feedback_loop: auditConcern(),
+    },
+    enforcement: [],
+    drift: null,
+    content: null,
+    overall: { status: "pass" },
+  };
+}
+
+/** Assert a prompt carries every field needed to save and validate the user's quality report. */
 function assertCarriesContract(surface: string, text: string): void {
   // Every top-level field the schema parser requires must appear in the shape.
   for (const field of REQUIRED_TOP_LEVEL_FIELDS) {
@@ -109,6 +153,59 @@ describe("quality report contract: CLI surfaces", () => {
   it("focused (process) prompt carries the full contract", () => {
     const payload = composeQuality(makeInput("process"));
     assertCarriesContract("focused/process", payload.prompt);
+  });
+
+  it("embeds live Verification and Recovery limits in every quality mode prompt and summary", () => {
+    const qualityModes = [
+      "agent-setup",
+      "process",
+      "harness",
+      "skills",
+    ] as const;
+    const auditReport = makeLimitedAuditReport();
+
+    // A user choosing any Quality mode must receive the same deterministic evidence boundaries.
+    for (const qualityMode of qualityModes) {
+      const payload = composeQuality({
+        ...makeInput(qualityMode),
+        auditReport,
+      });
+      assert.ok(
+        payload.prompt.includes(PROJECT_VALIDATION_LIMIT),
+        `${qualityMode}: prompt omitted Verification limit`,
+      );
+      assert.ok(
+        payload.prompt.includes(RECOVERY_RESUMABILITY_LIMIT),
+        `${qualityMode}: prompt omitted Recovery limit`,
+      );
+      assert.ok(
+        payload.auditSummary.includes(PROJECT_VALIDATION_LIMIT),
+        `${qualityMode}: auditSummary omitted Verification limit`,
+      );
+      assert.ok(
+        payload.auditSummary.includes(RECOVERY_RESUMABILITY_LIMIT),
+        `${qualityMode}: auditSummary omitted Recovery limit`,
+      );
+    }
+  });
+
+  it("keeps the focused cache-miss contract when no audit report is available", () => {
+    const focusedModes = ["process", "harness", "skills"] as const;
+
+    // A fast dashboard launch without cached evidence must disclose the gap instead of inventing limits.
+    for (const qualityMode of focusedModes) {
+      const payload = composeQuality({
+        ...makeInput(qualityMode),
+        auditUnavailableReason: "fast-cache-only",
+      });
+      assert.match(
+        payload.prompt,
+        /Audit: NOT LOADED \(FAST CACHE-ONLY MODE\)/,
+      );
+      assert.match(payload.auditSummary, /fast cache-only mode/);
+      assert.equal(payload.prompt.includes(PROJECT_VALIDATION_LIMIT), false);
+      assert.equal(payload.prompt.includes(RECOVERY_RESUMABILITY_LIMIT), false);
+    }
   });
 
   it("prior-report runs demand delta_tag; fresh runs forbid it", () => {

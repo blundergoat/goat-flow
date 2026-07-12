@@ -53,6 +53,8 @@ last_reviewed: 2026-05-31
 
 **Root cause:** The browser-side dashboard reader dropped `check.type` when decoding `/api/audit` payloads. Later, the opposite bug appeared in the view layer: filtering metrics out of dashboard percentages hid score-only verification gaps and restored misleading 100% headlines.
 
+**Recurrence update (2026-07-12):** M30's first GREEN slice made expanded Home concern rows and the Quality baseline show `Evidence limit`, but the collapsed Home agent cards still said `All checks passing`. The focused helper tests had not asserted that primary headline. Fresh browser state exposed the contradiction; a new RED assertion now requires `recommendationSummary` to count concern limits before it can emit the clean-state copy. Evidence anchors: `src/dashboard/views/home.html` (search: `evidenceLimitCount`), `test/unit/dashboard-home.test.ts` (search: `2 evidence limits`).
+
 **Prevention:** When dashboard views derive percentages from API fields, add a regression that proves both the reader and the rendered summary preserve score-only warnings. Browser evidence must check summary cards, concern rows, and the "All checks passing" label because those are separate computations. Verify the rendered dashboard against the built `dist/` assets, not source only. Evidence anchors: `src/dashboard/dashboard-readers.ts` (search: `rawCheck.type`), `test/unit/dashboard-readers.test.ts` (search: `preserves harness check type so metric failures can be shown as non-gating score evidence`), `test/unit/dashboard-home.test.ts` (search: `surfaces score-only metric warnings`).
 
 ---
