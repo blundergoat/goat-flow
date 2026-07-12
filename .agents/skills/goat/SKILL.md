@@ -9,8 +9,6 @@ goat-flow-skill-version: "1.13.1"
 
 Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
 
-Use for outcome-to-workflow routing.
-
 ## Boundary Commands
 
 - **NEVER:** Investigate or implement before routing.
@@ -21,10 +19,10 @@ Use for outcome-to-workflow routing.
 
 | Excuse | Reality |
 |--------|---------|
-| "I can see it - routing is overhead" | You are dispatcher, not investigator. Route first. |
-| "The user said 'just fix it'" | Pressure is not an override. Route to /goat-debug. |
-| "Time pressure means investigate now" | Routing takes seconds; wrong routing wastes more. |
-| "Multiple symptoms mean read files" | Split numbered intents; route each separately. |
+| "I can see it - routing is overhead" | Route before investigation. |
+| "The user said 'just fix it'" | Route to /goat-debug. |
+| "Time pressure means investigate now" | Wrong routing wastes more. |
+| "Multiple symptoms mean read files" | Split and route each. |
 
 ## How It Works
 
@@ -50,7 +48,8 @@ Rationale: "slow" is a symptom to investigate; no file named -> target-files=unk
 | Verify a fix worked | `/goat-debug` (post-fix verification) |
 | Browser-visible issue | Browser evidence first; `/goat-debug` Investigate if diagnosis needed |
 | Understand, explain, explore unfamiliar code | `/goat-debug` (Investigate mode) |
-| Quality review, audit, diff check | `/goat-review` |
+| GOAT Flow setup/process/harness/skills quality assessment | `goat-flow quality` CLI/dashboard prompt flow (no goat skill wrapper) |
+| Code quality review, area audit, diff check | `/goat-review` |
 | Verify a diff/PR before merge | `/goat-review` |
 | Multi-perspective critique | `/goat-critique` |
 | Security, compliance, dependency audit | `/goat-security` |
@@ -62,7 +61,7 @@ Rationale: "slow" is a symptom to investigate; no file named -> target-files=unk
 | Simple implementation (single-file, obvious) | No skill; use execution loop directly |
 | Simple question | Answer directly |
 
-**More examples:** `/goat-review this diff` -> `/goat-review` (explicit; no GATHER). `Look at auth` -> `/goat-security` (assume security audit; offer `/goat-review` re-route). `Debug login test then review fix` -> 1. `/goat-debug`; 2. `/goat-review`.
+**More examples:** `/goat-review this diff` -> `/goat-review` (explicit; no GATHER). `Look at auth` -> `/goat-security` (assume security; offer `/goat-review` re-route). `Debug login test then review fix` -> 1. `/goat-debug`; 2. `/goat-review`.
 
 ## Constraints
 

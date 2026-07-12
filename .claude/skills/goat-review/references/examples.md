@@ -54,7 +54,8 @@ Use this shape when Pass 1 raises a plausible template or output-format suspicio
 
 The refuted-suspicion example above walks one Pass 1 -> Pass 2 transition. This example shows the **entire Output Format filled in**, so a cold reader sees how every section is populated with real values rather than the empty template in `SKILL.md` (search: `## Output Format`). Following the convention in `## Finding Format Examples` below, it uses real `goat-review` anchors: treat it as the block to emit when a reviewed diff *weakens* the cited rules. The illustrative review surface is a small PR that (a) replaces the Blast Radius Rule's external call-site grep with a `// TODO` comment and (b) deletes the refuter authentication pre-flight. Proof class is `STATIC` for both findings because the review surface is documentation: the reviewer verifies by re-reading the live file, not by executing it.
 
-**Review surface:** PR mode (`gh pr view 412`); base `origin/main`, head `a1b2c3d`; 2 files, 86 changed lines; under the 20-file / 3000-line chunking threshold, so no chunking. Copilot reviewed the PR. Pass 3 auto-triggered by the `[MUST:needs-decision]` finding (trigger 3); the refuter received the full findings list and upheld both.
+**Review surface:** PR mode (`gh pr view 412`); base `origin/main`, head `a1b2c3d`; 2 files, 86 changed lines; under the 20-file / 3000-line chunking threshold, so no chunking. Copilot reviewed the PR. Pass 3 was offered because the `[MUST:needs-decision]` finding matched trigger 3. After the runtime, authentication, findings-only payload, one-call cap, cost impact, and local fallback were disclosed,
+the user explicitly approved one refuter call; the refuter received the full findings list and upheld both.
 
 ```markdown
 ## TL;DR

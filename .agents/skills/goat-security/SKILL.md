@@ -46,6 +46,8 @@ Use when assessing security posture before release, after auth/input/storage cha
 4. For diff mode, report changed file count, risky buckets touched, and whether each issue is on an added line, modified context, or clearly pre-existing context.
 5. Present `CONFIRMED` findings first. If `PROBABLE`/`THEORETICAL` leads are withheld, include count, compact titles, and exact evidence needed. Note what was not checked.
 
+**Quick-stop boundary:** Stop after step 5. A Quick Scan MUST NOT enter the Full Assessment Path. If a Phase 5 specialist trigger appears, recommend Full Assessment instead of running or waiting for a specialist.
+
 ## Full Assessment Path
 
 ### Phase 0 - Tool Detection / Lead Gathering
@@ -126,6 +128,8 @@ For diff mode also record:
 - **THEORETICAL** - policy/control gap without a live exploit path; evidence is `INFERRED`
 
 ### Phase 5 - Severity, Review Posture, and Cross-Check
+
+**Full Assessment-only specialist cross-check:** The trigger list below applies only after the user selects Full Assessment.
 
 Rank severity from exploitability first, then blast radius, then privileged-surface sensitivity:
 - Critical: external or low-friction exploit on auth, secrets, CI/CD, agent surface, or arbitrary execution

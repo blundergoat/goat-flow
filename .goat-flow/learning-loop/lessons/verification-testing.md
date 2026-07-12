@@ -317,3 +317,31 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **Prevention:** When an optional external verification pass is declined, preserve only degradation flags earned by the completed local workflow. Name forbidden decline-only flags in the skill and pin them in a contract test. Evidence anchors: `workflow/skills/goat-review/SKILL.md` (search: `Preserve only degradation flags`), `test/contract/skill-hardening-contracts.test.ts` (search: `solely because the user declined`).
 
 ---
+
+## Lesson: Depth headings do not create runtime stop boundaries
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** M33's native `/goat-security` Quick Scan entered the specialist rule located under Full Assessment, waited through four empty collaboration cycles, and added about eight minutes without changing the primary result.
+
+**Root cause:** The document grouped specialist work under `Full Assessment Path` but never told Quick Scan where to stop. The agent followed a later trigger literally and treated section placement as weaker than the trigger.
+
+**Fix:** Quick Scan now stops after its fifth step and recommends Full Assessment when a specialist trigger appears; Phase 5 labels the cross-check Full Assessment-only. Evidence anchors: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`) and `test/contract/skill-hardening-contracts.test.ts` (search: `Quick Scan out of Full-only specialist work`).
+
+**Prevention:** Every quick/full workflow needs an explicit quick endpoint plus a contract that rejects deeper-only actions. A heading is orientation, not control flow.
+
+---
+
+## Lesson: Pressure scenarios must isolate the rule under test
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-040 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
+
+**Root cause:** The scenario varied both test ordering and repository-history authority. Its wrong answer was independently invalid under always-loaded policy.
+
+**Fix:** The replacement uses the measured M33 security-depth incident and holds file scope plus mirror duties constant; only test-first ordering differs. Evidence anchors: `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Real goat-flow incident`) and `test/contract/skill-hardening-contracts.test.ts` (search: `isolated from repository-history policy`).
+
+**Prevention:** Before using an A/B/C pressure fixture, compare every option with always-loaded instructions and accepted ADRs. Keep all non-target obligations equal so only the rule under test explains the result.
+
+---

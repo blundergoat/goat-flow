@@ -116,6 +116,53 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("routes GOAT Flow quality assessments outside goat-review", () => {
+    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+      const routeMap = readMarkdownSection(skillPath, "Route Map");
+      assert.match(
+        routeMap,
+        /GOAT Flow setup\/process\/harness\/skills quality assessment[^\n]+`goat-flow quality` CLI\/dashboard prompt flow \(no goat skill wrapper\)/,
+        skillPath,
+      );
+      assert.match(
+        routeMap,
+        /Code quality review, area audit, diff check[^\n]+`\/goat-review`/,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        routeMap,
+        /GOAT Flow setup\/process\/harness\/skills quality assessment[^\n]+`\/goat-review`/,
+        skillPath,
+      );
+    });
+  });
+
+  it("keeps goat-security Quick Scan out of Full-only specialist work", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const quickScanPath = readMarkdownSection(skillPath, "Quick Scan Path");
+      const fullAssessmentPath = readMarkdownSection(
+        skillPath,
+        "Full Assessment Path",
+      );
+      assert.match(quickScanPath, /Stop after step 5/, skillPath);
+      assert.match(
+        quickScanPath,
+        /MUST NOT enter the Full Assessment Path/,
+        skillPath,
+      );
+      assert.match(
+        quickScanPath,
+        /recommend Full Assessment instead of running or waiting for a specialist/,
+        skillPath,
+      );
+      assert.match(
+        fullAssessmentPath,
+        /Full Assessment-only specialist cross-check/,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-plan failure-first thinking inside the existing risk flow", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -431,6 +478,47 @@ describe("skill hardening contracts", () => {
         /do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined/,
         skillPath,
       );
+    });
+
+    // The worked output must show the same approval journey users follow in the live skill.
+    const reviewExamplePaths = INSTALLED_SKILL_ROOTS.map(
+      (skillRoot) => `${skillRoot}/goat-review/references/examples.md`,
+    );
+    assertForEachTarget(reviewExamplePaths, (examplePath) => {
+      const reviewExamples = readProjectFile(examplePath);
+      assert.doesNotMatch(reviewExamples, /Pass 3 auto-triggered/, examplePath);
+      assert.match(
+        reviewExamples,
+        /Pass 3 was offered[^\n]+trigger 3/,
+        examplePath,
+      );
+      assert.match(
+        reviewExamples,
+        /After the runtime, authentication, findings-only payload, one-call cap, cost impact, and local fallback were disclosed,\s+the user explicitly approved one refuter call/,
+        examplePath,
+      );
+    });
+  });
+
+  it("keeps the skill-TDD example isolated from repository-history policy", () => {
+    const skillTddReferencePaths = [
+      "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
+      ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+    ];
+
+    assertForEachTarget(skillTddReferencePaths, (referencePath) => {
+      const pressureExamples = readMarkdownSection(
+        referencePath,
+        "Seven pressure types",
+      );
+      assert.match(pressureExamples, /Real goat-flow incident/, referencePath);
+      assert.match(
+        pressureExamples,
+        /only the test-first ordering differs/,
+        referencePath,
+      );
+      assert.doesNotMatch(pressureExamples, /Commit now/, referencePath);
+      assert.doesNotMatch(pressureExamples, /git commit/, referencePath);
     });
   });
 
