@@ -1,14 +1,8 @@
 /**
- * Single-source-of-truth manifest loader (M06a).
- *
- * Reads `workflow/manifest.json` and returns a resolved `Manifest` where every
- * `facts` field has been computed from canonical code sources (derived) or
- * validated against observed on-disk reality (static). Loading fails hard with
- * a `ManifestValidationError` when a static fact has drifted from what the
- * code actually exposes - that is the entire point of the module.
- *
- * Used by `composeQuality` and `composeSetup` to avoid hardcoded counts, and
- * by the `goat-flow manifest` CLI command.
+ * Single source of truth for workflow manifest data and derived facts.
+ * Use from setup, audit, quality, and dashboard flows when users need the
+ * current skills, agents, checks, or required files. Invalid static metadata
+ * stops loading with precise repair evidence instead of leaking stale state.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -33,7 +27,10 @@ import type {
   SkillFacts,
 } from "./types.js";
 import { ManifestValidationError } from "./types.js";
-import { readManifestJson } from "./manifest-json.js";
+import {
+  readManifestJson,
+  validateSkillReferenceSchema,
+} from "./manifest-json.js";
 
 // Re-exported here for API stability. These declarations moved into a sibling
 // module to break a circular dependency (its header explains the full story);
@@ -228,6 +225,7 @@ export function validateManifest(
   json: ManifestJson,
   observed: ObservedFacts,
 ): void {
+  validateSkillReferenceSchema(json);
   const findings: string[] = [];
   findings.push(...validateAgentCapabilities(json));
 

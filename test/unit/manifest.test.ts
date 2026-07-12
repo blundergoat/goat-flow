@@ -336,6 +336,72 @@ describe("validateSkillReferenceSchema", () => {
         err.findings.some((f) => f.includes("skills.references.goat_typo")),
     );
   });
+
+  it("throws when canonical skill identifiers are duplicated", () => {
+    const json = fixtureJson({}, ["goat", "goat-debug", "goat-debug"]);
+    assert.throws(
+      () => validateSkillReferenceSchema(json),
+      (err: unknown) =>
+        err instanceof ManifestValidationError &&
+        err.findings.some(
+          (finding) =>
+            finding.includes("skills.canonical") &&
+            finding.includes("goat-debug"),
+        ),
+    );
+  });
+
+  it("throws when one skill declares the same reference twice", () => {
+    const json = fixtureJson();
+    json.skills.references = {
+      goat: ["references/guide.md", "references/guide.md"],
+    };
+    assert.throws(
+      () => validateSkillReferenceSchema(json),
+      (err: unknown) =>
+        err instanceof ManifestValidationError &&
+        err.findings.some(
+          (finding) =>
+            finding.includes("skills.references.goat") &&
+            finding.includes("references/guide.md"),
+        ),
+    );
+  });
+
+  it("throws when a skill reference escapes its committed reference pack", () => {
+    const json = fixtureJson();
+    json.skills.references = {
+      goat: ["../../../.goat-flow/logs/quality/report.md"],
+    };
+    assert.throws(
+      () => validateSkillReferenceSchema(json),
+      (err: unknown) =>
+        err instanceof ManifestValidationError &&
+        err.findings.some(
+          (finding) =>
+            finding.includes("skills.references.goat") &&
+            finding.includes("committed `references/` path"),
+        ),
+    );
+  });
+
+  it("throws when a canonical required-file path is declared twice", () => {
+    const json = fixtureJson();
+    json.required_files = [
+      ".goat-flow/skill-docs/README.md",
+      ".goat-flow/skill-docs/README.md",
+    ];
+    assert.throws(
+      () => validateSkillReferenceSchema(json),
+      (err: unknown) =>
+        err instanceof ManifestValidationError &&
+        err.findings.some(
+          (finding) =>
+            finding.includes("required_files") &&
+            finding.includes(".goat-flow/skill-docs/README.md"),
+        ),
+    );
+  });
 });
 
 describe("validateManifest (missing key)", () => {

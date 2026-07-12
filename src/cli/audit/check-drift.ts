@@ -1,40 +1,10 @@
 /**
- * Template-vs-installed drift detection for goat-flow skills.
- *
- * Compares the canonical templates shipped in goat-flow against the
- * installed copies inside a consumer project (or the goat-flow repo
- * itself when run on its own root):
- *
- *   - Per-skill SKILL.md for every name in getSkillNames():
- *       workflow/skills/<name>/SKILL.md  vs
- *       .claude/skills/<name>/SKILL.md
- *       .agents/skills/<name>/SKILL.md
- *   - Shared meta references (template → installed in .goat-flow/skill-docs/):
- *       workflow/skills/reference/README.md                 vs .goat-flow/skill-docs/README.md
- *       workflow/skills/reference/skill-preamble.md         vs .goat-flow/skill-docs/skill-preamble.md
- *       workflow/skills/reference/skill-conventions.md      vs .goat-flow/skill-docs/skill-conventions.md
- *   - Standalone playbooks (template → installed in .goat-flow/skill-docs/playbooks/):
- *       workflow/skills/playbooks/README.md                 vs .goat-flow/skill-docs/playbooks/README.md
- *       workflow/skills/playbooks/browser-use.md            vs .goat-flow/skill-docs/playbooks/browser-use.md
- *       workflow/skills/playbooks/code-comments.md          vs .goat-flow/skill-docs/playbooks/code-comments.md
- *       workflow/skills/playbooks/gruff-code-quality.md            vs .goat-flow/skill-docs/playbooks/gruff-code-quality.md
- *       workflow/skills/playbooks/observability.md          vs .goat-flow/skill-docs/playbooks/observability.md
- *       workflow/skills/playbooks/changelog.md              vs .goat-flow/skill-docs/playbooks/changelog.md
- *       workflow/skills/playbooks/page-capture.md           vs .goat-flow/skill-docs/playbooks/page-capture.md
- *       workflow/skills/playbooks/release-notes.md          vs .goat-flow/skill-docs/playbooks/release-notes.md
- *       workflow/skills/playbooks/skill-quality-testing.md  vs .goat-flow/skill-docs/skill-quality-testing/README.md
- *   - Orphan directories under .claude/skills or .agents/skills whose
- *     name is not in getSkillNames(). Names that appear in manifest.stale_names
- *     are reported as deprecated instead of a plain orphan.
- *
- * Comparison is semantic: YAML frontmatter is parsed and compared
- * structurally (after stripping null/undefined leaves to avoid false
- * negatives on bare keys like `description:`), body content is
- * compared after trimEnd() + single trailing newline normalization.
- * This avoids false positives on key reorder or trailing whitespace.
+ * Canonical-template versus installed-artifact drift detection.
+ * Use during setup audits so operators learn which skill, shared document,
+ * hook, or agent mirror differs from the workflow package they intended to run.
+ * Semantic Markdown comparison ignores harmless YAML order and trailing-space changes.
  */
-import { readFileSync, existsSync } from "node:fs";
-import { posix as pathPosix, resolve as resolvePath } from "node:path";
+import { posix as pathPosix } from "node:path";
 import { load } from "js-yaml";
 import { isDeepStrictEqual } from "node:util";
 import type { ReadonlyFS } from "../types.js";
@@ -49,6 +19,11 @@ import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
 import type { AgentId } from "../types.js";
 import type { AgentProfile } from "../manifest/types.js";
 import type { DriftFinding, DriftReport } from "./types.js";
+import {
+  checkArtifactIntegrity,
+  readTemplateText,
+  SHARED_ARTIFACT_MIRRORS,
+} from "./check-artifact-integrity.js";
 
 const KNOWN_AGENT_IDS = new Set(["claude", "codex", "antigravity", "copilot"]);
 
@@ -137,123 +112,18 @@ export function skillContentsEquivalent(
 }
 
 /**
- * Runtime dependencies for `checkDrift`.
- *
- * The filesystem is rooted at the audited project, while `templateRoot` points
- * at goat-flow's package layout; separating them keeps consumer-project audits
- * from accidentally reading templates from the target project.
+ * Runtime sources for installed-project and canonical-package comparisons.
+ * The separation prevents consumer audits from reading templates from the target.
  */
 interface CheckDriftOptions {
   /** ReadonlyFS rooted at the project being audited (for installed-copy reads). */
   fs: ReadonlyFS;
-  /** Absolute path to the project being audited. Present for parity with other audit options; not currently used for IO. */
+  /** Audited project root retained for parity with other audit option contracts. */
   projectPath: string;
-  /**
-   * Absolute path whose layout mirrors goat-flow's own root (must contain
-   * workflow/skills/...). Defaults to the goat-flow package root resolved
-   * at runtime so consumer projects work out of the box.
-   */
+  /** Package/fixture root containing workflow sources; absent uses the shipped package. */
   templateRoot?: string;
   /** Selected agent whose installed mirrors should be compared; null or absent checks every installed agent. */
   agentFilter?: AgentId | null;
-}
-
-/**
- * Pair one canonical workflow file with its installed project copy.
- *
- * Shared references and playbooks are not per-skill directories, so the drift
- * audit keeps this explicit map in lockstep with the setup manifest.
- */
-interface SharedFileSpec {
-  /** Relative to templateRoot. */
-  template: string;
-  /** Relative to projectPath. */
-  installed: string;
-}
-
-const SHARED_FILES: SharedFileSpec[] = [
-  // Meta references (composed into every skill)
-  {
-    template: "workflow/skills/reference/README.md",
-    installed: ".goat-flow/skill-docs/README.md",
-  },
-  {
-    template: "workflow/skills/reference/skill-preamble.md",
-    installed: ".goat-flow/skill-docs/skill-preamble.md",
-  },
-  {
-    template: "workflow/skills/reference/skill-conventions.md",
-    installed: ".goat-flow/skill-docs/skill-conventions.md",
-  },
-  // Standalone playbooks (loaded on-demand)
-  {
-    template: "workflow/skills/playbooks/README.md",
-    installed: ".goat-flow/skill-docs/playbooks/README.md",
-  },
-  {
-    template: "workflow/skills/playbooks/browser-use.md",
-    installed: ".goat-flow/skill-docs/playbooks/browser-use.md",
-  },
-  {
-    template: "workflow/skills/playbooks/code-comments.md",
-    installed: ".goat-flow/skill-docs/playbooks/code-comments.md",
-  },
-  {
-    template: "workflow/skills/playbooks/gruff-code-quality.md",
-    installed: ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-  },
-  {
-    template: "workflow/skills/playbooks/observability.md",
-    installed: ".goat-flow/skill-docs/playbooks/observability.md",
-  },
-  {
-    template: "workflow/skills/playbooks/changelog.md",
-    installed: ".goat-flow/skill-docs/playbooks/changelog.md",
-  },
-  {
-    template: "workflow/skills/playbooks/page-capture.md",
-    installed: ".goat-flow/skill-docs/playbooks/page-capture.md",
-  },
-  {
-    template: "workflow/skills/playbooks/release-notes.md",
-    installed: ".goat-flow/skill-docs/playbooks/release-notes.md",
-  },
-  {
-    template: "workflow/skills/playbooks/skill-quality-testing.md",
-    installed: ".goat-flow/skill-docs/skill-quality-testing/README.md",
-  },
-  {
-    template:
-      "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
-    installed: ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
-  },
-  {
-    template:
-      "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md",
-    installed:
-      ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
-  },
-  {
-    template: "workflow/skills/playbooks/skill-quality-testing/deployment.md",
-    installed: ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
-  },
-];
-
-/**
- * Read a workflow template file relative to the package root.
- *
- * Missing or unreadable templates return null; this swallows file-read failures
- * so callers can report the exact drift finding path instead of turning one
- * filesystem failure into an exception that hides the rest of the audit.
- */
-function readTemplate(templateRoot: string, relative: string): string | null {
-  const abs = resolvePath(templateRoot, relative);
-  if (!existsSync(abs)) return null;
-  try {
-    return readFileSync(abs, "utf-8");
-  } catch {
-    return null;
-  }
 }
 
 /** Narrow parsed YAML/JSON values before reading hook and manifest properties. */
@@ -314,7 +184,7 @@ function compareSkills(
     // Every manifest-listed reference belongs to the same skill users invoke.
     for (const relativeFile of getSkillFiles(name)) {
       const templateRel = `workflow/skills/${name}/${relativeFile}`;
-      const template = readTemplate(templateRoot, templateRel);
+      const template = readTemplateText(templateRoot, templateRel);
 
       // A missing source template means every future consumer install would be incomplete.
       if (template === null) {
@@ -366,8 +236,8 @@ function compareSharedFiles(
   findings: DriftFinding[],
 ): number {
   let checked = 0;
-  for (const spec of SHARED_FILES) {
-    const template = readTemplate(templateRoot, spec.template);
+  for (const spec of SHARED_ARTIFACT_MIRRORS) {
+    const template = readTemplateText(templateRoot, spec.template);
     if (template === null) {
       findings.push({
         kind: "missing",
@@ -684,7 +554,7 @@ function compareHookArtifact(
   installedRel: string,
   expectedFromTemplate: (template: string) => string,
 ): void {
-  const template = readTemplate(templateRoot, templateRel);
+  const template = readTemplateText(templateRoot, templateRel);
   if (template === null) {
     findings.push({
       kind: "missing",
@@ -833,6 +703,7 @@ function compareRegistryHookScripts(
  *
  * @param options - Project filesystem plus optional goat-flow template root.
  * @returns Drift status, findings, and count of compared template/install pairs.
+ * @throws when the canonical manifest or hook registry cannot be loaded
  */
 export function checkDrift(options: CheckDriftOptions): DriftReport {
   const { fs, agentFilter } = options;
@@ -858,6 +729,15 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
     checkedHookArtifacts,
   );
   findOrphans(fs, findings, agentFilter);
+
+  // Identity, resource, and complete-set checks catch packaging failures that byte parity cannot see.
+  findings.push(
+    ...checkArtifactIntegrity({
+      fs,
+      templateRoot,
+      installedSkillRoots: selectedInstalledSkillRoots(fs, agentFilter),
+    }),
+  );
 
   // Any mismatch means setup or upgrade would give the user a different workflow than this checkout.
   return {
