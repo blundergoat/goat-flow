@@ -1,5 +1,7 @@
 /**
- * Core shared types for goat-flow.
+ * Shared data contracts for goat-flow CLI, audit, setup, and dashboard flows.
+ * Use these types when a user-facing result crosses module boundaries so every
+ * renderer and test sees the same optional, empty, and unavailable states.
  */
 // === Agent Types ===
 
@@ -376,6 +378,8 @@ export interface ReadonlyFS {
   lineCount(path: string): number;
   /** Parse JSON defensively, returning null for missing, unreadable, or malformed files. */
   readJson(path: string): unknown;
+  /** Report whether the user can currently list a directory; files, missing paths, and unreadable directories return false. */
+  isReadableDirectory(path: string): boolean;
   /** List child names; missing and unreadable directories intentionally return an empty list. */
   listDir(path: string): string[];
   /** Report whether a file can be executed by the current platform. */

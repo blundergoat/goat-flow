@@ -3,7 +3,9 @@ goat-flow-reference-version: "1.13.1"
 ---
 # Milestone Template - Detailed Field Reference
 
-Extracted from the goat-plan SKILL.md to keep the skill file within word budget. The SKILL.md retains a concise summary; this file has the full field descriptions and worked examples.
+This reference keeps handoff detail out of the always-scanned skill body.
+Use it when a Standard+ plan must survive a new agent, a later session, or source drift.
+Small low-risk plans keep the compact field set in `SKILL.md`.
 
 ## Contents
 
@@ -14,6 +16,61 @@ Extracted from the goat-plan SKILL.md to keep the skill file within word budget.
 - Risk-tagged milestone example
 - Phase 3 human verification gate example
 - Kill-criteria-triggered stop example
+
+## Handoff-grade milestone template
+
+Use this shape for Standard+ work or any milestone handed to a different implementer. Capture the baseline before writing tasks; a failing baseline becomes an explicit prerequisite instead of hidden plan context.
+
+```markdown
+# M01: <outcome>
+
+**Status:** not-started
+**Planned at:** `<sha>`, YYYY-MM-DD
+
+## Drift check before implementation
+
+`git diff --stat <sha> -- <in-scope paths>`
+`git status --short -- <in-scope paths>`
+
+If either command shows movement, re-read the live anchors and amend the milestone before implementation. The status command is required because uncommitted drift matters.
+
+## Current-state evidence
+
+- `<file>` (search: `<semantic anchor>`) - current behavior the task changes.
+
+## Verification baseline
+
+| Command | Expected result |
+|---|---|
+| `<read-only command>` | `<literal success condition, or known failure recorded as a prerequisite>` |
+
+## Scope
+
+### In scope
+- `<path>` - why this file belongs to the user-visible outcome.
+
+### Out of scope
+- `<tempting path>` - why touching it would expand the approved outcome.
+
+## Tasks
+- [ ] [RISKY] `<uncertainty-first action with target and proof>`
+- [ ] [CORE] `<implementation action with target and proof>`
+
+## STOP conditions
+- Stop when drift invalidates an anchor, work crosses the named scope, an assumption fails, or the same verification approach fails twice.
+
+## Command table
+
+| Command | Expected result |
+|---|---|
+| `<focused check>` | `<observable pass condition>` |
+
+## Maintenance notes
+- Re-check `<anchor>` when `<known dependency>` changes.
+- Preserve `<user-facing behavior or compatibility boundary>`.
+```
+
+The template records evidence and verification ownership; it never delegates implementation, commit, or push work.
 
 ## Milestone Field Descriptions
 

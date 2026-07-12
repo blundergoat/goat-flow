@@ -13,10 +13,11 @@ Read `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-
 
 Use when a concrete artifact deserves multi-perspective critique before shipping: plan, security assessment, debug hypotheses, review findings, test strategy, architecture proposal, or refactor approach.
 
-**NOT this skill (pre-invocation routing):** Use when deciding which skill to invoke, not after explicit invocation.
-- No artifact exists yet → create one first (goat-review, goat-debug, etc.)
-- Simple factual question → answer directly
-- Trivial artifact (hotfix, single-file change) → consider goat-review instead before invocation; explicit `/goat-critique` still runs full protocol.
+## Boundary Commands
+
+- **NEVER:** Replace delegated critique with inline role-play, skip required phases, or auto-apply recommendations.
+- **ALWAYS:** Treat explicit invocation as consent to run the full delegated protocol against a concrete artifact.
+- **DEFER TO:** Before invocation only, create a missing artifact first, answer simple facts directly, or use `/goat-review` for a trivial artifact; explicit `/goat-critique` still runs in full.
 
 | Excuse | Reality |
 |--------|---------|

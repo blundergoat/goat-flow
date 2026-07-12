@@ -21,7 +21,11 @@ goat-qa is a **testing gap analyser**: it maps changed code or a codebase area t
 - You want to find manual testing gaps before a release
 - You need a QA handoff artifact (flow diagram, risk matrix, manual test plan)
 
-**NOT this skill:** Run-test requests → run them directly. Test failures or fix verification → /goat-debug. Code quality → /goat-review. Milestones → /goat-plan. Feature briefs → dispatcher. Merge certification → /goat-review plus Proof Gate.
+## Boundary Commands
+
+- **NEVER:** Run or write tests, verify fixes, review code, or certify merges.
+- **ALWAYS:** Map code risk to tests read; return tiers with Verification Integrity.
+- **DEFER TO:** Direct test execution, `/goat-debug`, `/goat-review`, `/goat-plan`, or the dispatcher.
 
 | Excuse | Reality |
 |--------|---------|

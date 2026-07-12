@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-12
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -49,10 +49,12 @@ Some harness checks can report a missing directory as present if they rely on `c
 
 **Evidence:**
 - `src/cli/facts/fs.ts` (search: `swallows readdir errors as a cached [] fallback`) - catches `readdirSync` failures and returns `[]`.
-- `src/cli/audit/harness/check-recovery.ts` (search: `if (!ctx.fs.exists(logsDir))`) - the session-log check now guards existence before `listDir()`; future harness checks need the same pattern.
+- `src/cli/audit/harness/check-recovery.ts` (search: `if (!ctx.fs.isReadableDirectory(logsDir))`) - the session-log check now verifies directory readability before using the non-throwing listing.
 - Runtime probe from 2026-05-05: `createFS("/home/hxdev/projects/feature/api-main").exists(".goat-flow/logs/sessions")` returned `false`, while `listDir(".goat-flow/logs/sessions")` returned `[]`.
 
-**Prevention:** Harness checks that need existence semantics must call `ctx.fs.exists(path)` first. Use `listDir()` only after existence is established, or explicitly document that missing and empty are equivalent for that check.
+**Recurrence update (2026-07-12):** M33 found that existence alone still false-passed when `.goat-flow/plans` or `.goat-flow/logs/sessions` was an ordinary file. Setup and Recovery both reported PASS because `exists()` returned true and `listDir()` collapsed `ENOTDIR` to `[]`. `ReadonlyFS.isReadableDirectory` now shares the adapter's cached directory read, and both checks fail unusable paths while valid empty directories still pass. Evidence: `test/integration/audit-quality.test.ts` (search: `fails setup and recovery when required storage paths are files`).
+
+**Prevention:** When a check promises directory storage, require both `exists(path)` and `isReadableDirectory(path)` before using `listDir()`. Use `listDir()` alone only when missing, unreadable, and empty intentionally mean the same thing.
 
 ---
 

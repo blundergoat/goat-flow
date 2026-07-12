@@ -15,6 +15,32 @@ last_reviewed: 2026-07-12
 
 ---
 
+## Lesson: Timeout completion needs a deadline independent of child close
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** The seven-skill pressure matrix reproduced a preflight runner that exceeded its hard timeout window after process-group escalation. A detached test helper escaped the group, inherited stdout/stderr, and held those pipes open, so Node delayed the child's `close` event after the direct process exited.
+
+**Root cause:** The timeout path bounded process termination but used `close` as its only result-delivery event. An escaped descriptor holder could therefore hide a known timeout result.
+
+**Fix:** After SIGKILL, use a one-shot result deadline that preserves the observed direct-child status, destroys only local capture streams, emits a cleanup-limit diagnostic, and ignores late events. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`) and `test/integration/preflight-progress.test.ts` (search: `returns after escalation when an escaped descendant retains the capture pipe`).
+
+**Prevention:** Test timeout runners with a descendant that escapes the signalled group while retaining an output descriptor. Assert both status and a wall-clock bound; process-kill proof alone does not prove the caller returns.
+
+---
+
+## Lesson: Delegated pressure runs need persistent recovery state
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** M33 launched a long `goat-critique` run with `codex exec --ephemeral`. The run persisted Phase 1–4 evidence but was interrupted before synthesis; `codex exec resume` then failed with `no rollout found`, so the otherwise detailed attempt remained UNVERIFIED and had to be repeated.
+
+**Root cause:** The runner contract optimized for session cleanup even though delegated critique is expensive and its completion evidence spans multiple agent results plus a meta-audit.
+
+**Prevention:** Use persistent native sessions for delegated or multi-turn pressure tests. Keep ephemeral sessions for single-turn probes only; record the thread ID early and prove a recovery path before treating a long run as the sole release evidence.
+
+---
+
 ## Lesson: Gruff-driven direct imports must preserve facade proof
 
 **Status:** active | **Created:** 2026-05-31
@@ -73,9 +99,27 @@ last_reviewed: 2026-07-12
 
 **Recurrence 2026-06-14:** While adding concrete examples to the dispatcher, the first `goat/SKILL.md` patch reached 653 words against the 555-word dispatcher cap. The fix compressed examples and anti-excuse wording before final verification. Evidence anchors: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`), `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap across all mirrors`).
 
+**Recurrence 2026-07-12 (M33):** Adding the timeout lesson to `verification-preflight.md` pushed that bucket to 40KB against its 39KB gate. Moving the entry to this narrower bucket restored the schema boundary without deleting evidence. Evidence: `bash scripts/preflight-checks.sh` (Learning-loop schema).
+
+**Recurrence 2026-07-12:** The seven-skill boundary rollout first pushed `goat-plan/SKILL.md` to 2503 words and `goat-qa/SKILL.md` to 2524. An ad-hoc `sed '/^---$/,/^---$/d'` count falsely reported goat-qa at 1202 because later Markdown horizontal rules reopened the range; the canonical ADR-023 contract caught the real breach. Use the contract's exact frontmatter regex/counting method, not a generic delimiter range. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `Counts user-facing skill guidance without YAML frontmatter`), `workflow/skills/goat-plan/SKILL.md` (search: `## Boundary Commands`), `workflow/skills/goat-qa/SKILL.md` (search: `## Boundary Commands`).
+
+**Recurrence 2026-07-12 (M15):** Handoff and reconcile guidance first pushed `goat-plan/SKILL.md` to 2533 words. The focused contract failed before review work began; compressing duplicated output-mode prose restored the cap without removing behavior. Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Handoff-grade artifacts`), `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-plan handoff artifacts drift-aware`).
+
 **Root cause:** Treated prose edits as tiny while changing files governed by hard word-budget contracts.
 
 **Prevention:** For any skill/reference/playbook wording change, measure the affected file before broad validation and budget wording cuts in the same patch. Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts`. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`), `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`), `workflow/skills/goat-qa/SKILL.md` (search: `Proof classes:`).
+
+---
+
+## Lesson: Skill compaction must preserve indexed semantic anchors
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** M15 shortened goat-plan's When-to-Use prose to recover word budget. The focused skill contracts passed, but `stats --check` failed because `.goat-flow/learning-loop/footguns/skills.md` still anchored the removed phrase `Use when work needs milestone tracking`.
+
+**Root cause:** The edit treated prose as self-contained even though durable learning-loop evidence uses skill wording as a cross-file API.
+
+**Prevention:** Before compacting or renaming skill prose, search learning-loop indexes for the old phrase. After the edit, run `stats --check`; restore a useful stable anchor or update every durable reference in the same change. Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Use when work needs milestone tracking`), `.goat-flow/learning-loop/footguns/skills.md` (search: `New skill proposals can be configuration systems`).
 ---
 
 ## Lesson: Source-regex dashboard tests must tolerate formatter reflow

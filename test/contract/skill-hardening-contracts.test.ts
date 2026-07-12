@@ -92,6 +92,46 @@ describe("skill hardening contracts", () => {
     ["confirm ", "delegation ", "consent once ", "before spawning"].join(""),
   );
 
+  it("keeps canonical skill boundaries explicit and route-focused", () => {
+    const canonicalSkills = [
+      "goat",
+      "goat-debug",
+      "goat-plan",
+      "goat-review",
+      "goat-critique",
+      "goat-security",
+      "goat-qa",
+    ];
+
+    assertForEachTarget(canonicalSkills, (skillName) => {
+      assertForEachTarget(installedSkillPaths(skillName), (skillPath) => {
+        const boundaryCommands = readMarkdownSection(
+          skillPath,
+          "Boundary Commands",
+        );
+        assert.match(boundaryCommands, /\*\*NEVER:\*\*/, skillPath);
+        assert.match(boundaryCommands, /\*\*ALWAYS:\*\*/, skillPath);
+        assert.match(boundaryCommands, /\*\*DEFER TO:\*\*/, skillPath);
+      });
+    });
+  });
+
+  it("keeps goat-plan failure-first thinking inside the existing risk flow", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(
+        skillGuidance,
+        /If this plan fails, the most likely cause is/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /existing task, assumption, or kill criterion/,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-plan mid-implementation proof explicit and within budget", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -190,6 +230,71 @@ describe("skill hardening contracts", () => {
         examplePath,
       );
       assert.doesNotMatch(milestoneExample, /already amended/, examplePath);
+    });
+  });
+
+  // A user handing work to a fresh agent needs the same drift-safe plan in every runner.
+  it("keeps goat-plan handoff artifacts drift-aware without burdening small plans", () => {
+    // Every installed reference must expose the detailed template linked from its skill.
+    const milestoneExamplePaths = INSTALLED_SKILL_ROOTS.map(
+      (skillRoot) => `${skillRoot}/goat-plan/references/milestone-examples.md`,
+    );
+
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Handoff-grade artifacts/, skillPath);
+      assert.match(skillGuidance, /planned-at SHA\/date/, skillPath);
+      assert.match(
+        skillGuidance,
+        /git diff --stat <sha> -- <paths>/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /git status --short -- <paths>/, skillPath);
+      assert.match(skillGuidance, /uncommitted drift matters/, skillPath);
+      assert.match(skillGuidance, /current-state evidence/, skillPath);
+      assert.match(skillGuidance, /out-of-scope paths with reasons/, skillPath);
+      assert.match(skillGuidance, /STOP conditions/, skillPath);
+      assert.match(skillGuidance, /maintenance notes/, skillPath);
+      assert.match(skillGuidance, /Small File-Write stays compact/, skillPath);
+    });
+
+    assertForEachTarget(milestoneExamplePaths, (examplePath) => {
+      const milestoneExample = readProjectFile(examplePath);
+      assert.match(
+        milestoneExample,
+        /## Handoff-grade milestone template/,
+        examplePath,
+      );
+      assert.match(milestoneExample, /\*\*Planned at:\*\*/, examplePath);
+      assert.match(
+        milestoneExample,
+        /\| Command \| Expected result \|/,
+        examplePath,
+      );
+      assert.match(milestoneExample, /## Verification baseline/, examplePath);
+      assert.match(milestoneExample, /## Maintenance notes/, examplePath);
+    });
+  });
+
+  // A user resuming old local work needs status reconciliation without accidental implementation.
+  it("keeps goat-plan reconciliation local and status-aware", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(
+        skillGuidance,
+        /### Reconcile Existing Plan State/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /TODO:/, skillPath);
+      assert.match(skillGuidance, /DONE:/, skillPath);
+      assert.match(skillGuidance, /BLOCKED:/, skillPath);
+      assert.match(skillGuidance, /IN PROGRESS:/, skillPath);
+      assert.match(
+        skillGuidance,
+        /local workflow state, not a setup invariant/,
+        skillPath,
+      );
+      assert.doesNotMatch(skillGuidance, /execute <plan>/, skillPath);
     });
   });
 
@@ -327,6 +432,68 @@ describe("skill hardening contracts", () => {
         skillPath,
       );
     });
+  });
+
+  // A user asking what to build next needs evidence-backed ideas that cannot distort merge safety.
+  it("keeps direction audits advisory, grounded, and separate from defect verdicts", () => {
+    // Every runner must show the evidence classes and rejection routes behind the concise skill rule.
+    const reviewExamplePaths = INSTALLED_SKILL_ROOTS.map(
+      (skillRoot) => `${skillRoot}/goat-review/references/examples.md`,
+    );
+
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Direction \/ Opportunity Audit/, skillPath);
+      assert.match(skillGuidance, /advisory opportunity output/, skillPath);
+      assert.match(skillGuidance, /does not affect Ship Verdict/, skillPath);
+      assert.match(skillGuidance, /repo-grounded evidence/, skillPath);
+    });
+
+    assertForEachTarget(reviewExamplePaths, (examplePath) => {
+      const reviewExamples = readProjectFile(examplePath);
+      assert.match(reviewExamples, /unfinished intent/, examplePath);
+      assert.match(reviewExamples, /stated-but-undelivered/, examplePath);
+      assert.match(reviewExamples, /surface asymmetry/, examplePath);
+      assert.match(reviewExamples, /adjacent possible/, examplePath);
+      assert.match(reviewExamples, /friction worth productizing/, examplePath);
+      assert.match(reviewExamples, /impact divided by effort/, examplePath);
+      assert.match(
+        reviewExamples,
+        /discounted by confidence and fix risk/,
+        examplePath,
+      );
+      assert.match(reviewExamples, /Per-run refutations/, examplePath);
+      assert.match(reviewExamples, /Local cross-run rejections/, examplePath);
+      assert.match(reviewExamples, /Durable policy decisions/, examplePath);
+    });
+  });
+
+  // A user receiving delegated work needs independent verification and a clear re-plan threshold.
+  it("keeps delegated-work review independent and bounded", () => {
+    const delegatedReviewPattern = readProjectFile(
+      ".goat-flow/learning-loop/patterns/multi-agent.md",
+    );
+    assert.match(delegatedReviewPattern, /Delegated-work review/);
+    assert.match(delegatedReviewPattern, /re-run every done criterion/);
+    assert.match(delegatedReviewPattern, /git diff --stat/);
+    assert.match(
+      delegatedReviewPattern,
+      /read the full diff against stated intent/,
+    );
+    assert.match(delegatedReviewPattern, /meaningful assertions/);
+    assert.match(delegatedReviewPattern, /documented deviations on merit/);
+    assert.match(
+      delegatedReviewPattern,
+      /undocumented deviations as review failures/,
+    );
+    assert.match(delegatedReviewPattern, /two failed revision loops/);
+  });
+
+  // Users must not receive an eighth skill that silently owns implementation or repository history.
+  it("does not install a canonical goat-improve execution skill", () => {
+    const workflowManifest = readProjectFile("workflow/manifest.json");
+    assert.doesNotMatch(workflowManifest, /goat-improve/);
+    assert.doesNotMatch(workflowManifest, /execute <plan>/);
   });
 
   it("checks goat-critique sub-agent completeness before trusting self-report", () => {

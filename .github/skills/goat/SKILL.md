@@ -9,7 +9,13 @@ goat-flow-skill-version: "1.13.1"
 
 Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
 
-Use when the user gives an outcome and needs the right goat-* route. **If the user names a skill explicitly (`/goat-debug`, `/goat-review`, etc.), route immediately - no classification, no GATHER.**
+Use for outcome-to-workflow routing.
+
+## Boundary Commands
+
+- **NEVER:** Investigate or implement before routing.
+- **ALWAYS:** Honor explicit invocations; otherwise split intents and emit Route Snapshots.
+- **DEFER TO:** Routed skills, direct execution for simple changes, or direct answers.
 
 **If a symptom tempts code reading, STOP.** The dispatcher routes; the routed skill investigates.
 

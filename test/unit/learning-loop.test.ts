@@ -27,6 +27,7 @@ import type {
   GoatFlowConfig,
 } from "../../src/cli/config/types.js";
 
+/** Build the selected project's in-memory learning-loop files and readable directories. */
 function stubFS(
   files: Record<string, string>,
   dirs: Record<string, string[]>,
@@ -39,6 +40,8 @@ function stubFS(
     lineCount: (path) =>
       files[path] === undefined ? 0 : files[path]!.split("\n").length,
     readJson: () => null,
+    isReadableDirectory: (path) =>
+      Object.prototype.hasOwnProperty.call(dirs, path),
     listDir: (path) => dirs[path] ?? [],
     isExecutable: () => false,
     glob: () => [],

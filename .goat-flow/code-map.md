@@ -141,6 +141,7 @@ workflow/                        = packaged template source copied into target p
 ```text
 scripts/                         = development, release, test, and maintenance scripts
 ├── preflight-checks.sh          = canonical pre-commit/CI-style verification gate
+├── preflight-command-runner.mjs = captured Tests runner with TTY heartbeat and process-group timeout cleanup
 ├── run-tests.mjs                = Node test runner used by npm test scripts
 ├── build-dashboard-assets.mjs   = copies dashboard assets/views/vendor files into dist
 ├── bump-version.sh              = version sync across package/config/skills/docs

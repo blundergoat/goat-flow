@@ -1,6 +1,8 @@
 /**
  * Read-only filesystem adapter over Node's `fs` APIs.
- * Audit checks and fact extractors target this interface so tests can swap in mock filesystems without touching extraction logic.
+ * Audit checks use it to inspect a selected project without changing user files.
+ * Stable false/null/empty results keep platform errors out of user-facing reports,
+ * while explicit directory readability prevents unusable storage from passing.
  */
 import {
   readFileSync,
@@ -271,30 +273,59 @@ function readCachedJson(
   }
 }
 
-/** Cache directory listings; swallows readdir errors as [] by design. */
-function createDirectoryLister(
-  resolvePath: ResolvePath,
-): ReadonlyFS["listDir"] {
-  const listDirCache = new Map<string, string[]>();
+/** One cached directory read shared by readiness checks and child listings. */
+interface DirectoryReadResult {
+  readable: boolean;
+  entries: string[];
+}
 
-  /** List one directory through the per-adapter directory cache; swallows readdir errors as a cached [] fallback. */
-  function cachedListDir(path: string): string[] {
+/**
+ * Cache directory readability and entries from one filesystem operation.
+ * Use when audit users need to distinguish an empty directory from an unusable path.
+ *
+ * @param resolvePath - roots a project-relative path inside the selected project
+ * @returns non-mutating directory readiness and listing helpers
+ */
+function createDirectoryReader(
+  resolvePath: ResolvePath,
+): Pick<ReadonlyFS, "isReadableDirectory" | "listDir"> {
+  const directoryReadCache = new Map<string, DirectoryReadResult>();
+
+  /** Read once; swallows readdir errors as a cached [] fallback while retaining readable state. */
+  function readDirectory(path: string): DirectoryReadResult {
     const resolved = resolvePath(path);
-    const cached = listDirCache.get(resolved);
-    if (cached !== undefined) return cached;
+    const cachedDirectoryRead = directoryReadCache.get(resolved);
+
+    // A cached result keeps every concern in one audit run on the same user-visible filesystem view.
+    if (cachedDirectoryRead !== undefined) {
+      return cachedDirectoryRead;
+    }
     try {
       const entries = readdirSync(resolved, { withFileTypes: true }).map(
         (entry) => entry.name,
       );
-      listDirCache.set(resolved, entries);
-      return entries;
+      const readableDirectory = { readable: true, entries };
+      directoryReadCache.set(resolved, readableDirectory);
+      return readableDirectory;
     } catch {
-      const empty: string[] = [];
-      listDirCache.set(resolved, empty);
-      return empty;
+      // For example, a restored file named `sessions` cannot provide the log directory the user expects.
+      const unreadableDirectory = { readable: false, entries: [] };
+      directoryReadCache.set(resolved, unreadableDirectory);
+      return unreadableDirectory;
     }
   }
-  return cachedListDir;
+
+  return {
+    /** Tell setup and Recovery whether the user can actually store and list work at this path. */
+    isReadableDirectory(path: string): boolean {
+      return readDirectory(path).readable;
+    },
+
+    /** Return directory entries, preserving the historical empty-list fallback for other audit consumers. */
+    listDir(path: string): string[] {
+      return readDirectory(path).entries;
+    },
+  };
 }
 
 /** Check executability; swallows access errors and falls back to shebang detection on Windows. */
@@ -354,7 +385,7 @@ export function createFS(rootPath: string): ReadonlyFS {
   const resolvePath = createPathResolver(root);
   const readFile = createCachedReadFile(resolvePath);
   const exists = createExistsChecker(resolvePath);
-  const listDir = createDirectoryLister(resolvePath);
+  const directoryReader = createDirectoryReader(resolvePath);
   const globHelpers = createGlobHelpers(root, resolvePath);
 
   return {
@@ -373,7 +404,7 @@ export function createFS(rootPath: string): ReadonlyFS {
       return readCachedJson(readFile, path);
     },
 
-    listDir,
+    ...directoryReader,
 
     /** Check executability; swallows access errors and falls back to shebang detection on Windows. */
     isExecutable(path: string): boolean {

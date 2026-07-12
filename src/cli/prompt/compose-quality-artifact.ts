@@ -2,7 +2,7 @@
  * Composer for the artifact (skill / reference) quality-assessment prompt.
  *
  * Builds the prompt that scores a single skill or reference document against the
- * semantic dimensions, applying per-subtype weighting: playbook and index
+ * five semantic dimensions, applying per-subtype weighting: playbook and index
  * subtypes weight Examples higher, while the meta subtype may mark Examples `n/a`
  * with justification. Pure string assembly over the passed SkillQualityReport.
  */
@@ -66,7 +66,7 @@ function appendComposedFromInstruction(
 }
 
 /** Compose a focused quality prompt for a single skill or reference artifact.
- *  The prompt requires four scored semantic dimensions, an
+ *  The prompt requires five scored semantic dimensions, an
  *  anti-bias preamble, an explicit per-file `composedFrom` reading
  *  instruction, a focus/scope probe, a final gate decision, and a fenced JSON
  *  block summarising the verdict.
@@ -166,9 +166,12 @@ export function composeArtifactQualityPrompt(
   lines.push(
     "- **Coherence (1-5)** - does the bundle (SKILL.md + references) tell one coherent story, or do parts contradict, drift, or duplicate?",
   );
+  lines.push(
+    "- **Misuse / Limits (1-5)** - does the artifact state when not to use it, forbidden shortcuts, and where adjacent work belongs? Penalize boundary text that exists only to satisfy a checklist but does not change an agent's decision.",
+  );
   lines.push("");
   lines.push(
-    "Compute `semanticTotal`, `semanticMax` (default `/20` across the four dimensions; subtract any `n/a` dimension's max), and `semanticPct = semanticTotal / semanticMax`.",
+    "Compute `semanticTotal`, `semanticMax` (default `/25` across the five dimensions; subtract any `n/a` dimension's max), and `semanticPct = semanticTotal / semanticMax`.",
   );
   lines.push("");
 
@@ -195,6 +198,9 @@ export function composeArtifactQualityPrompt(
   );
   lines.push(
     '6. **Scope check:** Write a one-sentence summary of what this artifact does. If you cannot, that is a Clarity finding (record in semantic dimensions). If your sentence describes 3+ distinct concerns ("formats code AND evaluates it AND documents it"), recommend splitting and propose the boundaries. Note: this answers "is the scope right within the assigned subtype?" - distinct from the structural `consider-reclassifying` recommendation, which answers "is the subtype right?"',
+  );
+  lines.push(
+    "7. **Metric-gaming check:** What could an author add to satisfy this score without improving agent behavior? Identify checklist-shaped language that would look compliant while leaving misuse possible.",
   );
   lines.push("");
 
@@ -232,8 +238,9 @@ export function composeArtifactQualityPrompt(
   lines.push('    "examples": 3,');
   lines.push('    "focus": 5,');
   lines.push('    "coherence": 4,');
-  lines.push('    "total": 16,');
-  lines.push('    "max": 20');
+  lines.push('    "misuseLimits": 4,');
+  lines.push('    "total": 20,');
+  lines.push('    "max": 25');
   lines.push("  },");
   lines.push('  "gateDecision": "revise",');
   lines.push(

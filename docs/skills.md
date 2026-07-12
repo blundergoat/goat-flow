@@ -175,6 +175,10 @@ flowchart TD
 
 **Milestone archetypes:** Prove It Works (spike the riskiest part first) → Make It Real (end-to-end working) → Make It Solid (edge cases, security) → Make It Shine (polish, optional). Write modes persist milestone files immediately after breakdown; `/goat-plan` does not auto-chain `/goat-critique`. Each milestone has kill criteria, assumption tracking, and a dual AI + human verification gate (BLOCKING) before the next begins. Read-Only Analysis mode is available at any complexity level via analysis signals ("break this down for me", "how would you approach").
 
+**Handoff-grade milestone artifacts:** Standard+ plans record a planned-at SHA/date, committed and uncommitted drift commands, semantic-anchor current state, explicit in/out scope, a verification baseline, expected command results, STOP conditions, and maintenance notes. Small low-risk plans stay compact.
+
+**Reconcile:** On an explicit reconcile request, `/goat-plan` checks local TODO/DONE/BLOCKED/IN PROGRESS state against current code and evidence, then asks whether stale in-progress work should resume or be abandoned. Plan state remains local workflow context, never a setup invariant or implementation command.
+
 **Plan completion (Phase 4):** When all milestones are done, the agent runs an AI verification gate (every milestone complete, every task ticked, every exit criterion evidenced, every testing gate passed with current-session proof) then presents results at a blocking human verification gate. Plan artifacts must not include self-destruct instructions, and agents must not delete or archive plan files without human approval.
 
 **Key constraints:** MUST check for existing milestone files before creating new ones. MUST include testing gates on every milestone. MUST NOT continue building on an invalidated assumption. MUST NOT invoke or prompt for `/goat-critique` from `/goat-plan`. MUST pick exactly one mode in Step 0 and stay in it - cross-mode drift is the failure the mode-picker exists to prevent.
@@ -189,6 +193,7 @@ Structured code review and quality audit with negative verification.
 |------|---------|-------------|
 | **Quick Review** | review, PR, diff | Severity-ordered scan of changes with negative verification |
 | **Audit** | audit, quality sweep | Systematic codebase area scan - findings only, no fixes |
+| **Direction / Opportunity Audit** | explicit future-direction request | Advisory, repo-grounded opportunities kept separate from defect verdicts |
 
 **Quick Review:**
 
@@ -209,6 +214,8 @@ flowchart TD
 MUST NOT flag pre-existing issues as part of this change. MUST attempt to disprove each finding before presenting it.
 
 **Audit mode:** For codebase areas (not a diff). Scan using severity ordering, run negative verification, group 3+ related findings as systemic patterns. MUST NOT propose fixes in audit mode - findings only.
+
+**Direction / Opportunity Audit:** On explicit request, the area audit can also surface unfinished intent, stated-but-undelivered behavior, surface asymmetry, adjacent possibilities, and repeated friction. Every item needs a live repository anchor; opportunity ranking uses impact/effort adjusted for confidence and fix risk, while defects remain severity-ordered and continue to control Ship Verdict.
 
 ---
 

@@ -1,10 +1,15 @@
 /**
- * Integration tests for `goat-flow audit --harness` completeness checks.
+ * Exercises the user-visible `goat-flow audit --harness` concern contract.
+ * Use these integration checks when setup or harness evidence changes so a
+ * project owner never receives a passing score for unusable local storage.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { assertExists } from "../helpers/assert-exists.ts";
+import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
 import { runAudit } from "../../src/cli/audit/audit.js";
 import { createFS } from "../../src/cli/facts/fs.js";
@@ -270,6 +275,60 @@ describe("zero-entry fresh install", () => {
 });
 
 describe("harness scoring honesty", () => {
+  // A user can accidentally restore a file where recovery expects a directory after a broken backup.
+  it("fails setup and recovery when required storage paths are files", async () => {
+    const projectRoot = await mkdtemp(
+      join(tmpdir(), "goat-flow-recovery-storage-"),
+    );
+    try {
+      await mkdir(join(projectRoot, ".goat-flow", "logs"), {
+        recursive: true,
+      });
+      await writeFile(
+        join(projectRoot, ".goat-flow", "logs", "sessions"),
+        "not a directory",
+      );
+      await writeFile(
+        join(projectRoot, ".goat-flow", "plans"),
+        "not a directory",
+      );
+      const auditFileSystem = createFS(projectRoot);
+      const sessionSetupCheck = SETUP_CHECKS.find(
+        (check) => check.id === "session-logs",
+      );
+      const sessionRecoveryCheck = HARNESS_CHECKS.find(
+        (check) => check.id === "session-logs",
+      );
+      const milestoneRecoveryCheck = HARNESS_CHECKS.find(
+        (check) => check.id === "milestone-tracking",
+      );
+      assert.ok(sessionSetupCheck, "session-logs setup check must exist");
+      assert.ok(sessionRecoveryCheck, "session-logs recovery check must exist");
+      assert.ok(
+        milestoneRecoveryCheck,
+        "milestone-tracking recovery check must exist",
+      );
+
+      const setupFinding = sessionSetupCheck.run({ fs: auditFileSystem });
+      const sessionResult = sessionRecoveryCheck.run(
+        makeCtx({ fs: auditFileSystem }),
+      );
+      const milestoneResult = milestoneRecoveryCheck.run(
+        makeCtx({ fs: auditFileSystem }),
+      );
+
+      assert.ok(setupFinding, "a sessions file must fail setup");
+      assert.equal(sessionResult.status, "fail");
+      assert.equal(milestoneResult.status, "fail");
+      assert.match(
+        `${sessionResult.findings.join("\n")}\n${milestoneResult.findings.join("\n")}`,
+        /not a readable directory/u,
+      );
+    } finally {
+      await rm(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   it("fails session-log recovery when the sessions directory is missing", () => {
     const check = HARNESS_CHECKS.find((c) => c.id === "session-logs");
     assert.ok(check, "session-logs check must exist");

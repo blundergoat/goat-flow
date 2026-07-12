@@ -1,6 +1,6 @@
 ---
 category: multi-agent
-last_reviewed: 2026-05-27
+last_reviewed: 2026-07-12
 ---
 
 ## Pattern: Multi-agent critique - how to run it effectively
@@ -38,3 +38,13 @@ last_reviewed: 2026-05-27
 **Evidence:** `workflow/skills/goat-critique/SKILL.md` (search: `leak scan`) and `workflow/skills/goat-critique/SKILL.md` (search: `coverage gate`) are the current executable-check anchors that replaced earlier self-report-only gates.
 
 **Anti-pattern:** Do not let a prompt rule feed automatic HIGH severity or phase progression unless another context verifies the input. Prompt-based orchestration can request discipline; it cannot prove the discipline happened by reading the sub-agent's own assertion.
+
+---
+
+## Pattern: Delegated-work review before user handoff
+
+**Context:** Another agent implemented an approved milestone and the coordinating agent must decide whether the result is ready for the user.
+
+**Approach:** Review independently: re-run every done criterion yourself; check scope with `git diff --stat` or the local equivalent; read the full diff against stated intent; and audit new tests for meaningful assertions. Treat documented deviations on merit, but treat undocumented deviations as review failures because the user cannot evaluate a change they were never told about. After two failed revision loops, stop patching the same approach and re-plan.
+
+**Boundary:** This is a verification pattern, not executor dispatch. It does not authorize worktrees, implementation, commits, or pushes.

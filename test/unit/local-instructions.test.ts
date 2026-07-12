@@ -1,5 +1,7 @@
 /**
- * Unit tests for project-local instruction fact extraction.
+ * Exercises project-local instruction discovery used by audit and setup views.
+ * Use these fixtures when routing or instruction extraction changes so users
+ * see only files and directories that actually exist in the selected project.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -16,6 +18,7 @@ import { extractLocalInstructions } from "../../src/cli/facts/shared/local-instr
 import type { AgentProfile } from "../../src/cli/types.js";
 import type { ReadonlyFS } from "../../src/cli/types.js";
 
+/** Build a small in-memory project tree for one user-visible instruction scenario. */
 function stubFS(
   files: Record<string, string>,
   dirs: Record<string, string[]>,
@@ -28,6 +31,8 @@ function stubFS(
     lineCount: (path) =>
       files[path] === undefined ? 0 : files[path]!.split("\n").length,
     readJson: () => null,
+    isReadableDirectory: (path) =>
+      Object.prototype.hasOwnProperty.call(dirs, path),
     listDir: (path) => dirs[path] ?? [],
     isExecutable: () => false,
     glob: () => [],

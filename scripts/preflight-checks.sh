@@ -6,8 +6,10 @@
 
 # preflight-checks.sh
 #
-# Purpose:
-#   Runs the local pre-flight quality gate used before risky edits or releases.
+# Runs the local quality gate a developer uses before accepting risky work or a release.
+# Use it to see one phased verdict for shell policy, source checks, tests, drift, and links.
+# Interactive Tests runs show bounded progress while their output stays captured for diagnostics.
+# Redirected and CI runs keep a deterministic report that automation can parse safely.
 #
 # Usage:
 #   bash scripts/preflight-checks.sh
@@ -45,6 +47,9 @@ Usage: preflight-checks.sh [--verbose] [--no-color] [--ascii] [--help]
 
 Runs the local pre-flight quality gate. Exits 0 when all checks pass,
 non-zero otherwise.
+
+Interactive Tests runs show one elapsed-time heartbeat every 10 seconds.
+Redirected and CI output remains deterministic and contains no heartbeat lines.
 
 Options:
   -v, --verbose    Expand every sub-check (default collapses to one row per
@@ -154,6 +159,7 @@ NODE
 # ── Capability detection ─────────────────────────────────────────────
 _is_tty=0
 [[ -t 1 ]] && _is_tty=1
+preflight_test_heartbeat_seconds=10
 
 _use_color=1
 if [[ -n "$no_color" ]] || [[ -n "${NO_COLOR:-}" ]]; then
@@ -317,72 +323,36 @@ details_pipe() {
     done
 }
 
+# Run one Tests command while retaining final diagnostics and showing bounded TTY liveness.
+# Use the same helper for first-run and retry paths so users receive one timeout contract.
 run_command_capture_with_timeout() {
     local __output_var="$1"
     local __status_var="$2"
     local timeout_seconds="$3"
-    shift 3
+    local progress_label="$4"
+    shift 4
     local output status
+    local operator_progress_fd=""
+    local -a command_runner_arguments=(
+        scripts/preflight-command-runner.mjs
+        --timeout-seconds "$timeout_seconds"
+        --heartbeat-seconds "$preflight_test_heartbeat_seconds"
+        --label "$progress_label"
+    )
 
-    output="$(
-        node - "$timeout_seconds" "$@" <<'NODE' 2>&1
-const { spawn } = require("node:child_process");
+    # e.g. a developer ran preflight before release; long Tests show liveness outside captured CI output.
+    if [[ "$_is_tty" -eq 1 ]]; then
+        exec {operator_progress_fd}>&1
+        command_runner_arguments+=(--progress-fd "$operator_progress_fd")
+    fi
+    command_runner_arguments+=(-- "$@")
 
-const timeoutSeconds = Number(process.argv[2] || "0");
-const command = process.argv[3];
-const args = process.argv.slice(4);
-let timedOut = false;
-let forceKillTimer = null;
-const chunks = [];
-const child = spawn(command, args, {
-  detached: process.platform !== "win32",
-  stdio: ["ignore", "pipe", "pipe"],
-});
+    output="$(node "${command_runner_arguments[@]}" 2>&1)" && status=0 || status=$?
 
-function killChild(signal) {
-  if (!child.pid) return;
-  try {
-    if (process.platform === "win32") child.kill(signal);
-    else process.kill(-child.pid, signal);
-  } catch {
-    // The child may already have exited between the timeout and signal.
-  }
-}
-
-child.stdout.on("data", (chunk) => chunks.push(chunk));
-child.stderr.on("data", (chunk) => chunks.push(chunk));
-child.on("error", (error) => {
-  chunks.push(Buffer.from(String(error.message || error)));
-});
-
-const timer =
-  Number.isFinite(timeoutSeconds) && timeoutSeconds > 0
-    ? setTimeout(() => {
-        timedOut = true;
-        killChild("SIGTERM");
-        forceKillTimer = setTimeout(() => killChild("SIGKILL"), 1000);
-        forceKillTimer.unref();
-      }, timeoutSeconds * 1000)
-    : null;
-
-child.on("close", (code) => {
-  if (timer) clearTimeout(timer);
-  if (forceKillTimer) clearTimeout(forceKillTimer);
-  const outputChunks = [Buffer.concat(chunks)];
-  if (timedOut) {
-    outputChunks.push(
-      Buffer.from(`\n[preflight] command timed out after ${timeoutSeconds}s: ${[
-        command,
-        ...args,
-      ].join(" ")}\n`),
-    );
-  }
-  process.stdout.write(Buffer.concat(outputChunks), () => {
-    process.exit(timedOut ? 124 : code === null ? 1 : code);
-  });
-});
-NODE
-    )" && status=0 || status=$?
+    # No descriptor means redirected output stayed quiet; an interactive descriptor closes after this command.
+    if [[ -n "$operator_progress_fd" ]]; then
+        exec {operator_progress_fd}>&-
+    fi
 
     printf -v "$__output_var" '%s' "$output"
     printf -v "$__status_var" '%s' "$status"
@@ -1763,7 +1733,8 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
         warn "Invalid GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=$test_timeout_seconds; using 600"
         test_timeout_seconds=600
     fi
-    run_command_capture_with_timeout test_output test_exit "$test_timeout_seconds" "${test_command[@]}"
+    run_command_capture_with_timeout \
+        test_output test_exit "$test_timeout_seconds" "Tests" "${test_command[@]}"
 
     test_count=$(echo "$test_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
     pass_count=$(echo "$test_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
@@ -1780,7 +1751,8 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     elif [[ "$test_retryable" == true ]]; then
         retry_output=""
         retry_exit=1
-        run_command_capture_with_timeout retry_output retry_exit "$test_timeout_seconds" "${test_command[@]}"
+        run_command_capture_with_timeout \
+            retry_output retry_exit "$test_timeout_seconds" "Tests retry" "${test_command[@]}"
         retry_test_count=$(echo "$retry_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
         retry_pass_count=$(echo "$retry_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
         retry_fail_count=$(echo "$retry_output" | grep '# fail' | grep -oE '[0-9]+' || echo "0")

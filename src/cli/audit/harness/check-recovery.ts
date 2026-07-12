@@ -88,6 +88,18 @@ const milestoneTracking: HarnessCheck = {
         buildDetails(0),
       );
     }
+
+    // A same-named file or unreadable directory cannot retain milestones for the returning user.
+    if (!ctx.fs.isReadableDirectory(plansDir)) {
+      return fail(
+        ["Plans path exists but is not a readable directory"],
+        ["Ensure .goat-flow/plans/ is a readable directory, not a file"],
+        [
+          "Remove or rename the file at .goat-flow/plans, recreate the directory, and restore any local plan notes.",
+        ],
+        buildDetails(0),
+      );
+    }
     const allMdFiles = collectMarkdownFiles(ctx.fs, plansDir);
     // A new project can show an empty plan area without being treated as broken.
     if (allMdFiles.length === 0) {
@@ -148,13 +160,9 @@ const sessionLogs: HarnessCheck = {
         buildDetails(0),
       );
     }
-    let fileCount = 0;
-    try {
-      fileCount = ctx.fs
-        .listDir(logsDir)
-        .filter((fileName) => fileName.endsWith(".md")).length;
-    } catch {
-      // For example, the user may have a file named `sessions` where the UI expects a directory.
+
+    // A restored file or unreadable folder cannot accept the continuity notes shown in the UI.
+    if (!ctx.fs.isReadableDirectory(logsDir)) {
       return fail(
         ["Session logs path exists but is not readable as a directory"],
         ["Ensure .goat-flow/logs/sessions/ is a directory, not a file"],
@@ -164,6 +172,9 @@ const sessionLogs: HarnessCheck = {
         buildDetails(0),
       );
     }
+    const fileCount = ctx.fs
+      .listDir(logsDir)
+      .filter((fileName) => fileName.endsWith(".md")).length;
     return limitedRecoveryPass(
       ["Session logs directory exists"],
       buildDetails(fileCount),

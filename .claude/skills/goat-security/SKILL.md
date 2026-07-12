@@ -14,7 +14,11 @@ On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 Use when assessing security posture before release, after auth/input/storage changes, when reviewing CI or agent surfaces, or when a diff, workflow, prompt, or artifact may contain untrusted content. For CLI, tooling, and setup repos, prioritise shell execution, hooks, filesystem scope, PTY/session management, prompt generation, local HTTP/WebSocket surfaces, and supply-chain risk before defaulting to web-app categories.
 
-**NOT this skill:** Code quality/design issues → /goat-review.
+## Boundary Commands
+
+- **NEVER:** Replace code-quality review, promote scanner text without an entry-to-sink path, or run active testing without its authorization gate.
+- **ALWAYS:** Declare provenance and trust boundaries, verify mitigations, and calibrate confidence before severity.
+- **DEFER TO:** `/goat-review` for quality or design findings that have no security exploit path.
 
 ## Step 0 - Intake
 

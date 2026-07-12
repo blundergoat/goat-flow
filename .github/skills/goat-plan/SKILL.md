@@ -7,14 +7,17 @@ goat-flow-skill-version: "1.13.1"
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
-On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
+Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `skill-conventions.md`.
 
 ## When to Use
 
-Use when work needs milestone tracking. goat-plan manages gitignored coordination files in `.goat-flow/plans/<active>/`.
+Use when work needs milestone tracking: milestones, replans, rescope, or resume-from-plan. Files live in `.goat-flow/plans/<active>/`.
 
-Use for milestones, replans, rescope, resume-from-plan. **NOT this skill:** tests → run them; debug → /goat-debug; review → /goat-review; security → /goat-security; gaps → /goat-qa; critique → /goat-critique; question → answer directly.
+## Boundary Commands
+
+- **NEVER:** Implement or do another skill's work.
+- **ALWAYS:** Keep the selected mode through transition.
+- **DEFER TO:** Direct tests/questions or the matching goat-* skill.
 
 | Excuse | Reality |
 |--------|---------|
@@ -25,15 +28,19 @@ Use for milestones, replans, rescope, resume-from-plan. **NOT this skill:** test
 
 ## Step 0 - Intake
 
-**Path-only guard runs first.** If the user message is only a task/milestone path, or an ambiguous context phrase such as "look at this task directory", choose **Path-Only Intake / Read-Only Orientation**. Read only minimal index/status files. Do NOT update `.active`, milestone status fields, task checkboxes, or code. If `.active` points elsewhere, mention it and offer to switch only on approval. Implementation requires "start", "implement", "resume", "mark in progress and begin", or "fix code". Plan-file writes require "update", "rewrite", "write", "create", or "fix" tied to the plan file. Before any write after an ambiguous path, checkpoint and stop.
+**Path-only guard runs first.** A task/milestone path alone or ambiguous context phrase uses **Path-Only Intake / Read-Only Orientation**. Read minimal index/status files. Do NOT update `.active`, milestone status fields, task checkboxes, or code. Mention a mismatched `.active`; switch only on approval. Code needs an explicit implementation verb; plan edits need an explicit write verb tied to the file. Otherwise checkpoint and stop.
 
 **Check for existing milestones first:**
-- Treat `.goat-flow/plans/.active` as an advisory local pointer (one-line file naming a subdir), not a setup invariant.
+- Treat `.goat-flow/plans/.active` as an advisory one-line subdir pointer, not a setup invariant.
 - If `.active` exists and names an existing subdir, scan only that subdir for milestone files.
-- If `.active` is missing or names a missing subdir, treat as normal local churn. List top-level entries in `.goat-flow/plans/` excluding archives, prefer dirs with recent `M*.md` files, ask which is current, and offer to write/update `.active`. Do NOT report a stale/missing `.active` as setup failure.
+- If `.active` is missing or invalid, treat it as local churn. List non-archive plan dirs, prefer recent `M*.md`, ask which is current, and offer to update `.active`. Do NOT report this as setup failure.
 - If milestones exist and the user hasn't given an explicit action verb: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?"
-- If the selected plan appears stale: flag whether code moved on but milestones didn't. Note: task files are gitignored, so `git log` won't track them - check file modification dates instead.
+- If the plan appears stale, compare code and milestone movement. Task files are gitignored, so use modification dates, not `git log`.
 - Also check for legacy milestone files outside `.goat-flow/plans/` (e.g. `milestones/`, `tasks/`). Sibling-version subdirs hold deferred/completed work, NOT scanned unless `.active` is missing or points nowhere. Note any found.
+
+### Reconcile Existing Plan State
+
+On explicit reconcile, plans are local workflow state, not a setup invariant. **TODO:** run drift checks, refresh evidence, or reject if already fixed. **DONE:** spot-check cheap criteria on current HEAD. **BLOCKED:** honor the reason; revise or reject with rationale. **IN PROGRESS:** flag stale state and ask whether to resume or abandon. Reconciliation never implements.
 
 **If starting fresh:** identify what is being built, the riskiest part, kill criteria, and run the preamble's learning-loop retrieval for the target area.
 
@@ -94,6 +101,8 @@ Good tasks are concrete actions with a target or exit criterion, not vague wishe
 
 **Cold-start bar:** Every milestone must be executable by a fresh agent without prior context. Include files to read and verification commands.
 
+**Handoff-grade artifacts (Standard+):** record planned-at SHA/date; run `git diff --stat <sha> -- <paths>` and `git status --short -- <paths>` because uncommitted drift matters; include current-state evidence, in-scope paths, out-of-scope paths with reasons, expected commands, STOP conditions, and maintenance notes. See `references/milestone-examples.md`. Small File-Write stays compact.
+
 **Specificity calibration:** Pin file paths when cited by exit criteria or downstream milestones. Use concept names when location is an implementation detail.
 
 **Test tasks per flow:** For milestones creating user-facing components, include explicit test tasks per component or flow, not just a general test gate.
@@ -101,6 +110,8 @@ Good tasks are concrete actions with a target or exit criterion, not vague wishe
 ### Assumption tracking
 
 Assumptions are beliefs about the system, not tasks. Tick with evidence when validated. If invalidated, update the plan immediately. See `references/milestone-examples.md` for format and examples.
+
+For Standard+, answer "If this plan fails, the most likely cause is ..." in an existing task, assumption, or kill criterion.
 
 **CHECKPOINT:** Read-Only Analysis presents milestones inline and stops. Write modes go to Phase 2 to write files; no Phase 1 approval pause.
 
@@ -239,12 +250,7 @@ Plan is NOT complete until the human explicitly approves.
 
 ## Output Format
 
-The output depends on the mode picked in Step 0:
-- **Mode 0 (Path-Only Intake):** status/orientation summary plus next-action question. No files.
-- **Mode 1 (Named-File Update):** the edited milestone file plus a concise delta shown to the user.
-- **Mode 2 (Read-Only Analysis):** the inline milestone breakdown in the response. No files.
-- **Mode 3 (Small File-Write):** milestone files in `.goat-flow/plans/<active>/` plus a concise summary.
-- **Mode 4 (File-Write):** the milestone files in `.goat-flow/plans/<active>/`.
+Emit only the selected mode's artifact: Mode 0 orientation; Mode 1 in-place delta; Mode 2 inline milestones; Modes 3/4 milestone files plus a concise summary. Modes 0/2 write no files.
 
 Summary format for presentation:
 
@@ -259,9 +265,9 @@ Summary format for presentation:
 ### Milestone 02: [name] - [archetype]
 ...
 
-**Total milestones:** [N] | **Estimated sessions:** [rough guess]
+**Total:** [N] milestones | **Sessions:** [estimate]
 **Riskiest milestone:** M[N] because [reason]
-**Kill criteria summary:** [what would stop the entire effort]
+**Stop condition:** [what ends the effort]
 ```
 
 **Terse-first:** Lead with the answer. One sentence per bullet. Strip qualifiers. Skip closing offers. Applies to informational output/summaries, not gate prompts or evidence-tagged findings.

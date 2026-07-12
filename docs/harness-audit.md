@@ -127,10 +127,10 @@ Agents that run for minutes or hours need durable state. Without recovery mechan
 
 **Recovery checks (2):**
 
-- `milestone-tracking` - `.goat-flow/plans/` directory exists. Does not score task count, checkbox completion, milestone status, testing gates, roadmap progress, or recency. Empty, planned, active, and long-term roadmap files are valid local workflow state.
-- `session-logs` - `.goat-flow/logs/sessions/` directory exists. Does not count entries.
+- `milestone-tracking` - `.goat-flow/plans/` exists as a readable directory. Does not score task count, checkbox completion, milestone status, testing gates, roadmap progress, or recency. Empty, planned, active, and long-term roadmap files are valid local workflow state.
+- `session-logs` - `.goat-flow/logs/sessions/` exists as a readable directory. The JSON details expose the top-level Markdown file count for orientation, but that count does not affect status or score.
 
-**Not checked here:** entry counts, recency, content quality of task or session files, current objective, completed work, last verification, next action, or end-to-end resumability. A fresh install passes with the Recovery evidence limit.
+**Not checked here:** whether entry counts are sufficient, recency, content quality of task or session files, current objective, completed work, last verification, next action, or end-to-end resumability. A fresh install passes with the Recovery evidence limit.
 
 
 

@@ -3,7 +3,27 @@ goat-flow-reference-version: "1.13.1"
 ---
 # goat-review Reference Examples
 
-Extended Excuse/Reality table, finding-format examples, and constraint rationale for `/goat-review`.
+This reference carries detailed examples that would overload the review protocol.
+Use it to calibrate refutations, final output, and explicit direction audits.
+Every live claim still requires a verified file plus semantic anchor.
+
+## Direction / Opportunity Audit
+
+Run this area-audit variant only when the user explicitly asks what the repository should do next. Record the current read-only verification baseline first; a failing build or test is a prerequisite, not an opportunity. Every item needs repo-grounded evidence and exactly one class:
+
+- **unfinished intent** - TODO/FIXME clusters, dead flags, or stubs.
+- **stated-but-undelivered** - docs or flags promise behavior no live surface provides.
+- **surface asymmetry** - an export has no import, CRUD lacks one operation, or an integration works one way.
+- **adjacent possible** - a cheap extension is implied by the existing architecture.
+- **friction worth productizing** - docs, examples, issues, or support text repeat the same manual workaround.
+
+Emit these under `## Direction / Opportunity Audit`, without MUST/SHOULD/MAY tags. Rank only this opportunity/backlog output by impact divided by effort, discounted by confidence and fix risk. Defect findings remain severity-ordered and continue to control Ship Verdict. Generic ideas without a live anchor are rejected, not padded into the list.
+
+Route rejected material by lifespan:
+
+- **Per-run refutations:** keep Pass-2 evidence in random-suffixed `.goat-flow/logs/review/` ledgers.
+- **Local cross-run rejections:** record the rationale in the active plan's `backlog.md` or a named plan-local rejection section.
+- **Durable policy decisions:** use an ADR or learning-loop entry only when the decision changes future work beyond the current plan.
 
 ## Worked Example - Refuted Template Suspicion
 

@@ -1,13 +1,8 @@
 /**
- * GOAT Flow Setup checks for `goat-flow audit`.
- * 16 setup-scope checks that validate project structure:
- *   10 named (lessons, footguns, architecture, code-map, glossary, patterns,
- *             decisions, session-logs, plans, scratchpad)
- * + 1 skill-docs completeness and discoverability check
- * + 1 goat-flow-gitignore content check (catches pre-1.6.1 stale exceptions)
- * + 1 catch-all (other-files)
- * + 2 config (config-parses, config-version)
- * + 1 hook-version (installed hook dispatcher version stamps current)
+ * Defines the 16 setup-scope checks shown by `goat-flow audit`.
+ * Use them to tell a project owner whether required learning-loop, workspace,
+ * skill, config, and hook surfaces are structurally usable and version-current.
+ * These checks inspect the selected project but never execute its application.
  */
 import type { BuildCheck } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
@@ -433,13 +428,19 @@ const sessionLogs: BuildCheck = {
   ]),
   /** Run the Session logs check. */
   run: (ctx) => {
-    if (ctx.fs.exists(".goat-flow/logs/sessions")) return null;
+    // A user needs a real readable directory; a same-named file cannot preserve session continuity.
+    if (
+      ctx.fs.exists(".goat-flow/logs/sessions") &&
+      ctx.fs.isReadableDirectory(".goat-flow/logs/sessions")
+    ) {
+      return null;
+    }
     return {
       check: "Session logs",
-      message: "Missing: .goat-flow/logs/sessions/",
+      message: "Missing or unusable: .goat-flow/logs/sessions/",
       evidence: ".goat-flow/logs/sessions/",
       howToFix:
-        "Create session logs directory by running `goat-flow setup` or `mkdir -p .goat-flow/logs/sessions`.",
+        "Ensure .goat-flow/logs/sessions/ is a readable directory, then run `goat-flow setup` if it is missing.",
     };
   },
 };
@@ -456,7 +457,14 @@ const plans: BuildCheck = {
   /** Run the Plans check. */
   run: (ctx) => {
     const missing: string[] = [];
-    if (!ctx.fs.exists(".goat-flow/plans")) missing.push(".goat-flow/plans/");
+
+    // A file named `plans` cannot hold the local milestones a user expects to resume.
+    if (
+      !ctx.fs.exists(".goat-flow/plans") ||
+      !ctx.fs.isReadableDirectory(".goat-flow/plans")
+    ) {
+      missing.push(".goat-flow/plans/");
+    }
     if (!ctx.fs.exists(".goat-flow/plans/.gitignore"))
       missing.push(".goat-flow/plans/.gitignore");
     if (!ctx.fs.exists(".goat-flow/plans/README.md"))

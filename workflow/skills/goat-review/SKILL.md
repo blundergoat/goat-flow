@@ -11,11 +11,13 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 
 ## When to Use
 
-Use when reviewing a diff, PR, or set of changes. Also for quality audits of a codebase area.
+Use for diff/PR review or codebase-area quality audits.
 
-**Boundary:** goat-review owns quality, style, correctness. goat-security owns threat models, compliance, CVEs, auth boundaries. Security issues: flag and suggest `/goat-security`.
+## Boundary Commands
 
-**NOT this skill:** OWASP assessment → /goat-security. Understanding code → /goat-debug. Generating tests → /goat-qa. Planning milestones → /goat-plan. Feature briefs → dispatcher Route Map.
+- **NEVER:** Auto-edit, perform security review, or run an unapproved refuter.
+- **ALWAYS:** Reconstruct intent, run both passes, disprove suspicions, and emit the local verdict with Review Integrity.
+- **DEFER TO:** Security, debug, QA, planning, or dispatcher routes for their named work.
 
 ## Step 0 - Scope, Size, Spec
 
@@ -129,6 +131,10 @@ Check each finding with targeted INDEX-first retrieval against `.goat-flow/learn
 When the target is a codebase area (not a diff). For >20 files, recommend splitting. Two-pass discipline still applies per file cluster: skim the surface for suspicions, then open files for verification. Pre-existing issues ARE in scope (they are the point of an area audit).
 
 **BLOCKING GATE:** Present findings and pause. If calibration is uncertain, consider `/goat-critique`.
+
+### Direction / Opportunity Audit
+
+Only on explicit request, add an advisory opportunity output backed by repo-grounded evidence; it does not affect Ship Verdict. Categories, leverage ranking, and rejection routing: `references/examples.md`. Defects stay in normal findings.
 
 ## Spec Drift (opt-in)
 

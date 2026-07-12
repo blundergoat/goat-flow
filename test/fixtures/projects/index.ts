@@ -1,6 +1,7 @@
 /**
  * Shared test fixtures for audit/quality tests.
- * Exports stubFS, stubConfig, stubAgentFacts, and pre-built project fixtures.
+ * Use these defaults to model a healthy selected project before one focused
+ * setup or harness condition is overridden for a user-visible assertion.
  */
 import type {
   AgentFacts,
@@ -50,6 +51,7 @@ export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
     readFile: defaultReadFile,
     lineCount: () => 0,
     readJson: () => null,
+    isReadableDirectory: () => true,
     listDir: () => [],
     isExecutable: () => false,
     glob: () => [],
