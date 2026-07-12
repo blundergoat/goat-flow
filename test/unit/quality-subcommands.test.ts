@@ -191,6 +191,52 @@ describe("skill subcommand parsing", () => {
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });
+
+  it("parses skill doctor with the shared agent/format flags and a skill filter", () => {
+    const parsed = parseCLIArgs([
+      "skill",
+      "doctor",
+      ".",
+      "--agent",
+      "codex",
+      "--skill",
+      "goat",
+      "--format",
+      "json",
+    ]);
+
+    assert.equal(parsed.command, "skill");
+    assert.equal(parsed.skillSubcommand, "doctor");
+    assert.equal(parsed.projectPath, resolve("."));
+    assert.equal(parsed.agent, "codex");
+    assert.equal(parsed.skillFilter, "goat");
+    assert.equal(parsed.format, "json");
+  });
+
+  it("parses a project path before skill doctor", () => {
+    const parsed = parseCLIArgs(["skill", ".", "doctor"]);
+
+    assert.equal(parsed.skillSubcommand, "doctor");
+    assert.equal(parsed.projectPath, resolve("."));
+  });
+
+  it("rejects unsupported agent profiles before skill doctor dispatch", () => {
+    assert.throws(
+      () => parseCLIArgs(["skill", "doctor", "--agent", "unknown"]),
+      /Invalid agent: unknown/i,
+    );
+  });
+
+  it("keeps skill-new write flags out of the read-only doctor mode", () => {
+    assert.throws(
+      () => parseCLIArgs(["skill", "doctor", "--yes"]),
+      /--yes is only valid for skill new/i,
+    );
+    assert.throws(
+      () => parseCLIArgs(["skill", "new", "description", "--skill", "goat"]),
+      /--skill is only valid for skill doctor/i,
+    );
+  });
 });
 
 describe("quality candidacy draft naming", () => {

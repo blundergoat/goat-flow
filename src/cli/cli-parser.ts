@@ -30,9 +30,14 @@ import {
   type ParsedArgValues,
   type ParsedCLI,
   type QualitySubcommand,
-  type SkillCLIFields,
   type SkillSubcommand,
 } from "./cli-types.js";
+import {
+  buildSkillCLIFields,
+  parseSkillPositionals,
+  validateSkillFlags,
+  type SkillPositionals,
+} from "./skill-command-parser.js";
 
 /** Parse the positional subcommand from raw CLI args; throws CLIError for removed commands with migration help. */
 function parseCommand(argv: string[]): {
@@ -328,71 +333,6 @@ function parseCommandPositionals(
   };
 }
 
-/** Parsed skill command positionals before flag-derived fields are merged. */
-interface SkillPositionals {
-  skillSubcommand: SkillSubcommand | null;
-  skillDescription: string | null;
-  projectPath: string;
-}
-
-/** Detect positional skill project paths so descriptions do not accidentally consume them. */
-function isPathShapedSkillProject(value: string): boolean {
-  const normalized = value.replace(/\\/gu, "/");
-  return (
-    value === "." ||
-    value === ".." ||
-    normalized.startsWith("./") ||
-    normalized.startsWith("../") ||
-    normalized.startsWith("/") ||
-    /^[a-zA-Z]:[\\/]/u.test(value) ||
-    value.startsWith("\\\\")
-  );
-}
-
-/** Join free-form skill description parts after dropping absent argv values. */
-function parseSkillDescription(parts: string[]): string | null {
-  const description = parts
-    .filter(
-      (part): part is string => typeof part === "string" && part.length > 0,
-    )
-    .join(" ");
-  return description.length > 0 ? description : null;
-}
-
-/** Parse `skill [project-path] new [project-path] [description...]`; throws CLIError for unknown subcommands. */
-function parseSkillPositionals(positionals: string[]): SkillPositionals {
-  const [first, second, ...rest] = positionals;
-  if (first === undefined) {
-    return {
-      skillSubcommand: null,
-      skillDescription: null,
-      projectPath: resolve("."),
-    };
-  }
-  if (first === "new") {
-    const descriptionParts =
-      second !== undefined && isPathShapedSkillProject(second)
-        ? rest
-        : positionals.slice(1);
-    return {
-      skillSubcommand: "new",
-      skillDescription: parseSkillDescription(descriptionParts),
-      projectPath:
-        second !== undefined && isPathShapedSkillProject(second)
-          ? resolve(second)
-          : resolve("."),
-    };
-  }
-  if (second === "new") {
-    return {
-      skillSubcommand: "new",
-      skillDescription: parseSkillDescription(rest),
-      projectPath: resolve(first),
-    };
-  }
-  throw new CLIError(`unknown skill subcommand "${first}". Supported: new`, 2);
-}
-
 /** Validate flags shared across commands. */
 function rejectFlagOutsideCommand(
   command: Command,
@@ -484,7 +424,6 @@ function validateInstallFlags(command: Command, values: ParsedArgValues): void {
 }
 
 /** Validate quality mode flags against the selected quality subcommand. */
-// eslint-disable-next-line complexity -- intentional because one validator preserves the cross-command error contract
 function validateQualityFlags(
   command: Command,
   values: ParsedArgValues,
@@ -500,27 +439,6 @@ function validateQualityFlags(
       2,
     );
   }
-  if (
-    parsedString(values, "draft") !== undefined &&
-    !(
-      (command === "quality" && qualitySubcommand === "candidacy") ||
-      command === "skill"
-    )
-  ) {
-    throw new CLIError(
-      "--draft is only valid for quality candidacy and skill new.",
-      2,
-    );
-  }
-  if (parsedFlag(values, "interactive") && command !== "skill") {
-    throw new CLIError("--interactive is only valid for skill new.", 2);
-  }
-  if (parsedString(values, "name") !== undefined && command !== "skill") {
-    throw new CLIError("--name is only valid for skill new.", 2);
-  }
-  if (parsedFlag(values, "yes") && command !== "skill") {
-    throw new CLIError("--yes is only valid for skill new.", 2);
-  }
 }
 
 /** Validate flag combinations after strict parseArgs accepts their shapes. */
@@ -528,10 +446,12 @@ function validateFlagCombinations(
   command: Command,
   values: ParsedArgValues,
   qualitySubcommand: QualitySubcommand,
+  skillSubcommand: SkillSubcommand | null,
 ): void {
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
   validateQualityFlags(command, values, qualitySubcommand);
+  validateSkillFlags(command, values, qualitySubcommand, skillSubcommand);
 }
 
 /** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
@@ -542,26 +462,6 @@ function parseEventsLimitArg(value: string | undefined): number {
     throw new CLIError("--limit must be a positive integer.", 2);
   }
   return Math.min(parsed, 500);
-}
-
-function buildSkillCLIFields(
-  command: Command,
-  values: ParsedArgValues,
-  positionals: SkillPositionals,
-): SkillCLIFields {
-  const isSkillCommand = command === "skill";
-  const skillDraftValue = isSkillCommand
-    ? parsedString(values, "draft")
-    : undefined;
-  return {
-    skillSubcommand: positionals.skillSubcommand,
-    skillDescription: positionals.skillDescription,
-    skillDraftPath:
-      skillDraftValue === undefined ? null : resolve(skillDraftValue),
-    skillName: isSkillCommand ? (parsedString(values, "name") ?? null) : null,
-    skillInteractive: isSkillCommand && parsedFlag(values, "interactive"),
-    skillSkipConfirm: isSkillCommand && parsedFlag(values, "yes"),
-  };
 }
 
 /**
@@ -599,6 +499,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       draft: { type: "string" },
       interactive: { type: "boolean", default: false },
       name: { type: "string" },
+      skill: { type: "string" },
       yes: { type: "boolean", short: "y", default: false },
       json: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -649,6 +550,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     command,
     parsedValues,
     qualityPositionals.qualitySubcommand,
+    skillPositionals.skillSubcommand,
   );
 
   return {

@@ -1,12 +1,8 @@
 /**
- * Command-dispatch layer for the CLI: one handler per subcommand plus the COMMAND_HANDLERS table
- * and dispatchCommand entry that routes a parsed ParsedCLI to the right one. Handlers lazy-import
- * their heavy dependencies (audit, facts, quality, dashboard, stats) so a single command never pays
- * for modules it does not use. The shared error convention is to throw CLIError for user-facing
- * failures (the entry point maps that to an exit code) and to set process.exitCode (not exit) for
- * non-zero-but-successful outcomes like a failing audit, so buffered stdout still flushes.
+ * Routes parsed CLI commands through lazy handlers so unrelated commands avoid heavy imports.
+ * User failures throw CLIError; report failures set process.exitCode so stdout can flush.
+ * Use this layer when a command needs shared output and exit conventions.
  */
-
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { AgentId, ProjectFacts } from "./types.js";
@@ -37,7 +33,6 @@ import {
 } from "./prompt/commit-guidance.js";
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
-
 const PACKAGE_VERSION = getPackageVersion();
 
 function formatCandidacyArtifact(
@@ -511,11 +506,7 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
   }
 }
 
-/**
- * Run the quality command by delegating to the quality module with CLI-side dependencies injected.
- * The error/output behaviour lives in the injected collaborators - CLIError for failures and
- * writeOutput for results - so this wrapper only supplies them and forwards the parsed options.
- */
+/** Delegate every quality mode with the CLI's shared error/output collaborators. */
 async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   await runQualityCommand(options, {
     CLIError,
@@ -686,16 +677,23 @@ const COMMAND_HANDLERS: Partial<
   info: handleInfoCommand,
 };
 
-/**
- * Run `skill new`, scaffolding a skill/playbook from a description, draft, or interactive prompt.
- * Throws a usage CLIError (exit 2) when the subcommand is not `new` or when the skill author
- * reports a SkillNewInputError (bad/missing input); any other author error is rethrown unchanged.
- * Emits a JSON candidacy/path/score summary under `--format json`, otherwise the author's text.
- */
+/** Route `skill new` authoring or read-only `skill doctor` diagnosis. */
 async function handleSkillCommand(options: ParsedCLI): Promise<void> {
+  // Doctor reports installed discovery evidence without entering the write-capable authoring flow.
+  if (options.skillSubcommand === "doctor") {
+    const { handleSkillDoctorCommand } = await import("./skill-doctor.js");
+    handleSkillDoctorCommand(options);
+    return;
+  }
+  await handleSkillNewCommand(options);
+}
+
+/** Run skill authoring; throws `CLIError` for usage/input failures and preserves JSON/text output. */
+async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
+  // Any remaining mode must be the existing skill-new authoring contract.
   if (options.skillSubcommand !== "new") {
     throw new CLIError(
-      'Usage: goat-flow skill new ["<description>" | --draft <path> | --interactive]',
+      "Usage: goat-flow skill <new|doctor> [project-path] [flags]",
       2,
     );
   }

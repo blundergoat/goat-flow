@@ -79,6 +79,30 @@ npx goat-flow skill new --interactive               # prompts for description, n
 
 Default destinations: skills install to `.claude/skills/<name>/SKILL.md`; playbooks/references install to `.goat-flow/skill-docs/playbooks/<name>.md`. The command does not edit `workflow/manifest.json`.
 
+### `goat-flow skill doctor [path] [--agent <id>] [--skill <name>] [--format text|json|markdown]`
+
+Explain the static installation and invocation evidence for canonical goat-flow skills. The command is read-only: it never installs, repairs, edits, or invokes a skill.
+
+```bash
+npx goat-flow skill doctor .                              # All supported agent profiles and skills
+npx goat-flow skill doctor . --agent codex               # Codex paths and `$goat-*` invocation text
+npx goat-flow skill doctor . --agent codex --skill goat  # One canonical skill
+npx goat-flow skill doctor . --agent codex --format json # Stable machine-readable report
+```
+
+For each selected agent and skill, the report shows:
+
+- Canonical workflow source and installed skill-contract paths, including missing or unreadable state.
+- Frontmatter parse status, `name`, trigger `description`, goat-flow version, and invocation-control fields only when the installed metadata actually declares them.
+- Manifest-backed invocation syntax (`/goat-*` or `$goat-*`) and agent skill-source classification.
+- Mirror status using the same normalized comparison as `audit --check-drift`.
+- Static blockers for missing/unreadable files, malformed or empty discovery frontmatter, canonical-name mismatch, and duplicate installed names.
+- Existing `install` and `audit --check-drift` commands that can repair or verify the artifact.
+
+The status is `pass` when all selected skills are statically eligible and current, `warn` when eligibility remains but source/version/mirror evidence is incomplete or stale, and `fail` when at least one installed contract has a static blocker. `fail` exits 1; invalid agent or skill filters exit 2. JSON exposes `reportKind`, `status`, `target`, `evidenceLimit`, `summary`, and per-agent `skills` arrays.
+
+**Evidence limit:** this command checks files and manifest metadata. It cannot prove that a model will auto-trigger a skill, and it does not claim host behavior for unfamiliar invocation-control fields. Use the displayed explicit invocation when you want the skill deliberately.
+
 ### `goat-flow quality history [--agent <id>] [--all] [--format json]`
 
 List saved quality reports and same-agent setup deltas. By default the text view shows the 20 most recent runs; `--all` lifts that limit.
@@ -226,6 +250,7 @@ Common tasks and the commands to run:
 | Generate a setup prompt | `npx goat-flow setup . --agent claude` |
 | Decide what kind of artifact to author | `npx goat-flow quality candidacy "..."` |
 | Scaffold a new skill | `npx goat-flow skill new "..." --name <slug>` |
+| Explain whether installed skills are statically eligible | `npx goat-flow skill doctor . --agent codex` |
 | Use this in CI | `npx goat-flow audit . --format json` |
 | Export SARIF for code scanning | `npx goat-flow audit . --format sarif --output goat-flow-audit.sarif` |
 | Open the dashboard | `npx goat-flow dashboard .` |

@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-06-11
+last_reviewed: 2026-07-13
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -91,7 +91,7 @@ last_reviewed: 2026-06-11
 
 **Root cause:** I verified the target gruff rule and typecheck first, then jumped to the expensive full suite before running the cheap local style gates that the round-trip preflight also enforces.
 
-**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/cli-parser.ts` (search: `skillDraftValue`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`).
+**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `skillDraftValue`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`).
 
 ## Lesson: Size refactors must preserve browser script load graphs in tests
 
@@ -146,3 +146,13 @@ last_reviewed: 2026-06-11
 **Prevention:** After splitting any test file, run the whole new file glob, not just one renamed slice. Add explicit imports before trusting the split, even when the old parent already imported the same helpers. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `export {`), `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `COPILOT_GRUFF_HOOK_ENTRY`).
 
 **Recurrence 2026-05-31:** Full preflight later found the same standalone-module failure in the setup installer split, plus contract tests still reading old unsplit dashboard/CLI files instead of the new owners. Evidence anchors: `test/integration/setup-install.helpers.ts` (search: `runCliInstaller`), `test/unit/dashboard-custom-prompts.test.ts` (search: `CUSTOM_PROMPTS_ACTIONS_PATH`), `src/dashboard/index.html` (search: `dashboard-app-merge.js`), `test/unit/quality-subcommands.test.ts` (search: `quality-command.ts`).
+
+## Lesson: Parameterized matrix tests need named cases with direct assertions
+
+**Status:** active | **Created:** 2026-07-13
+
+**What happened:** The first M03 cross-agent install matrix wrapped assertions for all four agents inside two test-level loops. Gruff reported `test-quality.loop-in-test`; moving the work into named per-agent helpers then exposed `test-quality.no-assertions` because the visible test callbacks only called those helpers. The behavior suite passed both shapes, but its TAP output and analyzer evidence could not prove each named case owned an assertion.
+
+**Root cause:** I optimized the matrix for short source instead of failure localization. A helper can centralize fixture work, but each user-visible test case still needs its own direct assertion so CI and static analysis can connect the case name to evidence.
+
+**Prevention:** Register one named case per matrix value, return a concrete result from the shared scenario helper, and assert that result inside the test callback. Document temporary filesystem and subprocess side effects on helpers that perform installer flows. Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `Separate names make the failing agent visible`).

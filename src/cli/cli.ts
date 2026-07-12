@@ -43,6 +43,7 @@ Commands:
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
   events tail       Read local gitignored evidence-envelope events
   skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
+  skill doctor      Explain installed skill paths, invocation syntax, and static load blockers.
   hooks list        List registered hook state for this project
   hooks enable      Enable one registered hook and sync agent configs
   hooks disable     Disable one registered hook and sync agent configs
@@ -62,7 +63,8 @@ Flags:
   --untrusted-target Audit: skip executing the target's deny-hook code (static checks only; use for a checkout you don't trust)
   --no-audit-details Audit JSON: omit structured harness detail payloads
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
-  --json            Hooks: emit machine-readable JSON (alias for --format json)
+  --json            Emit machine-readable JSON (alias for --format json)
+  --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
   --force           Install/setup --apply: overwrite settings, config, and remove deprecated skills
   --update-config-version  Install: update only the version field in existing config.yaml
@@ -102,6 +104,8 @@ Examples:
   goat-flow skill ./repo new "<description>"
   goat-flow skill new --draft <path>   Validate an existing draft against the candidacy check
   goat-flow skill new --interactive    Prompt for description and name, then scaffold
+  goat-flow skill doctor . --agent codex
+  goat-flow skill doctor . --agent codex --skill goat --format json
   goat-flow --format markdown          PR-comment friendly output
   goat-flow --output report.json       Write results to file
 `);

@@ -27,10 +27,10 @@ export type Command =
   | "skill";
 
 /**
- * The only second positional accepted after `skill`. A single-member union today, kept as a named
- * type so a future authoring verb (e.g. "edit") is added in one place the parser and handler share.
+ * Second positionals accepted after `skill`: authoring (`new`) and read-only diagnostics (`doctor`).
+ * Keep this named so the parser and handler expose the same user-facing skill command set.
  */
-export type SkillSubcommand = "new";
+export type SkillSubcommand = "new" | "doctor";
 
 /**
  * The only second positional accepted after `events`; `tail` reads the local evidence-envelope log.
@@ -130,6 +130,7 @@ export interface ParsedCLI extends CLIOptions {
   skillDescription: string | null;
   skillDraftPath: string | null;
   skillName: string | null;
+  skillFilter: string | null;
   skillInteractive: boolean;
   skillSkipConfirm: boolean;
   eventsSubcommand: EventsSubcommand | null;
@@ -143,7 +144,7 @@ export interface ParsedCLI extends CLIOptions {
  * The slice of ParsedCLI that the `skill` command path populates, projected out so the parser can
  * build and spread just the skill-authoring fields without restating each one. Every member is
  * meaningful only when the command is `skill`; for any other command the parser fills these with
- * their null/false defaults, so a non-null value here signals a `skill new` invocation.
+ * their null/false defaults, so the subcommand identifies authoring versus read-only diagnosis.
  */
 export type SkillCLIFields = Pick<
   ParsedCLI,
@@ -151,6 +152,7 @@ export type SkillCLIFields = Pick<
   | "skillDescription"
   | "skillDraftPath"
   | "skillName"
+  | "skillFilter"
   | "skillInteractive"
   | "skillSkipConfirm"
 >;

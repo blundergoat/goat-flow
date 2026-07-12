@@ -21,6 +21,8 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 ├── hooks-command.ts             = CLI entry for `goat-flow hooks enable|disable|sync|list`
 ├── install-invocation.ts        = deterministic install/setup invocation parsing
 ├── skill-author.ts              = `goat-flow skill new` authoring flow
+├── skill-command-parser.ts      = lightweight `skill new|doctor` positional and flag rules
+├── skill-doctor.ts              = read-only installed skill path, invocation, frontmatter, and mirror diagnosis
 │
 ├── agents/                      = manifest-backed agent registry
 │   └── registry.ts              = typed runtime facade for agent metadata
