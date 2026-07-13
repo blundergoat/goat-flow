@@ -127,6 +127,10 @@ export function setupFixture(): string {
     SHARED_STUB,
   );
   writeFileSync(
+    join(root, "workflow", "skills", "playbooks", "hook-policy-testing.md"),
+    SHARED_STUB,
+  );
+  writeFileSync(
     join(root, "workflow", "skills", "playbooks", "observability.md"),
     SHARED_STUB,
   );
@@ -213,6 +217,16 @@ export function setupFixture(): string {
       "skill-docs",
       "playbooks",
       "gruff-code-quality.md",
+    ),
+    SHARED_STUB,
+  );
+  writeFileSync(
+    join(
+      root,
+      ".goat-flow",
+      "skill-docs",
+      "playbooks",
+      "hook-policy-testing.md",
     ),
     SHARED_STUB,
   );

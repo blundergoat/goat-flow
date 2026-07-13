@@ -7,6 +7,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
+import { STANDALONE_PLAYBOOK_FILES } from "../../src/cli/audit/skill-docs-contract.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { makeCtx, stubFS } from "../fixtures/projects/index.js";
 import { assertExists } from "../helpers/assert-exists.js";
@@ -16,6 +17,7 @@ const standalonePlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/changelog.md",
   ".goat-flow/skill-docs/playbooks/code-comments.md",
   ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
   ".goat-flow/skill-docs/playbooks/observability.md",
   ".goat-flow/skill-docs/playbooks/page-capture.md",
   ".goat-flow/skill-docs/playbooks/release-notes.md",
@@ -110,6 +112,17 @@ function playbookContractContext(
 }
 
 describe("standalone playbook audit contract", () => {
+  it("registers hook-policy-testing.md for audit and consumer discovery", () => {
+    assert.ok(
+      STANDALONE_PLAYBOOK_FILES.some(
+        (playbookPath) =>
+          playbookPath ===
+          ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
+      ),
+      "hook-policy-testing.md must be registered before users can discover it",
+    );
+  });
+
   it("fails when a registered playbook has no version frontmatter", () => {
     const result = playbookContractCheck.run(
       playbookContractContext({

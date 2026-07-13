@@ -139,7 +139,7 @@ workflow/                        = packaged template source copied into target p
 │   ├── goat-security/SKILL.md   = security assessment skill template
 │   ├── goat-qa/SKILL.md         = testing-gap analysis skill template
 │   ├── reference/               = skill-preamble.md and skill-conventions.md templates
-│   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, observability, page-capture, release-notes, skill-playbook-authoring-sync, skill-quality-testing
+│   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, observability, page-capture, release-notes, skill-playbook-authoring-sync, skill-quality-testing
 │
 ├── hooks/                       = hook templates and agent hook config templates
 │   ├── deny-dangerous.sh        = canonical deny-dangerous dispatcher template
@@ -239,6 +239,7 @@ docs/                            = user and maintainer documentation
 │       ├── changelog.md         = CHANGELOG.md discipline
 │       ├── code-comments.md     = inline comments, docstrings, TODO/FIXME/HACK rules
 │       ├── gruff-code-quality.md = gruff analyzer triage/fix/verification loop
+│       ├── hook-policy-testing.md = deny-hook policy, mirror, and registration verification
 │       ├── observability.md     = logs, metrics, spans, and sensitive-data instrumentation rules
 │       ├── page-capture.md      = Playwright/browser page-capture usage tiers
 │       ├── release-notes.md     = per-release narrative surfaces derived from changelog

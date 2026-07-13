@@ -28,6 +28,7 @@ const requiredSkillDocsFiles = [
   ".goat-flow/skill-docs/playbooks/changelog.md",
   ".goat-flow/skill-docs/playbooks/code-comments.md",
   ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
   ".goat-flow/skill-docs/playbooks/observability.md",
   ".goat-flow/skill-docs/playbooks/page-capture.md",
   ".goat-flow/skill-docs/playbooks/release-notes.md",

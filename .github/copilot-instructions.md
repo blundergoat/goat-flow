@@ -52,7 +52,7 @@ npm test
 bash scripts/preflight-checks.sh
 ```
 
-Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke` (hook check).
+Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke` (hook check; full workflow: `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 

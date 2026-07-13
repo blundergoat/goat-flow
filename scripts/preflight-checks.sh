@@ -1419,6 +1419,7 @@ const files = [
       "changelog.md",
       "code-comments.md",
       "gruff-code-quality.md",
+      "hook-policy-testing.md",
       "observability.md",
       "page-capture.md",
       "release-notes.md",
@@ -2161,6 +2162,17 @@ if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill
     fi
 else
     skip "release-notes.md sync (one or both files missing)"
+fi
+# Hook maintainers need the same policy-test workflow that consumer agents receive.
+if [[ -f workflow/skills/playbooks/hook-policy-testing.md ]] && [[ -f .goat-flow/skill-docs/playbooks/hook-policy-testing.md ]]; then
+    # Matching copies prevent a local policy test from differing from shipped guidance.
+    if diff -q workflow/skills/playbooks/hook-policy-testing.md .goat-flow/skill-docs/playbooks/hook-policy-testing.md >/dev/null 2>&1; then
+        pass "hook-policy-testing.md: template and installed copy match"
+    else
+        fail "hook-policy-testing.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "hook-policy-testing.md sync (one or both files missing)"
 fi
 # The authoring reference must match so users receive the same enrollment contract as maintainers.
 if [[ -f workflow/skills/playbooks/skill-playbook-authoring-sync.md ]] && [[ -f .goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md ]]; then

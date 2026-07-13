@@ -68,6 +68,14 @@ const INSTALLED_GRUFF_CODE_QUALITY = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
 );
+const TEMPLATE_HOOK_POLICY_TESTING = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/hook-policy-testing.md",
+);
+const INSTALLED_HOOK_POLICY_TESTING = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
+);
 const TEMPLATE_OBSERVABILITY = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/observability.md",
@@ -220,6 +228,21 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_GRUFF_CODE_QUALITY, INSTALLED_GRUFF_CODE_QUALITY),
       0,
       "gruff-code-quality.md: template and installed should match",
+    );
+  });
+
+  it("template and installed hook-policy-testing.md match", () => {
+    // Missing guidance means a fresh setup cannot teach users the tested hook workflow.
+    if (
+      !existsSync(TEMPLATE_HOOK_POLICY_TESTING) ||
+      !existsSync(INSTALLED_HOOK_POLICY_TESTING)
+    ) {
+      assert.fail("hook-policy-testing.md must exist in both managed locations");
+    }
+    assert.equal(
+      diffQuiet(TEMPLATE_HOOK_POLICY_TESTING, INSTALLED_HOOK_POLICY_TESTING),
+      0,
+      "hook-policy-testing.md: template and installed should match",
     );
   });
 

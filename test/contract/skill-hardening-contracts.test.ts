@@ -1107,6 +1107,7 @@ describe("ADR-023 word budget tiers", () => {
     "changelog.md",
     "code-comments.md",
     "gruff-code-quality.md",
+    "hook-policy-testing.md",
     "observability.md",
     "page-capture.md",
     "release-notes.md",
