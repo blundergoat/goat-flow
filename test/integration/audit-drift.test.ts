@@ -1,7 +1,8 @@
 /**
  * checkDrift clean-fixture baseline: with templates and installed copies identical, asserts a pass
- * with zero findings and that `checked` equals the exact expected skill-file plus shared-file count.
+ * with zero findings and that `checked` equals every manifest-derived comparison users rely on.
  */
+import { loadManifest } from "../../src/cli/manifest/manifest.js";
 import {
   after,
   assert,
@@ -40,9 +41,13 @@ describe("checkDrift: clean fixture", () => {
         0,
       ) * getInstalledSkillRoots().length;
     const expectedSharedComparisons = 15;
+    const expectedDeprecatedHookComparisons =
+      loadManifest().hooks.stale_names.length;
     assert.equal(
       report.checked,
-      expectedSkillComparisons + expectedSharedComparisons,
+      expectedSkillComparisons +
+        expectedSharedComparisons +
+        expectedDeprecatedHookComparisons,
     );
   });
 });

@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-06-07
+last_reviewed: 2026-07-13
 ---
 
 ## Lesson: Migration-output fixtures must match the collision branch
@@ -106,6 +106,8 @@ last_reviewed: 2026-06-07
 **Root cause:** I wrote the test against an internal diagnostic phrase rather than the audit result field users and dashboard consumers actually receive.
 
 **Prevention:** For harness-audit regressions, assert the serialized/public `CheckResult` contract first: `status`, `displayStatus`, `impact`, `failure.message`, and `howToFix` when relevant. Only assert raw finding phrasing if that phrasing is intentionally part of the public contract. Evidence anchors: `src/cli/audit/audit.ts` (search: `Convert a harness check`), `src/cli/audit/harness/check-context.ts` (search: `missing step words inside the section`).
+
+**Recurrence (2026-07-13):** The M07 ownership test matched a detailed validator finding against `ManifestValidationError.message`, but the public summary intentionally contains only the finding count. The validator was correct; the assertion now inspects `ManifestValidationError.findings`, matching existing manifest tests. Evidence anchor: `test/unit/manifest-file-ownership.test.ts` (search: `rejects ownership records without a usable source or generator`).
 
 ---
 

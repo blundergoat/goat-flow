@@ -9,6 +9,7 @@ import {
   COPILOT_GRUFF_HOOK_ENTRY,
   createFS,
   describe,
+  existsSync,
   HOOK_STUB,
   it,
   join,
@@ -90,6 +91,41 @@ describe("checkDrift: hook templates", () => {
         ),
         `expected missing central hook finding, findings=${JSON.stringify(report.findings)}`,
       );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // This fixture writes one retired hook; the audit contract reports it without mutation.
+  it("reports deprecated central hook files without deleting them", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      const deprecatedHookPath = join(
+        root,
+        ".goat-flow",
+        "hooks",
+        "plan-checkbox-guard.sh",
+      );
+      writeFileSync(deprecatedHookPath, HOOK_STUB);
+
+      const report = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+
+      assert.equal(report.status, "fail");
+      assert.ok(
+        report.findings.some(
+          (finding) =>
+            finding.kind === "deprecated" &&
+            finding.path === ".goat-flow/hooks/plan-checkbox-guard.sh" &&
+            finding.message.includes("goat-flow hooks sync"),
+        ),
+        `expected actionable deprecated-hook finding, findings=${JSON.stringify(report.findings)}`,
+      );
+      assert.equal(existsSync(deprecatedHookPath), true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

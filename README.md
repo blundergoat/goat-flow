@@ -126,7 +126,7 @@ For a brand new project, copy the goat-flow system files first. This step is det
 npx @blundergoat/goat-flow@latest install . --agent claude
 ```
 
-Use `--force` only when you want to overwrite existing settings, `.goat-flow/config.yaml`, and remove deprecated skills. For outdated or v0.9 projects, the installer automatically updates the config version and cleans deprecated skill directories.
+The manifest labels each installed file as system-owned, user-owned, generated, deprecated, or external. System files refresh from canonical sources; local content and external files stay untouched by default. Use `--force` only when you explicitly want to replace user-owned settings, config, policies, or other seeded guidance. For outdated or v0.9 projects, the installer automatically updates the config version and cleans deprecated skill directories.
 
 The installer keeps `.goat-flow/config.yaml` free of agent allowlists by default. Dashboard Home and aggregate `goat-flow audit .` read the supported agent registry from `workflow/manifest.json`, so they always show or check the current manifest-backed setup status. Use `--agent <id>` when you intentionally want one agent.
 
@@ -173,9 +173,14 @@ npx goat-flow audit . --format sarif       # SARIF output for code scanning uplo
 npx goat-flow install . --agent claude     # Copy/update system files
 npx goat-flow setup . --agent claude       # Generate setup prompt
 npx goat-flow quality . --agent claude     # Generate quality-assessment prompt
+npx goat-flow redact --output .goat-flow/logs/sessions/handoff.md
 npx goat-flow status .                     # Project state (bare/partial/v0.9/outdated/current/error)
 npx goat-flow manifest                     # Agent support matrix
 ```
+
+Use `redact` before saving a session, handoff, review, quality, security, or export draft. It replaces common credential shapes while preserving useful continuation context; it is not perfect DLP or a substitute for reviewing the output.
+
+For interrupted work without an active milestone, `.goat-flow/logs/sessions/README.md` provides the optional handoff receipt schema. Run the command, paste the receipt into stdin, and send EOF so raw text is scrubbed before the output file is created.
 
 The dashboard prints a tokenized localhost URL. Open that URL from the terminal output; the token is process-local and is removed from the visible address bar after the page boots.
 

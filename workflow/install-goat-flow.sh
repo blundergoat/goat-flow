@@ -61,6 +61,54 @@ if (mode === "stale-hooks") {
   process.exit(0);
 }
 
+if (mode === "file-ownership") {
+  const destinationPath = process.argv[4];
+  const declaredFile = manifest.file_ownership?.[destinationPath];
+
+  // Exact manifest records explain canonical files shown by `goat-flow manifest`.
+  if (declaredFile) {
+    console.log(`${declaredFile.ownership}\t${declaredFile.source || ""}`);
+    process.exit(0);
+  }
+
+  // Agent settings are seeded once, then kept for the user's local preferences.
+  for (const [agentId, agent] of Object.entries(manifest.agents || {})) {
+    const settingsPath = typeof agent.settings === "string" ? agent.settings : "";
+    const settingsExtension = settingsPath ? settingsPath.split(".").pop() : "";
+    const hookConfigPath =
+      typeof agent.hook_config_file === "string" ? agent.hook_config_file : "";
+
+    // A settings destination lets users retain local permissions and UI choices.
+    if (destinationPath === settingsPath) {
+      console.log(
+        `user-owned\tworkflow/hooks/agent-config/${agentId}.${settingsExtension}`,
+      );
+      process.exit(0);
+    }
+
+    // A separate hook config is also preserved after the first install.
+    if (destinationPath === hookConfigPath && hookConfigPath !== settingsPath) {
+      console.log(`user-owned\tworkflow/hooks/agent-config/${agentId}-hooks.json`);
+      process.exit(0);
+    }
+
+    // Installed skill mirrors are refreshed so users receive the current workflow.
+    if (destinationPath.startsWith(trimDir(agent.skills_dir) + "/")) {
+      console.log("system-owned\t");
+      process.exit(0);
+    }
+
+    // Installed guardrails are refreshed so every selected agent gets current policy.
+    if (destinationPath.startsWith(trimDir(agent.hooks_dir) + "/")) {
+      console.log("system-owned\t");
+      process.exit(0);
+    }
+  }
+
+  process.stderr.write(`unclassified installer destination: ${destinationPath}\n`);
+  process.exit(3);
+}
+
 if (mode === "skill-files") {
   const skillName = process.argv[4];
   const canonical = manifest.skills?.canonical;
@@ -211,8 +259,40 @@ COPIED=0
 SKIPPED=0
 REMOVED=0
 
+# Confirm one installer action matches the update behavior users see in the manifest report.
+# Use this before a copy or generated write so an unclassified destination stops safely.
+assert_file_ownership() {
+  local destination_path="$1" expected_ownership="$2" source_path="${3:-}"
+  local ownership_line actual_ownership declared_source
+
+  # An unknown destination has no safe overwrite or preserve behavior.
+  if ! ownership_line="$(manifest_eval file-ownership "$destination_path")"; then
+    echo "ERROR: no manifest ownership for installer destination: $destination_path"
+    exit 1
+  fi
+
+  IFS=$'\t' read -r actual_ownership declared_source <<< "$ownership_line"
+
+  # A mismatched action means setup would behave differently from its user-facing report.
+  if [[ "$actual_ownership" != "$expected_ownership" ]]; then
+    echo "ERROR: $destination_path is $actual_ownership, installer expected $expected_ownership"
+    exit 1
+  fi
+
+  # Exact manifest sources must match the template the user is about to receive.
+  if [[ -n "$declared_source" && -n "$source_path" && "$source_path" != "$GOAT_FLOW_ROOT/$declared_source" ]]; then
+    echo "ERROR: $destination_path source differs from manifest: $declared_source"
+    exit 1
+  fi
+}
+
+# Copy one canonical or explicitly forced seed into the user's selected project.
+# Use for files whose ownership class permits this installer write.
 copy_file() {
-  local src="$1" dst="$2"
+  local src="$1" dst="$2" expected_ownership="${3:-system-owned}"
+  assert_file_ownership "$dst" "$expected_ownership" "$src"
+
+  # Missing packaged content would leave the user's installation incomplete.
   if [[ ! -f "$src" ]]; then
     echo "ERROR: missing installer template: $src"
     echo "Manifest/template drift detected. Restore the referenced template before running install."
@@ -224,14 +304,19 @@ copy_file() {
   echo "  ✓ $dst"
 }
 
+# Seed a customizable file without replacing the user's existing content.
+# Use for policies, settings, and local decision guidance users may edit later.
 copy_if_missing() {
   local src="$1" dst="$2"
+  assert_file_ownership "$dst" "user-owned" "$src"
+
+  # Existing user content remains authoritative unless the user explicitly passed --force.
   if [[ -f "$dst" ]] && ! $FORCE; then
     SKIPPED=$((SKIPPED + 1))
     echo "  · $dst (exists, skipped)"
     return
   fi
-  copy_file "$src" "$dst"
+  copy_file "$src" "$dst" "user-owned"
 }
 
 prune_unlisted_skill_references() {
@@ -394,6 +479,9 @@ prune_legacy_agent_hook_copies() {
 
 touch_anchor() {
   local dst="$1"
+  assert_file_ownership "$dst" "generated"
+
+  # An existing anchor already keeps the user's empty workspace directory available.
   if [[ -f "$dst" ]]; then
     SKIPPED=$((SKIPPED + 1))
     echo "  · $dst (exists, skipped)"
@@ -1587,6 +1675,7 @@ copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/events-readme.md" ".goat-flo
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/critiques-readme.md" ".goat-flow/logs/critiques/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/review-readme.md" ".goat-flow/logs/review/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/security-readme.md" ".goat-flow/logs/security/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/session-logs-readme.md" ".goat-flow/logs/sessions/README.md"
 copy_if_missing "$GOAT_FLOW_ROOT/workflow/setup/reference/decisions-readme.md" ".goat-flow/learning-loop/decisions/README.md"
 touch_anchor ".goat-flow/logs/sessions/.gitkeep"
 echo ""
@@ -1774,7 +1863,7 @@ if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
       echo "  · $SETTINGS_DST (exists, skipped)"
     fi
   else
-    copy_file "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST"
+    copy_file "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST" "user-owned"
   fi
 else
   echo "  · no settings file for $AGENT"
@@ -1806,6 +1895,9 @@ echo ""
 # ==========================================================================
 echo "Config:"
 CONFIG_PATH=".goat-flow/config.yaml"
+assert_file_ownership "$CONFIG_PATH" "user-owned"
+
+# Existing config keeps user-selected hooks and skills unless migration is requested.
 if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
   CONFIG_CHANGED=false
   CONFIG_NOTES=()

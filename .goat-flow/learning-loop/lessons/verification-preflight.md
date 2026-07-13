@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-07-12
+last_reviewed: 2026-07-13
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -99,13 +99,15 @@ last_reviewed: 2026-07-12
 
 **Status:** active | **Created:** 2026-04-25
 
-**What happened:** Added source coverage for the M01 security preset contract and the focused test passed, but `npx prettier --check src/dashboard/preset-prompts.json <changed test file>` failed on the new file.
+**What happened:** M01's focused security-preset test passed before scoped Prettier rejected the new test file.
 
-**Root cause:** I treated the focused behavioral test as the first verification result for a new test file without running the repo formatter gate first.
+**Root cause:** I ran behavioural proof before the formatter gate for touched TypeScript.
 
-**Recurrence update (2026-05-17):** M11 SARIF added `src/cli/audit/sarif.ts`, `test/unit/audit-sarif.test.ts`, and a small CLI route edit. The focused SARIF tests passed first, but the next scoped formatter check failed on all three touched TypeScript files. Running `npx prettier --write src/cli/audit/sarif.ts src/cli/cli.ts test/unit/audit-sarif.test.ts` fixed the task-local formatter blocker before typecheck/full tests. Evidence anchors: `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`), `test/unit/audit-sarif.test.ts` (search: `routes audit --format sarif through the CLI renderer`).
+**Recurrence update (2026-05-17):** M11 SARIF repeated this across three TypeScript files. Evidence: `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`).
 
-**Prevention:** After adding or editing TypeScript tests, run `npx prettier --write <changed test files>` before claiming focused test verification. Keep the formatter check in the same verification bundle as the focused test so style failures are corrected before milestone boxes are ticked.
+**Recurrence update (2026-07-13):** M04/M09 contracts reached GREEN and typecheck exited 0 before Prettier rejected the touched test. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `requires an evidence budget before optional orchestration`).
+
+**Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
 
 ---
 
@@ -282,6 +284,8 @@ last_reviewed: 2026-07-12
 **Prevention:** Before full preflight after changing CLI command spawning, hook launchers, or TypeScript tests, run the direct sub-gates that preflight will aggregate: `npx knip` and `npm run format:check`. If preflight reports the TypeScript section as failed, reproduce the subtool reports directly and fix those exact findings before collecting final pass evidence.
 
 **Recurrence update (2026-06-10):** M05/M06b focused tests, format, stats, and typecheck were clean, but `npm run test:full` failed in the slow installer round-trip fixture because its copied repo ran preflight and exposed three ESLint errors plus two Knip unused exports from the new index/dashboard code. Direct `npx eslint ...` and `npx knip --include exports,types` reproduced the failures; fixing those exact findings was required before rerunning the full gate.
+
+**Recurrence update (2026-07-13):** M08 focused tests, typecheck, format, and gruff were clean, but preflight failed because `renderRedactedDurableText` was exported without a public consumer. Direct `npx knip` isolated the accidental API; making the CLI helper private cleared the exact gate.
 
 ---
 

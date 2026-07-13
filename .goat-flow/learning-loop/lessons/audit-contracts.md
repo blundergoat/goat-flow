@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-07-12
+last_reviewed: 2026-07-13
 ---
 
 ## Lesson: Artifact scanners need explicit mirror maps and command grammar controls
@@ -24,6 +24,8 @@ last_reviewed: 2026-07-12
 **Root cause:** I treated the unit audit report contract as the only caller. Integration tests also assert the lower-level `BuildCheck` shape, including optional `skip` behavior. Removing the skip gate also left unused directory constants that `npm run typecheck` caught before the full suite.
 
 **Prevention:** When changing an audit check from optional/skippable to mandatory, grep for both the check id and `skip?.` before verification. Update unit report expectations and integration `BuildCheck` assertions in the same edit, then run `npm run typecheck` before `npm test`. Evidence anchors: `src/cli/audit/check-goat-flow.ts` (search: `instruction-file-skill-docs-pointer`), `test/integration/audit-build.test.ts` (search: `fails when the project has no shared reference/playbook pack`).
+
+**Recurrence update (2026-07-13):** M06 added two required session-README gitignore exceptions. The live audit passed, but the first integration run failed because `HEALTHY_GOAT_FLOW_GITIGNORE` and the audit-command project writer still modeled the old contract. Updating both healthy fixtures cleared the exact 95-test suite.
 
 ---
 

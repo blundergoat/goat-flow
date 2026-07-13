@@ -38,9 +38,10 @@ src/cli/
   types.ts            # All type definitions
   constants.ts        # Shared constants
   paths.ts            # Path resolution utilities
+  redact-command.ts   # Pre-write scrubber for readable session, handoff, review, quality, security, and export text
   config/             # Configuration (reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
-  evidence/           # Evidence envelopes, redaction, JSONL append/tail helpers
+  evidence/           # Hash-only evidence metadata, readable text redaction, envelopes, JSONL append/tail helpers
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
   prompt/             # Prompt generation: commit-guidance.ts, compose-setup.ts, compose-quality.ts, compose-quality-agent-report.ts, compose-quality-agent-setup.ts, compose-quality-artifact.ts, compose-quality-common.ts, compose-quality-focused.ts, compose-quality-static-sections.ts, learning-loop-context.ts
   quality/            # Quality report schema, positional ids, history, and diff

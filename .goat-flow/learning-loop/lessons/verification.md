@@ -123,6 +123,8 @@ last_reviewed: 2026-07-13
 
 **Prevention:** When changing endpoint, launch-context, setup-prompt, or router semantics, grep focused tests for the old flags and phrases before the first run. Search the implementation and smoke/audit tests for old launch-context wording, env vars, runner flags, and setup commands. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/smoke/dashboard-endpoints.test.ts` (search: `injects POSIX launch prompts through PTY input`), `src/cli/audit/check-goat-flow.ts` (search: `Instruction file skill-docs pointer`).
 
+**Recurrence (2026-07-13):** M07 added eight manifest-backed deprecated-hook comparisons, while the clean drift fixture still expected the old comparison total. The test now derives the added count from `hooks.stale_names` instead of copying another literal. Evidence anchor: `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`).
+
 ---
 
 ## Lesson: Defensive session rechecks can conflict with TypeScript narrowing
@@ -156,6 +158,8 @@ last_reviewed: 2026-07-13
 **Root cause:** Treated fixture coverage as enough proof for a repository-wide validator. The new rule was correct, but the live repo contained older records that predated the stricter contract.
 
 **Fix:** After adding any validator that scans a project-wide artifact directory, run it against the live repository before the milestone gate and budget time for the live cleanup it exposes.
+
+**Recurrence (2026-07-13):** M07 ownership fixtures passed focused manifest tests, but full preflight found three packaged-mode `ManifestJson` fixtures that omitted the new required `file_ownership` contract. It also caught ESLint complexity and Knip exports outside the focused commands. After a manifest schema change, grep every `ManifestJson` fixture and run the full static/test gate, not only the new validator suite. Evidence anchors: `test/unit/packaged-install.test.ts` (search: `file_ownership`), `src/cli/manifest/manifest-json.ts` (search: `OWNERSHIP_EVIDENCE_FINDERS`).
 
 ---
 

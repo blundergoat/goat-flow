@@ -29,6 +29,7 @@ import type {
 import { ManifestValidationError } from "./types.js";
 import {
   readManifestJson,
+  validateFileOwnershipSchema,
   validateSkillReferenceSchema,
 } from "./manifest-json.js";
 
@@ -225,6 +226,7 @@ export function validateManifest(
   json: ManifestJson,
   observed: ObservedFacts,
 ): void {
+  validateFileOwnershipSchema(json);
   validateSkillReferenceSchema(json);
   const findings: string[] = [];
   findings.push(...validateAgentCapabilities(json));
@@ -289,8 +291,10 @@ export function composeManifest(
   return {
     version: json.version,
     required_files: json.required_files,
+    file_ownership: json.file_ownership ?? {},
     required_dirs: json.required_dirs,
     skills: json.skills,
+    hooks: json.hooks ?? { stale_names: [] },
     agents: json.agents,
     instruction_file: json.instruction_file,
     facts,
@@ -385,6 +389,35 @@ export function checkManifest(): ManifestCheckReport {
 }
 
 /**
+ * Build the ownership section operators use to predict reinstall behavior.
+ * Keep this separate from general facts so adding a class cannot complicate agent rendering.
+ */
+function renderFileOwnershipMarkdown(manifest: Manifest): string[] {
+  const ownershipCounts = new Map<string, number>();
+
+  // Every manifest file contributes to the operator-facing behavior summary.
+  for (const spec of Object.values(manifest.file_ownership)) {
+    ownershipCounts.set(
+      spec.ownership,
+      (ownershipCounts.get(spec.ownership) ?? 0) + 1,
+    );
+  }
+
+  return [
+    "## File ownership",
+    "",
+    "| Class | Files | Update behavior |",
+    "|-------|-------|-----------------|",
+    `| system-owned | ${ownershipCounts.get("system-owned") ?? 0} | overwrite from the canonical workflow source |`,
+    `| user-owned | ${ownershipCounts.get("user-owned") ?? 0} | seed when missing, then preserve user content |`,
+    `| generated | ${ownershipCounts.get("generated") ?? 0} | regenerate through the declared command |`,
+    `| deprecated | ${ownershipCounts.get("deprecated") ?? 0} | warn with an explicit cleanup path |`,
+    `| external | ${ownershipCounts.get("external") ?? 0} | verify only; never overwrite |`,
+    "",
+  ];
+}
+
+/**
  * Render the resolved manifest as a compact Markdown table. Used by `goat-flow manifest`.
  *
  * @param manifest - Resolved manifest to present.
@@ -433,6 +466,7 @@ export function renderManifestMarkdown(manifest: Manifest): string {
     `**Skills:** ${manifest.facts.skills.names.map((n) => `\`${n}\``).join(", ")}`,
   );
   lines.push("");
+  lines.push(...renderFileOwnershipMarkdown(manifest));
   lines.push("## Agents");
   lines.push("");
   lines.push(

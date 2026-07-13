@@ -27,6 +27,8 @@ const HEALTHY_GOAT_FLOW_GITIGNORE = [
   "!hooks/**",
   "!plans/",
   "!plans/**",
+  "!logs/sessions/",
+  "!logs/sessions/README.md",
   "",
 ].join("\n");
 

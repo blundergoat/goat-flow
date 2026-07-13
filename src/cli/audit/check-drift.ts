@@ -50,10 +50,8 @@ function stripNullish(frontmatterValue: unknown): unknown {
 
 /**
  * Parse YAML frontmatter and body text from a markdown file.
- *
  * The parser swallows malformed YAML into a sentinel object and never throws so
  * drift checks can report content mismatch without aborting the whole audit.
- *
  * @param raw - Full markdown file contents, including optional YAML frontmatter.
  * @returns Parsed frontmatter plus body text after the closing marker.
  */
@@ -82,11 +80,7 @@ function normalizeBody(body: string): string {
 
 /**
  * Compare skill markdown using goat-flow's drift semantics.
- *
- * Installed skill copies can reorder YAML keys or trim trailing whitespace
- * during setup; those edits are not functional drift, but body or frontmatter
- * value changes still are.
- *
+ * Ignore harmless YAML order and trailing-space changes while preserving contract differences.
  * @param expected - Template markdown content from `workflow/skills`.
  * @param existing - Installed markdown content from an agent or skill-docs tree.
  * @returns True when normalized frontmatter and body content match.
@@ -408,14 +402,6 @@ function readExplicitHooks(fs: ReadonlyFS): Record<string, unknown> | null {
   return parsed.hooks;
 }
 
-function expectedHookScript(
-  _fs: ReadonlyFS,
-  _hookFile: string,
-  template: string,
-): string {
-  return template;
-}
-
 /** Extract an explicit enabled boolean without treating missing config as disabled. */
 function enabledFromHookConfig(value: unknown): boolean | null {
   if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
@@ -432,21 +418,18 @@ function explicitHookEnabled(fs: ReadonlyFS, hookId: string): boolean | null {
   return enabledFromHookConfig(hooks["gruff-on-change"]);
 }
 
-/** Keep hook-object access centralized because callers mutate the returned config object. */
-function hooksObject(config: Record<string, unknown>): Record<string, unknown> {
-  return ensureHooksObject(config);
-}
-
+/** Remove an empty event so users do not see a registered hook with no commands. */
 function deleteHookEventIfEmpty(
   config: Record<string, unknown>,
   event: string,
 ): void {
-  const hooks = hooksObject(config);
+  const hooks = ensureHooksObject(config);
   if (Array.isArray(hooks[event]) && hooks[event].length === 0) {
     Reflect.deleteProperty(hooks, event);
   }
 }
 
+/** Remove one managed hook while preserving unrelated commands in the same event. */
 function removeHookEntries(
   config: Record<string, unknown>,
   event: string,
@@ -454,7 +437,7 @@ function removeHookEntries(
 ): void {
   const entries = ensureHookEntries(config, event);
   const next = entries.filter((entry) => !entryReferencesSpec(entry, spec));
-  const hooks = hooksObject(config);
+  const hooks = ensureHooksObject(config);
   if (next.length === 0) {
     Reflect.deleteProperty(hooks, event);
     return;
@@ -520,10 +503,8 @@ function applyExplicitHookToggles(
 }
 
 /**
- * Copilot keeps hook registrations in `.github/hooks/hooks.json`, which is
- * also the manifest-declared installed hook artifact. The static template only
- * represents default guardrails; dashboard/CLI toggles can add optional hooks.
- * Drift therefore compares against template plus desired toggle state.
+ * Build Copilot's expected hook registry from its template plus explicit toggles.
+ * Use during drift checks so dashboard choices do not look like accidental edits.
  */
 function expectedHookConfig(
   fs: ReadonlyFS,
@@ -585,7 +566,7 @@ function compareHookArtifact(
 
 /**
  * Compare hook artifacts for the runtime scope the user selected.
- * Use a filter to avoid asking Codex users to repair another agent's uninstalled config.
+ * A filter keeps one runtime from reporting another runtime's absent config.
  */
 function compareHooks(
   fs: ReadonlyFS,
@@ -623,7 +604,7 @@ function compareHooks(
         (template) =>
           hookFile === agent.hook_config_file
             ? expectedHookConfig(fs, agentId, agent, template)
-            : expectedHookScript(fs, hookFile, template),
+            : template,
       );
     }
 
@@ -647,14 +628,7 @@ function compareHooks(
 
 /**
  * Decide whether the registry safety-net should compare one optional hook script.
- *
- * Drift only compares copies that actually exist on disk or that config explicitly
- * enables - it never demands that a default-on hook be present. Whether a default
- * guardrail like deny-dangerous is installed at all is the audit's agent-guardrail
- * check's concern, not drift's; flagging it here would double-report and would mark
- * hook-free installs (e.g. skills-only projects) as drifted. Gating on
- * `spec.defaultEnabled` is therefore intentionally omitted.
- *
+ * Setup owns missing defaults; drift checks only installed or explicitly enabled copies.
  * @param fs - ReadonlyFS rooted at the audited project.
  * @param spec - Registry hook spec whose script is a comparison candidate.
  * @param installedRel - Project-relative path of the installed hook script.
@@ -691,11 +665,37 @@ function compareRegistryHookScripts(
         findings,
         `workflow/hooks/${script}`,
         installedRel,
-        (template) => expectedHookScript(fs, script, template),
+        (template) => template,
       );
     }
   }
   return checked;
+}
+
+/**
+ * Report retired central hook files without changing the user's project.
+ * Use after an upgrade so operators get the supported sync command while audit stays read-only.
+ */
+function findDeprecatedHookFiles(
+  fs: ReadonlyFS,
+  findings: DriftFinding[],
+): number {
+  const deprecatedHookNames = loadManifest().hooks.stale_names;
+  // Each historical filename is checked because an old install may still execute it.
+  for (const deprecatedHookName of deprecatedHookNames) {
+    const installedHookPath = pathPosix.join(
+      ".goat-flow/hooks",
+      deprecatedHookName,
+    );
+    // Missing retired hooks are the desired state and need no operator action.
+    if (!fs.exists(installedHookPath)) continue;
+    findings.push({
+      kind: "deprecated",
+      path: installedHookPath,
+      message: `deprecated hook remains installed; run goat-flow hooks sync to remove ${installedHookPath}`,
+    });
+  }
+  return deprecatedHookNames.length;
 }
 
 /**
@@ -728,6 +728,7 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
     findings,
     checkedHookArtifacts,
   );
+  checked += findDeprecatedHookFiles(fs, findings);
   findOrphans(fs, findings, agentFilter);
 
   // Identity, resource, and complete-set checks catch packaging failures that byte parity cannot see.

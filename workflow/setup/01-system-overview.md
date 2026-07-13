@@ -21,6 +21,18 @@ If the version is older, there is no maintained in-place upgrade guide. Refresh 
 - Then continue with `workflow/setup/02-instruction-file.md` and the remaining numbered setup steps.
 - If you encounter legacy flat learning-loop docs, old skill names, or legacy task-state files, promote durable content into `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/footguns/`, or `.goat-flow/learning-loop/decisions/` before removing them. Session logs are local continuity only.
 
+## File ownership during install and setup
+
+`workflow/manifest.json` gives every required or optional file one update policy. Run `goat-flow manifest` for class totals or `goat-flow manifest --format json` for the exact path records.
+
+- **system-owned:** the installer replaces the file from its declared workflow source.
+- **user-owned:** the installer seeds the file when missing and otherwise preserves local content; `--force` is the explicit override.
+- **generated:** the declared command regenerates the file from current project evidence.
+- **deprecated:** audit reports the retired path and its supported cleanup command before removal.
+- **external:** goat-flow may verify the path but never writes it.
+
+If a destination has no ownership record, stop instead of guessing. Never treat a directory as one ownership unit: `.goat-flow/` intentionally mixes canonical templates, user knowledge, generated indexes, and gitignored local state.
+
 ## What goat-flow is
 
 A framework that gives AI coding agents structured planning (with multi-perspective critique via `/goat-critique`), durable project knowledge, local continuity notes, and mechanical safety guardrails. Three layers:

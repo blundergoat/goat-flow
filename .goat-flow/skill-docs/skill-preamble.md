@@ -16,6 +16,8 @@ When a goat-* skill is active, the skill's Step 0 replaces READ and selects the 
 
 `/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default. They may produce findings, plans, recommendations, and required gitignored logs or snapshots, but MUST NOT mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement the changes.
 
+Before durable local text, run `goat-flow redact`.
+
 ## Severity Scale
 
 SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
@@ -96,6 +98,8 @@ Adapt ceremony to complexity. This is **pre-invocation routing guidance** for ch
 - **Full:** selected skill protocol; critique on request
 - If the dispatcher already chose depth, skip the question
 
+Before optional orchestration, load `skill-conventions.md` → Orchestration Admission.
+
 ## Routing Boundary
 
 Dispatcher-specific route maps live in `/goat`. Direct planning requests route to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request - a task path alone must not update `.active`, milestone status, checkboxes, or code. `/goat-plan` owns `.goat-flow/plans/.active` lookup and milestone-mode selection. If the user names a skill, respect it.
@@ -106,7 +110,7 @@ For Hotfix complexity (1-2 files, obvious change), skip skills and run READ → 
 
 ## Step 0 Budget
 
-If Step 0 exceeds 5 reads without output or a question, checkpoint with what you have; continue only when broader coverage is genuinely needed.
+After five Step 0 reads, checkpoint. Planning/interview questions: load `skill-conventions.md` → Adaptive Step 0.
 
 ## Learning-Loop Retrieval
 

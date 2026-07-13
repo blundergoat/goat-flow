@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-07-12
+last_reviewed: 2026-07-13
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -173,6 +173,8 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Repeat incident:** During CLI menu/install verification, the installer smoke used `rm -rf "$tmp"` for temp cleanup and the deny hook blocked it. The corrected smoke used a fixed `/tmp/goat-flow-install-smoke-*` path, preserved the command status, and cleaned up with `rm -r "$tmp"` after verification.
 
 **Repeat incident 2026-05-17:** During release-blocker cleanup, an inline Node heredoc for splitting lesson buckets was blocked with `BLOCKED: Command has more than 50 chained segments`. The fix: put the helper in `.goat-flow/scratchpad/split-lessons-release.mjs`, run it as a plain `node` file, and delete it after the move.
+
+**Repeat incident 2026-07-13:** While building an ignored rollback patch, `: >` and `truncate -s 0` were both blocked as destructive truncation. After two blocked variants, the workflow rewound: verify the destination is absent, create it from the first `diff`, then append later diffs.
 
 **Root cause:** Agent defaulted to `rm -rf` out of habit and treated the block as a dead end instead of considering alternatives.
 **Fix:** When a command is blocked, find the unblocked equivalent. `rm -rf dir/` → `rm dir/file && rmdir dir/`. `mv old new` → `mv -n old new`. The deny hook blocks dangerous patterns, not all file ops.

@@ -7,7 +7,13 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -176,6 +182,102 @@ describe("setup --apply installer", () => {
     assert.equal(gitignore.match(/^node_modules$/gm)?.length, 1);
     assert.doesNotMatch(gitignore, /^node_modules\/$/m);
     assert.match(gitignore, /^dist\/$/m);
+  });
+
+  // Runs two installs and writes one temp system file to prove canonical content replaces it.
+  it("overwrites system-owned files from their declared source", () => {
+    const projectRoot = makeTempProject();
+    const firstInstall = runInstaller(projectRoot, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    const installedReadmePath = join(
+      projectRoot,
+      ".goat-flow",
+      "logs",
+      "quality",
+      "README.md",
+    );
+    writeFileSync(installedReadmePath, "user edited a system file\n");
+
+    const reinstall = runInstaller(projectRoot, "--agent", "codex");
+    assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
+    assert.equal(
+      readFileSync(installedReadmePath, "utf-8"),
+      readFileSync(
+        join(
+          import.meta.dirname,
+          "..",
+          "..",
+          "workflow",
+          "setup",
+          "reference",
+          "quality-readme.md",
+        ),
+        "utf-8",
+      ),
+    );
+  });
+
+  // Runs two installs and writes one temp policy to prove project-owner content survives.
+  it("preserves user-owned files during a normal reinstall", () => {
+    const projectRoot = makeTempProject();
+    const firstInstall = runInstaller(projectRoot, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    const securityPolicyPath = join(
+      projectRoot,
+      ".goat-flow",
+      "security-policy.md",
+    );
+    const customizedPolicy =
+      "# Team security policy\n\nKeep this local rule.\n";
+    writeFileSync(securityPolicyPath, customizedPolicy);
+
+    const reinstall = runInstaller(projectRoot, "--agent", "codex");
+    assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
+    assert.equal(readFileSync(securityPolicyPath, "utf-8"), customizedPolicy);
+  });
+
+  // Runs two installs and removes one temp anchor to prove local session storage is recreated.
+  it("regenerates declared generated anchors", () => {
+    const projectRoot = makeTempProject();
+    const firstInstall = runInstaller(projectRoot, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    const sessionAnchorPath = join(
+      projectRoot,
+      ".goat-flow",
+      "logs",
+      "sessions",
+      ".gitkeep",
+    );
+    unlinkSync(sessionAnchorPath);
+
+    const reinstall = runInstaller(projectRoot, "--agent", "codex");
+    assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
+    assert.equal(existsSync(sessionAnchorPath), true);
+    assert.equal(readFileSync(sessionAnchorPath, "utf-8"), "");
+  });
+
+  // Writes one temp editor file, runs install, and proves the user's external rules stay unchanged.
+  it("leaves external files unchanged", () => {
+    const projectRoot = makeTempProject();
+    const cursorIgnorePath = join(projectRoot, ".cursorignore");
+    const editorRules = ".env*\nprivate-notes/\n";
+    writeFileSync(cursorIgnorePath, editorRules);
+
+    const install = runInstaller(projectRoot, "--agent", "codex");
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    assert.equal(readFileSync(cursorIgnorePath, "utf-8"), editorRules);
   });
 
   it(

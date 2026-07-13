@@ -7,8 +7,213 @@
 import { readFileSync } from "node:fs";
 
 import { getTemplatePath } from "../paths.js";
-import type { ManifestJson } from "./types.js";
+import type { ManifestFileOwnership, ManifestJson } from "./types.js";
 import { ManifestValidationError } from "./types.js";
+
+const FILE_OWNERSHIP_CLASSES = new Set<ManifestFileOwnership>([
+  "system-owned",
+  "user-owned",
+  "generated",
+  "deprecated",
+  "external",
+]);
+
+/** Narrow JSON values before ownership fields are read for user-facing validation. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Require visible source or generator text so operators can reproduce an ownership action. */
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+/** Accept only normalized repository-relative paths for managed artifact identities. */
+function isSafeManifestPath(path: string): boolean {
+  return (
+    path.length > 0 &&
+    !path.startsWith("/") &&
+    !path.includes("\\") &&
+    !path.split("/").includes("..")
+  );
+}
+
+/** Narrow a JSON value to one behavior the installer and manifest report understand. */
+function isFileOwnership(value: unknown): value is ManifestFileOwnership {
+  return (
+    typeof value === "string" &&
+    FILE_OWNERSHIP_CLASSES.has(value as ManifestFileOwnership)
+  );
+}
+
+/** Collect every current file users can receive or optionally provide. */
+function declaredOwnershipPaths(json: ManifestJson): Set<string> {
+  const optionalPaths = Object.keys(json.optional_files).filter(
+    (path) => path !== "_note",
+  );
+  return new Set([...json.required_files, ...optionalPaths]);
+}
+
+/**
+ * Per-class evidence checks keep each installer behavior readable in isolation.
+ * A null result means the operator has enough metadata to predict the write.
+ */
+const OWNERSHIP_EVIDENCE_FINDERS: Record<
+  ManifestFileOwnership,
+  (artifactPath: string, source: unknown, generator: unknown) => string | null
+> = {
+  // System installers need the exact canonical content they will write.
+  "system-owned": (artifactPath, source) =>
+    isNonEmptyString(source)
+      ? null
+      : `system-owned file ${artifactPath} must declare source.`,
+  // User seeds need one first-write source while later local edits stay authoritative.
+  "user-owned": (artifactPath, source, generator) =>
+    isNonEmptyString(source) || isNonEmptyString(generator)
+      ? null
+      : `user-owned file ${artifactPath} must declare source or generator.`,
+  // Generated files need the command an operator can rerun from current project evidence.
+  generated: (artifactPath, _source, generator) =>
+    isNonEmptyString(generator)
+      ? null
+      : `generated file ${artifactPath} must declare generator.`,
+  // Retired paths only need audit cleanup guidance, not a writer.
+  deprecated: () => null,
+  // External files belong to another tool and must not name a goat-flow writer.
+  external: (artifactPath, source, generator) =>
+    source === undefined && generator === undefined
+      ? null
+      : `external file ${artifactPath} must not declare source or generator.`,
+};
+
+/** Return a source-path repair when a declared template cannot be safely packaged. */
+function ownershipSourceFinding(
+  artifactPath: string,
+  source: unknown,
+): string | null {
+  // A missing source is valid for generated, deprecated, and external records.
+  if (source === undefined) return null;
+  // Template sources stay inside the packaged workflow so installs cannot escape the project contract.
+  if (
+    !isNonEmptyString(source) ||
+    !source.startsWith("workflow/") ||
+    !isSafeManifestPath(source)
+  ) {
+    return `file_ownership.${artifactPath}.source must be a safe workflow/ path.`;
+  }
+  return null;
+}
+
+/** Explain missing source/generator evidence for one otherwise valid ownership record. */
+function ownershipEvidenceFindings(
+  artifactPath: string,
+  ownership: ManifestFileOwnership,
+  source: unknown,
+  generator: unknown,
+): string[] {
+  return [
+    OWNERSHIP_EVIDENCE_FINDERS[ownership](artifactPath, source, generator),
+    ownershipSourceFinding(artifactPath, source),
+  ].filter((finding): finding is string => finding !== null);
+}
+
+/** Validate one path record and return user-actionable schema findings. */
+function ownershipEntryFindings(
+  artifactPath: string,
+  rawSpec: unknown,
+  declaredPaths: ReadonlySet<string>,
+): string[] {
+  // Unsafe identities could escape the project when installer paths are resolved.
+  if (!isSafeManifestPath(artifactPath)) {
+    return [
+      `file_ownership path ${artifactPath} must be repository-relative with no traversal.`,
+    ];
+  }
+
+  // A non-object spec cannot describe how setup should treat the user's file.
+  if (!isRecord(rawSpec)) {
+    return [`file_ownership.${artifactPath} must be an object.`];
+  }
+
+  const ownership = rawSpec["ownership"];
+
+  // Unknown classes have no deterministic overwrite/preserve behavior.
+  if (!isFileOwnership(ownership)) {
+    return [
+      `file_ownership.${artifactPath}.ownership must be one of: system-owned, user-owned, generated, deprecated, external.`,
+    ];
+  }
+
+  const findings: string[] = [];
+
+  // Current files cannot also be retired because users would receive contradictory guidance.
+  if (ownership === "deprecated" && declaredPaths.has(artifactPath)) {
+    findings.push(
+      `deprecated file ${artifactPath} must not remain required or optional.`,
+    );
+  }
+
+  // Extra records are accepted only when audit needs to report a retired path.
+  if (!declaredPaths.has(artifactPath) && ownership !== "deprecated") {
+    findings.push(
+      `file_ownership contains undeclared current path ${artifactPath}.`,
+    );
+  }
+
+  findings.push(
+    ...ownershipEvidenceFindings(
+      artifactPath,
+      ownership,
+      rawSpec["source"],
+      rawSpec["generator"],
+    ),
+  );
+  return findings;
+}
+
+/**
+ * Validate explicit update behavior for every required and optional manifest file.
+ * Separate path, class, and evidence checks so operators receive every repair in one run.
+ *
+ * @param json - raw manifest; absent ownership means the installation needs explicit migration
+ * @returns nothing on success; throws with every actionable ownership finding
+ */
+export function validateFileOwnershipSchema(json: ManifestJson): void {
+  const ownershipValue: unknown = json.file_ownership;
+
+  // Legacy manifests need an explicit migration because guessing ownership can destroy user edits.
+  if (!isRecord(ownershipValue)) {
+    throw new ManifestValidationError(
+      "workflow/manifest.json file_ownership requires explicit migration; no default ownership is applied.",
+      ["file_ownership must classify every required and optional file."],
+    );
+  }
+
+  const findings: string[] = [];
+  const declaredPaths = declaredOwnershipPaths(json);
+
+  // Every current path needs one visible update contract before installers or audits consume it.
+  for (const declaredPath of declaredPaths) {
+    // A missing record would force callers to invent an unsafe default.
+    if (!Object.hasOwn(ownershipValue, declaredPath)) {
+      findings.push(`file_ownership is missing declared path ${declaredPath}.`);
+    }
+  }
+
+  // Each ownership record must name one safe path, valid class, and usable source/generator evidence.
+  for (const [artifactPath, rawSpec] of Object.entries(ownershipValue)) {
+    findings.push(
+      ...ownershipEntryFindings(artifactPath, rawSpec, declaredPaths),
+    );
+  }
+
+  // A clean ownership registry is safe for setup, audit, and manifest reporting.
+  if (findings.length === 0) return;
+  throw new ManifestValidationError(
+    `workflow/manifest.json has invalid file_ownership metadata (${findings.length} finding${findings.length === 1 ? "" : "s"}).`,
+    findings,
+  );
+}
 
 /**
  * List repeated values in one manifest array.
@@ -244,6 +449,7 @@ export function readManifestJson(): ManifestJson {
   const path = getTemplatePath("workflow/manifest.json");
   const raw = readFileSync(path, "utf-8");
   const json = JSON.parse(raw) as ManifestJson;
+  validateFileOwnershipSchema(json);
   validateSkillReferenceSchema(json);
   return json;
 }

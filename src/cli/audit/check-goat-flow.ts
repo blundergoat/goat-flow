@@ -117,6 +117,8 @@ const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!hooks/**",
   "!plans/",
   "!plans/**",
+  "!logs/sessions/",
+  "!logs/sessions/README.md",
 ];
 
 /**

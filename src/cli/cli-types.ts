@@ -24,6 +24,7 @@ export type Command =
   | "menu"
   | "stats"
   | "index"
+  | "redact"
   | "skill";
 
 /**
@@ -88,6 +89,7 @@ export const COMMANDS: Command[] = [
   "menu",
   "stats",
   "index",
+  "redact",
   "skill",
 ];
 

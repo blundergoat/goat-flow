@@ -59,23 +59,15 @@ The `hallucination-risk` field is optional. Use it when an area is easy to misre
 
 ## Adaptive Step 0
 
-Before Step 0:
+Reuse 2-3 overlapping session logs instead of re-deriving settled context.
 
-- Read the 2-3 most recent files in `.goat-flow/logs/sessions/` when the task overlaps recent work
-- If a recent session log already covers the same area, prefer building on that context instead of re-deriving it
+**The gate rule:** Infer answers already supplied. If intent, target, and boundary are clear, confirm once and proceed. Ask only at a genuine fork. A detailed brief or "skip Step 0" proceeds.
 
-Then continue with the normal Step 0 flow:
+**Planning/interview boundary:** Default interview budget: one decision-bearing question at a time, no more than three per message or three rounds. Extend only when the user requests a deeper interview. When the budget is exhausted, present remaining choices with a recommended default and stop. Planning permission is not implementation permission. Do not implement unless the original directive authorized implementation or the user now selects it.
 
-Skills that gather context before acting follow this pattern:
+A clear implementation directive proceeds after required READ and SCOPE; do not manufacture interview questions. Examples: “Help me plan” → handoff; “Implement the approved plan” → proceed.
 
-1. Read the user's invocation for context already provided
-2. For each Step 0 question: if the answer is already clear from context → **confirm**: "I see [answer]. Correct?" Otherwise → **ask**
-3. If ALL questions are answered by the invocation → present a condensed confirmation and proceed
-4. If the user says "skip Step 0" or provides a detailed brief → confirm understanding and proceed
-
-**The gate rule:** If intent, target, and boundary are clear from the user's request, proceed without asking. Ask only at a genuine fork where the user's preference is not obvious. Bare invocation with no arguments = zero context = ask all structural questions and wait.
-
-**Dispatcher invocation:** When a skill is invoked via `/goat`, Step 0 is the single entry gate. The dispatcher already announced the skill - Step 0 goes straight to its questions without re-announcing. There is no double-gate: one announcement from the dispatcher, one gate (Step 0) in the skill.
+**Dispatcher invocation:** `/goat` announces the route; Step 0 asks any remaining questions without re-announcing. One dispatch, one intake gate.
 
 ## Contradiction Check
 
@@ -104,6 +96,16 @@ When working from a plan or milestone file:
 - If you completed a task 3 steps ago and forgot to tick it - go tick it NOW before continuing
 
 On `/compact` with no active milestone file: write a session log to `.goat-flow/logs/sessions/` summarizing current state. Milestone files are the primary continuity mechanism; session logs are the fallback.
+
+Handoff receipts: read `.goat-flow/logs/sessions/README.md`; redact before writing.
+
+## Durable Artifact Redaction
+
+Before writing session, handoff, critique, review, quality, security, or export text, pass the draft through `goat-flow redact` and write only its output to the intended gitignored path. Redact before disk, not after.
+
+Example: `goat-flow redact --output .goat-flow/logs/sessions/handoff.md`, then paste stdin and send EOF.
+
+The hash-only `redactEvidenceText` evidence API is not a readable scrubber. This reduces common credential leakage; it is not perfect DLP and does not replace secret review.
 
 ## Presenting Findings
 
@@ -141,6 +143,33 @@ Use `.goat-flow/logs/sessions/` for session summaries. Compact at ~60% context o
 Sub-agents: one objective, structured return, 5-call budget.
 
 When blocked: ask one question with a recommended default.
+
+## Orchestration Admission
+
+Before any optional repeated, parallel, delegated, review, QA, or critique pass, record:
+
+Budget Ledger:
+- Phase:
+- Initial budget:
+- Spent evidence:
+- Proposed extra pass:
+- New evidence expected:
+- Failure class:
+- Independence boundary:
+- Objective per subagent:
+- Why tasks are independent:
+- Merge boundary:
+- Budget/call cap:
+- Return schema:
+- Conflict owner:
+- Stop condition:
+- Decision: admitted | deferred | denied
+
+A repeated pass must name a new failure class, independence boundary, or explicit user request. Admit it when the change crosses a blast-radius threshold, failed verification needs targeted evidence, an independent context adds evidence, security or correctness risk outweighs cost, or the user requested it.
+
+Same-context reassurance with no new evidence is denied. Do not parallelize tasks sharing files unless the merge boundary and conflict owner are named. Subagents keep one objective, structured return, 5-call budget.
+
+Required skill phases and verification are pre-admitted; estimated cost cannot degrade or block them. Explicit `goat-critique` stays full delegated mode and preserves existing consent. This is rough admission control, not token accounting or a hard failure based only on estimated cost.
 
 ## Recovery
 

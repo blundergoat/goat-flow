@@ -66,6 +66,22 @@ interface SkillsStructure {
   references?: Record<string, string[]>;
 }
 
+/** Retired hook filenames the installer removes and drift audit reports. */
+interface HooksStructure {
+  stale_names: string[];
+}
+
+/** Update policy for one manifest-declared file visible to setup users. */
+export type ManifestFileOwnership =
+  "system-owned" | "user-owned" | "generated" | "deprecated" | "external";
+
+/** Canonical source or generator behind one explicitly owned file. */
+interface ManifestFileOwnershipSpec {
+  ownership: ManifestFileOwnership;
+  source?: string;
+  generator?: string;
+}
+
 /** Instruction-file contract declared by the manifest. `required_sections` is
  *  the canonical list of hot-path headings each agent instruction file must
  *  carry; harness checks build their regex patterns from these labels so the
@@ -85,11 +101,13 @@ export interface ManifestJson {
   description: string;
   version: string;
   required_files: string[];
+  file_ownership?: Record<string, ManifestFileOwnershipSpec>;
   required_dirs: string[];
   directory_purposes: Record<string, string>;
   optional_files: Record<string, string>;
   never_create: string[];
   skills: SkillsStructure;
+  hooks?: HooksStructure;
   agents: Record<string, AgentProfile>;
   instruction_file: ManifestInstructionFile;
   /** Added by M06a. Only holds values that cannot be derived from code. */
@@ -143,9 +161,12 @@ export interface Manifest {
   version: string;
   /** Files the project must contain; validated against disk by audit checks. */
   required_files: string[];
+  /** Per-file update behavior; every required/optional manifest path is explicit. */
+  file_ownership: Record<string, ManifestFileOwnershipSpec>;
   /** Directories the project must contain; validated against disk by audit checks. */
   required_dirs: string[];
   skills: SkillsStructure;
+  hooks: HooksStructure;
   agents: Record<string, AgentProfile>;
   instruction_file: ManifestInstructionFile;
   facts: ResolvedFacts;

@@ -134,7 +134,7 @@ npx goat-flow quality validate .goat-flow/logs/quality/2026-04-01-0900-claude-aa
 
 ### `goat-flow manifest [--check] [--format json]`
 
-Print the resolved single-source-of-truth manifest (agent registry, agent capability metadata, installed skills, required files, and derived facts). Pass `--check` to validate that the static manifest matches observed repo state and capability schema (exits non-zero on drift, used by CI).
+Print the resolved single-source-of-truth manifest (agent registry, agent capability metadata, installed skills, required files, per-file ownership, and derived facts). Markdown summarizes ownership classes and their update behavior; JSON includes the exact path, canonical source or generator, and ownership class. Pass `--check` to validate that the static manifest matches observed repo state and capability schema (exits non-zero on drift, used by CI).
 
 ```bash
 npx goat-flow manifest                    # Print resolved manifest as Markdown
@@ -162,6 +162,17 @@ Regenerate the generated learning-loop `INDEX.md` files for `.goat-flow/learning
 npx goat-flow index                       # Regenerate all four bucket indexes
 npx goat-flow index ../other-project      # Regenerate indexes in another project
 ```
+
+### `goat-flow redact [path] [--output <file>]`
+
+Scrub readable continuation text before it reaches disk. Pipe a session, handoff, review, quality, security, or export draft through stdin; the command replaces common token, auth-header, cookie, private-key, URL-secret, CLI-argument, and environment-assignment shapes while preserving ordinary paths, commands, and issue URLs.
+
+```bash
+npx goat-flow redact
+npx goat-flow redact --output .goat-flow/logs/sessions/handoff.md
+```
+
+Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, only the scrubbed result is persisted. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
 
 ### `goat-flow events tail [path] [--limit <n>] [--format json]`
 
@@ -191,7 +202,7 @@ Use `--apply` when you want setup to run the deterministic file-copy installer i
 
 ### `goat-flow install [path] --agent <id> [--force]`
 
-Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Existing settings are skipped unless `--force` is passed. Existing config files are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. For outdated or v0.9 projects the installer automatically updates the config version field and (for v0.9) removes deprecated skill directories; use `--force` for a full overwrite instead.
+Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved unless `--force` is passed. Existing config files are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. For outdated or v0.9 projects the installer automatically updates the config version field and (for v0.9) removes deprecated skill directories; use `--force` for an explicit user-owned overwrite instead.
 
 The shared references include `.goat-flow/skill-docs/README.md` for meta-reference doctrine, while `.goat-flow/skill-docs/playbooks/README.md` indexes tool/capability playbooks such as `browser-use.md` and `page-capture.md`. Generated or repaired instruction files include a Router Table pointer to `.goat-flow/skill-docs/playbooks/` so agents check local availability playbooks before declaring a tool unavailable.
 
@@ -246,6 +257,7 @@ Common tasks and the commands to run:
 | Get a harness quality prompt | `npx goat-flow quality . --agent claude --mode harness` |
 | Review quality trend history | `npx goat-flow quality history --agent claude` |
 | Compare two saved quality runs | `npx goat-flow quality diff --agent claude` |
+| Scrub a durable handoff before saving it | `npx goat-flow redact --output .goat-flow/logs/sessions/handoff.md`, then paste stdin and send EOF |
 | Inspect local dashboard/session events | `npx goat-flow events tail . --limit 20` |
 | Generate a setup prompt | `npx goat-flow setup . --agent claude` |
 | Decide what kind of artifact to author | `npx goat-flow quality candidacy "..."` |

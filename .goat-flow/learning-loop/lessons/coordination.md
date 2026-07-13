@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-05-25
+last_reviewed: 2026-07-13
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -71,3 +71,15 @@ last_reviewed: 2026-05-25
 **Created:** 2026-05-01
 **What happened:** Programme headline stated ~33 weekends (council's estimate). Phase breakdowns summed to ~26. The gap was unexplained - some combination of CF items, overhead, and double-counted shared infrastructure. The headline lost legitimacy when the math didn't add up.
 **Prevention:** Future programme documents should show effort accounting explicitly: per-skill serial sum (~35.5 weekends), phased estimate (~31 weekends), and a note on why they differ (shared infrastructure counted once in phased estimate, per-consumer in serial). Set the headline to the phased estimate with the accounting visible.
+
+---
+
+## Lesson: Activate prerequisites before the numerically next milestone
+
+**Created:** 2026-07-13
+
+**What happened:** After M05 approval, M06 was marked in progress before its dependency header was read. M06 required M08 to land first, so both statuses had to be corrected before implementation.
+
+**Root cause:** Numeric ordering was treated as execution ordering without checking the next milestone's live dependency contract.
+
+**Prevention:** Before changing milestone statuses, read `Depends on` in the candidate and every unmet prerequisite. Activate the prerequisite, not the next number.

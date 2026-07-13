@@ -2,7 +2,8 @@
 
 /**
  * Command-line entry point for goat-flow.
- * Handles argv parsing, command dispatch, exit codes, and on-disk output for audit, quality, setup, dashboard, events, and info workflows.
+ * Handles argv parsing, command dispatch, exit codes, and output for audit,
+ * quality, setup, dashboard, events, redaction, and information workflows.
  */
 
 import { realpathSync } from "node:fs";
@@ -41,6 +42,7 @@ Commands:
   manifest          Print the resolved single-source-of-truth manifest (--check validates consistency)
   stats             Learning-loop health report (live entry counts, stale refs, freshness). Use --check for CI.
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
+  redact            Scrub durable text from stdin before stdout or --output persistence
   events tail       Read local gitignored evidence-envelope events
   skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
   skill doctor      Explain installed skill paths, invocation syntax, and static load blockers.
@@ -99,6 +101,7 @@ Examples:
   goat-flow stats                      Learning-loop health report
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
   goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries
+  goat-flow redact --output .goat-flow/logs/sessions/handoff.md
   goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
   goat-flow skill new "<description>"  Scaffold a skill from a natural-language description
   goat-flow skill ./repo new "<description>"
@@ -117,14 +120,14 @@ function printVersion(): void {
 }
 
 /**
- * Entry point that dispatches to the appropriate command handler.
- * Installs an EPIPE guard that exits 0 when stdout is closed early (e.g. piped to `head`); any
- * other stdout error is rethrown. Parse and dispatch errors are not handled here - they throw and
- * are caught by the top-level runner below, which maps CLIError to its exit code.
+ * Route the user's command and keep closed output pipes from showing false failures.
+ * @returns completion after help, version, or the selected project command finishes
+ * @throws non-EPIPE output, parse, and command errors for consistent top-level handling
  */
 async function main(): Promise<void> {
   // Gracefully handle EPIPE (e.g., output piped to `head`)
   process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+    // A user may close `head` early; that successful partial read should exit quietly.
     if (err.code === "EPIPE") process.exit(0);
     throw err;
   });
@@ -134,10 +137,12 @@ async function main(): Promise<void> {
   // Empty argv opens the menu; path-only argv still uses the audit shorthand.
   const options = parseCLIArgs(rawArgs);
 
+  // Help requests show guidance without running a project command.
   if (options.showHelp) {
     printHelp();
     return;
   }
+  // Version requests give package identity without reading the target project.
   if (options.showVersion) {
     printVersion();
     return;
@@ -147,14 +152,13 @@ async function main(): Promise<void> {
 }
 
 /**
- * True when this module is the CLI entry point, including when launched through a symlink like
- * `node_modules/.bin/goat-flow`. Resolves both the invoked path and this module's URL through
- * realpath so the symlink and its target compare equal. A resolution error (missing or
- * unreadable path) is swallowed and treated as a fallback `false`, so importing this module as a
- * library never accidentally triggers the CLI runner.
+ * Detect direct or symlinked CLI launches so library imports stay side-effect free.
+ * @returns true for a runnable CLI entry; missing/unreadable paths safely return false
+ * @throws Never; path-resolution failures are caught so imports remain safe
  */
 function isMainModule(): boolean {
   const entry = process.argv[1];
+  // An imported module has no launch path and must not start the CLI for the user.
   if (!entry) return false;
   try {
     return (
@@ -162,12 +166,15 @@ function isMainModule(): boolean {
       realpathSync(fileURLToPath(import.meta.url))
     );
   } catch {
+    // Example: a deleted package symlink leaves the user's launch path unreadable.
     return false;
   }
 }
 
+// A direct CLI launch runs once; library consumers only receive exported helpers.
 if (isMainModule()) {
   main().catch((err: unknown) => {
+    // Expected input errors keep their actionable message and documented exit code.
     if (err instanceof CLIError) {
       console.error(err.message);
       process.exit(err.exitCode);

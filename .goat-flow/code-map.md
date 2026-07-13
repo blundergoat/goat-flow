@@ -13,6 +13,7 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 ├── cli-agent-options.ts         = agent flag parsing and validation helpers
 ├── cli-output.ts                = stdout and file output helpers
 ├── cli-error.ts                 = CLIError with exit-code handling
+├── redact-command.ts            = stdin-to-stdout/file scrubber for durable continuation text
 ├── index.ts                     = programmatic library entry and public re-exports
 ├── constants.ts                 = AUDIT_VERSION, SKILL_NAMES, and shared constants
 ├── paths.ts                     = package-root path resolution for source and packaged installs
@@ -45,7 +46,7 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 │   └── types.ts                 = GoatFlowConfig and LoadedConfig interfaces
 │
 ├── detect/                      = installed-agent and project-stack detection
-├── evidence/                    = evidence envelopes, redaction, JSONL append/tail helpers
+├── evidence/                    = hash-only evidence metadata, readable text scrubbing, envelopes, JSONL helpers
 ├── facts/                       = filesystem-backed facts used by audit, stats, and prompts
 │   ├── orchestrator.ts          = runs fact extractors and assembles ProjectFacts
 │   ├── fs.ts                    = real/test filesystem adapter

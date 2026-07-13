@@ -42,6 +42,7 @@ function fixtureJson(
     description: "fixture",
     version: AUDIT_VERSION,
     required_files: [],
+    file_ownership: {},
     required_dirs: [],
     directory_purposes: {},
     optional_files: {},

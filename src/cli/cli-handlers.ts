@@ -33,6 +33,7 @@ import {
 } from "./prompt/commit-guidance.js";
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
+import { handleRedactCommand } from "./redact-command.js";
 const PACKAGE_VERSION = getPackageVersion();
 
 function formatCandidacyArtifact(
@@ -672,6 +673,7 @@ const COMMAND_HANDLERS: Partial<
   manifest: handleManifestCommand,
   stats: handleStatsCommand,
   index: handleIndexCommand,
+  redact: handleRedactCommand,
   status: handleStatusCommand,
   dashboard: runDashboardCommand,
   info: handleInfoCommand,

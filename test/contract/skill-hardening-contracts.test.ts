@@ -777,6 +777,289 @@ describe("skill hardening contracts", () => {
     }
   });
 
+  it("requires an evidence budget before optional orchestration", () => {
+    const preamblePaths = [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ];
+
+    assertForEachTarget(preamblePaths, (referencePath) => {
+      assert.match(
+        readProjectFile(referencePath),
+        /Before optional orchestration, load `skill-conventions\.md` → Orchestration Admission/,
+        referencePath,
+      );
+    });
+
+    const conventionPaths = [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ];
+
+    assertForEachTarget(conventionPaths, (referencePath) => {
+      const admissionGuidance = readMarkdownSection(
+        referencePath,
+        "Orchestration Admission",
+      );
+      assert.match(admissionGuidance, /Budget Ledger:/, referencePath);
+      assert.match(admissionGuidance, /Initial budget:/, referencePath);
+      assert.match(admissionGuidance, /Spent evidence:/, referencePath);
+      assert.match(admissionGuidance, /Proposed extra pass:/, referencePath);
+      assert.match(admissionGuidance, /New evidence expected:/, referencePath);
+      assert.match(admissionGuidance, /Failure class:/, referencePath);
+      assert.match(admissionGuidance, /Independence boundary:/, referencePath);
+      assert.match(
+        admissionGuidance,
+        /Decision: admitted \| deferred \| denied/,
+        referencePath,
+      );
+      assert.match(admissionGuidance, /explicit user request/, referencePath);
+      assert.match(
+        admissionGuidance,
+        /not token accounting or a hard failure based only on estimated cost/,
+        referencePath,
+      );
+    });
+  });
+
+  it("requires team fit without weakening mandatory critique", () => {
+    const conventionPaths = [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ];
+
+    assertForEachTarget(conventionPaths, (referencePath) => {
+      const admissionGuidance = readMarkdownSection(
+        referencePath,
+        "Orchestration Admission",
+      );
+      assert.match(admissionGuidance, /Objective per subagent:/, referencePath);
+      assert.match(
+        admissionGuidance,
+        /Why tasks are independent:/,
+        referencePath,
+      );
+      assert.match(admissionGuidance, /Merge boundary:/, referencePath);
+      assert.match(admissionGuidance, /Budget\/call cap:/, referencePath);
+      assert.match(admissionGuidance, /Return schema:/, referencePath);
+      assert.match(admissionGuidance, /Conflict owner:/, referencePath);
+      assert.match(admissionGuidance, /Stop condition:/, referencePath);
+      assert.match(
+        admissionGuidance,
+        /Same-context reassurance with no new evidence is denied/,
+        referencePath,
+      );
+      assert.match(
+        admissionGuidance,
+        /one objective, structured return, 5-call budget/,
+        referencePath,
+      );
+      assert.match(
+        admissionGuidance,
+        /Required skill phases and verification are pre-admitted/,
+        referencePath,
+      );
+      assert.match(
+        admissionGuidance,
+        /Explicit `goat-critique` stays full delegated mode/,
+        referencePath,
+      );
+    });
+  });
+
+  it("bounds planning interviews and hands off before implementation", () => {
+    const preamblePaths = [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ];
+
+    assertForEachTarget(preamblePaths, (referencePath) => {
+      const stepBudgetGuidance = readMarkdownSection(
+        referencePath,
+        "Step 0 Budget",
+      );
+      assert.match(
+        stepBudgetGuidance,
+        /Planning\/interview questions: load `skill-conventions\.md` → Adaptive Step 0/,
+        referencePath,
+      );
+    });
+
+    const conventionPaths = [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ];
+
+    assertForEachTarget(conventionPaths, (referencePath) => {
+      const adaptiveIntake = readMarkdownSection(
+        referencePath,
+        "Adaptive Step 0",
+      );
+      assert.match(
+        adaptiveIntake,
+        /Default interview budget: one decision-bearing question at a time, no more than three per message or three rounds/,
+        referencePath,
+      );
+      assert.match(
+        adaptiveIntake,
+        /When the budget is exhausted, present remaining choices with a recommended default and stop/,
+        referencePath,
+      );
+      assert.match(
+        adaptiveIntake,
+        /Planning permission is not implementation permission/,
+        referencePath,
+      );
+      assert.match(
+        adaptiveIntake,
+        /Do not implement unless the original directive authorized implementation or the user now selects it/,
+        referencePath,
+      );
+      assert.match(adaptiveIntake, /“Help me plan” → handoff/, referencePath);
+    });
+  });
+
+  it("preserves autonomy for clear implementation directives", () => {
+    const conventionPaths = [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ];
+
+    assertForEachTarget(conventionPaths, (referencePath) => {
+      const adaptiveIntake = readMarkdownSection(
+        referencePath,
+        "Adaptive Step 0",
+      );
+      assert.match(
+        adaptiveIntake,
+        /A clear implementation directive proceeds after required READ and SCOPE; do not manufacture interview questions/,
+        referencePath,
+      );
+      assert.match(
+        adaptiveIntake,
+        /“Implement the approved plan” → proceed/,
+        referencePath,
+      );
+    });
+  });
+
+  it("requires pre-write redaction for durable local text", () => {
+    const preamblePaths = [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ];
+
+    assertForEachTarget(preamblePaths, (referencePath) => {
+      assert.match(
+        readProjectFile(referencePath),
+        /Before durable local text, run `goat-flow redact`/,
+        referencePath,
+      );
+    });
+
+    const conventionPaths = [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ];
+
+    assertForEachTarget(conventionPaths, (referencePath) => {
+      const redactionGuidance = readMarkdownSection(
+        referencePath,
+        "Durable Artifact Redaction",
+      );
+      assert.match(
+        redactionGuidance,
+        /session, handoff, critique, review, quality, security, or export text/,
+        referencePath,
+      );
+      assert.match(
+        redactionGuidance,
+        /Redact before disk, not after/,
+        referencePath,
+      );
+      assert.match(
+        redactionGuidance,
+        /goat-flow redact.*--output.*\.goat-flow\/logs/u,
+        referencePath,
+      );
+      assert.match(
+        redactionGuidance,
+        /hash-only `redactEvidenceText`.*not a readable scrubber/,
+        referencePath,
+      );
+    });
+  });
+
+  it("installs a conditional redacted handoff receipt schema", () => {
+    const templatePath = "workflow/setup/reference/session-logs-readme.md";
+    const installedPath = ".goat-flow/logs/sessions/README.md";
+    const receiptTemplate = readProjectFile(templatePath);
+
+    assert.equal(readProjectFile(installedPath), receiptTemplate);
+    assert.match(receiptTemplate, /Session logs remain optional/u);
+    assert.match(receiptTemplate, /compaction.*without an active milestone/u);
+    assert.match(
+      receiptTemplate,
+      /user requests a handoff or session summary/u,
+    );
+    assert.match(receiptTemplate, /goat-flow redact.*--output/u);
+    assert.match(receiptTemplate, /literal pass\/fail line or `not run`/u);
+    assert.match(receiptTemplate, /re-run before relying on the claim/u);
+
+    // Each field reconstructs the user's exact target and next safe action after interruption.
+    for (const receiptField of [
+      "Source session",
+      "Created",
+      "Agent/runtime",
+      "Repo",
+      "Worktree",
+      "Target project",
+      "Active mode",
+      "Goal",
+      "Files changed this session",
+      "Last verified command",
+      "Literal result line",
+      "Decisions compressed",
+      "Pending tasks",
+      "Live recheck requirements",
+      "Known blockers",
+      "Redaction applied",
+    ]) {
+      assert.match(receiptTemplate, new RegExp(`^- ${receiptField}:`, "mu"));
+    }
+
+    // Full-depth skills need only a compact route because the receipt schema is loaded on demand.
+    for (const conventionsPath of [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ]) {
+      assert.match(
+        readProjectFile(conventionsPath),
+        /Handoff receipts: read `.goat-flow\/logs\/sessions\/README.md`; redact before writing\./u,
+        conventionsPath,
+      );
+    }
+
+    const manifest = JSON.parse(readProjectFile("workflow/manifest.json")) as {
+      required_files: string[];
+    };
+    assert.ok(manifest.required_files.includes(installedPath));
+    assert.match(
+      readProjectFile("workflow/install-goat-flow.sh"),
+      /session-logs-readme\.md" "\.goat-flow\/logs\/sessions\/README\.md"/u,
+    );
+
+    // Both gitignore copies must keep only the README committed while receipt files stay local.
+    for (const gitignorePath of [
+      "workflow/setup/reference/goat-flow-gitignore",
+      ".goat-flow/.gitignore",
+    ]) {
+      const gitignore = readProjectFile(gitignorePath);
+      assert.match(gitignore, /logs\/sessions\/\*\.md/u, gitignorePath);
+      assert.match(gitignore, /!logs\/sessions\/README\.md/u, gitignorePath);
+    }
+  });
+
   it("clarifies deployment bulletproof evidence as a release gate or hardening debt", () => {
     // Both authoring surfaces must set the same expectation before users trust a skill claim.
     for (const referencePath of [
