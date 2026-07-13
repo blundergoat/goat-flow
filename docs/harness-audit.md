@@ -10,6 +10,20 @@
 
 Harness checks are grouped by the 5 concerns that matter for agent effectiveness. The audit checks whether the structural wiring for each concern is in place. It does not judge content quality - that's what [quality](harness-quality.md) is for. See [harness-engineering.md](harness-engineering.md) for the sources behind the model.
 
+## Enforcement matrix evidence
+
+The Agent Enforcement Matrix is an advisory comparison of evidence observed by the local audit, not a provider support or marketing claim. Terminal, JSON, and Home dashboard rows keep three fields together: `status` describes observed strength or absence, `assurance` names the proof class, and `sources` identifies where that proof came from. A shared capability label does not mean two runners have equivalent guardrails.
+
+| Assurance | What it proves | What it does not prove |
+|-----------|----------------|------------------------|
+| `runtime-local` | This audit executed the managed local self-test surface. | The external coding agent delivered or obeyed the hook end to end. |
+| `static-local` | Local settings, hook registration, or extracted facts match the capability contract. | The configured path executed during a real agent action. |
+| `manifest-declared` | goat-flow declares the integration shape for that runner. | Provider-native behavior or current runtime enforcement. |
+| `provider-documented` | Cited provider documentation supports the named capability. | This checkout configured or exercised that capability. |
+| `not-observed` | The audit has no stronger evidence source for the row. | Absence or presence beyond what the audit inspected. |
+
+`hard`, `limited`, and `soft` are positive local strength labels; `missing` means the inspected local surface is absent or failed; `unknown` means the audit cannot infer the broader capability. A `hard` row is rejected unless local static or runtime evidence exists. Static test fixtures prove this contract shape only, never runtime agent behavior. For a deeper managed-script probe, use `goat-flow hooks verify . --agent <id> --scenario deny-hook`; that command still does not exercise external-agent hook delivery.
+
 ## Check types
 
 Each harness check carries a `type` tag that determines whether (and how) a failure affects the concern's status:

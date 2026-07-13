@@ -1,5 +1,7 @@
 /**
- * Renderers for AuditReport: text (terminal), json (stable schema), markdown (PR comments).
+ * Renders audit results for terminal users, stable JSON consumers, and Markdown summaries.
+ * Use this file when output wording or machine-readable audit fields change.
+ * Enforcement output keeps status beside proof strength so runner comparisons remain honest.
  */
 import type {
   AgentEnforcementCapability,
@@ -40,29 +42,41 @@ const ENFORCEMENT_STATUS_LABELS: Record<EnforcementCapabilityStatus, string> = {
 
 /** Render a non-gating enforcement status label. */
 function enforcementStatus(status: EnforcementCapabilityStatus): string {
+  // Hard local protection is the strongest result shown to terminal users.
   if (status === "hard")
     return `${GREEN}${ENFORCEMENT_STATUS_LABELS[status]}${RESET}`;
+  // Missing protection is actionable and uses the terminal failure color.
   if (status === "missing") {
     return `${RED}${ENFORCEMENT_STATUS_LABELS[status]}${RESET}`;
   }
+  // Limited and soft protection remain visible without looking equivalent to hard enforcement.
   if (status === "limited" || status === "soft") {
     return `${YELLOW}${ENFORCEMENT_STATUS_LABELS[status]}${RESET}`;
   }
   return `${DIM}${ENFORCEMENT_STATUS_LABELS[status]}${RESET}`;
 }
 
+/** Render the proof class and source beside a capability status for direct runner comparison. */
+function enforcementEvidence(
+  capability: AgentEnforcementCapability["capabilities"][number],
+): string {
+  return `[assurance: ${capability.assurance}; source: ${capability.sources.join(", ")}]`;
+}
+
 /** Render the advisory enforcement matrix in terminal text format. */
 function renderEnforcementMatrix(matrix: AgentEnforcementCapability[]): string {
   const lines: string[] = [];
   lines.push(
-    `${BOLD}Agent Enforcement Matrix:${RESET}  ${DIM}advisory; does not affect audit status${RESET}`,
+    `${BOLD}Agent Enforcement Matrix:${RESET}  ${DIM}advisory local evidence; not provider support; does not affect audit status${RESET}`,
   );
   lines.push("");
+  // Each runner gets a separate section so users can compare unequal guardrail evidence directly.
   for (const agent of matrix) {
     lines.push(`  ${CYAN}${agent.name}${RESET}`);
+    // Every visible status stays adjacent to its assurance class and concrete evidence source.
     for (const capability of agent.capabilities) {
       lines.push(
-        `    ${enforcementStatus(capability.status)} ${capability.label}: ${capability.summary}`,
+        `    ${enforcementStatus(capability.status)} ${capability.label} ${enforcementEvidence(capability)}: ${capability.summary}`,
       );
     }
     lines.push("");

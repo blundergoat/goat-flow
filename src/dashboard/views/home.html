@@ -1421,6 +1421,27 @@
       return 'warn';
     },
     /**
+     * Return the plain-English proof label shown beneath one enforcement result.
+     * @param row - capability row; missing proof data appears as unknown to the user
+     * @returns assurance and source text, or an explicit unknown fallback when either is empty
+     */
+    enforcementEvidence(row) {
+      const assuranceLabels = {
+        'runtime-local': 'Runtime local proof',
+        'static-local': 'Static local proof',
+        'manifest-declared': 'Manifest declaration',
+        'provider-documented': 'Provider documentation',
+        'not-observed': 'Not observed',
+      };
+      const assuranceLabel =
+        assuranceLabels[row?.assurance] || 'Unknown proof';
+      const evidenceSources = Array.isArray(row?.sources)
+        ? row.sources.map((source) => source.replaceAll('-', ' ')).join(', ')
+        : '';
+      // Empty source data means the audit cannot explain the result, so the UI says so directly.
+      return `${assuranceLabel} · Source: ${evidenceSources || 'unknown'}`;
+    },
+    /**
      * Build a repair prompt for failing harness checks.
      * Use when the user clicks the Home harness fix action.
      *
@@ -1874,6 +1895,10 @@
                       <div>
                         <strong x-text="row.label"></strong>
                         <p x-text="row.summary"></p>
+                        <p
+                          class="detail-fix"
+                          x-text="enforcementEvidence(row)"
+                        ></p>
                       </div>
                     </div>
                   </template>

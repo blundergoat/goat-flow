@@ -25,6 +25,7 @@ import {
   stubConfig,
   stubFS,
 } from "./helpers.js";
+import type { AgentFacts } from "../../src.js";
 
 describe("Audit scoring model", () => {
   it("acknowledge silences exactly the listed id, not other advisories", () => {

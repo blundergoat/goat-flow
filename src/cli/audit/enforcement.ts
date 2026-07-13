@@ -11,12 +11,21 @@ import type { AuditScope, CheckResult } from "./types.js";
 export type EnforcementCapabilityStatus =
   "hard" | "limited" | "soft" | "missing" | "unknown";
 
-type EnforcementCapabilitySource =
+/** Evidence origin recorded beside a capability so users can distinguish local proof from declarations. */
+export type EnforcementCapabilitySource =
   | "local-settings"
   | "local-hook"
   | "runtime-self-test"
   | "manifest"
   | "provider-docs"
+  | "not-observed";
+
+/** User-facing proof class that keeps runtime, static, declared, and absent evidence visibly distinct. */
+export type EnforcementCapabilityAssurance =
+  | "runtime-local"
+  | "static-local"
+  | "manifest-declared"
+  | "provider-documented"
   | "not-observed";
 
 type EnforcementCapabilityId =
@@ -36,6 +45,7 @@ interface EnforcementCapability {
   label: string;
   status: EnforcementCapabilityStatus;
   sources: EnforcementCapabilitySource[];
+  assurance: EnforcementCapabilityAssurance;
   summary: string;
   evidence: string[];
 }
@@ -69,20 +79,102 @@ const CAPABILITY_LABELS: Record<EnforcementCapabilityId, string> = {
   "provider-native-enforcement": "Provider-native enforcement",
 };
 
+/** Classify where a capability's strongest local proof came from for the audit user. */
+function classifyEnforcementAssurance(
+  sources: readonly EnforcementCapabilitySource[],
+): EnforcementCapabilityAssurance {
+  // A self-test is the strongest local proof because the audit executed the managed hook surface.
+  if (sources.includes("runtime-self-test")) {
+    return "runtime-local";
+  }
+  const includesStaticLocalEvidence =
+    sources.includes("local-settings") || sources.includes("local-hook");
+  // Local settings or hook facts prove configured structure, not external-agent delivery.
+  if (includesStaticLocalEvidence) return "static-local";
+  // Provider documentation describes vendor support without proving this checkout's runtime behavior.
+  if (sources.includes("provider-docs")) return "provider-documented";
+  // Manifest declarations describe goat-flow's expected integration, not a runtime execution result.
+  if (sources.includes("manifest")) return "manifest-declared";
+  return "not-observed";
+}
+
+/** Reject empty or contradictory sources before they become a user-visible capability claim. */
+function validateEnforcementSources(
+  sources: readonly EnforcementCapabilitySource[],
+): void {
+  // A capability without a source cannot tell the user why its status was assigned.
+  if (sources.length === 0) {
+    throw new Error("Enforcement capability evidence requires a source");
+  }
+  const mixesUnobservedAndConcreteEvidence =
+    sources.includes("not-observed") && sources.length > 1;
+  // Unobserved evidence cannot be blended with stronger evidence to disguise an unknown result.
+  if (mixesUnobservedAndConcreteEvidence) {
+    throw new Error("Not-observed enforcement evidence must stand alone");
+  }
+}
+
+/** Reject a strength badge when its proof class would mislead the user about protection. */
+function validateEnforcementStatus(
+  status: EnforcementCapabilityStatus,
+  assurance: EnforcementCapabilityAssurance,
+): void {
+  const hasConcreteLocalAssurance =
+    assurance === "runtime-local" || assurance === "static-local";
+
+  // A hard badge needs concrete local evidence, never a manifest, provider statement, or absent observation.
+  if (status === "hard" && !hasConcreteLocalAssurance) {
+    throw new Error(
+      "Hard enforcement requires local static or runtime evidence",
+    );
+  }
+
+  const statusAllowsUnobservedEvidence =
+    status === "missing" || status === "unknown";
+  // Positive strength labels cannot be built from evidence the audit did not observe.
+  if (assurance === "not-observed" && !statusAllowsUnobservedEvidence) {
+    throw new Error(
+      "Unobserved enforcement evidence requires missing or unknown status",
+    );
+  }
+}
+
+/**
+ * Validate and classify one capability's evidence before users compare runner protections.
+ * Returns the assurance label rendered beside status, or throws when the evidence would create false parity.
+ *
+ * @param status - Visible strength or absence; `hard` requires concrete local evidence.
+ * @param sources - Non-empty evidence origins; `not-observed` must remain the only source when used.
+ * @returns Proof class shown beside the capability, with declarations kept distinct from local execution.
+ * @throws When sources are empty, contradictory, or too weak for the requested status.
+ */
+export function validateEnforcementCapabilityEvidence(
+  status: EnforcementCapabilityStatus,
+  sources: readonly EnforcementCapabilitySource[],
+): EnforcementCapabilityAssurance {
+  validateEnforcementSources(sources);
+  const assurance = classifyEnforcementAssurance(sources);
+  validateEnforcementStatus(status, assurance);
+
+  return assurance;
+}
+
+/** Build one validated capability row for terminal, JSON, and dashboard users. */
 function capability(
-  id: EnforcementCapabilityId,
+  capabilityId: EnforcementCapabilityId,
   status: EnforcementCapabilityStatus,
   sources: EnforcementCapabilitySource[],
-  summary: string,
-  evidence: string[],
+  userSummary: string,
+  evidenceAnchors: string[],
 ): EnforcementCapability {
   return {
-    id,
-    label: CAPABILITY_LABELS[id],
+    id: capabilityId,
+    label: CAPABILITY_LABELS[capabilityId],
     status,
     sources,
-    summary,
-    evidence,
+    assurance: validateEnforcementCapabilityEvidence(status, sources),
+    summary: userSummary,
+    evidence: evidenceAnchors,
   };
 }
 
@@ -91,10 +183,12 @@ function emptySummary(): Record<EnforcementCapabilityStatus, number> {
   return { hard: 0, limited: 0, soft: 0, missing: 0, unknown: 0 };
 }
 
+/** Count capability strengths so the dashboard can summarize what the audit observed for a runner. */
 function summarize(
   capabilities: EnforcementCapability[],
 ): Record<EnforcementCapabilityStatus, number> {
   const summary = emptySummary();
+  // Each capability contributes exactly once to the runner's visible strength totals.
   for (const enforcementCapability of capabilities) {
     summary[enforcementCapability.status]++;
   }
@@ -103,7 +197,9 @@ function summarize(
 
 /** Treat settings and registered hooks as active deny mechanisms; a present script alone is not enough. */
 function hasActiveMechanicalDeny(agentFacts: AgentFacts): boolean {
+  // A configuration-based deny is active without requiring a separate hook file.
   if (agentFacts.hooks.denyIsConfigBased) return true;
+  // Settings-backed runners need both matching deny patterns and a compatible deny mechanism.
   if (
     agentFacts.agent.denyMechanism &&
     agentFacts.agent.denyMechanism.type !== "deny-script" &&
@@ -114,33 +210,51 @@ function hasActiveMechanicalDeny(agentFacts: AgentFacts): boolean {
   return agentFacts.hooks.denyIsRegistered;
 }
 
+/** Describe whether one dangerous shell pattern is mechanically covered for the audited user. */
 function shellCapability(
   agentFacts: AgentFacts,
-  id: "shell-dangerous" | "shell-pipe-to-shell",
-  covered: boolean,
-  coveredSummary: string,
-  missingSummary: string,
+  capabilityId: "shell-dangerous" | "shell-pipe-to-shell",
+  dangerousPatternIsCovered: boolean,
+  protectedUserSummary: string,
+  missingUserSummary: string,
 ): EnforcementCapability {
-  const denyExists =
+  const localDenyMechanismExists =
     agentFacts.hooks.denyExists || agentFacts.hooks.denyIsConfigBased;
-  if (!denyExists) {
-    return capability(id, "missing", ["not-observed"], missingSummary, []);
+  // No local deny surface means the user has no observed protection for this pattern.
+  if (!localDenyMechanismExists) {
+    return capability(
+      capabilityId,
+      "missing",
+      ["not-observed"],
+      missingUserSummary,
+      [],
+    );
   }
-  if (!covered) {
-    return capability(id, "missing", ["local-hook"], missingSummary, [
-      "AgentFacts.hooks",
-    ]);
+  // A present deny surface still reports missing when its local facts do not cover the pattern.
+  if (!dangerousPatternIsCovered) {
+    return capability(
+      capabilityId,
+      "missing",
+      ["local-hook"],
+      missingUserSummary,
+      ["AgentFacts.hooks"],
+    );
   }
+  // Registered or settings-backed coverage gives the user a hard local protection badge.
   if (hasActiveMechanicalDeny(agentFacts)) {
-    return capability(id, "hard", ["local-hook"], coveredSummary, [
-      "AgentFacts.hooks",
-    ]);
+    return capability(
+      capabilityId,
+      "hard",
+      ["local-hook"],
+      protectedUserSummary,
+      ["AgentFacts.hooks"],
+    );
   }
   return capability(
-    id,
+    capabilityId,
     "limited",
     ["local-hook"],
-    `${coveredSummary}; hook coverage exists but registration was not proved`,
+    `${protectedUserSummary}; hook coverage exists but registration was not proved`,
     ["AgentFacts.hooks.denyIsRegistered"],
   );
 }
@@ -149,6 +263,7 @@ function shellCapability(
 function secretFileReadCapability(
   agentFacts: AgentFacts,
 ): EnforcementCapability {
+  // Settings-backed secret-path coverage blocks direct file-tool reads for the user.
   if (agentFacts.hooks.readDenyCoversSecrets) {
     return capability(
       "secret-file-read",
@@ -158,6 +273,7 @@ function secretFileReadCapability(
       ["AgentFacts.hooks.readDenyCoversSecrets"],
     );
   }
+  // Script-only runners can cover shell reads but cannot claim the same file-tool protection.
   if (agentFacts.agent.denyMechanism?.type === "deny-script") {
     return capability(
       "secret-file-read",
@@ -180,6 +296,7 @@ function secretFileReadCapability(
 function secretShellReadCapability(
   agentFacts: AgentFacts,
 ): EnforcementCapability {
+  // Missing Bash coverage leaves direct terminal reads of known secret paths unprotected.
   if (!agentFacts.hooks.bashDenyCoversSecrets) {
     return capability(
       "secret-shell-read",
@@ -189,6 +306,7 @@ function secretShellReadCapability(
       ["AgentFacts.hooks.bashDenyCoversSecrets"],
     );
   }
+  // Active local coverage gives the user a hard badge for direct literal shell reads.
   if (hasActiveMechanicalDeny(agentFacts)) {
     return capability(
       "secret-shell-read",
@@ -211,6 +329,7 @@ function secretShellReadCapability(
 function hookRegistrationCapability(
   agentFacts: AgentFacts,
 ): EnforcementCapability {
+  // With no settings deny or hook file, the audit has no registration surface to show the user.
   if (!agentFacts.hooks.denyExists && !agentFacts.hooks.denyIsConfigBased) {
     return capability(
       "hook-registration",
@@ -220,6 +339,7 @@ function hookRegistrationCapability(
       [],
     );
   }
+  // Settings-only enforcement is visible but has no shell hook event to register.
   if (agentFacts.hooks.denyIsConfigBased && !agentFacts.hooks.denyExists) {
     return capability(
       "hook-registration",
@@ -230,6 +350,7 @@ function hookRegistrationCapability(
     );
   }
   const preToolEvent = agentFacts.agent.hookEvents?.preTool ?? "pre-tool";
+  // A registered pre-tool hook is mechanically wired before the user's command runs.
   if (agentFacts.hooks.denyIsRegistered) {
     return capability(
       "hook-registration",
@@ -248,16 +369,19 @@ function hookRegistrationCapability(
   );
 }
 
+/** Find the guardrail check whose outcome tells users whether the managed self-test ran. */
 function denyCheck(
   agentScope: AuditScope | undefined,
 ): CheckResult | undefined {
   return agentScope?.checks.find((check) => check.id === "agent-guardrails");
 }
 
+/** Describe whether this audit executed the managed deny self-test or only inspected static wiring. */
 function hookSelfTestCapability(
   agentFacts: AgentFacts,
   options: BuildOptions,
 ): EnforcementCapability {
+  // Without a hook file, there is no managed runtime surface for the audit to exercise.
   if (!agentFacts.hooks.denyExists) {
     return capability(
       "hook-self-test",
@@ -268,8 +392,9 @@ function hookSelfTestCapability(
     );
   }
 
-  const check = denyCheck(options.agentScope);
-  if (!check || check.status === "skipped") {
+  const guardrailCheck = denyCheck(options.agentScope);
+  // Aggregate or skipped audits must tell the user that no runtime self-test ran.
+  if (!guardrailCheck || guardrailCheck.status === "skipped") {
     return capability(
       "hook-self-test",
       "limited",
@@ -278,16 +403,18 @@ function hookSelfTestCapability(
       ["agent-guardrails"],
     );
   }
-  if (check.status === "fail") {
+  // A failed guardrail check cannot be presented as usable runtime proof.
+  if (guardrailCheck.status === "fail") {
     return capability(
       "hook-self-test",
       "missing",
       ["local-hook"],
-      check.failure?.message ??
+      guardrailCheck.failure?.message ??
         "Deny hook self-test or static deny check failed",
       ["agent-guardrails"],
     );
   }
+  // Full evidence mode executes the managed self-test and earns runtime-local assurance.
   if (
     options.denyMechanismEvidenceLevel === "full" ||
     options.denyMechanismEvidenceLevel === undefined
@@ -313,6 +440,7 @@ function hookSelfTestCapability(
 function providerNativeCapability(
   agentFacts: AgentFacts,
 ): EnforcementCapability {
+  // A null local mechanism means goat-flow observed no project-local enforcement integration.
   if (agentFacts.agent.denyMechanism === null) {
     return capability(
       "provider-native-enforcement",
@@ -322,8 +450,9 @@ function providerNativeCapability(
       ["AgentProfile.denyMechanism"],
     );
   }
-  const mechanism = agentFacts.agent.denyMechanism.type;
-  if (mechanism === "deny-script") {
+  const configuredDenyMechanism = agentFacts.agent.denyMechanism.type;
+  // Script-only integration says nothing stronger about the provider's native permissions.
+  if (configuredDenyMechanism === "deny-script") {
     return capability(
       "provider-native-enforcement",
       "limited",
@@ -332,7 +461,8 @@ function providerNativeCapability(
       ["AgentProfile.denyMechanism"],
     );
   }
-  if (mechanism === "both") {
+  // Combined local settings and hooks still do not prove provider-native breadth.
+  if (configuredDenyMechanism === "both") {
     return capability(
       "provider-native-enforcement",
       "limited",
@@ -350,6 +480,7 @@ function providerNativeCapability(
   );
 }
 
+/** Keep broad filesystem capability unknown until a dedicated local proof observes it. */
 function broadFilesystemCapability(
   id: "file-read-restrictions" | "file-write-restrictions",
 ): EnforcementCapability {

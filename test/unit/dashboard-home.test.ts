@@ -41,6 +41,8 @@ type HomeModel = {
   enforcementBadge(row: Record<string, unknown>): string;
   /** Return the CSS class used for one enforcement badge. */
   enforcementBadgeClass(row: Record<string, unknown>): string;
+  /** Return the proof label shown under one enforcement result. */
+  enforcementEvidence(row: Record<string, unknown>): string;
   /** Return the enforcement rows rendered in the Home detail panel. */
   enforcementRows(agent: Record<string, unknown>): Record<string, unknown>[];
   /** Return the concern summary text rendered for one concern key. */
@@ -346,12 +348,16 @@ function loadAdvisoryEnforcementHomeModel(): {
           id: "shell-dangerous",
           label: "Dangerous shell commands",
           status: "hard",
+          sources: ["local-hook"],
+          assurance: "static-local",
           summary: "Deny mechanism blocks dangerous commands",
         },
         {
           id: "file-read-restrictions",
           label: "General file-read restrictions",
           status: "unknown",
+          sources: ["not-observed"],
+          assurance: "not-observed",
           summary: "Not inferred from secret-path coverage",
         },
       ],
@@ -668,8 +674,16 @@ describe("Home harness summary", () => {
     assert.equal(rows.length, expectedEnforcementRows);
     assert.equal(home.enforcementBadge(rows[0]!), "Hard");
     assert.equal(home.enforcementBadgeClass(rows[0]!), "pass");
+    assert.equal(
+      home.enforcementEvidence(rows[0]!),
+      "Static local proof · Source: local hook",
+    );
     assert.equal(home.enforcementBadge(rows[1]!), "Unk");
     assert.equal(home.enforcementBadgeClass(rows[1]!), "skipped");
+    assert.equal(
+      home.enforcementEvidence(rows[1]!),
+      "Not observed · Source: not observed",
+    );
   });
 });
 

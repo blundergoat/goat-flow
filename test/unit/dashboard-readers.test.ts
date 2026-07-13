@@ -326,6 +326,7 @@ function readAdvisoryEnforcementReport(): ReturnType<
               label: "Dangerous shell commands",
               status: "hard",
               sources: ["local-hook"],
+              assurance: "static-local",
               summary: "Deny mechanism blocks dangerous commands",
               evidence: ["AgentFacts.hooks"],
             },
@@ -334,7 +335,17 @@ function readAdvisoryEnforcementReport(): ReturnType<
               label: "General file-read restrictions",
               status: "unknown",
               sources: ["not-observed"],
+              assurance: "not-observed",
               summary: "Not inferred from secret-path coverage",
+              evidence: [],
+            },
+            {
+              id: "malformed-hard-row",
+              label: "Malformed hard row",
+              status: "hard",
+              sources: [],
+              assurance: "static-local",
+              summary: "This row has no evidence source",
               evidence: [],
             },
           ],
@@ -541,6 +552,8 @@ describe("dashboard payload readers", () => {
     assert.equal(enforcement.capabilities.length, expectedCapabilityCount);
     assert.equal(enforcement.capabilities[1]?.status, "unknown");
     assert.deepEqual(enforcement.capabilities[0]?.sources, ["local-hook"]);
+    assert.equal(enforcement.capabilities[0]?.assurance, "static-local");
+    assert.equal(enforcement.capabilities[1]?.assurance, "not-observed");
     assert.equal(enforcement.summary.hard, 1);
     assert.equal(enforcement.summary.limited, 0);
     assert.equal(enforcement.summary.soft, 0);

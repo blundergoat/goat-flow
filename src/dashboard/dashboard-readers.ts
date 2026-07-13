@@ -247,9 +247,15 @@ function readAuditFailure(rawFailure: unknown): AuditFailure | null {
 const AUDIT_PROVENANCE_SOURCE_TYPES =
   "|spec|vendor_docs|paper|incident|community|unknown|";
 const AUDIT_PROVENANCE_NORMATIVE_LEVELS = "|MUST|SHOULD|BEST_PRACTICE|";
-const AUDIT_CHECK_TYPES = "|integrity|advisory|metric|";
-const AUDIT_EVIDENCE_KINDS = "|semantic|structural|";
-const AUDIT_ASSURANCE_LEVELS = "|full|limited|";
+const AUDIT_CHECK_TYPES: readonly NonNullable<AuditCheck["type"]>[] = [
+  "integrity",
+  "advisory",
+  "metric",
+];
+const AUDIT_EVIDENCE_KINDS: readonly NonNullable<AuditCheck["evidenceKind"]>[] =
+  ["semantic", "structural"];
+const AUDIT_ASSURANCE_LEVELS: readonly NonNullable<AuditCheck["assurance"]>[] =
+  ["full", "limited"];
 const AUDIT_EVIDENCE_PATH_KEYS = [
   "evidence_paths",
   "framework_evidence_paths",
@@ -296,10 +302,13 @@ function readAuditCheckProvenance(
 }
 
 /** Read one optional string discriminator only when it is in the allowed API vocabulary. */
-function readEnumValue(value: unknown, allowed: string): string | undefined {
-  return typeof value === "string" && allowed.includes(`|${value}|`)
-    ? value
-    : undefined;
+function readEnum<T extends string>(
+  rawValue: unknown,
+  allowedValues: readonly T[],
+): T | undefined {
+  // Missing or non-text API values cannot become user-visible status labels.
+  if (typeof rawValue !== "string") return undefined;
+  return allowedValues.find((allowedValue) => allowedValue === rawValue);
 }
 
 /** Apply optional audit-check fields because scoring defaults depend on decoded type and acknowledgement. */
@@ -308,8 +317,7 @@ function applyAuditCheckOptionalFields(
   rawCheck: Record<string, unknown>,
   status: AuditStatus,
 ): void {
-  const type = readEnumValue(rawCheck.type, AUDIT_CHECK_TYPES) as
-    NonNullable<AuditCheck["type"]> | undefined;
+  const type = readEnum(rawCheck.type, AUDIT_CHECK_TYPES);
   if (type) check.type = type;
   if (rawCheck.acknowledged === true) check.acknowledged = true;
   const acknowledged = check.acknowledged === true;
@@ -319,15 +327,9 @@ function applyAuditCheckOptionalFields(
   check.impact =
     readAuditCheckImpact(rawCheck.impact) ??
     defaultCheckImpact(status, check.type, acknowledged);
-  const evidenceKind = readEnumValue(
-    rawCheck.evidenceKind,
-    AUDIT_EVIDENCE_KINDS,
-  ) as NonNullable<AuditCheck["evidenceKind"]> | undefined;
+  const evidenceKind = readEnum(rawCheck.evidenceKind, AUDIT_EVIDENCE_KINDS);
   if (evidenceKind) check.evidenceKind = evidenceKind;
-  const assurance = readEnumValue(
-    rawCheck.assurance,
-    AUDIT_ASSURANCE_LEVELS,
-  ) as NonNullable<AuditCheck["assurance"]> | undefined;
+  const assurance = readEnum(rawCheck.assurance, AUDIT_ASSURANCE_LEVELS);
   if (assurance) check.assurance = assurance;
   const failure = readAuditFailure(rawCheck.failure);
   if (failure) check.failure = failure;
@@ -413,18 +415,29 @@ function readAuditConcern(rawConcern: unknown): AuditConcern | null {
   };
 }
 
-/** Read an enforcement capability status from raw payload data. */
-function readEnforcementStatus(
-  rawValue: unknown,
-): EnforcementCapabilityStatus | null {
-  return rawValue === "hard" ||
-    rawValue === "limited" ||
-    rawValue === "soft" ||
-    rawValue === "missing" ||
-    rawValue === "unknown"
-    ? rawValue
-    : null;
-}
+const STATUS_VALUES: readonly EnforcementCapabilityStatus[] = [
+  "hard",
+  "limited",
+  "soft",
+  "missing",
+  "unknown",
+];
+const ENFORCEMENT_SOURCE_VALUES: readonly EnforcementCapabilitySource[] = [
+  "local-settings",
+  "local-hook",
+  "runtime-self-test",
+  "manifest",
+  "provider-docs",
+  "not-observed",
+];
+const ENFORCEMENT_ASSURANCE_VALUES: readonly EnforcementCapabilityAssurance[] =
+  [
+    "runtime-local",
+    "static-local",
+    "manifest-declared",
+    "provider-documented",
+    "not-observed",
+  ];
 
 /** Read only the known enforcement status counters from raw payload data. */
 function readEnforcementSummary(
@@ -437,43 +450,44 @@ function readEnforcementSummary(
     missing: 0,
     unknown: 0,
   };
+  // Missing summary data gives the dashboard explicit zeroes instead of invented runner results.
   if (!isRecord(rawSummary)) return summary;
+  // Only recognized status buckets can contribute to the user-facing totals.
   for (const [key, count] of Object.entries(rawSummary)) {
-    const status = readEnforcementStatus(key);
+    const status = readEnum(key, STATUS_VALUES);
+    // Invalid or empty counters are ignored so malformed payloads cannot become dashboard claims.
     if (status && typeof count === "number") summary[status] = count;
   }
   return summary;
-}
-
-/** Read one enforcement source label from raw payload data. */
-function readEnforcementSource(
-  rawValue: unknown,
-): EnforcementCapabilitySource | null {
-  return rawValue === "local-settings" ||
-    rawValue === "local-hook" ||
-    rawValue === "runtime-self-test" ||
-    rawValue === "manifest" ||
-    rawValue === "provider-docs" ||
-    rawValue === "not-observed"
-    ? rawValue
-    : null;
 }
 
 /** Read one advisory enforcement capability row. */
 function readEnforcementCapability(
   rawCapability: unknown,
 ): EnforcementCapability | null {
+  // A malformed row is omitted before it can appear as a user-visible protection claim.
   if (!isRecord(rawCapability)) return null;
   const id = readString(rawCapability.id);
   const label = readString(rawCapability.label);
-  const status = readEnforcementStatus(rawCapability.status);
+  const status = readEnum(rawCapability.status, STATUS_VALUES);
+  const assurance = readEnum(
+    rawCapability.assurance,
+    ENFORCEMENT_ASSURANCE_VALUES,
+  );
+  const sources = readArray(
+    rawCapability.sources,
+    (rawSource) => readEnum(rawSource, ENFORCEMENT_SOURCE_VALUES) ?? null,
+  );
   const summary = readString(rawCapability.summary);
-  if (!id || !label || !status || !summary) return null;
+  const hasVisibleEvidence = assurance !== undefined && sources.length > 0;
+  // Every visible row needs identity, status, a proof class, a source, and plain-English meaning.
+  if (!id || !label || !status || !hasVisibleEvidence || !summary) return null;
   return {
     id,
     label,
     status,
-    sources: readArray(rawCapability.sources, readEnforcementSource),
+    sources,
+    assurance,
     summary,
     evidence: readStringArray(rawCapability.evidence),
   };
@@ -483,9 +497,11 @@ function readEnforcementCapability(
 function readAgentEnforcementCapability(
   rawEnforcement: unknown,
 ): AgentEnforcementCapability | null {
+  // A malformed runner matrix is omitted rather than shown as a partial assurance result.
   if (!isRecord(rawEnforcement)) return null;
   const agent = readRunnerId(rawEnforcement.agent);
   const name = readString(rawEnforcement.name);
+  // Runner identity and advisory scope must be explicit before the dashboard shows capabilities.
   if (!agent || !name || rawEnforcement.advisory !== true) return null;
   const capabilities = readArray(
     rawEnforcement.capabilities,
