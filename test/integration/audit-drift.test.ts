@@ -3,6 +3,7 @@
  * with zero findings and that `checked` equals every manifest-derived comparison users rely on.
  */
 import { loadManifest } from "../../src/cli/manifest/manifest.js";
+import { SHARED_ARTIFACT_MIRRORS } from "../../src/cli/audit/check-artifact-integrity.js";
 import {
   after,
   assert,
@@ -40,7 +41,7 @@ describe("checkDrift: clean fixture", () => {
         (total, name) => total + getSkillFiles(name).length,
         0,
       ) * getInstalledSkillRoots().length;
-    const expectedSharedComparisons = 15;
+    const expectedSharedComparisons = SHARED_ARTIFACT_MIRRORS.length;
     const expectedDeprecatedHookComparisons =
       loadManifest().hooks.stale_names.length;
     assert.equal(

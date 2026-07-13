@@ -86,6 +86,7 @@ allow-only test proves usability but misses bypasses.
 These measured push shapes must all remain denied:
 
 ```bash
+# Each wrapper represents a measured path a user's request could take to the hook.
 for command_shape in \
   "bash -lc 'git push'" \
   "env -i git push" \
@@ -107,16 +108,20 @@ The exact wrapper matters. For example, a user may ask an agent to inspect a
 release script containing `bash -lc`; the recursive command body must still be
 classified rather than trusted as inert wrapper text.
 
-### 4. Verify canonical and installed policy
+### 4. Verify installed policy and available canonical source
 
-The dispatcher and its policy modules are one runtime unit. Verify both source
-and installed copies:
+The dispatcher and its policy modules are one runtime unit. Always verify the
+installed policy that protects the user's selected project:
 
 ```bash
-diff -q workflow/hooks/deny-dangerous.sh .goat-flow/hooks/deny-dangerous.sh
-diff -qr workflow/hooks/deny-dangerous .goat-flow/hooks/deny-dangerous
-bash workflow/hooks/deny-dangerous.sh --self-test=full
 bash .goat-flow/hooks/deny-dangerous.sh --self-test=full
+
+# Framework maintainers also prove the source that future consumers will install.
+if test -f workflow/hooks/deny-dangerous.sh; then
+  diff -q workflow/hooks/deny-dangerous.sh .goat-flow/hooks/deny-dangerous.sh
+  diff -qr workflow/hooks/deny-dangerous .goat-flow/hooks/deny-dangerous
+  bash workflow/hooks/deny-dangerous.sh --self-test=full
+fi
 ```
 
 In the controlling workspace, either dispatcher resolves policy modules from
@@ -138,8 +143,8 @@ rg -n '\.goat-flow/hooks/deny-dangerous\.sh' \
 Then run the structural checks that detect packaging or registration drift:
 
 ```bash
-node --import tsx src/cli/cli.ts manifest --check
-node --import tsx src/cli/cli.ts audit . --check-drift --format json
+goat-flow manifest --check
+goat-flow audit . --check-drift --format json
 ```
 
 A green classifier with a missing config pointer does not protect the user's
@@ -174,8 +179,4 @@ demonstrated the failure and report its literal output.
 
 ## Related References
 
-- [ADR-025: Block all git push](../../learning-loop/decisions/ADR-025-block-all-git-push.md)
-- [Deny-classifier footguns](../../learning-loop/footguns/deny-dangerous.md)
-- [Hook installation and registration footguns](../../learning-loop/footguns/hooks.md)
-- [GitHub CLI read-only boundary](../../plans/1.25.0/M03-gh-cli-readonly.md)
-- [Dotenv policy boundary](../../plans/1.25.0/M06-dotenv-twelve-factor.md)
+- [`skill-playbook-authoring-sync.md`](./skill-playbook-authoring-sync.md) - use when changing this shipped playbook's source/install contract.

@@ -237,7 +237,9 @@ describe("preamble/conventions sync: current state", () => {
       !existsSync(TEMPLATE_HOOK_POLICY_TESTING) ||
       !existsSync(INSTALLED_HOOK_POLICY_TESTING)
     ) {
-      assert.fail("hook-policy-testing.md must exist in both managed locations");
+      assert.fail(
+        "hook-policy-testing.md must exist in both managed locations",
+      );
     }
     assert.equal(
       diffQuiet(TEMPLATE_HOOK_POLICY_TESTING, INSTALLED_HOOK_POLICY_TESTING),

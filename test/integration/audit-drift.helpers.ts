@@ -1,13 +1,8 @@
 /**
- * Integration tests for `goat-flow audit --check-drift`.
- *
- * Builds a tmpdir that looks like goat-flow itself (templateRoot) plus a
- * project layout (.claude/skills, .agents/skills, .goat-flow/) and runs
- * checkDrift against it. Mirrors the preflight skill-parity check but with
- * normalized frontmatter/body comparison.
- *
- * Also runs checkDrift against this repo's own root to confirm the live
- * state stays pass.
+ * Builds temporary projects for `goat-flow audit --check-drift` tests.
+ * Use these helpers when a managed skill, playbook, hook, or mirror changes.
+ * Canonical and installed fixtures stay parallel so failures model user drift.
+ * Live-root checks also protect the maintained repository's current state.
  */
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -44,6 +39,18 @@ export const SKILL_STUB = (name: string): string =>
   `---\nname: ${name}\ndescription: stub for drift test\n---\n# ${name}\nbody\n`;
 
 export const SHARED_STUB = "# shared\nbody\n";
+const SHARED_PLAYBOOK_FILENAMES = [
+  "README.md",
+  "browser-use.md",
+  "changelog.md",
+  "code-comments.md",
+  "gruff-code-quality.md",
+  "hook-policy-testing.md",
+  "observability.md",
+  "page-capture.md",
+  "release-notes.md",
+  "skill-playbook-authoring-sync.md",
+] as const;
 export const HOOK_STUB = "#!/usr/bin/env bash\n# deny hook stub\n";
 export const COPILOT_HOOK_CONFIG_STUB =
   '{\n  "version": 1,\n  "hooks": { "preToolUse": [] }\n}\n';
@@ -76,6 +83,7 @@ export function writeSkillFiles(
   baseDir: string,
   name: string,
 ): void {
+  // Every declared file lets the fixture model the complete skill a user installs.
   for (const relativeFile of getSkillFiles(name)) {
     const fullPath = join(root, baseDir, name, relativeFile);
     mkdirSync(dirname(fullPath), { recursive: true });
@@ -83,6 +91,18 @@ export function writeSkillFiles(
       fullPath,
       relativeFile === "SKILL.md" ? SKILL_STUB(name) : SHARED_STUB,
     );
+  }
+}
+
+/**
+ * Create a directory and write the complete playbook pack to the temporary filesystem.
+ * Use for either canonical source or the installed copy users load.
+ */
+function writeSharedPlaybookFixtures(playbookDirectory: string): void {
+  mkdirSync(playbookDirectory, { recursive: true });
+  // Every registered filename keeps the fixture aligned with user installations.
+  for (const playbookFilename of SHARED_PLAYBOOK_FILENAMES) {
+    writeFileSync(join(playbookDirectory, playbookFilename), SHARED_STUB);
   }
 }
 
@@ -108,44 +128,8 @@ export function setupFixture(): string {
     join(root, "workflow", "skills", "reference", "skill-conventions.md"),
     SHARED_STUB,
   );
-  // Template: standalone playbooks live under workflow/skills/playbooks/
-  mkdirSync(join(root, "workflow", "skills", "playbooks"), { recursive: true });
-  writeFileSync(
-    join(root, "workflow", "skills", "playbooks", "README.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, "workflow", "skills", "playbooks", "browser-use.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, "workflow", "skills", "playbooks", "code-comments.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, "workflow", "skills", "playbooks", "gruff-code-quality.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, "workflow", "skills", "playbooks", "hook-policy-testing.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, "workflow", "skills", "playbooks", "observability.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, "workflow", "skills", "playbooks", "changelog.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, "workflow", "skills", "playbooks", "page-capture.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, "workflow", "skills", "playbooks", "release-notes.md"),
-    SHARED_STUB,
-  );
+  // Canonical playbooks represent what a future user receives from setup.
+  writeSharedPlaybookFixtures(join(root, "workflow", "skills", "playbooks"));
   writeFileSync(
     join(root, "workflow", "skills", "playbooks", "skill-quality-testing.md"),
     SHARED_STUB,
@@ -154,6 +138,7 @@ export function setupFixture(): string {
     join(root, "workflow", "skills", "playbooks", "skill-quality-testing"),
     { recursive: true },
   );
+  // Each authoring topic keeps the canonical methodology pack complete.
   for (const topical of [
     "tdd-iteration",
     "adversarial-framing",
@@ -171,11 +156,14 @@ export function setupFixture(): string {
       SHARED_STUB,
     );
   }
+  // Every canonical skill contributes the files compared across agent mirrors.
   for (const name of getSkillNames()) {
     writeSkillFiles(root, join("workflow", "skills"), name);
   }
   // Project installed copies of skill files
+  // Each supported agent receives the same user-facing skill pack.
   for (const agentDir of getInstalledSkillRoots()) {
+    // Every skill must exist under each selected agent directory.
     for (const name of getSkillNames()) {
       writeSkillFiles(root, agentDir, name);
     }
@@ -194,57 +182,9 @@ export function setupFixture(): string {
     join(root, ".goat-flow", "skill-docs", "skill-conventions.md"),
     SHARED_STUB,
   );
-  // Installed: standalone playbooks under .goat-flow/skill-docs/playbooks/
-  mkdirSync(join(root, ".goat-flow", "skill-docs", "playbooks"), {
-    recursive: true,
-  });
-  writeFileSync(
-    join(root, ".goat-flow", "skill-docs", "playbooks", "README.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, ".goat-flow", "skill-docs", "playbooks", "browser-use.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, ".goat-flow", "skill-docs", "playbooks", "code-comments.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(
-      root,
-      ".goat-flow",
-      "skill-docs",
-      "playbooks",
-      "gruff-code-quality.md",
-    ),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(
-      root,
-      ".goat-flow",
-      "skill-docs",
-      "playbooks",
-      "hook-policy-testing.md",
-    ),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, ".goat-flow", "skill-docs", "playbooks", "observability.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, ".goat-flow", "skill-docs", "playbooks", "changelog.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, ".goat-flow", "skill-docs", "playbooks", "page-capture.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, ".goat-flow", "skill-docs", "playbooks", "release-notes.md"),
-    SHARED_STUB,
+  // Installed playbooks represent the exact references an agent opens for a user.
+  writeSharedPlaybookFixtures(
+    join(root, ".goat-flow", "skill-docs", "playbooks"),
   );
   mkdirSync(join(root, ".goat-flow", "skill-docs", "skill-quality-testing"), {
     recursive: true,
@@ -259,6 +199,7 @@ export function setupFixture(): string {
     ),
     SHARED_STUB,
   );
+  // Each installed authoring topic mirrors its canonical user guidance.
   for (const topical of [
     "tdd-iteration",
     "adversarial-framing",
@@ -304,6 +245,7 @@ export function writeHookFixtures(root: string): void {
     join(root, "workflow", "hooks", "post-turn-safety.sh"),
     HOOK_STUB,
   );
+  // Canonical policy modules represent the hook package future users receive.
   for (const hookLibFile of [
     "patterns-shell.sh",
     "patterns-paths.sh",
@@ -322,6 +264,7 @@ export function writeHookFixtures(root: string): void {
     join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
     HOOK_STUB,
   );
+  // Installed policy modules represent the hook files active in a user's project.
   for (const hookLibFile of [
     "patterns-shell.sh",
     "patterns-paths.sh",
@@ -367,8 +310,10 @@ export function setupInstallRoundTripFixture(): string {
     recursive: true,
     filter: (src) => {
       const rel = relative(PROJECT_ROOT, src);
+      // The root itself must remain so the user's fixture directory is created.
       if (rel === "") return true;
       const [topLevel] = rel.split(sep);
+      // Repository metadata and dependencies are supplied separately to keep setup fast.
       if (topLevel === ".git" || topLevel === "node_modules") return false;
       return rel !== join(".goat-flow", "logs", "sessions");
     },
@@ -407,6 +352,7 @@ export function patchInstallRoundTripFixture(root: string): {
     };
   };
 
+  // A missing fixture skill is enrolled once so install output can be compared.
   if (!manifest.skills.canonical.includes(INSTALL_FIXTURE_SKILL)) {
     manifest.skills.canonical.push(INSTALL_FIXTURE_SKILL);
   }
@@ -420,6 +366,7 @@ export function patchInstallRoundTripFixture(root: string): {
 
   const constantsPath = join(root, "src", "cli", "constants.ts");
   const constants = readFileSync(constantsPath, "utf8");
+  // The CLI registry must expose the same fixture skill as the manifest.
   if (!constants.includes(`"${INSTALL_FIXTURE_SKILL}"`)) {
     writeFileSync(
       constantsPath,
