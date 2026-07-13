@@ -261,7 +261,7 @@ npx goat-flow dashboard               # Launch on default port
 npx goat-flow dashboard --dev         # Live reload mode
 ```
 
-### `goat-flow hooks <list|enable|disable|sync> [hook-id] [path]`
+### `goat-flow hooks <list|enable|disable|sync|verify> [hook-id] [path]`
 
 Manage the project's registered guardrail, quality, and safety hooks (`deny-dangerous`, `gruff-code-quality`, `post-turn-safety`) in `.goat-flow/config.yaml`, then reconcile the per-agent hook config files so every agent stays in sync.
 
@@ -271,9 +271,16 @@ npx goat-flow hooks list --json                 # Machine-readable hook state
 npx goat-flow hooks enable gruff-code-quality   # Enable one hook and sync agent configs
 npx goat-flow hooks disable gruff-code-quality  # Disable one hook and sync agent configs
 npx goat-flow hooks sync                         # Re-apply config.yaml hook state to agent configs
+npx goat-flow hooks verify . --agent codex --scenario deny-hook
 ```
 
 `enable` and `disable` require a `<hook-id>` (exit 2 if omitted). `sync` re-applies the `.goat-flow/config.yaml` hook state to every agent's hook config without changing which hooks are enabled.
+
+`hooks verify` requires both `--agent <id>` and the explicit `--scenario deny-hook` choice. It runs four fixed inert classifier operands—secret shell read, remote pipe to shell, repository push, and a read-only control—through the selected checkout's registered managed script with `shell: false`, a five-second timeout, and bounded output capture. The operands are arguments to `--check`; they are inspected, never executed. Because the selected checkout's hook code does execute, use this only for a checkout you trust or pass `--untrusted-target` to return explicit `unsupported` results without starting it.
+
+Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an exact expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. Reports and `hook.verify` events carry scenario ids, verdict metadata, evidence level, duration, and reason codes—not command operands, stdout, or stderr.
+
+The hook's self-test remains its broad internal regression corpus. `hooks verify` proves the four fixed classifier decisions against this checkout's managed installed script and registration state. It does not launch the external coding agent, prove provider-side hook delivery, or change the cost or semantics of `audit --harness`; audit may still report its own registration, self-test, and runtime-shaped smoke evidence without claiming this deep scenario report ran.
 
 ## Workflow Examples
 

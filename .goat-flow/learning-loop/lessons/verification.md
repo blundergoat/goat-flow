@@ -355,3 +355,17 @@ last_reviewed: 2026-07-13
 2. Keep parser modules dependency-light. A diagnostic subcommand may lazy-load audit/manifest code after dispatch, but argv parsing must not import that runtime.
 3. Before the human gate, run Knip and path-integrity through full preflight; focused TypeScript and analyzer checks do not prove the command's public exports or documentation references are clean.
 3. After behavioral GREEN, run whole-file ESLint, typecheck, and gruff before documentation or task completion; the verification unit is the changed file set, not only the new test cases.
+
+---
+
+## Lesson: Required CLI choices need omission tests
+
+**Status:** active | **Created:** 2026-07-13
+**Decision changed:** Test valid, invalid, and omitted forms for every required CLI choice; omission must not silently select a default. | **Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-07-13
+
+**What happened:** M17's plan and handler required `--scenario deny-hook`, but the parser returned that value when the flag was absent. Positive, invalid-value, and live explicit-command checks all passed, so only a final omission probe exposed the false choice.
+
+**Root cause:** I treated the sole current scenario as a harmless default even though explicit user selection was part of the command's safety contract.
+
+**Fix and prevention:** Add an omission RED test before implementation and make the parser exit 2 when the required value is absent. Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`) and `test/unit/hooks-runtime-evidence.test.ts` (search: `requires an explicit hook verification scenario group`).

@@ -27,6 +27,7 @@ const DOCUMENTED_EVENT_KINDS = {
   "project.save": "project.save",
   "project.remove": "project.remove",
   "project.switch": "project.switch",
+  "hook.verify": "hook.verify",
 } satisfies Record<EvidenceEventKind, EvidenceEventKind>;
 
 const LOCAL_STATE_README_PAIRS = [
@@ -83,10 +84,8 @@ describe("local data contract", () => {
     for (const eventKind of Object.values(DOCUMENTED_EVENT_KINDS)) {
       assert.match(architecture, new RegExp(`\\x60${eventKind}\\x60`, "u"));
     }
-    assert.match(
-      architecture,
-      /route\/runtime\/checkpoint\/promotion.*deferred/iu,
-    );
+    assert.match(architecture, /route\/checkpoint\/promotion.*deferred/iu);
+    assert.match(architecture, /other runtime event families.*deferred/iu);
   });
 
   describe("local-state guides", () => {

@@ -48,17 +48,21 @@ export type SkillSubcommand = "new" | "doctor";
 export type EventsSubcommand = "tail";
 
 /**
- * Second positional accepted after `hooks`: the read-only `list`/`sync` operations and the
- * `enable`/`disable` toggles. `enable`/`disable` additionally require a `<hook-id>`; the others do
- * not. Kept in sync with HOOK_SUBCOMMANDS, which is the runtime membership check for the same set.
+ * Second positional accepted after `hooks`: state operations, toggles, and explicit verification.
+ * `enable`/`disable` additionally require a `<hook-id>`; `verify` requires one selected agent.
+ * Keep this in sync with HOOK_SUBCOMMANDS, the parser's runtime membership check.
  */
-export type HookSubcommand = "list" | "enable" | "disable" | "sync";
+export type HookSubcommand = "list" | "enable" | "disable" | "sync" | "verify";
 export const HOOK_SUBCOMMANDS = new Set<string>([
   "list",
   "enable",
   "disable",
   "sync",
+  "verify",
 ]);
+
+/** Bounded runtime scenario groups users may request through `hooks verify`. */
+export type HookScenario = "deny-hook";
 
 /**
  * The mutually exclusive modes of the `quality` command. `prompt` (the default when no subcommand
@@ -149,6 +153,7 @@ export interface ParsedCLI extends CLIOptions {
   eventsLimit: number;
   hookSubcommand: HookSubcommand | null;
   hookId: string | null;
+  hookScenario: HookScenario | null;
   plansSubcommand: PlansSubcommand | null;
   diagnosticsSubcommand: DiagnosticsSubcommand | null;
   includeAll: boolean;

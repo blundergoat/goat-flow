@@ -16,7 +16,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 17 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
 | Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
-| Hook registration | `src/cli/hooks-command.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | CLI and dashboard hook toggles backed by manifest hook specs, installed-agent detection, and per-agent hook config writers |
+| Hook registration and proof | `src/cli/hooks-command.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | CLI/dashboard hook toggles plus explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
 ## Data Flow
@@ -39,6 +39,7 @@ src/cli/
   constants.ts        # Shared constants
   paths.ts            # Path resolution utilities
   redact-command.ts   # Pre-write scrubber for readable session, handoff, review, quality, security, and export text
+  hooks-runtime-evidence.ts # Explicit managed deny-hook classifier proof and metadata-only local events
   config/             # Configuration (reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   evidence/           # Hash-only evidence metadata, readable text redaction, envelopes, JSONL append/tail helpers
@@ -115,8 +116,9 @@ Local-only artifacts may prove that a named producer recorded bounded metadata a
 | `project.save` | existing | `dashboard-session-trace` | server | Project/favourite/add/remove counts | No project-list body | Project-list continuity |
 | `project.remove` | existing | `dashboard-session-trace` | server | Removed-project count | No removed path list | Project-list continuity |
 | `project.switch` | existing | `dashboard-session-trace` | server | Readiness state and project identity metadata | No config or file body | Selected-target diagnosis |
+| `hook.verify` | new in 1.14.0 | `hooks-runtime-evidence` | cli | Scenario id, agent, expected/observed state, verdict, evidence level, duration, and reason code | No command operand, stdout, stderr, or external-agent delivery claim | Checkout-local deny-hook proof and diagnosis |
 
-Route/runtime/checkpoint/promotion event families remain **deferred**. M17 owns the first runtime-evidence proposal; every future producer must add its exact event kind, producer, actor, bounded payload, redaction rule, consumer, and focused validation before extending `EvidenceEventKind`. M14 adds no event kind.
+Route/checkpoint/promotion event families and all other runtime event families remain **deferred**. M17 owns `hook.verify`; every future producer must add its exact event kind, producer, actor, bounded payload, redaction rule, consumer, and focused validation before extending `EvidenceEventKind`. M14 added no event kind.
 
 ### Evidence Depth and Tool Trust
 

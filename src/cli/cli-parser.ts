@@ -27,6 +27,7 @@ import {
   type Command,
   type DiagnosticsSubcommand,
   type EventsSubcommand,
+  type HookScenario,
   type HookSubcommand,
   type ParsedArgValues,
   type ParsedCLI,
@@ -264,7 +265,7 @@ function parseHooksPositionals(positionals: string[]): {
   const [first, second, third, ...rest] = positionals;
   if (!first || !HOOK_SUBCOMMANDS.has(first)) {
     throw new CLIError(
-      'hooks requires subcommand "list", "enable", "disable", or "sync".',
+      'hooks requires subcommand "list", "enable", "disable", "sync", or "verify".',
       2,
     );
   }
@@ -282,6 +283,24 @@ function parseHooksPositionals(positionals: string[]): {
     hookId: null,
     projectPath: resolve(second ?? "."),
   };
+}
+
+/** Parse the one bounded scenario group available to `hooks verify`. */
+function parseHookScenarioArg(
+  subcommand: HookSubcommand | null,
+  value: string | undefined,
+): HookScenario | null {
+  // Other hooks operations do not run runtime scenarios or receive a default group.
+  if (subcommand !== "verify") return null;
+  // Verification must not choose a proof group the user did not explicitly request.
+  if (value === undefined) {
+    throw new CLIError('hooks verify requires --scenario "deny-hook".', 2);
+  }
+  // Unknown groups must fail before the CLI can imply an unimplemented proof ran.
+  if (value !== "deny-hook") {
+    throw new CLIError('--scenario must be "deny-hook".', 2);
+  }
+  return "deny-hook";
 }
 
 /**
@@ -436,6 +455,25 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
   );
 }
 
+/** Reject runtime scenario flags outside the explicit hooks verification route. */
+function validateHookFlags(
+  command: Command,
+  values: ParsedArgValues,
+  hookSubcommand: HookSubcommand | null,
+): void {
+  const scenario = parsedString(values, "scenario");
+  // A scenario name has no meaning for listing, toggling, syncing, or another command.
+  if (
+    scenario !== undefined &&
+    (command !== "hooks" || hookSubcommand !== "verify")
+  ) {
+    throw new CLIError(
+      "--scenario is only valid for the hooks verify command.",
+      2,
+    );
+  }
+}
+
 /** Returns true when the command resolves to a deterministic install/apply path. */
 function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
   return (
@@ -498,11 +536,13 @@ function validateFlagCombinations(
   values: ParsedArgValues,
   qualitySubcommand: QualitySubcommand,
   skillSubcommand: SkillSubcommand | null,
+  hookSubcommand: HookSubcommand | null,
 ): void {
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
   validateQualityFlags(command, values, qualitySubcommand);
   validateSkillFlags(command, values, qualitySubcommand, skillSubcommand);
+  validateHookFlags(command, values, hookSubcommand);
 }
 
 /** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
@@ -566,6 +606,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       interactive: { type: "boolean", default: false },
       name: { type: "string" },
       skill: { type: "string" },
+      scenario: { type: "string" },
       yes: { type: "boolean", short: "y", default: false },
       json: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -632,6 +673,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     parsedValues,
     qualityPositionals.qualitySubcommand,
     skillPositionals.skillSubcommand,
+    hooksPositionals.hookSubcommand,
   );
 
   return {
@@ -668,6 +710,10 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     eventsLimit: parseEventsLimitArg(parsedString(parsedValues, "limit")),
     hookSubcommand: hooksPositionals.hookSubcommand,
     hookId: hooksPositionals.hookId,
+    hookScenario: parseHookScenarioArg(
+      hooksPositionals.hookSubcommand,
+      parsedString(parsedValues, "scenario"),
+    ),
     plansSubcommand: plansPositionals.plansSubcommand,
     diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,
     includeAll: parsedFlag(parsedValues, "all"),

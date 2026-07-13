@@ -42,6 +42,7 @@ const CURRENT_EVENT_KINDS = {
   "project.save": "project.save",
   "project.remove": "project.remove",
   "project.switch": "project.switch",
+  "hook.verify": "hook.verify",
 } satisfies Record<EvidenceEventKind, EvidenceEventKind>;
 
 const FORBIDDEN_RAW_PAYLOAD_KEYS = [

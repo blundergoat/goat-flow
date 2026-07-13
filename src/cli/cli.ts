@@ -52,6 +52,7 @@ Commands:
   hooks enable      Enable one registered hook and sync agent configs
   hooks disable     Disable one registered hook and sync agent configs
   hooks sync        Re-apply config.yaml hook truth to agent configs
+  hooks verify      Run bounded managed deny-hook classifier proof for one agent
 Arguments:
   project-path    Target project directory (default: .)
 
@@ -64,11 +65,12 @@ Flags:
   --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
   --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
   --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
-  --untrusted-target Audit: skip executing the target's deny-hook code (static checks only; use for a checkout you don't trust)
+  --untrusted-target Audit/hooks verify: skip executing target deny-hook code; use for a checkout you don't trust
   --no-audit-details Audit JSON: omit structured harness detail payloads
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
   --json            Emit machine-readable JSON (alias for --format json)
   --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
+  --scenario <name> Hooks verify: required bounded scenario group (deny-hook)
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
   --force           Install/setup --apply: overwrite managed seeds; plans export: regenerate output
   --update-config-version  Install: update only the version field in existing config.yaml
@@ -100,6 +102,7 @@ Examples:
   goat-flow hooks list --json          Print hook state as JSON
   goat-flow hooks enable gruff-code-quality
   goat-flow hooks sync                 Re-apply hook toggles from config.yaml
+  goat-flow hooks verify . --agent codex --scenario deny-hook
   goat-flow stats                      Learning-loop health report
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
   goat-flow diagnostics context . --agent codex

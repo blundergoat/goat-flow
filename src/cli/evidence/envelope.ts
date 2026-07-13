@@ -38,7 +38,8 @@ export type EvidenceEventKind =
   | "index.regenerate"
   | "project.save"
   | "project.remove"
-  | "project.switch";
+  | "project.switch"
+  | "hook.verify";
 
 type EvidencePayloadValue =
   | string
