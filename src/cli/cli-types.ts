@@ -33,7 +33,7 @@ export type Command =
 export type PlansSubcommand = "export";
 
 /** Read-only diagnostics views an operator can run without changing the selected project. */
-export type DiagnosticsSubcommand = "context" | "bundle";
+export type DiagnosticsSubcommand = "context" | "readiness" | "bundle";
 
 /**
  * Second positionals accepted after `skill`: authoring (`new`) and read-only diagnostics (`doctor`).

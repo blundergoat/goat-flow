@@ -48,11 +48,30 @@ describe("diagnostics command parsing", () => {
     assert.equal(parsed.format, "json");
   });
 
+  // A project owner can request readiness before asking an agent to start work.
+  it("parses diagnostics readiness with a project path", () => {
+    const parsed = parseCLIArgs([
+      "diagnostics",
+      "readiness",
+      ".",
+      "--agent",
+      "codex",
+      "--format",
+      "json",
+    ]);
+
+    assert.equal(parsed.command, "diagnostics");
+    assert.equal(parsed.diagnosticsSubcommand, "readiness");
+    assert.equal(parsed.projectPath, resolve("."));
+    assert.equal(parsed.agent, "codex");
+    assert.equal(parsed.format, "json");
+  });
+
   // A missing readout name cannot tell users which diagnostics contract they requested.
   it("rejects a missing diagnostics subcommand", () => {
     assert.throws(
       () => parseCLIArgs(["diagnostics"]),
-      /diagnostics requires subcommand "context" or "bundle"/iu,
+      /diagnostics requires subcommand "context", "readiness", or "bundle"/iu,
     );
   });
 
@@ -60,7 +79,7 @@ describe("diagnostics command parsing", () => {
   it("rejects unsupported diagnostics subcommands", () => {
     assert.throws(
       () => parseCLIArgs(["diagnostics", "unknown", "."]),
-      /diagnostics requires subcommand "context" or "bundle"/iu,
+      /diagnostics requires subcommand "context", "readiness", or "bundle"/iu,
     );
   });
 
@@ -77,6 +96,14 @@ describe("diagnostics command parsing", () => {
     assert.throws(
       () => parseCLIArgs(["diagnostics", "bundle", ".", "../other"]),
       /diagnostics bundle accepts at most one project path/iu,
+    );
+  });
+
+  // Two readiness targets would mix evidence from projects the user must repair separately.
+  it("rejects extra diagnostics readiness paths", () => {
+    assert.throws(
+      () => parseCLIArgs(["diagnostics", "readiness", ".", "../other"]),
+      /diagnostics readiness accepts at most one project path/iu,
     );
   });
 });

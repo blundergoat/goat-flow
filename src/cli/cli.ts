@@ -42,6 +42,7 @@ Commands:
   manifest          Print the resolved single-source-of-truth manifest (--check validates consistency)
   stats             Learning-loop health report (live entry counts, stale refs, freshness). Use --check for CI.
   diagnostics context  Measure static local context pressure without runner telemetry
+  diagnostics readiness  Show advisory five-concern preparedness without running target code
   diagnostics bundle   Create redacted local setup and runtime support evidence
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
   redact            Scrub durable text from stdin before stdout or --output persistence
@@ -108,6 +109,8 @@ Examples:
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
   goat-flow diagnostics context . --agent codex
   goat-flow diagnostics context . --agent codex --format json
+  goat-flow diagnostics readiness . --agent codex
+  goat-flow diagnostics readiness . --agent codex --format json
   goat-flow diagnostics bundle . --agent codex --format json
   goat-flow diagnostics bundle . --format json --output support-bundle.json
   goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries

@@ -20,9 +20,35 @@ export async function handleDiagnosticsCommand(
   // Direct callers must choose a shipped view before any selected-project collector runs.
   if (options.diagnosticsSubcommand === null) {
     throw new CLIError(
-      "Usage: goat-flow diagnostics <context|bundle> [project-path] [--agent <id>] [--format text|json|markdown]",
+      "Usage: goat-flow diagnostics <context|readiness|bundle> [project-path] [--agent <id>] [--format text|json|markdown]",
       2,
     );
+  }
+
+  // Readiness gives the user advisory static evidence before an agent starts project work.
+  if (options.diagnosticsSubcommand === "readiness") {
+    // Readiness promises concise terminal output and one stable dashboard-ready JSON contract.
+    if (options.format !== "text" && options.format !== "json") {
+      throw new CLIError(
+        "diagnostics readiness supports --format text or --format json.",
+        2,
+      );
+    }
+    const {
+      collectReadinessReport,
+      renderReadinessReportJson,
+      renderReadinessReportText,
+    } = await import("./diagnostics/readiness-report.js");
+    const readinessReport = collectReadinessReport(
+      options.projectPath,
+      options.agent,
+    );
+    const renderedReadiness =
+      options.format === "json"
+        ? renderReadinessReportJson(readinessReport)
+        : renderReadinessReportText(readinessReport);
+    writeOutput(options, renderedReadiness);
+    return;
   }
 
   // A support bundle has one concise terminal view and one stable machine-readable contract.
