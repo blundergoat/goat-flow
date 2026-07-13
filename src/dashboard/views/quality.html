@@ -1,6 +1,6 @@
 <!--
   Quality view for comparing deterministic audit evidence with saved assessment history.
-  Use after selecting an agent and quality mode to inspect scores, evidence limits, and launch prompts.
+  Use after selecting an agent and quality mode to inspect scores, findings, and launch prompts.
   The baseline card keeps structural completeness separate from the broader quality judgment users request.
 -->
 <div
@@ -184,32 +184,12 @@
               }
               // Missing optional arrays contribute zero, preserving older audit payloads in the card summary.
               const recommendationCount = this.concernKeys.reduce((total, key) => total + (agent.concerns[key]?.recommendations?.length || 0), 0);
-              const evidenceLimitCount = this.concernKeys.reduce((total, key) => total + (Array.isArray(agent.concerns[key]?.limits) ? agent.concerns[key].limits.length : 0), 0);
               const scoreWarningCount = (agent.harness?.checks || []).filter(check => check.status === 'fail' && check.impact === 'score-only').length;
-              // Passing checks with evidence boundaries stay visibly limited instead of looking fully certified.
-              if (recommendationCount === 0 && scoreWarningCount === 0 && evidenceLimitCount > 0) return `${evidenceLimitCount} evidence limit${evidenceLimitCount !== 1 ? 's' : ''}`;
-              // With no recommendations, warnings, or evidence limits, the card can say the agent is clear.
+              // With no recommendations or score warnings, the Quality card can stay visually clear.
               if (recommendationCount === 0 && scoreWarningCount === 0) return 'All checks passing';
               // Score-only warnings are surfaced before recommendations because they temper the grade.
               if (scoreWarningCount > 0) return `${scoreWarningCount} score warning${scoreWarningCount !== 1 ? 's' : ''}`;
               return `${recommendationCount} recommendation${recommendationCount !== 1 ? 's' : ''}`;
-            },
-            /**
-             * Return the first evidence limit shown below a Quality concern score.
-             * Use when a passing percentage needs a plain-English boundary without changing the score.
-             *
-             * @param concern - concern payload; missing or empty limits show no evidence-limit UI
-             * @returns visible limit text; empty means the older payload has no limit to claim
-             */
-            concernEvidenceLimitSummary(concern) {
-              // Older audit payloads may omit limits, so the Quality card stays compatible and silent.
-              const evidenceLimits = Array.isArray(concern?.limits) ? concern.limits : [];
-              // With no recorded boundary, the user sees the existing score and no fabricated warning.
-              if (evidenceLimits.length === 0) return '';
-              // e.g. the user sees Verification at 100% and checks whether project tests actually ran.
-              const remainingLimitCount = evidenceLimits.length - 1;
-              const remainingLimitLabel = remainingLimitCount > 0 ? ` (+${remainingLimitCount} more)` : '';
-              return `Evidence limit: ${evidenceLimits[0]}${remainingLimitLabel}`;
             }
           }"
           style="padding: 16px 20px"
@@ -274,7 +254,7 @@
                       <div
                         style="
                           display: grid;
-                          grid-template-columns: 68px minmax(0, 1fr) 32px auto;
+                          grid-template-columns: 68px minmax(0, 1fr) 32px;
                           align-items: center;
                           gap: 8px;
                           padding: 2px 0;
@@ -319,28 +299,6 @@
                           :style="{ color: scoreColor(selectedAgent.concerns[ck].score) }"
                           x-text="selectedAgent.concerns[ck].score + '%'"
                         ></span>
-                        <span
-                          x-show="concernEvidenceLimitSummary(selectedAgent.concerns[ck])"
-                          title="Evidence limit"
-                          style="
-                            color: #facc15;
-                            font-size: 9px;
-                            font-weight: 600;
-                          "
-                        >
-                          Limited
-                        </span>
-                        <p
-                          x-show="concernEvidenceLimitSummary(selectedAgent.concerns[ck])"
-                          x-text="concernEvidenceLimitSummary(selectedAgent.concerns[ck])"
-                          style="
-                            grid-column: 2 / -1;
-                            margin: 0;
-                            color: #facc15;
-                            font-size: 10px;
-                            line-height: 1.35;
-                          "
-                        ></p>
                       </div>
                     </template>
                   </div>

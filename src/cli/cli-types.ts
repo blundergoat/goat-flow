@@ -32,8 +32,8 @@ export type Command =
 /** Local plan operations; export previews or writes portable milestone bodies. */
 export type PlansSubcommand = "export";
 
-/** Static diagnostics views an operator can run without changing the selected project. */
-export type DiagnosticsSubcommand = "context";
+/** Read-only diagnostics views an operator can run without changing the selected project. */
+export type DiagnosticsSubcommand = "context" | "bundle";
 
 /**
  * Second positionals accepted after `skill`: authoring (`new`) and read-only diagnostics (`doctor`).

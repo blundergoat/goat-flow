@@ -277,7 +277,7 @@ last_reviewed: 2026-07-13
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-07-13
+**Decision changed:** Run ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 5 | **Latest occurrence:** 2026-07-13
 
 **What happened:** During the M07-M10 closeout, focused hook checks, typecheck, focused tests, `npm test`, and `npm publish --dry-run` were clean, but the first full `bash scripts/preflight-checks.sh` still failed in the TypeScript section with `Knip: 4 unused exports/types` and `Prettier (1 unformatted files)`. Direct reproduction showed `npx knip` reporting unlisted command binaries (`where`, `which`, `diff`) and `npm run format:check` reporting `test/unit/hook-registrar.test.ts`.
 
@@ -287,7 +287,7 @@ last_reviewed: 2026-07-13
 
 **Prevention:** Before full preflight after changing CLI command spawning, hook launchers, or TypeScript tests, run the direct sub-gates that preflight will aggregate: `npx knip` and `npm run format:check`. If preflight reports the TypeScript section as failed, reproduce the subtool reports directly and fix those exact findings before collecting final pass evidence.
 
-**Measured recurrences:** M05/M06b (2026-06-10) exposed three ESLint errors and two unused exports; M08 (2026-07-13) exposed one unused export; M17 (2026-07-13) exposed one complexity error, three impossible conditions, and five unused exports. Direct ESLint and Knip runs isolated each failure before preflight was repeated.
+**Measured recurrences:** M05/M06b (2026-06-10) exposed three ESLint errors and two unused exports; M08 (2026-07-13) exposed one unused export; M17 (2026-07-13) exposed one complexity error, three impossible conditions, and five unused exports; M23 (2026-07-13) exposed the internal-only `SupportBundleEnvironment` interface as an unused export. Direct ESLint and Knip runs isolated each failure before preflight was repeated.
 
 ---
 

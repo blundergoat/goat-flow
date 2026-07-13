@@ -1,28 +1,56 @@
 /**
  * Runs one read-only diagnostics view after the shared CLI parser selects it.
- * Use this boundary when an operator wants local context evidence rendered as
- * text, Markdown, or JSON without loading diagnostics collectors for other commands.
+ * Use this boundary when an operator wants local context pressure or a redacted
+ * support artifact without loading collectors belonging to unrelated commands.
  */
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
 
 /**
- * Build and render the selected project's static context-pressure report.
+ * Build and render the selected project's requested read-only diagnostics view.
  *
  * @param options - parsed target, agent, and format; a null agent includes all installed mirrors
- * @returns completion after one report reaches stdout or the requested output file
- * @throws CLIError when a direct caller omits the supported `context` diagnostics view
+ * @returns completion after one report reaches stdout or the requested output file; no value means output completed
+ * @throws CLIError when a direct caller omits a supported view or requests a format that view cannot render
  */
 export async function handleDiagnosticsCommand(
   options: ParsedCLI,
 ): Promise<void> {
-  // Context is the only shipped diagnostics view; this guard protects direct handler callers too.
-  if (options.diagnosticsSubcommand !== "context") {
+  // Direct callers must choose a shipped view before any selected-project collector runs.
+  if (options.diagnosticsSubcommand === null) {
     throw new CLIError(
-      "Usage: goat-flow diagnostics context [project-path] [--agent <id>] [--format text|json|markdown]",
+      "Usage: goat-flow diagnostics <context|bundle> [project-path] [--agent <id>] [--format text|json|markdown]",
       2,
     );
+  }
+
+  // A support bundle has one concise terminal view and one stable machine-readable contract.
+  if (options.diagnosticsSubcommand === "bundle") {
+    // Markdown and SARIF could imply schemas the support artifact does not promise.
+    if (options.format !== "text" && options.format !== "json") {
+      throw new CLIError(
+        "diagnostics bundle supports --format text or --format json.",
+        2,
+      );
+    }
+    const {
+      collectSupportBundle,
+      renderSupportBundleJson,
+      renderSupportBundleText,
+    } = await import("./diagnostics/support-bundle.js");
+    const supportBundle = collectSupportBundle(
+      options.projectPath,
+      options.agent,
+    );
+    const renderedBundle =
+      options.format === "json"
+        ? renderSupportBundleJson(supportBundle)
+        : renderSupportBundleText(supportBundle);
+    writeOutput(options, renderedBundle);
+    // A failed audit or collection remains visible to scripts after they parse the artifact.
+    if (supportBundle.exitCode !== 0) process.exitCode = supportBundle.exitCode;
+    return;
   }
 
   const { createFS } = await import("./facts/fs.js");

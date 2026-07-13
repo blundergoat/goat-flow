@@ -29,19 +29,38 @@ describe("diagnostics command parsing", () => {
     assert.equal(parsed.format, "json");
   });
 
+  // A support user can request one local bundle without entering another top-level command.
+  it("parses diagnostics bundle with a project path", () => {
+    const parsed = parseCLIArgs([
+      "diagnostics",
+      "bundle",
+      ".",
+      "--agent",
+      "codex",
+      "--format",
+      "json",
+    ]);
+
+    assert.equal(parsed.command, "diagnostics");
+    assert.equal(parsed.diagnosticsSubcommand, "bundle");
+    assert.equal(parsed.projectPath, resolve("."));
+    assert.equal(parsed.agent, "codex");
+    assert.equal(parsed.format, "json");
+  });
+
   // A missing readout name cannot tell users which diagnostics contract they requested.
   it("rejects a missing diagnostics subcommand", () => {
     assert.throws(
       () => parseCLIArgs(["diagnostics"]),
-      /diagnostics requires subcommand "context"/iu,
+      /diagnostics requires subcommand "context" or "bundle"/iu,
     );
   });
 
   // A misspelled future readout must not become an audit path by accident.
   it("rejects unsupported diagnostics subcommands", () => {
     assert.throws(
-      () => parseCLIArgs(["diagnostics", "bundle", "."]),
-      /diagnostics requires subcommand "context"/iu,
+      () => parseCLIArgs(["diagnostics", "unknown", "."]),
+      /diagnostics requires subcommand "context" or "bundle"/iu,
     );
   });
 
@@ -50,6 +69,14 @@ describe("diagnostics command parsing", () => {
     assert.throws(
       () => parseCLIArgs(["diagnostics", "context", ".", "../other"]),
       /diagnostics context accepts at most one project path/iu,
+    );
+  });
+
+  // Two support targets would make one bundle ambiguous for the maintainer reading it.
+  it("rejects extra diagnostics bundle paths", () => {
+    assert.throws(
+      () => parseCLIArgs(["diagnostics", "bundle", ".", "../other"]),
+      /diagnostics bundle accepts at most one project path/iu,
     );
   });
 });

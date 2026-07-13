@@ -45,7 +45,7 @@ Each harness check carries a `type` tag that determines whether (and how) a fail
 
 A passing status and 100 score mean the configured structural checks passed; they do not claim that the audit executed project commands or proved a complete recovery handoff. The machine-readable `concerns.<key>.limits` array records those non-gating evidence boundaries without changing status or score.
 
-Terminal and Markdown output label each entry as `Limit`. Home and Quality label it `Evidence limit` beside the affected passing concern, and all four quality-prompt modes include the same compact audit summary. Older payloads without `limits` remain valid and show no evidence-limit message.
+Terminal and Markdown output label each entry as `Limit`, Home labels it `Evidence limit` beside the affected passing concern, and all four quality-prompt modes include the same compact audit summary. The Quality baseline intentionally stays focused on scores, score warnings, and recommendations instead of repeating concern-limit callouts. Older payloads without `limits` remain valid and show no evidence-limit message.
 
 Verification states that the audit inspected guidance and hook configuration without executing build, test, lint, typecheck, or format commands. Recovery states that storage exists without proving the current objective, completed work, last verification, next action, or end-to-end resumability.
 

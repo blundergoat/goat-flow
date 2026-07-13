@@ -1,7 +1,7 @@
 /**
  * Dashboard summary tests for the Home and Quality views users scan after an audit.
- * They execute Alpine helpers in a browser-shaped VM and pin the labels shown beside concern scores.
- * Use when audit presentation changes so passing scores cannot hide evidence limits.
+ * They execute Alpine helpers in a browser-shaped VM and pin each page's score summaries.
+ * Use when audit presentation changes so Home evidence and Quality focus stay intentional.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -76,8 +76,6 @@ type HomeModel = {
 };
 
 type QualityBaselineModel = {
-  /** Return evidence-limit text shown under one Quality concern score. */
-  concernEvidenceLimitSummary(concern: Record<string, unknown> | null): string;
   /** Return the baseline-card action summary for one audited agent. */
   recommendationSummary(agent: Record<string, unknown> | null): string;
 };
@@ -635,16 +633,11 @@ describe("Home harness summary", () => {
     assert.equal(home.recommendationSummary(agent), "2 evidence limits");
   });
 
-  it("shows the same evidence-limit vocabulary beside Quality concern scores", () => {
+  it("keeps evidence limits out of the focused Quality baseline card", () => {
     const evidenceLimit = "End-to-end resumability was not demonstrated.";
     const quality = loadQualityBaselineModel();
     const qualitySource = readFileSync(QUALITY_VIEW_PATH, "utf-8");
 
-    assert.equal(
-      quality.concernEvidenceLimitSummary({ limits: [evidenceLimit] }),
-      `Evidence limit: ${evidenceLimit}`,
-    );
-    assert.equal(quality.concernEvidenceLimitSummary({}), "");
     assert.equal(
       quality.recommendationSummary({
         concerns: {
@@ -658,12 +651,10 @@ describe("Home harness summary", () => {
         },
         harness: { checks: [] },
       }),
-      "1 evidence limit",
+      "All checks passing",
     );
-    assert.match(
-      qualitySource,
-      /x-text="concernEvidenceLimitSummary\(selectedAgent\.concerns\[ck\]\)"/,
-    );
+    assert.doesNotMatch(qualitySource, /concernEvidenceLimitSummary/u);
+    assert.doesNotMatch(qualitySource, /title="Evidence limit"/u);
   });
 
   it("exposes advisory enforcement rows for the detail panel", () => {

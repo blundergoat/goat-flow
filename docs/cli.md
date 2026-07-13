@@ -169,7 +169,21 @@ Every surface shows UTF-8 bytes, lines, words when available, and a rough token 
 
 The top-five list ranks budgeted surfaces by their measured value divided by the applicable limit. `--agent` narrows instruction and installed-skill measurements to one runtime; without it, each installed agent mirror remains explicit because those runtimes load different paths. JSON uses the timestamp-free `goat-flow.context-report.v1` schema so repeated reads do not gain artificial drift.
 
-`diagnostics` is the shared readout namespace. Later support-bundle, readiness, and threat-model work can extend it without adding unrelated top-level commands; only `context` ships today, and unsupported subcommands exit with usage status 2.
+`diagnostics` is the shared readout namespace. Context and support-bundle readouts live here instead of adding unrelated top-level commands; unsupported subcommands exit with usage status 2.
+
+### `goat-flow diagnostics bundle [path] [--agent <id>] [--format text|json]`
+
+Create one local, redacted support artifact from existing manifest, config, agent-setup, audit, quality-history, event-metadata, stack, and environment collectors. Use it when a maintainer needs reproducible setup evidence without asking a user to paste several command outputs.
+
+```bash
+npx goat-flow diagnostics bundle .                         # Concise terminal summary
+npx goat-flow diagnostics bundle . --agent codex --format json
+npx goat-flow diagnostics bundle . --format json --output support-bundle.json
+```
+
+JSON uses the stable `goat-flow.support-bundle.v1` schema. It includes allowlisted summaries, counts, capability booleans, and hash-only file fingerprints. It omits raw config values and commands, instruction/settings bodies, audit evidence and failure prose, quality finding bodies and report paths, event payloads and project paths, prompts, terminal scrollback, and full logs. Display metadata passes through the shared durable-text scrubber; this is a practical support boundary, not a claim of perfect data-loss prevention.
+
+Successful evidence collection exits 0 when its composed audit passes. An audit-failing bundle remains parseable and exits 1; collection failure exits 1; a missing target exits 2. In JSON mode every one of those paths writes the same envelope before setting the process exit code. Text is intentionally compact and points users to `--format json` for the complete artifact. Bundles stay local unless the user chooses to share or upload them.
 
 ### `goat-flow index [path]`
 

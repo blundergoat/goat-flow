@@ -9,7 +9,7 @@ import { CLIError } from "./cli-error.js";
 import type { DiagnosticsSubcommand } from "./cli-types.js";
 
 /**
- * Parse `diagnostics context [project-path]` or reject ambiguous terminal input.
+ * Parse one diagnostics view and target, or reject ambiguous terminal input.
  *
  * @param positionals - namespace arguments; empty means the user omitted the required view
  * @returns the context view and one absolute target path for downstream fact extraction
@@ -21,21 +21,25 @@ export function parseDiagnosticsPositionals(positionals: string[]): {
 } {
   const [subcommand, projectPath, ...extraPositionals] = positionals;
 
-  // Context is the only shipped diagnostics view until later milestones extend this namespace.
-  if (subcommand !== "context") {
-    throw new CLIError('diagnostics requires subcommand "context".', 2);
+  // Unknown or missing views cannot tell users which diagnostics contract they requested.
+  if (subcommand !== "context" && subcommand !== "bundle") {
+    throw new CLIError(
+      'diagnostics requires subcommand "context" or "bundle".',
+      2,
+    );
   }
 
   // One optional target keeps the report tied to a single project users can act on.
   if (extraPositionals.length > 0) {
     throw new CLIError(
-      "diagnostics context accepts at most one project path.",
+      `diagnostics ${subcommand} accepts at most one project path.`,
       2,
     );
   }
 
+  // Omitting the optional project path means the user wants diagnostics for the current directory.
   return {
-    diagnosticsSubcommand: "context",
+    diagnosticsSubcommand: subcommand,
     projectPath: resolve(projectPath ?? "."),
   };
 }
