@@ -174,6 +174,7 @@ npx goat-flow install . --agent claude     # Copy/update system files
 npx goat-flow setup . --agent claude       # Generate setup prompt
 npx goat-flow quality . --agent claude     # Generate quality-assessment prompt
 npx goat-flow redact --output .goat-flow/logs/sessions/handoff.md
+npx goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
 npx goat-flow status .                     # Project state (bare/partial/v0.9/outdated/current/error)
 npx goat-flow manifest                     # Agent support matrix
 ```

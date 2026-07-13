@@ -34,6 +34,7 @@ import {
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
+import { handlePlansExportCommand } from "./plans-export.js";
 const PACKAGE_VERSION = getPackageVersion();
 
 function formatCandidacyArtifact(
@@ -589,13 +590,9 @@ async function handleEventsCommand(options: ParsedCLI): Promise<void> {
 }
 
 /**
- * Handle the manifest command: resolve + print the single-source-of-truth manifest.
- * The function forks up front on `--check` because the two modes are genuinely different outputs,
- * not formatting variants of one: `--check` is the CI gate that runs checkManifest and sets
- * process.exitCode to 1 on drift (so the pipeline fails), while the default branch just loads and
- * prints the resolved manifest with no exit-code side effect. They are kept in one handler so both
- * honour the same `--format` flag, but the early return after the check branch is intentional - it
- * avoids the printer ever running in CI mode.
+ * Print the resolved manifest or run its `--check` CI gate.
+ * Branches stay separate because check mode owns exit status while default only renders.
+ * Both paths preserve the same format contract without mixing their outputs.
  */
 async function handleManifestCommand(options: ParsedCLI): Promise<void> {
   const { loadManifest, checkManifest, renderManifestMarkdown } =
@@ -674,6 +671,7 @@ const COMMAND_HANDLERS: Partial<
   stats: handleStatsCommand,
   index: handleIndexCommand,
   redact: handleRedactCommand,
+  plans: handlePlansExportCommand,
   status: handleStatusCommand,
   dashboard: runDashboardCommand,
   info: handleInfoCommand,

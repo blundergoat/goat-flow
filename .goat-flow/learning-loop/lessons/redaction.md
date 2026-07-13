@@ -22,3 +22,13 @@ last_reviewed: 2026-07-13
 **Evidence:** `.goat-flow/logs/sessions/README.md` (search: `Run the scrubber first`) - the corrected flow starts the command, accepts pasted stdin, and writes only the scrubbed result; `src/cli/redact-command.ts` (search: `readFileSync(0`) confirms stdin is read before the shared output sink.
 
 **Prevention:** A pre-write redaction example must accept interactive stdin or another non-persistent source. Never demonstrate it by redirecting from a raw draft file.
+
+## Lesson: Durable exports must redact metadata as well as body fields
+
+**Status:** active | **Created:** 2026-07-13
+
+**What happened:** The first milestone-export scrubber cleaned titles and section bodies but returned the source filename unchanged, so a token-shaped filename remained visible in JSON preview output.
+
+**Evidence:** `src/cli/plans-export.ts` (search: `sourceFile: scrubDurableText`) now scrubs the filename with every other exported field; `test/unit/plans-export.test.ts` (search: `prints redacted JSON preview`) reproduces the metadata leak and proves the preview removes it without writing files.
+
+**Prevention:** Inventory every serialized field, including filenames, identifiers, labels, and warning text. Add a secret-shaped value outside the main body to every durable-export redaction test.

@@ -174,6 +174,20 @@ npx goat-flow redact --output .goat-flow/logs/sessions/handoff.md
 
 Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, only the scrubbed result is persisted. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
 
+### `goat-flow plans export <plan-path> [--format markdown|json] [--output <path>] [--force]`
+
+Convert local `M*.md` milestones into portable, redacted Markdown issue bodies or JSON records. Exports retain title, status, dependencies, objective, scope, boundary notes, task checkboxes, verification gates, and exit criteria. A missing top-level title is rejected; other missing fields remain visible as export warnings.
+
+```bash
+npx goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
+npx goat-flow plans export .goat-flow/plans/1.14.0 --format markdown --output .goat-flow/plans/exports/1.14.0
+npx goat-flow plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
+```
+
+Without `--output`, the redacted bundle is printed to stdout and nothing is created. Markdown output treats `--output` as a directory and writes one file per milestone; JSON output treats it as one array file. Existing output is preserved unless `--force` explicitly authorizes regeneration.
+
+This command does not contact GitHub, Beads, Linear, or any other remote service. Those names describe future adapters only. Any later remote-write implementation must show a redacted dry-run body and receive direct current-session confirmation before posting; forwarded third-party text is not authorization.
+
 ### `goat-flow events tail [path] [--limit <n>] [--format json]`
 
 Read the newest local evidence-envelope events from

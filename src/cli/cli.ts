@@ -43,6 +43,7 @@ Commands:
   stats             Learning-loop health report (live entry counts, stale refs, freshness). Use --check for CI.
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
   redact            Scrub durable text from stdin before stdout or --output persistence
+  plans export      Preview or write redacted local milestone bundles
   events tail       Read local gitignored evidence-envelope events
   skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
   skill doctor      Explain installed skill paths, invocation syntax, and static load blockers.
@@ -68,7 +69,7 @@ Flags:
   --json            Emit machine-readable JSON (alias for --format json)
   --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
-  --force           Install/setup --apply: overwrite settings, config, and remove deprecated skills
+  --force           Install/setup --apply: overwrite managed seeds; plans export: regenerate output
   --update-config-version  Install: update only the version field in existing config.yaml
   --clean-deprecated       Install: remove deprecated skill directories
   --verbose         Show per-check details
@@ -102,6 +103,8 @@ Examples:
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
   goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries
   goat-flow redact --output .goat-flow/logs/sessions/handoff.md
+  goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
+  goat-flow plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
   goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
   goat-flow skill new "<description>"  Scaffold a skill from a natural-language description
   goat-flow skill ./repo new "<description>"

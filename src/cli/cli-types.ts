@@ -25,7 +25,11 @@ export type Command =
   | "stats"
   | "index"
   | "redact"
+  | "plans"
   | "skill";
+
+/** Local plan operations; export previews or writes portable milestone bodies. */
+export type PlansSubcommand = "export";
 
 /**
  * Second positionals accepted after `skill`: authoring (`new`) and read-only diagnostics (`doctor`).
@@ -90,6 +94,7 @@ export const COMMANDS: Command[] = [
   "stats",
   "index",
   "redact",
+  "plans",
   "skill",
 ];
 
@@ -139,6 +144,7 @@ export interface ParsedCLI extends CLIOptions {
   eventsLimit: number;
   hookSubcommand: HookSubcommand | null;
   hookId: string | null;
+  plansSubcommand: PlansSubcommand | null;
   includeAll: boolean;
 }
 

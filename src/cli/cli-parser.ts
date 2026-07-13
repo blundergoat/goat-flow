@@ -29,6 +29,7 @@ import {
   type HookSubcommand,
   type ParsedArgValues,
   type ParsedCLI,
+  type PlansSubcommand,
   type QualitySubcommand,
   type SkillSubcommand,
 } from "./cli-types.js";
@@ -281,6 +282,28 @@ function parseHooksPositionals(positionals: string[]): {
   };
 }
 
+/**
+ * Parse the required `plans export <plan-path>` user journey.
+ * Throws CLIError when the operation or plan-path arity is invalid.
+ */
+function parsePlansPositionals(positionals: string[]): {
+  plansSubcommand: PlansSubcommand;
+  projectPath: string;
+} {
+  const [subcommand, planPath, ...extraPositionals] = positionals;
+
+  // Export is the only local plan operation currently exposed by the CLI.
+  if (subcommand !== "export") {
+    throw new CLIError('plans requires subcommand "export".', 2);
+  }
+
+  // A concrete plan directory is required and extra paths would make output ambiguous.
+  if (!planPath || extraPositionals.length > 0) {
+    throw new CLIError("plans export requires exactly one <plan-path>.", 2);
+  }
+  return { plansSubcommand: "export", projectPath: resolve(planPath) };
+}
+
 function parseHookTogglePositionals(
   subcommand: "enable" | "disable",
   hookId: string | undefined,
@@ -320,6 +343,14 @@ function parseCommandPositionals(
     return {
       qualitySubcommand: "prompt",
       projectPath: parseHooksPositionals(positionals).projectPath,
+      qualityDiffPair: null,
+      qualityValidatePath: null,
+      candidacyInput: null,
+    };
+  if (command === "plans")
+    return {
+      qualitySubcommand: "prompt",
+      projectPath: parsePlansPositionals(positionals).projectPath,
       qualityDiffPair: null,
       qualityValidatePath: null,
       candidacyInput: null,
@@ -408,8 +439,18 @@ function validateInstallFlags(command: Command, values: ParsedArgValues): void {
   if (command !== "setup" && parsedFlag(values, "apply")) {
     throw new CLIError("--apply is only valid for the setup command.", 2);
   }
+  // Plan exports may also use force, but only to regenerate an explicit local output path.
+  if (
+    parsedFlag(values, "force") &&
+    !isInstallCommand(command, values) &&
+    command !== "plans"
+  ) {
+    throw new CLIError(
+      "--force is only valid for install, setup --apply, or plans export.",
+      2,
+    );
+  }
   const installOnly: Array<[string, boolean | undefined]> = [
-    ["--force", parsedFlag(values, "force")],
     ["--update-config-version", parsedFlag(values, "update-config-version")],
     ["--clean-deprecated", parsedFlag(values, "clean-deprecated")],
   ];
@@ -462,6 +503,21 @@ function parseEventsLimitArg(value: string | undefined): number {
     throw new CLIError("--limit must be a positive integer.", 2);
   }
   return Math.min(parsed, 500);
+}
+
+/** Select the path consumed by the chosen command after each positional grammar is parsed. */
+function selectCommandProjectPath(
+  command: Command,
+  qualityProjectPath: string,
+  eventsProjectPath: string,
+  hooksProjectPath: string,
+  plansProjectPath: string,
+): string {
+  // Each namespaced command owns the path position its users supplied.
+  if (command === "events") return eventsProjectPath;
+  if (command === "hooks") return hooksProjectPath;
+  if (command === "plans") return plansProjectPath;
+  return qualityProjectPath;
 }
 
 /**
@@ -527,12 +583,17 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
           hookId: null,
           projectPath: qualityPositionals.projectPath,
         };
-  const projectPath =
-    command === "events"
-      ? eventsPositionals.projectPath
-      : command === "hooks"
-        ? hooksPositionals.projectPath
-        : qualityPositionals.projectPath;
+  const plansPositionals =
+    command === "plans"
+      ? parsePlansPositionals(positionals)
+      : { plansSubcommand: null, projectPath: qualityPositionals.projectPath };
+  const projectPath = selectCommandProjectPath(
+    command,
+    qualityPositionals.projectPath,
+    eventsPositionals.projectPath,
+    hooksPositionals.projectPath,
+    plansPositionals.projectPath,
+  );
   const skillPositionals: SkillPositionals =
     command === "skill"
       ? parseSkillPositionals(positionals)
@@ -565,7 +626,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     isVerbose: parsedFlag(parsedValues, "verbose"),
     output: resolveOutputPath(
       parsedString(parsedValues, "output"),
-      projectPath,
+      command === "plans" ? resolve(".") : projectPath,
     ),
     includeHarness: parsedFlag(parsedValues, "harness"),
     checkDrift: parsedFlag(parsedValues, "check-drift"),
@@ -587,6 +648,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     eventsLimit: parseEventsLimitArg(parsedString(parsedValues, "limit")),
     hookSubcommand: hooksPositionals.hookSubcommand,
     hookId: hooksPositionals.hookId,
+    plansSubcommand: plansPositionals.plansSubcommand,
     includeAll: parsedFlag(parsedValues, "all"),
     isDevMode: parsedFlag(parsedValues, "dev"),
     showHelp: parsedFlag(parsedValues, "help"),

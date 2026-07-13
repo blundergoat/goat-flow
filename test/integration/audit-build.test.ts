@@ -31,6 +31,7 @@ const requiredSkillDocsFiles = [
   ".goat-flow/skill-docs/playbooks/observability.md",
   ".goat-flow/skill-docs/playbooks/page-capture.md",
   ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
@@ -67,6 +68,7 @@ function makeSkillDocsCtx(options: {
   instructionFiles?: Record<string, string>;
 }) {
   const present = new Set<string>();
+  const healthyFilesystem = stubFS();
   const instructionFiles = options.instructionFiles ?? {
     "CLAUDE.md": options.instructionContent ?? "",
   };
@@ -88,7 +90,10 @@ function makeSkillDocsCtx(options: {
   return makeCtx({
     fs: stubFS({
       exists: (path) => present.has(path),
-      readFile: (path) => instructionFiles[path] ?? "# Stub\n",
+      readFile: (path) =>
+        instructionFiles[path] ??
+        healthyFilesystem.readFile(path) ??
+        "# Stub\n",
     }),
     structure: {
       ...makeCtx().structure,

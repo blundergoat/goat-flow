@@ -10,6 +10,17 @@ import { AUDIT_VERSION } from "../constants.js";
 
 const VERIFIED_ON = "2026-05-03";
 
+const STANDALONE_PLAYBOOK_FILES = [
+  ".goat-flow/skill-docs/playbooks/browser-use.md",
+  ".goat-flow/skill-docs/playbooks/changelog.md",
+  ".goat-flow/skill-docs/playbooks/code-comments.md",
+  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-docs/playbooks/observability.md",
+  ".goat-flow/skill-docs/playbooks/page-capture.md",
+  ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
+] as const;
+
 /** Return the setup spec provenance. */
 function setupSpecProvenance(paths: string[]): CheckEvidence {
   return {
@@ -47,13 +58,7 @@ const NAMED_PATHS = new Set([
   ".goat-flow/skill-docs/skill-conventions.md",
   ".goat-flow/skill-docs/playbooks/",
   ".goat-flow/skill-docs/playbooks/README.md",
-  ".goat-flow/skill-docs/playbooks/browser-use.md",
-  ".goat-flow/skill-docs/playbooks/changelog.md",
-  ".goat-flow/skill-docs/playbooks/code-comments.md",
-  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-docs/playbooks/observability.md",
-  ".goat-flow/skill-docs/playbooks/page-capture.md",
-  ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ...STANDALONE_PLAYBOOK_FILES,
   ".goat-flow/skill-docs/skill-quality-testing/",
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
@@ -90,13 +95,7 @@ const REQUIRED_SKILL_DOC_FILES = [
   ".goat-flow/skill-docs/skill-conventions.md",
   // Standalone playbooks
   ".goat-flow/skill-docs/playbooks/README.md",
-  ".goat-flow/skill-docs/playbooks/browser-use.md",
-  ".goat-flow/skill-docs/playbooks/changelog.md",
-  ".goat-flow/skill-docs/playbooks/code-comments.md",
-  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-docs/playbooks/observability.md",
-  ".goat-flow/skill-docs/playbooks/page-capture.md",
-  ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ...STANDALONE_PLAYBOOK_FILES,
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
@@ -252,6 +251,73 @@ function missingSkillReferenceInstructionRequirements(
     missing.push("Router Table pointer");
   }
   return missing;
+}
+
+/**
+ * Validate one installed playbook's version and first user-facing section.
+ * Use this failure before checking whether the README advertises the file.
+ */
+function standalonePlaybookShapeFailure(
+  ctx: Parameters<BuildCheck["run"]>[0],
+  playbookPath: (typeof STANDALONE_PLAYBOOK_FILES)[number],
+): ReturnType<BuildCheck["run"]> {
+  const playbookContent = ctx.fs.readFile(playbookPath) ?? "";
+  const frontmatter = playbookContent.match(
+    /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u,
+  )?.[1];
+  const expectedVersion = `goat-flow-reference-version: "${AUDIT_VERSION}"`;
+
+  // Missing or stale version metadata makes the installed reference unverifiable.
+  if (frontmatter === undefined || !frontmatter.includes(expectedVersion)) {
+    return {
+      check: "Instruction file skill-docs pointer",
+      message: `${playbookPath} is missing current goat-flow-reference-version frontmatter`,
+      evidence: playbookPath,
+      howToFix: `Start the playbook with YAML frontmatter containing ${expectedVersion}.`,
+    };
+  }
+
+  const firstLevelTwoHeading = playbookContent.match(/^##\s+(.+?)\s*$/mu)?.[1];
+  // A stable first section lets agents verify capability before following the workflow.
+  if (firstLevelTwoHeading !== "Availability Check") {
+    return {
+      check: "Instruction file skill-docs pointer",
+      message: `${playbookPath} must use Availability Check as its first H2 heading`,
+      evidence: playbookPath,
+      howToFix:
+        "Move `## Availability Check` before every other H2 and state the runnable probe or documentary load condition.",
+    };
+  }
+  return null;
+}
+
+/**
+ * Validate the installed playbooks users can discover from the shared README.
+ * Use this setup failure to stop malformed guidance before an agent loads it.
+ */
+function standalonePlaybookContractFailure(
+  ctx: Parameters<BuildCheck["run"]>[0],
+): ReturnType<BuildCheck["run"]> {
+  const playbookReadmePath = ".goat-flow/skill-docs/playbooks/README.md";
+  const playbookReadme = ctx.fs.readFile(playbookReadmePath) ?? "";
+
+  // Every registered playbook needs a valid body and a discoverable README row.
+  for (const playbookPath of STANDALONE_PLAYBOOK_FILES) {
+    const shapeFailure = standalonePlaybookShapeFailure(ctx, playbookPath);
+    // Shape failures are more actionable than the downstream discovery result.
+    if (shapeFailure !== null) return shapeFailure;
+    const playbookFilename = playbookPath.split("/").at(-1) ?? playbookPath;
+    // The README row is how a future agent discovers this registered playbook.
+    if (!playbookReadme.includes(`](./${playbookFilename})`)) {
+      return {
+        check: "Instruction file skill-docs pointer",
+        message: `${playbookReadmePath} has no Available playbooks row for ${playbookFilename}`,
+        evidence: playbookReadmePath,
+        howToFix: `Add a table row linking to ./${playbookFilename} with its load condition and capability.`,
+      };
+    }
+  }
+  return null;
 }
 
 // === Named structure checks (10) ===
@@ -570,6 +636,10 @@ const instructionFileSkillReferencePointer: BuildCheck = {
           "Refresh with `goat-flow install . --agent <agent>`. The index files are load-bearing and must be installed with the shared skill-docs/playbook pack.",
       };
     }
+
+    const playbookContractFailure = standalonePlaybookContractFailure(ctx);
+    // Contract failures explain why installed guidance is unsafe to load.
+    if (playbookContractFailure !== null) return playbookContractFailure;
 
     const missingRequirements = presentInstructionFiles(ctx).flatMap((path) => {
       const content = ctx.fs.readFile(path) ?? "";

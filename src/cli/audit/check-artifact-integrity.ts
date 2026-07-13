@@ -87,6 +87,7 @@ export const SHARED_ARTIFACT_MIRRORS: readonly ArtifactMirrorSpec[] = [
       "changelog.md",
       "page-capture.md",
       "release-notes.md",
+      "skill-playbook-authoring-sync.md",
     ],
   ),
   {

@@ -14,6 +14,7 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 ├── cli-output.ts                = stdout and file output helpers
 ├── cli-error.ts                 = CLIError with exit-code handling
 ├── redact-command.ts            = stdin-to-stdout/file scrubber for durable continuation text
+├── plans-export.ts              = redacted local Markdown/JSON milestone preview and export
 ├── index.ts                     = programmatic library entry and public re-exports
 ├── constants.ts                 = AUDIT_VERSION, SKILL_NAMES, and shared constants
 ├── paths.ts                     = package-root path resolution for source and packaged installs

@@ -30,6 +30,7 @@
     ".goat-flow/skill-docs/playbooks/observability.md",
     ".goat-flow/skill-docs/playbooks/page-capture.md",
     ".goat-flow/skill-docs/playbooks/release-notes.md",
+    ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
     ".goat-flow/skill-docs/skill-quality-testing/README.md",
     ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
     ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
@@ -156,6 +157,10 @@
       "ownership": "system-owned",
       "source": "workflow/skills/playbooks/release-notes.md"
     },
+    ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/skill-playbook-authoring-sync.md"
+    },
     ".goat-flow/skill-docs/skill-quality-testing/README.md": {
       "ownership": "system-owned",
       "source": "workflow/skills/playbooks/skill-quality-testing.md"
@@ -255,7 +260,7 @@
     ".goat-flow/logs/security/": "Workspace-local, gitignored-by-design security assessment history. Saved `/goat-security` run outputs for reference across sessions. Only README.md is committed.",
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
     ".goat-flow/skill-docs/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
-    ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, and release-notes.md for per-release narrative discipline. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
+    ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline, and skill-playbook-authoring-sync.md for built-in playbook shape, mirroring, discovery, registration, and verification. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
     ".goat-flow/skill-docs/skill-quality-testing/": "Committed skill-authoring methodology pack. README.md indexes the pack; tdd-iteration.md, adversarial-framing.md, and deployment.md cover skill TDD, pressure-testing, and deployment discipline.",
     ".goat-flow/hooks/": "Committed central hook runtime. Holds deny-dangerous.sh, gruff-code-quality.sh, post-turn-safety.sh, and hook-specific policy modules under subdirectories.",
     ".goat-flow/hooks/deny-dangerous/": "Committed shared hook policy store sourced by each agent's deny-dangerous.sh dispatcher. Holds the destructive-shell, secret-path, repository-write policy modules and the central deny-dangerous self-test.",

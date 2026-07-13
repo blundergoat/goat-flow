@@ -32,12 +32,69 @@ const HEALTHY_GOAT_FLOW_GITIGNORE = [
   "",
 ].join("\n");
 
+const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
+  "browser-use.md",
+  "changelog.md",
+  "code-comments.md",
+  "gruff-code-quality.md",
+  "observability.md",
+  "page-capture.md",
+  "release-notes.md",
+  "skill-playbook-authoring-sync.md",
+] as const;
+
+/** Render the default playbook index a healthy-project audit fixture exposes to users. */
+function healthyPlaybookReadme(): string {
+  const rows = HEALTHY_STANDALONE_PLAYBOOK_FILENAMES.map(
+    (filename) => `| [\`${filename}\`](./${filename}) | Fixture | n/a |`,
+  );
+  return `---
+goat-flow-reference-version: "${AUDIT_VERSION}"
+---
+# Skill Playbooks
+
+## Available playbooks
+
+${rows.join("\n")}
+`;
+}
+
+/** Render one versioned playbook with the first section users expect to load. */
+function healthyPlaybook(filename: string): string {
+  return `---
+goat-flow-reference-version: "${AUDIT_VERSION}"
+---
+# ${filename}
+
+## Availability Check
+
+Fixture capability is available.
+`;
+}
+
 // Test helper: a ReadonlyFS whose defaults describe a healthy project (a valid
 // .goat-flow/.gitignore, everything else empty/present). Pass overrides to
 // simulate the specific filesystem condition a check is meant to detect.
 export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   const defaultReadFile = (path: string): string | null => {
+    // The default project keeps committed goat-flow files visible to audit users.
     if (path === ".goat-flow/.gitignore") return HEALTHY_GOAT_FLOW_GITIGNORE;
+    // The playbook README lets agents discover every registered built-in reference.
+    if (path === ".goat-flow/skill-docs/playbooks/README.md") {
+      return healthyPlaybookReadme();
+    }
+    const playbookFilename = path.split("/").at(-1);
+    // Registered playbooks default to the contract shape unless a test overrides them.
+    if (
+      path.startsWith(".goat-flow/skill-docs/playbooks/") &&
+      playbookFilename !== undefined &&
+      HEALTHY_STANDALONE_PLAYBOOK_FILENAMES.includes(
+        playbookFilename as (typeof HEALTHY_STANDALONE_PLAYBOOK_FILENAMES)[number],
+      )
+    ) {
+      return healthyPlaybook(playbookFilename);
+    }
+    // Required hook fixtures carry the current version users receive from setup.
     if (
       [
         ".goat-flow/hooks/deny-dangerous.sh",
