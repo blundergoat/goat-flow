@@ -15,8 +15,7 @@ import {
   renderAuditJson,
   renderAuditText,
 } from "./audit-command/helpers.js";
-import type { AuditScope } from "../../src/cli/audit/types.js";
-import type { AuditReport } from "../../src.js";
+import type { AuditReport, AuditScope } from "../../src/cli/audit/types.js";
 import type { AgentFacts, AgentProfile } from "../../src/cli/types.js";
 
 /** Build a minimal agent scope because enforcement capability logic only needs status-shaped checks. */

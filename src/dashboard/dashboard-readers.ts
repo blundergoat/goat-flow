@@ -247,15 +247,9 @@ function readAuditFailure(rawFailure: unknown): AuditFailure | null {
 const AUDIT_PROVENANCE_SOURCE_TYPES =
   "|spec|vendor_docs|paper|incident|community|unknown|";
 const AUDIT_PROVENANCE_NORMATIVE_LEVELS = "|MUST|SHOULD|BEST_PRACTICE|";
-const AUDIT_CHECK_TYPES: readonly NonNullable<AuditCheck["type"]>[] = [
-  "integrity",
-  "advisory",
-  "metric",
-];
-const AUDIT_EVIDENCE_KINDS: readonly NonNullable<AuditCheck["evidenceKind"]>[] =
-  ["semantic", "structural"];
-const AUDIT_ASSURANCE_LEVELS: readonly NonNullable<AuditCheck["assurance"]>[] =
-  ["full", "limited"];
+const AUDIT_CHECK_TYPES = ["integrity", "advisory", "metric"] as const;
+const AUDIT_EVIDENCE_KINDS = ["semantic", "structural"] as const;
+const AUDIT_ASSURANCE_LEVELS = ["full", "limited"] as const;
 const AUDIT_EVIDENCE_PATH_KEYS = [
   "evidence_paths",
   "framework_evidence_paths",
@@ -415,13 +409,7 @@ function readAuditConcern(rawConcern: unknown): AuditConcern | null {
   };
 }
 
-const STATUS_VALUES: readonly EnforcementCapabilityStatus[] = [
-  "hard",
-  "limited",
-  "soft",
-  "missing",
-  "unknown",
-];
+const STATUSES = ["hard", "limited", "soft", "missing", "unknown"] as const;
 const ENFORCEMENT_SOURCE_VALUES: readonly EnforcementCapabilitySource[] = [
   "local-settings",
   "local-hook",
@@ -454,7 +442,7 @@ function readEnforcementSummary(
   if (!isRecord(rawSummary)) return summary;
   // Only recognized status buckets can contribute to the user-facing totals.
   for (const [key, count] of Object.entries(rawSummary)) {
-    const status = readEnum(key, STATUS_VALUES);
+    const status = readEnum(key, STATUSES);
     // Invalid or empty counters are ignored so malformed payloads cannot become dashboard claims.
     if (status && typeof count === "number") summary[status] = count;
   }
@@ -469,7 +457,7 @@ function readEnforcementCapability(
   if (!isRecord(rawCapability)) return null;
   const id = readString(rawCapability.id);
   const label = readString(rawCapability.label);
-  const status = readEnum(rawCapability.status, STATUS_VALUES);
+  const status = readEnum(rawCapability.status, STATUSES);
   const assurance = readEnum(
     rawCapability.assurance,
     ENFORCEMENT_ASSURANCE_VALUES,
