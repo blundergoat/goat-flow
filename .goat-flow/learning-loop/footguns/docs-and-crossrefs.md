@@ -118,6 +118,8 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 
 **Prevention:** When adding a playbook, grep the new filename through every surface above before declaring done. Then run `bash scripts/preflight-checks.sh`; the output must name the new playbook in parity rows. Run `npm test`; `preamble-sync.test.ts` must include the new playbook. If the playbook documents a CLI-only package, run `npx knip --no-progress` and only add `ignoreDependencies` after real npm-script or shell usage still leaves Knip unable to see it.
 
+**Recurrence update (2026-07-13):** M12 registered `skill-playbook-authoring-sync.md` in manifest and audit surfaces, so focused checks and the live controlling-workspace audit passed. The full consumer setup lifecycle then failed because `workflow/install-goat-flow.sh` lacked its explicit copy line; the same sweep found missing preflight, parity-test, setup-doc, architecture, code-map, and quality-prompt enrollment. The next preflight also rejected the playbook because its worked YAML example repeated the exact installed version assignment, producing `1.13.1 | 1.13.1`; examples now use an unquoted `CURRENT_VERSION` sentinel. The decisive reproductions are `test/integration/setup-quality-lifecycle.test.ts` (search: "keeps setup, audit, prompts, and report history on the selected consumer") and `scripts/preflight-checks.sh` (search: "Installed shared reference").
+
 ---
 
 ## Footgun: Cross-reference fragility across docs

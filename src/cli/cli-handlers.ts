@@ -10,6 +10,8 @@ import type { AuditReport, AuditScope, CheckResult } from "./audit/types.js";
 import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
+import { handleDiagnosticsCommand } from "./diagnostics-command.js";
+import { handleStatsCommand } from "./stats-command.js";
 import {
   MULTI_AGENT_SYNC_BANNER,
   validAgentFlags,
@@ -518,59 +520,6 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   });
 }
 
-/** Handle the stats command: report learning-loop health (live counts, stale refs, freshness). */
-async function handleStatsCommand(options: ParsedCLI): Promise<void> {
-  const { createFS } = await import("./facts/fs.js");
-  const { loadConfig } = await import("./config/reader.js");
-  const { extractFootgunFacts, extractLessonsFacts } =
-    await import("./facts/shared/learning-loop.js");
-  const { buildStatsReport, checkStats, buildDecisionsSection } =
-    await import("./stats/stats.js");
-  const {
-    renderStatsText,
-    renderStatsJson,
-    renderStatsMarkdown,
-    renderStatsCheckText,
-  } = await import("./stats/render.js");
-
-  const { collectIndexFreshness } = await import("./stats/index-freshness.js");
-  const { resolveIndexBucketPaths } =
-    await import("./learning-loop-index/parse-bucket.js");
-
-  const fs = createFS(options.projectPath);
-  const configState = loadConfig(options.projectPath, fs);
-  const report = buildStatsReport({
-    footguns: extractFootgunFacts(fs, configState),
-    lessons: extractLessonsFacts(fs, configState),
-    decisions: buildDecisionsSection(fs, configState.config.decisions.path),
-    indexes: collectIndexFreshness(
-      fs,
-      resolveIndexBucketPaths(configState.config),
-    ),
-  });
-
-  if (options.shouldCheck) {
-    const verdict = checkStats(report);
-    if (options.format === "json") {
-      writeOutput(options, JSON.stringify(verdict, null, 2));
-    } else {
-      writeOutput(options, renderStatsCheckText(verdict).trimEnd());
-    }
-    if (verdict.status === "fail") process.exitCode = 1;
-    return;
-  }
-
-  let rendered: string;
-  if (options.format === "json") {
-    rendered = renderStatsJson(report);
-  } else if (options.format === "markdown") {
-    rendered = renderStatsMarkdown(report);
-  } else {
-    rendered = renderStatsText(report);
-  }
-  writeOutput(options, rendered.trimEnd());
-}
-
 /**
  * Handle `events tail`, reading the most recent local evidence-envelope events for the project.
  * Throws a usage CLIError (exit 2) for any subcommand other than `tail`. Emits the events as a
@@ -669,6 +618,7 @@ const COMMAND_HANDLERS: Partial<
   skill: handleSkillCommand,
   manifest: handleManifestCommand,
   stats: handleStatsCommand,
+  diagnostics: handleDiagnosticsCommand,
   index: handleIndexCommand,
   redact: handleRedactCommand,
   plans: handlePlansExportCommand,

@@ -164,10 +164,20 @@ export interface LearningLoopEntryFact {
   sourcePath: string;
   kind: LearningLoopEntryKind;
   title: string;
+  /** Exact Markdown heading a stats or dashboard view can show as the entry anchor. */
+  heading: string;
   status: "active" | "resolved" | null;
   created: string | null;
   updated: string | null;
   resolved: string | null;
+  /** Whether the entry states the concrete future agent decision it changes. */
+  hasDecisionChangedGuidance: boolean;
+  /** Raw READ/SCOPE/ACT/VERIFY value; null means the author omitted this optional field. */
+  triggerPhase: string | null;
+  /** Parsed recurrence count; null means the optional field is absent or not numeric. */
+  incidentCount: number | null;
+  /** Latest recurrence date; null means the entry has no recorded recurrence date. */
+  latestOccurrence: string | null;
   excerpt: string;
   staleRefs: string[];
   invalidLineRefs: string[];

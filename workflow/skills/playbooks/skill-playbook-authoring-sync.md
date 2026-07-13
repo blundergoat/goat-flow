@@ -36,9 +36,13 @@ Every standalone playbook starts with current reference-version frontmatter:
 
 ```yaml
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: CURRENT_VERSION
 ---
 ```
+
+Replace `CURRENT_VERSION` with the current quoted release value when creating
+the file. The sentinel keeps this reference from looking like a second
+installed-version declaration to deterministic version checks.
 
 After the title and short orientation, the first H2 must be exactly
 `## Availability Check`.
@@ -84,14 +88,20 @@ ownership semantics does need an ADR before implementation.
 4. Copy the same content to `.goat-flow/skill-docs/playbooks/` and keep the two
    files semantically identical.
 5. Add the same discovery row to both playbook README copies.
-6. Register the installed path in `NAMED_PATHS` and
-   `REQUIRED_SKILL_DOC_FILES` in `src/cli/audit/check-goat-flow.ts`.
+6. Add the installed path to `STANDALONE_PLAYBOOK_FILES` in
+   `src/cli/audit/skill-docs-contract.ts`; `check-goat-flow.ts` imports that
+   inventory into both `NAMED_PATHS` and `REQUIRED_SKILL_DOC_FILES`.
 7. Register the source/install pair in `SHARED_ARTIFACT_MIRRORS` in
    `src/cli/audit/check-artifact-integrity.ts`.
 8. Register ownership/source in `workflow/manifest.json` `required_files`, and
    name the playbook in the playbooks `directory_purposes` description.
-9. Add a failing contract fixture before audit logic, then run the focused
-   contract, manifest, drift, and preflight checks.
+9. Add the `copy_file` enrollment to `workflow/install-goat-flow.sh` and the
+   corresponding existence check to `workflow/setup/03-install-skills.md`.
+10. Add the playbook to preflight mirror/budget checks and the integration
+    parity/budget tests so release verification covers the installed copy.
+11. Update explicit inventories in architecture, code map, and quality prompts.
+12. Add a failing contract fixture before audit logic, then run the focused
+    contract, consumer lifecycle, manifest, drift, and preflight checks.
 
 ## README Sync
 
@@ -109,10 +119,13 @@ link here so one source owns the details.
 
 ## Audit Registration
 
-Built-in playbooks use four coordinated registration surfaces:
+Built-in playbooks use four coordinated registration surfaces. The first two
+share one source declaration so their inventories cannot drift:
 
 1. `NAMED_PATHS` excludes the installed file from the manifest catch-all.
 2. `REQUIRED_SKILL_DOC_FILES` makes a missing installed reference fail setup.
+   Add both through `STANDALONE_PLAYBOOK_FILES` in
+   `src/cli/audit/skill-docs-contract.ts`, which `check-goat-flow.ts` imports.
 3. `SHARED_ARTIFACT_MIRRORS` compares canonical and installed content.
 4. `workflow/manifest.json` tells the installer which source owns the file.
 
@@ -120,6 +133,18 @@ Built-in playbooks use four coordinated registration surfaces:
 pair list. Frozen manifest snapshots describe historical releases and must not
 be changed from current live counts unless the current release snapshot is
 intentionally regenerated.
+
+## Installer and Release Enrollment
+
+Manifest ownership does not currently copy standalone playbooks by itself.
+Every built-in playbook also needs an explicit `copy_file` line in
+`workflow/install-goat-flow.sh`; without it, local audit passes while a fresh
+consumer install is incomplete.
+
+Keep the manual setup checklist, preflight mirror and word-budget gates,
+`preamble-sync.test.ts`, the skill-hardening budget inventory, architecture,
+code map, and generated quality-prompt inventory aligned. The consumer
+setup-to-audit lifecycle is the decisive proof that packaging reached users.
 
 ## Worked Registration Examples
 
@@ -140,6 +165,8 @@ playbook in the installed top-level directory.
   body matches.
 - Registering the pair in `check-drift.ts` misses the actual shared registry.
 - Omitting the manifest entry prevents deterministic installation.
+- Omitting the installer copy line leaves fresh consumer installs incomplete.
+- Omitting parity or budget enrollment lets the new artifact bypass release gates.
 - Placing Intent before Availability Check breaks predictable cold-start use.
 - Inferring snapshot counts from live state rewrites historical evidence.
 
@@ -150,6 +177,7 @@ Run these checks from the goat-flow controlling workspace:
 ```bash
 cmp -s workflow/skills/playbooks/README.md .goat-flow/skill-docs/playbooks/README.md
 node --import tsx --test --test-reporter=spec test/unit/playbook-contract.test.ts
+node --import tsx --test --test-reporter=spec test/integration/setup-quality-lifecycle.test.ts test/integration/preamble-sync.test.ts
 node --import tsx src/cli/cli.ts manifest --check
 node --import tsx src/cli/cli.ts audit . --check-drift --format json
 npm run typecheck

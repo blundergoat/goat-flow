@@ -45,6 +45,7 @@ Install the playbook pack from `workflow/skills/playbooks/`:
 - `.goat-flow/skill-docs/playbooks/observability.md` from `workflow/skills/playbooks/observability.md` - instrumentation discipline for logs, metrics, spans, trace context, and sensitive-data rules
 - `.goat-flow/skill-docs/playbooks/page-capture.md` from `workflow/skills/playbooks/page-capture.md` - batch page capture reference for multi-page browser evidence workflows
 - `.goat-flow/skill-docs/playbooks/release-notes.md` from `workflow/skills/playbooks/release-notes.md` - per-release narrative discipline derived from the changelog source of truth
+- `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` from `workflow/skills/playbooks/skill-playbook-authoring-sync.md` - built-in playbook shape, source/install enrollment, discovery, and verification contract
 - `.goat-flow/skill-docs/skill-quality-testing/README.md` from `workflow/skills/playbooks/skill-quality-testing.md` - short index for skill authoring and hardening
 - `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` from `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
 - `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
@@ -100,6 +101,7 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-docs/playbooks/observability.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/page-capture.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/release-notes.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/README.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` exists

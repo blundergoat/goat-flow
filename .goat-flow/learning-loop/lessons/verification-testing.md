@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-07-12
+last_reviewed: 2026-07-13
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -95,19 +95,26 @@ last_reviewed: 2026-07-12
 
 **Status:** active | **Created:** 2026-05-19
 
-**What happened:** Wording/schema edits repeatedly breached ADR-023 word caps: `skill-quality-testing/tdd-iteration.md` hit 3022/3008 words, `skill-preamble.md` exceeded 1500, and on 2026-05-22 proof-class fields pushed `goat-qa/SKILL.md` to 2578+.
+**Decision changed:** Run the canonical word-budget contract immediately after every skill or shared-reference wording edit, before expanding documentation scope.
 
-**Recurrence 2026-06-14:** While adding concrete examples to the dispatcher, the first `goat/SKILL.md` patch reached 653 words against the 555-word dispatcher cap. The fix compressed examples and anti-excuse wording before final verification. Evidence anchors: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`), `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap across all mirrors`).
+**Trigger phase:** VERIFY
 
-**Recurrence 2026-07-12 (M33):** Adding the timeout lesson to `verification-preflight.md` pushed that bucket to 40KB against its 39KB gate. Moving the entry to this narrower bucket restored the schema boundary without deleting evidence. Evidence: `bash scripts/preflight-checks.sh` (Learning-loop schema).
+**Incident count:** 6
 
-**Recurrence 2026-07-12:** The seven-skill boundary rollout first pushed `goat-plan/SKILL.md` to 2503 words and `goat-qa/SKILL.md` to 2524. An ad-hoc `sed '/^---$/,/^---$/d'` count falsely reported goat-qa at 1202 because later Markdown horizontal rules reopened the range; the canonical ADR-023 contract caught the real breach. Use the contract's exact frontmatter regex/counting method, not a generic delimiter range. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `Counts user-facing skill guidance without YAML frontmatter`), `workflow/skills/goat-plan/SKILL.md` (search: `## Boundary Commands`), `workflow/skills/goat-qa/SKILL.md` (search: `## Boundary Commands`).
+**Latest occurrence:** 2026-07-13
 
-**Recurrence 2026-07-12 (M15):** Handoff and reconcile guidance first pushed `goat-plan/SKILL.md` to 2533 words. The focused contract failed before review work began; compressing duplicated output-mode prose restored the cap without removing behavior. Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Handoff-grade artifacts`), `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-plan handoff artifacts drift-aware`).
+**What happened:** Six wording changes crossed hard ADR-023 or bucket caps before their focused contract forced compaction:
+
+- **2026-05-19/22:** `tdd-iteration.md` reached 3022/3008 words, `skill-preamble.md` exceeded 1500, and `goat-qa` exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
+- **2026-06-14:** Dispatcher examples reached 653 words against 555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
+- **2026-07-12 M33:** A timeout lesson pushed `verification-preflight.md` to 40KB against 39KB. Evidence: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
+- **2026-07-12 boundary rollout:** `goat-plan` reached 2503 and `goat-qa` 2524; a delimiter-based count falsely reported 1202. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `Counts user-facing skill guidance without YAML frontmatter`).
+- **2026-07-12 M15:** Handoff guidance pushed `goat-plan` to 2533. Evidence: `workflow/skills/goat-plan/SKILL.md` (search: `Handoff-grade artifacts`).
+- **2026-07-13 M13:** Memory guidance pushed shared references to 1560/1601 against 1500; consolidation restored 1484/1490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
 
 **Root cause:** Treated prose edits as tiny while changing files governed by hard word-budget contracts.
 
-**Prevention:** For any skill/reference/playbook wording change, measure the affected file before broad validation and budget wording cuts in the same patch. Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts`. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`), `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`), `workflow/skills/goat-qa/SKILL.md` (search: `Proof classes:`).
+**Prevention:** Measure every skill/reference/playbook immediately and budget compaction in the same patch. Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts`.
 
 ---
 
@@ -115,11 +122,21 @@ last_reviewed: 2026-07-12
 
 **Status:** active | **Created:** 2026-07-12
 
-**What happened:** M15 shortened goat-plan's When-to-Use prose to recover word budget. The focused skill contracts passed, but `stats --check` failed because `.goat-flow/learning-loop/footguns/skills.md` still anchored the removed phrase `Use when work needs milestone tracking`.
+**Decision changed:** Run `stats --check` after renaming or compacting parser and skill prose, then preserve or update every durable semantic anchor before continuing.
+
+**Trigger phase:** VERIFY
+
+**Incident count:** 2
+
+**Latest occurrence:** 2026-07-13
+
+**What happened:** M15 compaction removed `Use when work needs milestone tracking`; focused skill tests passed, but `stats --check` caught its durable reference in `.goat-flow/learning-loop/footguns/skills.md`.
+
+**Recurrence 2026-07-13:** M13 removed `Routing rule` and renamed a parser call; live stats caught both stale refs. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`), `src/cli/facts/shared/learning-loop-entries.ts` (search: `isDecisionRecordMarkdown(sourceFilename(decisionFile.path))`).
 
 **Root cause:** The edit treated prose as self-contained even though durable learning-loop evidence uses skill wording as a cross-file API.
 
-**Prevention:** Before compacting or renaming skill prose, search learning-loop indexes for the old phrase. After the edit, run `stats --check`; restore a useful stable anchor or update every durable reference in the same change. Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Use when work needs milestone tracking`), `.goat-flow/learning-loop/footguns/skills.md` (search: `New skill proposals can be configuration systems`).
+**Prevention:** Search indexes before prose renames, then run `stats --check`; restore or update every durable anchor in the same change.
 ---
 
 ## Lesson: Source-regex dashboard tests must tolerate formatter reflow
@@ -234,6 +251,8 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **Root cause:** I treated wording cleanup and path-semantics changes as local edits, but these surfaces are intentionally pinned by tests because agents consume the exact phrasing.
 
 **Recurrence 2026-05-17:** During M10 path validation hardening, the first full `npm test` run caught `test/smoke/dashboard-endpoints.test.ts` still asserting the old `Invalid project path` terminal error wording after `validateProjectPath` moved to the shared `LocalPathValidationError` contract. Evidence anchors: `src/cli/server/local-paths.ts` (search: `Local path validation failed`), `test/smoke/dashboard-endpoints.test.ts` (search: `rejects missing and file project paths before PTY launch`).
+
+**Recurrence 2026-07-13:** M20's first manual JSON probe parsed the report, then failed because it assumed a root `groups` key instead of the implemented `surfaces` groups. Re-reading the locked fixture showed the report was correct; the probe was rewritten against `goat-flow.context-report.v1`. Evidence anchor: `test/unit/context-report.test.ts` (search: `renders parseable JSON without telemetry or provider state`).
 
 **Prevention:** Before broad prose or prompt wording changes, search tests for the exact phrase and adjacent command text. If the product semantics are changing, update the contract test in the same edit; if the test protects unrelated established doctrine, keep that phrase intact.
 ---

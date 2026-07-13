@@ -37,6 +37,26 @@ last_reviewed: 2026-07-13
 
 ---
 
+## Lesson: Builder defaults do not protect direct verifier callers
+
+**Status:** active | **Created:** 2026-07-13
+
+**Decision changed:** Default migration-light fields at every exported consumer boundary, then run the full package suite to find callers outside focused fixtures.
+
+**Trigger phase:** VERIFY
+
+**Incident count:** 1
+
+**Latest occurrence:** 2026-07-13
+
+**What happened:** M13 defaulted missing learning-loop entries in `buildStatsReport`, and focused stats tests passed. The full `npm test` run found three `TypeError: learningLoopEntries is not iterable` failures because `test/unit/index-fresh.test.ts` calls exported `checkStats` with a legacy report object that bypasses the builder.
+
+**Root cause:** The compatibility fallback lived only in the preferred construction path, not the exported verifier that also consumes report-shaped objects at runtime. Source typecheck did not inspect the TypeScript test caller.
+
+**Prevention:** When adding migration-light report fields, search for every exported consumer and default absent collections at those boundaries. Run focused tests plus the package suite. Evidence anchors: `src/cli/stats/stats.ts` (search: `Older direct callers may omit entry facts`), `test/unit/index-fresh.test.ts` (search: `reportWith(indexes)`).
+
+---
+
 ## Lesson: Rubric honesty changes need both in-memory and disk-backed fixture sync
 
 **Status:** historical | **Created:** 2026-04-03 | **Reason:** Rubric/scanner system removed per ADR-013; specific check IDs no longer exist

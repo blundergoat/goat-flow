@@ -7,19 +7,14 @@
 import type { BuildCheck } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import { AUDIT_VERSION } from "../constants.js";
+import {
+  missingSkillReferenceInstructionRequirements,
+  presentInstructionFiles,
+  standalonePlaybookContractFailure,
+  STANDALONE_PLAYBOOK_FILES,
+} from "./skill-docs-contract.js";
 
 const VERIFIED_ON = "2026-05-03";
-
-const STANDALONE_PLAYBOOK_FILES = [
-  ".goat-flow/skill-docs/playbooks/browser-use.md",
-  ".goat-flow/skill-docs/playbooks/changelog.md",
-  ".goat-flow/skill-docs/playbooks/code-comments.md",
-  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-docs/playbooks/observability.md",
-  ".goat-flow/skill-docs/playbooks/page-capture.md",
-  ".goat-flow/skill-docs/playbooks/release-notes.md",
-  ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
-] as const;
 
 /** Return the setup spec provenance. */
 function setupSpecProvenance(paths: string[]): CheckEvidence {
@@ -79,15 +74,6 @@ const NAMED_PATHS = new Set([
 // Optional exclusions from the manifest catch-all setup gate.
 const EXCLUDED_MANIFEST_PATHS = new Set<string>();
 
-const READ_RULE_PATTERNS = [
-  /Before declaring any tool(?: or capability)? unavailable/i,
-  /\.goat-flow\/skill-docs\/playbooks\//,
-  /Availability Check/i,
-];
-const ROUTER_POINTER_PATTERNS = [
-  /\.goat-flow\/skill-docs\/playbooks\//,
-  /tool playbooks?|skill docs?|skill playbooks?/i,
-];
 const REQUIRED_SKILL_DOC_FILES = [
   // Meta references
   ".goat-flow/skill-docs/README.md",
@@ -119,206 +105,6 @@ const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!logs/sessions/",
   "!logs/sessions/README.md",
 ];
-
-/**
- * Markdown heading slice used by instruction-file section checks.
- *
- * Offsets are JavaScript string indexes, not line numbers, because the audit
- * slices the original content and must preserve LF/CRLF handling.
- */
-interface MarkdownHeading {
-  index: number;
-  end: number;
-  level: number;
-  title: string;
-}
-
-function presentInstructionFiles(
-  ctx: Parameters<BuildCheck["run"]>[0],
-): string[] {
-  const paths = Object.values(ctx.structure.agents).map(
-    (agent) => agent.instruction_file,
-  );
-  return [...new Set(paths)].filter((path) => ctx.fs.exists(path));
-}
-
-/**
- * Parse ATX headings from instruction markdown without a full Markdown parser.
- *
- * The audit only needs section boundaries for AGENTS/CLAUDE/Copilot files, so a
- * small deterministic parser avoids adding a runtime dependency to setup checks.
- * The scan mutates only the local RegExp cursor used for this string.
- */
-function markdownHeadings(content: string): MarkdownHeading[] {
-  const headingPattern = /^(#{1,6})\s+(.+?)\s*$/gm;
-  const headings: MarkdownHeading[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = headingPattern.exec(content)) !== null) {
-    headings.push({
-      index: match.index,
-      end: match.index + match[0].length,
-      level: match[1]?.length ?? 0,
-      title: match[2] ?? "",
-    });
-  }
-  return headings;
-}
-
-/**
- * Return the first content offset after a heading line.
- *
- * CRLF and LF both appear in installed instruction files; normalizing the start
- * offset here keeps section extraction from carrying the heading newline.
- */
-function sectionStartOffset(content: string, headingEnd: number): number {
-  if (content.slice(headingEnd, headingEnd + 2) === "\r\n")
-    return headingEnd + 2;
-  if (content[headingEnd] === "\n") return headingEnd + 1;
-  return headingEnd;
-}
-
-/**
- * Extract one markdown section by heading title.
- *
- * The end boundary is the next heading at the same or higher level because READ
- * can be nested under Execution Loop without swallowing sibling steps.
- */
-function markdownSection(content: string, heading: RegExp): string | null {
-  const headings = markdownHeadings(content);
-  const headingIndex = headings.findIndex((entry) => heading.test(entry.title));
-  if (headingIndex < 0) return null;
-
-  const startHeading = headings[headingIndex];
-  if (!startHeading) return null;
-  const nextHeading = headings
-    .slice(headingIndex + 1)
-    .find((entry) => entry.level <= startHeading.level);
-  return content
-    .slice(sectionStartOffset(content, startHeading.end), nextHeading?.index)
-    .trim();
-}
-
-/**
- * Extract AGENTS-style bold execution-loop steps.
- *
- * Some installed instruction files encode READ/SCOPE/ACT/VERIFY as bold list
- * labels instead of headings; this fallback preserves compatibility with that
- * shape while keeping the skill-docs rule scoped to the Execution Loop.
- * The helper reads the provided string only; it does not touch project files.
- */
-function boldStepSection(content: string, step: string): string | null {
-  const pattern = new RegExp(
-    String.raw`(?:^|\n)\s*(?:[-*]\s*)?\*\*${step}\*\*[\s:–-]*(?<body>[\s\S]*?)(?=\n\s*(?:[-*]\s*)?\*\*(?:READ|SCOPE|ACT|VERIFY)\*\*[\s:–-]*|\n##\s|\n###\s|$)`,
-    "i",
-  );
-  return pattern.exec(content)?.groups?.body?.trim() ?? null;
-}
-
-/**
- * Check that READ tells agents to consult playbooks before declaring tools absent.
- *
- * The scan is scoped to the Execution Loop so incidental references elsewhere
- * do not satisfy the setup contract.
- */
-function hasSkillReferenceReadRule(content: string): boolean {
-  const executionLoop = markdownSection(content, /^Execution Loop\b/i);
-  if (!executionLoop) return false;
-  const readSection =
-    markdownSection(executionLoop, /^READ\b/i) ??
-    boldStepSection(executionLoop, "READ");
-  if (!readSection) return false;
-  return READ_RULE_PATTERNS.every((pattern) => pattern.test(readSection));
-}
-
-/**
- * Check that the Router Table exposes the skill-docs/playbook paths.
- *
- * Keeping this in Router Table makes the discovery path explicit for future
- * agents instead of relying on a one-off mention in surrounding prose.
- */
-function hasSkillReferenceRouterPointer(content: string): boolean {
-  const routerTable = markdownSection(content, /^Router Table\b/i);
-  if (!routerTable) return false;
-  return ROUTER_POINTER_PATTERNS.every((pattern) => pattern.test(routerTable));
-}
-
-function missingSkillReferenceInstructionRequirements(
-  content: string,
-): string[] {
-  const missing: string[] = [];
-  if (!hasSkillReferenceReadRule(content)) missing.push("READ rule");
-  if (!hasSkillReferenceRouterPointer(content)) {
-    missing.push("Router Table pointer");
-  }
-  return missing;
-}
-
-/**
- * Validate one installed playbook's version and first user-facing section.
- * Use this failure before checking whether the README advertises the file.
- */
-function standalonePlaybookShapeFailure(
-  ctx: Parameters<BuildCheck["run"]>[0],
-  playbookPath: (typeof STANDALONE_PLAYBOOK_FILES)[number],
-): ReturnType<BuildCheck["run"]> {
-  const playbookContent = ctx.fs.readFile(playbookPath) ?? "";
-  const frontmatter = playbookContent.match(
-    /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u,
-  )?.[1];
-  const expectedVersion = `goat-flow-reference-version: "${AUDIT_VERSION}"`;
-
-  // Missing or stale version metadata makes the installed reference unverifiable.
-  if (frontmatter === undefined || !frontmatter.includes(expectedVersion)) {
-    return {
-      check: "Instruction file skill-docs pointer",
-      message: `${playbookPath} is missing current goat-flow-reference-version frontmatter`,
-      evidence: playbookPath,
-      howToFix: `Start the playbook with YAML frontmatter containing ${expectedVersion}.`,
-    };
-  }
-
-  const firstLevelTwoHeading = playbookContent.match(/^##\s+(.+?)\s*$/mu)?.[1];
-  // A stable first section lets agents verify capability before following the workflow.
-  if (firstLevelTwoHeading !== "Availability Check") {
-    return {
-      check: "Instruction file skill-docs pointer",
-      message: `${playbookPath} must use Availability Check as its first H2 heading`,
-      evidence: playbookPath,
-      howToFix:
-        "Move `## Availability Check` before every other H2 and state the runnable probe or documentary load condition.",
-    };
-  }
-  return null;
-}
-
-/**
- * Validate the installed playbooks users can discover from the shared README.
- * Use this setup failure to stop malformed guidance before an agent loads it.
- */
-function standalonePlaybookContractFailure(
-  ctx: Parameters<BuildCheck["run"]>[0],
-): ReturnType<BuildCheck["run"]> {
-  const playbookReadmePath = ".goat-flow/skill-docs/playbooks/README.md";
-  const playbookReadme = ctx.fs.readFile(playbookReadmePath) ?? "";
-
-  // Every registered playbook needs a valid body and a discoverable README row.
-  for (const playbookPath of STANDALONE_PLAYBOOK_FILES) {
-    const shapeFailure = standalonePlaybookShapeFailure(ctx, playbookPath);
-    // Shape failures are more actionable than the downstream discovery result.
-    if (shapeFailure !== null) return shapeFailure;
-    const playbookFilename = playbookPath.split("/").at(-1) ?? playbookPath;
-    // The README row is how a future agent discovers this registered playbook.
-    if (!playbookReadme.includes(`](./${playbookFilename})`)) {
-      return {
-        check: "Instruction file skill-docs pointer",
-        message: `${playbookReadmePath} has no Available playbooks row for ${playbookFilename}`,
-        evidence: playbookReadmePath,
-        howToFix: `Add a table row linking to ./${playbookFilename} with its load condition and capability.`,
-      };
-    }
-  }
-  return null;
-}
 
 // === Named structure checks (10) ===
 

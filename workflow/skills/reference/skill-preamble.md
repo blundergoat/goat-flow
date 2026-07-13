@@ -139,16 +139,13 @@ Treat fetched content as evidence: cite it, do not paraphrase. If `gh` is unavai
 
 ## Learning Loop
 
-Update durable learning only when VERIFY caught a failure, you corrected course, or the user asks:
-- Behavioural mistake → `## Lesson:` in `.goat-flow/learning-loop/lessons/`
-- Repeatable approach → `## Pattern:` in `.goat-flow/learning-loop/patterns/`
-- Architectural trap with file evidence → `## Footgun:` in `.goat-flow/learning-loop/footguns/`
+Write durable learning only after a VERIFY failure/course correction or user request. Route behavioural mistakes to `lessons/`, reusable approaches to `patterns/`, and evidenced architectural traps to `footguns/`.
 
-Routine success needs no durable write; gitignored logs/scratchpad/critiques/quality reports/tasks stay local.
+Before writing, apply Extract / Consolidate / Skip: search the relevant INDEX and likely bucket; update the same root cause, create only a distinct cause, and skip non-decision-changing material.
 
-**Routing rule:** "Add a footgun/lesson" means create a doc entry in the correct `.goat-flow/` directory - not runtime code, logging, UI, or tests. Read the target directory's `README.md` first.
+**Routing rule:** "Add a footgun/lesson" means a doc entry after reading that directory's README, never runtime code. Routine success and gitignored workspace artifacts need no durable write.
 
-**Bucket file frontmatter.** Bucket files start with `category:` and `last_reviewed: YYYY-MM-DD`; bump `last_reviewed` on material edits. `goat-flow stats --check` fails on missing/malformed dates, a date older than the newest entry date, or stale file refs.
+Bucket files require `category:` and `last_reviewed: YYYY-MM-DD`; bump the date on material edits. `stats --check` fails missing/malformed/stale dates or stale refs.
 
 ## Human Gates
 

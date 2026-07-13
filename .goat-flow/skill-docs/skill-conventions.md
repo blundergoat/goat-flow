@@ -10,13 +10,11 @@ in `skill-preamble.md` is always loaded first.
 
 ## Learning Loop - Entry Formats
 
-Bucket conventions (examples - actual bucket names are project-specific):
-- Lessons: category files like `verification.md`, `workflow.md`, `coordination.md`
-- Footguns: category files like `runtime.md`, `integration.md`, `data-stores.md`
+Use project-specific category buckets such as `verification.md` or `runtime.md`.
 
-Do not append to a monolithic log or directory README. Route entries to `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, or `.goat-flow/learning-loop/footguns/`.
+Route entries to `.goat-flow/learning-loop/lessons/`, `patterns/`, or `footguns/`; never append to a monolithic log or README.
 
-Use the standard entry formats:
+Before adding, Extract / Consolidate / Skip: search the relevant INDEX and bucket; update the same root cause even when symptoms differ; create only for a distinct cause; skip non-decision-changing material.
 ```markdown
 <!-- Lesson bucket -->
 ---
@@ -55,7 +53,7 @@ last_reviewed: YYYY-MM-DD
 **Approach:** [what to do]
 ```
 
-The `hallucination-risk` field is optional. Use it when an area is easy to misread from names alone, such as generated code, environment-specific config, or external API contracts.
+Use optional `hallucination-risk` when names alone can mislead, including generated code, environment config, or external contracts.
 
 ## Adaptive Step 0
 

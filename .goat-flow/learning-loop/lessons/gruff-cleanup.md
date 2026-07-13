@@ -150,9 +150,15 @@ last_reviewed: 2026-07-13
 ## Lesson: Parameterized matrix tests need named cases with direct assertions
 
 **Status:** active | **Created:** 2026-07-13
+**Decision changed:** Generate one named test per matrix value and keep the assertion in that test callback; shared helpers return evidence instead of hiding assertions.
+**Trigger phase:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-07-13
 
 **What happened:** The first M03 cross-agent install matrix wrapped assertions for all four agents inside two test-level loops. Gruff reported `test-quality.loop-in-test`; moving the work into named per-agent helpers then exposed `test-quality.no-assertions` because the visible test callbacks only called those helpers. The behavior suite passed both shapes, but its TAP output and analyzer evidence could not prove each named case owned an assertion.
 
 **Root cause:** I optimized the matrix for short source instead of failure localization. A helper can centralize fixture work, but each user-visible test case still needs its own direct assertion so CI and static analysis can connect the case name to evidence.
 
 **Prevention:** Register one named case per matrix value, return a concrete result from the shared scenario helper, and assert that result inside the test callback. Document temporary filesystem and subprocess side effects on helpers that perform installer flows. Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `Separate names make the failing agent visible`).
+
+**Recurrence 2026-07-13:** M14's evidence-envelope and local-data contract tests initially asserted matrix values inside test-level loops. Gruff again reported `test-quality.loop-in-test`; named cases restored direct, user-visible failure localization and produced `A`, composite `100`, with 0 findings. Evidence anchors: `test/unit/evidence-envelope.test.ts` (search: `FORBIDDEN_RAW_PAYLOAD_KEYS`) and `test/contract/local-data-contract.test.ts` (search: `LOCAL_STATE_README_PAIRS`).

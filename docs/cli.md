@@ -154,6 +154,23 @@ npx goat-flow stats --check               # CI gate for bucket hygiene + index f
 npx goat-flow stats --format json         # Machine-readable report
 ```
 
+### `goat-flow diagnostics context [path] [--agent <id>] [--format text|json|markdown]`
+
+Measure static context pressure from local goat-flow files without runner telemetry, network calls, provider credentials, prompt bodies, or session logs. The report covers root agent instructions, installed skill bodies, manifest-owned skill references, shared references/playbooks, and learning-loop buckets already extracted by the shared facts pipeline.
+
+```bash
+npx goat-flow diagnostics context .                         # All installed agent mirrors
+npx goat-flow diagnostics context . --agent codex           # Codex instruction and skill mirror
+npx goat-flow diagnostics context . --format json           # Stable machine-readable schema
+npx goat-flow diagnostics context . --format markdown       # Paste-ready report
+```
+
+Every surface shows UTF-8 bytes, lines, words when available, and a rough token estimate calculated as `ceil(UTF-8 bytes / 4)`. That estimate is a deterministic comparison aid, not the token count from a model invocation. Pressure labels reuse the selected project's instruction line target/limit, ADR-023's dispatcher/functional/reference word budgets, and the existing 40KB learning-loop bucket warning.
+
+The top-five list ranks budgeted surfaces by their measured value divided by the applicable limit. `--agent` narrows instruction and installed-skill measurements to one runtime; without it, each installed agent mirror remains explicit because those runtimes load different paths. JSON uses the timestamp-free `goat-flow.context-report.v1` schema so repeated reads do not gain artificial drift.
+
+`diagnostics` is the shared readout namespace. Later support-bundle, readiness, and threat-model work can extend it without adding unrelated top-level commands; only `context` ships today, and unsupported subcommands exit with usage status 2.
+
 ### `goat-flow index [path]`
 
 Regenerate the generated learning-loop `INDEX.md` files for `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/` from bucket content. Each row maps one active entry to its source file with a grep-friendly `(search: "...")` anchor and a one-sentence hook; resolved entries are skipped. Output is deterministic - re-running with unchanged buckets produces a zero diff - and buckets whose directory is absent are skipped. Run it after adding, editing, renaming, or resolving any learning-loop entry; `stats --check` fails until you do.

@@ -23,6 +23,7 @@ export type Command =
   | "hooks"
   | "menu"
   | "stats"
+  | "diagnostics"
   | "index"
   | "redact"
   | "plans"
@@ -30,6 +31,9 @@ export type Command =
 
 /** Local plan operations; export previews or writes portable milestone bodies. */
 export type PlansSubcommand = "export";
+
+/** Static diagnostics views an operator can run without changing the selected project. */
+export type DiagnosticsSubcommand = "context";
 
 /**
  * Second positionals accepted after `skill`: authoring (`new`) and read-only diagnostics (`doctor`).
@@ -92,6 +96,7 @@ export const COMMANDS: Command[] = [
   "hooks",
   "menu",
   "stats",
+  "diagnostics",
   "index",
   "redact",
   "plans",
@@ -145,6 +150,7 @@ export interface ParsedCLI extends CLIOptions {
   hookSubcommand: HookSubcommand | null;
   hookId: string | null;
   plansSubcommand: PlansSubcommand | null;
+  diagnosticsSubcommand: DiagnosticsSubcommand | null;
   includeAll: boolean;
 }
 

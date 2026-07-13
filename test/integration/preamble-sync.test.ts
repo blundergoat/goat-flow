@@ -92,6 +92,14 @@ const INSTALLED_RELEASE_NOTES = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/release-notes.md",
 );
+const TEMPLATE_PLAYBOOK_AUTHORING_SYNC = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/skill-playbook-authoring-sync.md",
+);
+const INSTALLED_PLAYBOOK_AUTHORING_SYNC = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
+);
 const TEMPLATE_CHANGELOG = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/changelog.md",
@@ -254,6 +262,25 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_RELEASE_NOTES, INSTALLED_RELEASE_NOTES),
       0,
       "release-notes.md: template and installed should match",
+    );
+  });
+
+  // A fresh install must expose the same playbook contract maintainers edit in workflow source.
+  it("template and installed skill-playbook-authoring-sync.md match", () => {
+    // Missing either copy means setup cannot give users the maintained authoring contract.
+    if (
+      !existsSync(TEMPLATE_PLAYBOOK_AUTHORING_SYNC) ||
+      !existsSync(INSTALLED_PLAYBOOK_AUTHORING_SYNC)
+    ) {
+      return;
+    }
+    assert.equal(
+      diffQuiet(
+        TEMPLATE_PLAYBOOK_AUTHORING_SYNC,
+        INSTALLED_PLAYBOOK_AUTHORING_SYNC,
+      ),
+      0,
+      "skill-playbook-authoring-sync.md: template and installed should match",
     );
   });
 

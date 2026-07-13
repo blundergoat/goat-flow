@@ -25,6 +25,7 @@ import {
   VALID_FORMATS,
   type CandidacyInputArg,
   type Command,
+  type DiagnosticsSubcommand,
   type EventsSubcommand,
   type HookSubcommand,
   type ParsedArgValues,
@@ -33,6 +34,7 @@ import {
   type QualitySubcommand,
   type SkillSubcommand,
 } from "./cli-types.js";
+import { parseDiagnosticsPositionals } from "./diagnostics-command-parser.js";
 import {
   buildSkillCLIFields,
   parseSkillPositionals,
@@ -355,6 +357,14 @@ function parseCommandPositionals(
       qualityValidatePath: null,
       candidacyInput: null,
     };
+  if (command === "diagnostics")
+    return {
+      qualitySubcommand: "prompt",
+      projectPath: parseDiagnosticsPositionals(positionals).projectPath,
+      qualityDiffPair: null,
+      qualityValidatePath: null,
+      candidacyInput: null,
+    };
   return {
     qualitySubcommand: "prompt",
     projectPath: resolve(positionals[0] ?? "."),
@@ -587,6 +597,16 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     command === "plans"
       ? parsePlansPositionals(positionals)
       : { plansSubcommand: null, projectPath: qualityPositionals.projectPath };
+  const diagnosticsPositionals: {
+    diagnosticsSubcommand: DiagnosticsSubcommand | null;
+    projectPath: string;
+  } =
+    command === "diagnostics"
+      ? parseDiagnosticsPositionals(positionals)
+      : {
+          diagnosticsSubcommand: null,
+          projectPath: qualityPositionals.projectPath,
+        };
   const projectPath = selectCommandProjectPath(
     command,
     qualityPositionals.projectPath,
@@ -649,6 +669,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     hookSubcommand: hooksPositionals.hookSubcommand,
     hookId: hooksPositionals.hookId,
     plansSubcommand: plansPositionals.plansSubcommand,
+    diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,
     includeAll: parsedFlag(parsedValues, "all"),
     isDevMode: parsedFlag(parsedValues, "dev"),
     showHelp: parsedFlag(parsedValues, "help"),

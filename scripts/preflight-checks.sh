@@ -1422,6 +1422,7 @@ const files = [
       "observability.md",
       "page-capture.md",
       "release-notes.md",
+      "skill-playbook-authoring-sync.md",
     ].flatMap((name) => [
       `workflow/skills/playbooks/${name}`,
       `.goat-flow/skill-docs/playbooks/${name}`,
@@ -2160,6 +2161,17 @@ if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill
     fi
 else
     skip "release-notes.md sync (one or both files missing)"
+fi
+# The authoring reference must match so users receive the same enrollment contract as maintainers.
+if [[ -f workflow/skills/playbooks/skill-playbook-authoring-sync.md ]] && [[ -f .goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md ]]; then
+    # Matching content means installed users receive the exact contract maintained in workflow source.
+    if diff -q workflow/skills/playbooks/skill-playbook-authoring-sync.md .goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md >/dev/null 2>&1; then
+        pass "skill-playbook-authoring-sync.md: template and installed copy match"
+    else
+        fail "skill-playbook-authoring-sync.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "skill-playbook-authoring-sync.md sync (one or both files missing)"
 fi
 if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-docs/skill-quality-testing/README.md ]]; then
     if diff -q workflow/skills/playbooks/skill-quality-testing.md .goat-flow/skill-docs/skill-quality-testing/README.md >/dev/null 2>&1; then

@@ -6,7 +6,12 @@
  * pass/fail, so CI and the human-readable report never disagree.
  */
 import { DECISION_META_FILES } from "../facts/shared/decision-files.js";
-import type { SharedFacts, BucketFreshness, ReadonlyFS } from "../types.js";
+import type {
+  SharedFacts,
+  BucketFreshness,
+  LearningLoopEntryFact,
+  ReadonlyFS,
+} from "../types.js";
 import type { IndexFreshness } from "./index-freshness.js";
 
 /**
@@ -28,10 +33,15 @@ export interface BucketSection {
   formatDiagnostic: string | null;
 }
 
-/** Full `goat-flow stats` report payload. */
+/**
+ * Full `goat-flow stats` report payload shown to CLI and dashboard users.
+ * Use this stable shape when a consumer needs summaries plus per-entry memory health.
+ */
 export interface StatsReport {
   footguns: BucketSection;
   lessons: BucketSection;
+  /** Stable entry facts; empty means this caller did not collect durable memories. */
+  learningLoopEntries: LearningLoopEntryFact[];
   decisions?: DecisionsSection;
   /** Generated-index freshness per bucket (`index-fresh` check); absent when not collected. */
   indexes?: IndexFreshness[];
@@ -55,7 +65,11 @@ interface DecisionFileSummary {
  */
 interface StatsWarning {
   file: string;
-  rule: "decision-metadata" | "empty-learning-loop" | "index-missing";
+  rule:
+    | "decision-metadata"
+    | "empty-learning-loop"
+    | "index-missing"
+    | "memory-quality";
   message: string;
 }
 
@@ -72,7 +86,10 @@ export interface DecisionsSection {
   warnings: StatsWarning[];
 }
 
-/** One actionable problem surfaced by `goat-flow stats --check`. */
+/**
+ * One blocking memory-health problem shown to an operator.
+ * Use this row when the project must be repaired before `stats --check` can pass.
+ */
 interface StatsFinding {
   file: string;
   rule:
@@ -89,45 +106,65 @@ interface StatsFinding {
   message: string;
 }
 
-/** Pass/fail verdict produced by `goat-flow stats --check`. */
+/**
+ * Pass/fail verdict shown after an operator runs `goat-flow stats --check`.
+ * Use findings for blockers and warnings for optional cleanup that can wait.
+ */
 export interface StatsCheckReport {
   status: "pass" | "fail";
   findings: StatsFinding[];
   warnings: StatsWarning[];
 }
 
-/** Build one learning-loop section summary. */
+/**
+ * Facts accepted by the stats checker, including legacy reports without per-entry memory health.
+ * Use at the verifier boundary while rendered `StatsReport` output keeps its stable required array.
+ */
+type StatsCheckInput = Omit<StatsReport, "learningLoopEntries"> & {
+  learningLoopEntries?: LearningLoopEntryFact[];
+};
+
+/**
+ * Summarize one memory directory for the stats screen and command output.
+ * Use when users need counts, freshness, references, and recurrence health together.
+ */
 function buildSection(
-  side: SharedFacts["footguns"] | SharedFacts["lessons"],
+  memoryDirectoryFacts: SharedFacts["footguns"] | SharedFacts["lessons"],
   totalInvalidLineRefs: number,
 ): BucketSection {
-  const bands = { fresh: 0, aging: 0, stale: 0, unknown: 0 };
-  for (const bucket of side.buckets) bands[bucket.freshnessBand] += 1;
+  const freshnessBandCounts = { fresh: 0, aging: 0, stale: 0, unknown: 0 };
+  // Each bucket contributes to the freshness summary users scan before opening a source file.
+  for (const bucket of memoryDirectoryFacts.buckets) {
+    freshnessBandCounts[bucket.freshnessBand] += 1;
+  }
   return {
-    path: side.path,
-    exists: side.exists,
-    totalEntries: side.entryCount,
-    totalStaleRefs: side.staleRefs.length,
+    path: memoryDirectoryFacts.path,
+    exists: memoryDirectoryFacts.exists,
+    totalEntries: memoryDirectoryFacts.entryCount,
+    totalStaleRefs: memoryDirectoryFacts.staleRefs.length,
     totalInvalidLineRefs,
-    totalGraduationCandidates: side.buckets.reduce(
-      (sum, bucket) => sum + bucket.graduationCandidates.length,
+    // Recurrence candidates are combined so users see one actionable directory total.
+    totalGraduationCandidates: memoryDirectoryFacts.buckets.reduce(
+      (graduationCandidateTotal, bucket) =>
+        graduationCandidateTotal + bucket.graduationCandidates.length,
       0,
     ),
-    bands,
-    buckets: side.buckets,
-    formatDiagnostic: side.formatDiagnostic,
+    bands: freshnessBandCounts,
+    buckets: memoryDirectoryFacts.buckets,
+    formatDiagnostic: memoryDirectoryFacts.formatDiagnostic,
   };
 }
 
 /**
  * Build the full stats report from the learning-loop slice of shared facts.
  *
- * @param shared Footgun, lesson, optional decision, and optional index-freshness facts from the shared extraction pipeline.
- * @returns Report shape consumed by all text, JSON, Markdown, and check renderers.
+ * @param shared - selected-project memory facts; omitted optional arrays mean those views show no rows.
+ * @returns report for text, JSON, Markdown, and checks; empty entries mean no memory facts were collected.
  */
 export function buildStatsReport(shared: {
   footguns: SharedFacts["footguns"];
   lessons: SharedFacts["lessons"];
+  learningLoopEntries?: LearningLoopEntryFact[];
   decisions?: DecisionsSection;
   indexes?: IndexFreshness[];
 }): StatsReport {
@@ -140,35 +177,57 @@ export function buildStatsReport(shared: {
       shared.lessons,
       shared.lessons.invalidLineRefs.length,
     ),
+    // Older internal callers may omit entry facts; users then receive a stable empty collection.
+    learningLoopEntries: shared.learningLoopEntries ?? [],
+    // Missing decision facts keep the decision section out of views that did not request it.
     ...(shared.decisions ? { decisions: shared.decisions } : {}),
+    // Missing index facts keep index health absent instead of presenting a false empty state.
     ...(shared.indexes ? { indexes: shared.indexes } : {}),
   };
 }
 
+/**
+ * Read the selected decision directory into the stats report.
+ * Use when users request ADR structure checks; an absent directory becomes an empty section.
+ *
+ * @param projectFiles - selected-project reader; unreadable files remain rows with empty content.
+ * @param configuredDecisionPath - configured ADR path; an empty path yields an absent section.
+ * @returns decision section for stats checks; empty files mean no ADRs were available to inspect.
+ */
 export function buildDecisionsSection(
-  fs: ReadonlyFS,
-  rawPath: string,
+  projectFiles: ReadonlyFS,
+  configuredDecisionPath: string,
 ): DecisionsSection {
-  const path = rawPath.replace(/\/$/, "");
-  const exists = fs.exists(path);
-  const filenames = exists ? fs.listDir(path).sort() : [];
-  const files = filenames.map((filename) => ({
-    filename,
-    path: `${path}/${filename}`,
-    content: fs.readFile(`${path}/${filename}`),
+  const decisionDirectoryPath = configuredDecisionPath.replace(/\/$/, "");
+  const decisionDirectoryExists = projectFiles.exists(decisionDirectoryPath);
+  // A missing decisions directory shows no ADR rows while its section records the absent state.
+  const decisionFilenames = decisionDirectoryExists
+    ? projectFiles.listDir(decisionDirectoryPath).sort()
+    : [];
+  // Every filename becomes a row so unreadable ADRs still reach the user's structure check.
+  const decisionFiles = decisionFilenames.map((decisionFilename) => ({
+    filename: decisionFilename,
+    path: `${decisionDirectoryPath}/${decisionFilename}`,
+    content: projectFiles.readFile(
+      `${decisionDirectoryPath}/${decisionFilename}`,
+    ),
   }));
   return {
-    path,
-    exists,
-    files,
+    path: decisionDirectoryPath,
+    exists: decisionDirectoryExists,
+    files: decisionFiles,
     warnings: [],
   };
 }
 
-/** Check one bucket for stale or missing last_reviewed metadata. */
+/**
+ * Check whether one bucket's review date can still be trusted by users.
+ * Use before deeper checks so missing or stale review dates get a direct repair message.
+ */
 function checkBucketLastReviewed(
   bucket: BucketSection["buckets"][number],
 ): StatsFinding | null {
+  // Without a valid review date, users cannot tell when the bucket was last verified.
   if (bucket.lastReviewed === null) {
     return {
       file: bucket.path,
@@ -176,6 +235,7 @@ function checkBucketLastReviewed(
       message: `${bucket.path}: missing or invalid frontmatter last_reviewed (expected YYYY-MM-DD)`,
     };
   }
+  // Newer entry dates invalidate the older bucket review date shown to users.
   if (
     bucket.maxEntryDate !== null &&
     bucket.maxEntryDate > bucket.lastReviewed
@@ -189,48 +249,55 @@ function checkBucketLastReviewed(
   return null;
 }
 
-const BUCKET_SIZE_WARN_BYTES = 40_000;
+/** Shared byte threshold where one learning-loop bucket becomes costly to retrieve. */
+export const BUCKET_SIZE_WARN_BYTES = 40_000;
 
-/** Collect bucket findings. */
+/**
+ * Collect every blocking problem for one learning-loop bucket.
+ * Use when an operator needs a complete repair list for that source file.
+ */
 function collectBucketFindings(
   bucket: BucketSection["buckets"][number],
 ): StatsFinding[] {
   const findings: StatsFinding[] = [];
   const reviewFinding = checkBucketLastReviewed(bucket);
+  // A review-date problem is shown alongside the bucket's other actionable defects.
   if (reviewFinding !== null) findings.push(reviewFinding);
+  // Oversized buckets make retrieval noisy, so users are asked to split the category.
   if (bucket.sizeBytes > BUCKET_SIZE_WARN_BYTES) {
-    const kb = Math.round(bucket.sizeBytes / 1024);
+    const bucketSizeKilobytes = Math.round(bucket.sizeBytes / 1024);
     findings.push({
       file: bucket.path,
       rule: "bucket-size",
-      message: `${bucket.path}: ${kb}KB exceeds ${Math.round(BUCKET_SIZE_WARN_BYTES / 1024)}KB threshold; consider splitting into narrower category buckets`,
+      message: `${bucket.path}: ${bucketSizeKilobytes}KB exceeds ${Math.round(BUCKET_SIZE_WARN_BYTES / 1024)}KB threshold; consider splitting into narrower category buckets`,
     });
   }
-  for (const ref of bucket.staleRefs) {
+  // Every stale semantic reference gets its own repair row for the operator.
+  for (const staleReference of bucket.staleRefs) {
     findings.push({
       file: bucket.path,
       rule: "stale-ref",
-      message: `${bucket.path}: stale file ref ${ref}`,
+      message: `${bucket.path}: stale file ref ${staleReference}`,
     });
   }
-  for (const ref of bucket.invalidLineRefs) {
+  // Every invalid line reference tells users which brittle evidence must gain a semantic anchor.
+  for (const invalidLineReference of bucket.invalidLineRefs) {
     findings.push({
       file: bucket.path,
       rule: "invalid-line-ref",
-      message: `${bucket.path}: invalid line ref ${ref}`,
+      message: `${bucket.path}: invalid line ref ${invalidLineReference}`,
     });
   }
   return findings;
 }
 
 /**
- * Collect blocking findings for one learning-loop directory.
- *
- * Why this re-parses `formatDiagnostic`: shared fact extraction emits one combined diagnostic
- * string, so this function must recover stable rule ids for CI while leaving empty buckets to warnings.
+ * Collect blockers while valid empty buckets stay advisory; reports malformed input as findings, never throws.
+ * This split exists because extraction combines diagnostics while users and CI need stable repair rule ids.
  */
 function collectFindings(section: BucketSection): StatsFinding[] {
   const findings: StatsFinding[] = [];
+  // A missing directory blocks the feedback loop because users have nowhere durable to record memory.
   if (!section.exists) {
     findings.push({
       file: section.path,
@@ -239,33 +306,49 @@ function collectFindings(section: BucketSection): StatsFinding[] {
     });
     return findings;
   }
+  // Each source bucket contributes its own direct repair findings.
   for (const bucket of section.buckets) {
     findings.push(...collectBucketFindings(bucket));
   }
+  // Combined extractor diagnostics are unpacked so users receive stable rule identifiers.
   if (section.formatDiagnostic !== null) {
     const alreadyReported = findings.some(
-      (f) => f.rule === "missing-last-reviewed",
+      (finding) => finding.rule === "missing-last-reviewed",
     );
-    for (const piece of section.formatDiagnostic.split("; ")) {
-      if (isEmptyLearningLoopDiagnostic(piece)) continue;
-      if (alreadyReported && /missing frontmatter last_reviewed/.test(piece)) {
+    // Each diagnostic becomes one repair row unless an equivalent finding already exists.
+    for (const diagnosticMessage of section.formatDiagnostic.split("; ")) {
+      // Empty fresh directories are valid user states and remain warnings instead of blockers.
+      if (isEmptyLearningLoopDiagnostic(diagnosticMessage)) continue;
+      // The direct bucket check already explains missing review dates, so duplicate prose is hidden.
+      if (
+        alreadyReported &&
+        /missing frontmatter last_reviewed/.test(diagnosticMessage)
+      ) {
         continue;
       }
-      if (/invalid last_reviewed format/.test(piece)) {
+      // Invalid date syntax gets a dedicated rule so users can find the exact formatting repair.
+      if (/invalid last_reviewed format/.test(diagnosticMessage)) {
         findings.push({
           file: section.path,
           rule: "invalid-last-reviewed",
-          message: piece,
+          message: diagnosticMessage,
         });
         continue;
       }
-      findings.push({ file: section.path, rule: "format", message: piece });
+      findings.push({
+        file: section.path,
+        rule: "format",
+        message: diagnosticMessage,
+      });
     }
   }
   return findings;
 }
 
-/** Return true for empty-directory diagnostics that should remain advisory warnings. */
+/**
+ * Recognize a valid empty-memory state that should not block a fresh project.
+ * Use while splitting extractor diagnostics into user-facing warnings and failures.
+ */
 function isEmptyLearningLoopDiagnostic(message: string): boolean {
   return (
     message === "Footgun directory exists but contains 0 entries" ||
@@ -273,38 +356,148 @@ function isEmptyLearningLoopDiagnostic(message: string): boolean {
   );
 }
 
-/** Collect advisory learning-loop warnings without converting them into failing findings. */
+/**
+ * Collect advisory learning-loop warnings for valid empty directories.
+ * Use when users need orientation without turning a fresh learning loop into a failure.
+ */
 function collectWarnings(section: BucketSection): StatsWarning[] {
+  // A clean bucket has no format diagnostic, so there is no advisory message to show users.
   if (section.formatDiagnostic === null) return [];
-  return section.formatDiagnostic
-    .split("; ")
-    .filter(isEmptyLearningLoopDiagnostic)
-    .map((message) => ({
-      file: section.path,
-      rule: "empty-learning-loop",
-      message,
-    }));
+  // Only valid empty-state diagnostics become warnings; other diagnostics remain blocking findings.
+  return (
+    section.formatDiagnostic
+      .split("; ")
+      .filter(isEmptyLearningLoopDiagnostic)
+      // Each empty directory gets one explicit warning row in text and JSON output.
+      .map((message) => ({
+        file: section.path,
+        rule: "empty-learning-loop",
+        message,
+      }))
+  );
+}
+
+const VALID_TRIGGER_PHASES = new Set(["READ", "SCOPE", "ACT", "VERIFY"]);
+const MAX_MEMORY_QUALITY_EXAMPLES = 3;
+
+/**
+ * Describe forward-looking metadata gaps for one durable memory.
+ * Use these labels when users need precise backfill work without a blocking failure.
+ */
+function describeMemoryQualityIssues(entry: LearningLoopEntryFact): string[] {
+  const issues: string[] = [];
+  // Missing decision guidance leaves a user without the concrete future behaviour to change.
+  if (!entry.hasDecisionChangedGuidance) {
+    issues.push("missing Decision changed");
+  }
+  // A supplied phase outside the execution loop cannot trigger retrieval at a predictable moment.
+  if (
+    entry.triggerPhase !== null &&
+    !VALID_TRIGGER_PHASES.has(entry.triggerPhase)
+  ) {
+    issues.push(`invalid Trigger phase "${entry.triggerPhase}"`);
+  }
+  // A recurrence before creation makes the user's incident chronology internally impossible.
+  if (
+    entry.latestOccurrence !== null &&
+    entry.created !== null &&
+    entry.latestOccurrence < entry.created
+  ) {
+    issues.push(
+      `Latest occurrence ${entry.latestOccurrence} predates Created ${entry.created}`,
+    );
+  }
+  return issues;
+}
+
+/**
+ * Group advisory memory-quality work by source bucket with bounded examples.
+ * Use this warning list to guide migration while old projects continue passing checks.
+ */
+function collectMemoryQualityWarnings(
+  learningLoopEntries: LearningLoopEntryFact[],
+): StatsWarning[] {
+  const candidatesBySource = new Map<
+    string,
+    Array<{ entry: LearningLoopEntryFact; issues: string[] }>
+  >();
+  // Only footguns and lessons use the forward-looking incident metadata in this milestone.
+  for (const entry of learningLoopEntries) {
+    // Patterns and decisions have different authoring contracts, so they are not backfill candidates.
+    if (entry.kind !== "footgun" && entry.kind !== "lesson") {
+      continue;
+    }
+    const issues = describeMemoryQualityIssues(entry);
+    // Complete entries add no user work and stay out of the advisory warning list.
+    if (issues.length === 0) {
+      continue;
+    }
+    // The first issue in a bucket starts its bounded candidate collection.
+    const sourceCandidates = candidatesBySource.get(entry.sourcePath) ?? [];
+    sourceCandidates.push({ entry, issues });
+    candidatesBySource.set(entry.sourcePath, sourceCandidates);
+  }
+
+  // Stable path ordering keeps CLI and dashboard warning rows reproducible for users.
+  return Array.from(candidatesBySource.entries())
+    .sort(([leftPath], [rightPath]) => leftPath.localeCompare(rightPath))
+    .map(([sourcePath, candidates]) => {
+      const boundedCandidates = candidates.slice(
+        0,
+        MAX_MEMORY_QUALITY_EXAMPLES,
+      );
+      // Each example names the memory and all metadata work visible for that entry.
+      const candidateExamples = boundedCandidates.map(
+        ({ entry, issues }) => `${entry.title} (${issues.join("; ")})`,
+      );
+      const omittedCandidateCount =
+        candidates.length - boundedCandidates.length;
+      // Extra candidates remain available in JSON without making the warning unreadably long.
+      const omittedSuffix =
+        omittedCandidateCount > 0
+          ? `; +${omittedCandidateCount} more in learningLoopEntries`
+          : "";
+      // Singular wording keeps one-entry buckets natural in the user-facing CLI output.
+      const candidateLabel =
+        candidates.length === 1 ? "candidate" : "candidates";
+      return {
+        file: sourcePath,
+        rule: "memory-quality" as const,
+        message: `${sourcePath}: ${candidates.length} backfill ${candidateLabel}: ${candidateExamples.join("; ")}${omittedSuffix}`,
+      };
+    });
 }
 
 const ADR_FILENAME = /^ADR-\d{3}-[a-z0-9-]+\.md$/;
 const ROUTING_HINT =
   "Wrong home -> right home: implementation TODOs and scoped work plans belong in .goat-flow/plans/; recurring hazards with evidence belong in .goat-flow/learning-loop/footguns/; reusable takeaways belong in .goat-flow/learning-loop/lessons/; temporary notes belong in .goat-flow/scratchpad/; backlog requests belong in Linear/GitHub issues.";
 
-/** Match a second-level ADR heading exactly enough to avoid prose false positives. */
+/**
+ * Detect one required ADR section without matching prose mentions.
+ * Use when operators validate decision structure after adding or editing an ADR.
+ */
 function hasHeading(content: string, heading: string): boolean {
   return new RegExp(`^##\\s+${heading}\\b`, "m").test(content);
 }
 
-/** Build the routing finding for files that do not follow the ADR filename invariant. */
-function decisionFilenameFinding(file: DecisionFileSummary): StatsFinding {
+/**
+ * Explain how an incorrectly named decision file should be routed or renamed.
+ * Use when an operator placed durable work in the decisions directory under the wrong shape.
+ */
+function decisionFilenameFinding(
+  decisionFile: DecisionFileSummary,
+): StatsFinding {
   return {
-    file: file.path,
+    file: decisionFile.path,
     rule: "decision-filename",
-    message: `${file.path}: decision records must be named ADR-NNN-kebab-case-title.md. ${ROUTING_HINT}`,
+    message: `${decisionFile.path}: decision records must be named ADR-NNN-kebab-case-title.md. ${ROUTING_HINT}`,
   };
 }
 
-/** Accept one tradeoff section variant so older ADR shapes do not need churn-only rewrites. */
+/**
+ * Accept the supported trade-off section variants used by existing ADRs.
+ * Use during validation so operators avoid churn-only rewrites of valid decisions.
+ */
 function hasDecisionTradeoffSection(content: string): boolean {
   return (
     hasHeading(content, "Consequences") ||
@@ -313,93 +506,160 @@ function hasDecisionTradeoffSection(content: string): boolean {
   );
 }
 
-/** Return the required ADR structure pieces missing from one decision record. */
+/**
+ * List required ADR sections absent from one decision record.
+ * Use to give operators one complete structural repair message instead of repeated failures.
+ */
 function missingDecisionStructure(content: string): string[] {
-  const missing: string[] = [];
-  if (!/^\*\*Status:\*\*/m.test(content)) missing.push("**Status:**");
-  if (!/^\*\*Date:\*\*/m.test(content)) missing.push("**Date:**");
-  if (!hasHeading(content, "Context")) missing.push("## Context");
-  if (!hasHeading(content, "Decision")) missing.push("## Decision");
+  const missingSections: string[] = [];
+  // Without status, users cannot tell whether the decision is proposed, accepted, or retired.
+  if (!/^\*\*Status:\*\*/m.test(content)) missingSections.push("**Status:**");
+  // Without a date, users cannot place the decision in the project's chronology.
+  if (!/^\*\*Date:\*\*/m.test(content)) missingSections.push("**Date:**");
+  // Context tells future users what forces made the decision necessary.
+  if (!hasHeading(content, "Context")) missingSections.push("## Context");
+  // The decision section tells users which option the project actually chose.
+  if (!hasHeading(content, "Decision")) missingSections.push("## Decision");
+  // At least one trade-off section explains the consequences users inherit.
   if (!hasDecisionTradeoffSection(content)) {
-    missing.push(
+    missingSections.push(
       "## Consequences or ## Failure Mode Comparison or ## Reversibility",
     );
   }
-  return missing;
+  return missingSections;
 }
 
+/**
+ * Build one actionable finding from an ADR's missing sections.
+ * Use when users need the malformed file and all required repairs in one message.
+ */
 function decisionStructureFinding(
-  file: DecisionFileSummary,
-  missing: string[],
+  decisionFile: DecisionFileSummary,
+  missingSections: string[],
 ): StatsFinding {
   return {
-    file: file.path,
+    file: decisionFile.path,
     rule: "decision-structure",
-    message: `${file.path}: malformed ADR is missing ${missing.join(", ")}. ${ROUTING_HINT}`,
+    message: `${decisionFile.path}: malformed ADR is missing ${missingSections.join(", ")}. ${ROUTING_HINT}`,
   };
 }
 
+/**
+ * Validate one decision-directory file and return its first blocking problem.
+ * Use when users run stats checks; valid ADRs and known meta files return no finding.
+ */
 function collectDecisionFileFinding(
-  file: DecisionFileSummary,
+  decisionFile: DecisionFileSummary,
 ): StatsFinding | null {
-  if (DECISION_META_FILES.has(file.filename)) return null;
-  if (!ADR_FILENAME.test(file.filename)) return decisionFilenameFinding(file);
+  // README and INDEX files are support surfaces, so users should not rename them as ADRs.
+  if (DECISION_META_FILES.has(decisionFile.filename)) return null;
+  // A non-canonical filename gets routing help before deeper structure checks run.
+  if (!ADR_FILENAME.test(decisionFile.filename)) {
+    return decisionFilenameFinding(decisionFile);
+  }
 
-  const missing = missingDecisionStructure(file.content ?? "");
-  return missing.length > 0 ? decisionStructureFinding(file, missing) : null;
+  // An unreadable decision has no usable structure, so validation treats its content as empty.
+  const decisionContent = decisionFile.content ?? "";
+  const missingSections = missingDecisionStructure(decisionContent);
+  // Complete ADRs produce no row; malformed ADRs show one combined repair finding.
+  return missingSections.length > 0
+    ? decisionStructureFinding(decisionFile, missingSections)
+    : null;
 }
 
-/** Collect structural ADR findings while ignoring the directory README and INDEX. */
+/**
+ * Collect structural ADR findings while ignoring support files.
+ * Use when users request decision health; an absent directory is handled by setup checks.
+ */
 function collectDecisionFindings(section: DecisionsSection): StatsFinding[] {
+  // A caller that did not provide a decision directory has no ADR rows to validate here.
   if (!section.exists) return [];
-  return section.files.flatMap(
-    (file) => collectDecisionFileFinding(file) ?? [],
+  // Valid files add no row, while each malformed file contributes one actionable finding.
+  return section.files.flatMap((decisionFile) => {
+    const decisionFinding = collectDecisionFileFinding(decisionFile);
+    // A valid ADR contributes no repair row to the user's result list.
+    return decisionFinding === null ? [] : [decisionFinding];
+  });
+}
+
+/**
+ * Map stale generated indexes to blocking repair findings.
+ * Use when users need to know which INDEX file must be regenerated before checks pass.
+ */
+function collectIndexFindings(indexes: IndexFreshness[]): StatsFinding[] {
+  // Only stale indexes block users; fresh and not-yet-generated states take different paths.
+  return (
+    indexes
+      .filter((indexStatus) => indexStatus.state === "stale")
+      // Each stale index receives its own copyable regeneration instruction.
+      .map((indexStatus) => ({
+        file: indexStatus.indexPath,
+        rule: "index-stale" as const,
+        message: `${indexStatus.indexPath}: generated index is stale; re-run \`goat-flow index\``,
+      }))
   );
 }
 
-/** Map stale generated indexes to blocking findings (the `index-fresh` check's failure arm). */
-function collectIndexFindings(indexes: IndexFreshness[]): StatsFinding[] {
-  return indexes
-    .filter((entry) => entry.state === "stale")
-    .map((entry) => ({
-      file: entry.indexPath,
-      rule: "index-stale" as const,
-      message: `${entry.indexPath}: generated index is stale; re-run \`goat-flow index\``,
-    }));
-}
-
-/** Map absent generated indexes to advisory warnings so a fresh install never false-fails. */
+/**
+ * Map absent generated indexes to advisory setup warnings.
+ * Use so fresh installs guide users toward generation without reporting a false failure.
+ */
 function collectIndexWarnings(indexes: IndexFreshness[]): StatsWarning[] {
-  return indexes
-    .filter((entry) => entry.state === "missing")
-    .map((entry) => ({
-      file: entry.indexPath,
-      rule: "index-missing" as const,
-      message: `${entry.indexPath}: INDEX.md not generated yet; run \`goat-flow index\``,
-    }));
+  // Missing indexes are valid on fresh installs and remain advisory for users.
+  return (
+    indexes
+      .filter((indexStatus) => indexStatus.state === "missing")
+      // Each absent index receives one copyable generation instruction.
+      .map((indexStatus) => ({
+        file: indexStatus.indexPath,
+        rule: "index-missing" as const,
+        message: `${indexStatus.indexPath}: INDEX.md not generated yet; run \`goat-flow index\``,
+      }))
+  );
 }
 
 /**
  * Run the `--check` verdict against an already-built stats report.
  *
- * @param report Stats report built from the same facts used by normal rendering.
- * @returns Pass/fail verdict with blocking findings separated from advisory warnings.
+ * @param report - rendered memory facts; an absent legacy entry collection preserves earlier checks.
+ * @returns verdict with blockers and warnings; empty findings means the operator may proceed.
  */
-export function checkStats(report: StatsReport): StatsCheckReport {
+export function checkStats(report: StatsCheckInput): StatsCheckReport {
+  // Omitted decision facts mean this caller did not request ADR validation.
+  const decisionFindings = report.decisions
+    ? collectDecisionFindings(report.decisions)
+    : [];
+  // Omitted index facts mean this caller did not request index freshness validation.
+  const indexFindings = report.indexes
+    ? collectIndexFindings(report.indexes)
+    : [];
+  // Hard integrity defects combine into the blocking list that controls the user's exit status.
   const findings = [
     ...collectFindings(report.footguns),
     ...collectFindings(report.lessons),
-    ...(report.decisions ? collectDecisionFindings(report.decisions) : []),
-    ...(report.indexes ? collectIndexFindings(report.indexes) : []),
+    ...decisionFindings,
+    ...indexFindings,
   ];
+  // A report without decision warnings keeps the advisory list focused on collected surfaces.
+  const decisionWarnings = report.decisions?.warnings ?? [];
+  // Omitted index facts contribute no warnings instead of implying indexes are healthy.
+  const indexWarnings = report.indexes
+    ? collectIndexWarnings(report.indexes)
+    : [];
+  // Older direct callers may omit entry facts, so users still get legacy checks instead of a crash.
+  const learningLoopEntries = report.learningLoopEntries ?? [];
+  // Advisory states combine separately so cleanup guidance never changes a passing exit status.
   const warnings = [
     ...collectWarnings(report.footguns),
     ...collectWarnings(report.lessons),
-    ...(report.decisions?.warnings ?? []),
-    ...(report.indexes ? collectIndexWarnings(report.indexes) : []),
+    ...collectMemoryQualityWarnings(learningLoopEntries),
+    ...decisionWarnings,
+    ...indexWarnings,
   ];
+  // No blocking findings means the user receives a passing verdict even when warnings remain.
+  const status = findings.length === 0 ? "pass" : "fail";
   return {
-    status: findings.length === 0 ? "pass" : "fail",
+    status,
     findings,
     warnings,
   };

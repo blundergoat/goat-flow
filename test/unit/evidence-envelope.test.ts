@@ -19,16 +19,52 @@ import {
   tailEvidenceEvents,
   validateEvidenceEnvelope,
 } from "../../src/cli/evidence/envelope.js";
-import type { EvidenceEnvelope } from "../../src/cli/evidence/envelope.js";
+import type {
+  EvidenceEnvelope,
+  EvidenceEventKind,
+} from "../../src/cli/evidence/envelope.js";
 import { redactEvidenceText } from "../../src/cli/evidence/redaction.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
+
+const CURRENT_EVENT_KINDS = {
+  "terminal.create": "terminal.create",
+  "terminal.delete": "terminal.delete",
+  "terminal.upload": "terminal.upload",
+  "terminal.send": "terminal.send",
+  "prompt.launch": "prompt.launch",
+  "prompt.send": "prompt.send",
+  "audit.exec": "audit.exec",
+  "audit.run": "audit.run",
+  "setup.prompt": "setup.prompt",
+  "quality.prompt": "quality.prompt",
+  "index.regenerate": "index.regenerate",
+  "project.save": "project.save",
+  "project.remove": "project.remove",
+  "project.switch": "project.switch",
+} satisfies Record<EvidenceEventKind, EvidenceEventKind>;
+
+const FORBIDDEN_RAW_PAYLOAD_KEYS = [
+  "prompt",
+  "output",
+  "terminal_output",
+  "terminal_scrollback",
+  "scrollback",
+  "upload_content",
+  "upload_data",
+  "screenshot",
+  "raw_json",
+  "raw_html",
+  "raw_tool_output",
+  "tool_output",
+] as const;
 
 /** Check framework-relative evidence paths against the live repo root. */
 function frameworkPathExists(path: string): boolean {
   return existsSync(join(PROJECT_ROOT, path));
 }
 
+/** Run one filesystem scenario in an isolated project and remove it afterward. */
 function withTempProject<T>(fn: (root: string) => T): T {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-evidence-"));
   try {
@@ -36,6 +72,24 @@ function withTempProject<T>(fn: (root: string) => T): T {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+/** Return the validation message a producer sees after attempting to persist raw local evidence. */
+function rawPayloadValidationMessage(
+  eventType: EvidenceEventKind,
+  forbiddenKey: (typeof FORBIDDEN_RAW_PAYLOAD_KEYS)[number],
+): string {
+  const envelope = createEvidenceEnvelope({
+    eventType,
+    actor: "server",
+    projectRoot: PROJECT_ROOT,
+    timestamp: "2026-05-17T01:02:03.000Z",
+    payload: {
+      producer_metadata: { [forbiddenKey]: "sensitive fixture value" },
+    },
+  });
+
+  return validateEvidenceEnvelope(envelope)[0] ?? "";
 }
 
 describe("EvidenceEnvelope", () => {
@@ -70,6 +124,30 @@ describe("EvidenceEnvelope", () => {
       validateEvidenceEnvelope(envelope)[0] ?? "",
       /prompt.*redacted/i,
     );
+  });
+
+  describe("raw payload boundary", () => {
+    // Each named case tells maintainers exactly which forbidden producer field regressed.
+    for (const forbiddenKey of FORBIDDEN_RAW_PAYLOAD_KEYS) {
+      // A representative event proves nested producer metadata follows the key policy.
+      it(`rejects raw ${forbiddenKey} metadata`, () => {
+        assert.match(
+          rawPayloadValidationMessage("audit.run", forbiddenKey),
+          new RegExp(`${forbiddenKey}.*redacted`, "iu"),
+        );
+      });
+    }
+
+    // Each named event case makes a future union addition visible in focused test output.
+    for (const eventType of Object.values(CURRENT_EVENT_KINDS)) {
+      // One representative forbidden key proves the event cannot bypass shared validation.
+      it(`applies raw-content validation to ${eventType}`, () => {
+        assert.match(
+          rawPayloadValidationMessage(eventType, "raw_tool_output"),
+          /raw_tool_output.*redacted/iu,
+        );
+      });
+    }
   });
 
   it("redacts sensitive text as hash plus byte length", () => {

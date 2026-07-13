@@ -16,8 +16,10 @@ Manual edits are normal: an explicit request to add or update a durable learning
 Auto-capture candidates must follow Extract / Consolidate / Skip:
 
 - Extract only when the item changes a future READ/SCOPE/ACT/VERIFY decision.
-- Consolidate into an existing entry when the same root cause already exists.
+- Consolidate by searching the generated index and likely category bucket first. When the same root cause already exists, update that entry even if the latest symptom looks different.
 - Skip raw tool output, successful smoke runs, UI/deploy churn, chain-of-thought, screenshots, raw JSON/HTML, duplicate dumps, and "I read the docs" summaries.
+
+Use the same search-before-add rule for manual edits. Create a new footgun only when the measured root cause is distinct from every candidate entry.
 
 Every entry MUST include file path evidence with grep-friendly semantic anchors (function name, unique string, or `(search: "pattern")`) per ADR-024. Do not use line numbers - they go stale on every edit.
 
@@ -38,8 +40,11 @@ Inside a bucket, add entries as `## Footgun:` blocks. Each entry MUST begin with
 ## Footgun: <short name>
 
 **Status:** active | **Created:** 2026-04-20 | **Evidence:** OBSERVED
+**Decision changed:** [the future agent decision this evidence changes]
 
 <body>
 ```
+
+New entries SHOULD include `**Decision changed:**`; `goat-flow stats --check` reports missing values as advisory backfill work, not a failure. Add `**Trigger phase:** READ|SCOPE|ACT|VERIFY` when one execution-loop phase should retrieve the memory. When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`.
 
 Entries without `**Status:**` cannot be split into active-vs-resolved by the audit scanner. Legacy single-entry files still work during migration, but category buckets with the frontmatter + `**Status:**` contract are the preferred and audited format.

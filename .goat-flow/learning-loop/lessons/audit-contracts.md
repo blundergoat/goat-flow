@@ -49,7 +49,7 @@ last_reviewed: 2026-07-13
 
 **Root cause:** Expected check ids were treated as stable facts instead of outputs of the current detector contract.
 
-**Prevention:** For fixture-driven audit tests, reproduce the failing audit/check output first, capture the current check ids, then update test assertions and fixture metadata together. Do not trust older expected ids after check-contract work.
+**Prevention:** For fixture-driven audit tests, reproduce the failing audit/check output first, capture the current check ids, then update test assertions and fixture metadata together. A healthy virtual filesystem must also satisfy every newly enforced content invariant; existence-only stubs are no longer healthy after a content detector lands. Do not trust older expected ids or fixture bodies after check-contract work. M12 recurrence anchor: `test/fixtures/projects/index.ts` (search: "healthyPlaybook").
 
 ---
 

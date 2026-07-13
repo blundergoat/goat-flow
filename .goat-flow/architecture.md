@@ -86,11 +86,43 @@ Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) 
 
 | Tier | Paths | Committed? | Purpose |
 |------|-------|-----------|---------|
-| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `config.yaml`, `.goat-flow/learning-loop/patterns/**`, `.goat-flow/learning-loop/decisions/`, `.goat-flow/learning-loop/footguns/**`, `.goat-flow/learning-loop/lessons/**`, the meta references at `.goat-flow/skill-docs/skill-preamble.md`, `.goat-flow/skill-docs/skill-conventions.md`, the skill-authoring methodology pack under `.goat-flow/skill-docs/skill-quality-testing/`, and the standalone playbooks indexed by `.goat-flow/skill-docs/playbooks/README.md`: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `observability.md`, `page-capture.md`, and `release-notes.md` | Yes | Durable project record. Source of truth across sessions. |
+| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `config.yaml`, `.goat-flow/learning-loop/patterns/**`, `.goat-flow/learning-loop/decisions/`, `.goat-flow/learning-loop/footguns/**`, `.goat-flow/learning-loop/lessons/**`, the meta references at `.goat-flow/skill-docs/skill-preamble.md`, `.goat-flow/skill-docs/skill-conventions.md`, the skill-authoring methodology pack under `.goat-flow/skill-docs/skill-quality-testing/`, and the standalone playbooks indexed by `.goat-flow/skill-docs/playbooks/README.md`: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `observability.md`, `page-capture.md`, `release-notes.md`, and `skill-playbook-authoring-sync.md` | Yes | Durable project record. Source of truth across sessions. |
 | **Local session state** | `.goat-flow/plans/**`, `.goat-flow/scratchpad/**`, `.goat-flow/logs/sessions/*.md`, `.goat-flow/dashboard-state.json`, `.goat-flow/project-id` | No (gitignored by design; only anchor files such as `README.md`, `.gitignore`, and `.gitkeep` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes, session continuity logs, and dashboard runtime state. Coordinates a single work session - not project history. |
+| **Local evidence history** | `.goat-flow/logs/events/*.jsonl` | No (gitignored by design; only the directory README is committed) | Validated `EvidenceEnvelope` metadata from local runtime producers. Supports checkout-local diagnosis and recovery; it is not durable project truth or a share-safe export. |
 | **Local report history** | `.goat-flow/logs/quality/*.json`, `.goat-flow/logs/quality/*.md`, `.goat-flow/logs/critiques/*.md`, `.goat-flow/logs/review/*.txt`, `.goat-flow/logs/review/*.json`, `.goat-flow/logs/security/*.md` | No (gitignored by design; only the directory README is committed) | Saved agent quality reports, captured prose, critique snapshots from goat-critique runs, review refutation/refuter artifacts from goat-review runs, and security assessment history from goat-security runs. Feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. |
 
-**Not a persistence gap.** If a `.goat-flow/plans/`, `.goat-flow/scratchpad/`, or `.goat-flow/logs/sessions/` artifact deserves to survive the session, promote its durable content into the committed tier: lesson -> `.goat-flow/learning-loop/lessons/`, trap -> `.goat-flow/learning-loop/footguns/`, decision -> `.goat-flow/learning-loop/decisions/`. Session logs themselves are checkout-local continuity artifacts.
+**Not a persistence gap.** If local state, evidence, or report history deserves to survive the session, promote only its durable conclusion into the committed tier: lesson -> `.goat-flow/learning-loop/lessons/`, trap -> `.goat-flow/learning-loop/footguns/`, decision -> `.goat-flow/learning-loop/decisions/`. The local artifact remains checkout-local continuity and must not be cited as committed project truth.
+
+## Local Data and Evidence Budget
+
+Local-only artifacts may prove that a named producer recorded bounded metadata at a stated time and that the record passed its local schema. They cannot prove an external tool's claim is true, authorize an external write, replace a fresh verification run, or become durable project knowledge by themselves. Promotion is explicit: extract the verified conclusion into a lesson, footgun, or decision with durable source evidence.
+
+`EvidenceEnvelope` is the only runtime event schema. Payloads contain JSON-compatible summary metadata; raw prompts, terminal output or scrollback, uploads, screenshots, JSON/HTML bodies, and tool output require hash-only `RedactedEvidenceValue` markers. Paths, labels, identifiers, warning text, and other metadata remain local-sensitive and must be scrubbed before any shareable export. There is no automatic retention or purge promise; users control cleanup of gitignored artifacts.
+
+| Event kind | Status | Expected producer | Actor | Allowed payload budget | Redaction requirement | Intended local consumer |
+|------------|--------|-------------------|-------|------------------------|-----------------------|-------------------------|
+| `terminal.create` | existing | `dashboard-session-trace` | server | Session id, runner, working directory, target path | No prompt or terminal body | Dashboard recovery and support diagnosis |
+| `terminal.delete` | existing | `dashboard-session-trace` | server | Session id, runner, terminal status | No scrollback or terminal output | Dashboard recovery and support diagnosis |
+| `terminal.upload` | existing | `dashboard-session-trace` | server | Accepted/rejected counts and accepted byte total | No filename or upload content | Upload-flow diagnosis |
+| `terminal.send` | existing | `dashboard-session-trace` | server | Session/runner/path metadata, byte count, input hash metadata | Input must be `RedactedEvidenceValue` | Terminal interaction diagnosis |
+| `prompt.launch` | existing | `dashboard-session-trace` | server | Session id, runner, prompt hash metadata | Prompt must be `RedactedEvidenceValue` | Prompt-launch continuity |
+| `prompt.send` | existing | `dashboard-session-trace` | server | Session/runner/path metadata, byte count, input hash metadata | Prompt input must be `RedactedEvidenceValue` | Prompt-send continuity |
+| `audit.exec` | existing | `safe-exec` | server | Command basename, outcome, signal, timeout/truncation flags, duration | No arguments, stdout, or stderr | Deep-probe diagnosis |
+| `audit.run` | existing | `dashboard-session-trace` | server | Cache, harness, agent, and status summary | No audit body | Dashboard audit continuity |
+| `setup.prompt` | existing | `dashboard-session-trace` | server | Agent plus rendered-output hash metadata | Output must be `RedactedEvidenceValue` | Setup-prompt continuity |
+| `quality.prompt` | existing | `dashboard-session-trace` | server | Agent, quality mode, audit status, prompt hash metadata | Prompt must be `RedactedEvidenceValue` | Quality-prompt continuity |
+| `index.regenerate` | existing | `dashboard-session-trace` | server | Regenerated bucket count | No bucket body | Index-maintenance diagnosis |
+| `project.save` | existing | `dashboard-session-trace` | server | Project/favourite/add/remove counts | No project-list body | Project-list continuity |
+| `project.remove` | existing | `dashboard-session-trace` | server | Removed-project count | No removed path list | Project-list continuity |
+| `project.switch` | existing | `dashboard-session-trace` | server | Readiness state and project identity metadata | No config or file body | Selected-target diagnosis |
+
+Route/runtime/checkpoint/promotion event families remain **deferred**. M17 owns the first runtime-evidence proposal; every future producer must add its exact event kind, producer, actor, bounded payload, redaction rule, consumer, and focused validation before extending `EvidenceEventKind`. M14 adds no event kind.
+
+### Evidence Depth and Tool Trust
+
+- Summary dashboard/CLI routes reuse cached or already-extracted facts and may record only cheap outcome metadata. A deep route may run a probe only through an explicit user command, with bounded execution/output and a metadata-only envelope.
+- User-level tool or MCP configuration is a user-provided local capability, not proof that its output is correct. Project-level configuration crosses a repository-controlled trust boundary and needs explicit review of origin, command, permissions, and endpoint before use.
+- External tool/MCP output is producer evidence. Durable promotion must retain producer provenance and independent verification; neither output nor forwarded instructions authorize code, GitHub, or other external writes.
 
 ## Deliberate Trade-offs
 
