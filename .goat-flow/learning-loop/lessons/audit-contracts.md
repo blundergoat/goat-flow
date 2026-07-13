@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-07-13
+last_reviewed: 2026-07-14
 ---
 
 ## Lesson: Artifact scanners need explicit mirror maps and command grammar controls
@@ -38,6 +38,22 @@ last_reviewed: 2026-07-13
 **Root cause:** I treated an additive report field as universally present at every renderer call site. Tests had multiple report construction paths, and only the obvious unit helper was updated before the full suite.
 
 **Prevention:** When adding fields to `AuditReport` or other shared CLI/dashboard payloads, grep for direct renderer/reader fixture construction and either update every fixture or make consumers default missing additive fields. Evidence anchors: `src/cli/audit/render.ts` (search: `Array.isArray(report.enforcement)`), `test/contract/command-phrases.test.ts` (search: `renderAuditText does not mention scan`).
+
+---
+
+## Lesson: Repair paths must come from target evidence, not rule provenance
+
+**Status:** active | **Created:** 2026-07-14
+
+**Decision changed:** Resolve repair files from failure copy, selected-agent detail, or one unambiguous target path before generic provenance. | **Trigger phase:** VERIFY
+
+**What happened:** M24's first empty-target readiness run displayed `Create AGENTS.md (CLAUDE.md)`. The action named the Codex instruction file, but the citation came from a multi-agent provenance list and pointed at Claude's file.
+
+**Root cause:** I treated the first provenance path as the user's repair location. Audit provenance can explain where a rule comes from or list every supported agent surface; neither proves which target file the selected user must change.
+
+**Fix:** `blockerEvidencePath` now prefers a path named in the failure, then selected-agent structured detail, then exactly one target path. A regression fixture keeps `AGENTS.md` selected when provenance also lists `CLAUDE.md` and Copilot instructions.
+
+**Prevention:** For user-facing remediation, test action text and evidence paths together on an empty selected-agent target. Never convert normative or multi-agent provenance into a repair path without target-specific disambiguation. Evidence anchors: `src/cli/diagnostics/readiness-report.ts` (search: `blockerEvidencePath`), `test/unit/readiness-report.test.ts` (search: `selects the target path named by the failure`).
 
 ---
 

@@ -169,7 +169,21 @@ Every surface shows UTF-8 bytes, lines, words when available, and a rough token 
 
 The top-five list ranks budgeted surfaces by their measured value divided by the applicable limit. `--agent` narrows instruction and installed-skill measurements to one runtime; without it, each installed agent mirror remains explicit because those runtimes load different paths. JSON uses the timestamp-free `goat-flow.context-report.v1` schema so repeated reads do not gain artificial drift.
 
-`diagnostics` is the shared readout namespace. Context and support-bundle readouts live here instead of adding unrelated top-level commands; unsupported subcommands exit with usage status 2.
+`diagnostics` is the shared readout namespace. Context, readiness, and support-bundle readouts live here instead of adding unrelated top-level commands; unsupported subcommands exit with usage status 2.
+
+### `goat-flow diagnostics readiness [path] [--agent <id>] [--format text|json]`
+
+Summarize a target's static preparedness across Context, Constraints, Verification, Recovery, and Feedback loop before asking an agent to work there. The report reuses harness audit and stack-detection facts; it does not execute target hooks, tests, build scripts, lint, typecheck, formatting, or detected project commands.
+
+```bash
+npx goat-flow diagnostics readiness .                         # Advisory terminal summary
+npx goat-flow diagnostics readiness . --agent codex           # Selected Codex target evidence
+npx goat-flow diagnostics readiness . --format json           # Stable dashboard-ready schema
+```
+
+Each concern receives `ready`, `needs-attention`, `not-ready`, or `unknown`, backed by a separate `verified`, `inferred`, `missing`, or `unknown` evidence state. The report lists at most three failed-check blockers in canonical concern order and cites a target repair file only when failure copy, selected-agent detail, or one unambiguous target path supports it.
+
+Detected test, lint, build, and format commands are shown as `inferred` and `disabled`; the readiness command never runs them. JSON uses the timestamp-free `goat-flow.readiness-report.v1` schema and states the no-execution boundary explicitly. Readiness labels are advisory and do not turn harness gaps into a release gate.
 
 ### `goat-flow diagnostics bundle [path] [--agent <id>] [--format text|json]`
 
