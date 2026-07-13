@@ -1,7 +1,7 @@
 /**
  * Runs one read-only diagnostics view after the shared CLI parser selects it.
- * Use this boundary for context pressure, readiness, or a redacted support artifact
- * without loading collectors belonging to unrelated commands.
+ * Use this boundary for context pressure, readiness, redacted support, or static
+ * threat posture without loading collectors belonging to unrelated commands.
  */
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
@@ -76,6 +76,38 @@ async function handleSupportBundleDiagnostics(
 }
 
 /**
+ * Build the static agent/tool threat artifact and write its selected text or JSON output.
+ * Use this view when a reviewer needs local posture without executing target hooks.
+ *
+ * @param options - parsed target, agent, and output destination for the threat-model user
+ * @returns completion after output is written; no value means the artifact reached its destination
+ * @throws CLIError when the user requests a format the threat model does not support
+ */
+async function handleThreatModelDiagnostics(options: ParsedCLI): Promise<void> {
+  // Threat posture has one concise human view and one stable machine-readable contract.
+  if (options.format !== "text" && options.format !== "json") {
+    throw new CLIError(
+      "diagnostics threat-model supports --format text or --format json.",
+      2,
+    );
+  }
+  const {
+    collectThreatModelReport,
+    renderThreatModelJson,
+    renderThreatModelText,
+  } = await import("./diagnostics/threat-model.js");
+  const threatModel = collectThreatModelReport(
+    options.projectPath,
+    options.agent,
+  );
+  const renderedThreatModel =
+    options.format === "json"
+      ? renderThreatModelJson(threatModel)
+      : renderThreatModelText(threatModel);
+  writeOutput(options, renderedThreatModel);
+}
+
+/**
  * Build the static context-pressure view and write text, JSON, or Markdown output.
  * Use this view when a user needs orientation evidence before choosing work.
  *
@@ -130,7 +162,7 @@ export async function handleDiagnosticsCommand(
   // Direct callers must choose a shipped view before any selected-project collector runs.
   if (options.diagnosticsSubcommand === null) {
     throw new CLIError(
-      "Usage: goat-flow diagnostics <context|readiness|bundle> [project-path] [--agent <id>] [--format text|json|markdown]",
+      "Usage: goat-flow diagnostics <context|readiness|bundle|threat-model> [project-path] [--agent <id>] [--format text|json|markdown]",
       2,
     );
   }
@@ -144,6 +176,12 @@ export async function handleDiagnosticsCommand(
   // A support bundle has one concise terminal view and one stable machine-readable contract.
   if (options.diagnosticsSubcommand === "bundle") {
     await handleSupportBundleDiagnostics(options);
+    return;
+  }
+
+  // Threat-model output keeps static agent/tool posture separate from general readiness.
+  if (options.diagnosticsSubcommand === "threat-model") {
+    await handleThreatModelDiagnostics(options);
     return;
   }
   await handleContextDiagnostics(options);

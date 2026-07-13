@@ -25,10 +25,11 @@ export function parseDiagnosticsPositionals(positionals: string[]): {
   if (
     subcommand !== "context" &&
     subcommand !== "readiness" &&
-    subcommand !== "bundle"
+    subcommand !== "bundle" &&
+    subcommand !== "threat-model"
   ) {
     throw new CLIError(
-      'diagnostics requires subcommand "context", "readiness", or "bundle".',
+      'diagnostics requires subcommand "context", "readiness", "bundle", or "threat-model".',
       2,
     );
   }

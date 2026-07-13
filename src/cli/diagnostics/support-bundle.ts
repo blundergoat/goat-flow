@@ -30,6 +30,7 @@ import {
   type QualityHistoryEntry,
 } from "../quality/history.js";
 import type { AgentId, AgentFacts, ProjectFacts } from "../types.js";
+import { THREAT_MODEL_DIAGNOSTIC_COMMAND } from "./threat-model.js";
 
 const SUPPORT_BUNDLE_SCHEMA = "goat-flow.support-bundle.v1";
 // Limit rationale: ten envelopes expose recent support timing without turning the bundle into an activity log.
@@ -197,6 +198,9 @@ export interface SupportBundle {
     strategy: "allowlisted summaries, hash-only fingerprints, scrubbed display metadata";
     scrubbedDisplayValueCount: number;
     omittedFields: readonly string[];
+  };
+  relatedDiagnostics: {
+    threatModel: typeof THREAT_MODEL_DIAGNOSTIC_COMMAND;
   };
   exitCode: 0 | 1 | 2;
   error?: {
@@ -522,6 +526,7 @@ export function buildSupportBundle(
       scrubbedDisplayValueCount: redactions.applied,
       omittedFields: OMITTED_SUPPORT_FIELDS,
     },
+    relatedDiagnostics: { threatModel: THREAT_MODEL_DIAGNOSTIC_COMMAND },
     exitCode: input.audit.status === "pass" ? 0 : 1,
   };
 }
@@ -553,6 +558,7 @@ export function buildSupportBundleError(
       scrubbedDisplayValueCount: redactions.applied,
       omittedFields: OMITTED_SUPPORT_FIELDS,
     },
+    relatedDiagnostics: { threatModel: THREAT_MODEL_DIAGNOSTIC_COMMAND },
     exitCode: input.exitCode,
     error: { code: input.errorCode, message: errorMessage },
   };
@@ -654,6 +660,7 @@ export function renderSupportBundleText(bundle: SupportBundle): string {
     lines.push(`Status: ${bundle.error?.message ?? "Unavailable"}`);
     lines.push(`Exit code: ${bundle.exitCode}`);
     lines.push("JSON detail: rerun with --format json.");
+    lines.push(`Threat posture: ${bundle.relatedDiagnostics.threatModel}`);
     return lines.join("\n");
   }
   const latestQuality = bundle.sections.quality.latest;
@@ -671,5 +678,6 @@ export function renderSupportBundleText(bundle: SupportBundle): string {
   }
   lines.push("Sensitive raw data is omitted.");
   lines.push("JSON detail: rerun with --format json or add --output <file>.");
+  lines.push(`Threat posture: ${bundle.relatedDiagnostics.threatModel}`);
   return lines.join("\n");
 }

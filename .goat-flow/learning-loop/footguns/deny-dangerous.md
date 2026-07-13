@@ -1,6 +1,6 @@
 ---
 category: deny-dangerous
-last_reviewed: 2026-07-12
+last_reviewed: 2026-07-14
 ---
 
 **Scope:** Traps in the `deny-dangerous` guardrail's shell-grammar policy parser - command/segment splitting, substitution and heredoc handling, secret-path and `git`/`gh` write classification, and structured-payload parsing. Hook install / launch / registration / config-drift plumbing lives in [hooks.md](hooks.md).
@@ -98,6 +98,8 @@ last_reviewed: 2026-07-12
 ## Footgun: Splitting a monolithic guardrail can drop parser coverage while preserving the headline checks
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Reports must use sibling-aware hook facts; a split hook's dispatcher can hide shipped denies.
+**Trigger phase:** VERIFY
 
 **Symptoms:** A hook split looks cleaner because `patterns-shell.sh`, `patterns-paths.sh`, and `patterns-writes.sh` each block the happy-path examples (`rm -rf /`, `cat .env`, `git push`). But the pre-M10 monolith carried much broader parser coverage - wrapper normalization, quoted read-only search literals, `git -C`/`git -c` push forms, global `gh --repo` grammar, split-quoted `.env`, `.envrc`, safe-scoped recursive deletion, structured Copilot/Antigravity payloads - so a small split passes smoke tests while re-opening old bypasses and false positives.
 
@@ -106,6 +108,7 @@ last_reviewed: 2026-07-12
 - Pre-restoration probes wrongly allowed `git -C /tmp push`, `git -c core.sshCommand=foo push`, `/usr/bin/git push`, `gh --repo owner/repo issue comment`, `gh workflow run deploy.yml`, `rm -r src`, `cat .envrc`, `cat '.'env`, `python3 -c 'print(open(".env").read())'`; and wrongly blocked `rm -rf ./node_modules`, `rg "&& rm -rf /" src/`, `bash -c "echo hello"`, `python -c 'print(1)'`.
 - 2026-06-07 wrapper-prefix bypass: `normalize_command_candidate` stripped `command`/`builtin`/`time`/`nohup`/`nice`/`sudo`/`env`, but not `exec`, `timeout`, `setsid`, `stdbuf`, `ionice`, `taskset`, `chrt`, or `flock`, so first-word rules could miss wrapped `rm -rf`, `git push --force`, `git reset --hard`, `git clean -fdx`, and `find -delete`. Fix: add conservative wrapper grammars that strip only command-bearing forms and leave no-command forms like `ionice -p`, `taskset -p`, `chrt -p`, and `exec 2>/dev/null` allowed. Regression cases: self-test (search: `Wrapper-prefix normalization`).
 - 2026-06-07 startup-unavailable hang: `deny_dangerous_unavailable` read stdin before checking invocation mode, so a broken policy store plus `--self-test=full` could block on interactive or delayed stdin instead of failing closed. Fix: skip startup payload reads for `--self-test`/`--check`/TTY invocations; real hook JSON payloads still get JSON deny responses. Regression case: self-test (search: `self-test startup should not read stdin`).
+- **Recurrence update (2026-07-14):** M25 labeled Codex push `permissive` while the live audit found the block. `src/cli/facts/agent/settings.ts` (`checkDenyPatterns`) saw only the dispatcher; `src/cli/facts/agent/hooks.ts` (`siblingGuardrailPaths`) saw the split policy. The report now uses `AgentFacts.hooks.denyBlocksGitPush`; its regression keeps the legacy summary false and expects restricted push.
 - Anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm_has_recursive`), `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git -C push`, `quoted destructive search literal`).
 
 **Prevention:**
@@ -114,6 +117,7 @@ last_reviewed: 2026-07-12
 3. Run representative old-case probes across all split hooks: wrapper-prefixed git pushes, global/inherited `gh` flags, read-only search literals with dangerous text, safe-scoped recursive deletion, split-quoted secret paths, and structured payloads for each registered agent.
 4. Keep the central self-test broad enough to fail on both bypasses and false positives; smoke checks alone prove only headline examples.
 5. Startup failure handlers must not unconditionally read stdin before CLI mode is known; diagnostics and self-tests need deterministic fail-closed output even when stdin is a TTY or delayed pipe.
+6. Reports must use `AgentFacts.hooks.denyBlocks*`; dispatcher text is incomplete after a policy split.
 
 ---
 

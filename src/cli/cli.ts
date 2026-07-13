@@ -44,6 +44,7 @@ Commands:
   diagnostics context  Measure static local context pressure without runner telemetry
   diagnostics readiness  Show advisory five-concern preparedness without running target code
   diagnostics bundle   Create redacted local setup and runtime support evidence
+  diagnostics threat-model  Show static agent/tool posture without executing target hooks
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
   redact            Scrub durable text from stdin before stdout or --output persistence
   plans export      Preview or write redacted local milestone bundles
@@ -113,6 +114,8 @@ Examples:
   goat-flow diagnostics readiness . --agent codex --format json
   goat-flow diagnostics bundle . --agent codex --format json
   goat-flow diagnostics bundle . --format json --output support-bundle.json
+  goat-flow diagnostics threat-model . --agent codex
+  goat-flow diagnostics threat-model . --agent codex --format json
   goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries
   goat-flow redact --output .goat-flow/logs/sessions/handoff.md
   goat-flow plans export .goat-flow/plans/1.14.0 --format markdown

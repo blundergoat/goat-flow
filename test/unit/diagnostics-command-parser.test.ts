@@ -67,11 +67,30 @@ describe("diagnostics command parsing", () => {
     assert.equal(parsed.format, "json");
   });
 
+  // A reviewer can request one static agent/tool threat artifact from the shared diagnostics namespace.
+  it("parses diagnostics threat-model with a project path", () => {
+    const parsed = parseCLIArgs([
+      "diagnostics",
+      "threat-model",
+      ".",
+      "--agent",
+      "codex",
+      "--format",
+      "json",
+    ]);
+
+    assert.equal(parsed.command, "diagnostics");
+    assert.equal(parsed.diagnosticsSubcommand, "threat-model");
+    assert.equal(parsed.projectPath, resolve("."));
+    assert.equal(parsed.agent, "codex");
+    assert.equal(parsed.format, "json");
+  });
+
   // A missing readout name cannot tell users which diagnostics contract they requested.
   it("rejects a missing diagnostics subcommand", () => {
     assert.throws(
       () => parseCLIArgs(["diagnostics"]),
-      /diagnostics requires subcommand "context", "readiness", or "bundle"/iu,
+      /diagnostics requires subcommand "context", "readiness", "bundle", or "threat-model"/iu,
     );
   });
 
@@ -79,7 +98,7 @@ describe("diagnostics command parsing", () => {
   it("rejects unsupported diagnostics subcommands", () => {
     assert.throws(
       () => parseCLIArgs(["diagnostics", "unknown", "."]),
-      /diagnostics requires subcommand "context", "readiness", or "bundle"/iu,
+      /diagnostics requires subcommand "context", "readiness", "bundle", or "threat-model"/iu,
     );
   });
 
@@ -104,6 +123,14 @@ describe("diagnostics command parsing", () => {
     assert.throws(
       () => parseCLIArgs(["diagnostics", "readiness", ".", "../other"]),
       /diagnostics readiness accepts at most one project path/iu,
+    );
+  });
+
+  // Two targets would mix threat evidence from agent installations the reviewer must assess separately.
+  it("rejects extra diagnostics threat-model paths", () => {
+    assert.throws(
+      () => parseCLIArgs(["diagnostics", "threat-model", ".", "../other"]),
+      /diagnostics threat-model accepts at most one project path/iu,
     );
   });
 });

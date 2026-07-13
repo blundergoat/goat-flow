@@ -290,8 +290,13 @@ describe("target readiness report", () => {
       "summary",
       "concerns",
       "blockers",
+      "relatedDiagnostics",
       "nextCommands",
     ]);
+    assert.equal(
+      parsed.relatedDiagnostics.threatModel,
+      "goat-flow diagnostics threat-model [path] [--agent <id>]",
+    );
     assert.deepEqual(
       Object.values(parsed.concerns).map((concern) => concern.label),
       ["ready", "ready", "ready", "ready", "ready"],
@@ -344,6 +349,7 @@ describe("target readiness report", () => {
       /Advisory only; no target code or project commands were executed\./u,
     );
     assert.match(rendered, /npm test \[inferred, disabled\]/u);
+    assert.match(rendered, /diagnostics threat-model/iu);
   });
 
   // A passing concern with an audit caveat remains ready while its evidence stays inferred.

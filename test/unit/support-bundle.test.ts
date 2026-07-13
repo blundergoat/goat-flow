@@ -32,7 +32,7 @@ function auditScope(status: "pass" | "fail"): AuditScope {
   return { status, checks: [], failures: [], summary: {} };
 }
 
-/** Return compact project facts whose instruction body is available only for hash evidence. */
+/** Preserve instruction content only for hash evidence; the bundle must never serialize its body. */
 function supportFacts(instructionBody: string): ProjectFacts {
   return {
     root: "/fixture",
@@ -66,7 +66,7 @@ function supportFacts(instructionBody: string): ProjectFacts {
   };
 }
 
-/** Return normalized config containing values the bundle must summarize without serializing. */
+/** Preserve secret-like values across config shapes so the redaction contract covers each source. */
 function supportConfig(secretValues: readonly string[]): LoadedConfig {
   return {
     exists: true,
@@ -124,7 +124,7 @@ function supportAudit(secretValue: string): AuditReport {
   };
 }
 
-/** Return one valid history row whose finding prose remains intentionally outside the bundle. */
+/** Preserve a realistic quality row while keeping its finding prose outside the shared bundle. */
 function supportQualityHistory(secretValue: string): QualityHistoryEntry[] {
   return [
     {
@@ -176,7 +176,7 @@ function supportQualityHistory(secretValue: string): QualityHistoryEntry[] {
   ];
 }
 
-/** Assemble one complete pure-builder input so each test changes only its failure class. */
+/** Preserve a complete builder baseline so each test isolates one support-bundle failure class. */
 function supportInput(): BuildSupportBundleInput {
   const tokenValue = ["gh", "p_", "a".repeat(24)].join("");
   const keyValue = ["bundle", "-key-value"].join("");
@@ -216,13 +216,28 @@ function supportInput(): BuildSupportBundleInput {
   };
 }
 
-/** Spawn the real command so parser, collectors, output, and exit status stay integrated. */
+/** Spawns the real command so parser, collectors, output, and exit status stay integrated. */
 function runBundleCommand(...args: string[]) {
   return spawnSync(
     process.execPath,
     ["--import", "tsx", CLI_PATH, "diagnostics", "bundle", ...args],
     { cwd: PROJECT_ROOT, encoding: "utf-8" },
   );
+}
+
+/** Confirm every readable fixture value stays absent from the support artifact a user shares. */
+function assertOmitsReadableValues(
+  renderedBundle: string,
+  forbiddenReadableValues: string[],
+): void {
+  // Each fixture value is checked separately so a failure identifies the exposed source.
+  for (const forbiddenValue of forbiddenReadableValues) {
+    assert.equal(
+      renderedBundle.includes(forbiddenValue),
+      false,
+      forbiddenValue,
+    );
+  }
 }
 
 describe("redacted support bundle", () => {
@@ -248,6 +263,10 @@ describe("redacted support bundle", () => {
       bundle.sections.events.entries[0]?.eventKind,
       "quality.prompt",
     );
+    assert.equal(
+      bundle.relatedDiagnostics.threatModel,
+      "goat-flow diagnostics threat-model [path] [--agent <id>]",
+    );
   });
 
   // Raw config, event, audit, quality, and instruction values never reach the artifact users share.
@@ -262,10 +281,7 @@ describe("redacted support bundle", () => {
 
     assert.doesNotMatch(rendered, /ghp_[a-z0-9_]+/iu);
     assert.doesNotMatch(rendered, /bundle-(?:key|password|passphrase)-value/iu);
-    // Every readable fixture value stays absent even when it originated in a nested collector field.
-    for (const forbiddenValue of forbiddenReadableValues) {
-      assert.equal(rendered.includes(forbiddenValue), false, forbiddenValue);
-    }
+    assertOmitsReadableValues(rendered, forbiddenReadableValues);
     assert.deepEqual(buildSupportBundle(input).redactions.omittedFields, [
       "audit check evidence and failure bodies",
       "config raw values and commands",
@@ -284,6 +300,7 @@ describe("redacted support bundle", () => {
     assert.match(rendered, /GOAT Flow support bundle/iu);
     assert.match(rendered, /Audit: fail/iu);
     assert.match(rendered, /--format json/iu);
+    assert.match(rendered, /diagnostics threat-model/iu);
     assert.doesNotMatch(rendered, /payload|scrollback|prompt body/iu);
   });
 

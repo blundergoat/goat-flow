@@ -169,7 +169,7 @@ Every surface shows UTF-8 bytes, lines, words when available, and a rough token 
 
 The top-five list ranks budgeted surfaces by their measured value divided by the applicable limit. `--agent` narrows instruction and installed-skill measurements to one runtime; without it, each installed agent mirror remains explicit because those runtimes load different paths. JSON uses the timestamp-free `goat-flow.context-report.v1` schema so repeated reads do not gain artificial drift.
 
-`diagnostics` is the shared readout namespace. Context, readiness, and support-bundle readouts live here instead of adding unrelated top-level commands; unsupported subcommands exit with usage status 2.
+`diagnostics` is the shared readout namespace. Context, readiness, support-bundle, and agent/tool threat-model readouts live here instead of adding unrelated top-level commands; unsupported subcommands exit with usage status 2.
 
 ### `goat-flow diagnostics readiness [path] [--agent <id>] [--format text|json]`
 
@@ -198,6 +198,20 @@ npx goat-flow diagnostics bundle . --format json --output support-bundle.json
 JSON uses the stable `goat-flow.support-bundle.v1` schema. It includes allowlisted summaries, counts, capability booleans, and hash-only file fingerprints. It omits raw config values and commands, instruction/settings bodies, audit evidence and failure prose, quality finding bodies and report paths, event payloads and project paths, prompts, terminal scrollback, and full logs. Display metadata passes through the shared durable-text scrubber; this is a practical support boundary, not a claim of perfect data-loss prevention.
 
 Successful evidence collection exits 0 when its composed audit passes. An audit-failing bundle remains parseable and exits 1; collection failure exits 1; a missing target exits 2. In JSON mode every one of those paths writes the same envelope before setting the process exit code. Text is intentionally compact and points users to `--format json` for the complete artifact. Bundles stay local unless the user chooses to share or upload them.
+
+### `goat-flow diagnostics threat-model [path] [--agent <id>] [--format text|json]`
+
+Show the configured agent/tool posture a maintainer reviews before trusting local automation. The report covers dangerous shell commands, network access, broad file writes, repository pushes, secret-bearing paths, and tool-call audit logging for each selected agent.
+
+```bash
+npx goat-flow diagnostics threat-model .                         # Compare configured agent surfaces
+npx goat-flow diagnostics threat-model . --agent codex           # Review only the Codex setup
+npx goat-flow diagnostics threat-model . --format json           # Stable PR/release artifact
+```
+
+Each surface is `restricted`, `permissive`, `unknown`, `unsupported`, or `not-configured`, with `SECURITY`, `CORRECTNESS`, or `INTEGRATION` severity and an evidence class such as `static-local`, `manifest-declared`, or `not-observed`. `permissive` means a known local control is absent; `unknown` means current facts cannot support either a protected or exposed claim; `unsupported` means the manifest defines no project-local enforcement surface for that runtime.
+
+This command is advisory static analysis. It reuses manifest-backed agent facts and the present-only audit enforcement matrix, does not execute target hooks or project commands, and never reads secret-file contents. A local hook path or registered event is therefore configuration evidence, not proof that an external coding-agent runtime delivered the hook. Readiness and support-bundle output link to this report without copying its classifier.
 
 ### `goat-flow index [path]`
 

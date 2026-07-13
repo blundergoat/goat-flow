@@ -15,6 +15,7 @@ import type {
   AuditReport,
   CheckResult,
 } from "../audit/types.js";
+import { THREAT_MODEL_DIAGNOSTIC_COMMAND } from "./threat-model.js";
 
 /** Canonical concern order used by JSON, terminal output, and blocker ranking. */
 const READINESS_CONCERNS: readonly AuditConcernKey[] = [
@@ -90,6 +91,9 @@ export interface ReadinessReport {
   };
   concerns: Record<AuditConcernKey, ReadinessConcern>;
   blockers: ReadinessBlocker[];
+  relatedDiagnostics: {
+    threatModel: typeof THREAT_MODEL_DIAGNOSTIC_COMMAND;
+  };
   nextCommands: ReadinessNextCommand[];
 }
 
@@ -525,6 +529,7 @@ export function buildReadinessReport(
     summary: summarizeReadiness(concerns, blockers.length),
     concerns,
     blockers,
+    relatedDiagnostics: { threatModel: THREAT_MODEL_DIAGNOSTIC_COMMAND },
     nextCommands: collectNextCommands(input.stack),
   };
 }
@@ -624,5 +629,6 @@ export function renderReadinessReportText(report: ReadinessReport): string {
       );
     }
   }
+  lines.push("", `Threat posture: ${report.relatedDiagnostics.threatModel}`);
   return lines.join("\n");
 }
