@@ -1,6 +1,21 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-07-13
+last_reviewed: 2026-07-14
+---
+
+## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
+
+**Status:** active | **Created:** 2026-07-14
+**Decision changed:** Failure-injection wrappers now scan the complete argument vector for the semantic path instead of assuming a fixed position.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-07-14
+
+**What happened:** M28's migration-failure fixture wrapped `mv` and matched the legacy source only at argument one. The hardened installer invoked `mv -n -- <source> <destination>`, so the wrapper delegated to the real command, installation exited 0, and the focused suite reported one failure even though the migration helper was behaving correctly.
+
+**Root cause:** The fixture encoded the old command shape instead of the behavior under test. Safety flags and the option terminator shifted the source operand without changing its meaning.
+
+**Prevention:** Command-wrapper fixtures must scan all arguments, or parse options when operand order matters, and match a unique semantic path. Keep the failure assertion alongside source/destination byte assertions so a wrapper that never activates cannot pass silently. Evidence anchor: `test/integration/setup-install-atomic-staging.test.ts` (search: `Migration helpers add safety flags`).
+
 ---
 
 ## Lesson: Migration-output fixtures must match the collision branch

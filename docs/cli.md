@@ -294,6 +294,14 @@ The preview covers source-backed `system-owned` manifest records and the selecte
 
 If the preview blocks, inspect the listed paths before choosing a write. `--force` is a broad existing content override: it permits managed conflict replacement and may also replace user-owned settings, config, policies, or seeded guidance, but it never bypasses path-safety failures. The preview itself needs no rollback because it changes nothing. Before a forced install, preserve the listed files with version control or a separate backup; after apply, use that same VCS/backup evidence to restore them if the result is not wanted.
 
+### Atomic installer writes
+
+Apply completes each copied, generated, or transformed file in a uniquely named staging directory beside its destination. Only a complete payload is renamed into place. If copy or generation fails, or the process receives `INT`, `TERM`, or `HUP`, the previous destination stays intact and goat-flow removes only its own staging payload. A warning that says `staging cleanup incomplete` includes the exact leftover directory to inspect; goat-flow never recursively removes unexpected content from it.
+
+Adjacent staging keeps the final rename on the destination filesystem. If that rename still fails, goat-flow reports `atomic replacement failed` and stops without a non-atomic copy fallback. Legacy migrations likewise preserve their source when same-filesystem rename cannot be proved. The guarantee is per file rather than whole-install transactional: completed earlier files remain applied when a later file fails.
+
+For a failed staged replacement, no content rollback is needed because the old destination remains visible. For a successful replacement that you later reject, inspect the listed path with `git diff -- <path>` and restore a tracked file with `git restore -- <path>`, or restore an untracked file from the backup taken before apply. Fix the reported path or filesystem problem before rerunning install.
+
 The installer does not create project-specific content such as the instruction file, architecture, code map, glossary, patterns, footguns, or lessons. Run `goat-flow setup . --agent <id>` afterward for the guided prompt that creates or refreshes those surfaces.
 
 ### `goat-flow status [path]`

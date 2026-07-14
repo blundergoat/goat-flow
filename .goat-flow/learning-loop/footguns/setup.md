@@ -43,11 +43,11 @@ last_reviewed: 2026-07-14
 ## Footgun: Final-path checks still follow symlinked parent directories
 
 **Status:** active | **Created:** 2026-07-14 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Managed-write admission must inspect every target path component and must not let force bypass an unsafe component.
+**Decision changed:** Managed-write admission must inspect every target path component before any file or directory creation and must not let force bypass an unsafe component.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-07-14
+**Incident count:** 3 | **Latest occurrence:** 2026-07-14
 
-**Symptoms:** M26 negative verification placed `.goat-flow/logs/quality` as a symlink to a disposable directory outside the selected project, with an outside `README.md` matching the package template. Checking only the final `README.md` path treated those bytes as a regular managed file because filesystem calls followed the symlinked parent. A CLI install could therefore admit a Bash write outside the selected project.
+**Symptoms:** M26 negative verification placed `.goat-flow/logs/quality` as a symlink to a disposable directory outside the selected project, with an outside `README.md` matching the package template. Checking only the final `README.md` path treated those bytes as a regular managed file because filesystem calls followed the symlinked parent. M28 then proved that validating staged files was still too late: a symlinked `.goat-flow` root received 19 setup directories before the first file check blocked. A CLI or direct installer could therefore write outside the selected project before reporting the unsafe path.
 
 **Why it happens:** `lstat` does not follow a symlink when that symlink is the path being inspected, but it still resolves symlinked parent components while reaching a deeper child. A final-file type check therefore proves only the last component is regular; it does not prove the destination stayed inside the selected project.
 
@@ -55,10 +55,12 @@ last_reviewed: 2026-07-14
 - `src/cli/managed-setup-preview.ts` (search: `Every parent must remain a real directory`) now inspects each parent component before hashing the final managed file.
 - `src/cli/managed-setup-state.ts` (search: `Require project-local directories before any baseline read or write`) applies the same containment check before trusting or replacing install state.
 - `src/cli/managed-setup-preview.ts` (search: `--force cannot bypass path safety`) keeps non-regular and unreadable managed destinations as hard admission failures.
+- `workflow/install-goat-flow.sh` (search: `The shared setup root must be local before migrations`) validates the root and every setup directory before `mkdir` or staged file work.
 - `test/integration/setup-install-preview.test.ts` (search: `blocks symlinked managed parents even when force is supplied`) reproduces the nested redirect and asserts that the outside sentinel remains byte-identical.
 - `test/unit/managed-setup-preview.test.ts` (search: `rejects a valid baseline behind a symlinked install-state directory`) proves valid-looking outside hashes remain invalid evidence.
+- `test/integration/setup-install-atomic-staging.test.ts` (search: `blocks a symlinked goat-flow root before creating outside directories`) snapshots the redirected tree and proves no outside directory appears.
 
-**Prevention:** Before any managed write, walk every destination component with non-following metadata checks and require real directories for parents plus a regular file or absence at the leaf. Treat symlinked, non-regular, and unreadable components as path-safety failures, not content conflicts; broad overwrite flags must never bypass them. Keep an outside-project sentinel in the regression test so a green status proves containment, not only an error message.
+**Prevention:** Walk every destination component before directory scaffolding as well as file writes. Require real directories for parents plus a regular file or absence at file leaves. Treat symlinked, non-regular, and unreadable components as path-safety failures, not content conflicts; broad overwrite flags must never bypass them. Snapshot the outside directory tree in regression tests so a green status proves containment, not only an eventual error message.
 
 ---
 
