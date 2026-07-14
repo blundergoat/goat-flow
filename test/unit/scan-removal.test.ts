@@ -129,6 +129,40 @@ describe("backwards compatibility", () => {
     assert.equal(parsed.shouldForce, true);
   });
 
+  it("install dry-run parses as a read-only managed preview", () => {
+    const parsed = parseCLIArgs([
+      "install",
+      ".",
+      "--agent",
+      "codex",
+      "--dry-run",
+    ]);
+    assert.equal(parsed.command, "install");
+    assert.equal(parsed.shouldDryRun, true);
+  });
+
+  it("rejects dry-run outside install and setup", () => {
+    assert.throws(
+      () => parseCLIArgs(["audit", ".", "--dry-run"]),
+      /--dry-run is only valid for install or setup/u,
+    );
+  });
+
+  it("rejects write flags that would be ignored by dry-run", () => {
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "install",
+          ".",
+          "--agent",
+          "codex",
+          "--dry-run",
+          "--force",
+        ]),
+      /--dry-run cannot be combined with --force/u,
+    );
+  });
+
   it("setup --apply parses as deterministic setup", () => {
     const parsed = parseCLIArgs(["setup", ".", "--agent", "codex", "--apply"]);
     assert.equal(parsed.command, "setup");

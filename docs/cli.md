@@ -268,12 +268,13 @@ Supported agent ids are read from `workflow/manifest.json` via `src/cli/agents/r
 ```bash
 npx goat-flow setup --agent claude    # Claude setup/upgrade prompt
 npx goat-flow setup --agent codex     # Codex setup/upgrade prompt
+npx goat-flow setup . --agent codex --dry-run
 npx goat-flow setup . --agent claude --apply
 ```
 
-Use `--apply` when you want setup to run the deterministic file-copy installer instead of printing a prompt. Use `--force` with `--apply` only when existing settings and `.goat-flow/config.yaml` should be overwritten.
+Use `--dry-run` to inspect managed template drift without composing a prompt or invoking the installer. Use `--apply` when you want setup to run the deterministic file-copy installer instead of printing a prompt. Use `--force` with `--apply` only after inspection and only when existing settings and `.goat-flow/config.yaml` may also be overwritten.
 
-### `goat-flow install [path] --agent <id> [--force]`
+### `goat-flow install [path] --agent <id> [--dry-run] [--force]`
 
 Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved unless `--force` is passed. Existing config files are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. For outdated or v0.9 projects the installer automatically updates the config version field and (for v0.9) removes deprecated skill directories; use `--force` for an explicit user-owned overwrite instead.
 
@@ -281,8 +282,17 @@ The shared references include `.goat-flow/skill-docs/README.md` for meta-referen
 
 ```bash
 npx @blundergoat/goat-flow@latest install . --agent claude
+npx @blundergoat/goat-flow@latest install . --agent codex --dry-run
 npx @blundergoat/goat-flow@latest install . --agent codex --force
 ```
+
+`--dry-run` prints a read-only managed-file preview as text or stable `goat-flow.managed-setup-preview.v1` JSON. Each exact repository-relative path is classified as `unchanged`, `local-edited`, `template-changed`, `both-changed`, `added`, `removed`, `missing`, or `unmanaged`, with the proposed action and reason. A blocked preview exits 1; invalid flags exit 2. `--output` is the only optional dry-run write and writes the requested report, not setup state or installed files.
+
+The comparison uses SHA-256 hashes only. After a successful CLI install, `.goat-flow/install-state/<agent>.json` records the package version, relative managed paths, and expected hashes for the next run; the installed `.goat-flow/.gitignore` keeps this state local. Missing state is safe for absent files and files already matching the current package. An existing differing file without a trusted baseline is `unmanaged` and blocks instead of being guessed safe. Malformed state, local edits, and deletions block by default. Symlinked, non-regular, or unreadable target components are path-safety failures and stay blocked even with `--force`.
+
+The preview covers source-backed `system-owned` manifest records and the selected agent's canonical skill mirror. It deliberately does not simulate config migrations, deprecated cleanup, generated commit guidance, generated indexes, or direct `workflow/install-goat-flow.sh` execution. Run the public CLI when you need the admission gate.
+
+If the preview blocks, inspect the listed paths before choosing a write. `--force` is a broad existing content override: it permits managed conflict replacement and may also replace user-owned settings, config, policies, or seeded guidance, but it never bypasses path-safety failures. The preview itself needs no rollback because it changes nothing. Before a forced install, preserve the listed files with version control or a separate backup; after apply, use that same VCS/backup evidence to restore them if the result is not wanted.
 
 The installer does not create project-specific content such as the instruction file, architecture, code map, glossary, patterns, footguns, or lessons. Run `goat-flow setup . --agent <id>` afterward for the guided prompt that creates or refreshes those surfaces.
 

@@ -481,9 +481,30 @@ function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
     (command === "setup" && parsedFlag(values, "apply"))
   );
 }
+/** Validate managed-preview combinations; throws CLIError before ignored write flags confuse users. */
+function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
+  const shouldDryRun = parsedFlag(values, "dry-run");
+  const commandSupportsDryRun = command === "install" || command === "setup";
+  // Preview is meaningful only where users can otherwise run deterministic setup writes.
+  if (shouldDryRun && !commandSupportsDryRun) {
+    throw new CLIError("--dry-run is only valid for install or setup.", 2);
+  }
+  const hasIgnoredWriteFlag =
+    parsedFlag(values, "force") ||
+    parsedFlag(values, "update-config-version") ||
+    parsedFlag(values, "clean-deprecated");
+  // Force and migration flags mutate broader surfaces and cannot change a read-only preview.
+  if (shouldDryRun && hasIgnoredWriteFlag) {
+    throw new CLIError(
+      "--dry-run cannot be combined with --force, --update-config-version, or --clean-deprecated. Preview first, then run the chosen write command separately.",
+      2,
+    );
+  }
+}
 
 /** Validate deterministic install/setup flags; throws CLIError when flags target the wrong command. */
 function validateInstallFlags(command: Command, values: ParsedArgValues): void {
+  validateDryRunFlag(command, values);
   if (command !== "setup" && parsedFlag(values, "apply")) {
     throw new CLIError("--apply is only valid for the setup command.", 2);
   }
@@ -598,6 +619,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       "no-audit-details": { type: "boolean", default: false },
       check: { type: "boolean", default: false },
       apply: { type: "boolean", default: false },
+      "dry-run": { type: "boolean", default: false },
       force: { type: "boolean", default: false },
       "update-config-version": { type: "boolean", default: false },
       "clean-deprecated": { type: "boolean", default: false },
@@ -697,6 +719,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     auditDetails: !parsedFlag(parsedValues, "no-audit-details"),
     shouldCheck: parsedFlag(parsedValues, "check"),
     shouldApply: parsedFlag(parsedValues, "apply"),
+    shouldDryRun: parsedFlag(parsedValues, "dry-run"),
     shouldForce: parsedFlag(parsedValues, "force"),
     updateConfigVersion: parsedFlag(parsedValues, "update-config-version"),
     cleanDeprecated: parsedFlag(parsedValues, "clean-deprecated"),

@@ -135,6 +135,7 @@ export interface ParsedCLI extends CLIOptions {
   auditDetails: boolean;
   shouldCheck: boolean;
   shouldApply: boolean;
+  shouldDryRun: boolean;
   shouldForce: boolean;
   updateConfigVersion: boolean;
   cleanDeprecated: boolean;

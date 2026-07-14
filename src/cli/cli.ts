@@ -75,6 +75,7 @@ Flags:
   --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
   --scenario <name> Hooks verify: required bounded scenario group (deny-hook)
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
+  --dry-run         Install/setup: preview managed template drift without changing the target
   --force           Install/setup --apply: overwrite managed seeds; plans export: regenerate output
   --update-config-version  Install: update only the version field in existing config.yaml
   --clean-deprecated       Install: remove deprecated skill directories
@@ -92,6 +93,7 @@ Examples:
   goat-flow audit . --format json      JSON output for CI
   goat-flow audit . --format sarif     SARIF output for CI/code scanning upload
   goat-flow install . --agent claude   Copy/update goat-flow system files
+  goat-flow install . --agent claude --dry-run
   goat-flow setup . --agent claude --apply
   goat-flow setup --agent claude       Setup prompt for Claude
   goat-flow quality . --agent claude   Quality assessment prompt for Claude

@@ -124,9 +124,10 @@ For a brand new project, copy the goat-flow system files first. This step is det
 
 ```bash
 npx @blundergoat/goat-flow@latest install . --agent claude
+npx @blundergoat/goat-flow@latest install . --agent claude --dry-run
 ```
 
-The manifest labels each installed file as system-owned, user-owned, generated, deprecated, or external. System files refresh from canonical sources; local content and external files stay untouched by default. Use `--force` only when you explicitly want to replace user-owned settings, config, policies, or other seeded guidance. For outdated or v0.9 projects, the installer automatically updates the config version and cleans deprecated skill directories.
+The manifest labels each installed file as system-owned, user-owned, generated, deprecated, or external. `--dry-run` previews source-backed managed templates and selected-agent skills without invoking the installer; normal CLI installs block local managed edits, deletions, and unknown baselines until you inspect them. System files then refresh from canonical sources while user-owned and external files stay untouched by default. Use `--force` only when you explicitly accept managed content conflicts and may also replace user-owned settings, config, policies, or other seeded guidance; it cannot bypass symlinked, non-regular, or unreadable target paths. For outdated or v0.9 projects, the installer automatically updates the config version and cleans deprecated skill directories.
 
 The installer keeps `.goat-flow/config.yaml` free of agent allowlists by default. Dashboard Home and aggregate `goat-flow audit .` read the supported agent registry from `workflow/manifest.json`, so they always show or check the current manifest-backed setup status. Use `--agent <id>` when you intentionally want one agent.
 

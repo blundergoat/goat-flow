@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-07-05
+last_reviewed: 2026-07-14
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -122,6 +122,8 @@ last_reviewed: 2026-07-05
 **Root cause:** I treated the verification shell as neutral while testing the same guardrail family that inspects shell text. The outer command was itself subject to `deny-dangerous.sh`, so payload replay patterns that are safe inside a test harness (`pipe to bash`, literal secret paths, long case bodies) were blocked before the hook under test ran.
 
 **Prevention:** For manual guardrail matrices, either run one direct case at a time or create a temporary harness file whose invocation command is boring (`bash tmp_harness.sh`). Construct secret-path payloads from variables when the outer live guard would otherwise see them, avoid `printf | bash hook` in favor of here-strings or files, and record temp roots in the parent shell before using command substitution. Evidence anchors: `.goat-flow/hooks/deny-dangerous.sh` (search: `Command has more than 50 chained segments`), `.goat-flow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`), and `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Temp cleanup must satisfy destructive-command hooks`).
+
+**Updated 2026-07-14:** M26's first disposable-target walkthrough repeated the same failure: the live PreToolUse hook rejected an all-in-one managed-setup validation command before any fixture was created. Moving the reviewed steps into `.goat-flow/scratchpad/m26-managed-setup-manual.sh` and invoking that file directly applied the existing prevention without weakening the hook.
 
 ---
 
