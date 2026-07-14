@@ -9,12 +9,15 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Component | Location | Purpose |
 |-----------|----------|---------|
 | Setup prompts | `workflow/setup/` | Agent-specific setup instructions, upgrade guides |
+| Setup installer | `workflow/install-goat-flow.sh` | Manifest-driven installation with ownership checks, safe parent-path validation, and adjacent per-file atomic staging |
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 7 goat-flow skill templates (6 functional + 1 dispatcher) |
 | Hook scripts | `workflow/hooks/` | Copyable `deny-dangerous.sh` dispatcher, shared `deny-dangerous/` policy templates, opt-in `gruff-code-quality.sh`, default `post-turn-safety.sh`, and per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 17 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
+| CLI diagnostics | `src/cli/diagnostics/` | Redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
+| Managed setup | `src/cli/managed-setup-command.ts`, `src/cli/managed-setup-preview.ts`, `src/cli/managed-setup-state.ts` | Hash-only dry-run classification, install admission, and local recovery state for manifest-managed template files |
 | Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
 | Hook registration and proof | `src/cli/hooks-command.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | CLI/dashboard hook toggles plus explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
@@ -27,6 +30,12 @@ User runs `npx goat-flow setup .` or reads workflow/setup/
   -> Follows numbered setup steps (01-06) via their agent config
   -> Agent reads workflow/setup/ (01-system-overview.md, 02-instruction-file.md, reference/execution-loop.md)
   -> Agent generates project-specific files (CLAUDE.md, hooks, skills, etc.)
+
+User runs `goat-flow install . --agent <id> --dry-run` or `goat-flow setup . --agent <id> --dry-run`
+  -> CLI compares manifest-managed template hashes with the selected target and last successful local baseline
+  -> Unsafe paths and ambiguous user edits block before the Bash installer starts
+  -> User runs `install` or `setup --apply`; the CLI invokes the installer, which completes each file beside its destination before rename
+  -> Direct `workflow/install-goat-flow.sh` use skips CLI preview but retains ownership, path-safety, and atomic-write enforcement
 ```
 
 ## CLI Layout
@@ -43,7 +52,11 @@ src/cli/
   config/             # Configuration (reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   evidence/           # Hash-only evidence metadata, readable text redaction, envelopes, JSONL append/tail helpers
+  diagnostics/        # Redacted support bundle, static readiness report, and agent/tool threat model
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
+  managed-setup-command.ts # CLI validation and output for install/setup dry runs
+  managed-setup-preview.ts # Hash-only managed-template comparison and install admission
+  managed-setup-state.ts   # Validated local baseline used by later setup previews
   prompt/             # Prompt generation: commit-guidance.ts, compose-setup.ts, compose-quality.ts, compose-quality-agent-report.ts, compose-quality-agent-setup.ts, compose-quality-artifact.ts, compose-quality-common.ts, compose-quality-focused.ts, compose-quality-static-sections.ts, learning-loop-context.ts
   quality/            # Quality report schema, positional ids, history, and diff
   audit/              # Build checks, quality checks, render.ts (output formatters: text, json, markdown)
@@ -74,6 +87,8 @@ src/dashboard/
 ## Key Constraints
 
 - **Setup shared templates are canonical.** `workflow/setup/reference/execution-loop.md` defines the execution loop; `workflow/setup/01-system-overview.md` defines the layer architecture and design intent. ADRs in `.goat-flow/learning-loop/decisions/` capture specific design decisions.
+- **Managed writes stay inside the selected project.** Preview and installer paths reject symlinked or non-directory parents before scaffolding; `--force` may replace supported content but never bypass path safety.
+- **Installer atomicity is per file, not per installation.** Each supported file is completed in an adjacent staging directory and renamed without a non-atomic copy fallback; earlier files from the same multi-file run may already be visible if a later file fails.
 - **Cross-references are fragile.** 200+ markdown files with dense internal linking (committed surface plus installed skill mirrors and worktree caches). File renames require repo-wide grep.
 - **Real evidence only.** All examples, footguns, and anti-patterns must trace to real incidents with file-path + semantic-anchor references (per ADR-024).
 
