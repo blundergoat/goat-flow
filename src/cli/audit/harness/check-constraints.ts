@@ -1,7 +1,7 @@
 /**
  * Constraints concern: Do deterministic rules catch failures before the LLM runs?
- * 4 checks: deny-covers-secrets, deny-blocks-dangerous, deny-blocks-pipe-to-shell,
- * deny-hook-registered.
+ * 5 checks: deny-covers-secrets, deny-blocks-dangerous, deny-blocks-pipe-to-shell,
+ * deny-hook-registered, settings-rules-matched.
  */
 import type {
   AuditContext,
@@ -465,9 +465,121 @@ const denyHookRegistered: HarnessCheck = {
   },
 };
 
+/** Rule tool prefixes Claude Code warns about at launch and never enforces. */
+const STALE_RULE_FORMS = new Map([
+  ["MultiEdit", "removed tool - folded into Edit"],
+  ["Write", "unmatched rule form - Edit(path) covers file edits"],
+  ["NotebookEdit", "unmatched rule form - Edit(path) covers file edits"],
+  ["Glob", "unmatched rule form - Read(path) covers file reads"],
+]);
+
+/** Permission arrays a Claude-style settings file can carry rules in. */
+const PERMISSION_RULE_ARRAYS = ["deny", "allow", "ask"] as const;
+
+/**
+ * Explain why one rule string uses a stale form, or null when it is matched.
+ *
+ * @param entry - A single permission rule string such as `Write(pattern)`.
+ * @returns The stale-form reason, or null for valid tools (Bash, Read, Edit,
+ *   WebFetch, mcp__*) and non-rule strings.
+ */
+function staleRuleReason(entry: string): string | null {
+  const tool = entry.match(/^([A-Za-z]+)\(/u)?.[1];
+  return (tool && STALE_RULE_FORMS.get(tool)) ?? null;
+}
+
+/**
+ * Collect permission rules whose tool prefix the agent will never match.
+ *
+ * Stale forms warn at launch and enforce nothing, so a settings file can look
+ * protective while the rule is dead config. Non-string entries are skipped.
+ *
+ * @param parsed - Parsed settings JSON from the agent settings facts.
+ * @returns Human-readable `array: rule (reason)` strings for each stale rule.
+ */
+function collectStaleSettingsRules(parsed: unknown): string[] {
+  if (!parsed || typeof parsed !== "object") return [];
+  const perms = (parsed as Record<string, unknown>).permissions;
+  if (!perms || typeof perms !== "object") return [];
+  const stale: string[] = [];
+  for (const arrayName of PERMISSION_RULE_ARRAYS) {
+    const rules = (perms as Record<string, unknown>)[arrayName];
+    if (!Array.isArray(rules)) continue;
+    for (const entry of rules) {
+      if (typeof entry !== "string") continue;
+      const reason = staleRuleReason(entry);
+      if (reason) stale.push(`${arrayName}: ${entry} (${reason})`);
+    }
+  }
+  return stale;
+}
+
+const settingsRulesMatched: HarnessCheck = {
+  id: "settings-rules-matched",
+  name: "Permission rules use forms the agent matches",
+  concern: "constraints",
+  type: "integrity",
+  provenance: constraintsProvenance(
+    "integrity",
+    [
+      "docs/harness-audit.md",
+      ".goat-flow/learning-loop/footguns/agent-settings.md",
+    ],
+    "incident",
+  ),
+  /** Run the Permission rules use forms the agent matches check. */
+  run: (ctx) => {
+    const findings: string[] = [];
+    const failures: string[] = [];
+    const denyMatrix: NonNullable<HarnessCheckDetails["denyMatrix"]> = [];
+    let eligible = 0;
+    for (const agentFacts of ctx.agents) {
+      const settingsFile = agentFacts.agent.settingsFile;
+      // Only Claude-style JSON settings carry Tool(pattern) permission rules;
+      // Codex TOML profiles use a glob = "deny" grammar with no tool prefix.
+      if (!settingsFile || !settingsFile.endsWith(".json")) continue;
+      if (!agentFacts.settings.valid) continue;
+      eligible += 1;
+      const stale = collectStaleSettingsRules(agentFacts.settings.parsed);
+      denyMatrix.push({
+        agent: agentFacts.agent.id,
+        missingPatterns: [],
+        extraPatterns: stale,
+        hookRegistered: agentFacts.hooks.denyIsRegistered,
+      });
+      if (stale.length === 0) {
+        findings.push(
+          `${agentFacts.agent.id}: all permission rules use matched forms`,
+        );
+      } else {
+        failures.push(
+          `${agentFacts.agent.id}: ${stale.length} permission rule(s) the agent never matches - ${stale.join("; ")}`,
+        );
+      }
+    }
+    if (eligible === 0) {
+      return pass(["No agents with JSON permission-rule settings to check"], {
+        denyMatrix,
+      });
+    }
+    if (failures.length === 0) return pass(findings, { denyMatrix });
+    return fail(
+      failures,
+      [
+        "Stale rules warn at launch and enforce nothing: MultiEdit was removed, and file permission checks only match Edit(path)/Read(path) rules.",
+      ],
+      [
+        "Re-run goat-flow setup/install for this agent - upgrades drop removed-tool rules and rewrite Write/NotebookEdit/Glob rules to their matched Edit/Read equivalents.",
+      ],
+      { denyMatrix },
+    );
+  },
+};
+
 export const CONSTRAINTS_CHECKS: HarnessCheck[] = [
   denyCoversSecrets,
   denyBlocksDangerous,
   denyBlocksPipeToShell,
   denyHookRegistered,
+  settingsRulesMatched,
 ];

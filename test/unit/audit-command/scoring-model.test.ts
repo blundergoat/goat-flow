@@ -613,7 +613,7 @@ describe("Audit scoring model", () => {
         score: concerns.constraints.score,
         limits: concerns.constraints.limits,
       },
-      { status: "fail", score: 75, limits: [] },
+      { status: "fail", score: 80, limits: [] },
     );
     assert.deepEqual(
       {

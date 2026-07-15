@@ -139,8 +139,8 @@ describe("codex config migration", () => {
     );
   });
 
-  // Fixture purpose: writes stale exact secret denies to cover broad-pattern migration.
-  it("migrates stale exact env and credentials denies to broad patterns", () => {
+  // Fixture purpose: writes stale exact secret denies to cover canonical-pattern migration.
+  it("migrates stale credentials denies and completes the enumerated env set", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");
     mkdirSync(codexDir, { recursive: true });
@@ -185,11 +185,13 @@ describe("codex config migration", () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
-    assert.match(config, /"\*\*\/\.env\*"\s*=\s*"deny"/);
+    assert.match(config, /"\*\*\/\.env" = "deny"/);
+    assert.match(config, /"\*\*\/\.env\.local" = "deny"/);
+    assert.match(config, /"\*\*\/\.env\.\*\.local" = "deny"/);
+    assert.doesNotMatch(config, /"\*\*\/\.env\*" = "deny"/);
     assert.match(config, /"\*\*\/credentials\*"\s*=\s*"deny"/);
     assert.match(config, /"private\/\*\*"\s*=\s*"deny"/);
-    assert.match(config, /env\.example is intentionally denied/);
-    assert.doesNotMatch(config, /"\*\*\/\.env\.local"\s*=\s*"deny"/);
+    assert.match(config, /env\.example stays readable/);
     assert.doesNotMatch(config, /"\*\*\/credentials"\s*=\s*"deny"/);
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
   });
@@ -298,7 +300,14 @@ describe("codex config migration", () => {
         "glob_scan_max_depth = 3",
         "# legacy :project_roots anchor was replaced with :workspace_roots",
         '[permissions.goat-flow.filesystem.":workspace_roots"]',
-        '"**/.env*" = "deny"',
+        '"**/.env" = "deny"',
+        '"**/.env.local" = "deny"',
+        '"**/.env.development" = "deny"',
+        '"**/.env.production" = "deny"',
+        '"**/.env.staging" = "deny"',
+        '"**/.env.test" = "deny"',
+        '"**/.envrc" = "deny"',
+        '"**/.env.*.local" = "deny"',
         '"**/secrets/**" = "deny"',
         '"**/.ssh/**" = "deny"',
         '"**/.aws/**" = "deny"',

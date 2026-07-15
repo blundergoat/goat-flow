@@ -1613,7 +1613,14 @@ function isInvalidNoneKey(key) {
 }
 
 const canonicalDenyPatterns = new Set([
-  "**/.env*",
+  "**/.env",
+  "**/.env.local",
+  "**/.env.development",
+  "**/.env.production",
+  "**/.env.staging",
+  "**/.env.test",
+  "**/.envrc",
+  "**/.env.*.local",
   "**/secrets/**",
   "**/.ssh/**",
   "**/.aws/**",
@@ -1635,13 +1642,7 @@ const oldGeneratedPatterns = new Set([
   ".docker/**",
   ".gnupg/**",
   ".kube/**",
-  "**/.env",
-  "**/.env.local",
-  "**/.env.development",
-  "**/.env.production",
-  "**/.env.staging",
-  "**/.env.test",
-  "**/.envrc",
+  "**/.env*",
   "**/credentials",
 ]);
 
@@ -1756,11 +1757,18 @@ const canonicalBlock = [
   "glob_scan_max_depth = 3",
   "",
   `[permissions.${activeProfile}.filesystem.":workspace_roots"]`,
-  "# Codex deny rules win over same-profile read rules. Unlike Claude settings,",
-  "# Codex cannot re-allow recursive sample env reads behind a broad filename",
-  "# deny, so .env.example is intentionally denied here to keep .env* variants",
-  "# protected consistently across agents.",
-  '"**/.env*" = "deny"',
+  "# Deny rules win over allow/read rules on both Codex and Claude, so a broad",
+  "# .env* deny cannot be re-opened for the sample file. Real env variants are",
+  "# denied individually so .env.example stays readable, matching the Bash deny",
+  "# hook; nonstandard variants (e.g. .env.backup) are covered by that hook.",
+  '"**/.env" = "deny"',
+  '"**/.env.local" = "deny"',
+  '"**/.env.development" = "deny"',
+  '"**/.env.production" = "deny"',
+  '"**/.env.staging" = "deny"',
+  '"**/.env.test" = "deny"',
+  '"**/.envrc" = "deny"',
+  '"**/.env.*.local" = "deny"',
   '"**/secrets/**" = "deny"',
   '"**/.ssh/**" = "deny"',
   '"**/.aws/**" = "deny"',
@@ -1820,17 +1828,24 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
-# Strip deny rules for tools Claude Code has removed from an existing
-# .claude/settings.json. Claude Code v2.x removed MultiEdit (folded into Edit);
-# any surviving MultiEdit(...) deny rule prints "matches no known tool" on every
-# launch. 1.10.0 scrubbed the templates but left already-installed deny lists
-# untouched, so a non-force upgrade never cleaned them. Remove-list (not
-# allow-list) on purpose: only prune tools Claude has REMOVED, never user-added
-# denies for valid unmanaged tools (WebFetch, NotebookEdit, mcp__*). Keep
-# REMOVED_CLAUDE_TOOLS in sync with the allow-set in
-# test/unit/agent-config-template-parity.test.ts. Writes back only when a rule
-# was actually removed, so MultiEdit-free files are never reformatted. Echoes
-# "migrated" or "unchanged".
+# Repair the permission rule arrays (deny/allow/ask) of an existing
+# .claude/settings.json so they stop printing Claude Code launch warnings and
+# match the current env policy. Three stale rule classes:
+#   - MultiEdit(...) rules ("matches no known tool" - Claude Code v2.x removed
+#     MultiEdit, folded into Edit): dropped.
+#   - Write/NotebookEdit/Glob path rules ("not matched by file permission
+#     checks - only Edit(path) rules are"; Edit covers all file-editing tools,
+#     Read covers reads): rewritten to the matched equivalent, or dropped when
+#     the covering rule already exists.
+#   - The broad Read(**/.env*) deny (shadowed the shipped .env.example allow -
+#     deny wins): expanded to the enumerated real env variants, deny only.
+# Remove/rewrite-list (not allow-list) on purpose: never touch user-added
+# rules for valid matched tools (Bash, Read, Edit, WebFetch, mcp__*). Keep
+# REMOVED_CLAUDE_TOOLS, UNMATCHED_RULE_REWRITES, and ENV_READ_DENY_EXPANSION
+# in sync with test/unit/agent-config-template-parity.test.ts. Untouched rules
+# keep their exact position; writes back only when a rule was actually
+# removed, rewritten, or expanded, so already-clean files are never
+# reformatted. Echoes "migrated" or "unchanged".
 migrate_claude_permission_deny() {
   local path="$1"
   local transform_result
@@ -1840,6 +1855,31 @@ const fs = require("node:fs");
 const path = process.argv[2];
 
 const REMOVED_CLAUDE_TOOLS = new Set(["MultiEdit"]);
+// Permission checks only match Edit(path)/Read(path) file rules; these forms
+// warn at launch and enforce nothing, so rewrite them to the covering tool.
+const UNMATCHED_RULE_REWRITES = new Map([
+  ["Write", "Edit"],
+  ["NotebookEdit", "Edit"],
+  ["Glob", "Read"],
+]);
+// Deny rules win over allow rules, so the broad env read deny silently
+// blocked .env.example despite the shipped allow entries. Expand it to the
+// enumerated real env variants; .env.example then matches no deny.
+const ENV_READ_DENY_EXPANSION = new Map([
+  [
+    "Read(**/.env*)",
+    [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.development)",
+      "Read(**/.env.production)",
+      "Read(**/.env.staging)",
+      "Read(**/.env.test)",
+      "Read(**/.envrc)",
+      "Read(**/.env.*.local)",
+    ],
+  ],
+]);
 
 let raw;
 try {
@@ -1858,24 +1898,78 @@ try {
   process.exit(0);
 }
 
-const deny = settings && settings.permissions && settings.permissions.deny;
-if (!Array.isArray(deny)) {
+const perms = settings && settings.permissions;
+if (!perms || typeof perms !== "object") {
   console.log("unchanged");
   process.exit(0);
 }
 
-const kept = deny.filter((entry) => {
-  if (typeof entry !== "string") return true;
-  const tool = entry.match(/^([A-Za-z]+)\(/u)?.[1];
-  return !(tool && REMOVED_CLAUDE_TOOLS.has(tool));
-});
+// Split a permission rule into tool name and path pattern; null for non-rules.
+const parseRule = (entry) =>
+  typeof entry === "string" ? entry.match(/^([A-Za-z]+)\((.*)\)$/u) : null;
 
-if (kept.length === deny.length) {
+// Return replacement entries for a stale rule, or null to keep it untouched.
+const replacementsFor = (entry, expandEnv) => {
+  if (expandEnv && ENV_READ_DENY_EXPANSION.has(entry)) {
+    return ENV_READ_DENY_EXPANSION.get(entry);
+  }
+  const rule = parseRule(entry);
+  if (rule && UNMATCHED_RULE_REWRITES.has(rule[1])) {
+    return [`${UNMATCHED_RULE_REWRITES.get(rule[1])}(${rule[2]})`];
+  }
+  return null;
+};
+
+// Drop removed-tool rules, rewrite/expand stale forms, and dedupe against
+// rules already present. Untouched rules keep their exact position. Returns
+// the repaired array, or null when nothing changed.
+const repairRules = (rules, expandEnv) => {
+  if (!Array.isArray(rules)) return null;
+  const survivors = rules.filter((entry) => {
+    const rule = parseRule(entry);
+    return !(rule && REMOVED_CLAUDE_TOOLS.has(rule[1]));
+  });
+  const present = new Set(
+    survivors.filter((entry) => replacementsFor(entry, expandEnv) === null),
+  );
+  const kept = [];
+  for (const entry of survivors) {
+    const replacements = replacementsFor(entry, expandEnv);
+    if (replacements === null) {
+      kept.push(entry);
+      continue;
+    }
+    for (const replacement of replacements) {
+      if (present.has(replacement)) continue;
+      present.add(replacement);
+      kept.push(replacement);
+    }
+  }
+  const changed =
+    kept.length !== rules.length ||
+    kept.some((entry, index) => entry !== rules[index]);
+  return changed ? kept : null;
+};
+
+let migrated = false;
+// Env expansion applies to deny only: expanding an allow would revoke the
+// user's .env.example read intent instead of preserving it.
+for (const [arrayName, expandEnv] of [
+  ["deny", true],
+  ["allow", false],
+  ["ask", false],
+]) {
+  const repaired = repairRules(perms[arrayName], expandEnv);
+  if (repaired) {
+    perms[arrayName] = repaired;
+    migrated = true;
+  }
+}
+
+if (!migrated) {
   console.log("unchanged");
   process.exit(0);
 }
-
-settings.permissions.deny = kept;
 const eol = raw.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(raw);
 let out = JSON.stringify(settings, null, 2);
@@ -2275,9 +2369,10 @@ if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
       fi
     elif [[ "$AGENT" == "claude" ]]; then
       migrate_claude_permission_deny "$SETTINGS_DST"
-      # A migrated result removes warnings for tools Claude no longer exposes.
+      # A migrated result removes launch warnings (removed tools, unmatched
+      # Write/NotebookEdit/Glob rules) and applies the enumerated env policy.
       if [[ "$LAST_TRANSFORM_RESULT" == "migrated" ]]; then
-        SETTINGS_MIGRATIONS+=("stale removed-tool deny rules")
+        SETTINGS_MIGRATIONS+=("stale or superseded permission rules")
       fi
     fi
     if [[ ${#SETTINGS_MIGRATIONS[@]} -gt 0 ]]; then
@@ -2294,6 +2389,17 @@ if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
   fi
 else
   echo "  · no settings file for $AGENT"
+fi
+# Personal Claude overrides carry the same shipped rule shapes; repair them too.
+if [[ "$AGENT" == "claude" && -n "${SETTINGS_DST:-}" ]]; then
+  SETTINGS_LOCAL_DST="${SETTINGS_DST%.json}.local.json"
+  if [[ -f "$SETTINGS_LOCAL_DST" ]]; then
+    migrate_claude_permission_deny "$SETTINGS_LOCAL_DST"
+    if [[ "$LAST_TRANSFORM_RESULT" == "migrated" ]]; then
+      COPIED=$((COPIED + 1))
+      echo "  ✓ $SETTINGS_LOCAL_DST (migrated: stale or superseded permission rules)"
+    fi
+  fi
 fi
 if [[ "$AGENT" == "codex" && -n "${SETTINGS_DST:-}" && -f "$SETTINGS_DST" ]]; then
   CODEX_VALIDATION="$(validate_codex_settings_after_install "$SETTINGS_DST")"

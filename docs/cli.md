@@ -14,12 +14,12 @@ The menu can start the dashboard, copy/update goat-flow system files, generate a
 
 ### `goat-flow audit [path] [flags]`
 
-Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (17 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status. Audit JSON/text also includes an advisory per-agent enforcement matrix; it explains hard, limited, soft, missing, and unknown enforcement evidence without changing pass/fail status.
+Validate setup correctness. The base audit runs two deterministic scopes (all pass/fail): GOAT Flow Setup and Agent Setup. Pass `--harness` to add the AI Harness Completeness scope (18 checks across 5 concerns - verifies structural installation of each concern). Harness results contribute to the overall audit status. Audit JSON/text also includes an advisory per-agent enforcement matrix; it explains hard, limited, soft, missing, and unknown enforcement evidence without changing pass/fail status.
 
 | Flag | Description |
 |------|-------------|
 | `--agent <id>` | Filter to one manifest-backed agent id. Run `npx goat-flow manifest` to inspect the current registry. |
-| `--harness` | Add AI Harness Completeness scope (17 checks, installed/not-installed per concern) |
+| `--harness` | Add AI Harness Completeness scope (18 checks, installed/not-installed per concern) |
 | `--check-drift` | Add skill template-vs-installed drift detection (orphan directories, byte-level divergence) |
 | `--check-content` | Add cold-path content lint (vague terms, generic instructions, factual-claim drift) |
 | `--untrusted-target` | Skip executing the target's deny-hook code (its configured launcher string and managed script). By default the audit runs that code for runtime proof; pass this when auditing a checkout you don't trust so the deny-mechanism check stays static (no execution). |

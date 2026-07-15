@@ -318,7 +318,7 @@ export interface HarnessCheckDetails {
     targetWorkspace: boolean;
     boundaryHeading: boolean;
   }[];
-  /** deny-covers-secrets / deny-blocks-dangerous / deny-blocks-pipe-to-shell / deny-hook-registered */
+  /** deny-covers-secrets / deny-blocks-dangerous / deny-blocks-pipe-to-shell / deny-hook-registered / settings-rules-matched */
   denyMatrix?: {
     agent: AgentId;
     missingPatterns: string[];

@@ -300,7 +300,9 @@ function isCodexDenyMode(mode: string): boolean {
   return mode === "none" || mode === "deny";
 }
 
-/** Detect root .env files and variants. Codex broad denies also deny .env.example. */
+/** Detect root .env files and variants. Accepts the legacy broad glob or the
+ *  enumerated per-variant denies (current templates enumerate them so
+ *  .env.example stays readable). */
 function existingExactPathsAreDenied(
   denied: Set<string>,
   fs: ReadonlyFS,

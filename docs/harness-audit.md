@@ -1,6 +1,6 @@
 # AI Harness Audit
 
-`npx goat-flow audit . --harness` adds 17 structural installation checks to the standard build audit. Each check answers an installation question - is the file present, is the registration in sync, is the deny pattern installed. Deterministic, no LLM involvement. Harness results contribute to the overall audit status. Not all checks can reach "installed" on every platform (e.g., Codex has no settings-based Read deny coverage; its deny layer is script-only), but install as much as possible.
+`npx goat-flow audit . --harness` adds 18 structural installation checks to the standard build audit. Each check answers an installation question - is the file present, is the registration in sync, is the deny pattern installed. Deterministic, no LLM involvement. Harness results contribute to the overall audit status. Not all checks can reach "installed" on every platform (e.g., Codex has no settings-based Read deny coverage; its deny layer is script-only), but install as much as possible.
 
 | Mode | Command | Question |
 |------|---------|----------|
@@ -68,9 +68,9 @@ Every registered build and harness check now carries machine-readable `provenanc
 
 1.2.0 keeps provenance JSON-only on purpose. Terminal and markdown renderers stay focused on status + remediation; if you need the justification trail for a check, inspect the per-check `provenance` object in JSON output.
 
-### The 17 checks by type
+### The 18 checks by type
 
-- **integrity (9):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
+- **integrity (10):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `settings-rules-matched`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
 - **advisory (6):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `deny-blocks-pipe-to-shell`, `commit-guidance`
 - **metric (2):** `evidence-before-claims`, `post-turn-hook-integrity`
 
@@ -101,12 +101,13 @@ The agent can only work with what it sees. Stale router paths, missing execution
 
 Constraints are the cheapest, most reliable layer of the harness. They cost zero tokens, produce zero false positives when well-designed, and prevent entire failure categories without any LLM involvement.
 
-**Constraints checks (4):**
+**Constraints checks (5):**
 
-- `deny-covers-secrets` - for agents with a file-read deny layer (Claude settings deny, Codex TOML permission profiles), the deny configuration blocks direct literal access to known secret-bearing files and directories. Claude re-allows read-only `.env.example` inspection; Codex deny rules win over same-profile read rules, so goat-flow intentionally denies `.env.example` there to keep broad `**/.env*` protection. The Bash deny hook covers direct literal filename-extension shell reads such as `*.key` and `*.pem`. Script-only agents such as Copilot rely entirely on the Bash deny hook for direct literal path blocking; the file-read deny check is unavailable for them as a platform limitation, not a failure. JSON output marks that passing state with `displayStatus: "info"` and `assurance: "limited"` instead of a plain OK. This is best-effort literal-path coverage and known deny-pattern coverage, not broad file read/write enforcement or proof against aliases, variables, encoded commands, or arbitrary interpreter code.
+- `deny-covers-secrets` - for agents with a file-read deny layer (Claude settings deny, Codex TOML permission profiles), the deny configuration blocks direct literal access to known secret-bearing files and directories. Deny rules beat allow rules on both Claude and Codex, so both templates deny the real env variants individually (`**/.env`, `**/.envrc`, `**/.env.local` and the other named variants, plus `**/.env.*.local`) and leave `.env.example` readable, matching the Bash deny hook; nonstandard variants such as `.env.backup` are covered by that hook's literal-path blocking, and env writes stay blocked broadly via `Edit(**/.env*)`. The Bash deny hook covers direct literal filename-extension shell reads such as `*.key` and `*.pem`. Script-only agents such as Copilot rely entirely on the Bash deny hook for direct literal path blocking; the file-read deny check is unavailable for them as a platform limitation, not a failure. JSON output marks that passing state with `displayStatus: "info"` and `assurance: "limited"` instead of a plain OK. This is best-effort literal-path coverage and known deny-pattern coverage, not broad file read/write enforcement or proof against aliases, variables, encoded commands, or arbitrary interpreter code.
 - `deny-blocks-dangerous` - each agent's deny configuration blocks broad recursive deletion, all git push (ADR-025), and `chmod`
 - `deny-blocks-pipe-to-shell` - each agent's deny configuration blocks `curl | bash` / `wget | sh` pipe-to-shell patterns
 - `deny-hook-registered` - hook registrations and hook files are in sync (registered hooks exist on disk, existing hooks are registered)
+- `settings-rules-matched` - JSON permission-rule settings (`.claude/settings.json`) carry only rule forms the agent actually matches, across `deny`, `allow`, and `ask`. `MultiEdit(...)` rules (removed tool) and `Write`/`NotebookEdit`/`Glob` path rules (never matched - `Edit`/`Read` cover file access) warn at launch and enforce nothing, so they read as protection that does not exist. Re-running goat-flow setup/install for the agent repairs them: removed-tool rules are dropped and unmatched forms are rewritten to their matched `Edit`/`Read` equivalents.
 
 **Not checked here:** Ask First boundary counts, linter registration cross-reference, static-analysis tool detection. Those were earlier designs that were dropped as either low signal or out-of-scope for a structural audit.
 

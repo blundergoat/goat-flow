@@ -3,7 +3,7 @@
 `npx goat-flow audit` currently registers **37 deterministic checks**:
 
 - **20 build checks**: 16 setup-scope checks plus 4 agent-scope checks
-- **17 harness checks**: additional checks enabled by `--harness`
+- **18 harness checks**: additional checks enabled by `--harness`
 
 Default `npx goat-flow audit .` runs the build checks. `npx goat-flow audit . --harness` runs those same build checks plus the harness checks. Harness checks are still deterministic even when they are typed as `integrity`, `advisory`, or `metric`; the type changes scoring behavior, not whether the check is deterministic.
 
@@ -75,6 +75,7 @@ Aggregate-mode nuance:
 | Constraints | `deny-blocks-dangerous` | `integrity` | Deny patterns block broad recursive deletion, all git push (ADR-025), and `chmod` |
 | Constraints | `deny-blocks-pipe-to-shell` | `advisory` | Deny patterns block `curl | bash` and `wget | sh` pipe-to-shell execution |
 | Constraints | `deny-hook-registered` | `integrity` | A deny hook that exists on disk is registered in the correct pre-tool hook slot |
+| Constraints | `settings-rules-matched` | `integrity` | JSON permission rules (deny/allow/ask) use forms the agent matches; `MultiEdit` (removed tool) and `Write`/`NotebookEdit`/`Glob` path rules warn at launch and enforce nothing - re-running goat-flow setup/install repairs them |
 | Verification | `hooks-registered` | `integrity` | Post-turn hook registrations and on-disk hook files stay in sync |
 | Verification | `commit-guidance` | `advisory` | Commit guidance exists at the canonical `docs/coding-standards/git-commit.md`; old GitHub commit-guidance locations are flagged as misplaced |
 | Verification | `evidence-before-claims` | `metric` | Present instruction files carry the Hallucination red-flags clauses and Rationalisations-to-reject pointer |
@@ -92,6 +93,6 @@ Aggregate-mode nuance:
 | `npx goat-flow audit . --agent <id>` | Same 20 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
 | `npx goat-flow audit . --check-drift` | 20 build checks + artifact drift/integrity | Validates canonical sources, installed mirrors, IDs, frontmatter, and referenced resources |
 | `npx goat-flow audit . --check-content` | 20 build checks + factual/content drift | Validates current documentation claims and removed-command examples |
-| `npx goat-flow audit . --harness` | 20 build + 17 harness = 37 checks | Adds harness completeness, still deterministic |
+| `npx goat-flow audit . --harness` | 20 build + 18 harness = 38 checks | Adds harness completeness, still deterministic |
 
 Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx goat-flow quality`.

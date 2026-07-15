@@ -76,13 +76,13 @@ When `--check-drift` or `--check-content` is enabled, drift and content findings
 
 ### Harness mode (`--harness`)
 
-Adds 17 checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Harness checks are deterministic but classified by type (see `HarnessCheckType` in `src/cli/audit/types.ts`): **integrity** (drift from install state - affects concern status), **advisory** (best practice - affects status unless the check id is listed in `harness.acknowledge` in `config.yaml`), and **metric** (workflow maturity signal - affects concern score, never affects pass/fail status). JSON results also include `displayStatus`, `impact`, optional `evidenceKind`, optional `assurance`, and split provenance path bases (`framework_evidence_paths` vs `target_evidence_paths`) so score-only, structural-smoke, platform-limited, and framework-rationale evidence can be rendered honestly.
+Adds 18 checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Harness checks are deterministic but classified by type (see `HarnessCheckType` in `src/cli/audit/types.ts`): **integrity** (drift from install state - affects concern status), **advisory** (best practice - affects status unless the check id is listed in `harness.acknowledge` in `config.yaml`), and **metric** (workflow maturity signal - affects concern score, never affects pass/fail status). JSON results also include `displayStatus`, `impact`, optional `evidenceKind`, optional `assurance`, and split provenance path bases (`framework_evidence_paths` vs `target_evidence_paths`) so score-only, structural-smoke, platform-limited, and framework-rationale evidence can be rendered honestly.
 
 Harness checks are grouped by **concern** -- the five things that matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
 
-**harness scope** (AI Harness Completeness) - 17 checks across 5 concerns:
+**harness scope** (AI Harness Completeness) - 18 checks across 5 concerns:
 - **Context** (5) - instruction file within line limit, execution loop present, doc paths resolve, required instruction sections present, workspace boundary guidance present
-- **Constraints** (4) - deny blocks direct literal secret paths, deny blocks dangerous commands, deny blocks pipe-to-shell, deny hook registered in agent settings
+- **Constraints** (5) - deny blocks direct literal secret paths, deny blocks dangerous commands, deny blocks pipe-to-shell, deny hook registered in agent settings, permission rules use forms the agent matches
 - **Verification** (4) - hooks in sync, commit guidance, evidence-before-claims coverage, post-turn hook integrity. The post-turn metric applies only to agents whose manifest declares a post-turn event; agents without that runtime capability are skipped, not scored as missing evidence.
 - **Recovery** (2) - milestone tracking, session logs
 - **Feedback Loop** (2) - feedback loop directories exist, decisions tracked
@@ -101,7 +101,7 @@ Agent Setup:              PASS
 
 AI Harness Completeness:  PASS
   Context:                PASS (5/5)
-  Constraints:            FAIL (3/4) - pipe-to-shell not blocked for codex
+  Constraints:            FAIL (4/5) - pipe-to-shell not blocked for codex
   Verification:           PASS (4/4)
   Recovery:               PASS (2/2)
   Feedback Loop:          PASS (2/2)
