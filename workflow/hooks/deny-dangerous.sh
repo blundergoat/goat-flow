@@ -1721,6 +1721,11 @@ split_command_segments_into() {
       if [[ "$split_pipeline_stages" -eq 1 && "$command_character" == "|" ]]; then
         __goat_split_out__+=("$current_policy_stage")
         current_policy_stage=""
+        # Bash's |& operator pipes stderr too; its ampersand belongs to the
+        # operator and must not hide the next executable behind a leading ampersand.
+        if [[ "$next_command_character" == "&" ]]; then
+          command_index=$((command_index + 1))
+        fi
         continue
       fi
 

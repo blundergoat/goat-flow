@@ -82,7 +82,10 @@ describe("local data contract", () => {
     assert.match(architecture, /## Local Data and Evidence Budget/u);
     // A union addition must also add a visible event-budget row for maintainers.
     for (const eventKind of Object.values(DOCUMENTED_EVENT_KINDS)) {
-      assert.match(architecture, new RegExp(`\\x60${eventKind}\\x60`, "u"));
+      assert.ok(
+        architecture.includes(`\`${eventKind}\``),
+        `architecture must budget the literal event kind ${eventKind}`,
+      );
     }
     assert.match(architecture, /route\/checkpoint\/promotion.*deferred/iu);
     assert.match(architecture, /other runtime event families.*deferred/iu);

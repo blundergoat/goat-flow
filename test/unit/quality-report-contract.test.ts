@@ -203,8 +203,66 @@ describe("quality report contract: CLI surfaces", () => {
         /Audit: NOT LOADED \(FAST CACHE-ONLY MODE\)/,
       );
       assert.match(payload.auditSummary, /fast cache-only mode/);
+      assert.match(
+        payload.prompt,
+        /Audit data not loaded \(fast cache-only mode/u,
+      );
       assert.equal(payload.prompt.includes(PROJECT_VALIDATION_LIMIT), false);
       assert.equal(payload.prompt.includes(RECOVERY_RESUMABILITY_LIMIT), false);
+    }
+  });
+
+  it("embeds drift and content failures in focused prompts and summaries", () => {
+    const auditReport = makeLimitedAuditReport();
+    auditReport.status = "fail";
+    auditReport.overall.status = "fail";
+    auditReport.drift = {
+      status: "fail",
+      checked: 12,
+      findings: [
+        {
+          kind: "content",
+          path: ".agents/skills/goat/SKILL.md",
+          message: "installed dispatcher differs from its workflow source",
+        },
+      ],
+    };
+    auditReport.content = {
+      status: "fail",
+      warnings: 1,
+      infos: 0,
+      filesScanned: 4,
+      findings: [
+        {
+          severity: "warning",
+          rule: "removed-command-scan",
+          path: "README.md",
+          line: 8,
+          message: "documentation teaches a removed command",
+        },
+      ],
+    };
+
+    for (const qualityMode of ["process", "harness", "skills"] as const) {
+      const payload = composeQuality({
+        ...makeInput(qualityMode),
+        auditReport,
+      });
+      for (const evidence of [
+        ".agents/skills/goat/SKILL.md",
+        "installed dispatcher differs",
+        "README.md:8 [removed-command-scan]",
+        "documentation teaches a removed command",
+      ]) {
+        assert.ok(
+          payload.prompt.includes(evidence),
+          `${qualityMode}: prompt omitted ${evidence}`,
+        );
+        assert.ok(
+          payload.auditSummary.includes(evidence),
+          `${qualityMode}: auditSummary omitted ${evidence}`,
+        );
+      }
     }
   });
 

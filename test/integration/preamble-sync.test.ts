@@ -146,17 +146,30 @@ function diffQuiet(expectedPath: string, actualPath: string): number {
   return result.status ?? -1;
 }
 
+/** Fail loudly when a managed mirror disappears instead of turning parity into a passing no-op. */
+function assertMirrorExists(
+  templatePath: string,
+  installedPath: string,
+  label: string,
+): void {
+  assert.equal(existsSync(templatePath), true, `${label}: template must exist`);
+  assert.equal(
+    existsSync(installedPath),
+    true,
+    `${label}: installed copy must exist`,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Template and installed copies currently match (sanity check)
 // ---------------------------------------------------------------------------
 describe("preamble/conventions sync: current state", () => {
   it("template and installed skill-docs README.md match", () => {
-    if (
-      !existsSync(TEMPLATE_REFERENCE_README) ||
-      !existsSync(INSTALLED_REFERENCE_README)
-    ) {
-      return;
-    }
+    assertMirrorExists(
+      TEMPLATE_REFERENCE_README,
+      INSTALLED_REFERENCE_README,
+      "skill-docs README.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_REFERENCE_README, INSTALLED_REFERENCE_README),
       0,
@@ -165,9 +178,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed skill-preamble.md match", () => {
-    if (!existsSync(TEMPLATE_PREAMBLE) || !existsSync(INSTALLED_PREAMBLE)) {
-      return; // Skip if either file is missing
-    }
+    assertMirrorExists(
+      TEMPLATE_PREAMBLE,
+      INSTALLED_PREAMBLE,
+      "skill-preamble.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_PREAMBLE, INSTALLED_PREAMBLE),
       0,
@@ -176,12 +191,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed skill-conventions.md match", () => {
-    if (
-      !existsSync(TEMPLATE_CONVENTIONS) ||
-      !existsSync(INSTALLED_CONVENTIONS)
-    ) {
-      return; // Skip if either file is missing
-    }
+    assertMirrorExists(
+      TEMPLATE_CONVENTIONS,
+      INSTALLED_CONVENTIONS,
+      "skill-conventions.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_CONVENTIONS, INSTALLED_CONVENTIONS),
       0,
@@ -190,12 +204,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed browser-use.md match", () => {
-    if (
-      !existsSync(TEMPLATE_BROWSER_USE) ||
-      !existsSync(INSTALLED_BROWSER_USE)
-    ) {
-      return; // Skip if either file is missing
-    }
+    assertMirrorExists(
+      TEMPLATE_BROWSER_USE,
+      INSTALLED_BROWSER_USE,
+      "browser-use.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_BROWSER_USE, INSTALLED_BROWSER_USE),
       0,
@@ -204,12 +217,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed code-comments.md match", () => {
-    if (
-      !existsSync(TEMPLATE_CODE_COMMENTS) ||
-      !existsSync(INSTALLED_CODE_COMMENTS)
-    ) {
-      return;
-    }
+    assertMirrorExists(
+      TEMPLATE_CODE_COMMENTS,
+      INSTALLED_CODE_COMMENTS,
+      "code-comments.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_CODE_COMMENTS, INSTALLED_CODE_COMMENTS),
       0,
@@ -218,12 +230,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed gruff-code-quality.md match", () => {
-    if (
-      !existsSync(TEMPLATE_GRUFF_CODE_QUALITY) ||
-      !existsSync(INSTALLED_GRUFF_CODE_QUALITY)
-    ) {
-      return;
-    }
+    assertMirrorExists(
+      TEMPLATE_GRUFF_CODE_QUALITY,
+      INSTALLED_GRUFF_CODE_QUALITY,
+      "gruff-code-quality.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_GRUFF_CODE_QUALITY, INSTALLED_GRUFF_CODE_QUALITY),
       0,
@@ -232,15 +243,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed hook-policy-testing.md match", () => {
-    // Missing guidance means a fresh setup cannot teach users the tested hook workflow.
-    if (
-      !existsSync(TEMPLATE_HOOK_POLICY_TESTING) ||
-      !existsSync(INSTALLED_HOOK_POLICY_TESTING)
-    ) {
-      assert.fail(
-        "hook-policy-testing.md must exist in both managed locations",
-      );
-    }
+    assertMirrorExists(
+      TEMPLATE_HOOK_POLICY_TESTING,
+      INSTALLED_HOOK_POLICY_TESTING,
+      "hook-policy-testing.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_HOOK_POLICY_TESTING, INSTALLED_HOOK_POLICY_TESTING),
       0,
@@ -249,12 +256,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed observability.md match", () => {
-    if (
-      !existsSync(TEMPLATE_OBSERVABILITY) ||
-      !existsSync(INSTALLED_OBSERVABILITY)
-    ) {
-      return;
-    }
+    assertMirrorExists(
+      TEMPLATE_OBSERVABILITY,
+      INSTALLED_OBSERVABILITY,
+      "observability.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_OBSERVABILITY, INSTALLED_OBSERVABILITY),
       0,
@@ -263,12 +269,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed page-capture.md match", () => {
-    if (
-      !existsSync(TEMPLATE_PAGE_CAPTURE) ||
-      !existsSync(INSTALLED_PAGE_CAPTURE)
-    ) {
-      return;
-    }
+    assertMirrorExists(
+      TEMPLATE_PAGE_CAPTURE,
+      INSTALLED_PAGE_CAPTURE,
+      "page-capture.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_PAGE_CAPTURE, INSTALLED_PAGE_CAPTURE),
       0,
@@ -277,12 +282,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed release-notes.md match", () => {
-    if (
-      !existsSync(TEMPLATE_RELEASE_NOTES) ||
-      !existsSync(INSTALLED_RELEASE_NOTES)
-    ) {
-      return;
-    }
+    assertMirrorExists(
+      TEMPLATE_RELEASE_NOTES,
+      INSTALLED_RELEASE_NOTES,
+      "release-notes.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_RELEASE_NOTES, INSTALLED_RELEASE_NOTES),
       0,
@@ -292,13 +296,11 @@ describe("preamble/conventions sync: current state", () => {
 
   // A fresh install must expose the same playbook contract maintainers edit in workflow source.
   it("template and installed skill-playbook-authoring-sync.md match", () => {
-    // Missing either copy means setup cannot give users the maintained authoring contract.
-    if (
-      !existsSync(TEMPLATE_PLAYBOOK_AUTHORING_SYNC) ||
-      !existsSync(INSTALLED_PLAYBOOK_AUTHORING_SYNC)
-    ) {
-      return;
-    }
+    assertMirrorExists(
+      TEMPLATE_PLAYBOOK_AUTHORING_SYNC,
+      INSTALLED_PLAYBOOK_AUTHORING_SYNC,
+      "skill-playbook-authoring-sync.md",
+    );
     assert.equal(
       diffQuiet(
         TEMPLATE_PLAYBOOK_AUTHORING_SYNC,
@@ -310,9 +312,7 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed changelog.md match", () => {
-    if (!existsSync(TEMPLATE_CHANGELOG) || !existsSync(INSTALLED_CHANGELOG)) {
-      return;
-    }
+    assertMirrorExists(TEMPLATE_CHANGELOG, INSTALLED_CHANGELOG, "changelog.md");
     assert.equal(
       diffQuiet(TEMPLATE_CHANGELOG, INSTALLED_CHANGELOG),
       0,
@@ -321,12 +321,11 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   it("template and installed skill-quality-testing.md match", () => {
-    if (
-      !existsSync(TEMPLATE_QUALITY_TESTING) ||
-      !existsSync(INSTALLED_QUALITY_TESTING)
-    ) {
-      return; // Skip if either file is missing
-    }
+    assertMirrorExists(
+      TEMPLATE_QUALITY_TESTING,
+      INSTALLED_QUALITY_TESTING,
+      "skill-quality-testing.md",
+    );
     assert.equal(
       diffQuiet(TEMPLATE_QUALITY_TESTING, INSTALLED_QUALITY_TESTING),
       0,
@@ -336,9 +335,11 @@ describe("preamble/conventions sync: current state", () => {
 
   for (const pair of TOPICAL_PAIRS) {
     it(`template and installed skill-quality-testing/${pair.name}.md match`, () => {
-      if (!existsSync(pair.template) || !existsSync(pair.installed)) {
-        return; // Skip if either file is missing
-      }
+      assertMirrorExists(
+        pair.template,
+        pair.installed,
+        `skill-quality-testing/${pair.name}.md`,
+      );
       assert.equal(
         diffQuiet(pair.template, pair.installed),
         0,
@@ -354,9 +355,11 @@ describe("preamble/conventions sync: current state", () => {
 // ---------------------------------------------------------------------------
 describe("preamble/conventions sync: regression detection", () => {
   it("detects when installed skill-preamble.md diverges from template", () => {
-    if (!existsSync(TEMPLATE_PREAMBLE) || !existsSync(INSTALLED_PREAMBLE)) {
-      return;
-    }
+    assertMirrorExists(
+      TEMPLATE_PREAMBLE,
+      INSTALLED_PREAMBLE,
+      "skill-preamble.md",
+    );
 
     const tempDir = mkdtempSync(join(tmpdir(), "goat-flow-preamble-sync-"));
     try {
@@ -399,7 +402,11 @@ describe("preamble/conventions sync: regression detection", () => {
 // ---------------------------------------------------------------------------
 describe("preamble/conventions sync: Proof Gate presence (ADR-018)", () => {
   it("template skill-preamble.md contains '## Proof Gate' heading", () => {
-    if (!existsSync(TEMPLATE_PREAMBLE)) return;
+    assert.equal(
+      existsSync(TEMPLATE_PREAMBLE),
+      true,
+      "skill-preamble.md template must exist",
+    );
     const content = readFileSync(TEMPLATE_PREAMBLE, "utf-8");
     assert.match(
       content,
@@ -409,7 +416,11 @@ describe("preamble/conventions sync: Proof Gate presence (ADR-018)", () => {
   });
 
   it("installed skill-preamble.md contains '## Proof Gate' heading", () => {
-    if (!existsSync(INSTALLED_PREAMBLE)) return;
+    assert.equal(
+      existsSync(INSTALLED_PREAMBLE),
+      true,
+      "installed skill-preamble.md must exist",
+    );
     const content = readFileSync(INSTALLED_PREAMBLE, "utf-8");
     assert.match(
       content,

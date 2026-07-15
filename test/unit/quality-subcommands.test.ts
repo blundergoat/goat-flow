@@ -220,6 +220,16 @@ describe("skill subcommand parsing", () => {
     assert.equal(parsed.projectPath, resolve("."));
   });
 
+  it("reports a missing skill subcommand after a project path", () => {
+    assert.throws(
+      () => parseCLIArgs(["skill", "./fixture-project"]),
+      (error: unknown) =>
+        error instanceof CLIError &&
+        error.exitCode === CLI_USAGE_EXIT_CODE &&
+        /project path.*missing a subcommand.*new.*doctor/iu.test(error.message),
+    );
+  });
+
   it("rejects unsupported agent profiles before skill doctor dispatch", () => {
     assert.throws(
       () => parseCLIArgs(["skill", "doctor", "--agent", "unknown"]),

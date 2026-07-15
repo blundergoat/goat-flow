@@ -324,6 +324,15 @@ function assertOutputPathsAvailable(
   }
 }
 
+/** Reject filename sanitization or redaction collisions before any export is written. */
+function assertUniqueOutputPaths(outputPaths: string[]): void {
+  const uniqueOutputPaths = new Set(outputPaths);
+  if (uniqueOutputPaths.size === outputPaths.length) return;
+  throw new PlansExportInputError(
+    "Multiple milestones resolve to the same export filename after redaction and sanitization. Rename the source milestone files before exporting.",
+  );
+}
+
 /** Write one Markdown file per milestone after every destination passes collision checks. */
 function writeMarkdownExports(
   records: PlanExportRecord[],
@@ -339,6 +348,7 @@ function writeMarkdownExports(
   const outputPaths = records.map((record) =>
     join(outputDirectory, markdownExportFilename(record.sourceFile)),
   );
+  assertUniqueOutputPaths(outputPaths);
   assertOutputPathsAvailable(outputPaths, shouldForce);
   mkdirSync(outputDirectory, { recursive: true });
 
@@ -359,6 +369,11 @@ function writeJsonExport(
   outputPath: string,
   shouldForce: boolean,
 ): string[] {
+  if (existsSync(outputPath) && statSync(outputPath).isDirectory()) {
+    throw new PlansExportInputError(
+      `JSON --output must be a file: ${outputPath}.`,
+    );
+  }
   assertOutputPathsAvailable([outputPath], shouldForce);
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(records, null, 2)}\n`, "utf-8");

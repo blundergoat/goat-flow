@@ -598,6 +598,7 @@ export function collectSupportBundle(
       agentFilter: selectedAgent,
       harness: true,
       checkDrift: false,
+      shouldRunAutoDrift: false,
       checkContent: false,
       denyMechanismEvidenceLevel: "static",
     });

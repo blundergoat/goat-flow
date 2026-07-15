@@ -80,6 +80,19 @@ describe("durable artifact redaction", () => {
     assert.match(scrubbed, /\[REDACTED:private-key\]/u);
   });
 
+  // Opaque flag values need redaction even when the option begins the input or a later line.
+  it("redacts credential flags at input and line starts", () => {
+    const scrubbed = scrubDurableText(
+      "--token opaque-token\n--api-key='opaque-key'\n",
+    );
+
+    assert.equal(
+      scrubbed,
+      "--token [REDACTED:argument]\n--api-key=[REDACTED:argument]\n",
+    );
+    assert.doesNotMatch(scrubbed, /opaque-(?:token|key)/u);
+  });
+
   // Paths and read-only commands remain useful so a resumed user can reproduce prior work.
   it("preserves benign paths, commands, issue URLs, and empty input", () => {
     const benignText = [

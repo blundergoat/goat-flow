@@ -122,6 +122,8 @@ function appendFocusedAuditSummary(
 
   const unavailableReason = input.auditUnavailableReason ?? "audit-failed";
   lines.push(renderAuditUnavailableHeading(unavailableReason));
+  lines.push("");
+  lines.push(auditSummaryText);
   lines.push(renderDegradedNote(unavailableReason));
 }
 

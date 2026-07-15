@@ -172,9 +172,23 @@ const sessionLogs: HarnessCheck = {
         buildDetails(0),
       );
     }
-    const fileCount = ctx.fs
-      .listDir(logsDir)
-      .filter((fileName) => fileName.endsWith(".md")).length;
+    let sessionLogFiles: string[];
+    try {
+      sessionLogFiles = ctx.fs.listDir(logsDir);
+    } catch {
+      // A filesystem adapter may lose read access between the directory probe and listing.
+      return fail(
+        ["Session logs directory could not be listed"],
+        ["Restore read access to .goat-flow/logs/sessions/"],
+        [
+          "Check directory permissions and retry the audit after .goat-flow/logs/sessions/ is readable.",
+        ],
+        buildDetails(0),
+      );
+    }
+    const fileCount = sessionLogFiles.filter((fileName) =>
+      fileName.endsWith(".md"),
+    ).length;
     return limitedRecoveryPass(
       ["Session logs directory exists"],
       buildDetails(fileCount),

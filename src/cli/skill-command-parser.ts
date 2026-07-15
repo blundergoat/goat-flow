@@ -156,6 +156,12 @@ export function parseSkillPositionals(positionals: string[]): SkillPositionals {
 
   // A recognized doctor shape is complete and stays read-only through dispatch.
   if (doctorPositionals !== null) return doctorPositionals;
+  if (isPathShapedSkillProject(first)) {
+    throw new CLIError(
+      `skill project path "${first}" is missing a subcommand. Use: skill ${first} new <description> or skill ${first} doctor`,
+      2,
+    );
+  }
   throw new CLIError(
     `unknown skill subcommand "${first}". Supported: new, doctor`,
     2,

@@ -40,7 +40,7 @@ const DURABLE_TEXT_REDACTION_RULES: readonly DurableTextRedactionRule[] = [
   },
   {
     pattern:
-      /(\s--(?:api-key|auth-token|password|secret|token)(?:=|\s+))(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s\r\n]+)/giu,
+      /((?:^|[^\S\r\n])--(?:api-key|auth-token|password|secret|token)(?:=|\s+))(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s\r\n]+)/gimu,
     replacement: "$1[REDACTED:argument]",
   },
   {

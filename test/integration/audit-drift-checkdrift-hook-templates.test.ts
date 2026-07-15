@@ -154,6 +154,47 @@ describe("checkDrift: hook templates", () => {
     }
   });
 
+  // A stale optional script for an unsupported lifecycle must not fail an agent-scoped audit.
+  it("ignores registry hook scripts unsupported by the selected agent", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+        `${HOOK_STUB}\n# stale unsupported copy\n`,
+      );
+
+      const codexReport = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+        agentFilter: "codex",
+      });
+      assert.equal(
+        codexReport.status,
+        "pass",
+        `Codex drift included an unsupported hook: ${JSON.stringify(codexReport.findings)}`,
+      );
+
+      const aggregateReport = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(aggregateReport.status, "fail");
+      assert.ok(
+        aggregateReport.findings.some(
+          (finding) =>
+            finding.path === ".goat-flow/hooks/gruff-code-quality.sh" &&
+            finding.kind === "content",
+        ),
+        `aggregate drift lost the stale hook: ${JSON.stringify(aggregateReport.findings)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("reports post-turn safety hook content drift", () => {
     const root = setupFixture();
     try {

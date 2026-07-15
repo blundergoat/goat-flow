@@ -125,6 +125,7 @@ describe("manifest file ownership", () => {
     assert.match(output, /## File ownership/u);
     assert.match(output, /system-owned.*overwrite/iu);
     assert.match(output, /user-owned.*preserve/iu);
+    assert.match(output, /user-owned.*unless `--force` is passed/iu);
     assert.match(output, /generated.*regenerate/iu);
     assert.match(output, /deprecated.*warn/iu);
     assert.match(output, /external.*never overwrite/iu);

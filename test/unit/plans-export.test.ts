@@ -261,4 +261,104 @@ describe("plans export", () => {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
+
+  /**
+   * Fixture purpose: prove two source names cannot silently overwrite one generated Markdown file.
+   * Process/filesystem side effects: spawns the CLI and writes only temporary source milestones.
+   */
+  it("rejects sanitized Markdown filename collisions before writing", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-filename-collision-"),
+    );
+    const planPath = join(temporaryRoot, "1.14.0");
+    const outputPath = join(temporaryRoot, "exports");
+    writePlanFixture(planPath, completeMilestoneBody(), "M01-a!.md");
+    writePlanFixture(planPath, completeMilestoneBody(), "M01-a?.md");
+
+    try {
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "markdown",
+        "--output",
+        outputPath,
+        "--force",
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /same export filename.*rename/iu);
+      assert.equal(existsSync(outputPath), false);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: prove redaction cannot collapse distinct secret-bearing names into one destination.
+   * Process/filesystem side effects: spawns the CLI and writes only temporary source milestones.
+   */
+  it("rejects redaction-induced Markdown filename collisions", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-redaction-collision-"),
+    );
+    const planPath = join(temporaryRoot, "1.14.0");
+    const outputPath = join(temporaryRoot, "exports");
+    const firstToken = ["ghp", "a".repeat(36)].join("_");
+    const secondToken = ["ghp", "b".repeat(36)].join("_");
+    writePlanFixture(planPath, completeMilestoneBody(), `M01-${firstToken}.md`);
+    writePlanFixture(
+      planPath,
+      completeMilestoneBody(),
+      `M01-${secondToken}.md`,
+    );
+
+    try {
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "markdown",
+        "--output",
+        outputPath,
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /same export filename.*redaction/iu);
+      assert.equal(existsSync(outputPath), false);
+      assert.doesNotMatch(result.stderr, new RegExp(firstToken, "u"));
+      assert.doesNotMatch(result.stderr, new RegExp(secondToken, "u"));
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: keep a directory-shaped JSON destination on the user-facing usage path.
+   * Process/filesystem side effects: spawns the CLI and creates only temporary directories.
+   */
+  it("rejects a JSON output directory even with force", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-json-directory-"),
+    );
+    const planPath = join(temporaryRoot, "1.14.0");
+    const outputPath = join(temporaryRoot, "exports");
+    writePlanFixture(planPath, completeMilestoneBody());
+    mkdirSync(outputPath, { recursive: true });
+
+    try {
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "json",
+        "--output",
+        outputPath,
+        "--force",
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /JSON --output must be a file/iu);
+      assert.doesNotMatch(result.stderr, /EISDIR/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
 });

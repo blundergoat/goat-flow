@@ -278,4 +278,29 @@ describe("checkDrift: artifact integrity", () => {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
   });
+
+  it("does not treat an active command with a retired-command prefix as removed", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      writeFileSync(
+        join(fixtureRoot, "README.md"),
+        "# Fixture\n\nRun `goat-flow scan-report .` to inspect the saved report.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) => finding.rule === "removed-command-scan",
+        ),
+        false,
+        `command prefix produced a removed-command finding: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
 });

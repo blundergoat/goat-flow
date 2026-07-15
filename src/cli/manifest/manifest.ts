@@ -409,7 +409,7 @@ function renderFileOwnershipMarkdown(manifest: Manifest): string[] {
     "| Class | Files | Update behavior |",
     "|-------|-------|-----------------|",
     `| system-owned | ${ownershipCounts.get("system-owned") ?? 0} | overwrite from the canonical workflow source |`,
-    `| user-owned | ${ownershipCounts.get("user-owned") ?? 0} | seed when missing, then preserve user content |`,
+    `| user-owned | ${ownershipCounts.get("user-owned") ?? 0} | seed when missing; preserve user content unless \`--force\` is passed |`,
     `| generated | ${ownershipCounts.get("generated") ?? 0} | regenerate through the declared command |`,
     `| deprecated | ${ownershipCounts.get("deprecated") ?? 0} | warn with an explicit cleanup path |`,
     `| external | ${ownershipCounts.get("external") ?? 0} | verify only; never overwrite |`,

@@ -251,7 +251,7 @@ const REMOVED_COMMAND_CHECKS: RemovedCommand[] = [
   ...Object.entries(CLI_REMOVED_COMMANDS).map(([command, message]) => ({
     rule: `removed-command-${command}`,
     pattern: new RegExp(
-      `(?:\`goat-flow\\s+${command}\\b[^\`]*\`|^\\s*(?:\\$\\s*)?goat-flow\\s+${command}\\b)`,
+      `(?:\`goat-flow\\s+${command}(?=\\s|\`)[^\`]*\`|^\\s*(?:\\$\\s*)?goat-flow\\s+${command}(?=\\s|$))`,
       "g",
     ),
     message,

@@ -532,7 +532,7 @@ export async function writeAuditSetupFixture(
       file === ".goat-flow/config.yaml"
         ? `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`
         : file === ".goat-flow/.gitignore"
-          ? "*\n!.gitignore\n!learning-loop/\n!learning-loop/**\n!skill-docs/\n!skill-docs/**\n!hooks/\n!hooks/**\n!plans/\n!plans/**\n!logs/sessions/\n!logs/sessions/README.md\n"
+          ? "*\n!.gitignore\n!learning-loop/\n!learning-loop/**\n!skill-docs/\n!skill-docs/**\n!hooks/\n!hooks/**\n!plans/\n!plans/**\n!logs/\n!logs/sessions/\n!logs/sessions/.gitkeep\n!logs/sessions/README.md\n!logs/quality/\n!logs/quality/README.md\n!logs/events/\n!logs/events/README.md\n!logs/critiques/\n!logs/critiques/README.md\n!logs/review/\n!logs/review/README.md\n!logs/security/\n!logs/security/README.md\n"
           : "# Stub\n";
     await writeProjectFile(root, file, content);
   }

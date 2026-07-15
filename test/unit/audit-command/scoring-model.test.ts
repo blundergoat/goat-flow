@@ -656,17 +656,59 @@ describe("Audit scoring model", () => {
   it("keeps evidence limits adjacent to passing concerns in terminal and Markdown output", () => {
     const report = getRepoAudit({ agentFilter: "codex", harness: true });
     assertExists(report.concerns);
-    const terminalOutput = renderAuditText(report);
+    const terminalOutput = renderAuditText(report).replace(
+      /\u001b\[[0-9;]*m/gu,
+      "",
+    );
     const markdownOutput = renderAuditMarkdown(report);
-    const evidenceLimits = [
-      ...report.concerns.verification.limits,
-      ...report.concerns.recovery.limits,
-    ];
+    const terminalVerificationStart =
+      terminalOutput.indexOf("\n  Verification  ");
+    const terminalRecoveryStart = terminalOutput.indexOf("\n  Recovery  ");
+    const terminalFeedbackStart = terminalOutput.indexOf("\n  Feedback Loop  ");
+    const markdownVerificationStart =
+      markdownOutput.indexOf("### Verification:");
+    const markdownRecoveryStart = markdownOutput.indexOf("### Recovery:");
+    const markdownFeedbackStart = markdownOutput.indexOf("### Feedback Loop:");
 
-    // Both text formats show every machine-readable boundary without changing the concern's PASS label.
-    for (const evidenceLimit of evidenceLimits) {
-      assert.ok(terminalOutput.includes(`Limit: ${evidenceLimit}`));
-      assert.ok(markdownOutput.includes(`*Limit:* ${evidenceLimit}`));
+    for (const index of [
+      terminalVerificationStart,
+      terminalRecoveryStart,
+      terminalFeedbackStart,
+      markdownVerificationStart,
+      markdownRecoveryStart,
+      markdownFeedbackStart,
+    ]) {
+      assert.ok(
+        index >= 0,
+        `missing concern heading in rendered audit: ${index}`,
+      );
+    }
+
+    const terminalVerification = terminalOutput.slice(
+      terminalVerificationStart,
+      terminalRecoveryStart,
+    );
+    const terminalRecovery = terminalOutput.slice(
+      terminalRecoveryStart,
+      terminalFeedbackStart,
+    );
+    const markdownVerification = markdownOutput.slice(
+      markdownVerificationStart,
+      markdownRecoveryStart,
+    );
+    const markdownRecovery = markdownOutput.slice(
+      markdownRecoveryStart,
+      markdownFeedbackStart,
+    );
+
+    // Each format keeps a limit inside its owning concern rather than merely somewhere in the report.
+    for (const evidenceLimit of report.concerns.verification.limits) {
+      assert.ok(terminalVerification.includes(`Limit: ${evidenceLimit}`));
+      assert.ok(markdownVerification.includes(`*Limit:* ${evidenceLimit}`));
+    }
+    for (const evidenceLimit of report.concerns.recovery.limits) {
+      assert.ok(terminalRecovery.includes(`Limit: ${evidenceLimit}`));
+      assert.ok(markdownRecovery.includes(`*Limit:* ${evidenceLimit}`));
     }
   });
 });

@@ -97,7 +97,10 @@ export interface BuildContextReportInput {
 
 /** Count user-facing body words after excluding machine-readable YAML frontmatter. */
 function countBudgetWords(content: string): number {
-  const userFacingBody = content.replace(/^---\n[\s\S]*?\n---\n?/u, "");
+  const userFacingBody = content.replace(
+    /^---\r?\n[\s\S]*?\r?\n---\r?\n?/u,
+    "",
+  );
   const trimmedContent = userFacingBody.trim();
 
   // An empty file contributes no words or user-facing context pressure.

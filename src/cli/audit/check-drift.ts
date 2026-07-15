@@ -649,9 +649,12 @@ function compareRegistryHookScripts(
   templateRoot: string,
   findings: DriftFinding[],
   checkedHookArtifacts: Set<string>,
+  agentFilter: AgentId | null | undefined,
 ): number {
   let checked = 0;
   for (const spec of listHookSpecs()) {
+    // Agent-scoped drift must not report scripts the selected runner cannot execute.
+    if (agentFilter && spec.unsupportedAgents?.[agentFilter]) continue;
     for (const script of spec.scriptFiles) {
       if (script.includes("/")) continue;
       const installedRel = pathPosix.join(".goat-flow/hooks", script);
@@ -727,6 +730,7 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
     templateRoot,
     findings,
     checkedHookArtifacts,
+    agentFilter,
   );
   checked += findDeprecatedHookFiles(fs, findings);
   findOrphans(fs, findings, agentFilter);

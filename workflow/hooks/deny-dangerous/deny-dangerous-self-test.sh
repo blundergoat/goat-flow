@@ -793,6 +793,8 @@ run_full() {
   # Real repository-write stages stay blocked even when they use the same words and shell shapes.
   expect_block writes "printf message | git commit -F -" "top-level pipeline commit remains blocked"
   expect_block writes "printf message | git push origin main" "top-level pipeline push remains blocked"
+  expect_block writes "printf message |& git push origin main" "stderr pipeline push remains blocked"
+  expect_allow writes "git status |& cat" "stderr pipeline with read-only git stays allowed"
   expect_block writes "true || git commit -m x" "command-list commit remains blocked"
   expect_block writes 'echo "$(git push origin main)"' "nested push remains blocked"
   expect_block writes \

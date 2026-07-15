@@ -6,6 +6,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import type { AuditReport, AuditScope } from "../../src/cli/audit/types.js";
@@ -241,6 +242,19 @@ function assertOmitsReadableValues(
 }
 
 describe("redacted support bundle", () => {
+  // Explicit drift suppression must also disable the audit runner's multi-agent auto-drift path.
+  it("keeps support collection independent of template drift", () => {
+    const source = readFileSync(
+      join(PROJECT_ROOT, "src", "cli", "diagnostics", "support-bundle.ts"),
+      "utf-8",
+    );
+
+    assert.match(
+      source,
+      /checkDrift:\s*false,\s*shouldRunAutoDrift:\s*false,/u,
+    );
+  });
+
   // A support recipient gets stable section names and compact evidence rather than raw project files.
   it("builds the versioned allowlisted summary", () => {
     const bundle = buildSupportBundle(supportInput());

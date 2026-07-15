@@ -16,6 +16,10 @@ const skillDocsCheck = SETUP_CHECKS.find(
   (check) => check.id === "instruction-file-skill-docs-pointer",
 );
 assertExists(skillDocsCheck);
+const goatFlowGitignoreCheck = SETUP_CHECKS.find(
+  (check) => check.id === "goat-flow-gitignore",
+);
+assertExists(goatFlowGitignoreCheck);
 
 const requiredSkillDocsFiles = [
   // Meta references
@@ -148,6 +152,40 @@ function assertBuildChecksPass(ctx: ReturnType<typeof makeCtx>): void {
 describe("audit build: all scopes pass on healthy project", () => {
   it("no failures when all checks pass", () => {
     assertBuildChecksPass(makeCtx());
+  });
+});
+
+describe("audit build: goat-flow gitignore exceptions", () => {
+  it("fails when committed log directories and README anchors stay ignored", () => {
+    const result = goatFlowGitignoreCheck.run(
+      makeCtx({
+        fs: stubFS({
+          readFile: (path) =>
+            path === ".goat-flow/.gitignore"
+              ? [
+                  "*",
+                  "!.gitignore",
+                  "!learning-loop/",
+                  "!learning-loop/**",
+                  "!skill-docs/",
+                  "!skill-docs/**",
+                  "!hooks/",
+                  "!hooks/**",
+                  "!plans/",
+                  "!plans/**",
+                  "!logs/sessions/",
+                  "!logs/sessions/README.md",
+                ].join("\n")
+              : null,
+        }),
+      }),
+    );
+
+    assertExists(result);
+    assert.match(result.message, /!logs\//u);
+    assert.match(result.message, /!logs\/quality\/README\.md/u);
+    assert.match(result.message, /!logs\/events\/README\.md/u);
+    assert.match(result.message, /!logs\/security\/README\.md/u);
   });
 });
 

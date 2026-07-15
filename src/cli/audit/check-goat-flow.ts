@@ -102,8 +102,20 @@ const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!hooks/**",
   "!plans/",
   "!plans/**",
+  "!logs/",
   "!logs/sessions/",
+  "!logs/sessions/.gitkeep",
   "!logs/sessions/README.md",
+  "!logs/quality/",
+  "!logs/quality/README.md",
+  "!logs/events/",
+  "!logs/events/README.md",
+  "!logs/critiques/",
+  "!logs/critiques/README.md",
+  "!logs/review/",
+  "!logs/review/README.md",
+  "!logs/security/",
+  "!logs/security/README.md",
 ];
 
 // === Named structure checks (10) ===
@@ -383,8 +395,11 @@ const goatFlowGitignoreContent: BuildCheck = {
       };
     }
     const content = ctx.fs.readFile(".goat-flow/.gitignore") ?? "";
+    const configuredPatterns = new Set(
+      content.split(/\r?\n/u).map((line) => line.trim()),
+    );
     const missing = REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.filter(
-      (pattern) => !content.includes(pattern),
+      (pattern) => !configuredPatterns.has(pattern),
     );
     if (missing.length === 0) return null;
     return {

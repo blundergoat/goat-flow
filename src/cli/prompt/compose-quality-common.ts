@@ -176,6 +176,28 @@ export function renderAuditSummary(report: AuditReport): string {
     }
   }
 
+  if (report.drift) {
+    lines.push("");
+    lines.push(
+      `- **Template Drift**: ${report.drift.status === "pass" ? "PASS" : "FAIL"} (${report.drift.checked} checked)`,
+    );
+    for (const finding of report.drift.findings) {
+      lines.push(`  - ${finding.path}: ${finding.message}`);
+    }
+  }
+
+  if (report.content) {
+    lines.push("");
+    lines.push(
+      `- **Content Claims**: ${report.content.status === "pass" ? "PASS" : "FAIL"} (${report.content.filesScanned} files scanned)`,
+    );
+    for (const finding of report.content.findings) {
+      lines.push(
+        `  - ${finding.path}${finding.line ? `:${finding.line}` : ""} [${finding.rule}]: ${finding.message}`,
+      );
+    }
+  }
+
   return lines.join("\n");
 }
 

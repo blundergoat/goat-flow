@@ -73,7 +73,7 @@ describe("agent mutation and external-write authority", () => {
       );
       assert.doesNotMatch(
         content,
-        /commit unless/i,
+        /\b(?:commit|push)\s+(?:if|unless|when|after)\b/iu,
         `${relativePath} must not restore conditional commit permission`,
       );
     }

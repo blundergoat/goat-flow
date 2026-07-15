@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-16
 ---
 
 ## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
@@ -135,6 +135,9 @@ last_reviewed: 2026-07-14
 ## Lesson: Audit check tests should assert the public failure field
 
 **Status:** active | **Created:** 2026-05-06
+**Decision changed:** Assert each public result field according to its declared role before matching prose.
+**Trigger phase:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-07-16
 
 **What happened:** While tightening the execution-loop smoke check, the first focused `test/unit/audit-command.test.ts` run failed because the new regression asserted that `CheckResult.failure.message` would contain the raw finding text `inside the section`. The implementation was already failing the check correctly; `failure.message` exposed the public recommendation text (`Add READ, SCOPE, ACT, VERIFY steps under the "Execution Loop" heading...`) instead.
 
@@ -143,6 +146,8 @@ last_reviewed: 2026-07-14
 **Prevention:** For harness-audit regressions, assert the serialized/public `CheckResult` contract first: `status`, `displayStatus`, `impact`, `failure.message`, and `howToFix` when relevant. Only assert raw finding phrasing if that phrasing is intentionally part of the public contract. Evidence anchors: `src/cli/audit/audit.ts` (search: `Convert a harness check`), `src/cli/audit/harness/check-context.ts` (search: `missing step words inside the section`).
 
 **Recurrence (2026-07-13):** The M07 ownership test matched a detailed validator finding against `ManifestValidationError.message`, but the public summary intentionally contains only the finding count. The validator was correct; the assertion now inspects `ManifestValidationError.findings`, matching existing manifest tests. Evidence anchor: `test/unit/manifest-file-ownership.test.ts` (search: `rejects ownership records without a usable source or generator`).
+
+**Recurrence (2026-07-16):** The PR #56 recovery regression correctly received separate `recommendations` and `howToFix` arrays from `HarnessCheckResult`, but the first assertion looked for recommendation text in `howToFix`. The runtime fix was correct; the focused run reported `pass 161`, `fail 1` until the assertion was aligned with the public field contract. Evidence anchors: `src/cli/audit/harness/helpers.ts` (search: `Build a failing harness-check result with recommendations`), `test/integration/audit-quality.test.ts` (search: `reports an unreadable session-log listing without aborting the audit`).
 
 ---
 

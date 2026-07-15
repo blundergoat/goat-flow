@@ -155,6 +155,39 @@ describe("static context report", () => {
     );
   });
 
+  it("excludes CRLF frontmatter from skill word budgets", () => {
+    const dispatcher = [
+      "---",
+      'description: "machine readable metadata with several words"',
+      "---",
+      "route now",
+      "",
+    ].join("\r\n");
+    const report = buildContextReport({
+      projectFiles: createContextFixtureFS({
+        ".claude/skills/goat/SKILL.md": dispatcher,
+      }),
+      facts: contextFacts(
+        stubAgentFacts({
+          instruction: {
+            exists: false,
+            content: null,
+            lineCount: 0,
+            sections: new Map(),
+          },
+          skills: {
+            ...stubAgentFacts().skills,
+            found: ["goat"],
+            installedDirs: ["goat"],
+          },
+        }),
+        makeSharedFacts(),
+      ),
+    });
+
+    assert.equal(report.surfaces.skills[0]?.words, 2);
+  });
+
   // The short authoring index uses its enforced 400-word routing cap, not the broad reference cap.
   it("applies the skill-authoring index budget", () => {
     const projectFiles = {

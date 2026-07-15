@@ -374,6 +374,28 @@ describe("harness scoring honesty", () => {
     assert.match(result.findings.join("\n"), /No session logs directory/);
   });
 
+  it("reports an unreadable session-log listing without aborting the audit", () => {
+    const check = HARNESS_CHECKS.find((c) => c.id === "session-logs");
+    assert.ok(check, "session-logs check must exist");
+    const result = check.run(
+      makeCtx({
+        fs: stubFS({
+          listDir: () => {
+            throw new Error("fixture list failure");
+          },
+        }),
+      }),
+    );
+
+    assert.equal(result.status, "fail");
+    assert.match(result.findings.join("\n"), /could not be listed/u);
+    assert.match(result.recommendations.join("\n"), /Restore read access/u);
+    assert.match(
+      result.howToFix?.join("\n") ?? "",
+      /Check directory permissions/u,
+    );
+  });
+
   it("does not score optional task checkbox completion as recovery health", () => {
     const check = HARNESS_CHECKS.find((c) => c.id === "milestone-tracking");
     assert.ok(check, "milestone-tracking check must exist");
