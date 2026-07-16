@@ -47,7 +47,7 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 │   ├── provenance-types.ts      = evidence-provenance schema for audit checks
 │   ├── render.ts                = text/json/markdown audit renderers
 │   ├── types.ts                 = audit report/check/failure types
-│   └── harness/                 = 17 advisory/integrity/metric checks across the 5 harness concerns
+│   └── harness/                 = 18 advisory/integrity/metric checks across the 5 harness concerns
 │
 ├── config/                      = `.goat-flow/config.yaml` loading and validation
 │   ├── reader.ts                = config reader, defaults, schema warnings

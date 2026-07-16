@@ -151,6 +151,8 @@ Assumptions are not tasks - they're beliefs about the system that affect the pla
 
 When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, record it immediately and stop dependent work. Apply the plan amendment only when the selected mode or required human approval permits; at a blocking gate, show the proposed amendment and wait.
 
+> **Illustrative scenarios.** The worked examples below specify input/output shape for whatever project this skill is installed in. Paths like `.goat-flow/plans/oauth-refresh/` and `src/auth/refresh.ts` are placeholders, not real incidents - never cite them as evidence.
+
 ## Worked Example - Path-Only Intake
 
 User message: `.goat-flow/plans/oauth-refresh/`

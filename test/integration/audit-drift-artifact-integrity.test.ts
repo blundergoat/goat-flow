@@ -317,6 +317,70 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  it("reports a stale harness count in the glossary's exact phrasing", () => {
+    // Regression: the glossary previously received only removed-command
+    // scanning, so "17 checks across 5 concerns" survived a green audit
+    // while the live registry said 18 (2026-07-16 quality reports).
+    const fixtureRoot = setupFixture();
+    try {
+      const glossaryPath = join(fixtureRoot, ".goat-flow", "glossary.md");
+      mkdirSync(dirname(glossaryPath), { recursive: true });
+      writeFileSync(
+        glossaryPath,
+        "| Harness | Validates agent governance installation via 999 checks across 5 concerns (context, constraints, verification, recovery, feedback-loop). | `docs/harness-audit.md` | AI Harness |\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "harness-check-count-drift" &&
+            finding.path === ".goat-flow/glossary.md",
+        ),
+        true,
+        `expected a harness-check-count-drift finding for the glossary, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a stale harness count in the code map's adjectival phrasing", () => {
+    // Regression: "N advisory/integrity/metric checks across the 5 harness
+    // concerns" evaded the count regex, which required the digit directly
+    // before "checks across N concerns" (2026-07-16 quality reports).
+    const fixtureRoot = setupFixture();
+    try {
+      const codeMapPath = join(fixtureRoot, ".goat-flow", "code-map.md");
+      mkdirSync(dirname(codeMapPath), { recursive: true });
+      writeFileSync(
+        codeMapPath,
+        "│   └── harness/ = 999 advisory/integrity/metric checks across the 5 harness concerns\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "harness-check-count-drift" &&
+            finding.path === ".goat-flow/code-map.md",
+        ),
+        true,
+        `expected a harness-check-count-drift finding for the code map, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("does not treat an active command with a retired-command prefix as removed", () => {
     const fixtureRoot = setupFixture();
     try {

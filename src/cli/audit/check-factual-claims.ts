@@ -168,7 +168,11 @@ const COUNT_CHECKS: CountClaimCheck[] = [
   },
   {
     rule: "harness-check-count-drift",
-    pattern: /\b(\d+)\s+checks\s+across\s+\d+\s+concerns\b/gi,
+    // Tolerates adjectives between the count and "checks" (code-map.md says
+    // "N advisory/integrity/metric checks") and "the N harness concerns"
+    // phrasing; the "across N concerns" tail keeps it harness-specific.
+    pattern:
+      /\b(\d+)\s+(?:[\w/-]+\s+){0,3}checks\s+across\s+(?:the\s+)?\d+\s+(?:harness\s+)?concerns\b/gi,
     /** Return the live harness checks across 5 concerns count. */
     actual: () => HARNESS_CHECKS.length,
     label: "harness checks across 5 concerns",
@@ -585,8 +589,14 @@ export function runFactualClaimChecks(ctx: AuditContext): {
     findings.push(...scanRemovedCommands(rel, text));
     findings.push(...scanLifetimeClaimEvidence(rel, text));
   }
+  // The glossary gets count and removed-command scans only: its deprecated-term
+  // entries ("Removed in v1.1.0") would false-positive the path-reference and
+  // lifetime-claim scans that full PROSE_TARGETS members receive.
   const glossary = ctx.fs.readFile(GLOSSARY_TARGET);
   if (glossary !== null) {
+    filesScanned++;
+    findings.push(...scanCountClaims(GLOSSARY_TARGET, glossary));
+    findings.push(...scanConcernCountClaims(GLOSSARY_TARGET, glossary));
     findings.push(...scanRemovedCommands(GLOSSARY_TARGET, glossary));
   }
   // Dashboard-specific loose patterns (safe only on dashboard docs).

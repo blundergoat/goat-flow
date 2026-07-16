@@ -61,17 +61,17 @@ The same surfaces also leaked third-party / competitor skill names (MySQL, Valyu
 
 **Root cause:** When seeding pattern docs from external material temporarily staged under `.goat-flow/scratchpad/`, the authoring agent kept the verbatim citations instead of (a) committing the source material first, (b) restating the principle without the citation, or (c) marking the section guidance-only. It treated the scratchpad path as cite-able because it lives inside `.goat-flow/`, missing that the whole `scratchpad/` subtree is gitignored. Naming the external skills (MySQL, Valyu, frontend-design) compounded it: the agent imported provider vocabulary with the structural pattern.
 
-**Why it matters:** Two harms.
-1. **Broken evidence chain.** Anyone cloning this repo cannot follow the cited path - it does not exist in their checkout, and the `(search: "...")` anchor fails. The framework's Evidence Standard (`workflow/skills/reference/skill-preamble.md`, search: `Re-read each cited file`) requires verifiable citations; gitignored paths cannot be re-read by anyone but the original author.
-2. **Competitor/third-party leakage.** Naming external skills in committed docs makes goat-flow look like it ships, endorses, or derives from those vendors' work, and pins generic patterns to a specific provider, making them look narrower than they are.
+**Why it matters:** (1) **Broken evidence chain.** A cloned checkout cannot follow the cited path or its `(search: "...")` anchor; the Evidence Standard (`workflow/skills/reference/skill-preamble.md`, search: `Re-read each cited file`) requires citations anyone can re-read. (2) **Competitor/third-party leakage.** Naming external skills in committed docs implies goat-flow ships, endorses, or derives from those vendors' work, and pins generic patterns to one provider.
 
 **Prevention:**
-1. **Never cite a `.goat-flow/scratchpad/`, `.goat-flow/plans/`, `.goat-flow/logs/sessions/`, `.goat-flow/logs/quality/`, or `.goat-flow/logs/critiques/` path from a committed file** (`.md`, `.ts`, `.sh`, etc.). These subtrees are gitignored except for anchor files (`README.md`, `.gitignore`, `.gitkeep`, committed README contents). When a pattern is worth committing, promote the source material to a committed location (`lessons/`, `footguns/`, `decisions/`, or a new `workflow/` file) before citing it.
+1. **Never cite a `.goat-flow/scratchpad/`, `.goat-flow/plans/`, `.goat-flow/logs/sessions/`, `.goat-flow/logs/quality/`, or `.goat-flow/logs/critiques/` path from a committed file** - those subtrees are gitignored except anchor files (`README.md`, `.gitignore`, `.gitkeep`). Promote source material to a committed location (`lessons/`, `footguns/`, `decisions/`, or a `workflow/` file) before citing it.
 2. **Strip third-party / competitor skill or vendor names** from generic guidance. State the pattern provider-neutrally ("a domain skill", "a vendor-SDK skill", "an external frontend-design reference") and use placeholders (`<VENDOR>_API_KEY`, not `VALYU_API_KEY`).
-3. **Apply the same rule to test files and code comments**, not just user-facing docs. Test fixtures and inline comments are read by contributors and shape authoring habits.
+3. **Apply the same rule to test files and code comments** - fixtures and inline comments shape contributor authoring habits.
 4. **When auditing docs, grep both classes:** `rg -n "\.goat-flow/(scratchpad|tasks|logs)/" --glob '*.md' --glob '*.ts'` for gitignored citations, plus a project-specific list of competitor names for vendor leakage. Add to `docs-and-crossrefs` footgun resolution rounds when found.
 
 Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `Round 4 (2026-05-11`) record the surfaces fixed.
+
+**Recurrence (2026-07-16):** Pre-1.14.0 quality report `2026-07-16-1018-codex-vwcaf` found five new `.goat-flow/scratchpad/related/` citations in `lessons/coordination.md`, `patterns/external-lessons.md`, and `patterns/refactoring.md`. Fix: cite upstream provenance (repo + PR + path + search anchor), writing the upstream path as plain prose - the stale-ref scanner (`src/cli/facts/shared/learning-loop-common.ts`, search: `isCheckableForStaleness`) resolves backticked slash-containing paths locally and fails `feedback-loop-active` when unresolved.
 
 ---
 
@@ -83,7 +83,7 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Root cause:** The agent treated the pasted output as informational context, not an implicit instruction. It confirmed the text looked correct ("5 concerns, no Boundary") but never ran the verification step the output prescribed - a verification gap: claiming success from reading text rather than running the command that proves it.
 
-**Why it matters:** "Next step (recommended)" in CLI output exists because the preceding command cannot fully verify the system on its own. Skipping it means declaring victory on a structural change (removing a harness concern) without end-to-end proof. The user caught it; a less attentive session would have shipped the gap silently.
+**Why it matters:** "Next step (recommended)" in CLI output exists because the preceding command cannot fully verify the system on its own; skipping it declared victory on a structural change (removing a harness concern) without end-to-end proof. The user caught it.
 
 **Prevention:** When pasted output contains a "next step", "recommended", or "run this" command, treat it as an implicit instruction and run it immediately - especially after structural changes where it is the verification gate. Reading output is not running it.
 

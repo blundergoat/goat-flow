@@ -90,7 +90,7 @@ src/dashboard/
 - **Managed writes stay inside the selected project.** Preview and installer paths reject symlinked or non-directory parents before scaffolding; `--force` may replace supported content but never bypass path safety.
 - **Installer atomicity is per file, not per installation.** Each supported file is completed in an adjacent staging directory and renamed without a non-atomic copy fallback; earlier files from the same multi-file run may already be visible if a later file fails.
 - **Cross-references are fragile.** 200+ markdown files with dense internal linking (committed surface plus installed skill mirrors and worktree caches). File renames require repo-wide grep.
-- **Real evidence only.** All examples, footguns, and anti-patterns must trace to real incidents with file-path + semantic-anchor references (per ADR-024).
+- **Real evidence only.** All examples, footguns, and anti-patterns must trace to real incidents with file-path + semantic-anchor references (per ADR-024). One scoped exception: worked examples inside shipped skill references specify input/output shape for arbitrary consumer projects, so they use placeholder scenarios - they must be explicitly labelled as illustrative and are never citable as evidence.
 
 ## Hot Path / Cold Path
 

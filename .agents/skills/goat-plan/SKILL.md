@@ -220,7 +220,7 @@ Plan is NOT complete until the human explicitly approves.
 
 - Confirm all statuses are `complete`
 - Plan files remain in `.goat-flow/plans/` - human decides archival
-- Write a session log if the plan spanned multiple sessions
+- No completion session log - per the shared conventions, session logs are only for `/compact` without an active milestone file or an explicit human request
 
 ## Constraints
 
