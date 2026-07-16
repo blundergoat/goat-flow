@@ -381,15 +381,11 @@ const VALID_TRIGGER_PHASES = new Set(["READ", "SCOPE", "ACT", "VERIFY"]);
 const MAX_MEMORY_QUALITY_EXAMPLES = 3;
 
 /**
- * Describe forward-looking metadata gaps for one durable memory.
- * Use these labels when users need precise backfill work without a blocking failure.
+ * Describe malformed supplied metadata for one durable memory.
+ * Missing optional fields stay available in JSON instead of producing corpus-wide warnings.
  */
 function describeMemoryQualityIssues(entry: LearningLoopEntryFact): string[] {
   const issues: string[] = [];
-  // Missing decision guidance leaves a user without the concrete future behaviour to change.
-  if (!entry.hasDecisionChangedGuidance) {
-    issues.push("missing Decision changed");
-  }
   // A supplied phase outside the execution loop cannot trigger retrieval at a predictable moment.
   if (
     entry.triggerPhase !== null &&
@@ -411,8 +407,8 @@ function describeMemoryQualityIssues(entry: LearningLoopEntryFact): string[] {
 }
 
 /**
- * Group advisory memory-quality work by source bucket with bounded examples.
- * Use this warning list to guide migration while old projects continue passing checks.
+ * Group malformed supplied memory metadata by source bucket with bounded examples.
+ * Optional-field migration stays in JSON; warnings identify values users actually supplied incorrectly.
  */
 function collectMemoryQualityWarnings(
   learningLoopEntries: LearningLoopEntryFact[],
@@ -423,7 +419,7 @@ function collectMemoryQualityWarnings(
   >();
   // Only footguns and lessons use the forward-looking incident metadata in this milestone.
   for (const entry of learningLoopEntries) {
-    // Patterns and decisions have different authoring contracts, so they are not backfill candidates.
+    // Patterns and decisions have different authoring contracts, so they are not metadata candidates.
     if (entry.kind !== "footgun" && entry.kind !== "lesson") {
       continue;
     }
@@ -458,12 +454,11 @@ function collectMemoryQualityWarnings(
           ? `; +${omittedCandidateCount} more in learningLoopEntries`
           : "";
       // Singular wording keeps one-entry buckets natural in the user-facing CLI output.
-      const candidateLabel =
-        candidates.length === 1 ? "candidate" : "candidates";
+      const issueLabel = candidates.length === 1 ? "issue" : "issues";
       return {
         file: sourcePath,
         rule: "memory-quality" as const,
-        message: `${sourcePath}: ${candidates.length} backfill ${candidateLabel}: ${candidateExamples.join("; ")}${omittedSuffix}`,
+        message: `${sourcePath}: ${candidates.length} metadata ${issueLabel}: ${candidateExamples.join("; ")}${omittedSuffix}`,
       };
     });
 }

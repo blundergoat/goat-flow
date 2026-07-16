@@ -1,9 +1,11 @@
 # Deterministic Audit Checks
 
-`npx goat-flow audit` currently registers **37 deterministic checks**:
+`npx goat-flow audit` currently has 38 executed check rows and 37 unique stable check ids:
 
 - **20 build checks**: 16 setup-scope checks plus 4 agent-scope checks
 - **18 harness checks**: additional checks enabled by `--harness`
+
+The totals differ because `session-logs` runs once in setup scope and once in the Recovery harness concern. The duplicate id intentionally represents the same invariant in two execution scopes; changing it would change downstream SARIF rule identity.
 
 Default `npx goat-flow audit .` runs the build checks. `npx goat-flow audit . --harness` runs those same build checks plus the harness checks. Harness checks are still deterministic even when they are typed as `integrity`, `advisory`, or `metric`; the type changes scoring behavior, not whether the check is deterministic.
 

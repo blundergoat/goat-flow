@@ -74,9 +74,9 @@ Full directives: `references/sub-agent-directives.md`.
 - **B (Alternatives):** SKEPTIC/ANALYST/STRATEGIST on alternatives, ranked by implementation friction. Must surface at least one alternative.
 - **C (Fresh Eyes):** No project context. Flags unstated assumptions and readability gaps. ISOLATION RULE enforced.
 
-Each sub-agent MUST return 3-7 findings plus required lens fields, severity, evidence, confidence, Proof class, rubric dimensions, overall assessment, and one strength; see `references/sub-agent-directives.md`.
+Each sub-agent normally returns 3-7 evidence-backed findings plus required lens fields, severity, evidence, confidence, Proof class, rubric dimensions, overall assessment, and one strength. Zero findings are valid only through the reference pack's clean-result attestation after one documented second pass.
 
-**Lens-finding floor:** A/B need >= 1 finding per lens or one re-run. C needs >= 1 unstated-assumption, readability-gap, or context-limited finding or one re-run. See anti-fabrication constraint and reference pack.
+**Lens coverage:** A/B must analyse every lens and C must probe assumptions/readability. A lens with no supported issue gets one documented second pass, then records `No supported finding` instead of inventing one. See the reference pack.
 
 ## Phase 2 - Rank and Compare
 
@@ -84,7 +84,7 @@ Execute in this order:
 
 **1. Context leak scan.** Grep Agent C output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Only flag references absent from Agent C's input. Untraceable match = CONTEXT LEAK; discard and re-spawn stricter. **Framework-self exemption:** for artifacts inside `.goat-flow/`, `skills/goat-*`, or a goat-flow instruction file, skip `.goat-flow/` and `goat-*` term scans. Check only structural navigation leaks: file paths, config keys, or architecture sections absent from the input.
 
-**1b. Completeness gate.** Verify each sub-agent returned required fields (see Constraints). Incomplete → re-spawn once.
+**1b. Completeness gate.** Verify each sub-agent returned required fields in either its findings or a clean-result attestation. A clean result must include `Evidence reviewed:`, rubric coverage, `Second-pass result:`, `Residual uncertainty:`, required lens fields, overall assessment, and one strength. Incomplete → re-spawn once.
 
 **2. Classify each finding:** **Consensus** (≥2 agents, severity within ±1), **Split** (≥2 agents, severity differs ≥2 levels or explicit reject vs blocking), **Unique** (one agent only). Silence is not a dismiss; treat as Unique.
 
@@ -185,11 +185,11 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 - MUST set max 5 tool-call budget per critique sub-agent; log calls/limit when exposed, otherwise unavailable markers. Do not claim mechanical enforcement when counts are unavailable.
 - MUST log per spawned critique/cross-exam/meta agent: id/handle if exposed, calls/limit, or unavailable markers.
 - MUST Scan Agent C output for context leaks before any other Phase 2 work. Only flag references absent from the input artifact. Any untraceable match = CONTEXT LEAK; discard and re-spawn.
-- MUST Check sub-agent completeness: verify 3-7 findings plus required lens fields against `references/sub-agent-directives.md`. Incomplete → re-spawn once; if still incomplete, record `sub-agent completeness limited`.
+- MUST Check sub-agent completeness: verify all required fields in the evidence-backed findings or a clean-result attestation after one documented second pass against `references/sub-agent-directives.md`. Incomplete → re-spawn once; if still incomplete, record `sub-agent completeness limited`.
 - MUST enforce cross-examination budget: Max 3 cross-examination agents total, max 3 tool calls per agent.
 - Recommendations are never auto-applied. After synthesis, stop. Do not enter implementation mode unless the user explicitly asks to apply changes.
 - MUST apply the Proof Gate from `skill-preamble.md` to every synthesised finding and preserve one proof class tag (`RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`) on each. Sub-agent reports are inputs to verify, not evidence to launder. Re-read applies to findings surviving to Phase 5 (typically 3-7 after Phase 3/4 filtering), not to all findings raised in Phase 1.
-- MUST NOT fabricate findings. Do not fabricate findings to meet the lens-finding floor; convergence allowed after one re-run.
+- MUST NOT fabricate findings. The 3-7 range is a normal target, never a quota; accept a complete clean-result attestation after the required second pass.
 - Universal constraints from skill-preamble.md apply.
 
 ## Output Format

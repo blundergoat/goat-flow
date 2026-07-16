@@ -95,6 +95,10 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 ## Footgun: Advisory warnings without enforcement train users to ignore output
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Optional missing metadata remains visible in structured facts; warnings are reserved for malformed supplied values.
+**Trigger phase:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-07-17
 
 **Symptoms:** A command emits the same wall of warnings on every run, but the warnings never fail the gate and have no migration path. Users and agents learn to scroll past them, including warnings that might matter later.
 
@@ -103,6 +107,8 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 **Evidence:** `stats --check` previously emitted decision-metadata warnings for every ADR missing optional Author(s) and Ticket/Context fields. The current stats warning pipeline is anchored at `src/cli/stats/stats.ts` (search: `Collect advisory learning-loop warnings`), and `.goat-flow/learning-loop/decisions/README.md` (search: `Author(s):`) still recommends the metadata without forcing unavoidable warnings.
 
 **Prevention:** Advisory warnings must have an enforcement timeline, a migration path, or be removed. A warning that fires on 100% of the corpus is not a safety net.
+
+**Recurrence update (2026-07-17):** `stats --check` passed while emitting 35 memory-quality warning groups covering 342 missing optional `Decision changed` values. The remediation kept `hasDecisionChangedGuidance` in JSON and removed absence-only warnings from `src/cli/stats/stats.ts` (search: `describeMemoryQualityIssues`).
 
 ## Footgun: YAML heredocs can break tooling before shell execution
 

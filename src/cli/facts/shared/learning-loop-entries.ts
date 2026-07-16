@@ -164,7 +164,7 @@ function extractMemoryQualityMetadata(
   | "incidentCount"
   | "latestOccurrence"
 > {
-  // A missing Decision changed field becomes an advisory backfill flag for the user.
+  // Missing optional guidance remains visible in JSON without flooding --check warnings.
   const hasDecisionChangedGuidance =
     extractEntryMetadata(entryContent, "Decision changed") !== null;
   return {

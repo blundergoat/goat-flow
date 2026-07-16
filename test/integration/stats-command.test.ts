@@ -200,6 +200,58 @@ describe("goat-flow stats - happy path", () => {
     const json = JSON.parse(renderStatsJson(report));
     assert.equal(json.footguns.totalEntries, expectedFootgunEntries);
   });
+
+  it("recognizes the three canonical footgun evidence labels", () => {
+    const fixtureProjectRoot = makeFixtureRepo({
+      footguns: {
+        "evidence.md":
+          "---\ncategory: evidence\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: measured\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\n- `src/measured.ts` (search: `measured`) - reproduced.\n\n## Footgun: observed\n\n**Status:** active | **Evidence:** OBSERVED\n\n- `src/observed.ts` (search: `observed`) - read directly.\n\n## Footgun: external\n\n**Status:** active | **Evidence:** EXTERNAL_REFERENCE\n\n- `docs/external.md` (search: `external`) - cited source with local applicability.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(fixtureProjectRoot);
+
+    const facts = extractFootgunFacts(
+      createFS(fixtureProjectRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(facts.entryCount, 3);
+    assert.equal(facts.labelCount, 3);
+    assert.equal(facts.hasEvidenceLabels, true);
+
+    const invalidFixtureRoot = makeFixtureRepo({
+      footguns: {
+        "legacy.md":
+          "---\ncategory: legacy\nlast_reviewed: 2026-04-18\n---\n\n# Legacy footgun\n\n**Evidence type:** HYPOTHETICAL_EXAMPLE\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(invalidFixtureRoot);
+    const invalidFacts = extractFootgunFacts(
+      createFS(invalidFixtureRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(invalidFacts.labelCount, 0);
+    assert.equal(invalidFacts.hasEvidenceLabels, false);
+
+    const multiLabelFixtureRoot = makeFixtureRepo({
+      footguns: {
+        "copied-template.md":
+          "---\ncategory: copied-template\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: copied all labels\n\n**Evidence:** ACTUAL_MEASURED | OBSERVED | EXTERNAL_REFERENCE\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(multiLabelFixtureRoot);
+    const multiLabelFacts = extractFootgunFacts(
+      createFS(multiLabelFixtureRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(multiLabelFacts.labelCount, 0);
+    assert.equal(multiLabelFacts.hasEvidenceLabels, false);
+  });
 });
 
 describe("goat-flow stats - graduation candidates", () => {
@@ -247,15 +299,15 @@ describe("goat-flow stats - graduation candidates", () => {
     assert.ok(markdown.includes("verification.md :: beta (2 recurrences)"));
   });
 
-  it("stays report-only: --check passes while candidates exist", () => {
+  it("keeps recurrence candidates report-only without optional-metadata warning noise", () => {
     const verdict = checkStats(loadRecurrenceReport());
     assert.equal(verdict.status, "pass");
     assert.deepEqual(verdict.findings, []);
     assert.equal(
       verdict.warnings.filter((warning) => warning.rule === "memory-quality")
         .length,
-      2,
-      "legacy recurrence buckets should receive advisory metadata work without failing",
+      0,
+      "missing optional guidance must not turn every legacy bucket into a warning",
     );
   });
 
@@ -278,7 +330,7 @@ describe("goat-flow stats - graduation candidates", () => {
 });
 
 describe("goat-flow stats --check", () => {
-  it("keeps legacy metadata gaps advisory and exposes entry health in JSON", () => {
+  it("exposes legacy optional metadata in JSON without flooding warnings", () => {
     const report = loadReport({
       footguns: {
         "quality.md":
@@ -294,17 +346,8 @@ describe("goat-flow stats --check", () => {
     assert.equal(
       verdict.warnings.filter((warning) => warning.rule === "memory-quality")
         .length,
-      1,
-      "one bucket should produce one bounded memory-quality warning",
-    );
-    assert.ok(
-      verdict.warnings.some(
-        (warning) =>
-          warning.rule === "memory-quality" &&
-          warning.message.includes("2 backfill candidates") &&
-          warning.message.includes("legacy alpha"),
-      ),
-      "expected a bucket warning that identifies bounded backfill candidates",
+      0,
+      "optional Decision changed backfill stays visible in JSON, not --check warnings",
     );
     assert.equal(json.learningLoopEntries.length, 2);
     assert.equal(json.learningLoopEntries[0].hasDecisionChangedGuidance, false);

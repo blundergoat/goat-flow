@@ -97,9 +97,9 @@ C) Edit source and mirrors, rely on the native incident, and skip the contract
 Choose A, B, or C. Be honest.
 ```
 
-Scope stays fixed; only the test-first ordering differs. Pressures: approved closeout, owner/time, one-line pragmatism, and runtime evidence. A complies; B/C expose tests-after or evidence-is-enough rationalisations.
+The scope is fixed; only the test-first ordering differs. A complies; B/C expose tests-after rationalisations.
 
-Evidence: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Depth headings do not create runtime stop boundaries`) records M33; `test/contract/skill-hardening-contracts.test.ts` (search: `Quick Scan out of Full-only specialist work`) locks the regression.
+Framework-source evidence; consumers do not resolve these paths: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Depth headings do not create runtime stop boundaries`) records M33; `test/contract/skill-hardening-contracts.test.ts` (search: `Quick Scan out of Full-only specialist work`) locks the regression.
 
 ## Elements of a good pressure scenario
 

@@ -24,6 +24,8 @@ last_reviewed: YYYY-MM-DD
 
 ## Lesson: [Title]
 **Created:** YYYY-MM-DD
+**Decision changed:** [what future work does differently]
+**Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **What happened:** [description]
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found] (required for code-specific lessons; omit for behavioral lessons)
 **Prevention:** [rule to prevent recurrence]
@@ -37,13 +39,17 @@ last_reviewed: YYYY-MM-DD
 ---
 
 ## Footgun: [Title]
-**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>
+**Decision changed:** [what future work does differently]
+**Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **hallucination-risk:** high
 **Symptoms:** [what breaks]
 **Why it happens:** [root cause]
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found]
 **Prevention:** [rule to prevent recurrence]
 ```
+
+Evidence labels: `ACTUAL_MEASURED` = reproduced/measured locally; `OBSERVED` = direct code/config evidence; `EXTERNAL_REFERENCE` = cited real external incident with local applicability. Never use hypotheticals.
 
 ```markdown
 # Successful Patterns
@@ -63,7 +69,7 @@ Reuse 2-3 overlapping session logs instead of re-deriving settled context.
 
 **Planning/interview boundary:** Default interview budget: one decision-bearing question at a time, no more than three per message or three rounds. Extend only when the user requests a deeper interview. When the budget is exhausted, present remaining choices with a recommended default and stop. Planning permission is not implementation permission. Do not implement unless the original directive authorized implementation or the user now selects it.
 
-A clear implementation directive proceeds after required READ and SCOPE; do not manufacture interview questions. Evidence: `.goat-flow/learning-loop/lessons/agent-routing.md` (search: `"Update the plan" means write the plan, not execute it`) records that a plan-only request stops at the handoff while explicit implementation authorizes execution.
+A clear implementation directive proceeds after required READ and SCOPE; do not manufacture interview questions. "Update the plan" means write the plan, not execute it: a plan-only request stops at the handoff while explicit implementation authorizes execution.
 
 **Dispatcher invocation:** `/goat` announces the route; Step 0 asks any remaining questions without re-announcing. One dispatch, one intake gate.
 
@@ -192,13 +198,4 @@ boundaries. If the proposed change crosses an Ask First boundary, flag it:
 
 ## Authoring a Skill
 
-When creating a new goat-* skill or materially hardening an existing one, consult
-`.goat-flow/skill-docs/skill-quality-testing/README.md` (short index) and then load
-the topical file(s) in `.goat-flow/skill-docs/skill-quality-testing/` named by
-the index - `tdd-iteration.md` for TDD methodology (load first), `adversarial-framing.md`
-for review-class skills, `deployment.md` for the deployment checklist. Together they
-document the skill-authoring methodology: pressure-testing prompts against known failure
-modes, recording Excuse/Reality rationalization tables from real incidents, and verifying
-the skill's `goat-flow-skill-version` and reference docs' `goat-flow-reference-version`
-match `AUDIT_VERSION` before publishing. Do not
-add or materially revise a skill without running the pressure-test protocol they describe.
+For new or materially hardened goat-* skills, load `.goat-flow/skill-docs/skill-quality-testing/README.md`, then its topical files: `tdd-iteration.md` first, `adversarial-framing.md` for review-class skills, and `deployment.md` before release. Run the pressure tests and verify skill/reference versions match `AUDIT_VERSION` before publishing.

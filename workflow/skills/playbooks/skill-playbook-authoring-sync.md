@@ -9,9 +9,18 @@ registries, and manifest ownership aligned so users receive one usable artifact.
 
 ## Availability Check
 
-This is a documentary authoring reference, not a runnable tool. Load it before
-editing `workflow/skills/playbooks/` or `.goat-flow/skill-docs/playbooks/`; no
-CLI availability probe applies.
+This is a documentary authoring reference, not a runnable tool. Apply the
+Applicability Gate below before following any repository path; no CLI probe
+applies.
+
+## Applicability Gate
+
+Read the current project's `package.json` and confirm both conditions:
+
+1. `name` is `@blundergoat/goat-flow`.
+2. `workflow/skills/playbooks/`, `src/cli/`, and `test/` exist.
+
+If either condition fails, this is a consumer install: stop; do not probe the framework-source paths below. Consumer-owned playbooks use the ownership route described under Boundary and do not follow the built-in registration workflow.
 
 ## Intent
 

@@ -155,6 +155,37 @@ describe("quality report contract: CLI surfaces", () => {
     assertCarriesContract("focused/process", payload.prompt);
   });
 
+  it("redacts the completed JSON before any quality report reaches disk", () => {
+    for (const qualityMode of [
+      "agent-setup",
+      "process",
+      "harness",
+      "skills",
+    ] as const) {
+      const prompt = composeQuality(makeInput(qualityMode)).prompt;
+      const redactIndex = prompt.indexOf(
+        "goat-flow redact --output \"$FILE\" <<'EOF'",
+      );
+      const validateIndex = prompt.indexOf('quality validate "$FILE"');
+
+      assert.notEqual(redactIndex, -1, `${qualityMode}: missing redact gate`);
+      assert.ok(
+        validateIndex > redactIndex,
+        `${qualityMode}: validation must follow pre-write redaction`,
+      );
+      assert.match(
+        prompt,
+        /Only the redacted JSON may reach `\$FILE`; never stage the raw draft in a file/,
+        `${qualityMode}: missing raw-draft prohibition`,
+      );
+      assert.doesNotMatch(
+        prompt,
+        /then write the JSON below to \$FILE/,
+        `${qualityMode}: prompt still teaches a direct raw write`,
+      );
+    }
+  });
+
   it("embeds live Verification and Recovery limits in every quality mode prompt and summary", () => {
     const qualityModes = [
       "agent-setup",

@@ -544,7 +544,9 @@ export function appendQualityReportContract(
   );
   lines.push(`FILE="\${QUALITY_DIR}/\${STAMP}-${input.agent}-\${RAND}.json"`);
   lines.push('mkdir -p "$QUALITY_DIR"');
-  lines.push("# (then write the JSON below to $FILE)");
+  lines.push(
+    "# Keep the completed JSON in memory; the redaction gate below writes $FILE.",
+  );
   lines.push("```");
   lines.push("");
   lines.push("**JSON body shape:**");
@@ -661,7 +663,21 @@ export function appendQualityReportContract(
   );
   pushFull(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
-    "- If you write the file via a bash heredoc, QUOTE the delimiter (`<<'EOF'`, not `<<EOF`). Unquoted delimiters make the shell interpret `` `backticks` `` as command substitution, which silently eats your inline code references.",
+    "- When streaming the report through the redaction heredoc below, QUOTE the delimiter (`<<'EOF'`, not `<<EOF`). Unquoted delimiters make the shell interpret `` `backticks` `` as command substitution, which silently eats your inline code references.",
+  );
+  lines.push("");
+  lines.push(
+    "**Redact before writing.** Build the complete JSON in memory, then replace the placeholder below and stream it through the readable scrubber. Only the redacted JSON may reach `$FILE`; never stage the raw draft in a file.",
+  );
+  lines.push("");
+  lines.push("```bash");
+  lines.push("goat-flow redact --output \"$FILE\" <<'EOF'");
+  lines.push("<insert the complete JSON body here>");
+  lines.push("EOF");
+  lines.push("```");
+  lines.push("");
+  lines.push(
+    "If `goat-flow redact` is unavailable, keep the report non-durable and state the exact reason; do not write an unredacted fallback.",
   );
   lines.push("");
   lines.push("**Validate before confirming.** After writing the file, run:");

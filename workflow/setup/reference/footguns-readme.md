@@ -41,10 +41,13 @@ Inside a bucket, add entries as `## Footgun:` blocks. Each entry MUST begin with
 
 **Status:** active | **Created:** 2026-04-20 | **Evidence:** OBSERVED
 **Decision changed:** [the future agent decision this evidence changes]
+**Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 
 <body>
 ```
 
-New entries SHOULD include `**Decision changed:**`; `goat-flow stats --check` reports missing values as advisory backfill work, not a failure. Add `**Trigger phase:** READ|SCOPE|ACT|VERIFY` when one execution-loop phase should retrieve the memory. When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`.
+Evidence labels are mutually exclusive: `ACTUAL_MEASURED` means reproduced or measured in the current project; `OBSERVED` means directly verified from current code or configuration without runtime measurement; `EXTERNAL_REFERENCE` means a cited real external incident with explicit local applicability. Hypothetical scenarios are never evidence.
+
+New entries SHOULD include `**Decision changed:**`; stats JSON exposes missing guidance for migration visibility without turning every legacy entry into a `stats --check` warning. Add `**Trigger phase:** READ|SCOPE|ACT|VERIFY` when one execution-loop phase should retrieve the memory. When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`.
 
 Entries without `**Status:**` cannot be split into active-vs-resolved by the audit scanner. Legacy single-entry files still work during migration, but category buckets with the frontmatter + `**Status:**` contract are the preferred and audited format.

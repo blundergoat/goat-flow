@@ -14,12 +14,7 @@ On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 goat-qa is a **testing gap analyser**: it maps changed code or a codebase area to coverage and outputs prioritized must/should/skip guidance. It does not write tests or run full test commands.
 
-**Invoke when:**
-- Feature branch is ready for testing and you want to know what to focus on
-- QA has a test plan and you want to verify it covers the actual code changes
-- You're reviewing a PR and want to know what the tests miss
-- You want to find manual testing gaps before a release
-- You need a QA handoff artifact (flow diagram, risk matrix, manual test plan)
+**Invoke for:** changed-code testing focus, plan-to-code coverage checks, pre-release manual gaps, or a QA risk/handoff artifact.
 
 ## Boundary Commands
 
@@ -31,8 +26,6 @@ goat-qa is a **testing gap analyser**: it maps changed code or a codebase area t
 |--------|---------|
 | "CI is green so coverage is fine" | Scanner scored 100% while preflight failed with 8 errors. CI tests what was thought of; gap analysis looks for what wasn't. |
 | "Unit tests cover it" | Structural tests that import and snapshot pass at high coverage but miss every behavioural edge. STRUCTURAL is not BEHAVIOURAL. |
-| "Coverage report says 80%" | Coverage measures shape, not truth. 20+ content-accuracy failures survived a structural pass that reported high coverage. |
-| "Doer ran the tests, so we're covered" | Doer-verifier is theater in single-agent context. The verifier must have a context boundary the doer did not cross. |
 
 ## Coverage Depth
 
@@ -42,6 +35,19 @@ goat-qa is a **testing gap analyser**: it maps changed code or a codebase area t
 | STRUCTURAL | Imports, constructs, or snapshots only - no behaviour assertion |
 | PARTIAL-BEHAVIOURAL | Happy path or narrow behaviour only; error/edge paths untested |
 | BEHAVIOURAL | Meaningful output, side-effect, error-path, or invariant coverage |
+
+### Exhaustive priority matrix
+
+Use this matrix in Standard and Audit modes so every risk/coverage pair lands in exactly one tier:
+
+| Risk | NONE | STRUCTURAL | PARTIAL-BEHAVIOURAL | BEHAVIOURAL |
+|------|------|------------|---------------------|-------------|
+| CRITICAL | Blocking | Blocking | Blocking | Defer |
+| HIGH | Blocking | Blocking | High-value | Defer |
+| MEDIUM | High-value | High-value | High-value | Defer |
+| LOW | Defer | Defer | Defer | Defer |
+
+Standard maps Blocking to Must test, High-value to Should test, and Defer to Safe to skip. Audit uses the matrix labels directly.
 
 ## Step 0 - Intake
 
@@ -82,10 +88,7 @@ Classify each change:
 | MEDIUM | Internal logic with limited blast radius | Utilities, validators, formatters, isolated components |
 | LOW | Cosmetic, config, or changes with no behavioural impact | Styling, copy, constants, type-only changes |
 
-**For each CRITICAL/HIGH change, trace the blast radius:**
-- What depends on this code? (callers, consumers, downstream services)
-- What user-visible flows pass through this code path?
-- Has this area broken before? (check footguns/lessons)
+For each CRITICAL/HIGH change, trace callers, consumers, user-visible flows, downstream services, and matched footguns/lessons.
 
 **Output: Change Risk Map**
 
@@ -120,9 +123,9 @@ Map each stated expectation to the code path that implements it. Gaps between in
 
 Based on the gaps, produce a focused plan and order by risk.
 
-**Must test (CRITICAL gaps):** table with what breaks and grounded effort estimate; if effort is unknown, write `unknown - needs harness/project context`
-**Should test if time allows (MEDIUM gaps):** same format, lower priority
-**Safe to skip this round:** low-risk or adequately covered areas
+**Must test (matrix Blocking):** table with what breaks and grounded effort estimate; if effort is unknown, write `unknown - needs harness/project context`
+**Should test if time allows (matrix High-value):** same format, lower priority
+**Safe to skip this round (matrix Defer):** name considered areas and why they can wait
 **Misaligned effort:** deprioritise plan cases not mapped to current changes
 
 **CHECKPOINT:** "Targeted testing plan ready. Want a flow diagram for any CRITICAL item?"
@@ -173,11 +176,11 @@ Record coverage using the Coverage Depth vocabulary above.
 
 Rank gaps by `Risk × (1 - CoverageLevel)` descending - Risk maps CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; CoverageLevel is a coverage fraction (NONE=0, STRUCTURAL=0.34, PARTIAL-BEHAVIOURAL=0.67, BEHAVIOURAL=1.0), so `(1 - CoverageLevel)` is the uncovered fraction and a CRITICAL+NONE file ranks top (4.0). Output:
 
-- **Blocking gaps** - CRITICAL-risk file with NONE or STRUCTURAL coverage. One line per file: missing behaviour + the test the user should add.
-- **High-value additions** - HIGH-risk file with PARTIAL coverage. Describe the untested path.
-- **Defer** - LOW-risk or already well-covered files. Name them explicitly so the user sees what was considered and why.
+- **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per file: missing behaviour + the test the user should add.
+- **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path.
+- **Defer** - every matrix Defer pair: LOW-risk or BEHAVIOURAL coverage. Name them explicitly so the user sees what was considered and why.
 
-**Worked Audit example:** Scope a small audit module; read tests, not filenames - the heuristic misleads both ways. An orchestrator can lack a same-name test yet run behaviourally through an integration suite, so it is PARTIAL-BEHAVIOURAL, not NONE. A content-integrity helper with no unit, integration, or exported-symbol references is genuinely NONE. Expected A4 blocking gap: that content-integrity check, CRITICAL by role, NONE coverage - add a test planting a wrong count and asserting it is flagged. Proof class STATIC.
+**Worked Audit example:** Scope a small audit module; read tests, not filenames - the heuristic misleads both ways. A file can lack a same-name test yet run behaviourally through an integration suite, so it is PARTIAL-BEHAVIOURAL, not NONE. Illustrative placeholder; not a real module and never evidence: after proving `src/example-content-check.ts` has no unit, integration, or exported-symbol references, classify it as NONE and route its risk/coverage pair through the matrix. Proof class STATIC applies only to the files actually inspected in the user's project.
 
 **BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template below.
 
@@ -244,9 +247,9 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 
 ```markdown
 ## Targeted Testing Plan
-### Must test before shipping  <!-- CRITICAL gaps with manual steps, failure symptoms, time, proof class -->
-### Should test if time allows  <!-- HIGH/MEDIUM gaps, proof class -->
-### Safe to skip  <!-- with rationale and proof class -->
+### Must test before shipping  <!-- Matrix Blocking pairs; include manual steps, failure symptoms, time, proof class -->
+### Should test if time allows  <!-- Matrix High-value pairs; include proof class -->
+### Safe to skip  <!-- Matrix Defer pairs; include rationale and proof class -->
 
 ## Verification Integrity
 
@@ -276,9 +279,9 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 <!-- Coverage: NONE | STRUCTURAL | PARTIAL-BEHAVIOURAL | BEHAVIOURAL -->
 
 ## Gap Report
-### Blocking gaps  <!-- CRITICAL-risk + NONE/STRUCTURAL coverage; each item includes proof class -->
-### High-value additions  <!-- HIGH-risk + PARTIAL coverage; each item includes proof class -->
-### Defer  <!-- LOW-risk or well-covered; each item includes proof class -->
+### Blocking gaps  <!-- Matrix Blocking pairs; each item includes proof class -->
+### High-value additions  <!-- Matrix High-value pairs; each item includes proof class -->
+### Defer  <!-- Matrix Defer pairs; each item includes proof class -->
 
 ## Verification Integrity
 - Intent spec: [audit scope rationale or `no-intent-spec`]

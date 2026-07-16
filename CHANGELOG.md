@@ -5,6 +5,10 @@
 - **Content audits catch standalone harness totals** - Harness-completeness count claims no longer need an `across N concerns` suffix to be checked against the live registry.
 - **Instruction release headers are gated** - Version bumps stamp release dates, and instruction parity rejects headers that disagree with the current changelog release.
 - **Skill evidence and QA audit contracts stay coherent** - Hot-path evidence rules carry the shipped-example exception, and QA preserves Blocking/High-value/Defer tiers after its audit gate.
+- **QA and critique outputs remain exhaustive without fabrication** - Risk/coverage matrices route every gap, clean delegated critiques use verified attestations, and shipped issue examples are explicitly non-evidence placeholders.
+- **Simple questions skip dispatcher ceremony** - Direct factual answers bypass learning-loop gathering and Route Snapshots while real skill and execution routes keep both gates.
+- **Quality reports redact before disk** - Generated prompts stream completed JSON through `goat-flow redact` before validation instead of teaching a raw file write.
+- **Learning-loop warnings preserve signal** - Missing optional guidance remains visible in JSON, malformed supplied metadata still warns, and templates define measured, observed, and external evidence labels.
 
 ## v1.14.0 - 2026-07-17
 

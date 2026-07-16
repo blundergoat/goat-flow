@@ -361,6 +361,23 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("lets simple factual questions bypass dispatcher ceremony", () => {
+    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Simple-fact fast path/, skillPath);
+      assert.match(
+        skillGuidance,
+        /answer directly after UNDERSTAND; skip GATHER and the Route Snapshot/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Route Snapshot for every inferred skill or direct-execution dispatch/,
+        skillPath,
+      );
+    });
+  });
+
   it("documents task-path classifier examples", () => {
     const skillsDocumentation = readProjectFile("docs/skills.md");
     assert.match(
@@ -441,6 +458,73 @@ describe("skill hardening contracts", () => {
         readMarkdownSection(skillPath, "Constraints"),
         /MUST produce "must test \/ should test \/ safe to skip"/,
         skillPath,
+      );
+    });
+  });
+
+  it("routes every goat-qa risk and coverage combination exhaustively", () => {
+    const expectedMatrixRows = [
+      /\| CRITICAL \| Blocking \| Blocking \| Blocking \| Defer \|/,
+      /\| HIGH \| Blocking \| Blocking \| High-value \| Defer \|/,
+      /\| MEDIUM \| High-value \| High-value \| High-value \| Defer \|/,
+      /\| LOW \| Defer \| Defer \| Defer \| Defer \|/,
+    ];
+
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Exhaustive priority matrix/, skillPath);
+      for (const matrixRow of expectedMatrixRows) {
+        assert.match(skillGuidance, matrixRow, skillPath);
+      }
+      assert.match(
+        skillGuidance,
+        /Standard maps Blocking to Must test, High-value to Should test, and Defer to Safe to skip/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Illustrative placeholder; not a real module and never evidence/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /### Must test before shipping  <!-- Matrix Blocking pairs/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /### Should test if time allows  <!-- Matrix High-value pairs/,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        /content-integrity helper with no unit, integration, or exported-symbol references is genuinely NONE/,
+        skillPath,
+      );
+    });
+  });
+
+  it("labels goat-plan issue examples as non-evidence placeholders", () => {
+    const issueFormatPaths = INSTALLED_SKILL_ROOTS.map(
+      (skillRoot) => `${skillRoot}/goat-plan/references/issue-format.md`,
+    );
+
+    assertForEachTarget(issueFormatPaths, (referencePath) => {
+      const issueFormat = readProjectFile(referencePath);
+      assert.match(
+        issueFormat,
+        /Illustrative placeholder; not a real incident and never evidence/,
+        referencePath,
+      );
+      assert.match(
+        issueFormat,
+        /\[User-visible outcome and why\]/,
+        referencePath,
+      );
+      assert.doesNotMatch(
+        issueFormat,
+        /Dashboard users cannot sign in|refresh-token rotation|OAuth callback/,
+        referencePath,
       );
     });
   });
@@ -610,16 +694,39 @@ describe("skill hardening contracts", () => {
     assert.doesNotMatch(workflowManifest, /execute <plan>/);
   });
 
-  it("checks goat-critique sub-agent completeness before trusting self-report", () => {
+  it("accepts verified clean goat-critique results without fabricated findings", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Check sub-agent completeness/, skillPath);
       assert.match(
         skillGuidance,
-        /3-7 findings plus required lens fields/,
+        /clean-result attestation after one documented second pass/,
+        skillPath,
+      );
+      assert.match(skillGuidance, /Evidence reviewed:/, skillPath);
+      assert.match(skillGuidance, /Residual uncertainty:/, skillPath);
+      assert.doesNotMatch(
+        skillGuidance,
+        /Each sub-agent MUST return 3-7 findings/,
         skillPath,
       );
       assert.match(skillGuidance, /sub-agent completeness limited/, skillPath);
+    });
+
+    const directivePaths = INSTALLED_SKILL_ROOTS.map(
+      (skillRoot) =>
+        `${skillRoot}/goat-critique/references/sub-agent-directives.md`,
+    );
+    assertForEachTarget(directivePaths, (referencePath) => {
+      const directives = readProjectFile(referencePath);
+      assert.match(directives, /Clean-result attestation/, referencePath);
+      assert.match(directives, /Second-pass result:/, referencePath);
+      assert.match(directives, /Residual uncertainty:/, referencePath);
+      assert.match(
+        directives,
+        /Never invent a finding to meet the normal target/,
+        referencePath,
+      );
     });
   });
 
@@ -655,7 +762,7 @@ describe("skill hardening contracts", () => {
       assert.match(skillGuidance, proofClassContract, skillPath);
       assert.match(
         skillGuidance,
-        /Each sub-agent MUST return[^\n]+Proof class/,
+        /Each sub-agent normally returns[^\n]+Proof class/,
         skillPath,
       );
       assert.match(
@@ -1033,6 +1140,130 @@ describe("skill hardening contracts", () => {
         referencePath,
       );
     });
+  });
+
+  it("keeps consumer-installed guidance honest about framework-only paths", () => {
+    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+      assert.doesNotMatch(
+        readProjectFile(skillPath),
+        /lessons\/review-feedback\.md/,
+        skillPath,
+      );
+    });
+
+    for (const preamblePath of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      assert.doesNotMatch(
+        readProjectFile(preamblePath),
+        /src\/cli\/redact-command\.ts/,
+        preamblePath,
+      );
+    }
+
+    for (const conventionsPath of [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ]) {
+      assert.doesNotMatch(
+        readProjectFile(conventionsPath),
+        /lessons\/agent-routing\.md/,
+        conventionsPath,
+      );
+    }
+
+    for (const playbookPath of [
+      "workflow/skills/playbooks/skill-playbook-authoring-sync.md",
+      ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
+    ]) {
+      const playbook = readProjectFile(playbookPath);
+      assert.match(playbook, /## Applicability Gate/, playbookPath);
+      assert.match(playbook, /@blundergoat\/goat-flow/, playbookPath);
+      assert.match(
+        playbook,
+        /consumer install: stop; do not probe the framework-source paths below/,
+        playbookPath,
+      );
+    }
+
+    for (const tddPath of [
+      "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
+      ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+    ]) {
+      assert.match(
+        readProjectFile(tddPath),
+        /Framework-source evidence; consumers do not resolve these paths/,
+        tddPath,
+      );
+    }
+  });
+
+  it("installs complete learning-loop templates and one evidence taxonomy", () => {
+    const templatePaths = [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+      "workflow/setup/reference/footguns-readme.md",
+      ".goat-flow/learning-loop/footguns/README.md",
+    ];
+
+    assertForEachTarget(templatePaths, (templatePath) => {
+      const template = readProjectFile(templatePath);
+      assert.match(template, /\*\*Decision changed:\*\*/, templatePath);
+      assert.match(template, /\*\*Trigger phase:\*\*/, templatePath);
+    });
+
+    for (const taxonomyPath of [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+      "workflow/setup/reference/footguns-readme.md",
+      ".goat-flow/learning-loop/footguns/README.md",
+      "workflow/evaluation/footguns.md",
+    ]) {
+      const taxonomy = readProjectFile(taxonomyPath);
+      assert.match(taxonomy, /ACTUAL_MEASURED/, taxonomyPath);
+      assert.match(taxonomy, /OBSERVED/, taxonomyPath);
+      assert.match(taxonomy, /EXTERNAL_REFERENCE/, taxonomyPath);
+    }
+
+    for (const choiceTemplatePath of [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+      "workflow/evaluation/footguns.md",
+    ]) {
+      assert.match(
+        readProjectFile(choiceTemplatePath),
+        /\*\*Evidence:\*\* <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>/,
+        choiceTemplatePath,
+      );
+    }
+
+    for (const instructionPath of [
+      "workflow/setup/agents/claude.md",
+      "workflow/setup/agents/codex.md",
+      "workflow/setup/agents/antigravity.md",
+      "workflow/setup/agents/copilot.md",
+      "CLAUDE.md",
+      "AGENTS.md",
+      ".github/copilot-instructions.md",
+    ]) {
+      const instruction = readProjectFile(instructionPath);
+      assert.match(instruction, /ACTUAL_MEASURED/, instructionPath);
+      assert.match(instruction, /OBSERVED/, instructionPath);
+      assert.match(instruction, /EXTERNAL_REFERENCE/, instructionPath);
+    }
+  });
+
+  it("explains audit execution rows versus stable check ids", () => {
+    const auditGuide = readProjectFile("docs/audit-checks.md");
+    assert.match(
+      auditGuide,
+      /38 executed check rows and 37 unique stable check ids/,
+    );
+    assert.match(
+      auditGuide,
+      /`session-logs` runs once in setup scope and once in the Recovery harness concern/,
+    );
   });
 
   it("installs a conditional redacted handoff receipt schema", () => {

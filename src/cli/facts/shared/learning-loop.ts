@@ -65,7 +65,7 @@ function countFootgunLabels(content: string): number {
   if (bucketCount > 0) {
     return countMatches(
       body,
-      /\*\*Evidence(?:\s+type)?:\*\*\s*(?:ACTUAL_MEASURED|DESIGN_TARGET|HYPOTHETICAL_EXAMPLE)/gim,
+      /\*\*Evidence(?:\s+type)?:\*\*\s*(?:ACTUAL_MEASURED|OBSERVED|EXTERNAL_REFERENCE)\s*$/gim,
     );
   }
   return hasEvidenceLabel(content) ? 1 : 0;
@@ -86,9 +86,13 @@ function mergeDirMentions(target: Map<string, number>, content: string): void {
 /** Detect whether a footgun entry declares an explicit evidence label. */
 function hasEvidenceLabel(content: string): boolean {
   return (
-    /^evidence_type:\s*.+$/im.test(content) ||
-    /^\*\*Evidence type:\*\*/m.test(content) ||
-    /\*\*Evidence:\*\*\s*(?:ACTUAL_MEASURED|DESIGN_TARGET|HYPOTHETICAL_EXAMPLE)/m.test(
+    /^evidence_type:\s*(?:ACTUAL_MEASURED|OBSERVED|EXTERNAL_REFERENCE)\s*$/im.test(
+      content,
+    ) ||
+    /^\*\*Evidence type:\*\*\s*(?:ACTUAL_MEASURED|OBSERVED|EXTERNAL_REFERENCE)\s*$/m.test(
+      content,
+    ) ||
+    /\*\*Evidence:\*\*\s*(?:ACTUAL_MEASURED|OBSERVED|EXTERNAL_REFERENCE)\s*$/m.test(
       content,
     )
   );
