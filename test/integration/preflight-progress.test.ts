@@ -6,7 +6,8 @@
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { afterEach, describe, it } from "node:test";
@@ -25,6 +26,7 @@ const PREFLIGHT_RUNNER_PATH = join(
 );
 const CHILD_FAILURE_STATUS = 7;
 const fixtureProcessIds = new Set<number>();
+const fixtureTemporaryDirectories = new Set<string>();
 
 /** Captured runner evidence; empty streams mean that channel produced nothing for the user. */
 interface PreflightRunnerResult {
@@ -46,7 +48,7 @@ interface PreflightRunnerFixture {
   heartbeatSeconds?: number;
   progressLabel?: string;
   shouldExposeProgress?: boolean;
-  parentStopAfterMs?: number;
+  parentStopAfterFile?: string;
 }
 
 /**
@@ -94,13 +96,24 @@ function runPreflightRunnerFixture(
     let runnerErrorOutput = "";
     let operatorProgress = "";
     let firstProgressAfterMs: number | null = null;
+    let hasRequestedParentStop = false;
+    let parentStopPoll: NodeJS.Timeout | null = null;
 
-    // A requested parent stop simulates the user closing preflight while its test child is active.
-    if (fixture.parentStopAfterMs !== undefined) {
-      setTimeout(
-        () => runnerProcess.kill("SIGTERM"),
-        fixture.parentStopAfterMs,
-      ).unref();
+    // A readiness file proves the buffered child reached its active state before parent cleanup begins.
+    const parentStopAfterFile = fixture.parentStopAfterFile;
+    if (parentStopAfterFile !== undefined) {
+      parentStopPoll = setInterval(() => {
+        if (hasRequestedParentStop || !existsSync(parentStopAfterFile)) {
+          return;
+        }
+        hasRequestedParentStop = true;
+        if (parentStopPoll !== null) {
+          clearInterval(parentStopPoll);
+          parentStopPoll = null;
+        }
+        runnerProcess.kill("SIGTERM");
+      }, 10);
+      parentStopPoll.unref();
     }
 
     // Configured pipes always exist; optional access keeps a spawn failure reportable instead of crashing the test.
@@ -120,8 +133,16 @@ function runPreflightRunnerFixture(
       }
       operatorProgress += chunk;
     });
-    runnerProcess.once("error", rejectFixture);
+    runnerProcess.once("error", (error) => {
+      if (parentStopPoll !== null) {
+        clearInterval(parentStopPoll);
+      }
+      rejectFixture(error);
+    });
     runnerProcess.once("close", (status, signal) => {
+      if (parentStopPoll !== null) {
+        clearInterval(parentStopPoll);
+      }
       resolveFixture({
         status,
         signal,
@@ -216,6 +237,10 @@ afterEach(() => {
     }
   }
   fixtureProcessIds.clear();
+  for (const temporaryDirectory of fixtureTemporaryDirectories) {
+    rmSync(temporaryDirectory, { force: true, recursive: true });
+  }
+  fixtureTemporaryDirectories.clear();
 });
 
 describe("preflight Tests-phase progress", () => {
@@ -412,8 +437,14 @@ describe("preflight Tests-phase progress", () => {
 
   // This fixture reproduces a worker that remains active when the user closes preflight.
   it("cleans the child process group before returning a parent termination", async () => {
+    const parentStopTemporaryDirectory = mkdtempSync(
+      join(tmpdir(), "goat-flow-preflight-parent-stop-"),
+    );
+    fixtureTemporaryDirectories.add(parentStopTemporaryDirectory);
+    const parentStopReadyFile = join(parentStopTemporaryDirectory, "ready");
     const parentStopFixtureSource = String.raw`
       const { spawn } = require("node:child_process");
+      const { writeFileSync } = require("node:fs");
       process.on("SIGTERM", () => {});
       const worker = spawn(
         process.execPath,
@@ -422,12 +453,13 @@ describe("preflight Tests-phase progress", () => {
       );
       process.stdout.write("PARENT_STOP_PID=" + process.pid + "\\n");
       process.stdout.write("PARENT_STOP_WORKER_PID=" + worker.pid + "\\n");
+      writeFileSync(${JSON.stringify(parentStopReadyFile)}, "ready");
       setInterval(() => {}, 1000);
     `;
     const runnerResult = await runPreflightRunnerFixture({
       timeoutSeconds: 3,
       heartbeatSeconds: 0.05,
-      parentStopAfterMs: 200,
+      parentStopAfterFile: parentStopReadyFile,
       childSource: parentStopFixtureSource,
     });
     const parentProcessId = fixtureProcessId(
