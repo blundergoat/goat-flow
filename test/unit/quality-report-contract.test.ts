@@ -163,14 +163,30 @@ describe("quality report contract: CLI surfaces", () => {
       "skills",
     ] as const) {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
-      const redactIndex = prompt.indexOf(
-        "goat-flow redact --output \"$FILE\" <<'EOF'",
+      const compatibilityIndex = prompt.indexOf("goat-flow --version");
+      const sourceFallbackIndex = prompt.indexOf(
+        "GOAT_FLOW_CLI=(node --import tsx src/cli/cli.ts)",
       );
-      const validateIndex = prompt.indexOf('quality validate "$FILE"');
+      const redactIndex = prompt.indexOf(
+        '"${GOAT_FLOW_CLI[@]}" redact --output "$FILE" <<\'EOF\'',
+      );
+      const validateIndex = prompt.indexOf(
+        '"${GOAT_FLOW_CLI[@]}" quality validate "$FILE"',
+      );
 
+      assert.notEqual(
+        compatibilityIndex,
+        -1,
+        `${qualityMode}: missing redactor compatibility check`,
+      );
+      assert.match(prompt, /goat-flow v1\.14\.0/, qualityMode);
+      assert.ok(
+        sourceFallbackIndex > compatibilityIndex,
+        `${qualityMode}: missing framework-source fallback`,
+      );
       assert.notEqual(redactIndex, -1, `${qualityMode}: missing redact gate`);
       assert.ok(
-        validateIndex > redactIndex,
+        redactIndex > sourceFallbackIndex && validateIndex > redactIndex,
         `${qualityMode}: validation must follow pre-write redaction`,
       );
       assert.match(
@@ -182,6 +198,11 @@ describe("quality report contract: CLI surfaces", () => {
         prompt,
         /then write the JSON below to \$FILE/,
         `${qualityMode}: prompt still teaches a direct raw write`,
+      );
+      assert.doesNotMatch(
+        prompt,
+        /^goat-flow (?:redact|quality validate)\b/m,
+        `${qualityMode}: stale global CLI remains unconditional`,
       );
     }
   });

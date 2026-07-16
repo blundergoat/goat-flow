@@ -205,7 +205,7 @@ describe("goat-flow stats - happy path", () => {
     const fixtureProjectRoot = makeFixtureRepo({
       footguns: {
         "evidence.md":
-          "---\ncategory: evidence\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: measured\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\n- `src/measured.ts` (search: `measured`) - reproduced.\n\n## Footgun: observed\n\n**Status:** active | **Evidence:** OBSERVED\n\n- `src/observed.ts` (search: `observed`) - read directly.\n\n## Footgun: external\n\n**Status:** active | **Evidence:** EXTERNAL_REFERENCE\n\n- `docs/external.md` (search: `external`) - cited source with local applicability.\n",
+          "---\ncategory: evidence\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: measured\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\n**Evidence:** `src/measured.ts` (search: `measured`) - reproduced.\n\n## Footgun: observed\n\n**Status:** active | **Evidence:** OBSERVED\n\n- `src/observed.ts` (search: `observed`) - read directly.\n\n## Footgun: external\n\n**Status:** active | **Evidence:** EXTERNAL_REFERENCE\n\n- `docs/external.md` (search: `external`) - cited source with local applicability.\n",
       },
       lessons: {},
     });
@@ -251,6 +251,39 @@ describe("goat-flow stats - happy path", () => {
     );
     assert.equal(multiLabelFacts.labelCount, 0);
     assert.equal(multiLabelFacts.hasEvidenceLabels, false);
+
+    const lowercaseFixtureRoot = makeFixtureRepo({
+      footguns: {
+        "lowercase.md":
+          "---\ncategory: lowercase\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: lowercase label\n\n**Status:** active | **Evidence:** observed\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(lowercaseFixtureRoot);
+    const lowercaseFacts = extractFootgunFacts(
+      createFS(lowercaseFixtureRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(lowercaseFacts.labelCount, 0);
+    assert.equal(lowercaseFacts.hasEvidenceLabels, false);
+
+    const duplicateMaskFixtureRoot = makeFixtureRepo({
+      footguns: {
+        "duplicate-mask.md":
+          "---\ncategory: duplicate-mask\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: duplicate labels\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n**Evidence type:** OBSERVED\n\nBody.\n\n## Footgun: missing label\n\n**Status:** active\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(duplicateMaskFixtureRoot);
+    const duplicateMaskFacts = extractFootgunFacts(
+      createFS(duplicateMaskFixtureRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(duplicateMaskFacts.entryCount, 2);
+    assert.equal(duplicateMaskFacts.labelCount, 0);
+    assert.equal(duplicateMaskFacts.hasEvidenceLabels, false);
   });
 });
 
@@ -392,6 +425,28 @@ describe("goat-flow stats --check", () => {
     const verdict = checkStats(report);
     assert.equal(verdict.status, "pass");
     assert.deepEqual(verdict.findings, []);
+  });
+
+  it("fails when footgun entries do not have exactly one canonical evidence label", () => {
+    const report = loadReport({
+      footguns: {
+        "labels.md":
+          "---\ncategory: labels\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: duplicate labels\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n**Evidence type:** OBSERVED\n\nBody.\n\n## Footgun: missing label\n\n**Status:** active\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+
+    assert.equal(verdict.status, "fail");
+    assert.ok(
+      verdict.findings.some(
+        (finding) =>
+          finding.rule === "evidence-label" &&
+          finding.message.includes("labels.md") &&
+          finding.message.includes("0 of 2"),
+      ),
+      "expected a blocking per-bucket evidence-label diagnostic",
+    );
   });
 
   it("passes with warnings for fresh empty learning-loop directories", () => {

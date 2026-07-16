@@ -89,7 +89,7 @@ The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-f
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
 **Learning loop** (update before DoD if VERIFY caught a failure or you corrected course):
-- Lesson → `.goat-flow/learning-loop/lessons/<category>.md`; footgun → `.goat-flow/learning-loop/footguns/<category>.md` using `ACTUAL_MEASURED`, `OBSERVED`, or `EXTERNAL_REFERENCE` (measured locally, read directly, or cited externally with local applicability); decision → `.goat-flow/learning-loop/decisions/`; optional context-compaction continuity note → `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md`.
+- Lesson → `.goat-flow/learning-loop/lessons/<category>.md`; footgun → `.goat-flow/learning-loop/footguns/<category>.md` choosing exactly one evidence label: `ACTUAL_MEASURED`, `OBSERVED`, or `EXTERNAL_REFERENCE` (measured locally, read directly, or cited externally with local applicability); decision → `.goat-flow/learning-loop/decisions/`; optional context-compaction continuity note → `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md`.
 
 ## Definition of Done
 

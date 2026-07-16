@@ -98,6 +98,7 @@ interface StatsFinding {
     | "stale-last-reviewed"
     | "stale-ref"
     | "invalid-line-ref"
+    | "evidence-label"
     | "format"
     | "bucket-size"
     | "decision-filename"
@@ -331,6 +332,14 @@ function collectFindings(section: BucketSection): StatsFinding[] {
         findings.push({
           file: section.path,
           rule: "invalid-last-reviewed",
+          message: diagnosticMessage,
+        });
+        continue;
+      }
+      if (/invalid evidence-label count/.test(diagnosticMessage)) {
+        findings.push({
+          file: section.path,
+          rule: "evidence-label",
           message: diagnosticMessage,
         });
         continue;

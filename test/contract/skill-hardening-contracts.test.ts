@@ -1251,6 +1251,11 @@ describe("skill hardening contracts", () => {
       assert.match(instruction, /ACTUAL_MEASURED/, instructionPath);
       assert.match(instruction, /OBSERVED/, instructionPath);
       assert.match(instruction, /EXTERNAL_REFERENCE/, instructionPath);
+      assert.match(
+        instruction,
+        /choose one|choosing exactly one/,
+        instructionPath,
+      );
     }
   });
 

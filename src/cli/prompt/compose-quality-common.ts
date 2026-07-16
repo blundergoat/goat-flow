@@ -670,24 +670,47 @@ export function appendQualityReportContract(
     "**Redact before writing.** Build the complete JSON in memory, then replace the placeholder below and stream it through the readable scrubber. Only the redacted JSON may reach `$FILE`; never stage the raw draft in a file.",
   );
   lines.push("");
+  lines.push(
+    `**Select a compatible redactor.** The installed CLI must report \`goat-flow v${getPackageVersion()}\`. A stale CLI can interpret \`redact\` as an audit target and write the wrong JSON. The source fallback below is allowed only in the goat-flow framework checkout.`,
+  );
+  lines.push("");
   lines.push("```bash");
-  lines.push("goat-flow redact --output \"$FILE\" <<'EOF'");
+  lines.push(
+    `if [ "$(goat-flow --version 2>/dev/null)" = "goat-flow v${getPackageVersion()}" ]; then`,
+  );
+  lines.push("  GOAT_FLOW_CLI=(goat-flow)");
+  lines.push(
+    'elif [ -f src/cli/cli.ts ] && [ "$(node -p "require(\'./package.json\').name" 2>/dev/null)" = "@blundergoat/goat-flow" ]; then',
+  );
+  lines.push("  GOAT_FLOW_CLI=(node --import tsx src/cli/cli.ts)");
+  lines.push("else");
+  lines.push(
+    `  echo "Compatible goat-flow v${getPackageVersion()} redactor unavailable; raw report not written" >&2`,
+  );
+  lines.push("  exit 1");
+  lines.push("fi");
+  lines.push('"${GOAT_FLOW_CLI[@]}" redact --output "$FILE" <<\'EOF\'');
   lines.push("<insert the complete JSON body here>");
   lines.push("EOF");
-  lines.push("```");
-  lines.push("");
-  lines.push(
-    "If `goat-flow redact` is unavailable, keep the report non-durable and state the exact reason; do not write an unredacted fallback.",
-  );
-  lines.push("");
-  lines.push("**Validate before confirming.** After writing the file, run:");
-  lines.push("");
-  lines.push("```bash");
-  lines.push(
-    'goat-flow quality validate "$FILE"   # or: node --import tsx src/cli/cli.ts quality validate "$FILE"',
-  );
+  lines.push("REDACT_STATUS=$?");
+  lines.push('if [ "$REDACT_STATUS" -ne 0 ]; then');
+  lines.push('  exit "$REDACT_STATUS"');
+  lines.push("fi");
+  lines.push('"${GOAT_FLOW_CLI[@]}" quality validate "$FILE"');
+  lines.push("VALIDATE_STATUS=$?");
+  lines.push('if [ "$VALIDATE_STATUS" -ne 0 ]; then');
+  lines.push('  exit "$VALIDATE_STATUS"');
+  lines.push("fi");
   lines.push('ls -la "$FILE"');
   lines.push("```");
+  lines.push("");
+  lines.push(
+    "If the compatibility block exits non-zero, keep the report non-durable and state the exact reason; do not write an unredacted fallback.",
+  );
+  lines.push("");
+  lines.push(
+    "**Validate before confirming.** The block above uses the same compatible CLI for redaction and validation, stops on either failure, and lists the resulting file only after validation passes.",
+  );
   lines.push("");
   lines.push(
     "If validate exits non-zero, read the reported error, fix the JSON, and re-write the file. Do NOT emit the confirmation below until validate passes.",

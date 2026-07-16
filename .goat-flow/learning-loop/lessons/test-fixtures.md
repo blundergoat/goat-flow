@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-07-16
+last_reviewed: 2026-07-17
 ---
 
 ## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
@@ -175,3 +175,31 @@ last_reviewed: 2026-07-16
 **Root cause:** The fixture represented the current installed version but hard-coded the previous release number. The version sweep covered runtime and release surfaces without checking this semantic test fixture.
 
 **Prevention:** Fixtures that mean current must import package-derived version metadata; literals are reserved for tests that intentionally model old or mismatched installs. After a release bump, search the test tree for the prior version before running the full suite. Evidence anchors: test/unit/skill-doctor.test.ts (search: skillMarkdown), src/cli/constants.ts (search: export const AUDIT_VERSION).
+
+---
+
+## Lesson: Aggregate metadata counts can mask invalid individual entries
+
+**Status:** active | **Created:** 2026-07-17
+**Decision changed:** Schema-health checks validate each parsed entry independently before aggregating counts.
+**Trigger phase:** VERIFY
+
+**What happened:** Evidence-label health compared a bucket-wide label count with its entry count. A two-entry fixture with two labels in the first entry and none in the second reported `labelCount: 2` and `hasEvidenceLabels: true`; the same matcher also accepted lowercase `observed` even though every template defines uppercase canonical labels. The first per-entry correction still collapsed two declarations in one section to one valid boolean, so the regression expectation had to tighten from one accepted entry to zero before the parser enforced mutual exclusivity. A final live-repo probe then found the strict matcher recognized only 91 of 107 labels because `**Evidence:**` also introduces narrative evidence blocks; the parser had to distinguish taxonomy metadata from prose. When the corrected fact was wired into `stats --check`, the first diagnostic used the aggregator's reserved `; ` separator and split one actionable error into two findings until the message changed to a colon.
+
+**Root cause:** `countFootgunLabels` counted regex matches across the complete bucket and `hasEvidenceLabels` accepted `labelCount >= entryCount`. The aggregate could not preserve which section owned each match, the global case-insensitive flag weakened the documented enum, and one undifferentiated Markdown regex treated evidence-body headings as evidence-type declarations.
+
+**Prevention:** Split structured Markdown into entries first, classify only frontmatter, Status-line, typed, or label-shaped standalone declarations, reduce each entry to at most one valid schema result, then aggregate. Add negative fixtures for duplicate-masks-missing, multiple labels in one value, legacy labels, wrong casing, a canonical label followed by narrative `**Evidence:**` content, and the blocking `stats --check` result. Diagnostic text must not contain the aggregator's `; ` delimiter. Evidence anchors: `src/cli/facts/shared/learning-loop.ts` (search: `getEvidenceLabelDiagnostic`) separates taxonomy metadata from prose and emits the bucket error; `src/cli/stats/stats.ts` (search: `evidence-label`) maps it to a stable rule; `test/integration/stats-command.test.ts` (search: `exactly one canonical evidence label`) locks parsing and enforcement.
+
+---
+
+## Lesson: Pressure scenarios must isolate the rule under test
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-040 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
+
+**Root cause:** The scenario varied both test ordering and repository-history authority. Its wrong answer was independently invalid under always-loaded policy.
+
+**Fix:** The replacement uses the measured M33 security-depth incident and holds file scope plus mirror duties constant; only test-first ordering differs. Evidence anchors: `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Real goat-flow incident`) and `test/contract/skill-hardening-contracts.test.ts` (search: `isolated from repository-history policy`).
+
+**Prevention:** Before using an A/B/C pressure fixture, compare every option with always-loaded instructions and accepted ADRs. Keep all non-target obligations equal so only the rule under test explains the result.
