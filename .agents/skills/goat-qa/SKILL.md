@@ -36,8 +36,6 @@ goat-qa is a **testing gap analyser**: it maps changed code or a codebase area t
 
 ## Coverage Depth
 
-Canonical coverage vocabulary used in Standard, Audit, and cross-skill output.
-
 | Level | Meaning |
 |-------|---------|
 | NONE | No matching test file or manual plan |
@@ -114,11 +112,9 @@ For CRITICAL items with no coverage, annotate why: new path / missed coverage on
 
 Map each stated expectation to the code path that implements it. Gaps between intent and code are undertested-risk candidates.
 
-**Cross-agent verification:** suggest a different agent/model for blind-spot checks.
-
 **BLOCKING GATE (auto-released on explicit test-plan intent):** Present gap analysis plus Verification Integrity, then stop and ask "Continue to Phase 3, or adjust first?" - unless the invocation already gave explicit "what should I test" / "test plan" intent, in which case treat it as a CHECKPOINT and continue through Phase 3 without pausing. Reserve diagrams for Phase 3; then suggest `/goat-plan`.
 
-**Worked Standard example:** Diff touches a terminal launch helper. Read that diff and the smoke tests covering prompt injection plus delayed/fallback delivery. Expected row: HIGH risk runner launch contract; BEHAVIOURAL coverage for prompt injection and delayed/fallback delivery; safe to skip more PTY timing tests unless timer constants changed; proof class STATIC unless executed.
+**Worked Standard example:** A terminal-launch diff is HIGH risk. Read its smoke tests; safe to skip more PTY timing tests only when timing code is unchanged.
 
 ## Phase 3 - Targeted Testing Plan
 
@@ -130,10 +126,6 @@ Based on the gaps, produce a focused plan and order by risk.
 **Misaligned effort:** deprioritise plan cases not mapped to current changes
 
 **CHECKPOINT:** "Targeted testing plan ready. Want a flow diagram for any CRITICAL item?"
-
-## Phase 4 - Flow Diagram
-
-For flow diagrams, use Mermaid flowcharts with 8-15 nodes per diagram, happy path first, then branch points for error states and edge cases.
 
 ---
 
@@ -187,7 +179,7 @@ Rank gaps by `Risk × (1 - CoverageLevel)` descending - Risk maps CRITICAL=4, HI
 
 **Worked Audit example:** Scope a small audit module; read tests, not filenames - the heuristic misleads both ways. An orchestrator can lack a same-name test yet run behaviourally through an integration suite, so it is PARTIAL-BEHAVIOURAL, not NONE. A content-integrity helper with no unit, integration, or exported-symbol references is genuinely NONE. Expected A4 blocking gap: that content-integrity check, CRITICAL by role, NONE coverage - add a test planting a wrong count and asserting it is flagged. Proof class STATIC.
 
-**BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved.
+**BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template below.
 
 ## Regression Guard Mode
 
@@ -205,7 +197,7 @@ This mode does NOT verify the fix itself.
 - goat-qa is a testing GAP ANALYSER - it finds mismatches between code (changed or existing) and testing coverage
 - MUST compare in-scope code against existing testing coverage (manual plan, automated tests, or neither)
 - MUST find gaps in BOTH directions: undertested risks AND misaligned test effort
-- MUST produce "must test / should test / safe to skip" tiers with rationale for skips
+- MUST use the declared mode's priority tiers: Standard uses "must test / should test / safe to skip"; Audit uses "Blocking / High-value / Defer"
 - MUST include Verification Integrity section
 - MUST apply the Proof Gate from `skill-preamble.md` to every claim made in the gap analysis or testing plan
 - MUST tag every finding/claim row with proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
@@ -301,4 +293,16 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 - Would-be testers: [who executes once gaps are filled]
 
 ## Flow Diagram  <!-- only on request -->
+```
+
+### Audit post-gate plan (after A4 approval)
+
+```markdown
+## Targeted Testing Plan
+### Blocking gaps
+### High-value additions
+### Defer
+
+## Verification Integrity
+<!-- Preserve A4 evidence limits; name test executors. -->
 ```

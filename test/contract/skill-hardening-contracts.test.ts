@@ -412,6 +412,39 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("keeps goat-qa Audit priorities coherent through the post-gate plan", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      const auditPostGateHeading =
+        "### Audit post-gate plan (after A4 approval)";
+      assert.match(
+        skillGuidance,
+        /Audit uses "Blocking \/ High-value \/ Defer"/,
+        skillPath,
+      );
+      assert.notEqual(
+        skillGuidance.indexOf(auditPostGateHeading),
+        -1,
+        skillPath,
+      );
+      const auditPostGateTemplate = skillGuidance.slice(
+        skillGuidance.indexOf(auditPostGateHeading),
+      );
+      assert.match(auditPostGateTemplate, /### Blocking gaps/, skillPath);
+      assert.match(
+        auditPostGateTemplate,
+        /### High-value additions/,
+        skillPath,
+      );
+      assert.match(auditPostGateTemplate, /### Defer/, skillPath);
+      assert.doesNotMatch(
+        readMarkdownSection(skillPath, "Constraints"),
+        /MUST produce "must test \/ should test \/ safe to skip"/,
+        skillPath,
+      );
+    });
+  });
+
   it("separates goat-review reporting-only DoD from implementation DoD", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);

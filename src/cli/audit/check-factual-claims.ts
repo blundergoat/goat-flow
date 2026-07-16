@@ -170,9 +170,10 @@ const COUNT_CHECKS: CountClaimCheck[] = [
     rule: "harness-check-count-drift",
     // Tolerates adjectives between the count and "checks" (code-map.md says
     // "N advisory/integrity/metric checks") and "the N harness concerns"
-    // phrasing; the "across N concerns" tail keeps it harness-specific.
+    // phrasing. Also covers the harness-specific inventory wording used by
+    // audit-checks.md, including Markdown-bold counts.
     pattern:
-      /\b(\d+)\s+(?:[\w/-]+\s+){0,3}checks\s+across\s+(?:the\s+)?\d+\s+(?:harness\s+)?concerns\b/gi,
+      /\b(\d+)(?:\*\*)?\s+(?:(?:[\w/-]+\s+){0,3}checks\s+across\s+(?:the\s+)?\d+\s+(?:harness\s+)?concerns|deterministic\s+harness-completeness\s+checks?)\b/gi,
     /** Return the live harness checks across 5 concerns count. */
     actual: () => HARNESS_CHECKS.length,
     label: "harness checks across 5 concerns",

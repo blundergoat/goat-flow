@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 ---
 
 ## Footgun: Optional-hook agent profiles break when installer treats hooks as universal
@@ -40,19 +40,27 @@ last_reviewed: 2026-07-14
 3. Reject any PR that hardcodes a harness-specific branch inside `workflow/install-goat-flow.sh`. New harnesses arrive via manifest entries and per-agent wrappers, not by branching the core installer.
 4. When adding the 5th, 6th, or Nth harness, run the path-integrity check (`scripts/check-path-integrity.sh`) and the parity check (`scripts/check-instruction-parity.mjs`) and confirm both pass before merging.
 
-## Footgun: Final-path checks still follow symlinked parent directories
+---
 
-**Status:** active | **Created:** 2026-07-14 | **Evidence:** ACTUAL_MEASURED
+## Resolved Entries
+
+> Historical record. These entries are no longer active traps.
+
+## Footgun: Final-path checks followed symlinked parent directories
+
+**Status:** resolved | **Created:** 2026-07-14 | **Resolved:** 2026-07-17 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Managed-write admission must inspect every target path component before any file or directory creation and must not let force bypass an unsafe component.
 **Trigger phase:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-07-14
 
-**Symptoms:** M26 negative verification placed `.goat-flow/logs/quality` as a symlink to a disposable directory outside the selected project, with an outside `README.md` matching the package template. Checking only the final `README.md` path treated those bytes as a regular managed file because filesystem calls followed the symlinked parent. M28 then proved that validating staged files was still too late: a symlinked `.goat-flow` root received 19 setup directories before the first file check blocked. A CLI or direct installer could therefore write outside the selected project before reporting the unsafe path.
+**Resolution:** Managed preview, install-state, and installer admission now inspect each existing path component before any directory scaffolding or file write. `--force` cannot bypass a symlinked or non-regular component. The focused preview, state, and atomic-installer regression suite covers the original nested redirects.
 
-**Why it happens:** `lstat` does not follow a symlink when that symlink is the path being inspected, but it still resolves symlinked parent components while reaching a deeper child. A final-file type check therefore proves only the last component is regular; it does not prove the destination stayed inside the selected project.
+**Original symptoms:** M26 negative verification placed `.goat-flow/logs/quality` as a symlink to a disposable directory outside the selected project, with an outside `README.md` matching the package template. Checking only the final `README.md` path treated those bytes as a regular managed file because filesystem calls followed the symlinked parent. M28 then proved that validating staged files was still too late: a symlinked `.goat-flow` root received 19 setup directories before the first file check blocked. A CLI or direct installer could therefore write outside the selected project before reporting the unsafe path.
 
-**Evidence:**
-- `src/cli/managed-setup-preview.ts` (search: `Every parent must remain a real directory`) now inspects each parent component before hashing the final managed file.
+**Why it happened:** `lstat` does not follow a symlink when that symlink is the path being inspected, but it still resolves symlinked parent components while reaching a deeper child. A final-file type check therefore proved only the last component was regular; it did not prove the destination stayed inside the selected project.
+
+**Current evidence:**
+- `src/cli/managed-setup-preview.ts` (search: `Every parent must remain a real directory`) inspects each parent component before hashing the final managed file.
 - `src/cli/managed-setup-state.ts` (search: `Require project-local directories before any baseline read or write`) applies the same containment check before trusting or replacing install state.
 - `src/cli/managed-setup-preview.ts` (search: `--force cannot bypass path safety`) keeps non-regular and unreadable managed destinations as hard admission failures.
 - `workflow/install-goat-flow.sh` (search: `The shared setup root must be local before migrations`) validates the root and every setup directory before `mkdir` or staged file work.
@@ -60,13 +68,9 @@ last_reviewed: 2026-07-14
 - `test/unit/managed-setup-preview.test.ts` (search: `rejects a valid baseline behind a symlinked install-state directory`) proves valid-looking outside hashes remain invalid evidence.
 - `test/integration/setup-install-atomic-staging.test.ts` (search: `blocks a symlinked goat-flow root before creating outside directories`) snapshots the redirected tree and proves no outside directory appears.
 
-**Prevention:** Walk every destination component before directory scaffolding as well as file writes. Require real directories for parents plus a regular file or absence at file leaves. Treat symlinked, non-regular, and unreadable components as path-safety failures, not content conflicts; broad overwrite flags must never bypass them. Snapshot the outside directory tree in regression tests so a green status proves containment, not only an eventual error message.
+**Prevention retained:** Walk every destination component before directory scaffolding as well as file writes. Require real directories for parents plus a regular file or absence at file leaves. Treat symlinked, non-regular, and unreadable components as path-safety failures, not content conflicts; broad overwrite flags must never bypass them. Snapshot the outside directory tree in regression tests so a green status proves containment, not only an eventual error message.
 
 ---
-
-## Resolved Entries
-
-> Historical record. These entries are no longer active traps.
 
 ## Footgun: Codex install migration matcher and post-install validator used different "invalid glob" definitions
 

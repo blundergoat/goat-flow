@@ -381,6 +381,38 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  it("reports a stale harness count in the audit guide's exact phrasing", () => {
+    // Regression: docs/audit-checks.md bolds the number and describes
+    // "deterministic harness-completeness checks" without a concern-count
+    // suffix, so the earlier harness-specific regex skipped the false claim.
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "`goat-flow audit . --harness` adds **999** deterministic harness-completeness checks on top of the build checks.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "harness-check-count-drift" &&
+            finding.path === "docs/audit-checks.md",
+        ),
+        true,
+        `expected a harness-check-count-drift finding for the audit guide, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("does not treat an active command with a retired-command prefix as removed", () => {
     const fixtureRoot = setupFixture();
     try {

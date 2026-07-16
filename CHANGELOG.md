@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Content audits catch standalone harness totals** - Harness-completeness count claims no longer need an `across N concerns` suffix to be checked against the live registry.
+- **Instruction release headers are gated** - Version bumps stamp release dates, and instruction parity rejects headers that disagree with the current changelog release.
+- **Skill evidence and QA audit contracts stay coherent** - Hot-path evidence rules carry the shipped-example exception, and QA preserves Blocking/High-value/Defer tiers after its audit gate.
+
 ## v1.14.0 - 2026-07-17
 
 - **Managed setup supports dry-run previews** - Reports classify drift; writes require safe destinations, baselines, and `--force` when ambiguous.
