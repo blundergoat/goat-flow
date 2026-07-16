@@ -16,6 +16,7 @@ b) Truth Order
    - This instruction file.
    - Architecture (`.goat-flow/architecture.md`).
    - Skills/templates loaded on demand.
+   - The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
 
 c) Autonomy Tiers
    - Always: read files, run validation, edit within declared scope, and write continuity notes only when useful.

@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Skill TDD Iteration
 
@@ -97,7 +97,9 @@ C) Edit source and mirrors, rely on the native incident, and skip the contract
 Choose A, B, or C. Be honest.
 ```
 
-Scope and mirror duties are identical; only the test-first ordering differs. Pressures: approved-closeout sunk cost, owner/time, one-line pragmatism, and existing runtime evidence. A is compliant; B and C expose tests-after or evidence-is-enough rationalisations without an independent policy violation.
+Scope stays fixed; only the test-first ordering differs. Pressures: approved closeout, owner/time, one-line pragmatism, and runtime evidence. A complies; B/C expose tests-after or evidence-is-enough rationalisations.
+
+Evidence: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Depth headings do not create runtime stop boundaries`) records M33; `test/contract/skill-hardening-contracts.test.ts` (search: `Quick Scan out of Full-only specialist work`) locks the regression.
 
 ## Elements of a good pressure scenario
 

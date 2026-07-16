@@ -231,6 +231,44 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  it("accepts an explicitly user-owned consumer playbook", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const consumerPlaybook = join(
+        fixtureRoot,
+        ".goat-flow",
+        "skill-docs",
+        "playbooks",
+        "lefthook.md",
+      );
+      writeFileSync(
+        consumerPlaybook,
+        [
+          "---",
+          'goat-flow-reference-version: "1.14.0"',
+          'goat-flow-ownership: "user-owned"',
+          "---",
+          "# lefthook",
+          "",
+          "## Availability Check",
+          "",
+        ].join("\n"),
+      );
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.path === ".goat-flow/skill-docs/playbooks/lefthook.md",
+        ),
+        false,
+        `expected user-owned playbook to remain local, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("reports a canonical shared file that has no source-to-install mapping", () => {
     const fixtureRoot = setupFixture();
     try {

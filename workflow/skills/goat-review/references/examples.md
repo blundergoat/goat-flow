@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # goat-review Reference Examples
 
@@ -9,7 +9,7 @@ Every live claim still requires a verified file plus semantic anchor.
 
 ## Direction / Opportunity Audit
 
-Run this area-audit variant only when the user explicitly asks what the repository should do next. Record the current read-only verification baseline first; a failing build or test is a prerequisite, not an opportunity. Every item needs repo-grounded evidence and exactly one class:
+Run this area-audit variant only when the user explicitly asks what the repository should do next. Record the current read-only verification baseline first. A failing build or test remains a defect finding and must not be reclassified as an opportunity; establish a passing or explicitly failing current baseline before proposing opportunities. Every item needs repo-grounded evidence and exactly one class:
 
 - **unfinished intent** - TODO/FIXME clusters, dead flags, or stubs.
 - **stated-but-undelivered** - docs or flags promise behavior no live surface provides.
@@ -50,63 +50,19 @@ Use this shape when Pass 1 raises a plausible template or output-format suspicio
 
 **Zero-finding final note:** "Checked Review Integrity against both optional references; no issue surfaced because the output template includes the required conditional lines."
 
-## Worked Example - Full Output Block (end-to-end)
+## Worked Example - Confirmed PR #56 Finding
 
-The refuted-suspicion example above walks one Pass 1 -> Pass 2 transition. This example shows the **entire Output Format filled in**, so a cold reader sees how every section is populated with real values rather than the empty template in `SKILL.md` (search: `## Output Format`). Following the convention in `## Finding Format Examples` below, it uses real `goat-review` anchors: treat it as the block to emit when a reviewed diff *weakens* the cited rules. The illustrative review surface is a small PR that (a) replaces the Blast Radius Rule's external call-site grep with a `// TODO` comment and (b) deletes the refuter authentication pre-flight. Proof class is `STATIC` for both findings because the review surface is documentation: the reviewer verifies by re-reading the live file, not by executing it.
+This incident records a finding from PR #56 at head `861c0acad3de7043f0a6f27cd8c1a78419b935c5`.
 
-**Review surface:** PR mode (`gh pr view 412`); base `origin/main`, head `a1b2c3d`; 2 files, 86 changed lines; under the 20-file / 3000-line chunking threshold, so no chunking. Copilot reviewed the PR. Pass 3 was offered because the `[MUST:needs-decision]` finding matched trigger 3. After the runtime, authentication, findings-only payload, one-call cap, cost impact, and local fallback were disclosed,
-the user explicitly approved one refuter call; the refuter received the full findings list and upheld both.
+**Review surface:** `src/cli/audit/check-artifact-integrity.ts` (search: `checkSharedFileSets`), `src/cli/skill-author.ts` (search: `PLAYBOOK_TEMPLATE`), and `test/integration/audit-drift-artifact-integrity.test.ts` (search: `accepts an explicitly user-owned consumer playbook`).
 
-```markdown
-## TL;DR
-Reviewed PR #412 (2 files, 86 lines): the diff removes the contract-change call-site search and the refuter auth gate. One MUST and one SHOULD surfaced; both confirmed in Pass 2 and upheld cross-model. Do not merge as-is.
+**Pass 1 suspicion:** The drift audit appeared to classify every unmapped installed playbook as stale even though `goat-flow skill new` creates consumer-only playbooks at that location.
 
-## Review Integrity
-- Scope snapshot: source=PR, base=origin/main, head=a1b2c3d, uncommitted=no, chunking=no
-- Files opened in Pass 2: 2/2  (diff-only: none)
-- Evidence: 2 OBSERVED / 0 INFERRED
-- Refutations logged: 1
-- Size: 2 files, 86 lines  (chunked: no)
-- Automated-reviewer overlap: 1 overlap with copilot-pull-request-reviewer, 1 net-new
-- Refuter pass: yes; confirmed=2, refuted=0, unresolved=0, leads-verified=0, model=codex
-- Degradation flags: spec-drift-skipped
-- Conclusion: confident
+**Pass 2 reproduction:** A generated `lefthook.md` under `.goat-flow/skill-docs/playbooks/` produced a `stale installed shared artifact` finding because it was absent from the package mirror map.
 
-## Findings
+**Finding:** The audit contradicted the documented consumer-project route and made a valid local playbook fail drift checks.
 
-### MUST
-- [MUST:needs-decision] [CONFIRMED-CROSS-MODEL] [overlap:copilot-pull-request-reviewer] **Blast Radius Rule no longer forces a call-site search on contract changes** `SKILL.md` (search: `Blast Radius Rule`) - the diff replaces the `rg`/`grep` consumer search with a `// TODO`, so a signature, return-type, or event-shape change can now ship without a single consumer verified; downstream callers break at runtime with no review signal. Needs-decision because relaxing the rule is a policy call the author may have intended. | Footgun: none | Evidence: OBSERVED | Proof: STATIC
-
-### SHOULD
-- [SHOULD:patch] [CONFIRMED-CROSS-MODEL] [new] **Refuter pre-flight auth check deleted** `references/refuter-spec.md` (search: `Pre-flight Check`) - removing the `codex login status` / `claude auth status` gate lets Pass 3 spawn an unauthenticated refuter that fails silently and is recorded as a clean `confirmed=0` instead of `cross-model-refuter-failed`; reviews then read as cross-verified when they were not. | Footgun: none | Evidence: OBSERVED | Proof: STATIC
-
-## Systemic Patterns
-<!-- 2 findings with distinct root causes and distinct fixes - no systemic parent emitted -->
-
-## Pre-existing Nearby
-- None.
-
-## Pre-existing Issues
-- None in scope for this diff.
-
-## Breaking Changes
-- None to the emitted skill contract; both findings remove safeguards rather than change a public interface.
-
-## Top 5 Risks (cross-tier)
-1. [MUST:needs-decision] **Contract changes ship without call-site verification** `SKILL.md` (search: `Blast Radius Rule`) - highest-harm regression: silent runtime breakage in unverified consumers.
-2. [SHOULD:patch] **Unauthenticated refuter passes as success** `references/refuter-spec.md` (search: `Pre-flight Check`) - false cross-model confidence on every Pass 3.
-
-## Ship Verdict
-Decision: **NO**
-Reasoning: The MUST finding (Blast Radius Rule removal) remains unaddressed by the diff, which forces NO per the Ship Verdict rule (unresolved MUST -> NO); the cross-model refuter upheld both findings. The SHOULD compounds the risk by masking refuter failures. Review Integrity is `confident`, so the verdict is not downgraded further.
-Confidence: HIGH
-
-## What's Good
-- The diff keeps the two-pass discipline and the Refutation Ledger path intact.
-
-## What I Didn't Examine
-- The CI workflow that invokes the refuter (out of diff scope); flagged for the author.
-```
+**Resolution:** Generated consumer playbooks now carry explicit `goat-flow-ownership: "user-owned"` frontmatter. The audit exempts only playbooks with that marker, while unmarked stale package artifacts remain findings. The regression covers both outcomes.
 
 ## Finding Format Examples
 

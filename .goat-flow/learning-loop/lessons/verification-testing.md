@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-07-13
+last_reviewed: 2026-07-16
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -99,11 +99,11 @@ last_reviewed: 2026-07-13
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 6
+**Incident count:** 7
 
-**Latest occurrence:** 2026-07-13
+**Latest occurrence:** 2026-07-16
 
-**What happened:** Six wording changes crossed hard ADR-023 or bucket caps before their focused contract forced compaction:
+**What happened:** Seven wording changes crossed hard ADR-023 or bucket caps before their focused contract forced compaction:
 
 - **2026-05-19/22:** `tdd-iteration.md` reached 3022/3008 words, `skill-preamble.md` exceeded 1500, and `goat-qa` exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
 - **2026-06-14:** Dispatcher examples reached 653 words against 555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
@@ -111,10 +111,11 @@ last_reviewed: 2026-07-13
 - **2026-07-12 boundary rollout:** `goat-plan` reached 2503 and `goat-qa` 2524; a delimiter-based count falsely reported 1202. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `Counts user-facing skill guidance without YAML frontmatter`).
 - **2026-07-12 M15:** Handoff guidance pushed `goat-plan` to 2533. Evidence: `workflow/skills/goat-plan/SKILL.md` (search: `Handoff-grade artifacts`).
 - **2026-07-13 M13:** Memory guidance pushed shared references to 1560/1601 against 1500; consolidation restored 1484/1490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
+- **2026-07-16 PR #56:** The first contract run measured 597/2689/1540/3021 words for goat/goat-plan/preamble/TDD and found stale assertions for removed hypotheticals. Compaction plus semantic assertions fixed both. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap`; `requires pre-write redaction for durable local text`).
 
-**Root cause:** Treated prose edits as tiny while changing files governed by hard word-budget contracts.
+**Root cause:** Treated budgeted prose edits as tiny.
 
-**Prevention:** Measure every skill/reference/playbook immediately and budget compaction in the same patch. Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts`.
+**Prevention:** Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` after each edit and compact immediately.
 
 ---
 
@@ -126,13 +127,15 @@ last_reviewed: 2026-07-13
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 2
+**Incident count:** 3
 
-**Latest occurrence:** 2026-07-13
+**Latest occurrence:** 2026-07-16
 
 **What happened:** M15 compaction removed `Use when work needs milestone tracking`; focused skill tests passed, but `stats --check` caught its durable reference in `.goat-flow/learning-loop/footguns/skills.md`.
 
 **Recurrence 2026-07-13:** M13 removed `Routing rule` and renamed a parser call; live stats caught both stale refs. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`), `src/cli/facts/shared/learning-loop-entries.ts` (search: `isDecisionRecordMarkdown(sourceFilename(decisionFile.path))`).
+
+**Recurrence 2026-07-16:** PR #56 compaction removed `Emit a Route Snapshot`; `stats --check` flagged the stale anchor, so it was restored. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`) and this file (search: `Dispatcher examples reached 653 words`).
 
 **Root cause:** The edit treated prose as self-contained even though durable learning-loop evidence uses skill wording as a cross-file API.
 

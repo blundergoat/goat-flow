@@ -38,7 +38,7 @@ Copy this placeholder-only schema into the scrubber input:
 - Pending tasks: <next unchecked tasks or none>
 - Live recheck requirements: <commands or claims to re-run before relying on the claim, or none>
 - Known blockers: <blocker plus required decision/state change, or none>
-- Redaction applied: yes - `goat-flow redact`
+- Redaction applied: <yes, via `goat-flow redact` | no - do not save this receipt>
 ```
 
 `Repo`, `Worktree`, and `Target project` are separate because the controlling goat-flow workspace may operate on another checkout. A resumed agent must re-run every live recheck before relying on a stale result; the receipt is orientation, not fresh verification.

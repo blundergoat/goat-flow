@@ -162,6 +162,7 @@ BLOCKING GATE: human reviews findings before any action is taken.
 
 const PLAYBOOK_TEMPLATE = `---
 goat-flow-reference-version: "{{VERSION}}"
+goat-flow-ownership: "user-owned"
 ---
 
 # {{NAME}}

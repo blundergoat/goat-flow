@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Milestone Template - Detailed Field Reference
 
@@ -26,6 +26,15 @@ Use this shape for Standard+ work or any milestone handed to a different impleme
 
 **Status:** not-started
 **Planned at:** `<sha>`, YYYY-MM-DD
+**Depends on:** <milestone, decision, or none>
+
+## Objective
+
+<Binary outcome this milestone proves or delivers.>
+
+## Read first
+
+- `<file>` (search: `<semantic anchor>`) - why the implementer must read it.
 
 ## Drift check before implementation
 
@@ -52,9 +61,43 @@ If either command shows movement, re-read the live anchors and amend the milesto
 ### Out of scope
 - `<tempting path>` - why touching it would expand the approved outcome.
 
+## Assumptions to validate
+
+- [ ] `<belief that must be proven>` - validation evidence required.
+
 ## Tasks
 - [ ] [RISKY] `<uncertainty-first action with target and proof>`
 - [ ] [CORE] `<implementation action with target and proof>`
+
+## Exit criteria
+
+- [ ] `<binary observable condition>`
+
+## Kill criteria
+
+- Stop if `<measured condition that invalidates the milestone>`.
+
+## Testing Gate
+
+### Static / Contract Check
+
+- [ ] `<static command>` exits 0.
+
+### Automated
+
+- [ ] `<focused test command>` exits 0.
+
+### Manual
+
+- [ ] `<one action>`; expected: `<one observable result>`.
+
+### Acceptance
+
+- [ ] Developer self-check completed.
+
+## Mid-implementation proof
+
+Run `<bounded command or smoke check>` after `<named edit boundary>` and stop on failure.
 
 ## STOP conditions
 - Stop when drift invalidates an anchor, work crosses the named scope, an assumption fails, or the same verification approach fails twice.
@@ -64,6 +107,10 @@ If either command shows movement, re-read the live anchors and amend the milesto
 | Command | Expected result |
 |---|---|
 | `<focused check>` | `<observable pass condition>` |
+
+## Deferred
+
+- `<item with destination pointer, or explicitly none>`
 
 ## Maintenance notes
 - Re-check `<anchor>` when `<known dependency>` changes.
@@ -102,7 +149,7 @@ Assumptions are not tasks - they're beliefs about the system that affect the pla
 - [ ] Rate limiting handles concurrent requests correctly (assumed, not tested)
 ```
 
-When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, update the milestone plan immediately - don't continue building on a false premise.
+When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, record it immediately and stop dependent work. Apply the plan amendment only when the selected mode or required human approval permits; at a blocking gate, show the proposed amendment and wait.
 
 ## Worked Example - Path-Only Intake
 
@@ -188,7 +235,7 @@ Expected checkpoint: `Milestone files + ISSUE.md written to .goat-flow/plans/oau
 Continuing the OAuth refresh-token example: M01 (`Prove refresh-token rotation`) finishes, the agent runs the AI Verification Gate, then presents the BLOCKING Human Verification Gate from SKILL.md Phase 3. Concrete presentation:
 
 ```markdown
-M01 complete - Human Verification Gate (BLOCKING)
+M01 implementation evidence ready - Human Verification Gate (BLOCKING)
 
 Files changed this session:
 - `src/auth/refresh.ts` - added `rotateRefreshToken()` persistence path
@@ -204,7 +251,7 @@ Assumptions:
 - [x] Provider returns a replacement refresh token (validated - observed in the provider response during the spike)
 - [ ] Session store handles concurrent refresh atomically - INVALIDATED: two parallel refreshes raced and one restored a stale token. Proposed M02 amendment: add a per-session lock before wiring the login flow. No plan file changed yet.
 
-M01 complete. Approve to proceed with M02, or adjust?
+M01 remains `in-progress` pending approval. Approve the proposed M02 amendment and completion transition, or adjust?
 ```
 
 The agent stops here and waits. It does not amend M02, set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. After the human approves the proposed amendment, the agent re-reads M02, applies the M02 amendment before changing statuses, records the assumption evidence, then sets M01 to `complete` and M02 to `in-progress`. It may touch M02 code only after those plan updates.

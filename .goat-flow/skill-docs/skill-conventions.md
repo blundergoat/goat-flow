@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Skill Conventions
 
@@ -63,7 +63,7 @@ Reuse 2-3 overlapping session logs instead of re-deriving settled context.
 
 **Planning/interview boundary:** Default interview budget: one decision-bearing question at a time, no more than three per message or three rounds. Extend only when the user requests a deeper interview. When the budget is exhausted, present remaining choices with a recommended default and stop. Planning permission is not implementation permission. Do not implement unless the original directive authorized implementation or the user now selects it.
 
-A clear implementation directive proceeds after required READ and SCOPE; do not manufacture interview questions. Examples: “Help me plan” → handoff; “Implement the approved plan” → proceed.
+A clear implementation directive proceeds after required READ and SCOPE; do not manufacture interview questions. Evidence: `.goat-flow/learning-loop/lessons/agent-routing.md` (search: `"Update the plan" means write the plan, not execute it`) records that a plan-only request stops at the handoff while explicit implementation authorizes execution.
 
 **Dispatcher invocation:** `/goat` announces the route; Step 0 asks any remaining questions without re-announcing. One dispatch, one intake gate.
 
@@ -88,10 +88,9 @@ If 3 consecutive file reads produce no new signal relevant to the current questi
 ## Task Tracking
 
 When working from a plan or milestone file:
-- Tick each task `- [x]` immediately when completed - not at the end of a batch, not later from memory, not in the closing protocol
-- The checkbox is the single source of truth for progress
-- If interrupted, compacted, or crashed, the checkboxes are how the next session knows where to resume
-- If you completed a task 3 steps ago and forgot to tick it - go tick it NOW before continuing
+- Tick each task `- [x]` immediately, never at batch end or closeout.
+- Checkboxes are the recovery source after interruption or compaction.
+- If a completed task was missed, tick it before continuing.
 
 On `/compact` with no active milestone file: write a session log to `.goat-flow/logs/sessions/` summarizing current state. Milestone files are the primary continuity mechanism; session logs are the fallback.
 
@@ -99,7 +98,7 @@ Handoff receipts: read `.goat-flow/logs/sessions/README.md`; redact before writi
 
 ## Durable Artifact Redaction
 
-Before writing session, handoff, critique, review, quality, security, or export text, pass the draft through `goat-flow redact` and write only its output to the intended gitignored path. Redact before disk, not after.
+For session, handoff, critique, review, quality, security, or export text, send the in-memory draft via stdin to `goat-flow redact --output <destination>`; only redacted output reaches disk. Never stage raw text. Redact before disk, not after.
 
 Example: `goat-flow redact --output .goat-flow/logs/sessions/handoff.md`, then paste stdin and send EOF.
 

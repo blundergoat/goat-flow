@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-16
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -115,13 +115,11 @@ last_reviewed: 2026-07-14
 
 **Status:** active | **Created:** 2026-04-26
 
-**What happened:** After fixing quality-prompt and audit-provenance issues, `npm run test:slow` failed in `checkDrift: installer round-trip fixture` because the temp repo's preflight reported one ESLint error and one Prettier failure. The root causes were in the current working tree: `src/cli/prompt/compose-quality.ts` had an over-complex helper, and `test/unit/quality-command.test.ts` needed Prettier formatting. Direct `npx eslint src/cli src/dashboard` and `npm run format:check` reproduced both failures.
+**What happened:** Prompt changes cleared focused tests and typecheck but failed the installer round-trip embedded preflight three times: on 2026-04-26 an over-complex compose-quality.ts helper and unformatted quality-command fixture; on 2026-05-24 checkHookRuntimeSmoke exceeded ESLint complexity by one; on 2026-07-16 PR #56 renderAuditSummary reached complexity 17. Extracting narrow helpers and formatting the fixture cleared the direct gates. The first 2026-07-16 recurrence note also pushed this bucket to 40,353 bytes, so the incident history was consolidated below the cap.
 
-**Root cause:** I treated focused unit tests, typecheck, and fast-suite results as enough after changing a prompt helper and test fixture. The slow installer round-trip runs repo preflight inside a copied checkout, so it catches lint and format debt that focused tests do not.
+**Root cause:** Focused behavior tests and typecheck do not run the full-source lint and format gates that the copied checkout enforces.
 
-**Recurrence update (2026-05-24):** Adding registered deny-hook runtime smoke coverage passed focused audit tests and typecheck, but the first full `bash scripts/preflight-checks.sh` failed in the TypeScript gate because `src/cli/audit/check-agent-deny-runtime.ts` (search: `checkHookRuntimeSmoke`) exceeded ESLint complexity by one branch. Splitting path selection and smoke execution into helpers (search: `runConfiguredHookCommandSmoke`) cleared `npx eslint src/cli/audit/check-agent-deny-runtime.ts` and the rerun preflight TypeScript gate.
-
-**Prevention:** Before rerunning `npm run test:slow` after prompt/test changes, run `npx eslint src/cli src/dashboard` and `npm run format:check` locally. If the slow round-trip preflight fails, reproduce the reported gate directly in the source checkout before changing installer or drift logic.
+**Prevention:** Before rerunning npm run test:slow after prompt or test changes, run npx eslint src/cli src/dashboard and npm run format:check in the source checkout. Reproduce a reported gate directly before changing installer or drift logic. Evidence anchors: src/cli/prompt/compose-quality-common.ts (search: appendScopeSummary), src/cli/audit/check-agent-deny-runtime.ts (search: runConfiguredHookCommandSmoke), test/unit/quality-report-contract.test.ts (search: embeds drift and content failures).
 
 ---
 

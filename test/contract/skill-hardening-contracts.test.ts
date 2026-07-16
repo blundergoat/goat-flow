@@ -480,23 +480,16 @@ describe("skill hardening contracts", () => {
       );
     });
 
-    // The worked output must show the same approval journey users follow in the live skill.
+    // Reference examples must use verified incidents rather than invented approval outcomes.
     const reviewExamplePaths = INSTALLED_SKILL_ROOTS.map(
       (skillRoot) => `${skillRoot}/goat-review/references/examples.md`,
     );
     assertForEachTarget(reviewExamplePaths, (examplePath) => {
       const reviewExamples = readProjectFile(examplePath);
       assert.doesNotMatch(reviewExamples, /Pass 3 auto-triggered/, examplePath);
-      assert.match(
-        reviewExamples,
-        /Pass 3 was offered[^\n]+trigger 3/,
-        examplePath,
-      );
-      assert.match(
-        reviewExamples,
-        /After the runtime, authentication, findings-only payload, one-call cap, cost impact, and local fallback were disclosed,\s+the user explicitly approved one refuter call/,
-        examplePath,
-      );
+      assert.doesNotMatch(reviewExamples, /PR #412|a1b2c3d/, examplePath);
+      assert.match(reviewExamples, /PR #56/, examplePath);
+      assert.match(reviewExamples, /checkSharedFileSets/, examplePath);
     });
   });
 
@@ -915,7 +908,16 @@ describe("skill hardening contracts", () => {
         /Do not implement unless the original directive authorized implementation or the user now selects it/,
         referencePath,
       );
-      assert.match(adaptiveIntake, /“Help me plan” → handoff/, referencePath);
+      assert.match(
+        adaptiveIntake,
+        /"Update the plan" means write the plan, not execute it/,
+        referencePath,
+      );
+      assert.match(
+        adaptiveIntake,
+        /plan-only request stops at the handoff/,
+        referencePath,
+      );
     });
   });
 
@@ -937,7 +939,7 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         adaptiveIntake,
-        /“Implement the approved plan” → proceed/,
+        /explicit implementation authorizes execution/,
         referencePath,
       );
     });
@@ -950,11 +952,21 @@ describe("skill hardening contracts", () => {
     ];
 
     assertForEachTarget(preamblePaths, (referencePath) => {
+      const redactionGuidance = readMarkdownSection(
+        referencePath,
+        "Durable Local Text Redaction",
+      );
       assert.match(
-        readProjectFile(referencePath),
-        /Before durable local text, run `goat-flow redact`/,
+        redactionGuidance,
+        /in-memory draft through stdin/,
         referencePath,
       );
+      assert.match(
+        redactionGuidance,
+        /goat-flow redact --output <destination>/,
+        referencePath,
+      );
+      assert.match(redactionGuidance, /never stage raw text/, referencePath);
     });
 
     const conventionPaths = [

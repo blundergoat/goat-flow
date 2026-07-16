@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Skill Preamble
 
@@ -16,7 +16,9 @@ When a goat-* skill is active, the skill's Step 0 replaces READ and selects the 
 
 `/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default. They may produce findings, plans, recommendations, and required gitignored logs or snapshots, but MUST NOT mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement the changes.
 
-Before durable local text, run `goat-flow redact`.
+## Durable Local Text Redaction
+
+Before durable local text, send the in-memory draft through stdin to `goat-flow redact --output <destination>`. Only redacted output reaches disk; never stage raw text at the destination or in a temporary file. If unavailable, keep it non-durable. Evidence: `src/cli/redact-command.ts` (search: `handleRedactCommand`).
 
 ## Severity Scale
 
@@ -62,11 +64,11 @@ Before any completion, fix, or "passing" claim:
 4. **Verify** the output demonstrates the specific claim, not an adjacent one.
 5. **Cite** `file + semantic anchor` for live code claims, semantic anchors for durable learning-loop artifacts, or the literal pass/fail summary line for command claims.
 
-The red-flags name what NOT to claim; this gate names HOW to substantiate a claim. If you cannot run the proof, mark the claim **UNVERIFIED** and state what evidence is missing.
+If proof cannot run, mark the claim **UNVERIFIED** and name the missing evidence.
 
 ### Rationalisations to reject (Excuse / Reality)
 
-If you catch yourself thinking the Excuse, run the proof or mark the claim `UNVERIFIED`. New rows require a verbatim source committed to this repo (footgun, lesson, ADR, or skill).
+Run the proof or mark `UNVERIFIED`; new rows require committed evidence.
 
 | Excuse | Reality |
 |---|---|

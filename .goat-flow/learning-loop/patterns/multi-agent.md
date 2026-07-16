@@ -1,6 +1,6 @@
 ---
 category: multi-agent
-last_reviewed: 2026-07-12
+last_reviewed: 2026-07-16
 ---
 
 ## Pattern: Multi-agent critique - how to run it effectively
@@ -43,8 +43,10 @@ last_reviewed: 2026-07-12
 
 ## Pattern: Delegated-work review before user handoff
 
-**Context:** Another agent implemented an approved milestone and the coordinating agent must decide whether the result is ready for the user.
+**Context:** During the recorded eight-review feedback session, earlier reviewer suggestions had already produced edits, so the coordinating review had to verify each later suggestion against the live tree before user handoff.
 
 **Approach:** Review independently: re-run every done criterion yourself; check scope with `git diff --stat` or the local equivalent; read the full diff against stated intent; and audit new tests for meaningful assertions. Treat documented deviations on merit, but treat undocumented deviations as review failures because the user cannot evaluate a change they were never told about. After two failed revision loops, stop patching the same approach and re-plan.
+
+**Evidence:** `.goat-flow/learning-loop/lessons/review-feedback.md` (search: `Blindly applying review feedback without verifying findings`) records eight review rounds, including false or stale findings that source inspection rejected.
 
 **Boundary:** This is a verification pattern, not executor dispatch. It does not authorize worktrees, implementation, commits, or pushes.

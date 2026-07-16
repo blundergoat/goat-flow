@@ -128,14 +128,8 @@ function inferQualityScope(projectPath: string): "framework-self" | "consumer" {
   }
 }
 
-/**
- * Render the audit summary block because reviewers need setup failures before qualitative judgment.
- *
- * @param report - completed audit report whose scope results and concern scores are summarised
- * @returns a Markdown block listing setup/agent pass-fail plus harness-completeness percentages
- */
-export function renderAuditSummary(report: AuditReport): string {
-  const lines: string[] = [];
+/** Append setup and agent scope failures to one audit summary. */
+function appendScopeSummary(lines: string[], report: AuditReport): void {
   const scopes: [string, string][] = [
     ["setup", "GOAT Flow Setup"],
     ["agent", "Agent Setup"],
@@ -145,58 +139,76 @@ export function renderAuditSummary(report: AuditReport): string {
     if (!scopeReport) continue;
     const status = scopeReport.status === "pass" ? "PASS" : "FAIL";
     lines.push(`- **${label}**: ${status}`);
-    if (scopeReport.failures.length > 0) {
-      for (const failure of scopeReport.failures) {
-        lines.push(`  - ${failure.check}: ${failure.message}`);
-      }
+    for (const failure of scopeReport.failures) {
+      lines.push(`  - ${failure.check}: ${failure.message}`);
     }
   }
+}
 
-  if (report.concerns) {
-    const keys: AuditConcernKey[] = [
-      "context",
-      "constraints",
-      "verification",
-      "recovery",
-      "feedback_loop",
-    ];
-    lines.push("");
+/** Append structural concern scores and evidence limits when harness facts exist. */
+function appendConcernSummary(lines: string[], report: AuditReport): void {
+  if (!report.concerns) return;
+  const keys: AuditConcernKey[] = [
+    "context",
+    "constraints",
+    "verification",
+    "recovery",
+    "feedback_loop",
+  ];
+  lines.push("");
+  lines.push(
+    "Harness completeness (structural integrity, not quality assessment):",
+  );
+  for (const key of keys) {
+    const concern = report.concerns[key];
+    const limits =
+      concern.limits.length > 0
+        ? `; limits: ${concern.limits.join(" | ")}`
+        : "";
     lines.push(
-      "Harness completeness (structural integrity, not quality assessment):",
+      `- ${key}: ${concern.status === "pass" ? "PASS" : "FAIL"} (${concern.score}%; metrics=${concern.metrics}${limits})`,
     );
-    for (const key of keys) {
-      const concern = report.concerns[key];
-      const limits =
-        concern.limits.length > 0
-          ? `; limits: ${concern.limits.join(" | ")}`
-          : "";
-      lines.push(
-        `- ${key}: ${concern.status === "pass" ? "PASS" : "FAIL"} (${concern.score}%; metrics=${concern.metrics}${limits})`,
-      );
-    }
   }
+}
 
-  if (report.drift) {
-    lines.push("");
-    lines.push(
-      `- **Template Drift**: ${report.drift.status === "pass" ? "PASS" : "FAIL"} (${report.drift.checked} checked)`,
-    );
-    for (const finding of report.drift.findings) {
-      lines.push(`  - ${finding.path}: ${finding.message}`);
-    }
+/** Append template-drift findings when the audit collected drift evidence. */
+function appendDriftSummary(lines: string[], report: AuditReport): void {
+  if (!report.drift) return;
+  lines.push("");
+  lines.push(
+    `- **Template Drift**: ${report.drift.status === "pass" ? "PASS" : "FAIL"} (${report.drift.checked} checked)`,
+  );
+  for (const finding of report.drift.findings) {
+    lines.push(`  - ${finding.path}: ${finding.message}`);
   }
+}
 
-  if (report.content) {
-    lines.push("");
+/** Append content-lint findings when the audit collected content evidence. */
+function appendContentSummary(lines: string[], report: AuditReport): void {
+  if (!report.content) return;
+  lines.push("");
+  lines.push(
+    `- **Content Claims**: ${report.content.status === "pass" ? "PASS" : "FAIL"} (${report.content.filesScanned} files scanned)`,
+  );
+  for (const finding of report.content.findings) {
     lines.push(
-      `- **Content Claims**: ${report.content.status === "pass" ? "PASS" : "FAIL"} (${report.content.filesScanned} files scanned)`,
+      `  - ${finding.path}${finding.line ? `:${finding.line}` : ""} [${finding.rule}]: ${finding.message}`,
     );
-    for (const finding of report.content.findings) {
-      lines.push(
-        `  - ${finding.path}${finding.line ? `:${finding.line}` : ""} [${finding.rule}]: ${finding.message}`,
-      );
-    }
   }
+}
+
+/**
+ * Render the audit summary block because reviewers need setup failures before qualitative judgment.
+ *
+ * @param report - completed audit report whose scope results and concern scores are summarised
+ * @returns a Markdown block listing setup/agent pass-fail plus harness-completeness percentages
+ */
+export function renderAuditSummary(report: AuditReport): string {
+  const lines: string[] = [];
+  appendScopeSummary(lines, report);
+  appendConcernSummary(lines, report);
+  appendDriftSummary(lines, report);
+  appendContentSummary(lines, report);
 
   return lines.join("\n");
 }

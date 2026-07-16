@@ -160,3 +160,18 @@ last_reviewed: 2026-07-16
 **Root cause:** The default threshold is tuned for small unit tests. goat-flow has many contract tests where visible fixture construction is part of the evidence. Extracting all of that setup into generic helpers would hide the behavioural contract the test is meant to preserve.
 
 **Prevention:** Keep `test-quality.setup-bloat.threshold` at `30` in `.gruff-ts.yaml` unless a future fixture helper makes those setup blocks clearer without hiding the SUT call or assertion. Still fix tests above that threshold case-by-case: extract reusable temp-project builders, keep assertions visible, and do not add empty `arrange()` wrappers only to satisfy the analyzer. Evidence anchors: `.gruff-ts.yaml` (search: `test-quality.setup-bloat`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `test-quality.setup-bloat`).
+
+---
+
+## Lesson: Current-version fixtures must derive from package metadata
+
+**Status:** active | **Created:** 2026-07-16
+**Decision changed:** Healthy current-version fixtures now interpolate the package-derived audit version instead of pinning a release literal.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-07-16
+
+**What happened:** After goat-flow was bumped from 1.13.1 to 1.14.0, the full test suite failed two skill-doctor cases. Their shared healthy fixture still emitted goat-flow-skill-version 1.13.1, so the runtime correctly classified the fixture as warn rather than pass.
+
+**Root cause:** The fixture represented the current installed version but hard-coded the previous release number. The version sweep covered runtime and release surfaces without checking this semantic test fixture.
+
+**Prevention:** Fixtures that mean current must import package-derived version metadata; literals are reserved for tests that intentionally model old or mismatched installs. After a release bump, search the test tree for the prior version before running the full suite. Evidence anchors: test/unit/skill-doctor.test.ts (search: skillMarkdown), src/cli/constants.ts (search: export const AUDIT_VERSION).

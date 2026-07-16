@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Skill Playbook Authoring Sync
 
@@ -25,7 +25,7 @@ not as isolated Markdown files.
 | Change | Route |
 |---|---|
 | Built-in tool or capability reference | Follow this full source/install and registration workflow |
-| Consumer-project-only playbook | Add the local file and README row; do not edit goat-flow's package manifest |
+| Consumer-project-only playbook | Add the local file with `goat-flow-ownership: "user-owned"` and a README row; do not edit goat-flow's package manifest |
 | Shared rule every skill inherits | `.goat-flow/skill-docs/skill-preamble.md` or `skill-conventions.md` |
 | First-class workflow with modes or gates | A goat-* skill, not a playbook |
 | Real failure or durable caution | Learning-loop lesson or footgun |
@@ -43,6 +43,15 @@ goat-flow-reference-version: CURRENT_VERSION
 Replace `CURRENT_VERSION` with the current quoted release value when creating
 the file. The sentinel keeps this reference from looking like a second
 installed-version declaration to deterministic version checks.
+
+Consumer-project-only playbooks add an explicit ownership marker:
+
+```yaml
+goat-flow-ownership: "user-owned"
+```
+
+`goat-flow skill new` writes this marker automatically. Do not add it to
+built-in source/install pairs: the manifest and mirror registry own those files.
 
 After the title and short orientation, the first H2 must be exactly
 `## Availability Check`.

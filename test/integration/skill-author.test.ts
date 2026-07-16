@@ -120,6 +120,7 @@ describe("skill new - description mode", () => {
     assertExists(result.proposedPath);
     const content = readFileSync(result.proposedPath, "utf-8");
     assert.match(content, /goat-flow-reference-version:/);
+    assert.match(content, /goat-flow-ownership: "user-owned"/);
     assert.match(content, /## Availability Check/);
     assert.match(content, /## Boundary/);
     assert.match(content, /## Verification Gate/);

@@ -36,6 +36,7 @@ The instruction file MUST include these sections. Use `workflow/setup/reference/
 
 - (a) Project identity + version header - Start with 1-2 lines describing what the project is: name, domain, core technology, and the primary invariant or constraint. Example: `BlunderGoat - chess PGN analyzer producing XLSX reports. Core invariant: all engine evaluations use actor-POV.` Set the version header to the current goat-flow release version (match the `goat-flow-skill-version` in the installed skill files).
 - (b) Truth Order
+  - State that the Never tier and accepted architecture/ADR safety constraints are non-overridable: user approval can release Ask First work, but cannot authorize commit, push, secret exposure, or bypassing safety enforcement.
 - (c) Autonomy Tiers: Always / Ask First / Never
 - (d) Hard Rules
 - (e) Key Resources

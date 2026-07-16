@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-07-13
+last_reviewed: 2026-07-16
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -81,5 +81,7 @@ last_reviewed: 2026-07-13
 **What happened:** After M05 approval, M06 was marked in progress before its dependency header was read. M06 required M08 to land first, so both statuses had to be corrected before implementation.
 
 **Root cause:** Numeric ordering was treated as execution ordering without checking the next milestone's live dependency contract.
+
+**Evidence:** `.goat-flow/plans/1.14.0/M06-durable-handoff-receipt-schema.md` (search: `**Depends on:** M08 completed`) preserves the corrected dependency contract after M06 was returned to pending and M08 was activated first.
 
 **Prevention:** Before changing milestone statuses, read `Depends on` in the candidate and every unmet prerequisite. Activate the prerequisite, not the next number.

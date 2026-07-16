@@ -54,6 +54,7 @@ const TEMPLATE_SHARED_ROOTS = [
   "workflow/skills/playbooks",
 ] as const;
 const INSTALLED_SHARED_ROOT = ".goat-flow/skill-docs";
+const USER_OWNED_PLAYBOOK_MARKER = "user-owned";
 
 /** Pair sibling Markdown names across one canonical and installed directory. */
 function sharedMarkdownMirrors(
@@ -209,6 +210,52 @@ function readSkillFrontmatterName(skillMarkdown: string): string | null {
   } catch {
     // For example, an unfinished YAML edit can leave the skill visible on disk but impossible to identify.
     return null;
+  }
+}
+
+/**
+ * Identify an explicitly consumer-owned installed playbook.
+ * Use so local playbooks created by `goat-flow skill new` do not masquerade as
+ * stale package artifacts, while unmarked leftovers still fail drift checks.
+ *
+ * @param fs - audited project filesystem; unreadable files are not trusted as user-owned
+ * @param installedPath - project-relative installed Markdown path; non-playbooks never qualify
+ * @returns true only for a playbook whose YAML frontmatter declares user-owned ownership
+ */
+function isUserOwnedConsumerPlaybook(
+  fs: ReadonlyFS,
+  installedPath: string,
+): boolean {
+  if (
+    !installedPath.startsWith(`${INSTALLED_SHARED_ROOT}/playbooks/`) ||
+    !installedPath.endsWith(".md")
+  ) {
+    return false;
+  }
+
+  const markdown = fs.readFile(installedPath);
+  if (markdown === null) return false;
+  const frontmatterMatch = markdown.match(
+    /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u,
+  );
+  if (frontmatterMatch?.[1] === undefined) return false;
+
+  try {
+    const frontmatter = load(frontmatterMatch[1]);
+    if (
+      frontmatter === null ||
+      typeof frontmatter !== "object" ||
+      Array.isArray(frontmatter)
+    ) {
+      return false;
+    }
+    return (
+      (frontmatter as Record<string, unknown>)["goat-flow-ownership"] ===
+      USER_OWNED_PLAYBOOK_MARKER
+    );
+  } catch {
+    // Malformed frontmatter cannot establish ownership, so normal stale-artifact handling applies.
+    return false;
   }
 }
 
@@ -685,6 +732,8 @@ function checkSharedFileSets(
   for (const installedPath of fs.glob(`${INSTALLED_SHARED_ROOT}/**/*.md`)) {
     // Current mapped files are checked for content elsewhere; only leftovers are stale here.
     if (declaredInstalled.has(installedPath)) continue;
+    // Consumer-authored playbooks are valid local extensions, not package leftovers.
+    if (isUserOwnedConsumerPlaybook(fs, installedPath)) continue;
     findings.push({
       kind: "orphan",
       path: installedPath,

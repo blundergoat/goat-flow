@@ -10,6 +10,8 @@
 4. `workflow/setup/reference/execution-loop.md` and `workflow/setup/02-instruction-file.md`
 5. Existing target-project instructions and `.goat-flow/` docs
 
+The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
+
 ## Autonomy Tiers
 
 **Always:** Set up Antigravity-owned surfaces: `AGENTS.md`, `.agents/skills/`, `.agents/hooks.json`, `.agents/hooks/`, and shared `.goat-flow/`. `AGENTS.md` and `.agents/skills/` are shared with Codex; either setup can create/update them, but neither should duplicate or stomp the other's content.

@@ -12,6 +12,7 @@ import {
   runSkillDoctor,
   type CanonicalSkillRead,
 } from "../../src/cli/skill-doctor.js";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
 const CODEX_PROFILE: AgentProfile = {
   id: "codex",
@@ -74,7 +75,7 @@ function skillMarkdown(
   name: string,
   description = `Use when running ${name}.`,
 ): string {
-  return `---\nname: ${name}\ndescription: "${description}"\ngoat-flow-skill-version: "1.13.1"\n---\n# ${name}\n`;
+  return `---\nname: ${name}\ndescription: "${description}"\ngoat-flow-skill-version: "${AUDIT_VERSION}"\n---\n# ${name}\n`;
 }
 
 /** Run a Codex-only doctor fixture over the supplied canonical skill names. */
