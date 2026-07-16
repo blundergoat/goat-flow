@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## v1.14.0 - 2026-07-16
+## v1.14.0 - 2026-07-17
 
 - **Managed setup supports dry-run previews** - Reports classify drift; writes require safe destinations, baselines, and `--force` when ambiguous.
 - **Installer replacements are atomic** - Sibling staging preserves destinations and exposes failures; unsafe paths and non-atomic legacy moves fail.
