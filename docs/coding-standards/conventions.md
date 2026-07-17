@@ -2,12 +2,13 @@
 
 ## Project Identity
 
-Documentation framework for AI coding agent workflows. Two parts:
-- **TypeScript CLI** (`src/cli/`): auditor, setup prompt generator, dashboard server
+Documentation framework for AI coding agent workflows. Four parts:
+- **TypeScript CLI and server** (`src/cli/`): auditor, setup prompt generator, and dashboard backend
+- **TypeScript dashboard** (`src/dashboard/`): browser-side Alpine.js UI compiled as classic scripts
 - **Markdown docs** (`docs/`, `workflow/`, `workflow/setup/`): framework documentation and agent templates
-- **Shell scripts** (`scripts/`, `workflow/hooks/`): maintenance, preflight checks, guardrail hooks
+- **Shell scripts** (`scripts/`, `workflow/hooks/`, `.goat-flow/hooks/`): maintenance, preflight checks, and guardrail hooks
 
-Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-yaml`, `ws`.
+Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-yaml`, `ws`; optional runtime dependency: `node-pty`.
 
 ## Architecture
 
@@ -57,8 +58,8 @@ npm run test           # runs test:fast (node --test; excludes slow/dashboard/pe
 npm run typecheck      # tsc --noEmit
 npm run audit          # node dist/cli/cli.js audit .
 
-shellcheck scripts/*.sh scripts/maintenance/*.sh                                            # Lint shell scripts
-bash -n scripts/*.sh scripts/maintenance/*.sh                                                # Syntax-check scripts
+shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 bash scripts/preflight-checks.sh         # Full preflight gate
 
 # CLI commands (from the framework checkout)
@@ -75,12 +76,12 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 - Use `.js` extensions in all TypeScript import paths (NodeNext requires it)
 - `node:test` + `node:assert/strict` for testing (not Jest, not Vitest)
 - Strict TypeScript: `"strict": true` in tsconfig.json
-- No `any` types. Minimize `as` casts. Use `unknown` and narrow.
+- Avoid explicit `any`; use `unknown` and narrow. A load-bearing interop exception requires an inline ESLint suppression with a same-line rationale. Minimize `as` casts.
 - Types are distributed by domain: CLI command types in `cli-types.ts`; audit types in `audit/types.ts`; and config, manifest, quality, and server types in `config/types.ts`, `manifest/types.ts`, `quality/*types.ts`, and `server/*types.ts`. Keep only genuinely cross-cutting types in `src/cli/types.ts`.
 - AUDIT_VERSION lives in `src/cli/constants.ts`, derived from `package.json` at runtime (single source of truth)
 - Skill frontmatter must embed AUDIT_VERSION - CI enforces this in the "Skill template versions" step
 - `ReadonlyFS` interface for filesystem access -- auditor never writes to disk
-- Minimal runtime dependencies (js-yaml, ws). Dev-only: typescript, tsx, @types/node
+- Minimal runtime dependencies (js-yaml, ws), with optional node-pty support. Dev-only: typescript, tsx, @types/node
 
 ## DO
 

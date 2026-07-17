@@ -573,6 +573,38 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("routes goat-qa by evidence scope before generic gap vocabulary", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const recentChangeRoute =
+        /Explicit diff, PR, branch, changed-file, or recent-change scope[^\n]+Standard mode[^\n]+even when[^\n]+"audit", "coverage", or "gaps"/u;
+      const areaAuditRoute =
+        /Explicit codebase area, directory, module, or risk-class coverage audit with no recent-change scope[^\n]+Audit mode/u;
+
+      assert.match(intake, recentChangeRoute, skillPath);
+      assert.match(intake, areaAuditRoute, skillPath);
+      assert.match(
+        intake,
+        /Bare "audit", "coverage", or "gaps" with no change or area scope[^\n]+ask whether the user means recent-change Standard or no-diff area Audit/u,
+        skillPath,
+      );
+      assert.match(
+        intake,
+        /Scope semantics outrank dispatcher depth/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        intake,
+        /"audit"\/"coverage"\/"gaps" → Audit mode/u,
+        skillPath,
+      );
+      assert.ok(
+        intake.search(recentChangeRoute) < intake.search(areaAuditRoute),
+        `${skillPath}: recent-change routing must precede no-diff area routing`,
+      );
+    });
+  });
+
   it("keeps goat-qa Audit priorities coherent through the post-gate plan", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);

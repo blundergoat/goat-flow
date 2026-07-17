@@ -5,8 +5,17 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { delimiter, join, resolve } from "node:path";
 import {
   renderAuditText,
   renderAuditMarkdown,
@@ -192,6 +201,120 @@ describe("deployed landing evidence", () => {
     assert.match(landingPage, /not complete runtime isolation/u);
     assert.doesNotMatch(landingPage, /Safety nets that can't be skipped/u);
   });
+
+  it("keeps landing-only deployment bounded and proof-backed", () => {
+    const sandbox = mkdtempSync(join(tmpdir(), "goat-flow-landing-deploy-"));
+    const fakeBin = join(sandbox, "bin");
+    const awsLog = join(sandbox, "aws.log");
+    const deployScript = resolve(PROJECT_ROOT, "scripts/deploy-landing.sh");
+
+    mkdirSync(fakeBin);
+    writeFileSync(
+      join(fakeBin, "aws"),
+      `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "$GOAT_DEPLOY_TEST_LOG"
+case "$1 $2" in
+  "cloudfront list-distributions") printf '%s\\n' 'E18PD4M848BMDU' ;;
+  "cloudfront get-distribution") printf '%s\\n' 'd3s5xkgnhshz7n.cloudfront.net' ;;
+  "cloudfront create-invalidation") printf '%s\\n' 'I-TEST-LANDING' ;;
+  "cloudfront wait") ;;
+  "s3 cp") ;;
+  *) printf 'unexpected aws call: %s\\n' "$*" >&2; exit 64 ;;
+esac
+`,
+    );
+    writeFileSync(
+      join(fakeBin, "curl"),
+      `#!/usr/bin/env bash
+set -euo pipefail
+output_path=""
+while (( $# > 0 )); do
+  case "$1" in
+    --output|-o) output_path="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[[ -n "$output_path" ]]
+if [[ "\${GOAT_DEPLOY_CURL_MISMATCH:-0}" == "1" ]]; then
+  printf '%s\\n' 'stale live response' > "$output_path"
+else
+  cp "$GOAT_DEPLOY_SOURCE" "$output_path"
+fi
+`,
+    );
+    writeFileSync(join(fakeBin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
+    chmodSync(join(fakeBin, "aws"), 0o755);
+    chmodSync(join(fakeBin, "curl"), 0o755);
+    chmodSync(join(fakeBin, "sleep"), 0o755);
+    writeFileSync(awsLog, "");
+
+    const baseEnvironment = {
+      ...process.env,
+      PATH: `${fakeBin}${delimiter}${process.env.PATH ?? ""}`,
+      GOAT_DEPLOY_SOURCE: resolve(PROJECT_ROOT, landingPath),
+      GOAT_DEPLOY_TEST_LOG: awsLog,
+    };
+
+    try {
+      const invalidArguments = spawnSync(
+        "bash",
+        [deployScript, "--landing-only", "unexpected"],
+        { encoding: "utf-8" },
+      );
+      assert.equal(invalidArguments.status, 2);
+      assert.match(invalidArguments.stderr, /Usage:/u);
+
+      const success = spawnSync("bash", [deployScript, "--landing-only"], {
+        cwd: sandbox,
+        encoding: "utf-8",
+        env: baseEnvironment,
+      });
+      assert.equal(
+        success.status,
+        0,
+        `landing-only success probe failed:\n${success.stdout}${success.stderr}`,
+      );
+
+      const awsCalls = readFileSync(awsLog, "utf-8");
+      const s3Uploads = awsCalls
+        .split("\n")
+        .filter((call) => call.startsWith("s3 cp "));
+      assert.equal(s3Uploads.length, 1, awsCalls);
+      assert.match(s3Uploads[0] ?? "", /s3:\/\/goat-flow\.com\/index\.html/u);
+      assert.match(awsCalls, /cloudfront wait invalidation-completed/u);
+      assert.doesNotMatch(
+        awsCalls,
+        /\b(?:acm|route53|s3api|sts)\b|create-distribution|origin-access|what-is-harness|\.jpg/u,
+      );
+
+      const invalidationDone = success.stdout.indexOf(
+        "Cache invalidation completed.",
+      );
+      const readbackDone = success.stdout.indexOf(
+        "Live landing page matches tracked source.",
+      );
+      const deploymentDone = success.stdout.indexOf("Deployment Complete");
+      assert.ok(invalidationDone >= 0, success.stdout);
+      assert.ok(readbackDone > invalidationDone, success.stdout);
+      assert.ok(deploymentDone > readbackDone, success.stdout);
+
+      writeFileSync(awsLog, "");
+      const mismatch = spawnSync("bash", [deployScript, "--landing-only"], {
+        cwd: sandbox,
+        encoding: "utf-8",
+        env: { ...baseEnvironment, GOAT_DEPLOY_CURL_MISMATCH: "1" },
+      });
+      assert.notEqual(mismatch.status, 0, mismatch.stdout);
+      assert.doesNotMatch(mismatch.stdout, /Deployment Complete/u);
+      assert.match(
+        `${mismatch.stdout}${mismatch.stderr}`,
+        /live landing page does not match tracked source/u,
+      );
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("coding-standard drift", () => {
@@ -212,7 +335,14 @@ describe("coding-standard drift", () => {
   ) as { compilerOptions?: { target?: string } };
   const packageJson = JSON.parse(
     readFileSync(resolve(PROJECT_ROOT, "package.json"), "utf-8"),
-  ) as { scripts?: Record<string, string> };
+  ) as {
+    scripts?: Record<string, string>;
+    optionalDependencies?: Record<string, string>;
+  };
+  const eslintConfig = readFileSync(
+    resolve(PROJECT_ROOT, "eslint.config.mjs"),
+    "utf-8",
+  );
 
   it("tracks the configured ECMAScript target and Prettier gate", () => {
     const target = tsconfig.compilerOptions?.target;
@@ -240,6 +370,28 @@ describe("coding-standard drift", () => {
     assert.match(conventions, /server\/.*types/u);
     assert.doesNotMatch(conventions, /# All type definitions/u);
     assert.doesNotMatch(conventions, /Don't put types outside `types\.ts`/u);
+  });
+
+  it("documents the browser dashboard and narrow explicit-any exception", () => {
+    assert.match(conventions, /Four parts:/u);
+    assert.match(conventions, /TypeScript dashboard/u);
+    assert.match(conventions, /`src\/dashboard\/`/u);
+    assert.match(conventions, /optional runtime dependency[^\n]+`node-pty`/u);
+    assert.ok(
+      packageJson.optionalDependencies?.["node-pty"],
+      "package.json must expose the documented optional node-pty dependency",
+    );
+
+    assert.match(frontend, /Node\.js CLI and server/u);
+    assert.match(frontend, /browser dashboard/u);
+    assert.doesNotMatch(frontend, /not a browser app/u);
+    assert.match(
+      eslintConfig,
+      /"@typescript-eslint\/no-explicit-any": "warn"/u,
+    );
+    assert.match(frontend, /Avoid explicit `any`/u);
+    assert.match(frontend, /same-line[^\n]+rationale/u);
+    assert.doesNotMatch(frontend, /^- No `any`\./mu);
   });
 });
 

@@ -51,27 +51,23 @@ Standard maps Blocking to Must test, High-value to Should test, and Defer to Saf
 
 ## Step 0 - Intake
 
-**Mode detection - confirm, don't silently decide:**
+**Mode detection - scope wins over vocabulary:**
 
-- Changed files + no specific ask → offer standard or audit
-- "audit"/"coverage"/"gaps" → Audit mode (full depth)
-- "verify coverage"/"what's risky"/"what should I test" or scoped files → Standard mode (quick depth)
+- Explicit diff, PR, branch, changed-file, or recent-change scope → Standard mode (quick depth), even when the request also says "audit", "coverage", or "gaps"
+- Explicit codebase area, directory, module, or risk-class coverage audit with no recent-change scope → Audit mode (full depth)
+- Bare "audit", "coverage", or "gaps" with no change or area scope → ask whether the user means recent-change Standard or no-diff area Audit
 
-**Depth mapping:** Standard = quick changed-file analysis. Audit = full codebase-area analysis. Dispatcher depth maps quick → Standard, full → Audit.
+**Depth mapping:** Standard reads changed files; Audit reads a no-diff area. Scope semantics outrank dispatcher depth; on conflict, state it and follow scope.
 
-If mode and scope are clear, state "Running [mode] on [scope]." and proceed. Ask only on ambiguity.
+**Gather:** scope, existing test plan (if any), audience. Check instruction Essential Commands or `package.json` for test/lint commands.
 
-**Gather:** changed scope, existing test plan (if any), audience. Check the instruction file's Essential Commands section or `package.json` scripts for test/lint commands.
+**Footgun check:** Run the preamble's target-area learning-loop retrieval. Emit matches or an explicit miss; never broad-load a bucket.
 
-**Footgun check:** Use the preamble's learning-loop retrieval on `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, and `.goat-flow/learning-loop/decisions/` for the target area. Surface matches or an explicit retrieval miss; do not broad-load any bucket.
+**PR / issue link:** benchmark acceptance criteria. With `gh`, read the PR and diff; otherwise record `no-intent-spec`, lowering `safe to skip` confidence.
 
-**PR / issue link:** use acceptance criteria as benchmark. If `gh` is available, read the PR and diff; otherwise record `no-intent-spec`, lowering `safe to skip` confidence.
+**No existing tests:** mark coverage `NONE`: "No automated tests; verification falls to human and AI reviewers."
 
-If arriving from the dispatcher with context already gathered, confirm and proceed.
-
-**No existing tests:** mark coverage `NONE` and state: "No automated tests; verification falls to human and AI reviewers."
-
-**CHECKPOINT:** "Analysing [N] changed files against [existing test plan / no test plan]. Audience: [dev/tester/both]." Proceed unless scope, audience, or test plan is ambiguous.
+**CHECKPOINT:** Standard: "Analysing [N] changed files against [existing test plan / no test plan]." Audit: "Auditing [scope] against [existing tests / no tests]." Proceed unless scope, audience, or test plan is ambiguous.
 
 ## Phase 1 - Change Risk Analysis
 

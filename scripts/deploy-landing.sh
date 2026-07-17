@@ -4,7 +4,154 @@ set -euo pipefail
 BUCKET="goat-flow.com"
 REGION="us-east-1"
 DOMAIN="goat-flow.com"
-SITE_DIR="docs/site"
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(cd -- "${SCRIPT_DIR}/.." && pwd)
+SITE_DIR="${PROJECT_ROOT}/docs/site"
+MODE="${1:-}"
+DIST_ID=""
+DIST_DOMAIN=""
+LIVE_COPY=""
+
+usage() {
+  echo "Usage: bash scripts/deploy-landing.sh [--landing-only]"
+  echo "  no flag         Provision infrastructure and deploy all site assets."
+  echo "  --landing-only  Upload only index.html to the existing distribution."
+}
+
+if (( $# > 1 )); then
+  usage >&2
+  exit 2
+fi
+
+case "$MODE" in
+  "" | --landing-only) ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
+
+cleanup_live_copy() {
+  if [[ -n "$LIVE_COPY" && -f "$LIVE_COPY" ]]; then
+    unlink -- "$LIVE_COPY"
+  fi
+}
+trap cleanup_live_copy EXIT
+
+find_existing_distribution() {
+  local distribution_ids
+  distribution_ids=$(aws cloudfront list-distributions \
+    --query "DistributionList.Items[?contains(Aliases.Items, '${DOMAIN}')].Id" \
+    --output text 2>/dev/null || true)
+
+  if [[ -z "$distribution_ids" || "$distribution_ids" == "None" ]]; then
+    echo "ERROR: No CloudFront distribution aliases ${DOMAIN}." >&2
+    return 1
+  fi
+  if [[ "$distribution_ids" =~ [[:space:]] ]]; then
+    echo "ERROR: Multiple CloudFront distributions alias ${DOMAIN}: ${distribution_ids}" >&2
+    return 1
+  fi
+
+  DIST_ID="$distribution_ids"
+  DIST_DOMAIN=$(aws cloudfront get-distribution --id "$DIST_ID" \
+    --query 'Distribution.DomainName' --output text)
+  if [[ -z "$DIST_DOMAIN" || "$DIST_DOMAIN" == "None" ]]; then
+    echo "ERROR: CloudFront distribution ${DIST_ID} has no domain name." >&2
+    return 1
+  fi
+}
+
+upload_landing_page() {
+  aws s3 cp "${SITE_DIR}/goat-flow-landing.html" "s3://${BUCKET}/index.html" \
+    --content-type "text/html; charset=utf-8" \
+    --cache-control "max-age=3600"
+  echo "  Uploaded index.html"
+}
+
+invalidate_cache_and_wait() {
+  local invalidation_id
+  invalidation_id=$(aws cloudfront create-invalidation \
+    --distribution-id "$DIST_ID" \
+    --paths "$@" \
+    --query 'Invalidation.Id' \
+    --output text)
+  if [[ -z "$invalidation_id" || "$invalidation_id" == "None" ]]; then
+    echo "ERROR: CloudFront did not return an invalidation ID." >&2
+    return 1
+  fi
+
+  echo "  Cache invalidation submitted: ${invalidation_id}"
+  aws cloudfront wait invalidation-completed \
+    --distribution-id "$DIST_ID" \
+    --id "$invalidation_id"
+  echo "  Cache invalidation completed."
+}
+
+verify_live_landing() {
+  local attempt
+  LIVE_COPY=$(mktemp)
+
+  for attempt in {1..6}; do
+    if curl --fail --silent --show-error --location \
+      --connect-timeout 10 \
+      --max-time 30 \
+      --header 'Accept-Encoding: identity' \
+      --header 'Cache-Control: no-cache' \
+      --output "$LIVE_COPY" \
+      "https://${DOMAIN}/?deploy-verify=$(date +%s)-${attempt}" && \
+      cmp -s "${SITE_DIR}/goat-flow-landing.html" "$LIVE_COPY"; then
+      unlink -- "$LIVE_COPY"
+      LIVE_COPY=""
+      echo "  Live landing page matches tracked source."
+      return 0
+    fi
+
+    if (( attempt < 6 )); then
+      sleep 5
+    fi
+  done
+
+  echo "ERROR: live landing page does not match tracked source after cache invalidation." >&2
+  return 1
+}
+
+print_deployment_summary() {
+  echo ""
+  echo "=== Deployment Complete ==="
+  echo "Distribution ID: $DIST_ID"
+  echo "CloudFront URL:  https://$DIST_DOMAIN"
+  echo "Live URL:        https://$DOMAIN"
+}
+
+deploy_landing_only() {
+  echo "=== goat-flow.com Landing-Only Deployment ==="
+  echo "Bucket: $BUCKET | Region: $REGION | Domain: $DOMAIN"
+  echo ""
+  echo "[1/4] Resolving existing CloudFront distribution..."
+  find_existing_distribution
+  aws cloudfront wait distribution-deployed --id "$DIST_ID"
+  echo "  Using deployed distribution: $DIST_ID ($DIST_DOMAIN)"
+
+  echo "[2/4] Uploading index.html..."
+  upload_landing_page
+
+  echo "[3/4] Invalidating landing-page cache entries..."
+  invalidate_cache_and_wait "/" "/index.html"
+
+  echo "[4/4] Verifying live landing page..."
+  verify_live_landing
+  print_deployment_summary
+}
+
+if [[ "$MODE" == "--landing-only" ]]; then
+  deploy_landing_only
+  exit 0
+fi
 
 echo "=== goat-flow.com Landing Page Deployment ==="
 echo "Bucket: $BUCKET | Region: $REGION | Domain: $DOMAIN"
@@ -268,10 +415,7 @@ echo "  Bucket policy applied."
 # Step 9: Upload content
 # -------------------------------------------------------------------
 echo "[8/9] Uploading site content..."
-aws s3 cp "${SITE_DIR}/goat-flow-landing.html" "s3://${BUCKET}/index.html" \
-  --content-type "text/html; charset=utf-8" \
-  --cache-control "max-age=3600"
-echo "  Uploaded index.html"
+upload_landing_page
 
 aws s3 cp "${SITE_DIR}/goat-flow-harness-engineering.html" "s3://${BUCKET}/what-is-harness-engineering" \
   --content-type "text/html; charset=utf-8" \
@@ -292,9 +436,8 @@ echo "  Uploaded harness-engineering-og.jpg"
 # Step 9b: Invalidate CloudFront cache (so re-runs pick up changes)
 # -------------------------------------------------------------------
 echo "  Invalidating CloudFront cache..."
-aws cloudfront create-invalidation --distribution-id "$DIST_ID" \
-  --paths "/*" --query 'Invalidation.Id' --output text > /dev/null
-echo "  Cache invalidation submitted."
+aws cloudfront wait distribution-deployed --id "$DIST_ID"
+invalidate_cache_and_wait "/*"
 
 # -------------------------------------------------------------------
 # Step 10: Create Route53 alias records
@@ -339,16 +482,12 @@ aws route53 change-resource-record-sets \
   --change-batch "$ROUTE53_CHANGES" > /dev/null
 echo "  DNS records created for $DOMAIN and www.$DOMAIN"
 
+echo "  Verifying live landing page..."
+verify_live_landing
+
 # -------------------------------------------------------------------
 # Done
 # -------------------------------------------------------------------
+print_deployment_summary
 echo ""
-echo "=== Deployment Complete ==="
-echo "Distribution ID: $DIST_ID"
-echo "CloudFront URL:  https://$DIST_DOMAIN"
-echo "Live URL:        https://$DOMAIN"
-echo ""
-echo "CloudFront takes 5-15 minutes to fully deploy."
-echo "Check status: aws cloudfront get-distribution --id $DIST_ID --query Distribution.Status"
-echo ""
-echo "To redeploy, just re-run: bash scripts/deploy-landing.sh"
+echo "To redeploy only index.html: bash scripts/deploy-landing.sh --landing-only"
