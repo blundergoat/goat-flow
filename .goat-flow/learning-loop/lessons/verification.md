@@ -369,3 +369,17 @@ last_reviewed: 2026-07-17
 **Root cause:** I treated the sole current scenario as a harmless default even though explicit user selection was part of the command's safety contract.
 
 **Fix and prevention:** Add an omission RED test before implementation and make the parser exit 2 when the required value is absent. Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`) and `test/unit/hooks-runtime-evidence.test.ts` (search: `requires an explicit hook verification scenario group`).
+
+---
+
+## Lesson: Milestone plans need exporter-contract verification before handoff
+
+**Status:** active | **Created:** 2026-07-17  
+**Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient. | **Trigger phase:** VERIFY  
+**Incident count:** 1 | **Latest occurrence:** 2026-07-17
+
+**What happened:** The 1.15.0 milestone files looked structurally complete and passed a custom heading/count check, but the first `plans export` preview warned that all 11 records lacked portable objectives and boundary notes. The files used a level-two `Objective` section instead of the exporter's bold `Objective` field, omitted `Boundary Notes`, and initially placed CAO incident gates in peer sections that the exporter would not include in task bodies.
+
+**Root cause:** I validated the authoring layout I had produced instead of the repository's consumer contract. A Markdown reader could infer the intended fields, while `parseMilestoneMarkdown` intentionally recognizes a narrower portable schema.
+
+**Fix and prevention:** Use `**Objective:**`, `## Scope`, `## Boundary Notes`, `## Tasks`, `## Testing Gate`, and `## Exit criteria` for portable milestones. Put task subgroups under level-three headings so they remain inside `Tasks`. Before handoff, run `node dist/cli/cli.js plans export <plan-path> --format json` and require every record to have zero warnings; when shell policy rejects a pipe into an interpreter, import `parseMilestoneMarkdown` directly in a read-only local verification script. Evidence anchors: `src/cli/plans-export.ts` (search: `addMissingFieldWarning`) and `src/cli/plans-export.ts` (search: `readMilestoneSection`).

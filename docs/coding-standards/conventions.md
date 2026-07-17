@@ -15,14 +15,17 @@ Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-ya
 src/cli/
   cli.ts              # Entry point, arg parsing (node:util parseArgs)
   index.ts            # Library re-exports
-  types.ts            # All type definitions
+  types.ts            # Cross-cutting shared types only
+  cli-types.ts        # CLI command and parser types
   constants.ts        # Shared constants (AUDIT_VERSION, SKILL_NAMES, etc.)
   paths.ts            # Path resolution utilities
   classify-state.ts   # Classify project setup state for prompt generation
   config/             # Configuration (index.ts, reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
-  audit/              # Audit engine (audit.ts, check-goat-flow.ts, check-agent-setup.ts, harness/, render.ts, types.ts)
+  audit/              # Audit engine (audit.ts, checks, harness/, render.ts, provenance-types.ts, types.ts)
+  manifest/           # Manifest reader and domain types (types.ts)
+  quality/            # Quality engine and schema/skill-quality type modules
   prompt/             # Prompt generation: commit-guidance.ts, compose-setup.ts, compose-quality.ts, compose-quality-agent-report.ts, compose-quality-agent-setup.ts, compose-quality-artifact.ts, compose-quality-common.ts, compose-quality-focused.ts, learning-loop-context.ts
   server/             # Dashboard server modules:
                       #   dashboard.ts (bootstrap, dispatch, live reload)
@@ -73,7 +76,7 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 - `node:test` + `node:assert/strict` for testing (not Jest, not Vitest)
 - Strict TypeScript: `"strict": true` in tsconfig.json
 - No `any` types. Minimize `as` casts. Use `unknown` and narrow.
-- All types in `src/cli/types.ts`. Audit-specific types in `src/cli/audit/types.ts`.
+- Types are distributed by domain: CLI command types in `cli-types.ts`; audit types in `audit/types.ts`; and config, manifest, quality, and server types in `config/types.ts`, `manifest/types.ts`, `quality/*types.ts`, and `server/*types.ts`. Keep only genuinely cross-cutting types in `src/cli/types.ts`.
 - AUDIT_VERSION lives in `src/cli/constants.ts`, derived from `package.json` at runtime (single source of truth)
 - Skill frontmatter must embed AUDIT_VERSION - CI enforces this in the "Skill template versions" step
 - `ReadonlyFS` interface for filesystem access -- auditor never writes to disk
@@ -93,7 +96,7 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 
 - Don't add unnecessary runtime dependencies (keep the dependency footprint minimal)
 - Don't use `console.log` outside `cli.ts` and `audit/render.ts` (preflight warns)
-- Don't put types outside `types.ts` or `audit/types.ts`
+- Don't turn `src/cli/types.ts` into a catch-all; colocate domain types with their owning module and reserve the shared file for cross-cutting contracts
 - Don't hardcode version strings (derive from package.json via constants.ts)
 - Don't use hypothetical examples in docs -- real incidents only
 - Don't reference removed ADR patterns (see `scripts/preflight-checks.sh` for the enforced list)

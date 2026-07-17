@@ -65,11 +65,11 @@ If mode and scope are clear, state "Running [mode] on [scope]." and proceed. Ask
 
 **Footgun check:** Use the preamble's learning-loop retrieval on `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, and `.goat-flow/learning-loop/decisions/` for the target area. Surface matches or an explicit retrieval miss; do not broad-load any bucket.
 
-**PR / issue link (strongly encouraged):** ask for PR/issue before Phase 1. Acceptance criteria are the benchmark. If `gh` is available, use `gh pr view` + `gh pr diff`; otherwise note `no-intent-spec`, which degrades `safe to skip` confidence.
+**PR / issue link:** use acceptance criteria as benchmark. If `gh` is available, read the PR and diff; otherwise record `no-intent-spec`, lowering `safe to skip` confidence.
 
 If arriving from the dispatcher with context already gathered, confirm and proceed.
 
-**No existing tests:** risk analysis still applies. Mark coverage `NONE` and state: "This project has no automated tests. Verification falls to human and AI reviewers."
+**No existing tests:** mark coverage `NONE` and state: "No automated tests; verification falls to human and AI reviewers."
 
 **CHECKPOINT:** "Analysing [N] changed files against [existing test plan / no test plan]. Audience: [dev/tester/both]." Proceed unless scope, audience, or test plan is ambiguous.
 
@@ -174,17 +174,20 @@ For each in-scope file:
 
 Record coverage using the Coverage Depth vocabulary above.
 
+Misaligned effort is an observed test-to-risk mismatch. Evidence must show duplicate tests adding no distinct branch/invariant while higher-risk behaviour is uncovered; mock-heavy/structural tests displacing user-visible or error paths; or deeper LOW-risk coverage beside uncovered CRITICAL/HIGH paths. Do not infer misalignment from high coverage alone or recommend deleting safety coverage. If no item meets these evidence conditions, report `none found` and name the comparison.
+
 ### A4 - Gap Report
 
-Rank gaps by `Risk × (1 - CoverageLevel)` descending - Risk maps CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; CoverageLevel is a coverage fraction (NONE=0, STRUCTURAL=0.34, PARTIAL-BEHAVIOURAL=0.67, BEHAVIOURAL=1.0), so `(1 - CoverageLevel)` is the uncovered fraction and a CRITICAL+NONE file ranks top (4.0). Output:
+Rank by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; NONE=0, STRUCTURAL=0.34, PARTIAL-BEHAVIOURAL=0.67, BEHAVIOURAL=1.0. Output:
 
 - **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per file: missing behaviour + the test the user should add.
 - **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path.
 - **Defer** - every matrix Defer pair: LOW-risk or BEHAVIOURAL coverage. Name them explicitly so the user sees what was considered and why.
+- **Misaligned effort** - evidence-backed test-to-risk mismatches, or `none found` with named comparison.
 
 **Illustrative scenario - input/output shape only; never evidence.**
 
-**Worked Audit example:** Scope a small audit module; read tests, not filenames - the heuristic misleads both ways. A file can lack a same-name test yet run behaviourally through an integration suite, so it is PARTIAL-BEHAVIOURAL, not NONE. In this scenario, after proving `<target-project>/src/content-check.ts` has no unit, integration, or exported-symbol references, classify it as NONE and route its risk/coverage pair through the matrix. Proof class STATIC applies only to files actually inspected in the user's project.
+**Worked Audit example:** Read tests, not filenames: integration coverage can make a file PARTIAL-BEHAVIOURAL. Classify `<target-project>/src/content-check.ts` as NONE only after checking unit, integration, and exported-symbol references.
 
 **BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template below.
 
@@ -203,7 +206,7 @@ This mode does NOT verify the fix itself.
 
 - goat-qa is a testing GAP ANALYSER - it finds mismatches between code (changed or existing) and testing coverage
 - MUST compare in-scope code against existing testing coverage (manual plan, automated tests, or neither)
-- MUST find gaps in BOTH directions: undertested risks AND misaligned test effort
+- MUST assess gaps in BOTH directions: undertested risks AND misaligned test effort; report `none found` rather than inventing either
 - MUST use the declared mode's priority tiers: Standard uses "must test / should test / safe to skip"; Audit uses "Blocking / High-value / Defer"
 - MUST include Verification Integrity section
 - MUST apply the Proof Gate from `skill-preamble.md` to every claim made in the gap analysis or testing plan
@@ -286,6 +289,7 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 ### Blocking gaps  <!-- Matrix Blocking pairs; each item includes proof class -->
 ### High-value additions  <!-- Matrix High-value pairs; each item includes proof class -->
 ### Defer  <!-- Matrix Defer pairs; each item includes proof class -->
+### Misaligned effort  <!-- Evidence-backed test-to-risk mismatches, or `none found` -->
 
 ## Verification Integrity
 - Intent spec: [audit scope rationale or `no-intent-spec`]
@@ -309,6 +313,7 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 ### Blocking gaps
 ### High-value additions
 ### Defer
+### Misaligned effort
 
 ## Verification Integrity
 <!-- Preserve A4 evidence limits; name test executors. -->

@@ -126,6 +126,32 @@ describe("user-facing CLI package identity", () => {
       );
     }
   });
+
+  it("keeps a direct preflight grep over deployable-site commands", () => {
+    const preflight = readFileSync(
+      resolve(PROJECT_ROOT, "scripts/preflight-checks.sh"),
+      "utf-8",
+    );
+    const landingPage = readFileSync(
+      resolve(PROJECT_ROOT, "docs/site/goat-flow-landing.html"),
+      "utf-8",
+    );
+
+    assert.match(preflight, /for f in docs\/site\/\*\.html/u);
+    assert.ok(
+      preflight.includes("npx[[:space:]]+goat-flow([[:space:]]|$)"),
+      "preflight must grep for the deprecated unscoped npx package",
+    );
+    assert.match(
+      preflight,
+      /Deployed site npx commands name @blundergoat\/goat-flow/u,
+    );
+    assert.doesNotMatch(
+      landingPage,
+      /(^|[^/])goat-flow audit --harness/mu,
+      "deployed examples must not fall back to a bare package command",
+    );
+  });
 });
 
 describe("deployed landing evidence", () => {
@@ -142,7 +168,11 @@ describe("deployed landing evidence", () => {
     const buildCheckCount = SETUP_CHECKS.length + AGENT_CHECKS.length;
 
     assert.notEqual(terminalStart, -1, `${landingPath} missing terminal mock`);
-    assert.notEqual(terminalEnd, -1, `${landingPath} missing terminal boundary`);
+    assert.notEqual(
+      terminalEnd,
+      -1,
+      `${landingPath} missing terminal boundary`,
+    );
     assert.match(terminalMock, /Illustrative audit output/u);
     assert.match(
       terminalMock,
@@ -153,15 +183,12 @@ describe("deployed landing evidence", () => {
       new RegExp(`${HARNESS_CHECKS.length} harness checks`, "u"),
     );
     assert.doesNotMatch(terminalMock, /Claude Code \(94%\)|Codex \(91%\)/u);
-    assert.doesNotMatch(
-      terminalMock,
-      /<span class="t-grade">[A-F]<\/span>/u,
-    );
+    assert.doesNotMatch(terminalMock, /<span class="t-grade">[A-F]<\/span>/u);
   });
 
   it("states guardrail limits instead of promising unskippable protection", () => {
     assert.match(landingPage, /Guardrails with explicit limits/u);
-    assert.match(landingPage, /best-effort local controls/u);
+    assert.match(landingPage, /best-effort\s+local controls/u);
     assert.match(landingPage, /not complete runtime isolation/u);
     assert.doesNotMatch(landingPage, /Safety nets that can't be skipped/u);
   });

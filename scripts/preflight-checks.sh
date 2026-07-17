@@ -1395,6 +1395,24 @@ if [[ "$contract_ok" == true ]]; then
     pass "goat-critique direct invocation has no obsolete Codex delegation exception"
 fi
 
+# Deployed HTML must never resolve the deprecated unscoped `goat-flow` npm
+# package. Keep this direct grep in preflight even though the TypeScript
+# contract suite also covers user-facing command surfaces: this fails early
+# with the exact deployed file and line.
+site_package_commands_ok=true
+for f in docs/site/*.html; do
+    [[ -f "$f" ]] || continue
+    unscoped_site_commands=$(grep -nE 'npx[[:space:]]+goat-flow([[:space:]]|$)' "$f" || true)
+    if [[ -n "$unscoped_site_commands" ]]; then
+        fail "$f contains an unscoped npx goat-flow command"
+        printf '%s\n' "$unscoped_site_commands" | details_pipe
+        site_package_commands_ok=false
+    fi
+done
+if [[ "$site_package_commands_ok" == true ]]; then
+    pass "Deployed site npx commands name @blundergoat/goat-flow"
+fi
+
 # ── Reference Budget Headroom ────────────────────────────────────────
 section "Reference Budgets"
 budget_headroom_output=$(

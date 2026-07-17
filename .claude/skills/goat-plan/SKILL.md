@@ -28,11 +28,11 @@ Use when work needs milestone tracking: milestones, replans, rescope, or resume-
 
 ## Step 0 - Intake
 
-**Learning-loop retrieval runs before mode branching.** Derive 2-4 concrete search terms from the supplied brief, named plan, or path. Run the preamble's INDEX-first retrieval across footguns, lessons, and patterns, adding decisions for architecture, policy, or setup work. Emit `Relevant prior learnings:` with matches or an explicit retrieval miss before selecting path-only, reconcile, fresh, or named-update behavior.
+1. **Classify the input shape before any plan-state read.** Path-only guard runs first: a task/milestone path alone or ambiguous context phrase selects **Path-Only Intake / Read-Only Orientation**. Do NOT update `.active`, milestone status fields, task checkboxes, or code. Switching a mismatched `.active` needs approval. Code or plan changes need an explicit action verb.
 
-**Path-only guard runs first.** A task/milestone path alone or ambiguous context phrase uses **Path-Only Intake / Read-Only Orientation**. Read minimal index/status files. Do NOT update `.active`, milestone status fields, task checkboxes, or code. Mention a mismatched `.active`; switch only on approval. Code needs an explicit implementation verb; plan edits need an explicit write verb tied to the file. Otherwise checkpoint and stop.
+2. **Run learning-loop retrieval before mode-specific reads.** Follow the preamble's INDEX-first retrieval and emit `Relevant prior learnings:`. Use brief/plan terms; add decisions for architecture, policy, or setup. For path-only intake, search only for plan-orientation and task-state failure classes. Do not retrieve implementation-domain learnings from the task path; open entries only when a hit affects safe orientation.
 
-**Check for existing milestones first:**
+3. **Inspect existing plan state only after retrieval.** Check for existing milestones:
 - `.goat-flow/plans/.active` is advisory. If valid, scan only its subdir.
 - If missing/invalid, list non-archive dirs and recent `M*.md`, ask which is current, and offer to update `.active`; this is not setup failure.
 - If milestones exist and the user hasn't given an explicit action verb: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?"
@@ -41,11 +41,11 @@ Use when work needs milestone tracking: milestones, replans, rescope, or resume-
 
 ### Reconcile Existing Plan State
 
-Plans are local workflow state, not a setup invariant. Explicit reconcile selects read-only mode R. **TODO:** refresh drift/evidence. **DONE:** spot-check current HEAD. **BLOCKED:** honor or reject with rationale. **IN PROGRESS:** flag staleness and ask resume/abandon. Stop after reporting; never implement.
+Plans are local workflow state, not a setup invariant. Mode R is read-only: **TODO:** refresh; **DONE:** verify HEAD; **BLOCKED:** honor or reject; **IN PROGRESS:** flag staleness. Report and stop; never implement.
 
 **If starting fresh:** identify what is being built, the riskiest part, and kill criteria.
 
-**Pick exactly one mode.** Apply these signals in order - stop at the first that matches:
+4. **Pick exactly one mode.** Apply these signals in order - stop at the first that matches:
 
 0. **Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
 R. **Reconcile Existing Plan State** - explicit reconcile/audit/refresh. Compare live state with recorded evidence, propose corrections, and stop without writes.

@@ -4,7 +4,7 @@ This is a **Node.js CLI tool** (not a browser app, not React/Vue). Pure TypeScri
 
 ## Module System
 
-- ESM: `"type": "module"`, target ES2022, `"module": "NodeNext"`
+- ESM: `"type": "module"`, target ES2023, `"module": "NodeNext"`
 - All imports use `.js` extensions: `import { foo } from './bar.js'`
 - Dynamic imports for lazy loading (see cli.ts -- keeps `--help` fast)
 - Node built-ins use `node:` prefix: `import { parseArgs } from 'node:util'`

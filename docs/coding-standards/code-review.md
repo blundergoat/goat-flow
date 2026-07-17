@@ -11,6 +11,7 @@
 
 All must pass before approving:
 - `npm run typecheck` (tsc --noEmit) clean
+- `npm run format:check` (Prettier check) clean
 - `npm test` passes
 - `shellcheck scripts/maintenance/*.sh` clean (if .sh files changed)
 - `bash scripts/preflight-checks.sh` passes
@@ -30,7 +31,7 @@ All must pass before approving:
 
 ## Don't Nitpick
 
-- Formatting handled by tsc strict mode (no separate formatter configured)
+- Formatting owned by Prettier; run `npm run format:check` and do not hand-nitpick formatter-owned whitespace
 - Markdown style variations (preflight does not lint markdown)
 - Comment style (no jsdoc requirement beyond what exists)
 - Test naming conventions (node:test is flexible on describe/it nesting)

@@ -282,9 +282,17 @@ describe("skill hardening contracts", () => {
       );
       const modeIndex = skillGuidance.indexOf("4. **Pick exactly one mode.**");
 
-      assert.notEqual(classifyIndex, -1, `${skillPath}: missing classification`);
+      assert.notEqual(
+        classifyIndex,
+        -1,
+        `${skillPath}: missing classification`,
+      );
       assert.notEqual(retrievalIndex, -1, `${skillPath}: missing retrieval`);
-      assert.notEqual(planStateIndex, -1, `${skillPath}: missing plan-state step`);
+      assert.notEqual(
+        planStateIndex,
+        -1,
+        `${skillPath}: missing plan-state step`,
+      );
       assert.notEqual(modeIndex, -1, `${skillPath}: missing mode selection`);
       assert.ok(
         classifyIndex < retrievalIndex &&
@@ -626,7 +634,11 @@ describe("skill hardening contracts", () => {
         /MUST assess gaps in BOTH directions/u,
         skillPath,
       );
-      assert.notEqual(auditOutputIndex, -1, `${skillPath}: missing Audit output`);
+      assert.notEqual(
+        auditOutputIndex,
+        -1,
+        `${skillPath}: missing Audit output`,
+      );
       assert.match(
         skillGuidance.slice(auditOutputIndex),
         /### Misaligned effort/u,
