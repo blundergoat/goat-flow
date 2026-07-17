@@ -274,6 +274,25 @@ function skillDirectoryFor(agent: AgentId | null | undefined): string {
   return getAgentProfile(agent ?? "claude").skillsDir;
 }
 
+/** Align skill-placement guidance with the same manifest profile used for the resolved path. */
+function withSkillDestination(
+  candidacy: CandidacyResult,
+  skillsDirectory: string,
+): CandidacyResult {
+  if (candidacy.recommendedArtifact.type !== "skill") return candidacy;
+  return {
+    ...candidacy,
+    nextSteps: candidacy.nextSteps.map((step) =>
+      step.action.startsWith("Place under ")
+        ? {
+            ...step,
+            action: `Place under ${skillsDirectory}/<name>/SKILL.md`,
+          }
+        : step,
+    ),
+  };
+}
+
 /** User-facing validation error for invalid `skill new` mode combinations. */
 class SkillNewInputError extends Error {
   /** Preserve the custom error name so the CLI can classify input failures. */
@@ -435,7 +454,7 @@ function suggestName(
 ): string {
   if (options.name && isValidSkillName(options.name)) return options.name;
   if (options.draftPath) {
-    const stem = basename(options.draftPath).replace(/\.md$/, "");
+    const stem = draftNameForPath(options.draftPath);
     if (isValidSkillName(stem)) return stem;
   }
   if (options.description) {
@@ -447,6 +466,14 @@ function suggestName(
     if (isValidSkillName(slug)) return slug;
   }
   return `new-${candidacy.recommendedArtifact.type}`;
+}
+
+/** Installed skills use their parent directory as the artifact name, not the generic SKILL.md stem. */
+function draftNameForPath(draftPath: string): string {
+  const filename = basename(draftPath);
+  return filename.toLowerCase() === "skill.md"
+    ? basename(dirname(draftPath))
+    : filename.replace(/\.md$/iu, "");
 }
 
 function describeArtifact(
@@ -492,10 +519,13 @@ async function runDescriptionMode(
 ): Promise<SkillNewResult> {
   const projectRoot = options.projectRoot ?? process.cwd();
   const skillsDirectory = skillDirectoryFor(options.agent);
-  const candidacy = runCandidacyCheck({
-    kind: "description",
-    text: description,
-  });
+  const candidacy = withSkillDestination(
+    runCandidacyCheck({
+      kind: "description",
+      text: description,
+    }),
+    skillsDirectory,
+  );
 
   const scaffolded = resolveScaffold(
     projectRoot,
@@ -590,10 +620,19 @@ async function runDescriptionMode(
 function scoreFreshSkill(
   projectRoot: string,
   name: string,
+  absolutePath: string,
 ): SkillNewResult["postScaffoldScore"] {
   const artifact = findArtifact(projectRoot, `skill:${name}`);
   if (!artifact) return undefined;
-  const report = scoreArtifact(projectRoot, artifact);
+  const selectedPath = relative(projectRoot, absolutePath).replace(/\\/g, "/");
+  const selectedArtifact =
+    artifact.path === selectedPath
+      ? artifact
+      : artifact.mirrorPaths?.includes(selectedPath)
+        ? { ...artifact, path: selectedPath }
+        : null;
+  if (!selectedArtifact) return undefined;
+  const report = scoreArtifact(projectRoot, selectedArtifact);
   return {
     totalScore: report.totalScore,
     profileMax: report.profileMax,
@@ -640,12 +679,16 @@ function runDraftMode(
     };
   }
   const content = readFileSync(absolutePath, "utf-8");
-  const suggestedName = basename(absolutePath, ".md");
-  const candidacy = runCandidacyCheck({
-    kind: "draft",
-    content,
-    suggestedName,
-  });
+  const suggestedName = draftNameForPath(absolutePath);
+  const skillsDirectory = skillDirectoryFor(options.agent);
+  const candidacy = withSkillDestination(
+    runCandidacyCheck({
+      kind: "draft",
+      content,
+      suggestedName,
+    }),
+    skillsDirectory,
+  );
 
   const output: string[] = [
     `Draft: ${relative(projectRoot, absolutePath)}`,
@@ -661,7 +704,7 @@ function runDraftMode(
     projectRoot,
     suggestedName,
     candidacy.recommendedArtifact,
-    skillDirectoryFor(options.agent),
+    skillsDirectory,
   );
   if (!scaffolded) {
     output.push(
@@ -679,6 +722,7 @@ function runDraftMode(
   }
 
   const expectedPath = scaffolded.proposedPath;
+  let postScaffoldScore: SkillNewResult["postScaffoldScore"];
   if (resolve(expectedPath) !== absolutePath) {
     output.push("");
     output.push(`Expected location: ${relative(projectRoot, expectedPath)}`);
@@ -687,10 +731,14 @@ function runDraftMode(
     );
     output.push("(not executed; review before moving.)");
   } else if (!scaffolded.isReference) {
-    const postScore = scoreFreshSkill(projectRoot, suggestedName);
-    if (postScore) {
+    postScaffoldScore = scoreFreshSkill(
+      projectRoot,
+      suggestedName,
+      absolutePath,
+    );
+    if (postScaffoldScore) {
       output.push(
-        `Quality: ${postScore.totalScore}/${postScore.profileMax} (snapshot of current draft)`,
+        `Quality: ${postScaffoldScore.totalScore}/${postScaffoldScore.profileMax} (snapshot of current draft)`,
       );
     }
   }
@@ -700,6 +748,7 @@ function runDraftMode(
     proposedPath: expectedPath,
     scaffold: null,
     written: false,
+    postScaffoldScore,
     output,
   };
 }

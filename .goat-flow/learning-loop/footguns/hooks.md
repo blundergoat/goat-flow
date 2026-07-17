@@ -200,7 +200,7 @@ last_reviewed: 2026-07-17
 
 **Status:** resolved | **Created:** 2026-06-07 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
 
-**Resolution:** Current migration code removes managed legacy gruff registrations before pruning per-agent scripts and rebuilds only supported/enabled central entries. The focused regression `test/integration/setup-install-migrations.test.ts` (search: `prunes legacy Codex gruff hook registrations because Codex gruff is unsupported`) verifies the old `.codex/hooks/gruff-code-quality.sh` file and both legacy/central gruff registrations are absent after a Codex upgrade while the supported deny hook remains registered.
+**Resolution:** Current migration code removes managed legacy gruff registrations before pruning per-agent scripts and rebuilds only supported/enabled central entries. The focused regression `test/integration/setup-install-migrations.test.ts` (search: `prunes legacy Codex gruff hook registrations because Codex gruff is unsupported`) verifies unsupported Codex registrations are pruned while the deny hook remains registered. `test/unit/hook-registrar.test.ts` (search: `enables gruff-code-quality for a detected Antigravity surface`) verifies a supported, detected surface receives the enabled central gruff registration.
 
 **Original symptoms:** The installer could successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure appeared only after upgrade because fresh installs used the new template shape and disabled optional hooks did not expose the stale entry.
 

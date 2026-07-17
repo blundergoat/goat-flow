@@ -86,6 +86,7 @@ describe("skill new - description mode", () => {
       { agent: undefined, expectedDirectory: ".claude/skills" },
       { agent: "claude" as const, expectedDirectory: ".claude/skills" },
       { agent: "codex" as const, expectedDirectory: ".agents/skills" },
+      { agent: "antigravity" as const, expectedDirectory: ".agents/skills" },
       { agent: "copilot" as const, expectedDirectory: ".github/skills" },
     ];
 
@@ -192,6 +193,7 @@ describe("skill new - description mode", () => {
       description:
         "I want a workflow that walks through Postgres index changes.",
       name: "pg-index-no",
+      agent: "codex",
       projectRoot,
       stdinAnswers: ["n"],
     });
@@ -199,6 +201,7 @@ describe("skill new - description mode", () => {
     assert.equal(result.candidacy.recommendedArtifact.type, "skill");
     assert.equal(result.written, false);
     assertExists(result.proposedPath);
+    assert.ok(result.proposedPath.includes("/.agents/skills/"));
     assert.ok(!existsSync(result.proposedPath));
   });
 
@@ -297,6 +300,93 @@ describe("skill new - draft mode", () => {
     assert.ok(
       result.output.some((line) => line.includes("Suggested move")),
       "draft is at draft.md, expected location is .claude/skills/draft/SKILL.md",
+    );
+  });
+
+  // Fixture purpose: creates same-name agent copies to ensure selected-agent draft scoring reads the requested SKILL.md.
+  it("scores a substantive Codex SKILL.md draft without reading a same-name Claude copy", async () => {
+    const projectRoot = makeTempProject();
+    const name = "shared-draft";
+    const codexDraftPath = join(
+      projectRoot,
+      ".agents",
+      "skills",
+      name,
+      "SKILL.md",
+    );
+    mkdirSync(join(projectRoot, ".agents", "skills", name), {
+      recursive: true,
+    });
+    writeFileSync(
+      codexDraftPath,
+      [
+        "---",
+        `name: ${name}`,
+        'description: "Use when reviewing database changes."',
+        'goat-flow-skill-version: "1.14.0"',
+        "---",
+        `# /${name}`,
+        "## When to Use",
+        "Use when reviewing database changes.",
+        "NOT this skill: unrelated work.",
+        "## Step 0",
+        "Read current target files and declare scope.",
+        "## Phase 1",
+        "Trace callers and record evidence.",
+        "## Verification",
+        "- [ ] Cite file plus semantic anchor.",
+        "- [ ] Record literal command output.",
+      ].join("\n"),
+    );
+
+    const baseline = await runSkillNew({
+      agent: "codex",
+      draftPath: codexDraftPath,
+      projectRoot,
+      stdinAnswers: [],
+    });
+    assert.equal(baseline.proposedPath, codexDraftPath);
+    assertExists(baseline.postScaffoldScore);
+    assert.equal(
+      baseline.candidacy.nextSteps[0]?.action,
+      "Place under .agents/skills/<name>/SKILL.md",
+    );
+
+    const claudeDraftPath = join(
+      projectRoot,
+      ".claude",
+      "skills",
+      name,
+      "SKILL.md",
+    );
+    mkdirSync(join(projectRoot, ".claude", "skills", name), {
+      recursive: true,
+    });
+    writeFileSync(
+      claudeDraftPath,
+      [
+        "---",
+        `name: ${name}`,
+        'description: "Use when x."',
+        "---",
+        `# /${name}`,
+      ].join("\n"),
+    );
+
+    const withClaudeCopy = await runSkillNew({
+      agent: "codex",
+      draftPath: codexDraftPath,
+      projectRoot,
+      stdinAnswers: [],
+    });
+    assert.equal(withClaudeCopy.proposedPath, codexDraftPath);
+    assert.equal(
+      withClaudeCopy.candidacy.nextSteps[0]?.action,
+      "Place under .agents/skills/<name>/SKILL.md",
+    );
+    assert.deepEqual(
+      withClaudeCopy.postScaffoldScore,
+      baseline.postScaffoldScore,
     );
   });
 

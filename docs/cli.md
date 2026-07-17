@@ -79,7 +79,7 @@ npx goat-flow skill new --interactive               # prompts for description, n
 
 With `--agent`, skills install to that manifest profile's skill directory: Codex and Antigravity use `.agents/skills/<name>/SKILL.md`, Claude uses `.claude/skills/<name>/SKILL.md`, and Copilot uses `.github/skills/<name>/SKILL.md`. Without `--agent`, the existing `.claude/skills/<name>/SKILL.md` default remains. Playbooks/references install to `.goat-flow/skill-docs/playbooks/<name>.md`. The command does not edit `workflow/manifest.json`.
 
-Fresh scaffolds contain placeholders, so `skill new` defers their numeric score until the placeholders are replaced and Skill TDD has run. Text and JSON output return the next-step handoff to `.goat-flow/skill-docs/skill-quality-testing/README.md` and `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md`; substantive draft evaluation remains available through the existing draft workflow.
+Fresh scaffolds contain placeholders, so `skill new` defers their numeric score until the placeholders are replaced and Skill TDD has run. Text and JSON output return the next-step handoff to `.goat-flow/skill-docs/skill-quality-testing/README.md` and `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md`. Draft mode scores an installed `<name>/SKILL.md` from the selected agent directory itself and returns the score in human and JSON output; it never substitutes a same-name copy from another agent directory.
 
 ### `goat-flow skill doctor [path] [--agent <id>] [--skill <name>] [--format text|json|markdown]`
 

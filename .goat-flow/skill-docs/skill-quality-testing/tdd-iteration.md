@@ -3,13 +3,15 @@ goat-flow-reference-version: "1.14.0"
 ---
 # Skill TDD Iteration
 
-The core TDD methodology for authoring and hardening goat-flow skills: RED/GREEN/REFACTOR loop, pressure types, rationalisation capture, bulletproofing, and the empirical budget.
+The core TDD methodology for authoring and hardening goat-flow skills: RED/GREEN/REFACTOR loop, pressure types, rationalisation capture, bulletproofing, and current-run evidence capture.
 
 Companion files in this pack:
 - `adversarial-framing.md` - review-class specific patterns (cynical-reviewer role, parallel reviewer, finding schema)
 - `deployment.md` - skip-testing rationalisations, deployment checklist, STOP rule
 
 Load this file when authoring a new discipline-enforcing skill, or hardening an existing one that was bypassed under pressure.
+
+> **Illustrative scenarios - input/output shape only; never evidence.** Uncited scenarios, quotes, BAD/GOOD blocks, iteration counts, and costs are shapes only. Replace them with current-run evidence.
 
 ## The iron law
 
@@ -52,7 +54,7 @@ Skills to NOT pressure-test:
 
 ## TDD loop for skills
 
-RED → GREEN → REFACTOR → STAY GREEN, adapted. Each phase is one Agent-tool call.
+RED → GREEN → REFACTOR → STAY GREEN, adapted. Each phase is one isolated evaluator run. Use a fresh delegated call when available and authorised; otherwise use a clean session.
 
 | Phase | Goal | Action |
 |-------|------|--------|
@@ -63,7 +65,7 @@ RED → GREEN → REFACTOR → STAY GREEN, adapted. Each phase is one Agent-tool
 | **REFACTOR** | Find the remaining holes | Re-run with additional pressure. Capture any new rationalisations. Add counters for each. |
 | **STAY GREEN** | Regression guard | After every later edit, re-run the highest-pressure scenario. Bulletproof = 3 consecutive passes without new rationalisations. |
 
-Baseline budget for a nontrivial discipline skill: **6 iterations, 10+ unique rationalisations** before GREEN converges. Fewer risks un-tested pressure classes.
+Do not reuse shipped counts. Run RED, GREEN, REFACTOR, then STAY GREEN to its threshold; report only current-run counts.
 
 ## Seven pressure types
 
@@ -250,11 +252,11 @@ The response type names the fix:
 
 ## Dispatch protocol
 
-1. Use the Agent tool. Each iteration = one Agent call with a self-contained prompt.
+1. Use one isolated evaluator and self-contained prompt per iteration: a fresh authorised delegated call or a clean session.
 2. **RED**: the subagent has **no access** to the skill under test. Zero skill context. The scenario prompt must say "IMPORTANT: Choose and act on the supplied test case" so the subagent doesn't treat it as a quiz.
 3. **GREEN / REFACTOR**: include the SKILL.md content inline in the prompt (simulates runtime skill loading).
 4. **Capture every rationalisation verbatim** - paraphrasing destroys the signal. "Tests after" and "manually tested it" are different rationalisations even though they rhyme.
-5. **Track cost**: typical ~$0.07–0.09 per iteration. A full TDD pass on a nontrivial discipline skill: ~$0.50. Budget accordingly.
+5. **Track cost**: record current-run runtime and model cost when exposed; otherwise record unknown. Never reuse a shipped estimate.
 6. **One subagent, one scenario.** Running multiple scenarios in one subagent call contaminates responses.
 
 ## Iteration log
@@ -314,18 +316,18 @@ Decision debt (if no): [durable decision record, issue, or team-owned backlog en
 
 The output shape ends with iteration count, captured rationalisations, consecutive-pass count, and measured cost from the current run.
 
-## Empirical grounding
+## Evidence boundaries
 
-- superpowers' own TDD skill went through **6 RED–GREEN–REFACTOR iterations** before bulletproof (2025-10-03 worked example above).
-- Baseline RED typically captures **10+ unique rationalisations** per nontrivial skill.
-- Pressure-tested compliance rises from ~33% → ~72% - Meincke et al. (2025), N=28,000, p < .001.
-- A bulletproof skill passes **3 consecutive** max-pressure scenarios without new rationalisations.
+- The worked log is an output shape, not history or proof.
+- Counts, runtime, and cost require current-run capture.
+- Meincke et al. (2025), N=28,000, p < .001, supports the persuasion discussion, not a local skill's effectiveness.
+- The methodology threshold is **3 consecutive** max-pressure scenarios without new rationalisations; record those runs.
 
 ## Description rule: trigger-only, never workflow-summary
 
 The `description:` frontmatter field decides when an agent loads the skill. It must describe **triggering conditions** ("Use when X happens"), never the skill's internal workflow ("Use when X - dispatches subagent then runs review between tasks").
 
-**Empirical observation:** workflow-summary descriptions cause the loading agent to follow the description instead of reading the body. "Code review between tasks" can cause one review when the body shows two stages. Trimming to triggering conditions restores correct skill-body following.
+**Authoring rule:** workflow-summary descriptions can compete with the body by presenting an abbreviated process. Keep the description trigger-only so the body remains the sole source of workflow sequencing.
 
 This failure mode is measurable. Portable checks can flag process verbs or sequencing language after the trigger phrase; use the BAD/GOOD examples below as the rule.
 

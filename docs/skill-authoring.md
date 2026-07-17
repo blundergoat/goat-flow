@@ -75,7 +75,7 @@ An untouched generated skill is a placeholder, so the command does not show a nu
 node --import tsx src/cli/cli.ts skill new --draft ./draft.md
 ```
 
-Draft mode never writes. It runs candidacy, compares the artifact shape to the selected agent profile's skill directory, and prints a move suggestion when the draft belongs somewhere else. Omitting `--agent` retains the Claude default.
+Draft mode never writes. It runs candidacy, compares the artifact shape to the selected agent profile's skill directory, and prints a move suggestion when the draft belongs somewhere else. For an installed `<name>/SKILL.md`, it derives the artifact name from the parent directory and returns that exact draft's current score in both human and JSON output; a same-name copy for another agent is not substituted. Omitting `--agent` retains the Claude default.
 
 ## Interactive Mode
 

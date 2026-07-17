@@ -7,8 +7,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { composeQuality } from "../../src/cli/prompt/compose-quality.js";
 import type { QualityInput } from "../../src/cli/prompt/compose-quality-common.js";
@@ -57,6 +58,79 @@ function extractReportWriteBlock(prompt: string): string {
   const blockEnd = prompt.indexOf("\n```", blockStart);
   assert.notEqual(blockEnd, -1, "unterminated report-write fence");
   return prompt.slice(blockStart, blockEnd);
+}
+
+/** Execute the generated wrapper against a deterministic fake global CLI. */
+function runReportWriteBlock({
+  version = "goat-flow v1.14.0",
+  redactStatus = 0,
+  validateStatus = 0,
+}: {
+  version?: string;
+  redactStatus?: number;
+  validateStatus?: number;
+} = {}) {
+  const tempRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-wrapper-"));
+  const outputPath = join(tempRoot, "quality-report.json");
+  const listMarker = join(tempRoot, "ls-called");
+  const cliPath = join(tempRoot, "goat-flow");
+  const listPath = join(tempRoot, "ls");
+  writeFileSync(
+    cliPath,
+    `#!/usr/bin/env node
+const { readFileSync, writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+if (args[0] === "--version") {
+  process.stdout.write(process.env.FAKE_GOAT_VERSION + "\\n");
+  process.exit(0);
+}
+if (args[0] === "redact") {
+  if (Number(process.env.FAKE_REDACT_STATUS) !== 0) process.exit(Number(process.env.FAKE_REDACT_STATUS));
+  const outputIndex = args.indexOf("--output");
+  writeFileSync(args[outputIndex + 1], readFileSync(0, "utf8"));
+  process.exit(0);
+}
+if (args[0] === "quality" && args[1] === "validate") {
+  JSON.parse(readFileSync(args[2], "utf8"));
+  process.exit(Number(process.env.FAKE_VALIDATE_STATUS));
+}
+process.exit(64);
+`,
+    { mode: 0o755 },
+  );
+  writeFileSync(
+    listPath,
+    `#!/usr/bin/env node
+require("node:fs").writeFileSync(process.env.FAKE_LS_MARKER, "called\\n");
+`,
+    { mode: 0o755 },
+  );
+
+  const prompt = composeQuality(makeInput("agent-setup")).prompt;
+  const report = { report_kind: "quality", detail: "wrapper contract" };
+  const writeBlock = extractReportWriteBlock(prompt).replace(
+    "<insert the complete report object here>",
+    JSON.stringify(report),
+  );
+  const result = spawnSync("bash", ["-c", writeBlock], {
+    cwd: tempRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${tempRoot}:${dirname(process.execPath)}:/usr/bin:/bin`,
+      FILE: outputPath,
+      FAKE_GOAT_VERSION: version,
+      FAKE_REDACT_STATUS: String(redactStatus),
+      FAKE_VALIDATE_STATUS: String(validateStatus),
+      FAKE_LS_MARKER: listMarker,
+    },
+  });
+  return {
+    result,
+    outputPath,
+    listMarker,
+    report,
+  };
 }
 
 /** Build the prompt input a user gets before any audit evidence is available. */
@@ -281,6 +355,37 @@ describe("quality report contract: CLI surfaces", () => {
     );
 
     assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+  });
+
+  it("executes redaction, validation, and listing in order with accurate failures", () => {
+    const success = runReportWriteBlock();
+    assert.equal(
+      success.result.status,
+      0,
+      success.result.stderr || success.result.stdout,
+    );
+    assert.deepEqual(
+      JSON.parse(readFileSync(success.outputPath, "utf8")),
+      success.report,
+    );
+    assert.equal(existsSync(success.listMarker), true);
+
+    const wrongVersion = runReportWriteBlock({
+      version: "goat-flow v1.13.0",
+    });
+    assert.equal(wrongVersion.result.status, 1);
+    assert.equal(existsSync(wrongVersion.outputPath), false);
+    assert.equal(existsSync(wrongVersion.listMarker), false);
+
+    const redactFailure = runReportWriteBlock({ redactStatus: 7 });
+    assert.equal(redactFailure.result.status, 7);
+    assert.equal(existsSync(redactFailure.outputPath), false);
+    assert.equal(existsSync(redactFailure.listMarker), false);
+
+    const validateFailure = runReportWriteBlock({ validateStatus: 9 });
+    assert.equal(validateFailure.result.status, 9);
+    assert.equal(existsSync(validateFailure.outputPath), true);
+    assert.equal(existsSync(validateFailure.listMarker), false);
   });
 
   it("embeds live Verification and Recovery limits in every quality mode prompt and summary", () => {

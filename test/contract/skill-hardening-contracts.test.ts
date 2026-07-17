@@ -652,9 +652,18 @@ describe("skill hardening contracts", () => {
     ];
 
     assertForEachTarget(skillTddReferencePaths, (referencePath) => {
+      const fullReference = readProjectFile(referencePath);
       const pressureExamples = readMarkdownSection(
         referencePath,
         "Seven pressure types",
+      );
+      const globalLabelIndex = fullReference.indexOf(
+        "Illustrative scenarios - input/output shape only; never evidence.",
+      );
+      assert.ok(
+        globalLabelIndex > 0 &&
+          globalLabelIndex < fullReference.indexOf("## The iron law"),
+        `${referencePath}: missing prominent file-wide illustrative label`,
       );
       assert.match(
         pressureExamples,
@@ -673,7 +682,47 @@ describe("skill hardening contracts", () => {
       );
       assert.doesNotMatch(pressureExamples, /Commit now/, referencePath);
       assert.doesNotMatch(pressureExamples, /git commit/, referencePath);
+      assert.doesNotMatch(
+        fullReference,
+        /superpowers' own TDD skill|typical ~\$0\.07|A full TDD pass[^\n]+~\$0\.50|Baseline RED typically|Baseline budget[^\n]+6 iterations/,
+        `${referencePath}: uncited framework history or fixed-cost claims remain`,
+      );
     });
+    assert.equal(
+      readProjectFile(skillTddReferencePaths[0]),
+      readProjectFile(skillTddReferencePaths[1]),
+      "workflow Skill TDD methodology and consumer-installed copy must remain byte-identical",
+    );
+  });
+
+  it("ties resolved hook footguns to the regressions that prove each boundary", () => {
+    const optionalMigration = readMarkdownSection(
+      ".goat-flow/learning-loop/footguns/hooks.md",
+      "Footgun: Optional hook migration must remove old registrations and re-add enabled central entries",
+    );
+    const failSoftAnalyzer = readMarkdownSection(
+      ".goat-flow/learning-loop/footguns/hooks.md",
+      "Footgun: Fail-soft analyzer skips can silently uncover a configured language",
+    );
+
+    for (const resolvedEntry of [optionalMigration, failSoftAnalyzer]) {
+      assert.match(
+        resolvedEntry,
+        /\*\*Status:\*\* resolved[^\n]+\*\*Resolved:\*\* 2026-07-17/u,
+      );
+    }
+    assert.match(
+      optionalMigration,
+      /setup-install-migrations\.test\.ts[^\n]+prunes legacy Codex gruff hook registrations because Codex gruff is unsupported/u,
+    );
+    assert.match(
+      optionalMigration,
+      /hook-registrar\.test\.ts[^\n]+enables gruff-code-quality for a detected Antigravity surface/u,
+    );
+    assert.match(
+      failSoftAnalyzer,
+      /gruff-code-quality-smoke\.test\.ts[^\n]+exits silently when project config is missing and diagnoses configured languages without a binary/u,
+    );
   });
 
   // A user asking what to build next needs evidence-backed ideas that cannot distort merge safety.
