@@ -28,6 +28,8 @@ Use when work needs milestone tracking: milestones, replans, rescope, or resume-
 
 ## Step 0 - Intake
 
+**Learning-loop retrieval runs before mode branching.** Derive 2-4 concrete search terms from the supplied brief, named plan, or path. Run the preamble's INDEX-first retrieval across footguns, lessons, and patterns, adding decisions for architecture, policy, or setup work. Emit `Relevant prior learnings:` with matches or an explicit retrieval miss before selecting path-only, reconcile, fresh, or named-update behavior.
+
 **Path-only guard runs first.** A task/milestone path alone or ambiguous context phrase uses **Path-Only Intake / Read-Only Orientation**. Read minimal index/status files. Do NOT update `.active`, milestone status fields, task checkboxes, or code. Mention a mismatched `.active`; switch only on approval. Code needs an explicit implementation verb; plan edits need an explicit write verb tied to the file. Otherwise checkpoint and stop.
 
 **Check for existing milestones first:**
@@ -41,7 +43,7 @@ Use when work needs milestone tracking: milestones, replans, rescope, or resume-
 
 Plans are local workflow state, not a setup invariant. Explicit reconcile selects read-only mode R. **TODO:** refresh drift/evidence. **DONE:** spot-check current HEAD. **BLOCKED:** honor or reject with rationale. **IN PROGRESS:** flag staleness and ask resume/abandon. Stop after reporting; never implement.
 
-**If starting fresh:** identify what is being built, the riskiest part, kill criteria, and run the preamble's learning-loop retrieval for the target area.
+**If starting fresh:** identify what is being built, the riskiest part, and kill criteria.
 
 **Pick exactly one mode.** Apply these signals in order - stop at the first that matches:
 

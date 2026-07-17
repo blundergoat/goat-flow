@@ -663,7 +663,7 @@ export function appendQualityReportContract(
   );
   pushFull(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
-    "- When streaming the report through the redaction heredoc below, QUOTE the delimiter (`<<'EOF'`, not `<<EOF`). Unquoted delimiters make the shell interpret `` `backticks` `` as command substitution, which silently eats your inline code references.",
+    "- When streaming the report through the redaction heredoc below, QUOTE the delimiter (`<<'NODE'`, not `<<NODE`). Unquoted delimiters make the shell interpret `` `backticks` `` as command substitution, which silently eats your inline code references.",
   );
   lines.push("");
   lines.push(
@@ -676,32 +676,74 @@ export function appendQualityReportContract(
   lines.push("");
   lines.push("```bash");
   lines.push(
-    `if [ "$(goat-flow --version 2>/dev/null)" = "goat-flow v${getPackageVersion()}" ]; then`,
+    "node --input-type=module - \"$FILE\" <<'NODE'",
+    'import { spawnSync } from "node:child_process";',
+    'import { existsSync, readFileSync } from "node:fs";',
+    "",
+    "const outputPath = process.argv[2];",
+    `const expectedVersion = "goat-flow v${getPackageVersion()}";`,
+    "const report = <insert the complete report object here>;",
+    "",
+    "function probeCompatibleCli(command, args) {",
+    '  const result = spawnSync(command, [...args, "--version"], {',
+    '    encoding: "utf8",',
+    "  });",
+    "  if (result.error || result.status !== 0) return null;",
+    "  if (result.stdout.trim() !== expectedVersion) return null;",
+    "  return { command, args };",
+    "}",
+    "",
+    'let selectedCli = probeCompatibleCli("goat-flow", []);',
+    'if (!selectedCli && existsSync("package.json")) {',
+    "  let packageJson = null;",
+    "  try {",
+    '    packageJson = JSON.parse(readFileSync("package.json", "utf8"));',
+    "  } catch {",
+    "    packageJson = null;",
+    "  }",
+    '  if (packageJson && packageJson.name === "@blundergoat/goat-flow" && existsSync("src/cli/cli.ts")) {',
+    "    selectedCli = probeCompatibleCli(process.execPath, [",
+    '      "--import",',
+    '      "tsx",',
+    '      "src/cli/cli.ts",',
+    "    ]);",
+    "  }",
+    "}",
+    "",
+    "if (!selectedCli) {",
+    `  console.error("Compatible goat-flow v${getPackageVersion()} redactor unavailable; raw report not written");`,
+    "  process.exit(1);",
+    "}",
+    "",
+    "function runOrExit(command, args, { input } = {}) {",
+    "  const result = spawnSync(command, args, {",
+    "    input,",
+    '    stdio: input === undefined ? "inherit" : ["pipe", "inherit", "inherit"],',
+    "  });",
+    "  if (result.error) {",
+    "    console.error(result.error.message);",
+    "    process.exit(1);",
+    "  }",
+    "  if (result.signal) {",
+    "    console.error(`Subprocess terminated by ${result.signal}`);",
+    "    process.kill(process.pid, result.signal);",
+    "  }",
+    "  if (result.status !== 0) process.exit(result.status ?? 1);",
+    "}",
+    "",
+    'const reportJson = JSON.stringify(report, null, 2) + "\\n";',
+    "runOrExit(",
+    "  selectedCli.command,",
+    '  [...selectedCli.args, "redact", "--output", outputPath],',
+    "  { input: reportJson },",
+    ");",
+    "runOrExit(selectedCli.command, [",
+    "  ...selectedCli.args,",
+    '  "quality", "validate", outputPath,',
+    "]);",
+    'runOrExit("ls", ["-la", outputPath]);',
+    "NODE",
   );
-  lines.push("  GOAT_FLOW_CLI=(goat-flow)");
-  lines.push(
-    'elif [ -f src/cli/cli.ts ] && [ "$(node -p "require(\'./package.json\').name" 2>/dev/null)" = "@blundergoat/goat-flow" ]; then',
-  );
-  lines.push("  GOAT_FLOW_CLI=(node --import tsx src/cli/cli.ts)");
-  lines.push("else");
-  lines.push(
-    `  echo "Compatible goat-flow v${getPackageVersion()} redactor unavailable; raw report not written" >&2`,
-  );
-  lines.push("  exit 1");
-  lines.push("fi");
-  lines.push('"${GOAT_FLOW_CLI[@]}" redact --output "$FILE" <<\'EOF\'');
-  lines.push("<insert the complete JSON body here>");
-  lines.push("EOF");
-  lines.push("REDACT_STATUS=$?");
-  lines.push('if [ "$REDACT_STATUS" -ne 0 ]; then');
-  lines.push('  exit "$REDACT_STATUS"');
-  lines.push("fi");
-  lines.push('"${GOAT_FLOW_CLI[@]}" quality validate "$FILE"');
-  lines.push("VALIDATE_STATUS=$?");
-  lines.push('if [ "$VALIDATE_STATUS" -ne 0 ]; then');
-  lines.push('  exit "$VALIDATE_STATUS"');
-  lines.push("fi");
-  lines.push('ls -la "$FILE"');
   lines.push("```");
   lines.push("");
   lines.push(

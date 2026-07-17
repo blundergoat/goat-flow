@@ -226,6 +226,33 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("runs goat-plan learning-loop retrieval before every mode branch", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      const retrievalIndex = skillGuidance.indexOf(
+        "Learning-loop retrieval runs before mode branching",
+      );
+      const pathOnlyIndex = skillGuidance.indexOf("Path-only guard runs first");
+      const reconcileIndex = skillGuidance.indexOf(
+        "Reconcile Existing Plan State",
+      );
+      const modeIndex = skillGuidance.indexOf("Pick exactly one mode");
+
+      assert.notEqual(retrievalIndex, -1, `${skillPath}: missing retrieval`);
+      assert.ok(
+        retrievalIndex < pathOnlyIndex &&
+          retrievalIndex < reconcileIndex &&
+          retrievalIndex < modeIndex,
+        `${skillPath}: a mode can bypass learning-loop retrieval`,
+      );
+      assert.match(
+        skillGuidance,
+        /supplied brief, named plan, or path/,
+        `${skillPath}: retrieval terms do not cover every invocation shape`,
+      );
+    });
+  });
+
   it("lets goat-plan File-Write persist without phase-one approval or critique handoff", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -483,7 +510,7 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         skillGuidance,
-        /Illustrative placeholder; not a real module and never evidence/,
+        /Illustrative scenario - input\/output shape only; never evidence/,
         skillPath,
       );
       assert.match(
@@ -597,7 +624,7 @@ describe("skill hardening contracts", () => {
       );
     });
 
-    // Reference examples must use verified incidents rather than invented approval outcomes.
+    // Reference examples teach output shape without claiming framework-only incidents as evidence.
     const reviewExamplePaths = INSTALLED_SKILL_ROOTS.map(
       (skillRoot) => `${skillRoot}/goat-review/references/examples.md`,
     );
@@ -605,8 +632,16 @@ describe("skill hardening contracts", () => {
       const reviewExamples = readProjectFile(examplePath);
       assert.doesNotMatch(reviewExamples, /Pass 3 auto-triggered/, examplePath);
       assert.doesNotMatch(reviewExamples, /PR #412|a1b2c3d/, examplePath);
-      assert.match(reviewExamples, /PR #56/, examplePath);
-      assert.match(reviewExamples, /checkSharedFileSets/, examplePath);
+      assert.match(
+        reviewExamples,
+        /Illustrative scenario - input\/output shape only; never evidence/,
+        examplePath,
+      );
+      assert.doesNotMatch(
+        reviewExamples,
+        /PR #56|checkSharedFileSets|src\/cli\/audit\/check-artifact-integrity\.ts/,
+        examplePath,
+      );
     });
   });
 
@@ -621,10 +656,19 @@ describe("skill hardening contracts", () => {
         referencePath,
         "Seven pressure types",
       );
-      assert.match(pressureExamples, /Real goat-flow incident/, referencePath);
+      assert.match(
+        pressureExamples,
+        /Illustrative scenario - input\/output shape only; never evidence/,
+        referencePath,
+      );
       assert.match(
         pressureExamples,
         /only the test-first ordering differs/,
+        referencePath,
+      );
+      assert.doesNotMatch(
+        pressureExamples,
+        /Real goat-flow incident|M33|test\/contract\/skill-hardening-contracts\.test\.ts/,
         referencePath,
       );
       assert.doesNotMatch(pressureExamples, /Commit now/, referencePath);
@@ -1191,12 +1235,100 @@ describe("skill hardening contracts", () => {
       "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
       ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
     ]) {
+      const tddGuidance = readProjectFile(tddPath);
       assert.match(
-        readProjectFile(tddPath),
-        /Framework-source evidence; consumers do not resolve these paths/,
+        tddGuidance,
+        /Illustrative scenario - input\/output shape only; never evidence/,
+        tddPath,
+      );
+      assert.doesNotMatch(
+        tddGuidance,
+        /Framework-source evidence|\/tmp\/payment-service|M33|test\/contract\/skill-hardening-contracts\.test\.ts/,
         tddPath,
       );
     }
+  });
+
+  it("labels shipped scenarios and removes framework-only evidence claims", () => {
+    const scenarioTargets = [
+      ...installedSkillPaths("goat-debug"),
+      ...installedSkillPaths("goat-security"),
+      ...installedSkillPaths("goat-qa"),
+      ...INSTALLED_SKILL_ROOTS.map(
+        (skillRoot) =>
+          `${skillRoot}/goat-critique/references/rubric-examples.md`,
+      ),
+      ...INSTALLED_SKILL_ROOTS.map(
+        (skillRoot) => `${skillRoot}/goat-review/references/examples.md`,
+      ),
+      "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
+      ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+    ];
+    const forbiddenFrameworkClaims =
+      /a coordination lesson|local decision record|Confirmed PR #56|checkSharedFileSets|Real incident: a `goat-debug` quality review|\/tmp\/payment-service|Framework-source evidence/u;
+
+    assertForEachTarget(scenarioTargets, (scenarioPath) => {
+      const scenarioGuidance = readProjectFile(scenarioPath);
+      assert.match(
+        scenarioGuidance,
+        /Illustrative scenario - input\/output shape only; never evidence/,
+        scenarioPath,
+      );
+      assert.doesNotMatch(
+        scenarioGuidance,
+        forbiddenFrameworkClaims,
+        scenarioPath,
+      );
+    });
+  });
+
+  it("distinguishes tool playbooks from skill-authoring methodology in setup", () => {
+    const setupGuide = readProjectFile("workflow/setup/02-instruction-file.md");
+    assert.match(
+      setupGuide,
+      /Tool playbooks[^\n]+`\.goat-flow\/skill-docs\/playbooks\/`/,
+    );
+    assert.match(
+      setupGuide,
+      /Skill-authoring methodology[^\n]+`\.goat-flow\/skill-docs\/skill-quality-testing\/`/,
+    );
+    assert.doesNotMatch(
+      setupGuide,
+      /playbooks\/skill-quality-testing/,
+      "skill-quality-testing is a sibling of playbooks, not its child",
+    );
+  });
+
+  it("keeps remediated workflow examples byte-identical across agent mirrors", () => {
+    const mirroredFiles = [
+      "goat-plan/SKILL.md",
+      "goat-debug/SKILL.md",
+      "goat-security/SKILL.md",
+      "goat-qa/SKILL.md",
+      "goat-critique/references/rubric-examples.md",
+      "goat-review/references/examples.md",
+    ];
+
+    assertForEachTarget(mirroredFiles, (relativePath) => {
+      const workflowSource = readProjectFile(`workflow/skills/${relativePath}`);
+      for (const installedRoot of [
+        ".claude/skills",
+        ".agents/skills",
+        ".github/skills",
+      ]) {
+        const mirrorPath = `${installedRoot}/${relativePath}`;
+        assert.equal(readProjectFile(mirrorPath), workflowSource, mirrorPath);
+      }
+    });
+
+    assert.equal(
+      readProjectFile(
+        ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+      ),
+      readProjectFile(
+        "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
+      ),
+    );
   });
 
   it("installs complete learning-loop templates and one evidence taxonomy", () => {

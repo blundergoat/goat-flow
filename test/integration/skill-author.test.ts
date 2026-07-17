@@ -81,6 +81,36 @@ describe("skill new - description mode", () => {
     assert.match(content, /## Verification/);
   });
 
+  it("routes workflow skill scaffolds through the selected agent profile", async () => {
+    const cases = [
+      { agent: undefined, expectedDirectory: ".claude/skills" },
+      { agent: "claude" as const, expectedDirectory: ".claude/skills" },
+      { agent: "codex" as const, expectedDirectory: ".agents/skills" },
+      { agent: "copilot" as const, expectedDirectory: ".github/skills" },
+    ];
+
+    for (const { agent, expectedDirectory } of cases) {
+      const projectRoot = makeTempProject();
+      const result = await runSkillNew({
+        description:
+          "I want a workflow that walks through Postgres index changes.",
+        name: `pg-index-${agent ?? "default"}`,
+        agent,
+        shouldSkipConfirm: true,
+        projectRoot,
+        stdinAnswers: [],
+      });
+
+      assert.equal(result.written, true);
+      assertExists(result.proposedPath);
+      assert.ok(
+        result.proposedPath.includes(`/${expectedDirectory}/`),
+        `${agent ?? "default"}: ${result.proposedPath}`,
+      );
+      assert.ok(existsSync(result.proposedPath));
+    }
+  });
+
   it("scaffolds a report skill for audit-shaped descriptions without writes", async () => {
     const projectRoot = makeTempProject();
     const result = await runSkillNew({
@@ -186,7 +216,7 @@ describe("skill new - description mode", () => {
     assert.ok(result.output.some((line) => line.includes("Invalid name")));
   });
 
-  it("scoring after scaffold lands within the workflow profile bounds", async () => {
+  it("defers scoring for an untouched scaffold and returns the Skill TDD handoff", async () => {
     const projectRoot = makeTempProject();
     const result = await runSkillNew({
       description:
@@ -197,12 +227,20 @@ describe("skill new - description mode", () => {
       stdinAnswers: [],
     });
     assert.ok(result.written);
-    assertExists(result.postScaffoldScore);
-    assert.ok(result.postScaffoldScore.totalScore > 0);
+    assert.equal(result.postScaffoldScore, null);
     assert.ok(
-      result.postScaffoldScore.totalScore <=
-        result.postScaffoldScore.profileMax,
+      result.output.some((line) =>
+        line.includes(
+          "Scoring deferred until placeholders are replaced and Skill TDD has run",
+        ),
+      ),
     );
+    assert.doesNotMatch(result.output.join("\n"), /\b\d+\/\d+\b/u);
+    assert.deepEqual(result.nextSteps, [
+      "Replace every scaffold placeholder with target-project evidence.",
+      "Follow .goat-flow/skill-docs/skill-quality-testing/README.md.",
+      "Run .goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md before scoring.",
+    ]);
   });
 
   it("rejects mixed description, draft, and interactive input modes", async () => {

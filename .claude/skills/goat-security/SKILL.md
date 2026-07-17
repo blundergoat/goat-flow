@@ -94,10 +94,12 @@ Default false-positive suppression:
 - dependency findings with no reachable package, no vulnerable path, or no operational impact
 - prompt-injection claims where the suspicious text is already treated as inert data and never executed or elevated
 
+**Illustrative scenario - input/output shape only; never evidence.** Replace the surface, controls, and semantic anchors with files re-read in the current target project.
+
 False-positive calibration example:
-- **Removed lead:** "Terminal WebSocket writes arbitrary input to `session.pty?.write`."
-- **Why removed:** This is intended terminal functionality, not a standalone vulnerability, when the path is gated by a crypto-random dashboard token plus Host and Origin checks.
-- **Evidence needed:** cite the token generation/check, WebSocket authorization guard, and PTY write sink before calling the lead false-positive.
+- **Removed lead:** "An authenticated terminal relay forwards user input to its PTY sink."
+- **Why removed:** Forwarding authenticated terminal input is intended functionality, not a standalone vulnerability, when the target project's actual path is gated by a high-entropy session credential plus origin and host controls.
+- **Evidence needed:** cite the target project's credential generation/check, connection authorization guard, and PTY write sink before calling the lead false-positive.
 
 Also call out positive observations when they materially reduce risk.
 
@@ -137,13 +139,15 @@ Rank severity from exploitability first, then blast radius, then privileged-surf
 - Medium: specific conditions, partial mitigation, or limited blast radius
 - Low: narrow edge case or mostly theoretical impact
 
+**Illustrative scenario - input/output shape only; never evidence.** These rows calibrate output shape only. A live assessment must replace them with current target-project paths, semantic anchors, and entry-to-sink proof.
+
 Worked examples:
 - external PR can smuggle `${{ github.event.* }}` into shell and execute secrets-bearing workflow step -> `Critical`
 - authenticated user can reset another account password due to missing ownership check -> `High`
-- local dashboard token is printed in a startup URL and accepted from `?token=`; a same-host process can replay it to attach a terminal WebSocket, while loopback-only bind and ephemeral token prevent a remote path -> `Low`
+- a local control-plane credential appears in a startup URL and is accepted from a query parameter; a same-host process can replay it while loopback-only binding and credential expiry prevent a remote path -> `Low`
 
 Report calibration example:
-- S-01: local dashboard token parser (search: `return url.searchParams.get("token")`) | asset: local dashboard authorization token | entry->sink: query token in startup/dev logs -> local history or scrollback -> replay against API/WebSocket | trust boundary: process secret to local stores readable by same-host actors | preconditions: same-host read access while the process is alive | confidence: CONFIRMED | severity: Low | proof-class: STATIC | blast radius: local dashboard API and PTY attach as the running user | proof-of-fix: stop logging query tokens, prefer a header token, and verify no request logger prints raw URL search params.
+- S-01: `<target-project>/src/local-control-plane.ts` (search: `readAccessToken`) | asset: local control-plane credential | entry->sink: query credential in startup/dev logs -> local history or scrollback -> replay against API/session channel | trust boundary: process secret to local stores readable by same-host actors | preconditions: same-host read access while the process is alive | confidence: CONFIRMED only after the target path is re-read | severity: Low | proof-class: STATIC | blast radius: local API and session attach as the running user | proof-of-fix: stop logging query credentials, prefer a header credential, and verify no request logger prints raw URL search parameters.
 
 For Critical/High, write the attack scenario: "An [attacker] can [action] via [vector], resulting in [impact]."
 For diff reviews, map posture explicitly:

@@ -51,19 +51,23 @@ Before editing shared references or playbooks, check the ADR-023 tier. Always-lo
 ```bash
 node --import tsx src/cli/cli.ts skill new \
   "I want a workflow that reviews risky database migrations before deploy" \
-  --name db-migration-review
+  --name db-migration-review \
+  --agent codex
 ```
 
 The command runs candidacy first. If the result is a skill or playbook, it prints the destination and a preview, then asks for confirmation before writing. Use `--yes` for non-interactive flows.
 
-Default destinations:
+Destinations:
 
 | Artifact | Destination |
 |---|---|
-| Skill | `.claude/skills/<name>/SKILL.md` |
+| Skill with `--agent <id>` | The selected manifest profile's skill directory, such as `.agents/skills/<name>/SKILL.md` for Codex or `.claude/skills/<name>/SKILL.md` for Claude. |
+| Skill without `--agent` | `.claude/skills/<name>/SKILL.md` (backward-compatible default). |
 | Playbook/reference | `.goat-flow/skill-docs/playbooks/<name>.md` |
 
 The command does not edit `workflow/manifest.json`.
+
+An untouched generated skill is a placeholder, so the command does not show a numeric quality score after writing it. Human and JSON output instead defer scoring until placeholders are replaced and Skill TDD has run, with next steps pointing to `.goat-flow/skill-docs/skill-quality-testing/README.md` and `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md`.
 
 ## Validate A Draft
 
@@ -71,7 +75,7 @@ The command does not edit `workflow/manifest.json`.
 node --import tsx src/cli/cli.ts skill new --draft ./draft.md
 ```
 
-Draft mode never writes. It runs candidacy, compares the artifact shape to the file location, and prints a move suggestion when the draft belongs somewhere else.
+Draft mode never writes. It runs candidacy, compares the artifact shape to the selected agent profile's skill directory, and prints a move suggestion when the draft belongs somewhere else. Omitting `--agent` retains the Claude default.
 
 ## Interactive Mode
 

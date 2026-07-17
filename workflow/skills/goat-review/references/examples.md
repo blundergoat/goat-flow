@@ -7,6 +7,8 @@ This reference carries detailed examples that would overload the review protocol
 Use it to calibrate refutations, final output, and explicit direction audits.
 Every live claim still requires a verified file plus semantic anchor.
 
+> **Illustrative scenario - input/output shape only; never evidence.** All example paths, suspicions, outcomes, and findings below must be replaced with current target-project evidence before they appear in a live review.
+
 ## Direction / Opportunity Audit
 
 Run this area-audit variant only when the user explicitly asks what the repository should do next. Record the current read-only verification baseline first. A failing build or test remains a defect finding and must not be reclassified as an opportunity; establish a passing or explicitly failing current baseline before proposing opportunities. Every item needs repo-grounded evidence and exactly one class:
@@ -27,7 +29,7 @@ Route rejected material by lifespan:
 
 ## Worked Example - Refuted Template Suspicion
 
-Use this shape when Pass 1 raises a plausible template or output-format suspicion and Pass 2 disproves it. This example uses real `goat-review` files and anchors.
+Use this shape when Pass 1 raises a plausible template or output-format suspicion and Pass 2 disproves it. The sibling skill filenames demonstrate the shape only; re-resolve and re-read them in the current installation before making a claim.
 
 **Review surface:** `SKILL.md`, `references/automated-review.md`, `references/refuter-spec.md`
 
@@ -50,15 +52,15 @@ Use this shape when Pass 1 raises a plausible template or output-format suspicio
 
 **Zero-finding final note:** "Checked Review Integrity against both optional references; no issue surfaced because the output template includes the required conditional lines."
 
-## Worked Example - Confirmed PR #56 Finding
+## Worked Example - Confirmed Finding Shape
 
-This incident records a finding from PR #56 at head `861c0acad3de7043f0a6f27cd8c1a78419b935c5`.
+This scenario shows how a generator/auditor contract mismatch becomes a confirmed finding only after a current reproduction.
 
-**Review surface:** `src/cli/audit/check-artifact-integrity.ts` (search: `checkSharedFileSets`), `src/cli/skill-author.ts` (search: `PLAYBOOK_TEMPLATE`), and `test/integration/audit-drift-artifact-integrity.test.ts` (search: `accepts an explicitly user-owned consumer playbook`).
+**Review surface:** `<target-project>/src/artifact-audit.ts` (search: `classifyInstalledArtifact`), `<target-project>/src/artifact-generator.ts` (search: `userOwnedMarker`), and `<target-project>/test/artifact-drift.test.ts` (search: `accepts a user-owned generated artifact`).
 
 **Pass 1 suspicion:** The drift audit appeared to classify every unmapped installed playbook as stale even though `goat-flow skill new` creates consumer-only playbooks at that location.
 
-**Pass 2 reproduction:** A generated `lefthook.md` under `.goat-flow/skill-docs/playbooks/` produced a `stale installed shared artifact` finding because it was absent from the package mirror map.
+**Pass 2 reproduction:** In this scenario, a generated user-owned playbook produces a `stale installed shared artifact` finding because it is absent from the package mirror map.
 
 **Finding:** The audit contradicted the documented consumer-project route and made a valid local playbook fail drift checks.
 
@@ -66,7 +68,7 @@ This incident records a finding from PR #56 at head `861c0acad3de7043f0a6f27cd8c
 
 ## Finding Format Examples
 
-Use concrete harm and proof class. These examples use real anchors from this skill surface; apply them when a reviewed diff removes, bypasses, or contradicts the cited rule.
+Use concrete harm and proof class. These examples use sibling skill anchors only to show the required shape; apply them only after a reviewed diff is checked against the current installed files.
 
 **Systemic pattern:**
 

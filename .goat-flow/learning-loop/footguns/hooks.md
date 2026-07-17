@@ -1,11 +1,11 @@
 ---
 category: hooks
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-17
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-dangerous.md](deny-dangerous.md).
 
-**Last independent review:** 2026-05-26 - Active entries re-verified against current split guardrail anchors and the central self-test (`PASS` across Workflow/Claude/GitHub/Codex/Antigravity). Antigravity uses `.agents/hooks.json` + `.agents/hooks/` for PreToolUse; `cat .env` is blocked by `patterns-paths.sh`.
+**Last independent review:** 2026-07-17 - Optional-hook migration and configured-analyzer diagnostics were re-run against their focused regression anchors and moved to Resolved. Other active entries were not reclassified by that check.
 
 ## Footgun: Hook toggles can scaffold uninstalled agent surfaces
 
@@ -156,49 +156,6 @@ last_reviewed: 2026-06-14
 
 ---
 
-## Footgun: Optional hook migration must remove old registrations and re-add enabled central entries
-
-**Status:** active | **Created:** 2026-06-07 | **Evidence:** OBSERVED
-
-**Symptoms:** The installer can successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure only appears after upgrade because fresh installs use the new template shape and disabled optional hooks do not expose the stale entry.
-
-**Why it happens:** `workflow/install-goat-flow.sh` originally treated only deny-dangerous and the old split guardrail scripts as managed during hook-config migration. Optional `gruff-code-quality.sh` registrations were outside that managed set, so pruning `.claude/hooks/`, `.codex/hooks/`, `.agents/hooks/`, or `.github/hooks/` could delete the script while preserving the old registration. Since gruff is optional, migration must remove stale managed entries everywhere and then re-add the central registration only when `.goat-flow/config.yaml` explicitly enables `gruff-code-quality`.
-
-**Evidence:**
-- `workflow/install-goat-flow.sh` (search: `managedScripts`) includes `gruff-code-quality.sh` in the managed migration set.
-- `workflow/install-goat-flow.sh` (search: `appendGruffHookEntries`) re-adds central gruff registrations from the enabled hook toggle rather than preserving stale per-agent paths.
-- `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`) reads the existing config toggle so enabled optional hooks survive upgrades while disabled hooks stay absent.
-
-**Prevention:**
-1. Any future optional hook must be in the installer managed-hook removal list before legacy files are pruned.
-2. Do not preserve old hook entries by path during a centralization migration; regenerate from the current registry/config toggle.
-3. Add upgrade fixtures for enabled and disabled optional hooks whenever a hook's install path changes.
-
----
-
-## Footgun: Fail-soft analyzer skips can silently uncover a configured language
-
-**Status:** active | **Created:** 2026-06-09 | **Evidence:** OBSERVED
-
-**Symptoms:** A project has a root `.gruff-<lang>.yaml` config, the matching language file is edited, and the PostToolUse hook exits 0 with no output. The agent sees no gruff feedback and may infer the changed lines are clean, while the analyzer never ran.
-
-**Why it happens:** `gruff-code-quality.sh` is intentionally fail-soft. That is correct for missing config, unsupported files, no `jq`, and no changed-line range. It is dangerous when a matching config exists but `discover_binary` misses the analyzer, because the project has opted that language into gruff coverage. A real monorepo kept `gruff-py` only under `strands_agents/.venv/bin/gruff-py`; ADR-032 correctly removed automatic `*/.venv/bin` discovery, so the old hook returned 0 silently and left Python uncovered.
-
-**Evidence:**
-- Hook contract and search paths: `workflow/hooks/gruff-code-quality.sh` (search: `BINARY_SEARCH_PATHS`) and (search: `GRUFF_PY_BIN`).
-- Diagnostic path: `workflow/hooks/gruff-code-quality.sh` (search: `present but %s not found on search paths`).
-- Config-error surfacing path: `workflow/hooks/gruff-code-quality.sh` (search: `config_error_message`).
-- Regression tests: `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses an explicit env override for a non-standard monorepo gruff binary`) and (search: `surfaces legacy JSON config diagnostics with empty findings`).
-- Security constraint: `.goat-flow/learning-loop/decisions/ADR-032-scope-gruff-hook-binary-discovery.md` (search: `Scope gruff-code-quality hook binary discovery to standard install locations`).
-
-**Prevention:**
-1. Treat config-present/binary-absent as a visible misconfiguration: emit one stderr line naming the config, binary, standard search paths, and the per-language env override. Keep exit 0.
-2. Preserve ADR-032's no-recursive-discovery rule. Do not add `*/.venv/bin`, `target/debug`, or arbitrary subtree search back to `discover_binary`.
-3. For monorepos with managed analyzers outside standard install paths, use explicit executable overrides such as `GRUFF_PY_BIN=/path/to/subproject/.venv/bin/gruff-py`.
-4. When analyzer JSON has empty `findings` but config diagnostics or `filesDiscovered: 0`, surface the diagnostic before reporting a clean changed-line count.
-
----
-
 ## Footgun: Registered Stop hooks can be dead config behind agent trust gates
 
 **Status:** active | **Created:** 2026-06-13 | **Evidence:** ACTUAL_MEASURED
@@ -238,3 +195,38 @@ last_reviewed: 2026-06-14
 - **Advisory hooks create unfixable quality warning after setup** (resolved 2026-04-14) - hooks ship enforce-mode (`GOAT_LINT_ENFORCE` defaults to 1).
 - **Codex hooks registered in config.toml instead of hooks.json** (resolved 2026-04-15) - moved to `.codex/hooks.json`; TOML hook sections were silently ignored.
 - **Codex hook migrations drift across files, templates, installer, docs** (resolved 2026-04-15) - restored Codex guardrail registration; aligned all four surfaces.
+
+## Footgun: Optional hook migration must remove old registrations and re-add enabled central entries
+
+**Status:** resolved | **Created:** 2026-06-07 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
+
+**Resolution:** Current migration code removes managed legacy gruff registrations before pruning per-agent scripts and rebuilds only supported/enabled central entries. The focused regression `test/integration/setup-install-migrations.test.ts` (search: `prunes legacy Codex gruff hook registrations because Codex gruff is unsupported`) verifies the old `.codex/hooks/gruff-code-quality.sh` file and both legacy/central gruff registrations are absent after a Codex upgrade while the supported deny hook remains registered.
+
+**Original symptoms:** The installer could successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure appeared only after upgrade because fresh installs used the new template shape and disabled optional hooks did not expose the stale entry.
+
+**Why it happened:** `workflow/install-goat-flow.sh` originally treated only deny-dangerous and the old split guardrail scripts as managed during hook-config migration. Optional `gruff-code-quality.sh` registrations were outside that managed set, so pruning `.claude/hooks/`, `.codex/hooks/`, `.agents/hooks/`, or `.github/hooks/` could delete the script while preserving the old registration.
+
+**Durable anchors:**
+- `workflow/install-goat-flow.sh` (search: `managedScripts`) includes `gruff-code-quality.sh` in the managed migration set.
+- `workflow/install-goat-flow.sh` (search: `appendGruffHookEntries`) re-adds central gruff registrations from the enabled hook toggle rather than preserving stale per-agent paths.
+- `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`) reads the existing config toggle so enabled optional hooks survive upgrades while disabled hooks stay absent.
+
+**Prevention:** Any future optional hook must enter the managed-hook removal list before legacy files are pruned. Regenerate current registrations from registry/config state, and add upgrade fixtures whenever an optional hook's install path changes.
+
+## Footgun: Fail-soft analyzer skips can silently uncover a configured language
+
+**Status:** resolved | **Created:** 2026-06-09 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
+
+**Resolution:** Missing project configuration still exits silently, but a matching `.gruff-<lang>.yaml` with no discoverable analyzer now emits a targeted stderr diagnostic while preserving fail-soft exit 0. The focused regression `test/integration/gruff-code-quality-smoke.test.ts` (search: `exits silently when project config is missing and diagnoses configured languages without a binary`) verifies both sides of that boundary.
+
+**Original symptoms:** A project had a root `.gruff-<lang>.yaml` config, the matching language file was edited, and the PostToolUse hook exited 0 with no output. The agent saw no gruff feedback and could infer the changed lines were clean while the analyzer never ran.
+
+**Why it happened:** `gruff-code-quality.sh` is intentionally fail-soft for missing config, unsupported files, no `jq`, and no changed-line range. It was dangerous when a matching config existed but `discover_binary` missed the analyzer, because the project had opted that language into gruff coverage. A measured monorepo incident kept `gruff-py` only under `strands_agents/.venv/bin/gruff-py`; ADR-032 correctly rejected automatic `*/.venv/bin` discovery, so the old hook returned 0 silently and left Python uncovered.
+
+**Durable anchors:**
+- Diagnostic path: `workflow/hooks/gruff-code-quality.sh` (search: `present but %s not found on search paths`).
+- Config-error path: `workflow/hooks/gruff-code-quality.sh` (search: `config_error_message`).
+- Explicit override coverage: `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses an explicit env override for a non-standard monorepo gruff binary`).
+- Security constraint: `.goat-flow/learning-loop/decisions/ADR-032-scope-gruff-hook-binary-discovery.md` (search: `Scope gruff-code-quality hook binary discovery to standard install locations`).
+
+**Prevention:** Keep config-present/binary-absent visible while preserving fail-soft exit 0 and ADR-032's no-recursive-discovery rule. Monorepos with managed analyzers outside standard paths must use an explicit executable override.

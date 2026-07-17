@@ -117,7 +117,9 @@ Map each stated expectation to the code path that implements it. Gaps between in
 
 **BLOCKING GATE (auto-released on explicit test-plan intent):** Present gap analysis plus Verification Integrity, then stop and ask "Continue to Phase 3, or adjust first?" - unless the invocation already gave explicit "what should I test" / "test plan" intent, in which case treat it as a CHECKPOINT and continue through Phase 3 without pausing. Reserve diagrams for Phase 3; then suggest `/goat-plan`.
 
-**Worked Standard example:** A terminal-launch diff is HIGH risk. Read its smoke tests; safe to skip more PTY timing tests only when timing code is unchanged.
+**Illustrative scenario - input/output shape only; never evidence.**
+
+**Worked Standard example:** A terminal-launch diff is HIGH risk. Read its smoke tests; safe to skip more PTY timing tests only when current target evidence proves timing code is unchanged.
 
 ## Phase 3 - Targeted Testing Plan
 
@@ -180,7 +182,9 @@ Rank gaps by `Risk × (1 - CoverageLevel)` descending - Risk maps CRITICAL=4, HI
 - **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path.
 - **Defer** - every matrix Defer pair: LOW-risk or BEHAVIOURAL coverage. Name them explicitly so the user sees what was considered and why.
 
-**Worked Audit example:** Scope a small audit module; read tests, not filenames - the heuristic misleads both ways. A file can lack a same-name test yet run behaviourally through an integration suite, so it is PARTIAL-BEHAVIOURAL, not NONE. Illustrative placeholder; not a real module and never evidence: after proving `src/example-content-check.ts` has no unit, integration, or exported-symbol references, classify it as NONE and route its risk/coverage pair through the matrix. Proof class STATIC applies only to the files actually inspected in the user's project.
+**Illustrative scenario - input/output shape only; never evidence.**
+
+**Worked Audit example:** Scope a small audit module; read tests, not filenames - the heuristic misleads both ways. A file can lack a same-name test yet run behaviourally through an integration suite, so it is PARTIAL-BEHAVIOURAL, not NONE. In this scenario, after proving `<target-project>/src/content-check.ts` has no unit, integration, or exported-symbol references, classify it as NONE and route its risk/coverage pair through the matrix. Proof class STATIC applies only to files actually inspected in the user's project.
 
 **BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template below.
 

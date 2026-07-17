@@ -42,7 +42,7 @@ The enforcement matrix is deliberately conservative. It reports local facts such
 
 ### `goat-flow quality [path] --agent <id> [--mode <mode>]`
 
-Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. `--mode` selects the assessment contract: `agent-setup` (default), `process`, `harness`, or `skills`. The prompt tells the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` (gitignored); prose findings come back in the agent's reply, the JSON does not.
+Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. `--mode` selects the assessment contract: `agent-setup` (default), `process`, `harness`, or `skills`. The prompt keeps the completed report object in process memory, selects an exact-version compatible CLI, streams the JSON through `redact` into `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` (gitignored), then validates it before listing the file. Prose findings come back in the agent's reply; the JSON does not.
 
 ```bash
 npx goat-flow quality . --agent claude         # Quality prompt for Claude
@@ -67,17 +67,19 @@ npx goat-flow quality candidacy --draft ./draft.md
 
 Candidacy is read-only. See [Skill Authoring](skill-authoring.md) for the full authoring workflow.
 
-### `goat-flow skill new [<description>] [--name <slug>] [--draft <file>] [--interactive] [--yes]`
+### `goat-flow skill new [<description>] [--name <slug>] [--draft <file>] [--interactive] [--yes] [--agent <id>]`
 
 Scaffold a new skill or playbook from a description, validate a draft's location, or run interactively. Runs `quality candidacy` first; only writes a file after confirmation (`--yes` for non-interactive flows).
 
 ```bash
-npx goat-flow skill new "I want a workflow that reviews risky database migrations before deploy" --name db-migration-review
+npx goat-flow skill new "I want a workflow that reviews risky database migrations before deploy" --name db-migration-review --agent codex
 npx goat-flow skill new --draft ./draft.md          # validate location only, never writes
 npx goat-flow skill new --interactive               # prompts for description, name, confirmation
 ```
 
-Default destinations: skills install to `.claude/skills/<name>/SKILL.md`; playbooks/references install to `.goat-flow/skill-docs/playbooks/<name>.md`. The command does not edit `workflow/manifest.json`.
+With `--agent`, skills install to that manifest profile's skill directory: Codex and Antigravity use `.agents/skills/<name>/SKILL.md`, Claude uses `.claude/skills/<name>/SKILL.md`, and Copilot uses `.github/skills/<name>/SKILL.md`. Without `--agent`, the existing `.claude/skills/<name>/SKILL.md` default remains. Playbooks/references install to `.goat-flow/skill-docs/playbooks/<name>.md`. The command does not edit `workflow/manifest.json`.
+
+Fresh scaffolds contain placeholders, so `skill new` defers their numeric score until the placeholders are replaced and Skill TDD has run. Text and JSON output return the next-step handoff to `.goat-flow/skill-docs/skill-quality-testing/README.md` and `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md`; substantive draft evaluation remains available through the existing draft workflow.
 
 ### `goat-flow skill doctor [path] [--agent <id>] [--skill <name>] [--format text|json|markdown]`
 

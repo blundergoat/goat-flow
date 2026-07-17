@@ -63,7 +63,8 @@ Router Table row:
 
 | Resource | Path |
 |----------|------|
-| Tool playbooks (README index for CLI/MCP availability checks; examples: browser-use, page-capture, skill-quality-testing) | `.goat-flow/skill-docs/playbooks/` - read BEFORE declaring a tool unavailable |
+| Tool playbooks (README index for CLI/MCP availability checks; examples: browser-use, page-capture) | `.goat-flow/skill-docs/playbooks/` - read BEFORE declaring a tool unavailable |
+| Skill-authoring methodology | `.goat-flow/skill-docs/skill-quality-testing/` - load the README, then the topical authoring guide |
 
 ## Optional: project infrastructure
 
@@ -89,6 +90,7 @@ After writing/updating the instruction file:
 - [ ] Workspace boundary guidance distinguishes controlling goat-flow workspace from selected target project without hardcoded absolute paths
 - [ ] READ step keeps the canonical skill-docs/playbooks phrases: "Before declaring any tool or capability unavailable", `.goat-flow/skill-docs/playbooks/`, and "Availability Check"
 - [ ] Router table includes the canonical `.goat-flow/skill-docs/playbooks/` tool playbooks row
+- [ ] Router table keeps `.goat-flow/skill-docs/skill-quality-testing/` as the sibling skill-authoring methodology path
 - [ ] `docs/coding-standards/git-commit.md` exists with project-specific commit guidance or the generated insufficient-history stub header, and the instruction file references it under `## Commit Messages`
 - [ ] Every line fits the Quality Bar: behavioral rule, scope boundary, command, verification gate, router pointer, or composition rule. Domain knowledge and project history are routed to cold-path files, not inlined.
 - [ ] If Path B: no useful existing content was lost

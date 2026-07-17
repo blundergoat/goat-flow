@@ -3,12 +3,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 
+import { getAgentProfile } from "./agents/registry.js";
 import { getPackageVersion } from "./paths.js";
 import {
   runCandidacyCheck,
   type CandidacyResult,
 } from "./quality/candidacy.js";
 import { findArtifact, scoreArtifact } from "./quality/skill-quality.js";
+import type { AgentId } from "./types.js";
 
 const WORKFLOW_TEMPLATE = `---
 name: {{NAME}}
@@ -226,6 +228,8 @@ const TEMPLATES_BY_SUBTYPE: Record<string, string> = {
 
 /** Input contract for the three mutually exclusive `skill new` modes. */
 interface SkillNewOptions {
+  /** Agent whose manifest-defined skill directory receives skill scaffolds. */
+  agent?: AgentId | null | undefined;
   /** A natural-language description of the skill (description mode). */
   description?: string | undefined;
   /** Path to an existing markdown draft (draft-validation mode). */
@@ -249,14 +253,26 @@ interface SkillNewResult extends Record<"written", boolean> {
   proposedPath: string | null;
   /** Filled scaffold content. */
   scaffold: string | null;
-  /** Quality score after scaffold (skill kind only). */
-  postScaffoldScore?: { totalScore: number; profileMax: number } | undefined;
+  /** Quality score for a substantive draft; untouched scaffolds defer scoring. */
+  postScaffoldScore?:
+    { totalScore: number; profileMax: number } | null | undefined;
+  /** Machine-readable handoff after a placeholder scaffold is written. */
+  nextSteps?: string[] | undefined;
   /** Human-readable lines for terminal output. */
   output: string[];
 }
 
-const SKILL_DIR = ".claude/skills";
 const PLAYBOOK_DIR = ".goat-flow/skill-docs/playbooks";
+const SCAFFOLD_NEXT_STEPS = [
+  "Replace every scaffold placeholder with target-project evidence.",
+  "Follow .goat-flow/skill-docs/skill-quality-testing/README.md.",
+  "Run .goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md before scoring.",
+] as const;
+
+/** Resolve the manifest-defined destination while preserving Claude as the legacy default. */
+function skillDirectoryFor(agent: AgentId | null | undefined): string {
+  return getAgentProfile(agent ?? "claude").skillsDir;
+}
 
 /** User-facing validation error for invalid `skill new` mode combinations. */
 class SkillNewInputError extends Error {
@@ -303,6 +319,7 @@ function resolveScaffold(
   projectRoot: string,
   name: string,
   recommendation: CandidacyResult["recommendedArtifact"],
+  skillsDirectory: string,
 ): ResolvedScaffold | null {
   const choice = templateForRecommendation(recommendation);
   if (!choice) return null;
@@ -313,7 +330,7 @@ function resolveScaffold(
   const proposedPath = (
     choice.isReference
       ? join(projectRoot, PLAYBOOK_DIR, `${name}.md`)
-      : join(projectRoot, SKILL_DIR, name, "SKILL.md")
+      : join(projectRoot, skillsDirectory, name, "SKILL.md")
   ).replace(/\\/g, "/");
   return { template, proposedPath, isReference: choice.isReference };
 }
@@ -474,6 +491,7 @@ async function runDescriptionMode(
   prompts: InteractivePrompts,
 ): Promise<SkillNewResult> {
   const projectRoot = options.projectRoot ?? process.cwd();
+  const skillsDirectory = skillDirectoryFor(options.agent);
   const candidacy = runCandidacyCheck({
     kind: "description",
     text: description,
@@ -483,6 +501,7 @@ async function runDescriptionMode(
     projectRoot,
     suggestName(options, candidacy),
     candidacy.recommendedArtifact,
+    skillsDirectory,
   );
 
   if (!scaffolded) {
@@ -513,6 +532,7 @@ async function runDescriptionMode(
     projectRoot,
     name,
     candidacy.recommendedArtifact,
+    skillsDirectory,
   );
   if (!final) {
     return {
@@ -545,13 +565,15 @@ async function runDescriptionMode(
   ];
 
   let postScaffoldScore: SkillNewResult["postScaffoldScore"];
+  let nextSteps: string[] | undefined;
   if (written && !final.isReference) {
-    postScaffoldScore = scoreFreshSkill(projectRoot, name);
-    if (postScaffoldScore) {
-      output.push(
-        `Initial quality: ${postScaffoldScore.totalScore}/${postScaffoldScore.profileMax}`,
-      );
-    }
+    postScaffoldScore = null;
+    nextSteps = [...SCAFFOLD_NEXT_STEPS];
+    output.push(
+      "Scoring deferred until placeholders are replaced and Skill TDD has run.",
+      "Next steps:",
+      ...nextSteps.map((step) => `  - ${step}`),
+    );
   }
 
   return {
@@ -560,6 +582,7 @@ async function runDescriptionMode(
     scaffold,
     written,
     postScaffoldScore,
+    nextSteps,
     output,
   };
 }
@@ -638,6 +661,7 @@ function runDraftMode(
     projectRoot,
     suggestedName,
     candidacy.recommendedArtifact,
+    skillDirectoryFor(options.agent),
   );
   if (!scaffolded) {
     output.push(

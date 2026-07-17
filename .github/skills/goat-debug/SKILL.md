@@ -84,7 +84,9 @@ Test cheap-and-likely first. Skip expensive-and-unlikely until cheap options are
 
 ### Worked Example - D1 to D4
 
-Use this as the output shape, not as a canned diagnosis. Real incident: a `goat-debug` quality review scored Examples `2/5` because the composed skill had no full phase walkthrough.
+**Illustrative scenario - input/output shape only; never evidence.** Replace every path, assessment result, command outcome, and semantic anchor below with current target-project evidence before using this structure in a live diagnosis.
+
+Use this as the output shape, not as a canned diagnosis. The scenario begins with a current quality report alleging that a target skill lacks a full phase walkthrough.
 
 - **D1 scope:** symptom boundary = Examples deduction; affected components = the target skill's `SKILL.md`, `skill-preamble.md`, `skill-conventions.md`; read estimate = 3 files.
 - **Hypotheses:**
@@ -94,7 +96,7 @@ Use this as the output shape, not as a canned diagnosis. Real incident: a `goat-
 | 1 | `SKILL.md` lacks a worked phase example | Data | `rg -n '### Worked Example' SKILL.md` | No `### Worked Example` heading CONFIRMS the deduction. |
 | 2 | Shared references already supply the missing example | Configuration | `rg -n 'D1|Minimal Failing Case|worked' skill-preamble.md skill-conventions.md` | If only rules/templates appear, ELIMINATE this as a fix. |
 
-- **D1.5 minimal case:** the three composed files reproduce the score; dashboard metadata and unrelated skill copies are removed because the missing walkthrough is visible in the composed bundle.
+- **D1.5 minimal case:** in this scenario, the three composed files preserve the reported deduction; dashboard metadata and unrelated skill copies are removed because the alleged missing walkthrough is visible in the composed bundle.
 - **D2 root cause shape:** `SKILL.md` (search: `## Output Format`) had an output skeleton but no concrete phase walkthrough; confidence is HIGH only after reproducing the assessment or rerunning the quality report.
 - **D3 fix plan (human-approved):** add a concrete phase walkthrough (this D1-D4 section) to `SKILL.md`; blast radius = docs only, no `.goat-flow/architecture.md` constraint touched; verification = rerun the quality assessment, then re-grep the file.
 - **D4 post-fix verification:** rerun the original reproduction (the skill quality assessment); the "no full phase walkthrough" deduction no longer fires. Static follow-up only: `rg -n '### Worked Example' SKILL.md` now returns this section where D1's grep found none. A code change is not a fix until the original repro passes, so downgrade to **UNVERIFIED** if the assessment cannot be rerun.

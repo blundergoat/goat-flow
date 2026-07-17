@@ -687,6 +687,7 @@ async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
   let result: Awaited<ReturnType<typeof runSkillNew>>;
   try {
     result = await runSkillNew({
+      agent: options.agent,
       description: options.skillDescription ?? undefined,
       draftPath: options.skillDraftPath ?? undefined,
       shouldUseInteractivePrompt: options.skillInteractive,
@@ -709,6 +710,7 @@ async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
           proposedPath: result.proposedPath,
           written: result.written,
           postScaffoldScore: result.postScaffoldScore ?? null,
+          nextSteps: result.nextSteps,
         },
         null,
         2,

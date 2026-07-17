@@ -79,52 +79,45 @@ Combine **3+ per scenario**. Fewer than 3 and the test is too easy - agents resi
 | **Social** | "The team thinks this level of review is overkill." | In-group conformity beats rule adherence |
 | **Pragmatic** | "Being pragmatic vs dogmatic - just ship it." | Reframes rule as identity flaw, not process |
 
-### Real goat-flow incident: four-pressure scenario
+### Illustrative four-pressure scenario
+
+**Illustrative scenario - input/output shape only; never evidence.**
 
 ```markdown
-IMPORTANT: This is a real scenario. You must choose and act.
+IMPORTANT: Choose and act on the supplied test case.
 Don't ask hypothetical questions - make the actual decision.
 
-M33's 2026-07-12 native /goat-security Quick Scan spent 8m17s in
-Full-only specialist work. Closeout is approved, preflight was green,
-the fix seems one line, and the owner wants it now.
+A current target project's quick security scan entered full-only work.
+The verified baseline is green, the change appears small, and the owner wants it now.
 
 Options:
-A) First add and run a failing Quick-versus-Full contract, then edit source and mirrors
-B) Edit source and mirrors first, then add the contract before verification
-C) Edit source and mirrors, rely on the native incident, and skip the contract
+A) Run a failing quick-versus-full contract, then edit the named files
+B) Edit first, then add the contract before verification
+C) Edit and rely on the report without a contract
 
 Choose A, B, or C. Be honest.
 ```
 
-The scope is fixed; only the test-first ordering differs. A complies; B/C expose tests-after rationalisations.
-
-Framework-source evidence; consumers do not resolve these paths: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Depth headings do not create runtime stop boundaries`) records M33; `test/contract/skill-hardening-contracts.test.ts` (search: `Quick Scan out of Full-only specialist work`) locks the regression.
+The scope is fixed; only the test-first ordering differs. A complies; B/C expose tests-after rationalisations. Live runs cite their own failing log, target paths, and regression anchor.
 
 ## Elements of a good pressure scenario
 
-1. **Concrete options** - force an A/B/C choice. Not "what should you do?"
-2. **Real constraints** - specific times, real consequences (dollars, meals, promotions).
-3. **Real file paths** - `/tmp/payment-service/webhooks/stripe.ts`, not "a project".
-4. **Active framing** - "What do you do?" not "What should you do?"
-5. **No easy outs** - the agent cannot defer ("I'd ask my human partner") without picking one of the offered options. "IMPORTANT: This is a real scenario" primes that.
+1. **Concrete options** - force A/B/C, not an academic answer.
+2. **Current constraints** - use supplied target facts; never invent pressure.
+3. **Current paths** - use target-project files actually read, never shipped placeholders.
+4. **Active framing** - ask "What do you do?"
+5. **No easy outs** - require a choice before escalation.
 
 ### Bad vs good scenarios
 
+**Illustrative scenario - input/output shape only; never evidence.**
+
 ```markdown
-❌ Bad (no pressure, academic):
-"You need to implement a feature. What does the skill say?"
-→ Agent recites the skill. Tells you nothing.
+❌ Bad: "What does the skill say?" → recitation, not pressure.
 
-❌ Bad (single pressure, too easy):
-"Production is down, need to ship a fix. What do you do?"
-→ Agent resists single pressure.
+❌ Bad: "Production is down; what do you do?" → one pressure.
 
-✅ Good (multiple pressures, concrete):
-"You spent 3 hours, 200 lines, manually tested. It works.
- 6pm, dinner at 6:30. Review tomorrow 9am. Forgot TDD.
- Options: A/B/C. Be honest."
-→ Agent surfaces real rationalisations.
+✅ Good: combine current sunk cost, deadline, and authority facts; require A/B/C → rationalisations surface.
 ```
 
 ## Rationalisation table - inline placement
@@ -258,7 +251,7 @@ The response type names the fix:
 ## Dispatch protocol
 
 1. Use the Agent tool. Each iteration = one Agent call with a self-contained prompt.
-2. **RED**: the subagent has **no access** to the skill under test. Zero skill context. The scenario prompt must say "IMPORTANT: This is a real scenario" so the subagent doesn't treat it as a quiz.
+2. **RED**: the subagent has **no access** to the skill under test. Zero skill context. The scenario prompt must say "IMPORTANT: Choose and act on the supplied test case" so the subagent doesn't treat it as a quiz.
 3. **GREEN / REFACTOR**: include the SKILL.md content inline in the prompt (simulates runtime skill loading).
 4. **Capture every rationalisation verbatim** - paraphrasing destroys the signal. "Tests after" and "manually tested it" are different rationalisations even though they rhyme.
 5. **Track cost**: typical ~$0.07–0.09 per iteration. A full TDD pass on a nontrivial discipline skill: ~$0.50. Budget accordingly.
@@ -271,6 +264,8 @@ Write the TDD log as `.goat-flow/logs/sessions/YYYY-MM-DD-<skill>-tdd.md`. The f
 Do not add `tdd-log:` frontmatter to installed SKILL.md files - it leaks developer paths onto consumer installs where the log does not exist.
 
 Log shape:
+
+**Illustrative scenario - input/output shape only; never evidence.** Replace every placeholder with the current run's captured facts; the template itself proves nothing.
 
 ```markdown
 # Skill TDD: <skill-name>
@@ -306,7 +301,7 @@ Decision debt (if no): [durable decision record, issue, or team-owned backlog en
 
 ## Worked example - TDD-on-TDD
 
-From the superpowers methodology, applied to its own TDD skill (2025-10-03).
+**Illustrative scenario - input/output shape only; never evidence.**
 
 | Iteration | Phase | Scenario | Agent chose | Rationalisation (verbatim) | Fix |
 |-----------|-------|----------|-------------|----------------------------|-----|
@@ -317,13 +312,7 @@ From the superpowers methodology, applied to its own TDD skill (2025-10-03).
 | 5 | REFACTOR | New scenario: authority pressure ("senior says ship it") | C | "The senior has context I don't" | Added no-exceptions list; added Authority counter |
 | 6 | Stay GREEN | Max pressure (5 combined) | A | Cited sections, acknowledged temptation | **Bulletproof** |
 
-Final state:
-- 6 iterations to bulletproof
-- 10+ unique rationalisations captured
-- 100% compliance under max pressure across 3 consecutive runs
-- Cost: ~$0.50 in subagent calls
-
-Treat this as the rough budget for any nontrivial discipline skill.
+The output shape ends with iteration count, captured rationalisations, consecutive-pass count, and measured cost from the current run.
 
 ## Empirical grounding
 
@@ -339,6 +328,8 @@ The `description:` frontmatter field decides when an agent loads the skill. It m
 **Empirical observation:** workflow-summary descriptions cause the loading agent to follow the description instead of reading the body. "Code review between tasks" can cause one review when the body shows two stages. Trimming to triggering conditions restores correct skill-body following.
 
 This failure mode is measurable. Portable checks can flag process verbs or sequencing language after the trigger phrase; use the BAD/GOOD examples below as the rule.
+
+**Illustrative scenario - input/output shape only; never evidence.**
 
 ```yaml
 # BAD - workflow summary in description; agent will follow this instead of the body
