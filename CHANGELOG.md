@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **BREAKING: skill scaffolding now requires failing RED evidence** - Capture `.goat-flow/logs/sessions/YYYY-MM-DD-<name>-tdd.md` first and pass it with `skill new --red-log`; playbook scaffolding and draft validation are unchanged.
+- **PR review overlap reads inline bot findings** - `/goat-review` fetches paginated pull-request comments with file positions and normalizes the actual Copilot and GitHub Advanced Security identities.
+- **Plan assumption examples stay non-evidence** - The shipped assumption block now sits inside its illustrative-scenario boundary, and the contract covers every installed mirror.
 - **Content audits catch standalone harness totals** - Harness-completeness count claims no longer need an `across N concerns` suffix to be checked against the live registry.
 - **Instruction release headers are gated** - Version bumps stamp release dates, and instruction parity rejects headers that disagree with the current changelog release.
 - **Skill evidence and QA audit contracts stay coherent** - Hot-path evidence rules carry the shipped-example exception, and QA preserves Blocking/High-value/Defer tiers after its audit gate.

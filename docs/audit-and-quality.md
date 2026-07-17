@@ -5,13 +5,13 @@ goat-flow has two evaluation commands. `audit` is deterministic - it runs checks
 ## Quick reference
 
 ```bash
-npx goat-flow audit .                              # Build correctness (pass/fail)
-npx goat-flow audit . --harness                    # Include AI harness completeness checks
-npx goat-flow audit . --agent claude               # Scope to one agent
-npx goat-flow audit . --format sarif               # Export audit findings as SARIF 2.1.0
-npx goat-flow quality . --agent antigravity             # Generate quality-assessment prompt for one agent
-npx goat-flow quality history --agent antigravity       # Review saved trend history
-npx goat-flow quality diff --agent antigravity          # Compare the latest two saved runs
+npx @blundergoat/goat-flow@latest audit .                              # Build correctness (pass/fail)
+npx @blundergoat/goat-flow@latest audit . --harness                    # Include AI harness completeness checks
+npx @blundergoat/goat-flow@latest audit . --agent claude               # Scope to one agent
+npx @blundergoat/goat-flow@latest audit . --format sarif               # Export audit findings as SARIF 2.1.0
+npx @blundergoat/goat-flow@latest quality . --agent antigravity             # Generate quality-assessment prompt for one agent
+npx @blundergoat/goat-flow@latest quality history --agent antigravity       # Review saved trend history
+npx @blundergoat/goat-flow@latest quality diff --agent antigravity          # Compare the latest two saved runs
 ```
 
 | Command | Output | Deterministic? | Gates CI? | Requires --agent? |
@@ -58,7 +58,7 @@ Checks are grouped by **scope**:
 - `agent-settings` - selected agent settings/config file parses as valid JSON or TOML
 - `agent-guardrails` - selected agent has a deny mechanism, shell-hook syntax is valid, deny patterns exist, installed deny hook files match the workflow templates, and the smoke deny self-test passes when the script exists
 
-**Agent scope:** `audit` checks every supported manifest-backed agent from `workflow/manifest.json` unless `--agent <id>` is supplied. Run `npx goat-flow manifest` to inspect the current support matrix; use `--agent <id>` to scope checks to one supported runtime.
+**Agent scope:** `audit` checks every supported manifest-backed agent from `workflow/manifest.json` unless `--agent <id>` is supplied. Run `npx @blundergoat/goat-flow@latest manifest` to inspect the current support matrix; use `--agent <id>` to scope checks to one supported runtime.
 
 ### Enforcement matrix
 
@@ -122,7 +122,7 @@ For single-agent projects the check is opt-in via the flag. For multi-agent proj
 Generates a structured quality-assessment prompt for a coding agent to evaluate goat-flow quality and usefulness on the current project. This is fundamentally different from `audit` - it produces a prompt, not findings.
 
 ```bash
-npx goat-flow quality . --agent antigravity
+npx @blundergoat/goat-flow@latest quality . --agent antigravity
 ```
 
 The generated prompt asks the agent to:
@@ -143,17 +143,17 @@ CLI `quality` command request fresh audit context before composing the prompt.
 
 ### Quality report lifecycle
 
-`npx goat-flow quality` composes the prompt and instructs the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` - a gitignored path. No separate capture step is needed; the agent owns the write, and `history` / `diff` operate on whatever the agent saved.
+`npx @blundergoat/goat-flow@latest quality` composes the prompt and instructs the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` - a gitignored path. No separate capture step is needed; the agent owns the write, and `history` / `diff` operate on whatever the agent saved.
 
 ```bash
-npx goat-flow quality . --agent antigravity             # Default: Agent Installation mode
-npx goat-flow quality . --agent claude --mode process   # GOAT Flow Process mode
-npx goat-flow quality . --agent claude --mode harness   # Harness Engineering mode
-npx goat-flow quality . --agent claude --mode skills    # Skills mode
-npx goat-flow quality history --agent antigravity            # List saved reports + same-agent score deltas
-npx goat-flow quality history --mode process            # Filter history to one quality mode
-npx goat-flow quality diff --agent antigravity               # Derive resolved / new / persisted / stuck vs prior run
-npx goat-flow quality diff --mode skills                # Compare within one mode only
+npx @blundergoat/goat-flow@latest quality . --agent antigravity             # Default: Agent Installation mode
+npx @blundergoat/goat-flow@latest quality . --agent claude --mode process   # GOAT Flow Process mode
+npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness   # Harness Engineering mode
+npx @blundergoat/goat-flow@latest quality . --agent claude --mode skills    # Skills mode
+npx @blundergoat/goat-flow@latest quality history --agent antigravity            # List saved reports + same-agent score deltas
+npx @blundergoat/goat-flow@latest quality history --mode process            # Filter history to one quality mode
+npx @blundergoat/goat-flow@latest quality diff --agent antigravity               # Derive resolved / new / persisted / stuck vs prior run
+npx @blundergoat/goat-flow@latest quality diff --mode skills                # Compare within one mode only
 ```
 
 ### Quality modes
@@ -193,9 +193,9 @@ This keeps audit and quality separated in both terminology and storage: audit re
 ## How they work together
 
 ```
-npx goat-flow audit .              →  "Is it installed correctly?"        →  Fix structural issues
-npx goat-flow audit . --harness    →  "Is the harness complete?"          →  Fix failing concerns
-npx goat-flow quality . --agent X  →  "What does an agent actually think?" →  Get fresh perspective
+npx @blundergoat/goat-flow@latest audit .              →  "Is it installed correctly?"        →  Fix structural issues
+npx @blundergoat/goat-flow@latest audit . --harness    →  "Is the harness complete?"          →  Fix failing concerns
+npx @blundergoat/goat-flow@latest quality . --agent X  →  "What does an agent actually think?" →  Get fresh perspective
 ```
 
 Typical workflow after setup:

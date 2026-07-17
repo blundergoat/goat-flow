@@ -137,6 +137,8 @@ For each milestone, produce:
 - **Depends on** - Which milestone must complete first
 - **Read first** - Files the implementing agent should read before starting this milestone
 
+> **Illustrative scenario - input/output shape only; never evidence.** The assumption block and worked examples below specify shapes for whatever project this skill is installed in. Paths, measurements, endpoints, and outcomes are placeholders, not real incidents - never cite them as evidence.
+
 ## Assumption Tracking
 
 Assumptions are not tasks - they're beliefs about the system that affect the plan:
@@ -151,13 +153,11 @@ Assumptions are not tasks - they're beliefs about the system that affect the pla
 
 When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, record it immediately and stop dependent work. Apply the plan amendment only when the selected mode or required human approval permits; at a blocking gate, show the proposed amendment and wait.
 
-> **Illustrative scenarios.** The worked examples below specify input/output shape for whatever project this skill is installed in. Paths like `.goat-flow/plans/oauth-refresh/` and `src/auth/refresh.ts` are placeholders, not real incidents - never cite them as evidence.
-
 ## Worked Example - Path-Only Intake
 
 User message: `.goat-flow/plans/oauth-refresh/`
 
-Evidence read: `.goat-flow/plans/.active` says `checkout-hardening`; `.goat-flow/plans/oauth-refresh/M01-prove-refresh-token-rotation.md` has `Status: complete`; `.goat-flow/plans/oauth-refresh/M02-wire-login-refresh-flow.md` has `Status: in-progress`.
+Evidence read: `.goat-flow/plans/.active` says `checkout-hardening`; milestone status fields show `.goat-flow/plans/oauth-refresh/M01-prove-refresh-token-rotation.md` is complete and `.goat-flow/plans/oauth-refresh/M02-wire-login-refresh-flow.md` is the single in-progress milestone; the bounded follow-up read returns only its first unchecked task line, `[CORE] Implement refresh callback`.
 
 Expected output:
 

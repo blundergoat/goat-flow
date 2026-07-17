@@ -429,3 +429,21 @@ describe("preamble/conventions sync: Proof Gate presence (ADR-018)", () => {
     );
   });
 });
+
+describe("preamble/conventions sync: proof-evidence pointer", () => {
+  it("points both preambles directly to the verification claim evidence table", () => {
+    for (const preamblePath of [TEMPLATE_PREAMBLE, INSTALLED_PREAMBLE]) {
+      const content = readFileSync(preamblePath, "utf-8");
+      assert.match(
+        content,
+        /skill-quality-testing\/deployment\.md` under `Verification claim evidence`/,
+        preamblePath,
+      );
+      assert.doesNotMatch(
+        content,
+        /Concrete claim\/proof examples live in `\.goat-flow\/skill-docs\/skill-quality-testing\/README\.md`/,
+        preamblePath,
+      );
+    }
+  });
+});

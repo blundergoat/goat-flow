@@ -62,7 +62,9 @@ If ambiguous, ask. Never silently pick.
 
 **CHECKPOINT (Reconcile):** "Mode R. Live state: [status]. Proposed corrections: [changes or none]. No writes."
 
-**CHECKPOINT (all other modes):** "Mode: [Named-File Update | Read-Only Analysis | Small File-Write | File-Write]. Creating milestones for [feature]. Riskiest part: [risk]. Kill criteria: [criteria]. Proceeding to milestone breakdown."
+**CHECKPOINT (Named-File Update):** "Mode 1. Edit [file] in place for [delta]. Boundary: [scope]."
+
+**CHECKPOINT (planning modes):** "Mode: [Read-Only Analysis | Small File-Write | File-Write]. Creating milestones for [feature]. Riskiest part: [risk]. Kill criteria: [criteria]."
 
 ## Phase 1 - Milestone Breakdown
 
@@ -114,9 +116,10 @@ The delivery path maps 1:1 to the mode picked in Step 0. Do exactly the mode's b
 
 ### Mode 0: Path-Only Intake / Read-Only Orientation
 
-- Read task directory README/index and milestone filenames/status fields only.
+- Read task README/index and milestone filenames/status fields. If exactly one milestone is in-progress, read only its first unchecked task line; no other body content.
 - Do NOT mutate `.goat-flow/plans/.active`, milestone status, checkboxes, or code.
-- Present: active marker, plan reference, milestone list/status, current in-progress item.
+- Zero/multiple in-progress: report ambiguity; read no bodies.
+- Present: active marker, plan, milestone statuses, current milestone, and bounded task line when unambiguous.
 - Ask: "Summary, status check, plan update, or start a specific milestone?"
 - Stop until the user answers with an explicit action.
 

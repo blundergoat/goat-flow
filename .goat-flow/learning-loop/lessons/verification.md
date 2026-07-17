@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-07-13
+last_reviewed: 2026-07-17
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -43,7 +43,7 @@ last_reviewed: 2026-07-13
 
 **Root cause:** I checked only the targeted docs rule and assumed a comment-only patch could not change broader warning or lint counts.
 
-**Prevention:** After a large gruff docs batch, run `npx gruff-ts analyse --format json --fail-on none` and compare warning count, then run the lint/preflight gate for any helper extraction. Do not remove a useful comment just to hide a surfaced warning. Evidence anchors: `src/dashboard/app.ts` (search: `encodeTerminalUploadFiles`), `src/dashboard/app.ts` (search: `showTerminalUploadResult`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `_uploadTerminalImages`).
+**Prevention:** After a large gruff docs batch, run `npx gruff-ts analyse --format json --fail-on none` and compare warning count, then run the lint/preflight gate for any helper extraction. Do not remove a useful comment just to hide a surfaced warning. Evidence anchors: `src/dashboard/app.ts` (search: `encodeTerminalUploadFiles`), `src/dashboard/app.ts` (search: `showTerminalUploadResult`).
 
 ## Lesson: docs.missing-internal-function-doc must not be silenced; baseline the residue
 
@@ -53,7 +53,7 @@ last_reviewed: 2026-07-13
 
 **Root cause:** Two correct rules collide: gruff rules must not be disabled, but comments must only explain non-obvious WHY. This rule had no tuning options, leaving only fix, rename, or baseline.
 
-**Prevention:** Triage `docs.missing-internal-function-doc` with the gruff-code-quality playbook. Add comments only when they meet the contract bar; otherwise rename or baseline with rationale. Revisit when gruff-ts gains threshold/name-match tuning. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Doc comments are mandatory under that playbook`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `docs.missing-internal-function-doc`), `scripts/preflight-checks.sh` (search: `Gruff Policy`).
+**Prevention:** Triage `docs.missing-internal-function-doc` with the gruff-code-quality playbook. Add comments only when they meet the contract bar; otherwise rename or baseline with rationale. Revisit when gruff-ts gains threshold/name-match tuning. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Doc comments are mandatory under that playbook`), `scripts/preflight-checks.sh` (search: `Gruff Policy`).
 
 ## Lesson: RegExp constructor assertions need a real escape helper
 

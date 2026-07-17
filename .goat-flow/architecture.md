@@ -25,13 +25,15 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 ## Data Flow
 
 ```
-User runs `npx goat-flow setup .` or reads workflow/setup/
+Consumer runs `npx @blundergoat/goat-flow@latest setup . --agent <id>` or reads workflow/setup/
+  -> Framework contributors use `node --import tsx src/cli/cli.ts setup . --agent <id>` from this checkout while the current release is unpublished
   -> Chooses agent (workflow/setup/agents/claude.md, workflow/setup/agents/codex.md, workflow/setup/agents/antigravity.md, workflow/setup/agents/copilot.md)
   -> Follows numbered setup steps (01-06) via their agent config
   -> Agent reads workflow/setup/ (01-system-overview.md, 02-instruction-file.md, reference/execution-loop.md)
   -> Agent generates project-specific files (CLAUDE.md, hooks, skills, etc.)
 
-User runs `goat-flow install . --agent <id> --dry-run` or `goat-flow setup . --agent <id> --dry-run`
+Consumer runs `npx @blundergoat/goat-flow@latest install . --agent <id> --dry-run` or `npx @blundergoat/goat-flow@latest setup . --agent <id> --dry-run`
+  -> Framework contributors substitute `node --import tsx src/cli/cli.ts` for the scoped package command; a freshly built checkout may use `npm run goat-flow:cli --`
   -> CLI compares manifest-managed template hashes with the selected target and last successful local baseline
   -> Unsafe paths and ambiguous user edits block before the Bash installer starts
   -> User runs `install` or `setup --apply`; the CLI invokes the installer, which completes each file beside its destination before rename

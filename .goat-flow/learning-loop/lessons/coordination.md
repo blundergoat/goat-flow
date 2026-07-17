@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-07-16
+last_reviewed: 2026-07-17
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -82,6 +82,6 @@ last_reviewed: 2026-07-16
 
 **Root cause:** Numeric ordering was treated as execution ordering without checking the next milestone's live dependency contract.
 
-**Evidence:** `.goat-flow/plans/1.14.0/M06-durable-handoff-receipt-schema.md` (search: `**Depends on:** M08 completed`) preserves the corrected dependency contract after M06 was returned to pending and M08 was activated first.
+**Evidence:** The 1.14.0 M06 durable-handoff-receipt milestone (local gitignored plan file - no durable anchor exists) declared "Depends on: M08 completed"; M06 was returned to pending and M08 activated first. This is a behavioral lesson; milestone files are local session state and must not be cited as durable anchors.
 
 **Prevention:** Before changing milestone statuses, read `Depends on` in the candidate and every unmet prerequisite. Activate the prerequisite, not the next number.

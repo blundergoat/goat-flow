@@ -221,11 +221,11 @@ MUST NOT flag pre-existing issues as part of this change. MUST attempt to dispro
 
 ## /goat-critique
 
-Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, 3 sub-agents, 5 phases. Rationale: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md`.
+Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, with Phases 1-5 plus mandatory meta-audit (5.5) and outcome capture (5.6). Rationale: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md`.
 
-| Sub-agents | Phases |
+| Delegation | Phases |
 |------------|--------|
-| 3 delegated agents (Agent-tool calls, isolated contexts) | 5: Generate → Rank → Cross-Examine → Clarify → Synthesise |
+| 3 critique agents (always), up to 3 cross-exam agents (conditional), 1 meta-agent (always) | 1-5: Generate → Rank → Cross-Examine → Clarify → Synthesise; 5.5: Meta-audit; 5.6: Outcome capture |
 
 ```mermaid
 flowchart TD
@@ -241,10 +241,12 @@ flowchart TD
     Generate --> P2["Phase 2: Rank & Compare\nConsensus / Split / Unique"]
     P2 --> P3["Phase 3: Cross-Examine\nSplit findings get a tiebreaker agent"]
     P3 --> P4["Phase 4: Clarify\nPresent disputes to human"]
-    P4 -->|"BLOCKING GATE"| P5["Phase 5: Synthesise\nConsensus + Resolved + Verified + Retracted\n+ Open Questions + What Wasn't Critiqued"]
+    P4 -->|"BLOCKING GATE when questions exist"| P5["Phase 5: Synthesise\nConsensus + Resolved + Verified + Retracted\n+ Open Questions + What Wasn't Critiqued"]
+    P5 --> P55["Phase 5.5: Meta-audit\n1 isolated meta-agent"]
+    P55 -->|"BLOCKING GATE"| P56["Phase 5.6: Outcome capture\naccepted / rejected / deferred / partial"]
 ```
 
-**Key constraints:** MUST use real delegated sub-agent calls, not inline role-play. MUST restrict the fresh-eyes pass to artifact + evaluation criteria only (no project context). MUST include "What Wasn't Critiqued" section (never empty). MUST put low-confidence recommendation candidates under Open Questions until evidence supports them.
+**Key constraints:** MUST use real delegated sub-agent calls, not inline role-play. MUST run the meta-audit before the synthesis gate and capture outcomes only after the human responds. MUST restrict the fresh-eyes pass to artifact + evaluation criteria only (no project context). MUST include "What Wasn't Critiqued" section (never empty). MUST put low-confidence recommendation candidates under Open Questions until evidence supports them.
 
 ---
 

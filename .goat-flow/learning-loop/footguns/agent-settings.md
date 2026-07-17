@@ -1,6 +1,6 @@
 ---
 category: agent-settings
-last_reviewed: 2026-07-16
+last_reviewed: 2026-07-17
 ---
 
 ## Footgun: Settings-layer deny globs match guarded phrases quoted inside benign read-only commands
@@ -64,11 +64,15 @@ Fix shipped 1.10.1: `migrate_claude_permission_deny` in `workflow/install-goat-f
 
 **Prevention (4):** When you remove or rename anything that ships into a user-owned config, add BOTH a template guard AND an upgrade migration, and a test that seeds the OLD value in an *existing* file then asserts the upgrade prunes it. A template-only test is false confidence — it passes while every already-installed project stays broken.
 
+## Resolved Entries
+
+---
+
 ## Footgun: Claude allow rules cannot re-open paths behind a broader deny
 
-**Status:** active | **Created:** 2026-07-16 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-07-16 | **Resolved:** 2026-07-17 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** `.claude/settings.json` shipped `allow: Read(.env.example), Read(**/.env.example)` next to `deny: Read(**/.env*)`, and the docs claimed the sample file was readable (`docs/harness-audit.md`, `workflow/hooks/README.md`). In practice the Read tool was denied on `.env.example` while the Bash deny hook allowed `cat .env.example` — the two layers disagreed and the allow entries were dead config.
+**Symptoms:** At incident time, `.claude/settings.json` shipped `allow: Read(.env.example), Read(**/.env.example)` next to `deny: Read(**/.env*)`, and the docs claimed the sample file was readable (`docs/harness-audit.md`, `workflow/hooks/README.md`). In practice the Read tool was denied on `.env.example` while the Bash deny hook allowed `cat .env.example` — the two layers disagreed and the allow entries were dead config.
 
 **Why it happens:** Claude Code permission precedence is deny > ask > allow; a deny glob that matches a path cannot be re-opened by any allow rule, and `**/.env*` matches `.env.example`. The Codex template even justified denying `.env.example` on the (false) premise that Claude COULD re-allow it, so the wrong doctrine propagated across three surfaces before anyone probed the actual behaviour.
 
@@ -76,6 +80,8 @@ Fix shipped 1.10.1: `migrate_claude_permission_deny` in `workflow/install-goat-f
 - `workflow/hooks/agent-config/claude.json` and `.claude/settings.json` (search: `Read(**/.env)`) — env read denies are enumerated per variant since 2026-07-16 so `.env.example` matches no deny; `Edit(**/.env*)` still blocks writes.
 - `workflow/hooks/agent-config/codex.toml` (search: `env.example stays readable`) — Codex mirrors the enumerated set; the installer migration expands the broad glob in existing installs (search in `workflow/install-goat-flow.sh`: `ENV_READ_DENY_EXPANSION`).
 - `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `.env.example read`) — the Bash hook always had the intended policy (reads allowed, writes blocked).
+
+**Resolution:** The Claude and Codex templates now enumerate real env variants, setup migrates the broad deny in existing installs, parity tests protect `.env.example`, and the hook self-test verifies that reading it remains allowed.
 
 **Prevention:**
 1. Never pair an allow rule with a broader deny and expect the allow to win — if an exemption is needed, enumerate the deny so the exempt path simply doesn't match any deny rule.

@@ -1,12 +1,12 @@
 # AI Harness Audit
 
-`npx goat-flow audit . --harness` adds 18 structural installation checks to the standard build audit. Each check answers an installation question - is the file present, is the registration in sync, is the deny pattern installed. Deterministic, no LLM involvement. Harness results contribute to the overall audit status. Not all checks can reach "installed" on every platform (e.g., Codex has no settings-based Read deny coverage; its deny layer is script-only), but install as much as possible.
+`npx @blundergoat/goat-flow@latest audit . --harness` adds 18 structural installation checks to the standard build audit. Each check answers an installation question - is the file present, is the registration in sync, is the deny pattern installed. Deterministic, no LLM involvement. Harness results contribute to the overall audit status. Not all checks can reach "installed" on every platform (e.g., Codex has no settings-based Read deny coverage; its deny layer is script-only), but install as much as possible.
 
 | Mode | Command | Question |
 |------|---------|----------|
-| Build | `npx goat-flow audit .` | Is it installed correctly? |
-| **Harness** | **`npx goat-flow audit . --harness`** | **Is each concern structurally installed?** |
-| Quality | `npx goat-flow quality . --agent X` | Does this make sense to a fresh agent? |
+| Build | `npx @blundergoat/goat-flow@latest audit .` | Is it installed correctly? |
+| **Harness** | **`npx @blundergoat/goat-flow@latest audit . --harness`** | **Is each concern structurally installed?** |
+| Quality | `npx @blundergoat/goat-flow@latest quality . --agent X` | Does this make sense to a fresh agent? |
 
 Harness checks are grouped by the 5 concerns that matter for agent effectiveness. The audit checks whether the structural wiring for each concern is in place. It does not judge content quality - that's what [quality](harness-quality.md) is for. See [harness-engineering.md](harness-engineering.md) for the sources behind the model.
 
@@ -64,7 +64,7 @@ Only `advisory`-typed checks can be acknowledged. Integrity checks have no opt-o
 
 ## Check provenance
 
-Every registered build and harness check now carries machine-readable `provenance` in `npx goat-flow audit . --format json`. The record includes `source_type`, `normative_level`, `verified_on`, and supporting `evidence_paths` / `source_urls`. The legacy `evidence_paths` list is also split into `framework_evidence_paths` and `target_evidence_paths` when serialized, so framework rationale files do not look like missing files in the audited target project. Check results also expose `displayStatus`, `impact`, and optional `evidenceKind` / `assurance` fields so dashboard consumers can distinguish hard failures, score-only warnings, skipped checks, metrics, structural smoke evidence, and passing checks with platform-limited assurance.
+Every registered build and harness check now carries machine-readable `provenance` in `npx @blundergoat/goat-flow@latest audit . --format json`. The record includes `source_type`, `normative_level`, `verified_on`, and supporting `evidence_paths` / `source_urls`. The legacy `evidence_paths` list is also split into `framework_evidence_paths` and `target_evidence_paths` when serialized, so framework rationale files do not look like missing files in the audited target project. Check results also expose `displayStatus`, `impact`, and optional `evidenceKind` / `assurance` fields so dashboard consumers can distinguish hard failures, score-only warnings, skipped checks, metrics, structural smoke evidence, and passing checks with platform-limited assurance.
 
 1.2.0 keeps provenance JSON-only on purpose. Terminal and markdown renderers stay focused on status + remediation; if you need the justification trail for a check, inspect the per-check `provenance` object in JSON output.
 

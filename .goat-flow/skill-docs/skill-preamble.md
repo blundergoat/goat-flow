@@ -81,7 +81,7 @@ Run the proof or mark `UNVERIFIED`; new rows require committed evidence.
 | "Looks correct to me" | Structural inspection ≠ verification. |
 | "Different words, rule doesn't apply" | Spirit over letter - paraphrases count. |
 
-Concrete claim/proof examples live in `.goat-flow/skill-docs/skill-quality-testing/README.md`.
+Concrete claim/proof examples live in `.goat-flow/skill-docs/skill-quality-testing/deployment.md` under `Verification claim evidence`.
 
 ## Ceremony Level
 
@@ -119,7 +119,7 @@ After five Step 0 reads, checkpoint. Planning/interview questions: load `skill-c
 - Derive 2-4 search terms from the target area, symptom, and named file/tool.
 - Read the matching `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md` rows first; open a source entry only on a candidate hit; follow related refs at most 2 hops. Grep individual buckets only after the INDEX pass or on a known retrieval miss.
 - On zero hits, reword once and re-scan. If still empty, record the miss - do not broad-load a bucket.
-- Step 0 of every functional goat-* skill MUST emit `Relevant prior learnings: <matching INDEX entries or none found>`; on `none found`, the next line MUST be `Terms searched: <terms>`. Emit even when the area feels familiar or continues prior work - a silent skip is indistinguishable from a miss. If an index is stale, emit, then run `goat-flow index`.
+- Step 0 of every functional goat-* skill MUST emit `Relevant prior learnings: <matching INDEX entries or none found>`; on `none found`, the next line MUST be `Terms searched: <terms>`. Emit even when the area feels familiar or continues prior work - a silent skip is indistinguishable from a miss. If stale, emit `index-stale`; reporting-only/read-only/no-write/no-implementation modes defer regeneration. Otherwise run `goat-flow index` only with user authorization.
 
 ## Availability Check
 

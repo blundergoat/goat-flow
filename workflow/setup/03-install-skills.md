@@ -14,7 +14,7 @@ Read the detailed templates in `workflow/skills/` (each skill is a directory con
 2. **goat-review/SKILL.md** - Structured code review + quality audit. RFC 2119 severity, negative verification, footgun matching.
 3. **goat-security/SKILL.md** - Threat-model-driven security assessment. Exploitability ranking, dependency auditing.
 4. **goat-plan/SKILL.md** - Milestone planner and manager. Routes to inline or file-write mode based on scope and signals: inline for hotfix/small features, file-write for Standard+ scope.
-5. **goat-critique/SKILL.md** - Multi-perspective critique using sub-agent orchestration. 3 agents (risk, alternatives, fresh eyes), 5 phases, cross-examination, and synthesis.
+5. **goat-critique/SKILL.md** - Multi-perspective critique using sub-agent orchestration. Phases 1-5 plus mandatory Phase 5.5 meta-audit and Phase 5.6 outcome capture; 3 critique agents (risk, alternatives, fresh eyes), up to 3 conditional cross-exam agents, and 1 mandatory meta-agent.
 6. **goat-qa/SKILL.md** - Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort.
 7. **goat/SKILL.md** - Dispatcher. Routes natural language to the right skill. Required - audit checks for it (audit check: agent-skills).
 

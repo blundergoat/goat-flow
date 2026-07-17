@@ -28,9 +28,10 @@ Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
 1. **UNDERSTAND (inferred only)** - classify intent; split multiple intents; ask only if order matters.
    - **Simple-fact fast path:** for one factual question, answer directly after UNDERSTAND; skip GATHER and the Route Snapshot.
 2. **GATHER (inferred skill or direct-execution routing only)** - before routing, check:
-   - Footgun matches: grep `.goat-flow/learning-loop/footguns/INDEX.md` for the target area; open entries only on hits
    - Ask-first boundaries: scan the active instruction file's Ask First boundaries for named files; if none are named, record `target-files=unknown`
-   - If any check fails or is unavailable, note `gather-degraded` and route anyway
+   - Routed skills own learning-loop retrieval; do not pre-read their learning-loop indexes in the dispatcher
+   - Direct execution only: run the shared preamble's INDEX-first retrieval before emitting the Route Snapshot
+   - If the boundary scan or direct-execution retrieval fails, note `gather-degraded` and route anyway
    - Do not emit the preamble's `Relevant prior learnings` line - that belongs to the routed skill's Step 0
 3. **ROUTE (inferred skill or direct-execution only)** - dispatch using the map. Emit a Route Snapshot:
 

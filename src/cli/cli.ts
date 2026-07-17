@@ -73,6 +73,7 @@ Flags:
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
   --json            Emit machine-readable JSON (alias for --format json)
   --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
+  --red-log <file>  Skill new: failing RED receipt required before a skill write
   --scenario <name> Hooks verify: required bounded scenario group (deny-hook)
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
   --dry-run         Install/setup: preview managed template drift without changing the target
@@ -123,10 +124,12 @@ Examples:
   goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
   goat-flow plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
   goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
-  goat-flow skill new "<description>"  Scaffold a skill from a natural-language description
-  goat-flow skill ./repo new "<description>"
+  goat-flow skill new "<description>" --red-log <file>
+                                      Scaffold a skill after failing RED evidence
+  goat-flow skill ./repo new "<description>" --red-log <file>
   goat-flow skill new --draft <path>   Validate an existing draft against the candidacy check
-  goat-flow skill new --interactive    Prompt for description and name, then scaffold
+  goat-flow skill new --interactive --red-log <file>
+                                      Prompt for description and name, then scaffold after RED
   goat-flow skill doctor . --agent codex
   goat-flow skill doctor . --agent codex --skill goat --format json
   goat-flow --format markdown          PR-comment friendly output

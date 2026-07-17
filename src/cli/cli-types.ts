@@ -147,6 +147,7 @@ export interface ParsedCLI extends CLIOptions {
   skillSubcommand: SkillSubcommand | null;
   skillDescription: string | null;
   skillDraftPath: string | null;
+  skillRedLogPath: string | null;
   skillName: string | null;
   skillFilter: string | null;
   skillInteractive: boolean;
@@ -172,6 +173,7 @@ export type SkillCLIFields = Pick<
   | "skillSubcommand"
   | "skillDescription"
   | "skillDraftPath"
+  | "skillRedLogPath"
   | "skillName"
   | "skillFilter"
   | "skillInteractive"

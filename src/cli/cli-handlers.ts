@@ -690,6 +690,7 @@ async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
       agent: options.agent,
       description: options.skillDescription ?? undefined,
       draftPath: options.skillDraftPath ?? undefined,
+      redLogPath: options.skillRedLogPath ?? undefined,
       shouldUseInteractivePrompt: options.skillInteractive,
       name: options.skillName ?? undefined,
       shouldSkipConfirm: options.skillSkipConfirm,

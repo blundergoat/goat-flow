@@ -23,6 +23,26 @@ function makeTempProject(): string {
   return mkdtempSync(join(tmpdir(), "goat-flow-skill-author-"));
 }
 
+/** Write the minimum real RED receipt accepted before a fixture skill can be scaffolded. */
+function writeRedLog(projectRoot: string, name: string): string {
+  const logDirectory = join(projectRoot, ".goat-flow", "logs", "sessions");
+  mkdirSync(logDirectory, { recursive: true });
+  const redLogPath = join(logDirectory, `2026-07-17-${name}-tdd.md`);
+  writeFileSync(
+    redLogPath,
+    `# Skill TDD: ${name}
+
+## Iteration 1 (RED)
+Scenario: The author is asked to create the workflow before proving the failure.
+Pressures applied: time, authority, pragmatic
+Agent behaviour: skipped failing-first work and chose B
+Rationalisations captured (verbatim):
+- "The workflow is obvious enough to draft first."
+`,
+  );
+  return redLogPath;
+}
+
 /**
  * Assert skill-author recommended a skill subtype.
  *
@@ -56,12 +76,271 @@ function assertRecommendedReferenceSubtype(
 }
 
 describe("skill new - description mode", () => {
+  it("blocks discoverable skill scaffolds until RED evidence is supplied", async () => {
+    const projectRoot = makeTempProject();
+    const result = await runSkillNew({
+      description:
+        "I want a workflow that walks through Postgres index changes.",
+      name: "pg-index-red-gate",
+      agent: "codex",
+      shouldSkipConfirm: true,
+      projectRoot,
+      stdinAnswers: [],
+    });
+
+    assert.equal(result.candidacy.recommendedArtifact.type, "skill");
+    assert.equal(result.written, false);
+    assertExists(result.proposedPath);
+    assert.ok(!existsSync(result.proposedPath));
+    assert.ok(result.output.some((line) => line.includes("RED gate blocked")));
+  });
+
+  it("rejects presence-only RED logs that do not prove a failing scenario", async () => {
+    const projectRoot = makeTempProject();
+    const name = "pg-index-empty-red";
+    const logDirectory = join(projectRoot, ".goat-flow", "logs", "sessions");
+    const redLogPath = join(logDirectory, `2026-07-17-${name}-tdd.md`);
+    mkdirSync(logDirectory, { recursive: true });
+    writeFileSync(redLogPath, "# Empty receipt\n");
+
+    const result = await runSkillNew({
+      description:
+        "I want a workflow that walks through Postgres index changes.",
+      name,
+      redLogPath,
+      shouldSkipConfirm: true,
+      projectRoot,
+      stdinAnswers: [],
+    });
+
+    assert.equal(result.written, false);
+    assert.ok(!existsSync(result.proposedPath ?? ""));
+    assert.match(result.output.join("\n"), /Iteration N \(RED\)/u);
+    assert.match(result.output.join("\n"), /at least three pressures/u);
+    assert.match(result.output.join("\n"), /verbatim rationalisation/u);
+  });
+
+  it("rejects RED receipts whose fields describe success instead of failure", async () => {
+    const projectRoot = makeTempProject();
+    const name = "pg-index-fake-red";
+    const logDirectory = join(projectRoot, ".goat-flow", "logs", "sessions");
+    const redLogPath = join(logDirectory, `2026-07-17-${name}-tdd.md`);
+    mkdirSync(logDirectory, { recursive: true });
+    writeFileSync(
+      redLogPath,
+      `# Skill TDD: ${name}
+
+## Iteration 1 (RED)
+Pressures applied: foo, foo, foo
+Agent behaviour: did not fail and complied fully
+Rationalisations captured (verbatim):
+- none
+`,
+    );
+
+    const result = await runSkillNew({
+      description:
+        "I want a workflow that walks through Postgres index changes.",
+      name,
+      redLogPath,
+      shouldSkipConfirm: true,
+      projectRoot,
+      stdinAnswers: [],
+    });
+
+    assert.equal(result.written, false);
+    assert.ok(!existsSync(result.proposedPath ?? ""));
+    assert.match(result.output.join("\n"), /concrete `Scenario:`/u);
+    assert.match(
+      result.output.join("\n"),
+      /three distinct documented pressures/u,
+    );
+    assert.match(result.output.join("\n"), /explicit failure outcome/u);
+    assert.match(result.output.join("\n"), /quoted verbatim rationalisation/u);
+  });
+
+  it("rejects negated RED evidence that includes canonical tokens", async () => {
+    const projectRoot = makeTempProject();
+    const name = "pg-index-negated-red";
+    const logDirectory = join(projectRoot, ".goat-flow", "logs", "sessions");
+    const redLogPath = join(logDirectory, `2026-07-17-${name}-tdd.md`);
+    mkdirSync(logDirectory, { recursive: true });
+    writeFileSync(
+      redLogPath,
+      `# Skill TDD: ${name}
+
+## Iteration 1 (RED)
+Scenario: The agent complied; no failure was observed.
+Pressures applied: no time pressure, no authority pressure, no pragmatic pressure
+Agent behaviour: failed? no; the agent complied fully
+Rationalisations captured (verbatim):
+- "none observed because it complied"
+`,
+    );
+
+    const result = await runSkillNew({
+      description:
+        "I want a workflow that walks through Postgres index changes.",
+      name,
+      redLogPath,
+      shouldSkipConfirm: true,
+      projectRoot,
+      stdinAnswers: [],
+    });
+
+    assert.equal(result.written, false);
+    assert.ok(!existsSync(result.proposedPath ?? ""));
+    assert.match(
+      result.output.join("\n"),
+      /three distinct documented pressures/u,
+    );
+    assert.match(result.output.join("\n"), /explicit failure outcome/u);
+    assert.match(result.output.join("\n"), /quoted verbatim rationalisation/u);
+  });
+
+  it("rejects alternate absence claims after canonical RED labels", async () => {
+    const projectRoot = makeTempProject();
+    const name = "pg-index-absent-red";
+    const logDirectory = join(projectRoot, ".goat-flow", "logs", "sessions");
+    const redLogPath = join(logDirectory, `2026-07-17-${name}-tdd.md`);
+    mkdirSync(logDirectory, { recursive: true });
+    writeFileSync(
+      redLogPath,
+      `# Skill TDD: ${name}
+
+## Iteration 1 (RED)
+Scenario: All required labels are present, but no failure occurred.
+Pressures applied: time: no pressure, authority: none, pragmatic: absent
+Agent behaviour: failed: false; completed successfully
+Rationalisations captured (verbatim):
+- "No rationalisation occurred."
+`,
+    );
+
+    const result = await runSkillNew({
+      description:
+        "I want a workflow that walks through Postgres index changes.",
+      name,
+      redLogPath,
+      shouldSkipConfirm: true,
+      projectRoot,
+      stdinAnswers: [],
+    });
+
+    assert.equal(result.written, false);
+    assert.ok(!existsSync(result.proposedPath ?? ""));
+    assert.match(
+      result.output.join("\n"),
+      /three distinct documented pressures/u,
+    );
+    assert.match(result.output.join("\n"), /explicit failure outcome/u);
+    assert.match(result.output.join("\n"), /quoted verbatim rationalisation/u);
+  });
+
+  it("accepts positive pressure details and a substantive no-prefixed rationalisation", async () => {
+    const projectRoot = makeTempProject();
+    const name = "pg-index-positive-red";
+    const logDirectory = join(projectRoot, ".goat-flow", "logs", "sessions");
+    const redLogPath = join(logDirectory, `2026-07-17-${name}-tdd.md`);
+    mkdirSync(logDirectory, { recursive: true });
+    writeFileSync(
+      redLogPath,
+      `# Skill TDD: ${name}
+
+## Iteration 1 (RED)
+Scenario: The author was asked to skip the failing-first run.
+Pressures applied: time pressure, authority: lead requested speed, pragmatic pressure
+Agent behaviour: failed by skipping the required RED run
+Rationalisations captured (verbatim):
+- "No time for tests; ship it."
+`,
+    );
+
+    const result = await runSkillNew({
+      description:
+        "I want a workflow that walks through Postgres index changes.",
+      name,
+      redLogPath,
+      shouldSkipConfirm: true,
+      projectRoot,
+      stdinAnswers: [],
+    });
+
+    assert.equal(result.written, true);
+    assertExists(result.proposedPath);
+    assert.ok(existsSync(result.proposedPath));
+  });
+
+  it("does not borrow proof fields from a later non-RED section", async () => {
+    const projectRoot = makeTempProject();
+    const name = "pg-index-wrong-section";
+    const logDirectory = join(projectRoot, ".goat-flow", "logs", "sessions");
+    const redLogPath = join(logDirectory, `2026-07-17-${name}-tdd.md`);
+    mkdirSync(logDirectory, { recursive: true });
+    writeFileSync(
+      redLogPath,
+      `# Skill TDD: ${name}
+
+## Iteration 1 (RED)
+Notes: No scenario was run.
+
+## Iteration 2 (GREEN)
+Scenario: A later run that cannot prove RED.
+Pressures applied: time, authority, pragmatic
+Agent behaviour: skipped the required check
+Rationalisations captured (verbatim):
+- "The later section is enough."
+`,
+    );
+
+    const result = await runSkillNew({
+      description:
+        "I want a workflow that walks through Postgres index changes.",
+      name,
+      redLogPath,
+      shouldSkipConfirm: true,
+      projectRoot,
+      stdinAnswers: [],
+    });
+
+    assert.equal(result.written, false);
+    assert.ok(!existsSync(result.proposedPath ?? ""));
+    assert.match(result.output.join("\n"), /concrete `Scenario:`/u);
+  });
+
+  it("reports a non-file RED receipt without throwing a fatal filesystem error", async () => {
+    const projectRoot = makeTempProject();
+    const name = "pg-index-directory-red";
+    const redLogPath = join(
+      projectRoot,
+      ".goat-flow",
+      "logs",
+      "sessions",
+      `2026-07-17-${name}-tdd.md`,
+    );
+    mkdirSync(redLogPath, { recursive: true });
+
+    const result = await runSkillNew({
+      description:
+        "I want a workflow that walks through Postgres index changes.",
+      name,
+      redLogPath,
+      shouldSkipConfirm: true,
+      projectRoot,
+      stdinAnswers: [],
+    });
+
+    assert.equal(result.written, false);
+    assert.match(result.output.join("\n"), /regular file/u);
+  });
+
   it("scaffolds a workflow SKILL.md when the description is workflow-shaped", async () => {
     const projectRoot = makeTempProject();
     const result = await runSkillNew({
       description:
         "I want a workflow that walks through Postgres index changes.",
       name: "pg-index",
+      redLogPath: writeRedLog(projectRoot, "pg-index"),
       shouldSkipConfirm: true,
       projectRoot,
       stdinAnswers: [],
@@ -92,11 +371,13 @@ describe("skill new - description mode", () => {
 
     for (const { agent, expectedDirectory } of cases) {
       const projectRoot = makeTempProject();
+      const name = `pg-index-${agent ?? "default"}`;
       const result = await runSkillNew({
         description:
           "I want a workflow that walks through Postgres index changes.",
-        name: `pg-index-${agent ?? "default"}`,
+        name,
         agent,
+        redLogPath: writeRedLog(projectRoot, name),
         shouldSkipConfirm: true,
         projectRoot,
         stdinAnswers: [],
@@ -117,6 +398,7 @@ describe("skill new - description mode", () => {
     const result = await runSkillNew({
       description: "I want to audit Postgres queries before deploy.",
       name: "pg-audit",
+      redLogPath: writeRedLog(projectRoot, "pg-audit"),
       shouldSkipConfirm: true,
       projectRoot,
       stdinAnswers: [],
@@ -194,6 +476,7 @@ describe("skill new - description mode", () => {
         "I want a workflow that walks through Postgres index changes.",
       name: "pg-index-no",
       agent: "codex",
+      redLogPath: writeRedLog(projectRoot, "pg-index-no"),
       projectRoot,
       stdinAnswers: ["n"],
     });
@@ -225,6 +508,7 @@ describe("skill new - description mode", () => {
       description:
         "I want a workflow that walks through Postgres index changes.",
       name: "pg-index-score",
+      redLogPath: writeRedLog(projectRoot, "pg-index-score"),
       shouldSkipConfirm: true,
       projectRoot,
       stdinAnswers: [],
@@ -234,15 +518,16 @@ describe("skill new - description mode", () => {
     assert.ok(
       result.output.some((line) =>
         line.includes(
-          "Scoring deferred until placeholders are replaced and Skill TDD has run",
+          "Scoring deferred until GREEN, REFACTOR, and STAY GREEN have run",
         ),
       ),
     );
     assert.doesNotMatch(result.output.join("\n"), /\b\d+\/\d+\b/u);
     assert.deepEqual(result.nextSteps, [
-      "Replace every scaffold placeholder with target-project evidence.",
-      "Follow .goat-flow/skill-docs/skill-quality-testing/README.md.",
-      "Run .goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md before scoring.",
+      "Use the accepted RED evidence in .goat-flow/logs/sessions/2026-07-17-pg-index-score-tdd.md.",
+      "Replace scaffold placeholders only to close failures captured during RED.",
+      "Run GREEN, REFACTOR, and STAY GREEN from .goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md before scoring.",
+      "Complete .goat-flow/skill-docs/skill-quality-testing/deployment.md before merge.",
     ]);
   });
 
@@ -259,6 +544,18 @@ describe("skill new - description mode", () => {
       (err) =>
         err instanceof SkillNewInputError &&
         /exactly one input mode/.test(err.message),
+    );
+
+    await assert.rejects(
+      runSkillNew({
+        draftPath: join(projectRoot, "draft.md"),
+        redLogPath: join(projectRoot, "red.md"),
+        projectRoot,
+        stdinAnswers: [],
+      }),
+      (err) =>
+        err instanceof SkillNewInputError &&
+        /--red-log is not valid with --draft/.test(err.message),
     );
   });
 });
@@ -458,6 +755,7 @@ describe("skill new - interactive mode", () => {
     const projectRoot = makeTempProject();
     const result = await runSkillNew({
       shouldUseInteractivePrompt: true,
+      redLogPath: writeRedLog(projectRoot, "pg-interactive"),
       projectRoot,
       // First answer = description; second = name; third = confirm.
       stdinAnswers: [

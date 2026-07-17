@@ -199,6 +199,7 @@ function validateAuthoringOnlyFlags(
   const authoringFlags: Array<[string, boolean]> = [
     ["--interactive", parsedFlag(values, "interactive")],
     ["--name", parsedString(values, "name") !== undefined],
+    ["--red-log", parsedString(values, "red-log") !== undefined],
     ["--yes", parsedFlag(values, "yes")],
   ];
 
@@ -245,6 +246,18 @@ export function validateSkillFlags(
   validateDoctorFilter(values, isSkillDoctor);
 }
 
+/** Resolve one skill-only path flag without adding branches to the shared field builder. */
+function resolvedSkillPath(
+  values: ParsedArgValues,
+  name: string,
+  isSkillCommand: boolean,
+  basePath = ".",
+): string | null {
+  if (!isSkillCommand) return null;
+  const value = parsedString(values, name);
+  return value === undefined ? null : resolve(basePath, value);
+}
+
 /**
  * Build the skill-only slice of parsed CLI options for command dispatch.
  * Use after strict parseArgs validates the raw flag shapes.
@@ -260,14 +273,16 @@ export function buildSkillCLIFields(
   positionals: SkillPositionals,
 ): SkillCLIFields {
   const isSkillCommand = command === "skill";
-  const skillDraftValue = isSkillCommand
-    ? parsedString(values, "draft")
-    : undefined;
   return {
     skillSubcommand: positionals.skillSubcommand,
     skillDescription: positionals.skillDescription,
-    skillDraftPath:
-      skillDraftValue === undefined ? null : resolve(skillDraftValue),
+    skillDraftPath: resolvedSkillPath(values, "draft", isSkillCommand),
+    skillRedLogPath: resolvedSkillPath(
+      values,
+      "red-log",
+      isSkillCommand,
+      positionals.projectPath,
+    ),
     skillName: isSkillCommand ? (parsedString(values, "name") ?? null) : null,
     skillFilter: isSkillCommand
       ? (parsedString(values, "skill") ?? null)

@@ -99,11 +99,11 @@ last_reviewed: 2026-07-17
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 8
+**Incident count:** 11
 
 **Latest occurrence:** 2026-07-17
 
-**What happened:** Eight edits crossed ADR-023 or bucket caps:
+**What happened:** Eleven edits crossed ADR-023 or bucket caps:
 
 - **2026-05-19/22:** TDD packs hit 3022/3008 words, the preamble exceeded 1500, and QA exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
 - **2026-06-14:** Dispatcher guidance hit 653/555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
@@ -113,6 +113,9 @@ last_reviewed: 2026-07-17
 - **2026-07-13 M13:** Shared references hit 1560/1601, then compacted to 1484/1490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
 - **2026-07-16 PR #56:** Goat/plan/preamble/TDD measured 597/2689/1540/3021; compaction also repaired stale assertions. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap`; `requires pre-write redaction for durable local text`).
 - **2026-07-17 QA Audit:** A post-gate template pushed QA to 2531; compaction restored 2476. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-qa Audit priorities coherent through the post-gate plan`).
+- **2026-07-17 quality follow-up:** Path-only and checkpoint corrections pushed goat-plan to 2517; the focused contract failed, and compaction restored 2490 before broader verification. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- **2026-07-17 inline-review ingestion:** Adding the required PR-comments endpoint pushed goat-review to 2511; the focused contract failed, and compaction restored the skill below 2500 before broader verification. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `ingests path-bearing automated findings from inline PR comments`; `functional skills stay within the 2500-word cap across all mirrors`).
+- **2026-07-17 quality remediation:** Stale-index wording pushed the preamble to 1514; compaction restored it below 1500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
 
 **Root cause:** Treated capped prose as tiny.
 
@@ -241,6 +244,8 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **What happened:** During M05b verification, a malformed `rg` command accidentally left a literal `>` outside the quoted search pattern. The shell interpreted it as output redirection and truncated `src/dashboard/views/home.html` to an empty file. The mistake was caught by `wc -l`, `git diff`, and the dashboard HTML regression before final verification, then the Home template was restored.
 
 **Recurrence 2026-06-14:** While verifying a `goat-qa` skill-doc edit, an `rg` pattern included Markdown backticks around `initialInput`. The deny-dangerous hook blocked it as command substitution before execution. No files were changed by the blocked command, but the verification pass still had to be rerun with a safer pattern. Evidence anchors: `workflow/skills/goat-qa/SKILL.md` (search: `safe to skip more PTY timing tests`) and `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Shell metacharacters in verification searches can corrupt source files`).
+
+**Recurrence 2026-07-17:** A double-quoted `rg` pattern contained Markdown backticks. The deny hook blocked it before execution; rerunning with single quotes changed no tracked files. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Root cause:** The search pattern contained shell-significant characters (`>` in HTML text, later backticks in Markdown text) and the command was assembled too casually. A read-only verification command stopped being read-only because the shell parsed the pattern before `rg` ever ran.
 

@@ -223,32 +223,84 @@ describe("skill hardening contracts", () => {
         /Do NOT mutate `\.goat-flow\/plans\/\.active`, milestone status, checkboxes, or code/,
         skillPath,
       );
-    });
-  });
-
-  it("runs goat-plan learning-loop retrieval before every mode branch", () => {
-    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
-      const skillGuidance = readProjectFile(skillPath);
-      const retrievalIndex = skillGuidance.indexOf(
-        "Learning-loop retrieval runs before mode branching",
-      );
-      const pathOnlyIndex = skillGuidance.indexOf("Path-only guard runs first");
-      const reconcileIndex = skillGuidance.indexOf(
-        "Reconcile Existing Plan State",
-      );
-      const modeIndex = skillGuidance.indexOf("Pick exactly one mode");
-
-      assert.notEqual(retrievalIndex, -1, `${skillPath}: missing retrieval`);
-      assert.ok(
-        retrievalIndex < pathOnlyIndex &&
-          retrievalIndex < reconcileIndex &&
-          retrievalIndex < modeIndex,
-        `${skillPath}: a mode can bypass learning-loop retrieval`,
+      assert.match(
+        skillGuidance,
+        /If exactly one milestone is in-progress, read only its first unchecked task line; no other body content/,
+        skillPath,
       );
       assert.match(
         skillGuidance,
-        /supplied brief, named plan, or path/,
-        `${skillPath}: retrieval terms do not cover every invocation shape`,
+        /Zero\/multiple in-progress: report ambiguity; read no bodies/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /current milestone, and bounded task line when unambiguous/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /CHECKPOINT \(Named-File Update\)/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Edit \[file\] in place for \[delta\]/,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        /CHECKPOINT \(all other modes\)/,
+        skillPath,
+      );
+    });
+
+    const milestoneExamplePaths = INSTALLED_SKILL_ROOTS.map(
+      (skillRoot) => `${skillRoot}/goat-plan/references/milestone-examples.md`,
+    );
+    assertForEachTarget(milestoneExamplePaths, (examplePath) => {
+      const milestoneExample = readProjectFile(examplePath);
+      assert.match(
+        milestoneExample,
+        /the bounded follow-up read returns only its first unchecked task line/,
+        examplePath,
+      );
+    });
+  });
+
+  it("orders goat-plan path-only classification before bounded retrieval and plan reads", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      const classifyIndex = skillGuidance.indexOf(
+        "1. **Classify the input shape before any plan-state read.**",
+      );
+      const retrievalIndex = skillGuidance.indexOf(
+        "2. **Run learning-loop retrieval before mode-specific reads.**",
+      );
+      const planStateIndex = skillGuidance.indexOf(
+        "3. **Inspect existing plan state only after retrieval.**",
+      );
+      const modeIndex = skillGuidance.indexOf("4. **Pick exactly one mode.**");
+
+      assert.notEqual(classifyIndex, -1, `${skillPath}: missing classification`);
+      assert.notEqual(retrievalIndex, -1, `${skillPath}: missing retrieval`);
+      assert.notEqual(planStateIndex, -1, `${skillPath}: missing plan-state step`);
+      assert.notEqual(modeIndex, -1, `${skillPath}: missing mode selection`);
+      assert.ok(
+        classifyIndex < retrievalIndex &&
+          retrievalIndex < planStateIndex &&
+          planStateIndex < modeIndex,
+        `${skillPath}: Step 0 order is ambiguous`,
+      );
+      assert.match(
+        skillGuidance,
+        /For path-only intake, search only for plan-orientation and task-state failure classes/u,
+        `${skillPath}: path-only retrieval is not bounded to orientation`,
+      );
+      assert.match(
+        skillGuidance,
+        /Do not retrieve implementation-domain learnings from the task path/u,
+        `${skillPath}: path-only intake can load unrelated implementation context`,
       );
     });
   });
@@ -405,6 +457,63 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("assigns learning-loop retrieval to exactly one route owner", () => {
+    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+      const routingFlow = readMarkdownSection(skillPath, "How It Works");
+      assert.match(
+        routingFlow,
+        /Routed skills own learning-loop retrieval; do not pre-read their learning-loop indexes in the dispatcher/u,
+        skillPath,
+      );
+      assert.match(
+        routingFlow,
+        /Direct execution only: run the shared preamble's INDEX-first retrieval before emitting the Route Snapshot/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        routingFlow,
+        /Footgun matches: grep/u,
+        `${skillPath}: dispatcher must not duplicate the routed skill's Step 0 retrieval`,
+      );
+    });
+  });
+
+  it("defers stale-index regeneration when committed writes are forbidden", () => {
+    for (const preamblePath of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const retrievalContract = readMarkdownSection(
+        preamblePath,
+        "Learning-Loop Retrieval",
+      );
+      assert.match(
+        retrievalContract,
+        /reporting-only\/read-only\/no-write\/no-implementation modes defer regeneration/u,
+        preamblePath,
+      );
+      assert.match(
+        retrievalContract,
+        /Otherwise run `goat-flow index` only with user authorization/u,
+        preamblePath,
+      );
+    }
+  });
+
+  it("keeps glossary continuity terms aligned with the conditional session-log contract", () => {
+    const glossary = readProjectFile(".goat-flow/glossary.md");
+    assert.match(
+      glossary,
+      /A current handoff receipt is an optional, redacted session-log fallback written on `\/compact` when no active milestone exists or when the user explicitly requests one/u,
+    );
+    assert.match(
+      glossary,
+      /milestone state remains primary; only when no active milestone exists, or the user explicitly requests it, write a redacted session log/u,
+    );
+    assert.doesNotMatch(glossary, /\| Handoff \| Deprecated in v1\.1\.0\./u);
+    assert.doesNotMatch(glossary, /On `\/compact`, session log written/u);
+  });
+
   it("documents task-path classifier examples", () => {
     const skillsDocumentation = readProjectFile("docs/skills.md");
     assert.match(
@@ -484,6 +593,43 @@ describe("skill hardening contracts", () => {
       assert.doesNotMatch(
         readMarkdownSection(skillPath, "Constraints"),
         /MUST produce "must test \/ should test \/ safe to skip"/,
+        skillPath,
+      );
+    });
+  });
+
+  it("makes goat-qa Audit mode assess misaligned effort without inventing it", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      const auditMode = readMarkdownSection(skillPath, "Audit Mode");
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+      const auditOutputHeading = "### Audit mode (no diff - A1–A4 shape)";
+      const auditOutputIndex = skillGuidance.indexOf(auditOutputHeading);
+
+      assert.match(
+        auditMode,
+        /Misaligned effort is an observed test-to-risk mismatch/u,
+        skillPath,
+      );
+      assert.match(
+        auditMode,
+        /Do not infer misalignment from high coverage alone/u,
+        skillPath,
+      );
+      assert.match(
+        auditMode,
+        /If no item meets these evidence conditions, report `none found`/u,
+        skillPath,
+      );
+      assert.match(
+        constraints,
+        /MUST assess gaps in BOTH directions/u,
+        skillPath,
+      );
+      assert.notEqual(auditOutputIndex, -1, `${skillPath}: missing Audit output`);
+      assert.match(
+        skillGuidance.slice(auditOutputIndex),
+        /### Misaligned effort/u,
         skillPath,
       );
     });
@@ -821,6 +967,45 @@ describe("skill hardening contracts", () => {
         referencePath,
       );
     });
+  });
+
+  it("keeps goat-critique lifecycle aligned with its accepted decision and public guidance", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(
+        skillGuidance,
+        /Phases 1-5, 5\.5 meta-audit, 5\.6 outcome capture, three critique sub-agents, one meta-agent/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /full delegated, Phases 1-5 plus 5\.5\/5\.6, three critique sub-agents plus one meta-agent/,
+        skillPath,
+      );
+    });
+
+    const acceptedDecision = readProjectFile(
+      ".goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md",
+    );
+    assert.match(
+      acceptedDecision,
+      /mandatory lifecycle is Phases 1-5 plus Phase 5\.5 meta-audit and Phase 5\.6 outcome capture/,
+    );
+    assert.match(
+      acceptedDecision,
+      /three isolated critique sub-agents[\s\S]+up to three cross-exam agents[\s\S]+one meta-agent/,
+    );
+
+    const publicSkills = readProjectFile("docs/skills.md");
+    assert.match(publicSkills, /3 critique agents \(always\)/);
+    assert.match(publicSkills, /up to 3 cross-exam agents \(conditional\)/);
+    assert.match(publicSkills, /1 meta-agent \(always\)/);
+    assert.match(publicSkills, /5\.5: Meta-audit; 5\.6: Outcome capture/);
+
+    const setupGuide = readProjectFile("workflow/setup/03-install-skills.md");
+    assert.match(setupGuide, /mandatory Phase 5\.5 meta-audit/);
+    assert.match(setupGuide, /Phase 5\.6 outcome capture/);
+    assert.match(setupGuide, /1 mandatory meta-agent/);
   });
 
   it("keeps report-only finding outputs aligned with the shared proof-class contract", () => {
@@ -1299,10 +1484,18 @@ describe("skill hardening contracts", () => {
   });
 
   it("labels shipped scenarios and removes framework-only evidence claims", () => {
+    const planScenarioTargets = [
+      "workflow/skills/goat-plan/references/milestone-examples.md",
+      ...INSTALLED_SKILL_ROOTS.map(
+        (skillRoot) =>
+          `${skillRoot}/goat-plan/references/milestone-examples.md`,
+      ),
+    ];
     const scenarioTargets = [
       ...installedSkillPaths("goat-debug"),
       ...installedSkillPaths("goat-security"),
       ...installedSkillPaths("goat-qa"),
+      ...planScenarioTargets,
       ...INSTALLED_SKILL_ROOTS.map(
         (skillRoot) =>
           `${skillRoot}/goat-critique/references/rubric-examples.md`,
@@ -1327,6 +1520,56 @@ describe("skill hardening contracts", () => {
         scenarioGuidance,
         forbiddenFrameworkClaims,
         scenarioPath,
+      );
+    });
+
+    assertForEachTarget(planScenarioTargets, (scenarioPath) => {
+      const scenarioGuidance = readProjectFile(scenarioPath);
+      assert.match(
+        scenarioGuidance,
+        /> \*\*Illustrative scenario - input\/output shape only; never evidence\.\*\*[^\n]*\n\n## Assumption Tracking/u,
+        `${scenarioPath}: scenario label must immediately precede the assumption block`,
+      );
+    });
+  });
+
+  it("ingests path-bearing automated findings from inline PR comments", () => {
+    const reviewSkillTargets = [
+      "workflow/skills/goat-review/SKILL.md",
+      ...installedSkillPaths("goat-review"),
+    ];
+    assertForEachTarget(reviewSkillTargets, (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(
+        skillGuidance,
+        /gh api --paginate[^\n]+pulls\/<number>\/comments/,
+        skillPath,
+      );
+    });
+
+    const overlapReferenceTargets = [
+      "workflow/skills/goat-review/references/automated-review.md",
+      ...INSTALLED_SKILL_ROOTS.map(
+        (skillRoot) =>
+          `${skillRoot}/goat-review/references/automated-review.md`,
+      ),
+    ];
+    assertForEachTarget(overlapReferenceTargets, (referencePath) => {
+      const overlapGuidance = readProjectFile(referencePath);
+      assert.match(
+        overlapGuidance,
+        /pulls\/<number>\/comments[^\n]+authoritative known-findings set/,
+        referencePath,
+      );
+      assert.match(
+        overlapGuidance,
+        /`Copilot`[^\n]+`copilot-pull-request-reviewer`/,
+        referencePath,
+      );
+      assert.match(
+        overlapGuidance,
+        /`github-advanced-security\[bot\]`[^\n]+`github-advanced-security`/,
+        referencePath,
       );
     });
   });

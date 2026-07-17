@@ -28,7 +28,7 @@ Use for diff/PR review or codebase-area quality audits.
 - If vague, ask one follow-up covering files, concerns, and mode.
 - Auto-detect: explicit input, staged, unstaged, PR-style branch ahead of base, then `git diff`.
 
-**PR mode:** prefer PR URL/number because it supplies base, head, description, and linked issues. Prompt: "PR URL or number? -- or say 'local' if not pushed." Resolve with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,title,body,reviews,comments`; diff via `gh pr diff <ref>`. Record URL/base SHA. See `references/automated-review.md` for overlap-tagging.
+**PR mode:** prefer PR URL/number. Prompt: "PR URL or number? -- or say 'local' if not pushed." Resolve with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,number,title,body,reviews,comments`; diff via `gh pr diff <ref>`. Record URL/base SHA. Derive owner/repo and number from the URL; fetch inline findings with `gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=100'`; see `references/automated-review.md`.
 
 **Base fallback:** when no PR link or `gh` unavailable, resolve base from explicit user base, `skills.goat-review.local_pr_base`, remote HEAD, user prompt, then `main` with `base-detection-failed`. Prefer existing refs; only `git fetch origin <base> --quiet` after explicit network approval. Diff `origin/<base>...HEAD` if present, else local `<base>...HEAD` with `base-fetch-skipped` or `base-fetch-failed`. Record base/source/SHA in Review Integrity.
 
@@ -167,7 +167,7 @@ Anti-hallucination surface -- tells the reader at a glance how confident the rev
 - **Size:** lines changed, files changed, chunking state. PR mode: resolved base, source annotation, short SHA.
 - **Scope snapshot:** source, base, head, uncommitted, chunking.
 - **Refutations logged:** `<N>`
-- **PR-mode extension:** when PR mode fetched `reviews,comments`, add `Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new`; when no bot review exists, add `Automated-reviewer overlap: no-automated-review-present`; outside PR mode, omit or write `n/a`.
+- **PR-mode extension:** when PR mode fetched inline pull-request comments, add `Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new`; when no bot review exists, add `Automated-reviewer overlap: no-automated-review-present`; outside PR mode, omit or write `n/a`.
 - **Pass-3 extension:** when Pass 3 runs, is triggered, or is skipped after a trigger, add `Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<id|n/a>`.
 - **Degradation flags:** `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `spec-drift-skipped`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`.
 - **Conclusion:** `confident` | `coverage-degraded` | `high-inference` | `partial`.

@@ -58,12 +58,12 @@ shellcheck scripts/*.sh scripts/maintenance/*.sh                                
 bash -n scripts/*.sh scripts/maintenance/*.sh                                                # Syntax-check scripts
 bash scripts/preflight-checks.sh         # Full preflight gate
 
-# CLI commands (after build)
-npx goat-flow audit .                        # Validate setup correctness
-npx goat-flow audit . --harness              # AI harness completeness checks
-npx goat-flow install . --agent claude       # Copy/update system files
-npx goat-flow setup --agent claude           # Generate setup prompt
-npx goat-flow quality . --agent claude       # Generate quality-assessment prompt
+# CLI commands (from the framework checkout)
+node --import tsx src/cli/cli.ts audit .                        # Validate setup correctness
+node --import tsx src/cli/cli.ts audit . --harness              # AI harness completeness checks
+node --import tsx src/cli/cli.ts install . --agent claude       # Copy/update system files
+node --import tsx src/cli/cli.ts setup --agent claude           # Generate setup prompt
+node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quality-assessment prompt
 ```
 
 ## Conventions

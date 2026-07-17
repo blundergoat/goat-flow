@@ -125,9 +125,9 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 ## Footgun: Pre-release prompts can resolve an older global CLI
 
 **Status:** active | **Created:** 2026-07-17 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Generated write instructions verify the CLI version before invoking a newly added command and use a package-identity-gated source fallback in the framework checkout.
+**Decision changed:** Framework-checkout commands use the source CLI (or a freshly built local CLI) and verify its version instead of trusting a bare PATH binary; generated write instructions retain the package-identity-gated source fallback.
 **Trigger phase:** ACT
-**Incident count:** 1
+**Incident count:** 2
 **Latest occurrence:** 2026-07-17
 
 **Symptoms:** A prompt generated from the current source tree invokes a newly added CLI command, prints a success-looking write message, but exits non-zero and persists the output of an older command instead of the requested artifact.
@@ -136,7 +136,9 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 
 **Evidence:** `src/cli/prompt/compose-quality-common.ts` (search: `Select a compatible redactor`) now requires the installed binary to report the current package version and permits the source fallback only when `package.json` identifies the framework checkout. The 2026-07-17 reproduction resolved `goat-flow` to v1.13.0, printed `Written to /tmp/goat-redact-benign.json`, and exited 1; the source command exited 0 and its redacted quality report passed `quality validate`.
 
-**Prevention:** When a generated prompt calls a CLI command added in the current release, do not use command existence as compatibility proof. Verify the exact package version before any output write, and gate source fallbacks on both the expected package name and source entry path.
+**Recurrence 2026-07-17:** Current consumer guidance still used `npx goat-flow`, although the unscoped registry package is deprecated and a clean-directory probe resolved a stale global v1.13.0 binary instead of source v1.14.0. Current command surfaces now name `@blundergoat/goat-flow`; `test/contract/command-phrases.test.ts` (search: `does not let unscoped npx resolve the deprecated goat-flow package`) guards the package identity. Skill hardening receipt: `.goat-flow/logs/sessions/2026-07-17-goat-tdd.md` (local, gitignored).
+
+**Prevention:** In the framework checkout, use `node --import tsx src/cli/cli.ts <command>` before build or `npm run goat-flow:cli -- <command>` only after a fresh build, and verify `--version` matches `package.json`; do not use bare `goat-flow` during pre-release work. Consumer examples must name the scoped `@blundergoat/goat-flow` package. When a generated prompt calls a command added in the current release, verify the exact version before any output write and gate source fallbacks on both the expected package name and source entry path.
 
 ## Resolved Entries
 

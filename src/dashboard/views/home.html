@@ -1166,9 +1166,9 @@
       // Setup uses a generated prompt rather than a raw shell command.
       if (priority === 'setup') return 'Generated setup prompt for ' + agentName(activeRunner);
       // Harness repair shows the audit command users can recognize.
-      if (priority === 'harness') return '$ npx goat-flow audit . --harness --agent ' + this.failingHarnessAgent();
+      if (priority === 'harness') return '$ npx @blundergoat/goat-flow@latest audit . --harness --agent ' + this.failingHarnessAgent();
       // Quality refresh shows the assessment command for the active runner.
-      if (priority === 'completeness') return '$ npx goat-flow quality . --agent ' + activeRunner;
+      if (priority === 'completeness') return '$ npx @blundergoat/goat-flow@latest quality . --agent ' + activeRunner;
       return null;
     },
     /**

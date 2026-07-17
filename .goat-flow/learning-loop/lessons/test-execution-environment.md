@@ -41,7 +41,7 @@ last_reviewed: 2026-07-17
 
 **Root cause:** I trusted a milestone's directory-shaped test command instead of checking `package.json` and `scripts/run-tests.mjs`. In this repo, test file discovery and slow/fast partitioning live in `scripts/run-tests.mjs`; direct Node `--test` invocations should name specific `*.test.ts` files, not a directory.
 
-**Prevention:** For suite-wide verification, use `node scripts/run-tests.mjs fast` or the matching npm script from `package.json`. Use `node --import tsx --test <specific-file.test.ts>` only for focused files. Treat `ERR_MODULE_NOT_FOUND` on a test directory or `index.json` as an invocation-shape failure before diagnosing product code. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), `.goat-flow/plans/1.12.0/M01-verification-score-spike-and-decision.md` (search: `node scripts/run-tests.mjs fast`).
+**Prevention:** For suite-wide verification, use `node scripts/run-tests.mjs fast` or the matching npm script from `package.json`. Use `node --import tsx --test <specific-file.test.ts>` only for focused files. Treat `ERR_MODULE_NOT_FOUND` on a test directory or `index.json` as an invocation-shape failure before diagnosing product code. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`).
 
 ---
 

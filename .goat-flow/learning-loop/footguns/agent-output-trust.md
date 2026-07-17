@@ -1,6 +1,6 @@
 ---
 category: agent-output-trust
-last_reviewed: 2026-05-25
+last_reviewed: 2026-07-17
 ---
 
 ## Footgun: Agent-produced output may contain control sequences that hijack the host terminal
@@ -40,9 +40,9 @@ last_reviewed: 2026-05-25
 - **PR #783** (merged 2026-03-21, `klieret`): `get_content_string` in external mini-swe-agent path src/minisweagent/models/utils/content_string.py (search: `Anthropic tool use`) needed separate handling for `tool_use` (extract `input`), `tool_result` (extract `content`), and text blocks. The original implementation just joined `item.get("text", "")` for every list item, returning empty strings for tool_use/tool_result blocks.
 
 **Goat-flow applicability — LOW today, MEDIUM future:** Goat-flow does not directly wrap LM providers. But several surfaces will grow this exposure:
-- The proposed evidence envelope (per `improvement-ideas-codex.md`'s top recommendation) will carry provider-shaped messages across surfaces. Each surface that reads them needs the same defensive shape probes mini learned.
+- The proposed evidence envelope (top recommendation of the Codex improvement-ideas review, a local gitignored plan note) will carry provider-shaped messages across surfaces. Each surface that reads them needs the same defensive shape probes mini learned.
 - AG-UI dashboard integration receives structured message events from agent runners; any code that consumes `message.content` must distinguish string vs list vs None.
-- Trajectory replay (per `.goat-flow/plans/related-improvement-ideas/M03-deterministic-skill-replay.md`) replays recorded provider messages; the replay harness needs to handle the same shape variants mini does.
+- Trajectory replay (a deterministic-skill-replay improvement idea in a local gitignored plan note) replays recorded provider messages; the replay harness needs to handle the same shape variants mini does.
 
 **Prevention:**
 1. When wrapping any LM provider message shape, never assume the content field is non-null. Always: `if content is None:` BEFORE `len(content)` BEFORE `content[0]`.

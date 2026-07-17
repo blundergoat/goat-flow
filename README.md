@@ -30,7 +30,7 @@ npm install --save-dev @blundergoat/goat-flow    # npm
 then run this for the dashboard:
 
 ```bash
-npx goat-flow dashboard .
+npm exec --package=@blundergoat/goat-flow -- goat-flow dashboard .
 ```
 
 For the dashboard's embedded terminal, you'll need `node-pty` to compile. See [Troubleshooting](#troubleshooting) if the terminal doesn't appear.
@@ -168,18 +168,18 @@ Run `npx @blundergoat/goat-flow@latest manifest` to inspect the live agent matri
 The dashboard covers most workflows visually. For CI or scripting, the same features are available as CLI commands:
 
 ```bash
-npx goat-flow dashboard .                  # Launch the dashboard
-npx goat-flow audit .                      # Run audit (pass/fail output)
-npx goat-flow audit . --harness            # Add AI harness scoring
-npx goat-flow audit . --format json        # JSON output for CI
-npx goat-flow audit . --format sarif       # SARIF output for code scanning upload
-npx goat-flow install . --agent claude     # Copy/update system files
-npx goat-flow setup . --agent claude       # Generate setup prompt
-npx goat-flow quality . --agent claude     # Generate quality-assessment prompt
-npx goat-flow redact --output .goat-flow/logs/sessions/handoff.md
-npx goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
-npx goat-flow status .                     # Project state (bare/partial/v0.9/outdated/current/error)
-npx goat-flow manifest                     # Agent support matrix
+npx @blundergoat/goat-flow@latest dashboard .                  # Launch the dashboard
+npx @blundergoat/goat-flow@latest audit .                      # Run audit (pass/fail output)
+npx @blundergoat/goat-flow@latest audit . --harness            # Add AI harness scoring
+npx @blundergoat/goat-flow@latest audit . --format json        # JSON output for CI
+npx @blundergoat/goat-flow@latest audit . --format sarif       # SARIF output for code scanning upload
+npx @blundergoat/goat-flow@latest install . --agent claude     # Copy/update system files
+npx @blundergoat/goat-flow@latest setup . --agent claude       # Generate setup prompt
+npx @blundergoat/goat-flow@latest quality . --agent claude     # Generate quality-assessment prompt
+npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format markdown
+npx @blundergoat/goat-flow@latest status .                     # Project state (bare/partial/v0.9/outdated/current/error)
+npx @blundergoat/goat-flow@latest manifest                     # Agent support matrix
 ```
 
 Use `redact` before saving a session, handoff, review, quality, security, or export draft. It replaces common credential shapes while preserving useful continuation context; it is not perfect DLP or a substitute for reviewing the output.

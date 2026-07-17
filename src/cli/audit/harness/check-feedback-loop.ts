@@ -180,7 +180,7 @@ const feedbackLoopActive: HarnessCheck = {
           "Fix stale footgun/lesson file references or remove local-path markup",
         ],
         [
-          "Run `goat-flow stats . --check` (or `npx goat-flow stats . --check`), then update the cited footgun/lesson entries so every backticked local path resolves or is rewritten as external incident prose.",
+          "Run `npx @blundergoat/goat-flow@latest stats . --check`, then update the cited footgun/lesson entries so every backticked local path resolves or is rewritten as external incident prose.",
         ],
         details,
       );

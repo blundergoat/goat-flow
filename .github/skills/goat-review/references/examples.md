@@ -80,7 +80,7 @@ Use concrete harm and proof class. These examples use sibling skill anchors only
 **PR automated-review overlap:**
 
 ```markdown
-- [SHOULD:patch] [overlap:copilot-pull-request-reviewer] **Report PR metadata ingestion failure explicitly** `references/automated-review.md` (search: `automated-review-uningested`) - If `gh pr view` returns `reviews,comments` but parsing fails, the review must degrade explicitly instead of reporting no bot findings; otherwise duplicated findings look net-new. | Footgun: none | Evidence: OBSERVED | Proof: STATIC
+- [SHOULD:patch] [overlap:copilot-pull-request-reviewer] **Report inline-review ingestion failure explicitly** `references/automated-review.md` (search: `automated-review-uningested`) - If the paginated `pulls/<number>/comments` request fails or loses path-bearing entries, the review must degrade explicitly instead of reporting no bot findings; otherwise duplicated findings look net-new. | Footgun: none | Evidence: OBSERVED | Proof: STATIC
 ```
 
 ## Excuse/Reality Table (Full)

@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-07-13
+last_reviewed: 2026-07-17
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -31,7 +31,7 @@ last_reviewed: 2026-07-13
 
 **Root cause:** I treated an npm script as a transparent binary wrapper while capturing machine-readable output. npm can prepend lifecycle/script text unless invoked silently, which corrupts stdout-only JSON reports.
 
-**Prevention:** For machine-readable gruff reports, use `node_modules/.bin/gruff-ts analyse --format json --fail-on none ...` or an explicitly silent npm invocation. Validate the capture with `JSON.parse` before grouping findings or writing plan evidence. Evidence anchors: `.goat-flow/plans/1.11.0/M01-gruff-ts-zero-findings.md` (search: `For JSON captures, use the local binary directly`).
+**Prevention:** For machine-readable gruff reports, use `node_modules/.bin/gruff-ts analyse --format json --fail-on none ...` or an explicitly silent npm invocation. Validate the capture with `JSON.parse` before grouping findings or writing plan evidence. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `node_modules/.bin`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `--fail-on none`).
 
 ## Lesson: Gruff error-behavior comments need rule vocabulary
 
@@ -91,7 +91,7 @@ last_reviewed: 2026-07-13
 
 **Root cause:** I verified the target gruff rule and typecheck first, then jumped to the expensive full suite before running the cheap local style gates that the round-trip preflight also enforces.
 
-**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `skillDraftValue`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`).
+**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`).
 
 ## Lesson: Size refactors must preserve browser script load graphs in tests
 

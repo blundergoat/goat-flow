@@ -133,12 +133,16 @@ describe("quality subcommand parsing", () => {
 
 describe("skill subcommand parsing", () => {
   it("keeps projectPath at cwd instead of treating 'new' as a path", () => {
+    const redLogPath =
+      ".goat-flow/logs/sessions/2026-07-17-deploy-checks-tdd.md";
     const parsed = parseCLIArgs([
       "skill",
       "new",
       "I want a workflow for deploy checks",
       "--name",
       "deploy-checks",
+      "--red-log",
+      redLogPath,
       "--yes",
     ]);
     assert.equal(parsed.command, "skill");
@@ -148,16 +152,21 @@ describe("skill subcommand parsing", () => {
       parsed.skillDescription,
       "I want a workflow for deploy checks",
     );
+    assert.equal(parsed.skillRedLogPath, resolve(redLogPath));
   });
 
   it("parses an explicit project path after skill new", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-skill-cli-"));
+    const redLogPath =
+      ".goat-flow/logs/sessions/2026-07-17-deploy-checks-tdd.md";
     try {
       const parsed = parseCLIArgs([
         "skill",
         "new",
         projectRoot,
         "I want a workflow for deploy checks",
+        "--red-log",
+        redLogPath,
       ]);
       assert.equal(parsed.command, "skill");
       assert.equal(parsed.skillSubcommand, "new");
@@ -166,6 +175,7 @@ describe("skill subcommand parsing", () => {
         parsed.skillDescription,
         "I want a workflow for deploy checks",
       );
+      assert.equal(parsed.skillRedLogPath, resolve(projectRoot, redLogPath));
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

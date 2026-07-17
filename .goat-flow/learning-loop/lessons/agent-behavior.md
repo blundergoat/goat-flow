@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-07-16
+last_reviewed: 2026-07-17
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -73,6 +73,8 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Recurrence (2026-07-16):** Pre-1.14.0 quality report `2026-07-16-1018-codex-vwcaf` found five new `.goat-flow/scratchpad/related/` citations in `lessons/coordination.md`, `patterns/external-lessons.md`, and `patterns/refactoring.md`. Fix: cite upstream provenance (repo + PR + path + search anchor), writing the upstream path as plain prose - the stale-ref scanner (`src/cli/facts/shared/learning-loop-common.ts`, search: `isCheckableForStaleness`) resolves backticked slash-containing paths locally and fails `feedback-loop-active` when unresolved.
 
+**Recurrence update (2026-07-17):** `.goat-flow/plans/**` and one quality-report path were cited as durable evidence in seven lessons and four footguns; three anchored plan files were already deleted. All replaced with committed anchors or plain prose. The prevention is now structural: `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`) fails evidence-grammar refs to gitignored paths; committed anchor files (README.md, .gitignore, .gitkeep) exempt.
+
 ---
 
 ## Lesson: Agent ignored explicit "next step" command in pasted output
@@ -97,9 +99,9 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Root cause:** The agent generated commit subjects by paraphrasing the diff in abstract verbs ("the change makes X better") instead of naming the concrete edit ("replace shell-specific build steps with Node fs calls"). The prior commit-guidance doc listed format rules and a "what not to commit" list but did not name the failure mode or show a bad-vs-good rewrite, so the rules were easy to satisfy on paper while still emitting low-information subjects. One outlier (`4e0ec5d fix(dashboard): speed up home audit load on Windows`) carried a concrete subject + bulleted body and stood out as the gold standard.
 
-**Why it matters:** Commit messages are the only artifact a future maintainer reads when running `git log`, `git bisect`, or assembling a CHANGELOG. Subjects built from *enhance/improve/streamline/clarify* force every reader to open the diff to learn what shipped, defeating structured commits. The synonym churn ("streamline... enhance clarity" two commits in a row) is a tell that the agent was rewording rather than describing.
+**Why it matters:** Commit messages are what a future maintainer reads in `git log`, `git bisect`, or a CHANGELOG pass. Subjects built from *enhance/improve/streamline/clarify* force readers to open the diff, and back-to-back synonym churn is the tell that the agent reworded instead of described.
 
-**Prevention:** `docs/coding-standards/git-commit.md` - the canonical commit guide, summarised in the auto-read instruction files under `## Commit Messages` - now (a) bans the weak-verb list explicitly, (b) prescribes concrete verbs (*add, remove, replace, rename, fix, deny, gate, harden, cache*), (c) requires a body whenever the subject names more than one axis or has a non-obvious motivation, and (d) includes three bad→good rewrites from the actual recent log so the agent has an imitable pattern, not just abstract rules. The gold-standard `4e0ec5d` body is reproduced inline as the body template (search: "speed up home audit load on Windows" in `docs/coding-standards/git-commit.md`).
+**Prevention:** `docs/coding-standards/git-commit.md` - the canonical commit guide, summarised in the auto-read instruction files under `## Commit Messages` - bans the weak-verb list, prescribes concrete verbs, requires a body for multi-axis or non-obvious subjects, and shows bad→good rewrites from the actual recent log. The gold-standard `4e0ec5d` body is the inline body template (search: "speed up home audit load on Windows" in `docs/coding-standards/git-commit.md`).
 
 ## Lesson: Retrieval terms must name the concrete failure class
 
@@ -153,7 +155,7 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Created:** 2026-04-18
 
-**What happened:** User proposed `.goat-flow/skill-docs/` as a new installed-state location for the three reference files at `workflow/skills/reference/` (`skill-preamble.md`, `skill-conventions.md`, `skill-quality-testing.md`) - part of the install-copy flow, grouping the trio alongside `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/decisions/`. The agent read it as "move/rename `workflow/skills/reference/` → `.goat-flow/skill-docs/`", a restructure leaving `workflow/skills/reference/` depopulated. User had to restate the install relationship: *"workflow contains all the files for the goat-flow system installation ... .goat-flow/skill-docs/ would be used to copy those three files for the goat-flow system itself"*.
+**What happened:** User proposed `.goat-flow/skill-docs/` as a new installed-state location for the three reference files at `workflow/skills/reference/` (`skill-preamble.md`, `skill-conventions.md`, `skill-quality-testing.md`) as part of the install-copy flow. The agent read it as "move/rename `workflow/skills/reference/` → `.goat-flow/skill-docs/`", a restructure leaving `workflow/skills/reference/` depopulated. User had to restate the install relationship: *"workflow contains all the files for the goat-flow system installation ... .goat-flow/skill-docs/ would be used to copy those three files for the goat-flow system itself"*.
 
 **Root cause:** Agent collapsed the `workflow/` vs `.goat-flow/` distinction. goat-flow's architecture has a load-bearing split - `workflow/` is template source (what the package ships), `.goat-flow/` is installed state (what exists in a consumer project after install) - and the install script copies from the former to the latter. When the user names a path under each, the default reading is "install-copy relationship" (both paths exist; one populated from the other at install time), not "rename" (one replaces the other).
 

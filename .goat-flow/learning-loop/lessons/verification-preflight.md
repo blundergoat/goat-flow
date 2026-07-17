@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-07-16
+last_reviewed: 2026-07-17
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -141,7 +141,7 @@ last_reviewed: 2026-07-16
 
 **Recurrence update (2026-07-12):** M02 policy-contract verification ran targeted ESLint against `test/contract/command-phrases.test.ts`; the normal command returned only an ignored-file warning, and `--no-ignore` then failed because the test is outside ESLint's configured TypeScript project. The focused Node test and `npm run typecheck` were the supported gates. After those two failed attempts, verification rewound to the repository-supported scopes instead of forcing ad hoc lint coverage. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`).
 
-**Recurrence update (2026-07-12):** M29's testing gate again listed ignored unit/integration test files in a targeted `npx eslint --max-warnings 0` command. ESLint reported three ignored-file warnings and exited 1 even though the changed source had no lint error. The gate was corrected to lint only the three changed `src/cli/audit/` files; TypeScript, Prettier, and focused Node tests remain the supported verification for the ignored test files. Evidence anchor: `.goat-flow/plans/1.14.0/M29-harness-assurance-semantics.md` (search: `test files are intentionally outside this repo's ESLint scope`).
+**Recurrence update (2026-07-12):** M29's testing gate again listed ignored unit/integration test files in a targeted `npx eslint --max-warnings 0` command. ESLint reported three ignored-file warnings and exited 1 even though the changed source had no lint error. The gate was corrected to lint only the three changed `src/cli/audit/` files; TypeScript, Prettier, and focused Node tests remain the supported verification for the ignored test files. Evidence anchor: `eslint.config.mjs` (search: `"test/**"`) - test files are intentionally outside this repo's ESLint scope.
 
 **Recurrence update (2026-07-13):** M20 hit Prettier on three files, ESLint on tests outside its project, and Knip on four internal type exports. Correction used formatting, scoped source lint/tests, and private types. Evidence: `test/unit/context-report.test.ts` (search: `static context report`).
 

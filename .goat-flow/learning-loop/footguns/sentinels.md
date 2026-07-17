@@ -1,6 +1,6 @@
 ---
 category: sentinels
-last_reviewed: 2026-05-27
+last_reviewed: 2026-07-17
 ---
 
 ## Footgun: Sentinel-position policy is invisible until the LM tries trailing output
@@ -24,7 +24,7 @@ last_reviewed: 2026-05-27
   ```
 
 **Goat-flow applicability:** Goat-flow doesn't currently parse a magic-string submit signal, but any future signal it consumes from agent output is exposed to the same trap. Candidate surfaces:
-- Hook stderr emission from a session-state hook (per `.goat-flow/plans/related-improvement-ideas/M01-session-state-hooks.md`) — when the hook emits `<budget-pressure>...</budget-pressure>` and the agent reads it in its next observation, the block markers' position relative to other hook output matters.
+- Hook stderr emission from a session-state hook (a session-state-hooks improvement idea in a local gitignored plan note) — when the hook emits `<budget-pressure>...</budget-pressure>` and the agent reads it in its next observation, the block markers' position relative to other hook output matters.
 - Dashboard terminal traces that look for protocol markers in PTY output (`src/cli/server/terminal.ts` search: `looksLikePromptSend`).
 - Any future evidence-envelope sentinels.
 

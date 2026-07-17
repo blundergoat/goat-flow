@@ -323,6 +323,22 @@ describe("extractLessonsFacts freshness + placeholder filtering", () => {
     const facts = extractLessonsFacts(fs, stubConfig(), pinnedNow);
     assert.deepEqual(facts.staleRefs, []);
   });
+
+  it("flags a lesson search anchor pointing at a gitignored plans path", () => {
+    // Narrative mentions of local-state paths stay exempt (previous test);
+    // the `(search: ...)` durable-evidence grammar does not.
+    const fs = stubFS(
+      {
+        [`${fixtureDir}verification.md`]:
+          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: anchored to plan\n\nEvidence anchors: `.goat-flow/plans/1.12.0/M01-spike.md` (search: `run-tests`).\n",
+      },
+      { [fixtureDir]: ["verification.md"] },
+    );
+    const facts = extractLessonsFacts(fs, stubConfig(), pinnedNow);
+    assert.deepEqual(facts.staleRefs, [
+      ".goat-flow/plans/1.12.0/M01-spike.md (gitignored path used as durable evidence anchor)",
+    ]);
+  });
 });
 
 describe("extractFootgunFacts search-anchor staleness", () => {
@@ -405,6 +421,38 @@ describe("extractFootgunFacts search-anchor staleness", () => {
     const facts = extractFootgunFacts(fs, stubConfig(), pinnedNow);
     assert.deepEqual(facts.invalidLineRefs, [
       "src/cli/cli.ts:1 (missing semantic anchor)",
+    ]);
+  });
+
+  it("flags a gitignored plans path used as a search anchor even when the file exists", () => {
+    // The never-anchor-to-local-state invariant (footguns/auditor.md): plan
+    // files vanish on clean checkouts, so they can never be durable evidence.
+    // Local existence must not suppress the violation.
+    const fs = stubFS(
+      {
+        [`${fixtureDir}quality.md`]:
+          "---\ncategory: quality\nlast_reviewed: 2026-04-19\n---\n\n## Footgun: plans anchor\n\n**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED\n\nEvidence anchors: `.goat-flow/plans/1.9.0/M00-cleanup.md` (search: `setup-bloat`).\n",
+        ".goat-flow/plans/1.9.0/M00-cleanup.md": "setup-bloat threshold\n",
+      },
+      { [fixtureDir]: ["quality.md"] },
+    );
+    const facts = extractFootgunFacts(fs, stubConfig(), pinnedNow);
+    assert.deepEqual(facts.staleRefs, [
+      ".goat-flow/plans/1.9.0/M00-cleanup.md (gitignored path used as durable evidence anchor)",
+    ]);
+  });
+
+  it("flags a gitignored path on a bare Evidence anchors line", () => {
+    const fs = stubFS(
+      {
+        [`${fixtureDir}auditor.md`]:
+          "---\ncategory: auditor\nlast_reviewed: 2026-04-19\n---\n\n## Footgun: local log anchor\n\n**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED\n\n**Evidence anchors:** `.goat-flow/logs/quality/2026-04-19-codex-abcde.json`\n",
+      },
+      { [fixtureDir]: ["auditor.md"] },
+    );
+    const facts = extractFootgunFacts(fs, stubConfig(), pinnedNow);
+    assert.deepEqual(facts.staleRefs, [
+      ".goat-flow/logs/quality/2026-04-19-codex-abcde.json (gitignored path used as durable evidence anchor)",
     ]);
   });
 });

@@ -163,7 +163,7 @@ last_reviewed: 2026-07-17
 **Trap:** Writing a Stop entry into `.codex/hooks.json` or `.agents/hooks.json` does not mean the agent will ever execute it. On 2026-06-13, a capture fixture with Stop hooks registered for all three agents showed: Claude fired and delivered the full payload; Codex (codex-cli 0.139.0, `features` reports `hooks stable true`, docs document the `Stop` event) never executed the hook across four `codex exec` runs even with `--dangerously-bypass-hook-trust`, project trust, and a project config layer; Antigravity (agy 1.0.6) logged `Loaded hooks.json ... 1 total handlers` and `JSON hook "jsonhook__stop-capture_Stop_0_0": executing command` but the command never ran because execution waits on `~/.gemini/trusted_hooks.json` review (`toolPermission=request-review`) and print mode exits first.
 
 **Evidence:**
-- M02b Evidence section, `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` (search: `Stop payload fields and supported-agent notes`).
+- The 2026-06-13 capture-fixture runs recorded in the M02b plan-checkbox-guard milestone (local gitignored plan file; the per-agent delivery results are restated in full in the Trap paragraph above).
 - ADR-039 (search: `Remove Plan Checkbox Guard`) removes the plan checkbox guard from current shipped hooks and keeps only a tombstone cleanup path.
 - `post-turn-safety` was held to the same standard on 2026-06-14: `antigravity` was added to its `unsupportedAgents` (codex was already gated), so goat-flow does not ship a default-on Stop hook to an agent whose delivery is unverified. A default-on *secret scanner* whose Stop event may never fire is false assurance - arguably worse than shipping nothing, because the dashboard still reports it "installed."
 

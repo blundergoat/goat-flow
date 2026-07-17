@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-07-13
+last_reviewed: 2026-07-17
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -98,7 +98,7 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 
 **Why it happens:** Footguns get created when an incident hits. When the bug is fixed, the fixer often updates code + tests + changelog but does not update the footgun text. The Status tag stays `active` because the *principle* (e.g., "two paths checking the same shape must call one predicate") is still valid — but the *evidence* (the specific identifier the Symptoms paragraph names) is now stale. The Prevention rules and the Symptoms paragraph live at different lifecycles, and no single check enforces that they stay in sync.
 
-**Evidence:** Caught by the Codex quality report `.goat-flow/logs/quality/2026-05-25-2006-codex-jqclh.json` flagging `.goat-flow/learning-loop/footguns/setup.md` (search: `Codex install migration matcher and post-install validator used different`). The original active entry's Symptoms paragraph named a search anchor for an obsolete matcher, but `rg` returned zero hits in `workflow/install-goat-flow.sh` - the installer was refactored (per the v1.8.0 changelog entry "Codex install: filesystem permissions migrated in place") to use a single `isInvalidNoneKey` predicate across both the migration awk pass and the validator awk pass. The setup footgun is now resolved with current anchors, preserving the prevention rule without sending agents after a removed symbol.
+**Evidence:** Caught by Codex quality report 2026-05-25-2006-codex-jqclh (local gitignored quality history) flagging `.goat-flow/learning-loop/footguns/setup.md` (search: `Codex install migration matcher and post-install validator used different`). The original active entry's Symptoms paragraph named a search anchor for an obsolete matcher, but `rg` returned zero hits in `workflow/install-goat-flow.sh` - the installer was refactored (per the v1.8.0 changelog entry "Codex install: filesystem permissions migrated in place") to use a single `isInvalidNoneKey` predicate across both the migration awk pass and the validator awk pass. The setup footgun is now resolved with current anchors, preserving the prevention rule without sending agents after a removed symbol.
 
 **Prevention:**
 1. When you fix a bug that has a footgun entry, in the same PR EITHER (a) rewrite the Symptoms paragraph to describe the principle the fix demonstrates and update the search anchors to point at the current shape, OR (b) move the entry to the file's "Resolved Entries" section with a one-line summary of what was learned. Do not leave an `active` footgun whose Symptoms anchors don't resolve.

@@ -14,30 +14,41 @@ review accountable ("Copilot 11, Manual 3, accuracy 100%").
 
 ## Ingestion
 
-The Step 0 `gh pr view` already includes `reviews,comments` in its `--json`
-field list. Parse the returned payload:
+The Step 0 `gh pr view` payload provides PR metadata, review submissions,
+and issue-level comments. It does **not** provide the path-bearing inline
+review comments needed for finding overlap.
 
-- `reviews[]` - structured review submissions; check `author.login` for
-  the bot inventory below.
-- `comments[]` - issue-comment-style entries on the PR; same author check.
+Resolve `<owner>/<repo>` and `<number>` from the PR URL and number, then
+fetch every inline review comment:
 
-Treat findings authored by any of these as the **automated-review index**:
+```bash
+gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=100'
+```
 
-- `copilot-pull-request-reviewer`
-- `github-advanced-security`
-- `claude[bot]` (Anthropic GitHub App)
-- any other repo-specific bot the user names
+The `pulls/<number>/comments` response is the authoritative known-findings set;
+each entry exposes `.user.login`, `.path`, `.line` or `.original_line`,
+and `.body`. Use `reviews[]` only to detect reviewer participation or summary
+claims; never manufacture file positions from review summaries. Use
+`comments[]` only as issue-level context.
 
-For each automated finding, record `{ reviewer, file, line?, brief }`
-where `brief` is the first 80 chars of the finding body. The index is the
-authoritative known-findings set for the rest of the review.
+Normalize known GitHub identities before matching:
 
-If no automated reviewers commented, record `no-automated-review-present`
-in Review Integrity and skip overlap tagging.
+- `Copilot` and `copilot-pull-request-reviewer` -> `copilot-pull-request-reviewer`
+- `github-advanced-security[bot]` and `github-advanced-security` -> `github-advanced-security`
+- `claude[bot]` -> `claude`
+- any other repo-specific bot the user names -> its stable login
 
-If `gh pr view` fetched the payload but parsing failed (rate-limited,
-schema change, or no parsable bot entries), flag
-`automated-review-uningested` in Review Integrity.
+For each automated finding, record `{ reviewer, file, line?, brief }`,
+where `brief` is the first 80 chars of the inline comment body. Preserve the
+comment URL when available so a disputed overlap can be checked.
+
+If the inline-comments response succeeds with no bot-authored entries and no
+known bot review claims findings, record `no-automated-review-present` in
+Review Integrity and skip overlap tagging.
+
+If the endpoint fails, pagination is incomplete, parsing loses path/body fields,
+or a known bot review claims findings but no usable inline entries are returned,
+flag `automated-review-uningested` in Review Integrity.
 
 ## Pass 2 Overlap Tagging
 
@@ -69,10 +80,10 @@ Outside PR mode: omit the line entirely or write `n/a`.
 
 ## Degradation Flag
 
-`automated-review-uningested` joins the existing flags list. Trigger when
-`gh pr view` returned `reviews,comments` but parsing did not produce a
-usable bot finding index. Distinct from `no-automated-review-present`
-which is the legitimate "no bot has commented yet" state.
+`automated-review-uningested` joins the existing flags list. Trigger when the
+inline-comments endpoint or parser did not produce a complete path-bearing bot
+finding index. Distinct from `no-automated-review-present`, which is the
+legitimate "no bot has commented yet" state.
 
 ## Why This Surface Exists
 

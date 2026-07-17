@@ -625,6 +625,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       "clean-deprecated": { type: "boolean", default: false },
       dev: { type: "boolean", default: false },
       draft: { type: "string" },
+      "red-log": { type: "string" },
       interactive: { type: "boolean", default: false },
       name: { type: "string" },
       skill: { type: "string" },

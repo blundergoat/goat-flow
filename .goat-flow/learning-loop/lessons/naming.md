@@ -1,6 +1,6 @@
 ---
 category: naming
-last_reviewed: 2026-05-31
+last_reviewed: 2026-07-17
 ---
 
 ## Lesson: Boundary payload names are not placeholder debt
@@ -11,7 +11,7 @@ last_reviewed: 2026-05-31
 
 **Root cause:** The default placeholder list treats `value`, `data`, and `item` as generic local names. That is useful in business logic, but too broad for goat-flow's boundary-heavy code, where validators often start with unknown input and narrow it by shape.
 
-**Prevention:** Keep `.gruff-ts.yaml` `placeholderNames` focused on throwaway placeholders (`foo`, `bar`, `baz`, `tmp`, `temp`, `thing`, `stuff`). Rename numbered or domain-ambiguous symbols case-by-case, but do not churn boundary validators away from `value` or `data` unless the narrower domain is already known. Evidence anchors: `.gruff-ts.yaml` (search: `placeholderNames`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `naming.identifier-quality`).
+**Prevention:** Keep `.gruff-ts.yaml` `placeholderNames` focused on throwaway placeholders (`foo`, `bar`, `baz`, `tmp`, `temp`, `thing`, `stuff`). Rename numbered or domain-ambiguous symbols case-by-case, but do not churn boundary validators away from `value` or `data` unless the narrower domain is already known. Evidence anchors: `.gruff-ts.yaml` (search: `placeholderNames`).
 
 ---
 
@@ -23,7 +23,7 @@ last_reviewed: 2026-05-31
 
 **Root cause:** `naming.short-variable` is intentionally syntax-local. It cannot distinguish a throwaway `r` from a conventional `ws` WebSocket handle or `md` Markdown renderer without project vocabulary.
 
-**Prevention:** Keep `.gruff-ts.yaml` `acceptedAbbreviations` limited to domain-standard two-letter terms, and rename concentrated one-letter locals where a clearer name is obvious. Do not add broad one-letter names such as `r`, `a`, `b`, or `m` to the allowlist. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `naming.short-variable`).
+**Prevention:** Keep `.gruff-ts.yaml` `acceptedAbbreviations` limited to domain-standard two-letter terms, and rename concentrated one-letter locals where a clearer name is obvious. Do not add broad one-letter names such as `r`, `a`, `b`, or `m` to the allowlist. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`).
 
 ---
 
@@ -35,7 +35,7 @@ last_reviewed: 2026-05-31
 
 **Root cause:** Word-boundary replacement is not safe for one-letter identifiers in TypeScript source because regex flags, string literals, and other syntax-adjacent one-letter tokens can also sit on word boundaries.
 
-**Prevention:** For one-letter identifiers, inspect the local AST-shaped context or use a narrower pattern such as `const m =` plus explicit call-site replacements. Always run the focused test after the rename and before expanding the rename pattern to other files. Evidence anchors: `test/unit/manifest.test.ts` (search: `renderManifestMarkdown`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `naming.short-variable`).
+**Prevention:** For one-letter identifiers, inspect the local AST-shaped context or use a narrower pattern such as `const m =` plus explicit call-site replacements. Always run the focused test after the rename and before expanding the rename pattern to other files. Evidence anchors: `test/unit/manifest.test.ts` (search: `renderManifestMarkdown`).
 
 ---
 
@@ -47,7 +47,7 @@ last_reviewed: 2026-05-31
 
 **Root cause:** `naming.boolean-prefix` enforces an `is/has/can`-style grammar, but goat-flow has two other boolean naming grammars: UI state (`show*`, `loading*`, `selected*`, `terminal*`) and CLI/API flag names that intentionally match query params, JSON fields, or argv switches. Renaming those mechanically would make boundary code less traceable.
 
-**Prevention:** Keep `.gruff-ts.yaml` `booleanPrefixes` extended for camelCase state and protocol prefixes used across dashboard and CLI surfaces. Do not use the prefix list to hide exact lowercase flag names; those remain fix-or-baseline candidates because gruff's prefix matcher requires an uppercase boundary after the prefix. Evidence anchors: `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `naming.boolean-prefix`).
+**Prevention:** Keep `.gruff-ts.yaml` `booleanPrefixes` extended for camelCase state and protocol prefixes used across dashboard and CLI surfaces. Do not use the prefix list to hide exact lowercase flag names; those remain fix-or-baseline candidates because gruff's prefix matcher requires an uppercase boundary after the prefix. Evidence anchors: `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`).
 
 ---
 

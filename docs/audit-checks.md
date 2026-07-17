@@ -1,13 +1,13 @@
 # Deterministic Audit Checks
 
-`npx goat-flow audit` currently has 38 executed check rows and 37 unique stable check ids:
+`npx @blundergoat/goat-flow@latest audit` currently has 38 executed check rows and 37 unique stable check ids:
 
 - **20 build checks**: 16 setup-scope checks plus 4 agent-scope checks
 - **18 harness checks**: additional checks enabled by `--harness`
 
 The totals differ because `session-logs` runs once in setup scope and once in the Recovery harness concern. The duplicate id intentionally represents the same invariant in two execution scopes; changing it would change downstream SARIF rule identity.
 
-Default `npx goat-flow audit .` runs the build checks. `npx goat-flow audit . --harness` runs those same build checks plus the harness checks. Harness checks are still deterministic even when they are typed as `integrity`, `advisory`, or `metric`; the type changes scoring behavior, not whether the check is deterministic.
+Default `npx @blundergoat/goat-flow@latest audit .` runs the build checks. `npx @blundergoat/goat-flow@latest audit . --harness` runs those same build checks plus the harness checks. Harness checks are still deterministic even when they are typed as `integrity`, `advisory`, or `metric`; the type changes scoring behavior, not whether the check is deterministic.
 
 Machine-readable output is available with `--format json` or `--format sarif`. SARIF output registers each active audit check id as a SARIF rule id and emits results only for actionable audit findings: failing setup/agent/harness checks plus drift/content findings when those optional checks are enabled. SARIF rule ids are derived from the stable goat-flow check ids below, so renaming a check id is a downstream alert-identity change for SARIF consumers.
 
@@ -64,7 +64,7 @@ Aggregate-mode nuance:
 
 ## Harness Checks
 
-`npx goat-flow audit . --harness` adds **18** deterministic harness-completeness checks on top of the 20 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
+`npx @blundergoat/goat-flow@latest audit . --harness` adds **18** deterministic harness-completeness checks on top of the 20 build checks. These checks are grouped by concern and typed as `integrity`, `advisory`, or `metric`. JSON output exposes each check's raw `status` plus `displayStatus`, `impact`, and optional `assurance` so score-only metric/advisory warnings and platform-limited passes do not look like ordinary hard failures or full-assurance passes.
 
 | Concern | Check id | Type | What it validates |
 |---------|----------|------|-------------------|
@@ -91,10 +91,10 @@ Aggregate-mode nuance:
 
 | Command | Checks included | Notes |
 |---------|-----------------|-------|
-| `npx goat-flow audit .` | 16 setup + 4 agent = 20 build checks | Structural install gate only |
-| `npx goat-flow audit . --agent <id>` | Same 20 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
-| `npx goat-flow audit . --check-drift` | 20 build checks + artifact drift/integrity | Validates canonical sources, installed mirrors, IDs, frontmatter, and referenced resources |
-| `npx goat-flow audit . --check-content` | 20 build checks + factual/content drift | Validates current documentation claims and removed-command examples |
-| `npx goat-flow audit . --harness` | 20 build + 18 harness = 38 checks | Adds harness completeness, still deterministic |
+| `npx @blundergoat/goat-flow@latest audit .` | 16 setup + 4 agent = 20 build checks | Structural install gate only |
+| `npx @blundergoat/goat-flow@latest audit . --agent <id>` | Same 20 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
+| `npx @blundergoat/goat-flow@latest audit . --check-drift` | 20 build checks + artifact drift/integrity | Validates canonical sources, installed mirrors, IDs, frontmatter, and referenced resources |
+| `npx @blundergoat/goat-flow@latest audit . --check-content` | 20 build checks + factual/content drift | Validates current documentation claims and removed-command examples |
+| `npx @blundergoat/goat-flow@latest audit . --harness` | 20 build + 18 harness = 38 checks | Adds harness completeness, still deterministic |
 
-Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx goat-flow quality`.
+Harness mode is still structural. It does not judge whether the content is actually good for the project; that remains the job of `npx @blundergoat/goat-flow@latest quality`.
