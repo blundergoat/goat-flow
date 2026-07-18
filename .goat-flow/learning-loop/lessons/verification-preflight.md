@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-18
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -107,7 +107,11 @@ last_reviewed: 2026-07-17
 
 **Recurrence update (2026-07-13):** M04/M09 contracts reached GREEN and typecheck exited 0 before Prettier rejected the touched test. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `requires an evidence budget before optional orchestration`).
 
+**Recurrence update (2026-07-18):** The v1.14.0 skill-quality truncation regressions reached GREEN and typecheck exited 0 before scoped Prettier rejected the new dashboard summary test and its touched fragment. Evidence: `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`).
+
 **Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
+
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-07-18
 
 ---
 

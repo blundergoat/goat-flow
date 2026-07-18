@@ -20,8 +20,45 @@ import {
   writeText,
   writeSkill,
   getRepoArtifacts,
+  cloneQualityConfig,
+  DEFAULT_QUALITY_CONFIG,
 } from "./helpers.js";
 import { composeArtifactQualityPrompt } from "../../../src/cli/prompt/compose-quality.js";
+import { composeArtifactContent } from "../../../src/cli/quality/skill-quality-content.js";
+
+describe("artifact composition", () => {
+  it("keeps the primary skill ahead of shared context when composition truncates", () => {
+    const projectRoot = makeTempProject();
+    const config = cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
+    config.composition.skillPreamblePath = "preamble.md";
+    config.composition.skillConventionsPath = null;
+    config.composition.maxComposedBytes = 1024;
+    writeText(join(projectRoot, "preamble.md"), "P".repeat(2000));
+    const rawContent = [
+      "# /primary-probe",
+      "Primary workflow evidence must be assessed before shared context.",
+      "PRIMARY-SKILL-TAIL",
+    ].join("\n");
+
+    const composed = composeArtifactContent(
+      projectRoot,
+      {
+        id: "skill:primary-probe",
+        name: "primary-probe",
+        path: ".claude/skills/primary-probe/SKILL.md",
+        kind: "skill",
+        source: "installed",
+      },
+      rawContent,
+      config,
+      { scanDisk: false },
+    );
+
+    assert.equal(composed.sources[0], "SKILL.md");
+    assert.match(composed.composed, /PRIMARY-SKILL-TAIL/u);
+    assert.deepEqual(composed.notes, ["composition truncated at 1KB"]);
+  });
+});
 
 describe("artifact discovery", () => {
   it("discovers installed skills from .claude/skills/", () => {

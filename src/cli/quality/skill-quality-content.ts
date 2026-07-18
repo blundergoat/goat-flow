@@ -1,6 +1,6 @@
 /**
  * Filesystem-facing layer of skill-quality scoring: discovers artifacts on disk, safely reads their
- * content under byte caps, composes the scoring surface (preamble, conventions, and skill-local
+ * content under byte caps, composes the scoring surface (primary skill, shared guidance, and skill-local
  * references), and provides the small text utilities (heading counts, frontmatter stripping, token
  * estimate) the metric scorers call.
  *
@@ -367,6 +367,12 @@ export function composeArtifactContent(
   const chunks: string[] = [];
   const sources: string[] = [];
   const notes: string[] = [];
+
+  // The artifact under review owns the bounded window. Shared guidance and references enrich any
+  // remaining space but cannot displace the primary skill evidence that the score describes.
+  chunks.push(rawContent);
+  sources.push("SKILL.md");
+
   if (config.composition.skillPreamblePath) {
     const preamble = readOptionalText(
       join(projectRoot, config.composition.skillPreamblePath),
@@ -390,9 +396,6 @@ export function composeArtifactContent(
       sources.push(basename(config.composition.skillConventionsPath));
     }
   }
-
-  chunks.push(rawContent);
-  sources.push("SKILL.md");
 
   if (scanDisk) {
     const skillDir = dirname(join(projectRoot, artifact.path));
