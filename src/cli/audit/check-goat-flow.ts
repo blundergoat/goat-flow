@@ -88,12 +88,21 @@ const REQUIRED_SKILL_DOC_FILES = [
   ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
 ];
 
-// Un-ignore patterns the goat-flow-gitignore template installs into
-// `.goat-flow/.gitignore`. The template ignores everything (`*`) by default,
-// then re-includes these committed surfaces. Pre-1.6.1 installs are missing
-// the old skill-doc entries, which silently hides the committed docs and hook
-// policy files from git even though the files exist on disk.
-const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
+// Effective (non-comment) lines the goat-flow-gitignore template installs
+// into `.goat-flow/.gitignore`: the ignore-everything default, every
+// re-include of a committed surface, and the local-log content ignores.
+// Stale installs silently hide committed docs, hook policy, top-level guides,
+// or workspace anchors from git even though the files exist on disk.
+// Keep in sync with workflow/setup/reference/goat-flow-gitignore - a parity
+// test derives the expected list from that template, so drift fails CI.
+export const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
+  "*",
+  "!.gitignore",
+  "!config.yaml",
+  "!architecture.md",
+  "!code-map.md",
+  "!glossary.md",
+  "!security-policy.md",
   "!learning-loop/",
   "!learning-loop/**",
   "!skill-docs/",
@@ -102,19 +111,31 @@ const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!hooks/**",
   "!plans/",
   "!plans/**",
+  "!scratchpad/",
+  "!scratchpad/**",
   "!logs/",
   "!logs/sessions/",
   "!logs/sessions/.gitkeep",
+  "logs/sessions/*.md",
   "!logs/sessions/README.md",
   "!logs/quality/",
+  "logs/quality/*.json",
+  "logs/quality/*.md",
   "!logs/quality/README.md",
   "!logs/events/",
+  "logs/events/*.jsonl",
   "!logs/events/README.md",
   "!logs/critiques/",
+  "logs/critiques/*.md",
   "!logs/critiques/README.md",
   "!logs/review/",
+  "logs/review/*.txt",
+  "logs/review/*.json",
+  "logs/review/*.md",
   "!logs/review/README.md",
   "!logs/security/",
+  "logs/security/*.md",
+  "logs/security/*.json",
   "!logs/security/README.md",
 ];
 
@@ -404,7 +425,7 @@ const goatFlowGitignoreContent: BuildCheck = {
     if (missing.length === 0) return null;
     return {
       check: "goat-flow gitignore exceptions",
-      message: `.goat-flow/.gitignore is missing required un-ignore entries: ${missing.join(", ")}. Stale gitignores silently hide committed skill docs, hook policy, or plan anchors from git.`,
+      message: `.goat-flow/.gitignore is missing required entries: ${missing.join(", ")}. Stale gitignores silently hide committed skill docs, hook policy, top-level guides, or workspace anchors from git - or over-commit local-only logs.`,
       evidence: ".goat-flow/.gitignore",
       howToFix:
         "Run `goat-flow install . --agent <id>` to refresh .goat-flow/.gitignore from the current template. After it overwrites, `git add .goat-flow/skill-docs/playbooks/ .goat-flow/skill-docs/` to track files that were previously hidden.",

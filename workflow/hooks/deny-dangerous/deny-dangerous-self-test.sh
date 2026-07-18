@@ -720,7 +720,9 @@ run_full() {
   expect_block paths "cat ./secrets/prod.pfx" "pfx file"
   expect_block paths "cat deploy.pem" "pem file"
   expect_block paths "git ls-files .env" "git ls-files env"
-  expect_block paths "echo TOKEN > .env.example" ".env.example write"
+  expect_allow paths "echo TOKEN > .env.example" ".env.example write allowed"
+  expect_block paths "echo TOKEN > .env" ".env write"
+  expect_block paths "echo TOKEN >> .env.local" ".env.local append write"
   expect_allow paths "git status # .env" "secret path in shell comment"
   expect_allow paths "printf '%s\n' '# .env'" "secret path inside quoted text"
   expect_allow paths "jq -r .key file.json" "jq bare key query"
@@ -844,16 +846,16 @@ run_full() {
   _literal_subst+="'"
   expect_allow shell "printf '%s\n' ${_literal_subst}" "single-quoted substitution-looking text does not trip opener cap"
 
-  # --- .env.example redirect handling. Regression: any redirect (even a bare
-  # 2>&1 / 2>/dev/null) was treated as a write to .env.example. Reads with
-  # non-targeting redirects must pass; real writes to it must block. ---
+  # --- .env.example is sample material: reads AND writes are allowed. Real
+  # .env* files stay blocked in both directions; redirects that merely dup or
+  # discard stderr are still reads. ---
   expect_allow paths "ls .env.example 2>&1" ".env.example read with stderr dup"
   expect_allow paths "cat .env.example 2>/dev/null" ".env.example read discarding stderr"
   expect_allow paths "cat .env.example > /tmp/example-copy.txt" ".env.example read redirected elsewhere"
-  expect_block paths "echo TOKEN >> .env.example" ".env.example append write"
-  expect_block paths "printf x >.env.example" ".env.example clobber write without space"
-  expect_block paths "echo TOKEN > ./.env.example" ".env.example dot-slash write"
-  expect_block paths "echo TOKEN > fixtures/.env.example" ".env.example subdir write"
+  expect_allow paths "echo TOKEN >> .env.example" ".env.example append write allowed"
+  expect_allow paths "printf x >.env.example" ".env.example clobber write allowed"
+  expect_allow paths "echo TOKEN > ./.env.example" ".env.example dot-slash write allowed"
+  expect_allow paths "echo TOKEN > fixtures/.env.example" ".env.example subdir write allowed"
   expect_allow paths "cat fixtures/.env.example 2>&1" "path-prefixed .env.example read with stderr dup"
 
   # --- Local data may be piped into explicit inline interpreter snippets or

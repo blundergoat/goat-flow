@@ -44,9 +44,9 @@ describe("agent config template parity", () => {
     );
 
     // Env policy: deny rules beat allow rules on BOTH agents, so a broad
-    // **/.env* read deny would shadow .env.example. Each real env variant is
-    // denied individually instead; .env.example stays readable (matching the
-    // Bash deny hook) while writes stay blocked via Claude's Edit(**/.env*).
+    // **/.env* deny would shadow .env.example. Each real env variant is
+    // denied individually instead - for Read AND Edit - so .env.example stays
+    // readable and writable (matching the Bash deny hook).
     const envDenyPatterns = [
       "**/.env",
       "**/.env.local",
@@ -62,6 +62,10 @@ describe("agent config template parity", () => {
         claudeReadPatterns.has(pattern),
         `Claude template should deny Read(${pattern})`,
       );
+      assert.ok(
+        claudeDeny.includes(`Edit(${pattern})`),
+        `Claude template should deny Edit(${pattern})`,
+      );
       assert.match(
         codexTemplate,
         new RegExp(`"${escapeRegExp(pattern)}"\\s*=\\s*"deny"`),
@@ -72,18 +76,22 @@ describe("agent config template parity", () => {
       !claudeReadPatterns.has("**/.env*"),
       "broad Read(**/.env*) would shadow the .env.example allow (deny wins)",
     );
+    assert.ok(
+      !claudeDeny.includes("Edit(**/.env*)"),
+      "broad Edit(**/.env*) would shadow the .env.example edit allow (deny wins)",
+    );
     assert.doesNotMatch(
       codexTemplate,
       new RegExp(`"${escapeRegExp("**/.env*")}"\\s*=\\s*"deny"`),
       "broad **/.env* would deny .env.example on Codex",
     );
     assert.ok(
-      claudeDeny.includes("Edit(**/.env*)"),
-      "env writes stay broadly denied on Claude",
-    );
-    assert.ok(
       claudeAllow.includes("Read(**/.env.example)"),
       "sample env allow entry present on Claude",
+    );
+    assert.ok(
+      claudeAllow.includes("Edit(**/.env.example)"),
+      "sample env edit allow entry present on Claude",
     );
     assert.match(codexTemplate, /env\.example stays readable/);
 

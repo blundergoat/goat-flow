@@ -5,7 +5,7 @@
  * Fixtures cover complete, partial, and malformed goat-plan milestones.
  */
 import { spawnSync } from "node:child_process";
-import { describe, it } from "node:test";
+import { describe, it, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
@@ -13,6 +13,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -74,6 +75,29 @@ function runPlansExport(...args: string[]) {
   );
 }
 
+/** Create a symlink, or skip the test on hosts that forbid unprivileged links. */
+function symlinkOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+): boolean {
+  try {
+    symlinkSync(target, link);
+    return true;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error as NodeJS.ErrnoException).code === "EPERM"
+    ) {
+      testContext.skip(
+        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
+      );
+      return false;
+    }
+    throw error;
+  }
+}
+
 describe("plans export", () => {
   // A complete plan keeps every gate and checkbox future issue adapters need.
   it("parses complete milestone fields without warnings", () => {
@@ -110,6 +134,34 @@ describe("plans export", () => {
     assert.ok(record.warnings.includes("missing status"));
     assert.ok(record.warnings.includes("missing verification gate"));
     assert.ok(record.warnings.includes("missing exit criteria"));
+  });
+
+  // Handoff-grade milestones use a `## Objective` section and bare `Status:` line.
+  it("parses section-style objectives and plain status lines", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# Milestone 01: Prove refresh-token rotation",
+        "Status: not-started",
+        "",
+        "## Objective",
+        "",
+        "Prove the provider issues rotated refresh tokens.",
+        "",
+        "## Tasks",
+        "",
+        "- [ ] [RISKY] Verify rotation",
+        "",
+      ].join("\n"),
+      "M01-prove-rotation.md",
+    );
+
+    assert.equal(record.status, "not-started");
+    assert.equal(
+      record.objective,
+      "Prove the provider issues rotated refresh tokens.",
+    );
+    assert.ok(!record.warnings.includes("missing status"));
+    assert.ok(!record.warnings.includes("missing objective"));
   });
 
   // A body without its milestone heading is malformed because an issue title cannot be inferred safely.
@@ -357,6 +409,80 @@ describe("plans export", () => {
       assert.equal(result.status, 2);
       assert.match(result.stderr, /JSON --output must be a file/iu);
       assert.doesNotMatch(result.stderr, /EISDIR/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  // A directory shadowing one generated filename must fail before ANY milestone
+  // is written; a forced regeneration must never leave a partial bundle.
+  it("fails atomically when a forced Markdown destination is a directory", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
+    const planPath = join(temporaryRoot, "plan");
+    const outputDirectory = join(temporaryRoot, "out");
+    writePlanFixture(planPath, completeMilestoneBody());
+    writePlanFixture(planPath, completeMilestoneBody(), "M43-second.md");
+    mkdirSync(join(outputDirectory, "M43-second.md"), { recursive: true });
+
+    try {
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "markdown",
+        "--output",
+        outputDirectory,
+        "--force",
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /regular file or absent/u);
+      assert.doesNotMatch(result.stderr, /EISDIR/u);
+      assert.ok(
+        !existsSync(join(outputDirectory, "M42-portable-plan.md")),
+        "no partial bundle may be written before the collision fails",
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  // A symlinked generated filename must never be followed to an outside file,
+  // even when the user authorized replacement with --force.
+  it("refuses symlinked Markdown destinations even with force", (testContext: TestContext) => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
+    const planPath = join(temporaryRoot, "plan");
+    const outputDirectory = join(temporaryRoot, "out");
+    const victimPath = join(temporaryRoot, "victim.txt");
+    writePlanFixture(planPath, completeMilestoneBody());
+    mkdirSync(outputDirectory, { recursive: true });
+    writeFileSync(victimPath, "keep\n", "utf-8");
+
+    try {
+      if (
+        !symlinkOrSkip(
+          testContext,
+          victimPath,
+          join(outputDirectory, "M42-portable-plan.md"),
+        )
+      ) {
+        return;
+      }
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "markdown",
+        "--output",
+        outputDirectory,
+        "--force",
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /regular file or absent/u);
+      assert.equal(
+        readFileSync(victimPath, "utf-8"),
+        "keep\n",
+        "the symlink target must remain untouched",
+      );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

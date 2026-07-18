@@ -129,6 +129,62 @@ describe("managed setup preview", () => {
     assert.doesNotMatch(state, new RegExp(projectPath, "u"));
   });
 
+  /**
+   * Fixture reproduces a target installed before install-state existed: a
+   * differing system-owned file with no baseline. The upgrade must adopt and
+   * refresh it without --force, then record a baseline for the next run.
+   */
+  it("adopts pre-baseline managed files instead of blocking the upgrade", () => {
+    const projectPath = makeTempProject();
+    const managedReadmePath = join(
+      projectPath,
+      ".goat-flow",
+      "logs",
+      "quality",
+      "README.md",
+    );
+    const legacyBody = "older-package readme body\n";
+    mkdirSync(join(projectPath, ".goat-flow", "logs", "quality"), {
+      recursive: true,
+    });
+    writeFileSync(managedReadmePath, legacyBody);
+
+    const dryRun = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(dryRun.status, 0, dryRun.stderr || dryRun.stdout);
+    const report = JSON.parse(dryRun.stdout) as {
+      verdict: string;
+      files: Array<{ path: string; state: string; action: string }>;
+    };
+    assert.equal(report.verdict, "warning");
+    const adoptedFile = report.files.find(
+      (file) => file.path === ".goat-flow/logs/quality/README.md",
+    );
+    assert.equal(adoptedFile?.state, "adopted");
+    assert.equal(adoptedFile?.action, "replace");
+
+    const upgrade = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(upgrade.status, 0, upgrade.stderr || upgrade.stdout);
+    assert.notEqual(
+      readFileSync(managedReadmePath, "utf-8"),
+      legacyBody,
+      "the adopted file must be refreshed to the current package bytes",
+    );
+    assert.equal(
+      existsSync(
+        join(projectPath, ".goat-flow", "install-state", "codex.json"),
+      ),
+      true,
+      "the first managed upgrade must record a baseline",
+    );
+  });
+
   it("blocks a local managed edit until the user supplies force", () => {
     const projectPath = makeTempProject();
     const firstInstall = runCliInstaller(projectPath, "--agent", "codex");

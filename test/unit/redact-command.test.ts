@@ -80,6 +80,37 @@ describe("durable artifact redaction", () => {
     assert.match(scrubbed, /\[REDACTED:private-key\]/u);
   });
 
+  // Compact JSON keeps secrets mid-line; fields must scrub without a line anchor.
+  it("redacts fields inside compact JSON objects", () => {
+    const scrubbed = scrubDurableText(
+      '{"password":"hunter2","user":"me","auth":{"token":"opaque-value"}}',
+    );
+
+    assert.equal(
+      scrubbed,
+      '{"password":"[REDACTED:field]","user":"me","auth":{"token":"[REDACTED:field]"}}',
+    );
+  });
+
+  // Unquoted object notation still scrubs when the value ends at a delimiter.
+  it("redacts unquoted field values that end at a delimiter or line end", () => {
+    assert.equal(
+      scrubDurableText("{password: hunter2, user: me}"),
+      '{password: "[REDACTED:field]", user: me}',
+    );
+    assert.equal(
+      scrubDurableText("password: hunter2"),
+      'password: "[REDACTED:field]"',
+    );
+  });
+
+  // Keyword-led prose is guidance, not a credential assignment; it must survive.
+  it("preserves prose lines that begin with a credential keyword", () => {
+    const proseLine = "Token: use the CI-scoped one for deploys";
+
+    assert.equal(scrubDurableText(proseLine), proseLine);
+  });
+
   // Opaque flag values need redaction even when the option begins the input or a later line.
   it("redacts credential flags at input and line starts", () => {
     const scrubbed = scrubDurableText(

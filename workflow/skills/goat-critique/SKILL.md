@@ -84,15 +84,15 @@ Execute in this order:
 
 **1. Context leak scan.** Grep Agent C output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Only flag references absent from Agent C's input. Untraceable match = CONTEXT LEAK; discard and re-spawn stricter. **Framework-self exemption:** for artifacts inside `.goat-flow/`, `skills/goat-*`, or a goat-flow instruction file, skip `.goat-flow/` and `goat-*` term scans. Check only structural navigation leaks: file paths, config keys, or architecture sections absent from the input.
 
-**1b. Completeness gate.** Verify each sub-agent returned required fields in either its findings or a clean-result attestation. A clean result must include `Evidence reviewed:`, rubric coverage, `Second-pass result:`, `Residual uncertainty:`, required lens fields, overall assessment, and one strength. Incomplete → re-spawn once.
+**1b. Completeness gate.** Verify each sub-agent returned required fields in either its findings or a clean-result attestation (`Evidence reviewed:` through `Residual uncertainty:` and strength per the reference pack, plus B's unconditional ranked alternative). Incomplete → re-spawn once.
 
 **2. Classify each finding:** **Consensus** (≥2 agents, severity within ±1), **Split** (≥2 agents, severity differs ≥2 levels or explicit reject vs blocking), **Unique** (one agent only). Silence is not a dismiss; treat as Unique.
 
 **3. Score each sub-agent's critique** on Grounding, Specificity, Actionability, Coverage, and Calibration.
 
-**4. Verify sub-agent dimension coverage.** Skim each agent's findings; confirm each claimed dimension has substantive content. Demote unsubstantiated claims. Use orchestrator-verified dimensions as input to step 5.
+**4. Verify sub-agent dimension coverage.** Skim each agent's findings, or a clean attestation's `Rubric coverage:` entries; confirm each claimed dimension has substantive content or named evidence. Demote unsubstantiated claims. Use orchestrator-verified dimensions as input to step 5.
 
-**5. Compute rubric coverage gates.** Unaddressed mandatory dimensions → auto-generate HIGH coverage-gap finding. Unaddressed optional → auto-generate MEDIUM.
+**5. Compute rubric coverage gates.** A dimension is addressed by a substantive finding or step-4-verified attestation coverage. Unaddressed mandatory → auto-generate HIGH coverage-gap finding; optional → MEDIUM.
 
 **6. Spot-check OBSERVED claims.** For each finding marked OBSERVED, re-read the cited file + semantic anchor or proof artifact. Findings that fail spot-check get tagged `[evidence-gap: spot-check failed]`; Phase 3 decides retract or upgrade.
 

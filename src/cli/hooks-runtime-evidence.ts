@@ -4,6 +4,7 @@
  * scenarios; reports and events omit command operands and captured process text.
  */
 import { spawnSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -46,7 +47,7 @@ type HookProbeObserved =
   "blocked" | "allowed" | "unavailable" | "not-run" | "error";
 
 /** One fixed classifier input; `command` is never copied into reports or events. */
-interface HookProbeScenario {
+export interface HookProbeScenario {
   id: string;
   label: string;
   expected: HookProbeExpected;
@@ -247,21 +248,34 @@ function rejectedProbeExecution(): HookProbeExecution {
   };
 }
 
-/** Execute one inert classifier operand through Bash without a shell interpolation layer. */
-function executeManagedHookProbe(
+/**
+ * Execute one inert classifier operand through Bash without a shell interpolation layer.
+ * Exported so containment tests can prove redirected script paths never run.
+ */
+export function executeManagedHookProbe(
   projectPath: string,
   scriptPath: string,
   scenario: HookProbeScenario,
 ): HookProbeExecution {
   const resolvedScriptPath = resolve(projectPath, scriptPath);
-  // A malformed registrar path must never execute code outside the selected checkout.
-  if (!isInsideProject(projectPath, resolvedScriptPath)) {
+  // A malformed registrar path must never execute code outside the selected
+  // checkout - including through a symlinked script or parent directory, so
+  // containment is checked on fully resolved physical paths, not lexical ones.
+  let physicalScriptPath: string;
+  let physicalProjectPath: string;
+  try {
+    physicalScriptPath = realpathSync(resolvedScriptPath);
+    physicalProjectPath = realpathSync(projectPath);
+  } catch {
+    return rejectedProbeExecution();
+  }
+  if (!isInsideProject(physicalProjectPath, physicalScriptPath)) {
     return rejectedProbeExecution();
   }
   const startedAt = performance.now();
   const execution = spawnSync(
     "bash",
-    [resolvedScriptPath, "--check", scenario.command],
+    [physicalScriptPath, "--check", scenario.command],
     {
       cwd: projectPath,
       encoding: "utf-8",

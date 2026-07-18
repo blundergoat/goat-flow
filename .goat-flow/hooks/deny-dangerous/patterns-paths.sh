@@ -99,50 +99,6 @@ is_secret_path_touch() {
   return 1
 }
 
-is_env_example_touch() {
-  local c
-  c=$(strip_shell_quotes_for_path_scan "$1")
-  if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"])\.env\.example([[:space:]]|$|[\'\"]) ]]; then return 0; fi
-  if [[ "$c" =~ (\>|\>\>|\>\|)[[:space:]]*[\'\"]?\.env\.example([[:space:]]|$|[\'\"]) ]]; then return 0; fi
-  return 1
-}
-
-# True only when a redirect actually writes to .env.example. A bare fd dup
-# (2>&1), a stderr discard (2>/dev/null), or a redirect to some other file is
-# still a read of .env.example, so those must not be treated as writes.
-is_env_example_redirect_write() {
-  local c
-  c=$(strip_shell_quotes_for_path_scan "$1")
-  # The redirect target may carry a path prefix (./ , sub/dir/ , ~/x/ , /abs/),
-  # so allow an optional leading path before the .env.example basename.
-  [[ "$c" =~ (\>|\>\>|\>\|)[[:space:]]*[\'\"]?([^[:space:]>|\'\"]*/)?\.env\.example([[:space:]]|$|[\'\"]) ]]
-}
-
-is_git_ls_files() {
-  __goat_git_strip_globals "$1" || return 1
-  [[ "$__goat_git_rest" =~ ^ls-files([[:space:]]|$) ]]
-}
-
-is_find_read_only() {
-  local c="$1"
-  ! [[ "$c" =~ (^|[[:space:]])-(delete|exec|execdir|ok|okdir)([[:space:]]|$) ]]
-}
-
-is_env_example_pipe_consumer_read_only() {
-  local c
-  c=$(normalize_command_candidate "$1")
-  local verb="${c%%[[:space:]]*}"
-  verb="${verb##*/}"
-  case "$verb" in
-    grep|egrep|fgrep|rg|ag|ack|cat|head|tail|less|more|wc|file|diff|printf|echo|read|ls|stat|test)
-      return 0 ;;
-    sed)
-      ! [[ "$c" =~ sed[[:space:]]+-[a-zA-Z]*i || "$c" =~ sed[[:space:]]+--in-place ]]
-      return $? ;;
-    *) return 1 ;;
-  esac
-}
-
 is_search_command_verb() {
   local verb="${1##*/}"
   case "$verb" in
@@ -288,48 +244,9 @@ check_secret_segment() {
     fi
   fi
 
-  local touches_env_example=0
-  if is_env_example_touch "$cmd"; then
-    touches_env_example=1
-  fi
-
-  if [[ "$touches_env_example" -eq 1 ]]; then
-    local env_example_read_only=0
-    case "$CMD_VERB" in
-      grep|egrep|fgrep|rg|ag|ack|cat|head|tail|less|more|wc|file|diff|printf|echo|read|ls|stat|test)
-        env_example_read_only=1 ;;
-      find)
-        if is_find_read_only "$cmd"; then
-          env_example_read_only=1
-        fi ;;
-      git)
-        if is_git_ls_files "$cmd"; then
-          env_example_read_only=1
-        fi ;;
-      sed)
-        if ! [[ "$cmd" =~ sed[[:space:]]+-[a-zA-Z]*i || "$cmd" =~ sed[[:space:]]+--in-place ]]; then
-          env_example_read_only=1
-        fi ;;
-    esac
-    if [[ "$HAS_REDIRECT" -eq 1 ]] && is_env_example_redirect_write "$cmd"; then
-      env_example_read_only=0
-    fi
-    if [[ "$HAS_PIPE" -eq 1 ]]; then
-      local env_pipe_scan="${CMD_UNQUOTED//||/__GOAT_OR__}"
-      local -a env_pipeline_parts
-      local env_pipe_index
-      IFS='|' read -ra env_pipeline_parts <<< "$env_pipe_scan"
-      for ((env_pipe_index = 1; env_pipe_index < ${#env_pipeline_parts[@]}; env_pipe_index++)); do
-        if ! is_env_example_pipe_consumer_read_only "${env_pipeline_parts[$env_pipe_index]}"; then
-          env_example_read_only=0
-          break
-        fi
-      done
-    fi
-    if [[ "$env_example_read_only" -eq 0 ]]; then
-      block ".env.example is allowed for read-only inspection only. Use an explicit file-edit approval path for changes." || return $?
-    fi
-  fi
+  # .env.example is sample material, not a secret: reads and writes are both
+  # allowed. is_secret_path_touch masks the exact name, so only real .env*
+  # variants reach the secret block below.
 
   if [[ "$touches_secret" -eq 1 ]]; then
     block "Secret-file access ($CMD_VERB). Reading or editing .env / SSH/AWS/GCP keys / credentials through the agent is an exfil risk." || return $?

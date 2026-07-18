@@ -28,7 +28,10 @@ export {
 export { agentDenyMechanism } from "../src/cli/audit/check-agent-deny-mechanism.js";
 export { scanSemanticDrift } from "../src/cli/audit/check-factual-semantic-drift.js";
 export { AGENT_CHECKS } from "../src/cli/audit/check-agent-setup.js";
-export { SETUP_CHECKS } from "../src/cli/audit/check-goat-flow.js";
+export {
+  REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS,
+  SETUP_CHECKS,
+} from "../src/cli/audit/check-goat-flow.js";
 export { CONSTRAINTS_CHECKS } from "../src/cli/audit/harness/check-constraints.js";
 export { FEEDBACK_LOOP_CHECKS } from "../src/cli/audit/harness/check-feedback-loop.js";
 export { RECOVERY_CHECKS } from "../src/cli/audit/harness/check-recovery.js";

@@ -34,9 +34,14 @@ const DURABLE_TEXT_REDACTION_RULES: readonly DurableTextRedactionRule[] = [
     replacement: "$1[REDACTED:env-value]$2",
   },
   {
+    // Keys may sit mid-line in compact JSON ({"password":"..","user":".."}),
+    // so the anchor accepts an object/array/list delimiter as well as a line
+    // start. Quoted values may be followed by more fields; an unquoted value
+    // must end at a delimiter or end-of-line so prose such as
+    // "Token: use the CI-scoped one" keeps its readable continuation.
     pattern:
-      /^(\s*["']?(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|private[_-]?key|secret|token)["']?\s*:\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,}\r\n]+)(\s*[,}]?)$/gimu,
-    replacement: '$1"[REDACTED:field]"$2',
+      /((?:^|[{,[])\s*["']?(?:api[_-]?key|access[_-]?token|auth[_-]?token|password|private[_-]?key|secret|token)["']?\s*:\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,}\]\r\n]+(?=\s*(?:[,}\]]|$)))/gimu,
+    replacement: '$1"[REDACTED:field]"',
   },
   {
     pattern:

@@ -83,13 +83,14 @@ function runCodexFixture(
   installedFiles: Readonly<Record<string, string>>,
   canonicalFiles: Readonly<Record<string, string>>,
   canonicalSkillNames: readonly string[],
+  skillFilter: string | null = null,
 ) {
   return runSkillDoctor({
     projectPath: "/project",
     fs: createMemoryFS(installedFiles),
     agentProfiles: [CODEX_PROFILE],
     canonicalSkillNames,
-    skillFilter: null,
+    skillFilter,
     readCanonicalSkill: createCanonicalReader(canonicalFiles),
   });
 }
@@ -185,6 +186,39 @@ describe("skill doctor", () => {
         ),
       ),
       true,
+    );
+  });
+
+  /** Fixture covers a focused --skill run against a collision owned by ANOTHER skill's mirror. */
+  it("still flags a duplicate command name when the doctor is filtered to one skill", () => {
+    const goatMarkdown = skillMarkdown("goat");
+    const duplicateMarkdown = skillMarkdown("goat", "Use when debugging.");
+
+    const report = runCodexFixture(
+      {
+        ".agents/skills/goat/SKILL.md": goatMarkdown,
+        ".agents/skills/goat-debug/SKILL.md": duplicateMarkdown,
+      },
+      {
+        "workflow/skills/goat/SKILL.md": goatMarkdown,
+        "workflow/skills/goat-debug/SKILL.md": skillMarkdown("goat-debug"),
+      },
+      ["goat", "goat-debug"],
+      "goat",
+    );
+    const skills = report.agents[0]?.skills ?? [];
+
+    // Only the requested row is rendered, but its collision evidence names both paths.
+    assert.equal(skills.length, 1);
+    assert.equal(skills[0]?.canonicalName, "goat");
+    assert.equal(skills[0]?.staticEligibility, "blocked");
+    assert.match(
+      skills[0]?.blockingReasons.join("\n") ?? "",
+      /duplicate installed frontmatter name "goat"/i,
+    );
+    assert.match(
+      skills[0]?.blockingReasons.join("\n") ?? "",
+      /goat-debug\/SKILL\.md/,
     );
   });
 

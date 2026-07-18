@@ -13,34 +13,14 @@ import type {
   ProjectStructure,
   ReadonlyFS,
 } from "../../src.js";
-import { AUDIT_VERSION, getSkillNames } from "../../src.js";
+import {
+  AUDIT_VERSION,
+  getSkillNames,
+  REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS,
+} from "../../src.js";
 
 const HEALTHY_GOAT_FLOW_GITIGNORE = [
-  "*",
-  "!.gitignore",
-  "!config.yaml",
-  "!learning-loop/",
-  "!learning-loop/**",
-  "!skill-docs/",
-  "!skill-docs/**",
-  "!hooks/",
-  "!hooks/**",
-  "!plans/",
-  "!plans/**",
-  "!logs/",
-  "!logs/sessions/",
-  "!logs/sessions/.gitkeep",
-  "!logs/sessions/README.md",
-  "!logs/quality/",
-  "!logs/quality/README.md",
-  "!logs/events/",
-  "!logs/events/README.md",
-  "!logs/critiques/",
-  "!logs/critiques/README.md",
-  "!logs/review/",
-  "!logs/review/README.md",
-  "!logs/security/",
-  "!logs/security/README.md",
+  ...REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS,
   "",
 ].join("\n");
 

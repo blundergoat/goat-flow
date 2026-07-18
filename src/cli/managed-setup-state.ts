@@ -390,11 +390,14 @@ export function writeManagedInstallState(
   assertManagedStateWritePath(projectPath, preview.agent);
   mkdirSync(dirname(statePath), { recursive: true });
   try {
-    writeFileSync(
-      temporaryPath,
-      `${JSON.stringify(state, null, 2)}\n`,
-      "utf-8",
-    );
+    // A pre-planted temp entry (for example a symlink in an untrusted
+    // checkout) must never receive the baseline bytes: clear it, then create
+    // the temp file exclusively so the write cannot follow a redirection.
+    rmSync(temporaryPath, { force: true });
+    writeFileSync(temporaryPath, `${JSON.stringify(state, null, 2)}\n`, {
+      encoding: "utf-8",
+      flag: "wx",
+    });
     renameSync(temporaryPath, statePath);
   } catch (error) {
     // For example, a user may make install-state read-only between preview and apply.

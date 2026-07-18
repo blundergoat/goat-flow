@@ -42,6 +42,7 @@ export type ManagedSetupFileState =
   | "template-changed"
   | "both-changed"
   | "added"
+  | "adopted"
   | "removed"
   | "missing"
   | "unmanaged";
@@ -139,6 +140,11 @@ const STATE_PRESENTATION: Record<
     action: "create",
     reason: "The current goat-flow package adds this managed file.",
   },
+  adopted: {
+    action: "replace",
+    reason:
+      "No previous install baseline exists, so goat-flow refreshes this system-owned file and records a baseline for future drift protection.",
+  },
   removed: {
     action: "preserve",
     reason:
@@ -152,7 +158,7 @@ const STATE_PRESENTATION: Record<
   unmanaged: {
     action: "protect",
     reason:
-      "The target file differs and no trusted previous-install hash exists.",
+      "The target path cannot be verified safely, so goat-flow will not write it.",
   },
 };
 
@@ -172,9 +178,13 @@ export function classifyManagedSetupFile(
   // Matching current and new bytes require no write, even when old state is unavailable.
   if (input.currentSha256 === input.newExpectedSha256) return "unchanged";
 
-  // Without an old baseline, only a missing destination is safe to create.
+  // Without an old baseline, a missing destination is created and an existing
+  // differing regular file is adopted: pre-install-state targets legitimately
+  // hold older-package bytes, and the managed refresh matches what the
+  // installer always did for system-owned templates before baselines existed.
+  // The verdict stays "warning" so users see every adopted path before Bash runs.
   if (input.oldExpectedSha256 === null) {
-    return input.currentSha256 === null ? "added" : "unmanaged";
+    return input.currentSha256 === null ? "added" : "adopted";
   }
 
   // A deleted destination may represent deliberate user intent, so setup pauses.
@@ -380,8 +390,13 @@ function previewVerdict(
   if (baselineStatus === "invalid") return "blocked";
   // Any ambiguous target state pauses the installer until the user supplies explicit force.
   if (files.some((file) => BLOCKING_STATES.has(file.state))) return "blocked";
-  // Retired paths are preserved but still deserve user attention.
-  if (files.some((file) => file.state === "removed")) return "warning";
+  // Retired paths are preserved and pre-baseline adoptions replace bytes, so
+  // both still deserve user attention before the installer runs.
+  if (
+    files.some((file) => file.state === "removed" || file.state === "adopted")
+  ) {
+    return "warning";
+  }
   return "ready";
 }
 

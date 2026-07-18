@@ -18,8 +18,10 @@ glob_scan_max_depth = 3
 [permissions.goat-flow.filesystem.":workspace_roots"]
 # Deny rules win over allow/read rules on both Codex and Claude, so a broad
 # .env* deny cannot be re-opened for the sample file. Real env variants are
-# denied individually so .env.example stays readable, matching the Bash deny
-# hook; nonstandard variants (e.g. .env.backup) are covered by that hook.
+# denied individually so .env.example stays readable and writable, matching
+# the Bash deny hook. Only these enumerated variants are denied at the file
+# layer; nonstandard names (e.g. .env.backup) are blocked by the Bash deny
+# hook for shell commands, not for direct file reads.
 "**/.env" = "deny"
 "**/.env.local" = "deny"
 "**/.env.development" = "deny"

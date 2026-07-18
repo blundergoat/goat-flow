@@ -1837,11 +1837,12 @@ NODE
 #     checks - only Edit(path) rules are"; Edit covers all file-editing tools,
 #     Read covers reads): rewritten to the matched equivalent, or dropped when
 #     the covering rule already exists.
-#   - The broad Read(**/.env*) deny (shadowed the shipped .env.example allow -
-#     deny wins): expanded to the enumerated real env variants, deny only.
+#   - The broad Read(**/.env*) and Edit(**/.env*) denies (shadowed the shipped
+#     .env.example allow and blocked sample-file edits - deny wins): expanded
+#     to the enumerated real env variants, deny only.
 # Remove/rewrite-list (not allow-list) on purpose: never touch user-added
 # rules for valid matched tools (Bash, Read, Edit, WebFetch, mcp__*). Keep
-# REMOVED_CLAUDE_TOOLS, UNMATCHED_RULE_REWRITES, and ENV_READ_DENY_EXPANSION
+# REMOVED_CLAUDE_TOOLS, UNMATCHED_RULE_REWRITES, and ENV_DENY_EXPANSIONS
 # in sync with test/unit/agent-config-template-parity.test.ts. Untouched rules
 # keep their exact position; writes back only when a rule was actually
 # removed, rewritten, or expanded, so already-clean files are never
@@ -1863,9 +1864,10 @@ const UNMATCHED_RULE_REWRITES = new Map([
   ["Glob", "Read"],
 ]);
 // Deny rules win over allow rules, so the broad env read deny silently
-// blocked .env.example despite the shipped allow entries. Expand it to the
-// enumerated real env variants; .env.example then matches no deny.
-const ENV_READ_DENY_EXPANSION = new Map([
+// blocked .env.example despite the shipped allow entries, and the broad env
+// edit deny blocked sample-file writes. Expand both to the enumerated real
+// env variants; .env.example then matches no deny.
+const ENV_DENY_EXPANSIONS = new Map([
   [
     "Read(**/.env*)",
     [
@@ -1877,6 +1879,19 @@ const ENV_READ_DENY_EXPANSION = new Map([
       "Read(**/.env.test)",
       "Read(**/.envrc)",
       "Read(**/.env.*.local)",
+    ],
+  ],
+  [
+    "Edit(**/.env*)",
+    [
+      "Edit(**/.env)",
+      "Edit(**/.env.local)",
+      "Edit(**/.env.development)",
+      "Edit(**/.env.production)",
+      "Edit(**/.env.staging)",
+      "Edit(**/.env.test)",
+      "Edit(**/.envrc)",
+      "Edit(**/.env.*.local)",
     ],
   ],
 ]);
@@ -1910,8 +1925,8 @@ const parseRule = (entry) =>
 
 // Return replacement entries for a stale rule, or null to keep it untouched.
 const replacementsFor = (entry, expandEnv) => {
-  if (expandEnv && ENV_READ_DENY_EXPANSION.has(entry)) {
-    return ENV_READ_DENY_EXPANSION.get(entry);
+  if (expandEnv && ENV_DENY_EXPANSIONS.has(entry)) {
+    return ENV_DENY_EXPANSIONS.get(entry);
   }
   const rule = parseRule(entry);
   if (rule && UNMATCHED_RULE_REWRITES.has(rule[1])) {

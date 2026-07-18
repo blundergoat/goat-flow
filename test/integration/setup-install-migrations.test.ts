@@ -519,8 +519,8 @@ describe("setup --apply installer upgrade migrations", () => {
     // env read deny shadowed the shipped .env.example allow (deny wins). The
     // upgrade must drop removed-tool rules, rewrite unmatched forms to the
     // covering tool (or drop them when the covering rule already exists),
-    // expand the broad env read deny in the deny array only, and leave
-    // managed (Edit) plus user-added unmanaged (WebFetch) rules untouched.
+    // expand the broad env read and edit denies in the deny array only, and
+    // leave managed (Edit) plus user-added unmanaged (WebFetch) rules alone.
     writeFileSync(
       join(root, ".claude", "settings.json"),
       JSON.stringify(
@@ -537,6 +537,7 @@ describe("setup --apply installer upgrade migrations", () => {
               "NotebookEdit(**/notebooks/**)",
               "Glob(**/generated/**)",
               "Read(**/.env*)",
+              "Edit(**/.env*)",
               "WebFetch(**/internal/**)",
             ],
           },
@@ -575,13 +576,19 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.ok(deny.includes("Edit(**/custom-cert.pem)"), "Write rewritten");
     assert.ok(deny.includes("Edit(**/notebooks/**)"), "NotebookEdit rewritten");
     assert.ok(deny.includes("Read(**/generated/**)"), "Glob rewritten");
-    // Broad env read deny expanded so .env.example matches no deny rule.
+    // Broad env denies expanded so .env.example matches no deny rule.
     assert.ok(!deny.includes("Read(**/.env*)"), "broad env read deny expanded");
     assert.ok(deny.includes("Read(**/.env)"), "exact env deny added");
     assert.ok(deny.includes("Read(**/.envrc)"), "envrc deny added");
     assert.ok(
       deny.includes("Read(**/.env.*.local)"),
       "local-variant deny added",
+    );
+    assert.ok(!deny.includes("Edit(**/.env*)"), "broad env edit deny expanded");
+    assert.ok(deny.includes("Edit(**/.env)"), "exact env edit deny added");
+    assert.ok(
+      deny.includes("Edit(**/.env.*.local)"),
+      "local-variant edit deny added",
     );
     // Allow/ask arrays repaired without env expansion.
     assert.ok(allow.includes("Edit(docs/**)"), "allow Write rewritten to Edit");

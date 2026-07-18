@@ -1,5 +1,5 @@
 /**
- * Managed setup preview contract tests for the eight user-visible drift states.
+ * Managed setup preview contract tests for the nine user-visible drift states.
  * These fixtures keep classification independent from filesystem setup so failures
  * tell users whether local edits, package changes, or missing baselines caused a block.
  * State serialization checks also ensure continuation data stays hash-only.
@@ -7,6 +7,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -92,11 +93,11 @@ const CLASSIFICATION_FIXTURES: ClassificationFixture[] = [
     expectedState: "missing",
   },
   {
-    name: "unmanaged",
+    name: "adopted pre-baseline file",
     oldExpectedSha256: null,
     currentSha256: CURRENT_FILE_HASH,
     newExpectedSha256: NEW_EXPECTED_HASH,
-    expectedState: "unmanaged",
+    expectedState: "adopted",
   },
 ];
 
@@ -124,6 +125,35 @@ describe("managed setup classification", () => {
       }),
       "unchanged",
     );
+  });
+
+  /**
+   * Fixture models the first CLI install into a target set up before
+   * install-state existed: a differing regular managed file must warn and
+   * refresh, never block the whole upgrade behind --force.
+   */
+  it("adopts a pre-baseline differing managed file with a warning verdict", () => {
+    const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-adopt-"));
+    const managedDirectory = join(projectPath, ".goat-flow", "logs", "quality");
+    try {
+      mkdirSync(managedDirectory, { recursive: true });
+      writeFileSync(
+        join(managedDirectory, "README.md"),
+        "older-package readme body\n",
+        "utf-8",
+      );
+      const preview = buildManagedSetupPreview(projectPath, "codex");
+      const managedFile = preview.files.find(
+        (file) => file.path === ".goat-flow/logs/quality/README.md",
+      );
+
+      assert.equal(managedFile?.state, "adopted");
+      assert.equal(managedFile?.action, "replace");
+      assert.equal(preview.baselineStatus, "missing");
+      assert.equal(preview.verdict, "warning");
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
   });
 });
 
@@ -198,6 +228,67 @@ describe("managed install state", () => {
     } finally {
       rmSync(projectPath, { recursive: true, force: true });
       rmSync(redirectedStatePath, { recursive: true, force: true });
+    }
+  });
+
+  /** This fixture plants a symlinked temp entry and proves the baseline write cannot be redirected. */
+  it("never writes baseline bytes through a pre-planted temp symlink", () => {
+    const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-preview-state-"));
+    const victimPath = join(
+      mkdtempSync(join(tmpdir(), "goat-flow-preview-victim-")),
+      "victim.json",
+    );
+    const preview: ManagedSetupPreview = {
+      schemaVersion: "goat-flow.managed-setup-preview.v1",
+      coverage: "managed-template-files",
+      agent: "codex",
+      goatFlowVersion: "1.13.1",
+      baselineStatus: "missing",
+      verdict: "ready",
+      limits: [],
+      files: [
+        {
+          path: ".goat-flow/hooks/deny-dangerous.sh",
+          ownership: "system-owned",
+          state: "added",
+          action: "create",
+          reason: "The managed template is not installed yet.",
+          oldExpectedSha256: null,
+          currentStatus: "missing",
+          currentSha256: null,
+          newExpectedSha256: NEW_EXPECTED_HASH,
+        },
+      ],
+    };
+
+    try {
+      mkdirSync(join(projectPath, ".goat-flow", "install-state"), {
+        recursive: true,
+      });
+      writeFileSync(victimPath, "untouched\n", "utf-8");
+      const statePath = managedInstallStatePath(projectPath, "codex");
+      // An untrusted checkout can pre-plant the deterministic temp name.
+      symlinkSync(victimPath, `${statePath}.tmp-${process.pid}`);
+
+      writeManagedInstallState(projectPath, preview);
+
+      assert.equal(
+        readFileSync(victimPath, "utf-8"),
+        "untouched\n",
+        "the symlink target must never receive baseline bytes",
+      );
+      const stateStats = lstatSync(statePath);
+      assert.ok(
+        stateStats.isFile(),
+        "recorded baseline must be a regular file",
+      );
+      assert.match(
+        readFileSync(statePath, "utf-8"),
+        /goat-flow\.install-state\.v1/u,
+      );
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+      rmSync(join(victimPath, ".."), { recursive: true, force: true });
     }
   });
 

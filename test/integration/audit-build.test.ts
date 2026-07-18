@@ -3,9 +3,14 @@
  */
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { assertExists } from "../helpers/assert-exists.ts";
 import { createRequire, syncBuiltinESMExports } from "node:module";
-import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
+import {
+  REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS,
+  SETUP_CHECKS,
+} from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
@@ -186,6 +191,27 @@ describe("audit build: goat-flow gitignore exceptions", () => {
     assert.match(result.message, /!logs\/quality\/README\.md/u);
     assert.match(result.message, /!logs\/events\/README\.md/u);
     assert.match(result.message, /!logs\/security\/README\.md/u);
+  });
+
+  // The required-pattern list drifted from the shipped template once before
+  // (scratchpad/ and the top-level guide re-includes were audited as optional
+  // while the template shipped them). Deriving the expectation from the
+  // template file itself makes any future divergence fail here.
+  it("requires exactly the shipped template's effective gitignore lines", () => {
+    const templatePath = join(
+      resolve(import.meta.dirname, "..", ".."),
+      "workflow/setup/reference/goat-flow-gitignore",
+    );
+    const templateLines = readFileSync(templatePath, "utf-8")
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
+
+    assert.deepEqual(
+      [...REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS],
+      templateLines,
+      "REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS must match workflow/setup/reference/goat-flow-gitignore",
+    );
   });
 });
 

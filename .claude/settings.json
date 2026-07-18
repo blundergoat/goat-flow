@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Read(.env.example)",
-      "Read(**/.env.example)"
+      "Read(**/.env.example)",
+      "Edit(.env.example)",
+      "Edit(**/.env.example)"
     ],
     "deny": [
       "Bash(*git commit*)",
@@ -19,7 +21,14 @@
       "Read(**/.env.test)",
       "Read(**/.envrc)",
       "Read(**/.env.*.local)",
-      "Edit(**/.env*)",
+      "Edit(**/.env)",
+      "Edit(**/.env.local)",
+      "Edit(**/.env.development)",
+      "Edit(**/.env.production)",
+      "Edit(**/.env.staging)",
+      "Edit(**/.env.test)",
+      "Edit(**/.envrc)",
+      "Edit(**/.env.*.local)",
       "Read(**/secrets/**)",
       "Read(**/*.pem)",
       "Read(**/*.key)",

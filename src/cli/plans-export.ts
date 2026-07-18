@@ -6,6 +6,7 @@
  */
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -59,14 +60,17 @@ class PlansExportInputError extends Error {
   }
 }
 
-/** Read a bold single-line milestone field; missing content returns an empty value. */
+/** Read a bold or plain single-line milestone field; missing content returns an empty value. */
 function readMilestoneField(content: string, label: string): string {
   const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  return (
-    content
-      .match(new RegExp(`^\\*\\*${escapedLabel}:\\*\\*\\s*(.+)$`, "imu"))?.[1]
-      ?.trim() ?? ""
+  const boldMatch = content.match(
+    new RegExp(`^\\*\\*${escapedLabel}:\\*\\*\\s*(.+)$`, "imu"),
   );
+  // goat-plan's compact example shape writes bare `Status: not-started` lines,
+  // so a plain label is accepted whenever the bold form is absent.
+  const fieldMatch =
+    boldMatch ?? content.match(new RegExp(`^${escapedLabel}:\\s*(.+)$`, "imu"));
+  return fieldMatch?.[1]?.trim() ?? "";
 }
 
 /** Split level-two sections while preserving nested headings and user-authored Markdown. */
@@ -143,7 +147,11 @@ export function parseMilestoneMarkdown(
   const sections = readMilestoneSections(content);
   const status = readMilestoneField(content, "Status");
   const dependencies = readMilestoneField(content, "Depends on");
-  const objective = readMilestoneField(content, "Objective");
+  // Handoff-grade milestones carry the objective as a `## Objective` section
+  // rather than a metadata line; both shapes are real goat-plan output.
+  const objective =
+    readMilestoneField(content, "Objective") ||
+    readMilestoneSection(sections, ["objective"]);
   const scopeMarkdown = readMilestoneSection(sections, [
     "scope",
     "scope discipline",
@@ -324,6 +332,31 @@ function assertOutputPathsAvailable(
   }
 }
 
+/**
+ * Require every export destination to be a regular file or absent before writing.
+ * Runs even under force: replacement authorizes new content, never writing
+ * through a symlink or into a directory that shadows a generated filename.
+ */
+function assertWritableDestinations(outputPaths: string[]): void {
+  for (const outputPath of outputPaths) {
+    let destinationStats;
+    try {
+      destinationStats = lstatSync(outputPath);
+    } catch (error) {
+      // Absent is the normal case: the export write creates the file.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw new PlansExportInputError(
+        `Cannot inspect export output ${outputPath} before writing.`,
+      );
+    }
+    if (!destinationStats.isFile()) {
+      throw new PlansExportInputError(
+        `Export output must be a regular file or absent: ${outputPath}. Move the conflicting path before exporting.`,
+      );
+    }
+  }
+}
+
 /** Reject filename sanitization or redaction collisions before any export is written. */
 function assertUniqueOutputPaths(outputPaths: string[]): void {
   const uniqueOutputPaths = new Set(outputPaths);
@@ -350,6 +383,7 @@ function writeMarkdownExports(
   );
   assertUniqueOutputPaths(outputPaths);
   assertOutputPathsAvailable(outputPaths, shouldForce);
+  assertWritableDestinations(outputPaths);
   mkdirSync(outputDirectory, { recursive: true });
 
   // Each milestone stays independent so future issue adapters can consume one body at a time.
@@ -375,6 +409,7 @@ function writeJsonExport(
     );
   }
   assertOutputPathsAvailable([outputPath], shouldForce);
+  assertWritableDestinations([outputPath]);
   mkdirSync(dirname(outputPath), { recursive: true });
   writeFileSync(outputPath, `${JSON.stringify(records, null, 2)}\n`, "utf-8");
   return [outputPath];

@@ -5,15 +5,26 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import type { CreateEvidenceEnvelopeInput } from "../../src/cli/evidence/envelope.js";
 import {
+  executeManagedHookProbe,
   renderHookRuntimeReportJson,
   renderHookRuntimeReportText,
   verifyManagedDenyHook,
   type HookProbeExecution,
+  type HookProbeScenario,
   type HookRuntimeDependencies,
   type ManagedDenyHookState,
 } from "../../src/cli/hooks-runtime-evidence.js";
@@ -74,6 +85,77 @@ function configuredReport(dependencies: HookRuntimeDependencies) {
 }
 
 describe("hooks runtime evidence", () => {
+  const PROBE_SCENARIO: HookProbeScenario = {
+    id: "fixture-probe",
+    label: "Fixture probe",
+    expected: "blocked",
+    command: "git push",
+  };
+
+  /** Fixture proves a symlinked hook script cannot smuggle execution outside the checkout. */
+  it("rejects a symlinked hook script pointing outside the checkout", () => {
+    const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-hook-symlink-"));
+    const outsidePath = mkdtempSync(join(tmpdir(), "goat-flow-hook-outside-"));
+    const markerPath = join(outsidePath, "executed.marker");
+    const outsideScript = join(outsidePath, "outside-hook.sh");
+
+    try {
+      writeFileSync(
+        outsideScript,
+        `#!/usr/bin/env bash\ntouch "${markerPath}"\nexit 0\n`,
+        { mode: 0o755 },
+      );
+      mkdirSync(join(projectPath, ".goat-flow", "hooks"), { recursive: true });
+      symlinkSync(
+        outsideScript,
+        join(projectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),
+      );
+
+      const execution = executeManagedHookProbe(
+        projectPath,
+        ".goat-flow/hooks/deny-dangerous.sh",
+        PROBE_SCENARIO,
+      );
+
+      assert.equal(
+        execution.hasSpawnError,
+        true,
+        "the probe must be rejected, not executed",
+      );
+      assert.equal(execution.exitCode, null);
+      assert.ok(!existsSync(markerPath), "the outside script must never run");
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+      rmSync(outsidePath, { recursive: true, force: true });
+    }
+  });
+
+  /** Control fixture keeps regular in-checkout hook scripts executable after the symlink guard. */
+  it("still executes a regular in-checkout hook script", () => {
+    const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-hook-regular-"));
+
+    try {
+      mkdirSync(join(projectPath, ".goat-flow", "hooks"), { recursive: true });
+      writeFileSync(
+        join(projectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        '#!/usr/bin/env bash\necho "BLOCKED: Policy fixture: blocked by test policy" >&2\nexit 2\n',
+        { mode: 0o755 },
+      );
+
+      const execution = executeManagedHookProbe(
+        projectPath,
+        ".goat-flow/hooks/deny-dangerous.sh",
+        PROBE_SCENARIO,
+      );
+
+      assert.equal(execution.hasSpawnError, false);
+      assert.equal(execution.exitCode, 2);
+      assert.match(execution.stderr, /BLOCKED: Policy fixture/u);
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
   // A terminal user can choose one checkout, agent, and the bounded deny-hook scenario group.
   it("parses hooks verify without adding a top-level verify command", () => {
     const parsed = parseCLIArgs([

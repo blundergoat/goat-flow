@@ -491,7 +491,11 @@ function applyDuplicateNameBlockers(skills: MutableSkillDoctorEntry[]): void {
   }
 }
 
-/** Select and validate the canonical skill filter before collecting agent rows. */
+/**
+ * Validate the canonical skill filter users asked to focus on.
+ * The filter narrows only the rendered rows: duplicate-name evidence is always
+ * collected across the complete canonical inventory first.
+ */
 function selectedSkillNames(
   canonicalSkillNames: readonly string[],
   skillFilter: string | null,
@@ -535,7 +539,10 @@ export function runSkillDoctor(options: SkillDoctorOptions): SkillDoctorReport {
 
   // Each selected profile gets its own invocation style and installed-path diagnosis.
   const agents = options.agentProfiles.map((agentProfile) => {
-    const skills = skillNames.map((canonicalSkillName) =>
+    // Duplicate-name evidence needs every canonical row: a focused --skill run
+    // must still see a collision claimed by another installed skill, so the
+    // full mirror is inspected first and the filter narrows rendered rows only.
+    const allSkills = options.canonicalSkillNames.map((canonicalSkillName) =>
       inspectSkill(
         options.fs,
         agentProfile,
@@ -543,7 +550,10 @@ export function runSkillDoctor(options: SkillDoctorOptions): SkillDoctorReport {
         canonicalReader,
       ),
     );
-    applyDuplicateNameBlockers(skills);
+    applyDuplicateNameBlockers(allSkills);
+    const skills = allSkills.filter((skill) =>
+      skillNames.includes(skill.canonicalName),
+    );
     return {
       agent: {
         id: agentProfile.id,

@@ -50,6 +50,7 @@ Three to seven findings is the normal useful range, not a quota. A sub-agent tha
 - **Second-pass result:** prompt used and what was re-read
 - **Residual uncertainty:** unread or untestable surface, or `none identified` with rationale
 - **SKEPTIC / ANALYST / STRATEGIST:** what each lens checked; C may use `N/A - fresh-eyes scope` where appropriate
+- **Alternatives (Agent B only):** at least one ranked, meaningfully different approach and why the artifact's choice wins - the alternatives mandate is unconditional and a clean result does not waive it; A and C omit this field
 - **Proof class:** `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
 - **Overall assessment:** STRONG / ADEQUATE / WEAK / FLAWED
 - **Strength:** one concrete strength with an artifact anchor
