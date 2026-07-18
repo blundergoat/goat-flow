@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-19
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -154,14 +154,19 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 ## Lesson: Confused install-copy path pair for a directory move
 
 **Created:** 2026-04-18
+**Updated:** 2026-07-19
+**Decision changed:** Resolve the exact workflow source from `workflow/manifest.json` or `rg --files` before putting a managed source/install pair into a plan or command.
+**Trigger phase:** READ
+**Incident count:** 2
+**Latest occurrence:** 2026-07-19
 
-**What happened:** User proposed `.goat-flow/skill-docs/` as a new installed-state location for the three reference files at `workflow/skills/reference/` (`skill-preamble.md`, `skill-conventions.md`, `skill-quality-testing.md`) as part of the install-copy flow. The agent read it as "move/rename `workflow/skills/reference/` → `.goat-flow/skill-docs/`", a restructure leaving `workflow/skills/reference/` depopulated. User had to restate the install relationship: *"workflow contains all the files for the goat-flow system installation ... .goat-flow/skill-docs/ would be used to copy those three files for the goat-flow system itself"*.
+**What happened:** The agent first misread the install-copy pair `workflow/skills/reference/` → `.goat-flow/skill-docs/` as a directory move. On 2026-07-19 it repeated the root mistake by pluralizing the source directory in a milestone command instead of resolving the manifest entry. The drift check failed before source edits; `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`) supplied the real path.
 
-**Root cause:** Agent collapsed the `workflow/` vs `.goat-flow/` distinction. goat-flow's architecture has a load-bearing split - `workflow/` is template source (what the package ships), `.goat-flow/` is installed state (what exists in a consumer project after install) - and the install script copies from the former to the latter. When the user names a path under each, the default reading is "install-copy relationship" (both paths exist; one populated from the other at install time), not "rename" (one replaces the other).
+**Root cause:** The agent inferred a path while collapsing goat-flow's source/installed-state split: `workflow/` ships templates; `.goat-flow/` receives managed copies.
 
-**Why it matters:** Renaming out of `workflow/` would have stripped goat-flow of its template source. A consumer project has no `workflow/` directory; any SKILL.md cross-reference pointing there is broken post-install. The user had to correct the misreading before implementation could start - at real cost in turns and frustration.
+**Why it matters:** A wrong move can remove consumer templates, while an invented source path makes planning and verification fail before useful work begins.
 
-**Prevention:** When the user proposes a new path under `.goat-flow/` that co-exists with an existing `workflow/` path, default to "both paths exist, with install-time copy between them". Before recommending a move, ask whether the source at `workflow/...` should remain populated. Invariant: `workflow/` stays as template source; `.goat-flow/` is populated from it at install time.
+**Prevention:** Treat `workflow/` and `.goat-flow/` as a source/install pair. Resolve both paths from `workflow/manifest.json` or `rg --files` before planning, moving, or running them; never infer directory spelling.
 
 ---
 

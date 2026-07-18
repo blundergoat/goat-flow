@@ -162,9 +162,9 @@ Run a narrow specialist cross-check when any of these are true:
 
 An admissible specialist is an independent tool or reviewer with a named failure class and structured return. Same-context self-review does not qualify. Apply `skill-conventions.md` → Orchestration Admission; this required phase is pre-admitted, but a delegated or external reviewer is eligible only when its invocation is already authorized by current-session user intent or local instructions.
 
-If no admissible and available specialist exists, record `specialist-unavailable`; do not wait or block. Keep each affected candidate `PROBABLE` with the exact evidence needed to promote or kill it.
+If no admissible and available specialist exists, record `specialist-unavailable`; do not wait or block. Preserve each affected candidate's current confidence: retain `CONFIRMED` findings. Only unresolved candidates remain `PROBABLE` with the exact evidence needed to promote or kill them.
 
-Use `/goat-critique` only for disagreement resolution or cross-examination, not as the default second pass. Keep unresolved items in the report as PROBABLE with exact evidence needed. Cap extra churn at one specialist pass per finding cluster. Outcomes: `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`.
+Use `/goat-critique` only for disagreement resolution or cross-examination, not as the default second pass. Keep unresolved items in the report as PROBABLE with exact evidence needed. Cap extra churn at one specialist pass per finding cluster. Outcomes: `retain CONFIRMED`, `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`.
 
 ### Phase 5.5 - Exploit Chaining
 

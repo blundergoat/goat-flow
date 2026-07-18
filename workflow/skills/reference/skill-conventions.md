@@ -89,7 +89,7 @@ If 3 consecutive file reads produce no new signal relevant to the current questi
 2. State what you were looking for and didn't find
 3. Ask the human to redirect, narrow scope, or close
 
-**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** safety-critical gates (goat-debug D2→D3 "human decides before fixing", goat-security final report) MUST remain blocking even in sub-agent mode - these exist to prevent auto-fixing without human review.
+**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** the goat-debug D2→D3 "human decides before fixing" safety gate MUST remain blocking even in sub-agent mode - it prevents auto-fixing without human review.
 
 ## Task Tracking
 

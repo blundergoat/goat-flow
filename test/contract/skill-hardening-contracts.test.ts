@@ -322,10 +322,44 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         fullAssessmentPath,
-        /keep each affected candidate `PROBABLE` with the exact evidence needed/i,
+        /Preserve each affected candidate's current confidence: retain `CONFIRMED` findings/,
+        skillPath,
+      );
+      assert.match(
+        fullAssessmentPath,
+        /Only unresolved candidates remain `PROBABLE` with the exact evidence needed/,
+        skillPath,
+      );
+      assert.match(
+        fullAssessmentPath,
+        /Outcomes: `retain CONFIRMED`, `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`/,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        fullAssessmentPath,
+        /Keep each affected candidate `PROBABLE`/,
         skillPath,
       );
     });
+  });
+
+  it("names only real safety-critical sub-agent gates", () => {
+    for (const conventionsPath of [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ]) {
+      const conventions = readProjectFile(conventionsPath);
+      assert.match(
+        conventions,
+        /goat-debug D2→D3 "human decides before fixing"/,
+        conventionsPath,
+      );
+      assert.doesNotMatch(
+        conventions,
+        /goat-security final report/,
+        conventionsPath,
+      );
+    }
   });
 
   it("keeps goat-plan failure-first thinking inside the existing risk flow", () => {
