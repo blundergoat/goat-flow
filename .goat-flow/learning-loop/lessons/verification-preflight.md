@@ -1,17 +1,17 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-07-18
+last_reviewed: 2026-07-19
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
 
 **Status:** active | **Created:** 2026-04-03
 
-**What happened:** While tightening scanner messages, verification included a `prettier --write` pass on three rubric files without the repo's single-quote flag. The code was still valid, but the formatter rewrote quote style across entire files and created a much larger diff than intended.
-**Root cause:** Treated formatting as a neutral cleanup step instead of part of the blast radius. The command matched the tool, but not the repo's existing style contract.
-**Fix:** When formatting targeted files during verification, use the same style flags the repo already uses or the same invocation pattern that previous maintenance/test scripts used. Always check `git diff --stat` immediately after formatter runs to catch accidental blast-radius expansion.
+**What happened:** Formatter verification twice rewrote more than intended: rubric files lost the repo's quote style, then a narrow landing-page edit reformatted most of the hand-authored HTML. On 2026-07-19, a scoped check also included `.gitignore`; Prettier correctly failed because that file has no inferred parser.
 
-**2026-04-25 amendment:** The same trap recurred on `docs/site/goat-flow-landing.html`: a targeted stale-copy edit plus broad `prettier --write` rewrote most of the hand-authored landing page. Keep formatter scopes to touched files that are already formatter-owned, and read `git diff --stat` before running expensive gates so formatting churn can be reverted before verification evidence is collected.
+**Root cause:** Formatting was treated as neutral cleanup instead of a file-type and blast-radius contract.
+
+**Prevention:** Use the repository scripts and their owned extensions (`package.json`, search: `"format:check"`). Scope direct Prettier calls only to formatter-owned files; verify files such as `.gitignore` with byte parity or `git diff --check`. Inspect `git diff --stat` after any formatter write.
 
 ---
 
@@ -105,13 +105,11 @@ last_reviewed: 2026-07-18
 
 **Recurrence update (2026-05-17):** M11 SARIF repeated this across three TypeScript files. Evidence: `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`).
 
-**Recurrence update (2026-07-13):** M04/M09 contracts reached GREEN and typecheck exited 0 before Prettier rejected the touched test. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `requires an evidence budget before optional orchestration`).
-
-**Recurrence update (2026-07-18):** The v1.14.0 skill-quality truncation regressions reached GREEN and typecheck exited 0 before scoped Prettier rejected the new dashboard summary test and its touched fragment. Evidence: `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`).
+**Recurrences (2026-07-13, 2026-07-18, 2026-07-19):** M04/M09 contracts, the skill-quality truncation fixes, and M07 setup-truth contracts each reached GREEN before scoped Prettier rejected touched TypeScript. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), and `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
 
 **Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-07-18
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 5 | **Latest occurrence:** 2026-07-19
 
 ---
 
@@ -253,7 +251,7 @@ last_reviewed: 2026-07-18
 
 **Recurrence update (2026-05-27):** During the M11 learning-loop consolidation, `stats --check` passed after lesson files were merged and renamed, but the targeted audit unit suite failed with `Invalid audit check provenance` because `src/cli/audit/harness/check-context.ts` still cited the deleted `auditor-and-rubric.md` lesson, and `src/cli/audit/harness/check-verification.ts` still cited the deleted `verification-review.md` and `agent-behavior-trust.md` lessons. The markdown cross-reference grep was clean; the stale paths lived in code-owned provenance metadata.
 
-**Recurrence update (2026-06-10):** Adding the Step 0 emission lesson made `stats --check` fail twice: first `bucket-size` because `.goat-flow/learning-loop/lessons/agent-behavior.md` exceeded `BUCKET_SIZE_WARN_BYTES`, then `stale-ref` because the evidence used bare `skill-preamble.md`. The fix was to compress the new entry, cite `.goat-flow/skill-docs/skill-preamble.md`, and re-run `goat-flow index` before rechecking. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Step 0 retrieval was advisory`) and `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
+**Recurrences (2026-06-10, 2026-07-19):** `stats --check` caught `bucket-size` after Step 0 and M07 recurrence edits crossed `BUCKET_SIZE_WARN_BYTES`; the first run also caught a bare-path `stale-ref`. Both fixes compacted redundant wording, preserved anchors, regenerated indexes, and reran stats. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Step 0 retrieval was advisory`) and `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
 
 **Root cause:** Filesystem/path checks prove that a local path currently resolves, not that the reference is committed, portable, or appropriate for a durable lesson/ADR. Ignored local workspaces and external examples require different citation forms from repo-local files.
 

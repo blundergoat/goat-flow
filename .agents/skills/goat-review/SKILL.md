@@ -21,12 +21,12 @@ Use for diff/PR review or codebase-area quality audits.
 
 ## Step 0 - Scope, Size, Spec
 
-> "Reviewing [X] -- diff review (quick), PR review against a base branch, or area audit + DoD cross-checks (full)?"
+> "Reviewing [X] -- diff review (quick), PR review against a base branch (quick by default), or area audit + DoD cross-checks (full)?"
 
 - If user already says "quick", "PR", or "full", confirm and continue.
-- If arriving from the dispatcher with depth already chosen, skip the depth question.
+- If the dispatcher chose depth, skip the question.
 - If vague, ask one follow-up covering files, concerns, and mode.
-- Auto-detect: explicit input, staged, unstaged, PR-style branch ahead of base, then `git diff`.
+- Auto-detect: explicit input; otherwise a dirty worktree (combine staged and unstaged changes into one declared change set); otherwise PR-style branch ahead of base, then `git diff`.
 
 **PR mode:** prefer URL/number; otherwise prompt or use `local`. Get metadata: `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,number,title,body`; diff: `gh pr diff <ref>`. Record URL/base SHA. Automated-review conclusions stay unread until both local passes finish; Step 0 fetches no review/comment bodies.
 
@@ -44,12 +44,14 @@ Use for diff/PR review or codebase-area quality audits.
 
 Before Pass 1, record the review surface:
 
-- **Source:** staged | unstaged | PR | branch diff | area | explicit path list
+- **Source:** worktree | staged | unstaged | PR | branch diff | area | explicit path list
 - **Base/Head:** `<branch-or-sha>` / `<branch-or-sha>` (n/a for area audit)
 - **Uncommitted included:** yes | no | n/a
 - **Size:** diff `<files>`/`<changed-lines>`; area `<files>`/`<clusters>`
 - **Chunking:** no | proposed | accepted | skipped-by-user
 - **Scope degradation:** `<flags or "none">`
+
+For `worktree`, inspect both `git diff --cached` and `git diff`; record both path sets.
 
 Unknown mode-applicable values add degradation. Required `n/a` is resolved, not degraded.
 
@@ -132,7 +134,17 @@ Check each finding with targeted INDEX-first retrieval against `.goat-flow/learn
 
 ## Area Audit (Full)
 
-Area audit scans a declared area, not a diff. Run two passes per cluster; pre-existing issues are in scope. Without a release/merge question, emit `N/A - AREA AUDIT ONLY`.
+Audit the declared area, not a diff; pre-existing issues are in scope.
+
+### Area Pass 1 - Inventory and Risk Hypotheses
+
+For each cluster, inventory responsibilities, interfaces, trust/state boundaries, and critical paths without using recent diff as scope. Record raw suspicions with `file + semantic anchor`; do not resolve them.
+
+### Area Pass 2 - Implementation and Consumer Verification
+
+Open the implementation, relevant tests, and callers/consumers. Disprove suspicions using guards and call-site evidence; apply the Blast Radius Rule. Mark each suspicion `CONFIRMED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger.
+
+Without a release/merge question, emit `N/A - AREA AUDIT ONLY`.
 
 **BLOCKING GATE:** Present findings and pause. If calibration is uncertain, consider `/goat-critique`.
 
@@ -191,17 +203,11 @@ Always emit it; minimum: "confident - no degradation flags".
 - Pre-existing issues ARE in scope
 
 **Both modes:**
-- MUST run external call-site search for any contract-change suspicion before resolving (Blast Radius Rule); prefer `rg`, fall back to host search or `grep -rniE`, and flag `coverage-degraded` if skipped
-- MUST tag every surfaced finding with `[SEVERITY:ACTION]`
-- MUST grep `.goat-flow/learning-loop/footguns/` per finding; omit the tag on no direct match after the allowed reword
+- MUST apply the Blast Radius Rule, severity/action tags, Footgun Cross-Check, systemic grouping, and Review Integrity in both modes
 - MUST order findings by severity, not by file or discovery order
-- MUST emit Review Integrity on every run
 - MUST propose chunking above 20 files in either mode, or 3000 changed lines in diff mode
-- MUST emit Spec Drift only when opt-in triggered. If skipped, record `Spec drift: skipped` without a degradation flag
-- MUST split Spec Drift output by direction: exit-criteria drift as `[advisory]` (no severity tag), assumption invalidation as `[MUST:needs-decision]` under `## Findings`, open-criterion satisfaction as `[ready-to-tick]`
-- MUST store temporary review artifacts under `.goat-flow/logs/review/` with random suffix
-- MUST attempt to disprove each Pass-1 suspicion during Pass 2
-- MUST group 3+ related findings as systemic patterns
+- Emit Spec Drift only when opted in. If skipped, record `Spec drift: skipped` without a degradation flag
+- Route Spec Drift by direction
 - MUST NOT edit files unless user says "implement"; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.
 - **Ship Verdict rules (diff/PR or explicit release/merge question):** unresolved MUST -> NO. SHOULD-only -> YES WITH CONDITIONS. MAY-only -> YES. INTENT-MISMATCH -> NO until author confirms intent. Review Integrity `coverage-degraded`, `high-inference`, or `partial` -> downgrade verdict one step.

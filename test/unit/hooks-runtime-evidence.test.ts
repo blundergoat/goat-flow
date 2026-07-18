@@ -313,6 +313,53 @@ describe("hooks runtime evidence", () => {
     assert.equal(report.summary.pass, 0);
   });
 
+  for (const { name, execution, reasonCode } of [
+    {
+      name: "reports a timed-out probe with the stable timeout reason",
+      execution: { ...BLOCKED_EXECUTION, timedOut: true },
+      reasonCode: "probe-timed-out",
+    },
+    {
+      name: "reports a spawn failure with the stable execution-error reason",
+      execution: {
+        ...ALLOWED_EXECUTION,
+        exitCode: null,
+        hasSpawnError: true,
+      },
+      reasonCode: "probe-execution-error",
+    },
+    {
+      name: "gives timeout precedence over simultaneous spawn-error evidence",
+      execution: {
+        ...BLOCKED_EXECUTION,
+        exitCode: null,
+        timedOut: true,
+        hasSpawnError: true,
+      },
+      reasonCode: "probe-timed-out",
+    },
+  ] as const) {
+    it(name, () => {
+      const report = configuredReport(
+        runtimeDependencies({ executeProbe: () => execution }),
+      );
+
+      assert.equal(report.status, "fail");
+      assert.deepEqual(report.summary, {
+        pass: 0,
+        fail: 0,
+        unsupported: 0,
+        notConfigured: 0,
+        error: DENY_HOOK_SCENARIO_COUNT,
+      });
+      for (const scenario of report.scenarios) {
+        assert.equal(scenario.observed, "error");
+        assert.equal(scenario.verdict, "error");
+        assert.equal(scenario.reasonCode, reasonCode);
+      }
+    });
+  }
+
   // An explicit untrusted-target choice suppresses checkout code execution and records no pass.
   it("skips target hook execution when the user marks the checkout untrusted", () => {
     let executionCount = 0;

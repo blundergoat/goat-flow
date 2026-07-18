@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-07-18
+last_reviewed: 2026-07-19
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -99,11 +99,11 @@ last_reviewed: 2026-07-18
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 12
+**Incident count:** 14
 
-**Latest occurrence:** 2026-07-18
+**Latest occurrence:** 2026-07-19
 
-**What happened:** Twelve edits crossed ADR-023 or bucket caps:
+**What happened:** Fourteen edits crossed ADR-023 or bucket caps:
 
 - **2026-05-19/22:** TDD packs hit 3022/3008 words, the preamble exceeded 1500, and QA exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
 - **2026-06-14:** Dispatcher guidance hit 653/555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
@@ -113,10 +113,12 @@ last_reviewed: 2026-07-18
 - **2026-07-13 M13:** Shared references hit 1560/1601, then compacted to 1484/1490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
 - **2026-07-16 PR #56:** Goat/plan/preamble/TDD measured 597/2689/1540/3021; compaction also repaired stale assertions. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap`; `requires pre-write redaction for durable local text`).
 - **2026-07-17 QA Audit:** A post-gate template pushed QA to 2531; compaction restored 2476. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-qa Audit priorities coherent through the post-gate plan`).
-- **2026-07-17 quality follow-up:** Path-only and checkpoint corrections pushed goat-plan to 2517; the focused contract failed, and compaction restored 2490 before broader verification. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-07-17 inline-review ingestion:** Adding the required PR-comments endpoint pushed goat-review to 2511; the focused contract failed, and compaction restored the skill below 2500 before broader verification. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `ingests path-bearing automated findings from inline PR comments`; `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-07-17 quality remediation:** Stale-index wording pushed the preamble to 1514; compaction restored it below 1500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
-- **2026-07-18 review independence:** Reordering bot ingestion pushed goat-review to 2527; an immediate count triggered compaction to 2488 before mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
+- **2026-07-17 quality follow-up:** Goat-plan hit 2517, then compacted to 2490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- **2026-07-17 inline-review ingestion:** Goat-review hit 2511, then compacted below 2500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `ingests path-bearing automated findings from inline PR comments`).
+- **2026-07-17 quality remediation:** The preamble hit 1514, then compacted below 1500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
+- **2026-07-18 review independence:** Goat-review hit 2527, then compacted to 2488. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
+- **2026-07-19 review scope:** Worktree/area wording pushed goat-review to 2512; compaction restored 2498. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `defines two evidence-producing area audit passes`; `functional skills stay within the 2500-word cap across all mirrors`).
+- **2026-07-19 QA rows:** Goat-qa hit 2506, then 2499. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
 
 **Root cause:** Treated capped prose as tiny.
 
@@ -246,7 +248,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Recurrence 2026-06-14:** While verifying a `goat-qa` skill-doc edit, an `rg` pattern included Markdown backticks around `initialInput`. The deny-dangerous hook blocked it as command substitution before execution. No files were changed by the blocked command, but the verification pass still had to be rerun with a safer pattern. Evidence anchors: `workflow/skills/goat-qa/SKILL.md` (search: `safe to skip more PTY timing tests`) and `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Shell metacharacters in verification searches can corrupt source files`).
 
-**Recurrence 2026-07-17:** A double-quoted `rg` pattern contained Markdown backticks. The deny hook blocked it before execution; rerunning with single quotes changed no tracked files. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
+**Recurrences 2026-07-17 and 2026-07-19:** Double-quoted `rg` patterns containing Markdown backticks were blocked before execution. Single-quoting the whole pattern fixed both searches without changing files. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Root cause:** The search pattern contained shell-significant characters (`>` in HTML text, later backticks in Markdown text) and the command was assembled too casually. A read-only verification command stopped being read-only because the shell parsed the pattern before `rg` ever ran.
 
@@ -266,7 +268,9 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Recurrence 2026-07-13:** M20's first manual JSON probe parsed the report, then failed because it assumed a root `groups` key instead of the implemented `surfaces` groups. Re-reading the locked fixture showed the report was correct; the probe was rewritten against `goat-flow.context-report.v1`. Evidence anchor: `test/unit/context-report.test.ts` (search: `renders parseable JSON without telemetry or provider state`).
 
-**Prevention:** Before broad prose or prompt wording changes, search tests for the exact phrase and adjacent command text. If the product semantics are changing, update the contract test in the same edit; if the test protects unrelated established doctrine, keep that phrase intact.
+**Recurrence 2026-07-19:** A `setupPrompt` fixture landed in the preceding subtest, so RED failed with `setupPrompt is not defined` instead of the intended prompt-copy assertion. Moving the fixture into its consumer produced the real failure. Evidence: `test/contract/command-phrases.test.ts` (search: `keeps git-history correlations as candidates until semantic proof exists`).
+
+**Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine.
 ---
 
 ## Lesson: Split transient preflight test failures from task regressions
@@ -329,14 +333,17 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 ## Lesson: Coverage classification by filename misjudges in both directions
 
 **Status:** active | **Created:** 2026-06-14
-**Decision changed:** Shipped coverage examples use explicitly labelled placeholders unless their live coverage status is contract-tested.
+**Updated:** 2026-07-19
+**Decision changed:** Search the whole test tree and classify each named behaviour/invariant; a file-level label cannot promote uncovered siblings.
 **Trigger phase:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-07-19
 
-**What happened:** While authoring a worked Audit example for the goat-qa skill, I classified `src/cli/audit/` coverage from same-name unit-test files alone: I marked `check-goat-flow.ts` NONE and called `check-drift.ts`'s `checkDrift` orchestrator untested. Both verdicts were wrong because integration suites exercise them. The replacement example then used `runFactualClaimChecks` as a genuinely uncovered counter-example, but that claim also went stale once `test/integration/audit-drift-artifact-integrity.test.ts` imported and exercised it. The shipped skill again taught a current NONE claim that the live test tree disproved.
+**What happened:** A shipped Audit example classified coverage from same-name unit files and made three NONE/untested claims that integration suites disproved or later invalidated. On 2026-07-19, goat-qa A3's single label per file could likewise let one covered behaviour hide an uncovered sibling; the first correction required only CRITICAL/HIGH rows, leaving MEDIUM/LOW matrix rows ambiguous until manual verification.
 
-**Root cause:** I treated filename/same-name matching and one unit file's `describe` blocks as a coverage proxy, then embedded a mutable live-module coverage claim in a shipped reference without a contract that would fail when coverage changed. Filename presence misleads in both directions, and live examples drift as tests are added.
+**Root cause:** Filename and file-level summaries are lossy coverage proxies. Tests cross filenames, and one source file can contain behaviours with different coverage depths.
 
-**Prevention:** Grep the whole test tree for exported symbols and end-to-end invocations before classifying coverage. Substantiate NONE by proving zero references across `test/`, not by absence of a same-name file. In shipped skill examples, prefer an explicitly labelled non-evidence placeholder unless a contract locks the live claim. Evidence anchors: `src/cli/audit/check-goat-flow.ts` (search: `SETUP_CHECKS`) is covered by `test/integration/audit-build.test.ts` (search: `assertBuildChecksPass`); `src/cli/audit/check-drift.ts` (search: `export function checkDrift`) by `test/integration/audit-drift.test.ts` (search: `checkDrift`); `src/cli/audit/check-factual-claims.ts` (search: `runFactualClaimChecks`) by `test/integration/audit-drift-artifact-integrity.test.ts` (search: `runFactualClaimChecks`).
+**Prevention:** Search all tests and end-to-end invocations before classifying. Inventory every named behaviour/invariant, make CRITICAL/HIGH exhaustive, and assign one coverage row per behaviour. BEHAVIOURAL applies only to what that row proves. Keep shipped examples explicitly non-evidence unless a contract locks live coverage. Evidence anchors: `workflow/skills/goat-qa/SKILL.md` (search: `A file summary cannot promote a row`), `test/contract/skill-hardening-contracts.test.ts` (search: `keeps covered behaviours from deferring uncovered siblings`), `src/cli/audit/check-goat-flow.ts` (search: `SETUP_CHECKS`) and `test/integration/audit-build.test.ts` (search: `assertBuildChecksPass`).
 ---
 
 ## Lesson: Declined optional verification must not create a degradation flag

@@ -1,19 +1,20 @@
 # Step 06 - Final Verification
 
-The setup gate is: `goat-flow audit . --agent {agent}` passes and `goat-flow audit . --agent {agent} --harness` passes. The remaining checks below are agent-driven verification steps that improve quality but are not enforced by the auditor.
+The setup gate is: `goat-flow audit . --agent {agent}`, `goat-flow audit . --agent {agent} --harness`, and `goat-flow audit . --agent {agent} --check-content` all pass. The remaining checks below are agent-driven verification steps that improve quality beyond the automated gates.
 
 ## Audit (required gate)
 
-Run both required audit commands and fix all failures until they pass:
+Run all three required audit commands and fix all failures until they pass:
 
 ```bash
 goat-flow audit . --agent {agent}
 goat-flow audit . --agent {agent} --harness
+goat-flow audit . --agent {agent} --check-content
 ```
 
 The `--agent` flag scopes the audit to one agent's surfaces: it checks that agent's instruction file, skills directory, hooks, and settings. It does NOT check other agents' files. For multi-agent projects, run the audit once per agent.
 
-The audit validates structural requirements: required files/dirs exist, config parses, skills installed with version tags, hooks present, deny patterns registered. It does NOT validate content quality (evidence citations, instruction-file specificity, duplicate surfaces). The checks below cover those content concerns.
+The base audit validates structural requirements: required files/dirs exist, config parses, skills installed with version tags, hooks present, and deny patterns registered. The `--check-content` audit validates supported cold-path content claims and reference integrity. It does not replace the agent-driven evidence, specificity, and duplicate-surface checks below.
 
 `goat-flow quality` is optional - it generates an agent-driven review prompt but is not required for setup completion. `goat-flow audit --harness` adds structural installation checks for 5 concerns (context, constraints, verification, recovery, feedback loop) and is part of setup completion. Harness results contribute to the overall audit status - a harness failure is an audit failure. Recovery is milestone/session-log based; missing task content in a fresh install is normal, while stale recovery paths or missing required files should be fixed.
 
@@ -50,13 +51,13 @@ For each backtick-wrapped path or hook path:
 - Verify the instruction file version header matches the goat-flow release version
 - Verify `.goat-flow/config.yaml` version matches the goat-flow release version
 - Verify every installed goat skill reference Markdown file is listed in `workflow/manifest.json` `skills.references`; remove stale files left by reference merges or renames
-- For auto-seeded footgun entries, spot-check that each cited semantic anchor actually resolves to the described trap. If the anchor doesn't match (wrong function, outdated string), fix the reference
+- For footgun entries promoted from history candidates, spot-check that each cited semantic anchor actually resolves to the described trap. If the anchor doesn't match (wrong function, outdated string), return the item to the session log instead of weakening its evidence
 
 ## Evidence verification
 
 After generating footguns and the instruction file, re-verify the evidence:
 
-1. **Semantic-anchor citations:** For every semantic anchor in generated footguns and in the instruction file's BAD/GOOD examples, grep for the cited anchor. If it doesn't resolve to the described content, fix the citation. This catches auto-seeding errors where git history evidence doesn't match current code.
+1. **Semantic-anchor citations:** For every semantic anchor in generated footguns and in the instruction file's BAD/GOOD examples, grep for the cited anchor. If it doesn't resolve to the described content, fix the citation. This catches promotion errors where git-history correlation does not match current code.
 
 2. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 
@@ -110,6 +111,7 @@ Before finalising, add a gap report to the setup session log:
 - **Areas not assessed:** [list any parts of the codebase that setup didn't read or analyse]
 - **Known gaps:** [list detected gaps that setup couldn't fix, e.g., "Python source files found but no Python tests exist"]
 - **Things skipped:** [list anything setup chose not to do, with reason]
+- **History candidates:** [list correlation-only candidates that were not promoted, with the paths or commits that prompted investigation]
 - **Harness-specific checks:** [confirm workspace boundary guidance, skill-docs snippets, and commit guidance were checked; list any exception, including generated insufficient-history commit-guidance stubs]
 
 For each detected language with source files but no test files, note it in the gap report. This is a setup gap, NOT a footgun - do not create a footgun entry for missing tests. The gap report goes in the session log only.
@@ -129,6 +131,7 @@ Use one shared local continuity file: `.goat-flow/logs/sessions/YYYY-MM-DD-setup
 **Verification gate:**
 - [ ] `goat-flow audit . --agent {agent}` passes
 - [ ] `goat-flow audit . --agent {agent} --harness` passes
+- [ ] `goat-flow audit . --agent {agent} --check-content` passes
 - [ ] All required files and directories in `workflow/manifest.json` exist
 - [ ] Workspace boundary guidance, skill-docs snippets, and commit guidance are present where required
 - [ ] Stale-reference checks and Essential Commands smoke tests are complete

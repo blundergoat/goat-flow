@@ -518,3 +518,166 @@ describe("step 06 references audit", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Setup truth and evidence contracts
+// ---------------------------------------------------------------------------
+describe("setup truth and evidence contracts", () => {
+  const contentAuditCommand =
+    "goat-flow audit . --agent {agent} --check-content";
+
+  it("requires content lint before early-stop and final setup completion", () => {
+    const overview = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/setup/01-system-overview.md"),
+      "utf-8",
+    );
+    const finalVerification = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/setup/06-final-verification.md"),
+      "utf-8",
+    );
+    const setupPrompt = readFileSync(
+      resolve(PROJECT_ROOT, "src/cli/prompt/compose-setup.ts"),
+      "utf-8",
+    );
+    assert.ok(
+      overview.includes(contentAuditCommand),
+      "Step 01 early-stop must require the content-aware audit",
+    );
+    assert.ok(
+      overview.indexOf(contentAuditCommand) < overview.indexOf("**STOP**"),
+      "Step 01 must run content lint before its STOP decision",
+    );
+    assert.ok(
+      finalVerification.includes(contentAuditCommand),
+      "Step 06 required gate must include the content-aware audit",
+    );
+    assert.ok(
+      (finalVerification.match(/--check-content/gu) ?? []).length >= 2,
+      "Step 06 must show content lint in both its command gate and checklist",
+    );
+    assert.match(
+      setupPrompt,
+      /--check-content/u,
+      "generated setup gates must include content lint",
+    );
+    assert.doesNotMatch(setupPrompt, /both required setup gates|both audits/iu);
+  });
+
+  it("keeps git-history correlations as candidates until semantic proof exists", () => {
+    const customise = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/setup/05-customise-to-project.md"),
+      "utf-8",
+    );
+    const finalVerification = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/setup/06-final-verification.md"),
+      "utf-8",
+    );
+    const setupPrompt = readFileSync(
+      resolve(PROJECT_ROOT, "src/cli/prompt/compose-setup.ts"),
+      "utf-8",
+    );
+
+    assert.match(customise, /History correlations are candidates only\./u);
+    assert.match(
+      customise,
+      /MUST NOT create a durable footgun or lesson from churn, revert\/fix counts, or co-commit frequency alone/u,
+    );
+    assert.match(
+      customise,
+      /Promote a candidate only when all three gates pass:/u,
+    );
+    assert.match(
+      customise,
+      /current code or configuration supplies a grep-friendly semantic anchor/iu,
+    );
+    assert.match(customise, /changes a future decision/iu);
+    assert.doesNotMatch(customise, /auto-seed/iu);
+    assert.doesNotMatch(finalVerification, /auto-seed/iu);
+    assert.doesNotMatch(setupPrompt, /auto-seed/iu);
+    assert.match(setupPrompt, /history candidates/u);
+  });
+
+  it("calibrates evidence labels to direct observation and reproduction", () => {
+    const customise = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/setup/05-customise-to-project.md"),
+      "utf-8",
+    );
+
+    assert.match(
+      customise,
+      /Use `OBSERVED` when current code or configuration directly demonstrates the trap\./u,
+    );
+    assert.match(
+      customise,
+      /Use `ACTUAL_MEASURED` only when the failure was reproduced or measured locally\./u,
+    );
+    assert.match(
+      customise,
+      /A revert, fix, or rollback commit may support a lesson only after the incident and root cause are verified\./u,
+    );
+    assert.doesNotMatch(customise, /Use `ACTUAL_MEASURED` evidence labels\./u);
+  });
+});
+
+describe("setup-facing learning-loop retrieval", () => {
+  const agentTemplates = [
+    "workflow/setup/agents/claude.md",
+    "workflow/setup/agents/codex.md",
+    "workflow/setup/agents/antigravity.md",
+    "workflow/setup/agents/copilot.md",
+  ] as const;
+
+  it("uses the canonical INDEX-first sequence in every setup agent template", () => {
+    for (const relativePath of agentTemplates) {
+      const content = readFileSync(
+        resolve(PROJECT_ROOT, relativePath),
+        "utf-8",
+      );
+      assert.match(content, /Use INDEX-first retrieval/u, relativePath);
+      assert.match(
+        content,
+        /learning-loop\/\{footguns,lessons,patterns\}\/INDEX\.md/u,
+        relativePath,
+      );
+      assert.match(
+        content,
+        /Open source entries only on candidate hits/u,
+        relativePath,
+      );
+      assert.match(
+        content,
+        /grep bucket files only after the INDEX pass or on a known retrieval miss/u,
+        relativePath,
+      );
+      assert.doesNotMatch(content, /Use grep-first retrieval/u, relativePath);
+    }
+  });
+
+  it("uses INDEX-first retrieval in the execution-loop reference and quality preset", () => {
+    const executionLoop = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/setup/reference/execution-loop.md"),
+      "utf-8",
+    );
+    const presets = JSON.parse(
+      readFileSync(
+        resolve(PROJECT_ROOT, "src/dashboard/preset-prompts.json"),
+        "utf-8",
+      ),
+    ) as Array<{ id: string; prompt: string }>;
+    const qualityPreset = presets.find(
+      (preset) => preset.id === "quality-check-goatflow",
+    );
+
+    assert.ok(qualityPreset, "quality-check-goatflow preset must exist");
+    for (const [surface, content] of [
+      ["execution-loop reference", executionLoop],
+      ["quality preset", qualityPreset.prompt],
+    ] as const) {
+      assert.match(content, /INDEX-first retrieval/u, surface);
+      assert.match(content, /footguns,lessons,patterns/u, surface);
+      assert.match(content, /INDEX\.md/u, surface);
+      assert.match(content, /source entries only on candidate hits/u, surface);
+      assert.doesNotMatch(content, /grep-first retrieval/u, surface);
+    }
+  });
+});

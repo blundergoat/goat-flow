@@ -145,7 +145,7 @@ If unsure, ask the user before A1.5.
 
 ### A1.5 - Scope-Size Gate
 
-Inventory approximate file count before deep analysis. If too large, present a ranked slice prioritising load-bearing and interface-boundary files. Proceed to A2 only after manageable scope is confirmed.
+Count files before deep analysis. If too large, rank a load-bearing/interface slice; proceed after scope confirmation.
 
 ### A2 - Inventory and Risk Ranking
 
@@ -164,21 +164,22 @@ Load-bearing + Interface files get CRITICAL or HIGH risk ratings by default.
 ### A3 - Coverage Analysis
 
 For each in-scope file:
-1. Does a test file exist? If not → coverage `NONE`.
-2. If yes, read the test. Does it assert behaviour (outputs, side effects, error paths) or only construct the unit?
-3. Flag mock-heavy tests (everything mocked = behaviour untested) and integration-only blind spots (suite skips when the external service is unavailable).
+1. Inventory named behaviours/invariants with a code anchor and risk before coverage; CRITICAL/HIGH inventory must be exhaustive.
+2. Create one row per named behaviour; files may have multiple rows/labels.
+3. Search all tests and exported-symbol references. No matching test/manual plan → coverage `NONE`.
+4. Read matches; classify assertions for that behaviour. Flag mocks/skipped integrations.
 
-Record coverage using the Coverage Depth vocabulary above.
+A file summary cannot promote a row. BEHAVIOURAL applies only to the named behaviour/invariant actually asserted.
 
 Misaligned effort is an observed test-to-risk mismatch. Evidence must show duplicate tests adding no distinct branch/invariant while higher-risk behaviour is uncovered; mock-heavy/structural tests displacing user-visible or error paths; or deeper LOW-risk coverage beside uncovered CRITICAL/HIGH paths. Do not infer misalignment from high coverage alone or recommend deleting safety coverage. If no item meets these evidence conditions, report `none found` and name the comparison.
 
 ### A4 - Gap Report
 
-Rank by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; NONE=1.0, STRUCTURAL=0.66, PARTIAL-BEHAVIOURAL=0.33, BEHAVIOURAL=0. Output:
+Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; NONE=1.0, STRUCTURAL=0.66, PARTIAL-BEHAVIOURAL=0.33, BEHAVIOURAL=0. Output:
 
-- **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per file: missing behaviour + the test the user should add.
+- **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per behaviour/invariant: file + code anchor, missing assertion, and test to add.
 - **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path.
-- **Defer** - every matrix Defer pair: LOW-risk or BEHAVIOURAL coverage. Name them explicitly so the user sees what was considered and why.
+- **Defer** - every matrix Defer pair: LOW-risk rows or a named behaviour with BEHAVIOURAL coverage. A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file.
 - **Misaligned effort** - evidence-backed test-to-risk mismatches, or `none found` with named comparison.
 
 **Illustrative scenario - input/output shape only; never evidence.**
@@ -278,7 +279,7 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 <!-- Roles: load-bearing / interface boundary / integration glue / UI / support -->
 
 ## Coverage Analysis
-| File | Test file | Coverage | Notes | Proof Class |
+| File | Behaviour / Invariant | Risk | Test file | Coverage | Notes | Proof Class |
 <!-- Coverage: NONE | STRUCTURAL | PARTIAL-BEHAVIOURAL | BEHAVIOURAL -->
 
 ## Gap Report

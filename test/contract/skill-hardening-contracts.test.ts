@@ -252,6 +252,83 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("combines staged and unstaged changes into one worktree scope", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const scopeSnapshot = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      assert.match(
+        scopeSnapshot,
+        /dirty worktree \(combine staged and unstaged changes into one declared change set\)/u,
+        skillPath,
+      );
+      assert.match(scopeSnapshot, /\*\*Source:\*\*[^\n]+worktree/u, skillPath);
+      assert.match(
+        scopeSnapshot,
+        /For `worktree`, inspect both `git diff --cached` and `git diff`; record both path sets/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("states the default PR review depth at intake", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const scope = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      assert.match(
+        scope,
+        /PR review against a base branch \(quick by default\)/u,
+        skillPath,
+      );
+      assert.match(
+        scope,
+        /If user already says "quick", "PR", or "full"/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("defines two evidence-producing area audit passes", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const areaAudit = readMarkdownSection(skillPath, "Area Audit (Full)");
+      const passOneIndex = areaAudit.indexOf(
+        "### Area Pass 1 - Inventory and Risk Hypotheses",
+      );
+      const passTwoIndex = areaAudit.indexOf(
+        "### Area Pass 2 - Implementation and Consumer Verification",
+      );
+
+      assert.ok(passOneIndex >= 0, `${skillPath}: missing Area Pass 1`);
+      assert.ok(
+        passTwoIndex > passOneIndex,
+        `${skillPath}: Area Pass 2 must follow Area Pass 1`,
+      );
+      assert.match(
+        areaAudit,
+        /inventory responsibilities, interfaces, trust\/state boundaries, and critical paths without using recent diff as scope/u,
+        skillPath,
+      );
+      assert.match(
+        areaAudit,
+        /Record raw suspicions with `file \+ semantic anchor`; do not resolve them/u,
+        skillPath,
+      );
+      assert.match(
+        areaAudit,
+        /Open the implementation, relevant tests, and callers\/consumers/u,
+        skillPath,
+      );
+      assert.match(
+        areaAudit,
+        /Mark each suspicion `CONFIRMED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger/u,
+        skillPath,
+      );
+    });
+  });
+
   it("records the current ceremony contract in ADR-006", () => {
     const decision = readProjectFile(
       ".goat-flow/learning-loop/decisions/ADR-006-autonomous-skill-mode.md",
@@ -952,6 +1029,60 @@ describe("skill hardening contracts", () => {
       assert.match(
         skillGuidance.slice(auditOutputIndex),
         /### Misaligned effort/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("classifies goat-qa Audit coverage per named behaviour or invariant", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const auditMode = readMarkdownSection(skillPath, "Audit Mode");
+      assert.match(
+        auditMode,
+        /Inventory named behaviours\/invariants with a code anchor and risk before coverage; CRITICAL\/HIGH inventory must be exhaustive/u,
+        skillPath,
+      );
+      assert.match(
+        auditMode,
+        /Create one row per named behaviour; files may have multiple rows\/labels/u,
+        skillPath,
+      );
+      assert.match(
+        auditMode,
+        /A file summary cannot promote a row/u,
+        skillPath,
+      );
+      assert.match(
+        auditMode,
+        /BEHAVIOURAL applies only to the named behaviour\/invariant actually asserted/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("keeps covered behaviours from deferring uncovered siblings", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      const auditMode = readMarkdownSection(skillPath, "Audit Mode");
+      const auditOutputHeading = "### Audit mode (no diff - A1–A4 shape)";
+      const auditOutput = skillGuidance.slice(
+        skillGuidance.indexOf(auditOutputHeading),
+      );
+
+      assert.match(
+        auditMode,
+        /Rank each behaviour row by `Risk × uncovered fraction`/u,
+        skillPath,
+      );
+      assert.match(auditMode, /One line per behaviour\/invariant/u, skillPath);
+      assert.match(
+        auditMode,
+        /A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file/u,
+        skillPath,
+      );
+      assert.match(
+        auditOutput,
+        /\| File \| Behaviour \/ Invariant \| Risk \| Test file \| Coverage \| Notes \| Proof Class \|/u,
         skillPath,
       );
     });

@@ -157,23 +157,23 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Updated:** 2026-07-19
 **Decision changed:** Resolve the exact workflow source from `workflow/manifest.json` or `rg --files` before putting a managed source/install pair into a plan or command.
 **Trigger phase:** READ
-**Incident count:** 2
+**Incident count:** 4
 **Latest occurrence:** 2026-07-19
 
-**What happened:** The agent first misread the install-copy pair `workflow/skills/reference/` → `.goat-flow/skill-docs/` as a directory move. On 2026-07-19 it repeated the root mistake by pluralizing the source directory in a milestone command instead of resolving the manifest entry. The drift check failed before source edits; `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`) supplied the real path.
+**What happened:** Four pre-edit reads or commands inferred paths: the agent misread a workflow source/install pair as a move, pluralized a managed source directory, guessed an ADR-016 filename, then guessed an M06 milestone filename. Each failed. `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-016-cold-path-truth-maintenance.md`), and `rg --files --hidden --no-ignore` supplied the exact paths.
 
-**Root cause:** The agent inferred a path while collapsing goat-flow's source/installed-state split: `workflow/` ships templates; `.goat-flow/` receives managed copies.
+**Root cause:** It inferred concept-shaped names instead of resolving the manifest, generated index, or ignored-plan inventory; the install cases also collapsed workflow sources into installed copies.
 
 **Why it matters:** A wrong move can remove consumer templates, while an invented source path makes planning and verification fail before useful work begins.
 
-**Prevention:** Treat `workflow/` and `.goat-flow/` as a source/install pair. Resolve both paths from `workflow/manifest.json` or `rg --files` before planning, moving, or running them; never infer directory spelling.
+**Prevention:** Resolve managed paths from `workflow/manifest.json`, learning entries from `INDEX.md`, and ignored milestones with `rg --files --hidden --no-ignore`. Never infer directory or document names.
 
 ---
 
 ## Lesson: When deny hook blocks a command, use the unblocked equivalent
 
 **Created:** 2026-03-28
-**Updated:** 2026-05-17
+**Updated:** 2026-07-19
 
 **What happened:** Agent needed to delete `.github/skills/goat-onboard/` and `.github/skills/goat-reflect/`. Used `rm -rf`, blocked by the destructive-shell guard. Instead of `rm file && rmdir dir` (not blocked), it asked the user to delete manually - wasting a round trip on something trivially solvable.
 
@@ -184,6 +184,8 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Repeat incident 2026-07-13:** While building an ignored rollback patch, `: >` and `truncate -s 0` were both blocked as destructive truncation. After two blocked variants, the workflow rewound: verify the destination is absent, create it from the first `diff`, then append later diffs. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the shipped guard that produced the block.
 
 **Recurrence update 2026-07-16:** A read-only source search embedded a destructive-command literal in the search expression, so the deny hook rejected the entire command before `rg` ran. The corrected search used semantic terms such as `destructive` and `truncate` instead of replaying an executable-looking command. Evidence: `.goat-flow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the matching guard; this entry (search: `When deny hook blocks a command, use the unblocked equivalent`) records the recovery.
+
+**Recurrence 2026-07-19:** A `node -e` dry-run summarizer embedded `child_process`, so the hook blocked it before execution. Piping the direct CLI output to `jq` produced the same assertion without a shell-execution wrapper. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 
 **Root cause:** Agent defaulted to `rm -rf` out of habit and treated the block as a dead end instead of considering alternatives.
 **Fix:** When a command is blocked, find the unblocked equivalent. `rm -rf dir/` → `rm dir/file && rmdir dir/`. `mv old new` → `mv -n old new`. The deny hook blocks dangerous patterns, not all file ops.
