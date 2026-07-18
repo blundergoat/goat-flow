@@ -325,6 +325,48 @@ const SKILLS_DOC_STALE_PHRASES: Array<{
     message:
       "docs/skills.md still claims exploitability ranking is a universal hard gate; the live skill only requires it in deeper threat-model work.",
   },
+  {
+    needle: "Announce: Routing to /goat-X",
+    rule: "skills-dispatcher-control-flow-drift",
+    message:
+      "docs/skills.md still presents every dispatcher request as one inferred routing path; the live skill bypasses classification for explicit skill invocations and bypasses gathering and routing for simple facts.",
+  },
+  {
+    needle: "Footgun matches\\nRecent git",
+    rule: "skills-dispatcher-retrieval-drift",
+    message:
+      "docs/skills.md still claims the dispatcher pre-reads footguns and recent git; the live dispatcher delegates learning-loop retrieval to routed skills and only retrieves for direct execution.",
+  },
+  {
+    needle: "log lessons and footguns after completion",
+    rule: "skills-learning-loop-write-drift",
+    message:
+      "docs/skills.md still requires unconditional learning-loop writes after completion; the shared contract only writes durable entries after verification failures, course corrections, or explicit requests.",
+  },
+  {
+    needle: 'I1 -->|"BLOCKING GATE"| I2',
+    rule: "skills-debug-investigate-gate-drift",
+    message:
+      "docs/skills.md still blocks every goat-debug investigation at I1; the live skill treats explicit goal and scope as a checkpoint and continues without waiting.",
+  },
+  {
+    needle: "Severity-Ordered Scan",
+    rule: "skills-review-pass-drift",
+    message:
+      "docs/skills.md still teaches a single severity-ordered goat-review scan; the live skill requires diff-only Blind Suspicion followed by full-file Grounded Verification.",
+  },
+  {
+    needle: "**Threat model mode:**",
+    rule: "skills-security-mode-drift",
+    message:
+      "docs/skills.md still teaches obsolete goat-security modes; the live skill selects Quick Scan or Full Assessment depth and keeps compliance as an output posture.",
+  },
+  {
+    needle: 'P2 -->|"BLOCKING GATE"| P3',
+    rule: "skills-qa-phase-gate-drift",
+    message:
+      "docs/skills.md still makes goat-qa Phase 2 unconditionally blocking; the live Standard path auto-releases explicit test-plan intent while Audit remains blocking.",
+  },
 ];
 
 /** Drift: docs/skills.md contains stale contract phrases. */

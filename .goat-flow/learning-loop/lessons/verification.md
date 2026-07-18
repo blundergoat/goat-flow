@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-18
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -179,11 +179,13 @@ last_reviewed: 2026-07-17
 
 ## Lesson: Heading regexes can silently truncate router-table checks
 
-**Status:** historical | **Created:** 2026-04-03 | **Reason:** Rubric check 2.4.3 no longer exists (ADR-013); markdown-parsing principle survives in later parser lessons
+**Status:** active | **Created:** 2026-04-03 | **Last recurrence:** 2026-07-18
 
 **What happened:** Tightened `2.4.3` to parse the Router Table directly, but the first extractor used a multiline regex with `$` in the lookahead. In JavaScript regexes, `$` under `/m` matches end-of-line, so the match stopped after the `## Router Table` heading and never included the rows below it. The new regression also referenced an undefined fixture constant, so the first focused test run broke twice before the real logic was verified.
 **Root cause:** Reached for a compact heading regex instead of reusing the repo’s line-based section parsing style, then wrote a regression that depended on a fixture helper that did not exist in that file.
-**Fix:** For markdown section extraction, prefer line-based parsers over multiline heading regexes with `$`. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
+**Recurrence:** A goat-review regression read the `## Constraints` section with `readMarkdownSection`, but that helper treated a `## Constraints` heading inside the skill's fenced output template as the next real section. The test therefore reported a missing rule after the production fix was already present. Reading the full skill document exposed the false failure. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps an unselected optional Spec Drift pass out of review degradation`) and local TDD receipt `.goat-flow/logs/sessions/2026-07-18-goat-review-tdd.md`.
+
+**Fix:** For markdown section extraction, prefer a line-based parser that tracks fenced-code state over multiline heading regexes with `$`. When the invariant is file-wide, assert against the full document instead of a section helper. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
 
 ---
 

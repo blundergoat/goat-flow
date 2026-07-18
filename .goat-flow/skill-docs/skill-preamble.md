@@ -18,7 +18,7 @@ When a goat-* skill is active, the skill's Step 0 replaces READ and selects the 
 
 ## Durable Local Text Redaction
 
-Before durable local text, send the in-memory draft through stdin to `goat-flow redact --output <destination>`. Only redacted output reaches disk; never stage raw text at the destination or in a temporary file. If the command is unavailable, keep the text non-durable.
+Before durable local text, require `goat-flow --version` to match this reference's `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Send the in-memory draft through stdin to `goat-flow redact --output <destination>`. Only redacted output reaches disk; never stage raw text. Otherwise keep the text non-durable.
 
 ## Severity Scale
 

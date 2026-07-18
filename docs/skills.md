@@ -64,14 +64,20 @@ Route to the right skill in one step. Type `/goat` followed by what you need.
 
 ```mermaid
 flowchart TD
-    Input["User input"] --> Understand["Classify intent"]
-    Understand --> Gather["Gather context\nAsk First boundaries\nFootgun matches\nRecent git"]
-    Gather --> Route{"Route to\nskill"}
-    Route --> Announce["Announce: Routing to /goat-X\nOne-line rationale"]
-    Announce --> Execute["Load target skill's Step 0"]
+    Input["User input"] --> Explicit{"Named goat-* skill?"}
+    Explicit -->|Yes| Execute["Load named skill's Step 0"]
+    Explicit -->|No| Understand["Classify intent"]
+    Understand --> Simple{"Simple factual question?"}
+    Simple -->|Yes| Answer["Answer directly"]
+    Simple -->|No| Gather["Scan Ask First boundaries\nRouted skill owns learnings\nDirect path retrieves learnings"]
+    Gather --> Route{"Route to skill\nor direct execution"}
+    Route --> Snapshot["Emit Route Snapshot"]
+    Snapshot --> Destination{"Selected path"}
+    Destination -->|Skill| Execute
+    Destination -->|Direct| Direct["Use execution loop directly"]
 ```
 
-The dispatcher classifies intent conversationally - not by keyword lookup. It asks 0-2 clarification questions max and routes with a stated assumption if still ambiguous.
+Explicit skill invocations pass through immediately. Otherwise, the dispatcher classifies intent conversationally - not by keyword lookup. It answers simple factual questions directly; inferred skill and direct-execution routes emit a Route Snapshot. It asks 0-2 clarification questions max and routes with a stated assumption if still ambiguous.
 
 | Intent | Skill |
 |--------|-------|
@@ -140,7 +146,7 @@ flowchart TD
 
     subgraph Investigate["Investigate Mode"]
         I1["I1: Scope & Plan\nDeclare in/out of scope\nRead estimate"]
-        I1 -->|"BLOCKING GATE"| I2["I2: Read (Progressive Depth)\nEntry points → Critical path → Supporting"]
+        I1 -->|"CHECKPOINT"| I2["I2: Read (Progressive Depth)\nEntry points → Critical path → Supporting"]
         I2 -->|"3x estimate?"| Check{"Re-scope?"}
         Check -->|Yes| I1
         Check -->|No| I3["I3: Report\n'What I Didn't Read' (required)"]
@@ -149,7 +155,7 @@ flowchart TD
     I3 -->|"BLOCKING GATE"| Close["Go deeper / Switch to diagnose / Close"]
 ```
 
-For onboarding ("I'm new to this project"), use investigate mode - covers stack detection and codebase orientation through progressive depth reading.
+For an explicit goal and scope continue without waiting at I1; pause only for ambiguity or before exceeding the declared read limit. For onboarding ("I'm new to this project"), use investigate mode - covers stack detection and codebase orientation through progressive depth reading.
 
 ---
 
@@ -191,7 +197,7 @@ Structured code review and quality audit with negative verification.
 
 | Mode | Trigger | What it does |
 |------|---------|-------------|
-| **Quick Review** | review, PR, diff | Severity-ordered scan of changes with negative verification |
+| **Quick Review** | review, PR, diff | Diff-only suspicion pass followed by grounded verification |
 | **Audit** | audit, quality sweep | Systematic codebase area scan - findings only, no fixes |
 | **Direction / Opportunity Audit** | explicit future-direction request | Advisory, repo-grounded opportunities kept separate from defect verdicts |
 
@@ -202,8 +208,8 @@ flowchart TD
     S0["Step 0\nAuto-detect scope\nFootgun check"] --> R1
 
     subgraph Review["Quick Review"]
-        R1["Severity-Ordered Scan\nSecurity > Correctness > Integration > Performance > Style"]
-        R1 --> R2["Negative Verification\nAttempt to DISPROVE each finding\nRemove false positives"]
+        R1["Pass 1: Blind Suspicion\nDiff only\nCapture raw suspicions"]
+        R1 -->|"CHECKPOINT"| R2["Pass 2: Grounded Verification\nOpen full files\nConfirm / Refute / Unresolve"]
         R2 --> R3["Present Findings\nMUST / SHOULD / MAY Fix"]
     end
 
@@ -211,7 +217,7 @@ flowchart TD
     DoD -->|"CHECKPOINT"| Close["Closing"]
 ```
 
-MUST NOT flag pre-existing issues as part of this change. MUST attempt to disprove each finding before presenting it.
+Pass 1 never surfaces findings. Pass 2 is the source of truth: it opens full files, attempts to disprove every suspicion, and removes refuted items before presentation. MUST NOT flag pre-existing issues as part of this change.
 
 **Audit mode:** For codebase areas (not a diff). Scan using severity ordering, run negative verification, group 3+ related findings as systemic patterns. MUST NOT propose fixes in audit mode - findings only.
 
@@ -256,27 +262,29 @@ Threat-model-driven security assessment with framework-aware verification. For C
 
 | Mode | Trigger | What it does |
 |------|---------|-------------|
-| **Threat model** | security, vulnerability, OWASP | Full threat surface scan with exploitability ranking |
-| **Dependency audit** | dependencies, CVEs, supply chain | Focused dependency vulnerability scan |
-| **Compliance** | HIPAA, GDPR, compliance | Regulation-specific controls assessment |
+| **Quick Scan** | quick scan, bounded diff/security check | Verify the highest-risk surfaces, report evidence, and stop before Full-only specialist work |
+| **Full Assessment** | full assessment, release/security posture | Threat model, framework-aware verification, calibrated findings, specialist cross-check, and proof gate |
+| **Compliance Mode** | HIPAA, GDPR, compliance | Classify control gaps with direct clause citations where available |
 
-**Threat model mode:**
+**Quick and Full paths:**
 
 ```mermaid
 flowchart TD
-    S0["Step 0\nFramework auto-detect\nFootgun check"] --> P1
-
-    subgraph ThreatModel["Threat Model Mode"]
-        P1["Phase 1: Threat Surface Scan\nPick only categories that fit this repo:\nshell/hooks • secrets/filesystem • PTY/dashboard • prompt generation • dependencies"]
-        P1 --> P2["Phase 2: Framework-Aware Verification\nFor each finding, check:\n(a) installed? (b) configured? (c) applied?"]
-    end
-
-    P2 -->|"BLOCKING GATE"| P3["Phase 3: Exploitability Ranking\nCritical → High → Medium → Low\nAttack scenario for each"]
-    P3 --> P4["Phase 4: Self-Check\nRe-read cited code\nRemove unverified findings"]
-    P4 -->|"BLOCKING GATE"| Close["Present final report"]
+    S0["Step 0\nProvenance + review mode\nQuick or Full depth"] --> Depth{"Selected depth"}
+    Depth -->|Quick| Q1["Quick Scan\nHighest-risk surfaces\nVerify mitigations"]
+    Q1 --> Q2["Report confirmed findings\nWithheld-lead count + evidence needed"]
+    Q2 -->|"QUICK STOP"| Close["Close"]
+    Depth -->|Full| P1["Phases 0-2\nLead gathering + threat surface\nFramework-aware verification"]
+    P1 --> P2["Phases 3-4\nFinding schema\nConfidence classification"]
+    P2 --> P3["Phase 5\nSeverity + authorised specialist\nor specialist-unavailable"]
+    P3 --> P4["Phases 5.5-6\nExploit chaining\nSelf-check + Proof Gate"]
+    P4 --> Persist{"Persist findings?"}
+    Persist -->|No| Close
+    Persist -->|User confirms| Log["Write redacted security log"]
+    Log --> Close
 ```
 
-MUST check built-in mitigations before flagging. A finding mitigated by the framework, runtime, or CLI guardrails is a false positive, not a finding. Confidence classification: CONFIRMED (entry-to-sink traced), PROBABLE (plausible, missing source trace), THEORETICAL (policy gap, no exploit path).
+Quick Scan stops after its five reporting steps and recommends Full Assessment instead of entering specialist work. Full Assessment checks built-in mitigations before keeping a lead; a mitigated lead with no demonstrated bypass is not a finding. Its specialist must be independently admissible and already authorised; otherwise record `specialist-unavailable` without blocking. Confidence classification: CONFIRMED (entry-to-sink traced), PROBABLE (plausible, missing source trace), THEORETICAL (policy gap, no exploit path).
 
 | Repo type | Check these mitigations first |
 |-----------|------------------------------|
@@ -303,11 +311,13 @@ flowchart TD
     subgraph GapAnalysis["Gap Analysis"]
         P1["Phase 1: Change Risk Map\nRead actual diff, not just file names\nClassify: CRITICAL / HIGH / MEDIUM / LOW\nTrace blast radius for CRITICAL/HIGH"]
         P1 -->|"CHECKPOINT"| P2["Phase 2: Gap Analysis\nCompare risk vs coverage\nUndertested risks + Misaligned effort"]
-        P2 -->|"BLOCKING GATE"| P3["Phase 3: Targeted Testing Plan\nMust test / Should test / Safe to skip\nTime estimates for manual items"]
+        P2 -->|"BLOCKING GATE unless test-plan intent is explicit"| P3["Phase 3: Targeted Testing Plan\nMust test / Should test / Safe to skip\nTime estimates for manual items"]
     end
 
     P3 -->|"CHECKPOINT"| Close["Closing"]
 ```
+
+Standard presents Phase 2 and pauses by default. An explicit "what should I test" or "test plan" intent auto-releases the gate as a checkpoint and continues through Phase 3. Audit mode always waits after its A4 gap report.
 
 ---
 
@@ -318,7 +328,7 @@ Every skill shares:
 - **BLOCKING GATEs** - agent stops and waits for human decision
 - **CHECKPOINTs** - agent reports status and continues unless interrupted
 - **Footgun check** - cross-reference `.goat-flow/learning-loop/footguns/` for known traps
-- **Learning loop** - log lessons and footguns after completion
+- **Learning loop** - write durable entries only after a VERIFY failure, course correction, or explicit request
 - **Ceremony scaling** - hotfixes skip ceremony, system changes get full treatment
 
 See `.goat-flow/skill-docs/skill-preamble.md` (installed) or `workflow/skills/reference/skill-preamble.md` (source template) for the canonical shared conventions.

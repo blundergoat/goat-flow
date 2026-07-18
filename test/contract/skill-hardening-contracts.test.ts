@@ -34,7 +34,35 @@ function readMarkdownSection(
 ): string {
   const documentBody = readProjectFile(projectRelativePath);
   const sectionMarker = `## ${sectionHeading}`;
-  const sectionStartIndex = documentBody.indexOf(sectionMarker);
+  const lines = documentBody.split(/\r?\n/u);
+  let sectionStartIndex = -1;
+  let sectionEndIndex = lines.length;
+  let activeFence: "`" | "~" | null = null;
+
+  for (const [lineIndex, line] of lines.entries()) {
+    const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line);
+    if (fenceMatch) {
+      const fenceCharacter = fenceMatch[1][0] as "`" | "~";
+      if (activeFence === null) {
+        activeFence = fenceCharacter;
+      } else if (activeFence === fenceCharacter) {
+        activeFence = null;
+      }
+      continue;
+    }
+
+    if (activeFence !== null) continue;
+
+    if (sectionStartIndex === -1 && line === sectionMarker) {
+      sectionStartIndex = lineIndex;
+      continue;
+    }
+
+    if (sectionStartIndex !== -1 && /^##\s+/u.test(line)) {
+      sectionEndIndex = lineIndex;
+      break;
+    }
+  }
 
   // A missing heading means users cannot reach the promised workflow section.
   assert.notEqual(
@@ -43,17 +71,7 @@ function readMarkdownSection(
     `${projectRelativePath} missing ${sectionMarker}`,
   );
 
-  const nextSectionIndex = documentBody.indexOf(
-    "\n## ",
-    sectionStartIndex + sectionMarker.length,
-  );
-
-  // The final section runs to end-of-file because no later user-facing section exists.
-  if (nextSectionIndex === -1) {
-    return documentBody.slice(sectionStartIndex);
-  }
-
-  return documentBody.slice(sectionStartIndex, nextSectionIndex);
+  return lines.slice(sectionStartIndex, sectionEndIndex).join("\n");
 }
 
 /**
@@ -158,6 +176,40 @@ describe("skill hardening contracts", () => {
       assert.match(
         fullAssessmentPath,
         /Full Assessment-only specialist cross-check/,
+        skillPath,
+      );
+    });
+  });
+
+  it("defines goat-security specialist admission and unavailable fallback", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const fullAssessmentPath = readMarkdownSection(
+        skillPath,
+        "Full Assessment Path",
+      );
+      assert.match(
+        fullAssessmentPath,
+        /An admissible specialist is an independent tool or reviewer with a named failure class and structured return/,
+        skillPath,
+      );
+      assert.match(
+        fullAssessmentPath,
+        /Same-context self-review does not qualify/,
+        skillPath,
+      );
+      assert.match(
+        fullAssessmentPath,
+        /invocation is already authorized by current-session user intent or local instructions/,
+        skillPath,
+      );
+      assert.match(
+        fullAssessmentPath,
+        /record `specialist-unavailable`; do not wait or block/,
+        skillPath,
+      );
+      assert.match(
+        fullAssessmentPath,
+        /keep each affected candidate `PROBABLE` with the exact evidence needed/i,
         skillPath,
       );
     });
@@ -486,6 +538,85 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("documents distinct dispatcher endpoints for inferred skills and direct execution", () => {
+    const skillsDocumentation = readProjectFile("docs/skills.md");
+    const dispatcherDocumentation = readMarkdownSection(
+      "docs/skills.md",
+      "/goat - Dispatcher",
+    );
+
+    assert.match(
+      dispatcherDocumentation,
+      /Explicit -->\|Yes\| Execute\["Load (?:named|target) skill's Step 0"\]/u,
+      "explicit skill invocations must load the named skill",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Snapshot --> Destination/u,
+      "every inferred route must emit its Route Snapshot before dispatch",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Destination -->\|Skill\| Execute/u,
+      "inferred skill routes must load the target skill",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Destination -->\|Direct\| Direct\["Use execution loop directly"\]/u,
+      "direct execution must not load a skill Step 0",
+    );
+    assert.doesNotMatch(
+      skillsDocumentation,
+      /Snapshot --> Execute(?:\s|$)/u,
+      "a shared endpoint collapses direct execution into skill loading",
+    );
+  });
+
+  it("keeps public skill workflows aligned with the installed control flow", () => {
+    const debugDocumentation = readMarkdownSection(
+      "docs/skills.md",
+      "/goat-debug",
+    );
+    assert.match(
+      debugDocumentation,
+      /I1 -->\|"CHECKPOINT"\| I2/u,
+      "explicitly scoped investigation must not be documented as a blocking gate",
+    );
+    assert.match(
+      debugDocumentation,
+      /explicit goal and scope continue without waiting/u,
+    );
+    assert.doesNotMatch(debugDocumentation, /I1 -->\|"BLOCKING GATE"\| I2/u);
+
+    const reviewDocumentation = readMarkdownSection(
+      "docs/skills.md",
+      "/goat-review",
+    );
+    assert.match(reviewDocumentation, /Pass 1: Blind Suspicion/u);
+    assert.match(reviewDocumentation, /Pass 2: Grounded Verification/u);
+    assert.doesNotMatch(reviewDocumentation, /Severity-Ordered Scan/u);
+
+    const securityDocumentation = readMarkdownSection(
+      "docs/skills.md",
+      "/goat-security",
+    );
+    assert.match(securityDocumentation, /\*\*Quick Scan\*\*/u);
+    assert.match(securityDocumentation, /\*\*Full Assessment\*\*/u);
+    assert.doesNotMatch(securityDocumentation, /\*\*Threat model mode:\*\*/u);
+    assert.doesNotMatch(securityDocumentation, /\*\*Dependency audit\*\*/u);
+    assert.doesNotMatch(securityDocumentation, /\*\*Compliance\*\*/u);
+
+    const qaDocumentation = readMarkdownSection("docs/skills.md", "/goat-qa");
+    assert.match(
+      qaDocumentation,
+      /BLOCKING GATE unless test-plan intent is explicit/u,
+    );
+    assert.match(
+      qaDocumentation,
+      /explicit "what should I test" or "test plan" intent auto-releases the gate/u,
+    );
+  });
+
   it("defers stale-index regeneration when committed writes are forbidden", () => {
     for (const preamblePath of [
       "workflow/skills/reference/skill-preamble.md",
@@ -700,6 +831,11 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         skillGuidance,
+        /Risk × uncovered fraction.*NONE=1\.0, STRUCTURAL=0\.66, PARTIAL-BEHAVIOURAL=0\.33, BEHAVIOURAL=0/,
+        `${skillPath}: uncovered fraction must decrease as behavioural coverage increases`,
+      );
+      assert.match(
+        skillGuidance,
         /Illustrative scenario - input\/output shape only; never evidence/,
         skillPath,
       );
@@ -759,6 +895,39 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("keeps an unselected optional Spec Drift pass out of review degradation", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const reviewIntegrity = readMarkdownSection(
+        skillPath,
+        "Review Integrity (confidence signal)",
+      );
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+      const outputFormat = readMarkdownSection(skillPath, "Output Format");
+
+      assert.match(
+        reviewIntegrity,
+        /\*\*Spec drift:\*\* `checked M\[NN\]` \| `skipped` \| `unavailable`\. Optional skip is not degradation/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        reviewIntegrity,
+        /\*\*Degradation flags:\*\*[^\n]*spec-drift-skipped/u,
+        `${skillPath}: an optional local pass must not degrade a complete review`,
+      );
+      assert.match(
+        constraints,
+        /If skipped, record `Spec drift: skipped` without a degradation flag/u,
+        skillPath,
+      );
+      assert.doesNotMatch(constraints, /log `spec-drift-skipped`/u, skillPath);
+      assert.match(
+        outputFormat,
+        /- Spec drift: <checked M\[NN\] \| skipped/u,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-debug bisect reporting-only until explicit approval", () => {
     // Example: a user asks for a regression diagnosis while unrelated edits remain open.
     assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
@@ -785,6 +954,36 @@ describe("skill hardening contracts", () => {
         skillGuidance,
         /success, error, cancellation, or interruption/,
         skillPath,
+      );
+    });
+  });
+
+  it("lets an explicit read-only investigation pass its scope checkpoint", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const investigateMode = readMarkdownSection(
+        skillPath,
+        "Investigate Mode",
+      );
+
+      assert.match(
+        investigateMode,
+        /\*\*CHECKPOINT:\*\* "I'll investigate \[scope\] reading up to \[N\] files\. Adjust\?"/u,
+        skillPath,
+      );
+      assert.match(
+        investigateMode,
+        /When the goal and scope are explicit, continue to I2 without waiting/u,
+        skillPath,
+      );
+      assert.match(
+        investigateMode,
+        /Pause only when the goal or boundary is ambiguous, or before exceeding the declared 3x read limit/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        investigateMode,
+        /\*\*BLOCKING GATE:\*\* "I'll investigate/u,
+        `${skillPath}: read-only orientation must not wait when scope is explicit`,
       );
     });
   });
@@ -1428,6 +1627,17 @@ describe("skill hardening contracts", () => {
         /goat-flow redact --output <destination>/,
         referencePath,
       );
+      assert.match(redactionGuidance, /goat-flow --version/, referencePath);
+      assert.match(
+        redactionGuidance,
+        /goat-flow-reference-version/,
+        referencePath,
+      );
+      assert.match(
+        redactionGuidance,
+        /missing or mismatched CLIs as unavailable/,
+        referencePath,
+      );
       assert.match(redactionGuidance, /never stage raw text/, referencePath);
     });
 
@@ -1454,6 +1664,11 @@ describe("skill hardening contracts", () => {
       assert.match(
         redactionGuidance,
         /goat-flow redact.*--output.*\.goat-flow\/logs/u,
+        referencePath,
+      );
+      assert.match(
+        redactionGuidance,
+        /version-compatible CLI required by `skill-preamble\.md`/,
         referencePath,
       );
       assert.match(
@@ -1751,6 +1966,9 @@ describe("skill hardening contracts", () => {
       receiptTemplate,
       /user requests a handoff or session summary/u,
     );
+    assert.match(receiptTemplate, /goat-flow --version/u);
+    assert.match(receiptTemplate, /\.goat-flow\/config\.yaml/u);
+    assert.match(receiptTemplate, /mismatched.*do not save/u);
     assert.match(receiptTemplate, /goat-flow redact.*--output/u);
     assert.match(receiptTemplate, /literal pass\/fail line or `not run`/u);
     assert.match(receiptTemplate, /re-run before relying on the claim/u);

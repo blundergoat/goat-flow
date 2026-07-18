@@ -34,7 +34,7 @@ Use for diff/PR review or codebase-area quality audits.
 
 **Diff sizing:** before Pass 1, measure files/changed lines. If over **20 files OR 3000 changed lines**, propose file-group chunking; if user proceeds unchunked, record `large-diff-unchunked`.
 
-**Spec source (opt-in):** if `.goat-flow/plans/.active` points to an in-progress/testing milestone, offer: "Include Spec Drift check against M[NN] exit criteria?" Default skip for quick, offer for full. Note choice in Review Integrity.
+**Spec source (opt-in):** if `.goat-flow/plans/.active` points to an in-progress/testing milestone, offer: "Include Spec Drift check against M[NN] exit criteria?" Default skip for quick, offer for full. Record checked/skipped/unavailable in Review Integrity; optional skip is not degradation.
 
 **Temporary review artifacts:** write under `.goat-flow/logs/review/` only with a random suffix (`goat-review-<artifact>.<random>.txt`). Never write to repo root.
 
@@ -160,19 +160,20 @@ Offer Pass 3 when ANY of: (1) user opts in at Step 0, (2) Review Integrity would
 
 ## Review Integrity (confidence signal)
 
-Anti-hallucination surface -- tells the reader at a glance how confident the review is.
+Confidence signal for review coverage.
 
 - **Files opened in Pass 2:** count / total. Paths read diff-only.
 - **Evidence tags:** N OBSERVED / M INFERRED.
 - **Size:** lines changed, files changed, chunking state. PR mode: resolved base, source annotation, short SHA.
 - **Scope snapshot:** source, base, head, uncommitted, chunking.
 - **Refutations logged:** `<N>`
-- **PR-mode extension:** when PR mode fetched inline pull-request comments, add `Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new`; when no bot review exists, add `Automated-reviewer overlap: no-automated-review-present`; outside PR mode, omit or write `n/a`.
+- **Spec drift:** `checked M[NN]` | `skipped` | `unavailable`. Optional skip is not degradation.
+- **PR-mode extension:** record `Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new`; use `no-automated-review-present` when absent and `n/a` outside PR mode.
 - **Pass-3 extension:** when Pass 3 runs, is triggered, or is skipped after a trigger, add `Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<id|n/a>`.
-- **Degradation flags:** `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `spec-drift-skipped`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`.
+- **Degradation flags:** `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`.
 - **Conclusion:** `confident` | `coverage-degraded` | `high-inference` | `partial`.
 
-Never leave this section empty. "confident - no degradation flags" is the minimum.
+Always emit it; minimum: "confident - no degradation flags".
 
 ## Constraints
 
@@ -192,7 +193,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 - MUST order findings by severity, not by file or discovery order
 - MUST emit Review Integrity on every run
 - MUST propose chunking when the diff exceeds 20 files OR 3000 changed lines
-- MUST emit Spec Drift only when opt-in triggered; if skipped, log `spec-drift-skipped` in Review Integrity
+- MUST emit Spec Drift only when opt-in triggered. If skipped, record `Spec drift: skipped` without a degradation flag
 - MUST split Spec Drift output by direction: exit-criteria drift as `[advisory]` (no severity tag), assumption invalidation as `[MUST:needs-decision]` under `## Findings`, open-criterion satisfaction as `[ready-to-tick]`
 - MUST store temporary review artifacts under `.goat-flow/logs/review/` with random suffix
 - MUST attempt to disprove each Pass-1 suspicion during Pass 2
@@ -216,6 +217,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 - Size: <files> files, <lines> lines  (chunked: <group or "no">)
 - Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new | no-automated-review-present | n/a
 - Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<id|n/a>
+- Spec drift: <checked M[NN] | skipped | unavailable>
 - Degradation flags: <list or "none">
 - Conclusion: <confident | coverage-degraded | high-inference | partial>
 
@@ -227,7 +229,7 @@ Never leave this section empty. "confident - no degradation flags" is the minimu
 ## Systemic Patterns  <!-- only when 3+ findings share one root cause -->
 - [SEVERITY:ACTION] **[pattern title]** - affected anchors: `<file + semantic anchor>`, `<file + semantic anchor>`; repeated failure: <one sentence>; harm: <one sentence>
 
-## Spec Drift   <!-- only when opt-in triggered; otherwise omit and log spec-drift-skipped -->
+## Spec Drift   <!-- only when opt-in triggered -->
 <!-- advisory-only entries (exit-criteria drift, ready-to-tick); assumption invalidation goes under ## Findings as [MUST:needs-decision] -->
 - [advisory] **[criterion title]** - claimed done in M[NN] but not supported by diff
 - [ready-to-tick] **[criterion title]** - now satisfied by diff, milestone still shows `- [ ]`

@@ -160,6 +160,10 @@ Run a narrow specialist cross-check when any of these are true:
 - `PROBABLE` findings outnumber `CONFIRMED`
 - strong evidence and strong uncertainty coexist in the same finding cluster (findings that share a root cause, file, or trust boundary)
 
+An admissible specialist is an independent tool or reviewer with a named failure class and structured return. Same-context self-review does not qualify. Apply `skill-conventions.md` → Orchestration Admission; this required phase is pre-admitted, but a delegated or external reviewer is eligible only when its invocation is already authorized by current-session user intent or local instructions.
+
+If no admissible and available specialist exists, record `specialist-unavailable`; do not wait or block. Keep each affected candidate `PROBABLE` with the exact evidence needed to promote or kill it.
+
 Use `/goat-critique` only for disagreement resolution or cross-examination, not as the default second pass. Keep unresolved items in the report as PROBABLE with exact evidence needed. Cap extra churn at one specialist pass per finding cluster. Outcomes: `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`.
 
 ### Phase 5.5 - Exploit Chaining

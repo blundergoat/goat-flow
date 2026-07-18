@@ -174,7 +174,7 @@ Misaligned effort is an observed test-to-risk mismatch. Evidence must show dupli
 
 ### A4 - Gap Report
 
-Rank by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; NONE=0, STRUCTURAL=0.34, PARTIAL-BEHAVIOURAL=0.67, BEHAVIOURAL=1.0. Output:
+Rank by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; NONE=1.0, STRUCTURAL=0.66, PARTIAL-BEHAVIOURAL=0.33, BEHAVIOURAL=0. Output:
 
 - **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per file: missing behaviour + the test the user should add.
 - **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path.

@@ -8,7 +8,7 @@ Session logs remain optional. Write a handoff receipt only when context compacti
 
 ## Write Safely
 
-Run the scrubber first, paste the receipt into stdin, then send EOF. Only the redacted result reaches the output file:
+Run the scrubber first in the write pipeline. Before starting it, confirm `goat-flow --version` matches the version in `.goat-flow/config.yaml`; a missing or mismatched CLI is unavailable, so do not save the receipt. Paste the receipt into the compatible scrubber's stdin and send EOF. Only the redacted result reaches the output file:
 
 ```bash
 goat-flow redact --output .goat-flow/logs/sessions/YYYY-MM-DD-handoff.md

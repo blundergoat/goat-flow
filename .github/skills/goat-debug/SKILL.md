@@ -148,7 +148,7 @@ Every diagnose-mode report ends with this section. It tells the reader how much 
 
 Declare: **In scope** [files/dirs], **Out of scope** [what we skip], **Read estimate** [N files, pause at 3x].
 
-**BLOCKING GATE:** "I'll investigate [scope] reading up to [N] files. Adjust?"
+**CHECKPOINT:** "I'll investigate [scope] reading up to [N] files. Adjust?" When the goal and scope are explicit, continue to I2 without waiting. Pause only when the goal or boundary is ambiguous, or before exceeding the declared 3x read limit.
 
 ### I2 - Read (Progressive Depth)
 

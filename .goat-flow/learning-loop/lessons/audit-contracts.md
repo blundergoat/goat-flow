@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-18
 ---
 
 ## Lesson: Artifact scanners need explicit mirror maps and command grammar controls
@@ -90,3 +90,31 @@ last_reviewed: 2026-07-14
 **Root cause:** Quality reports detect weak presentation, but they do not automatically know which non-gating limits are intentional.
 
 **Prevention:** Before implementing recommendations that change audit status, scoring, or setup gates, reconcile the suggestion against current ADRs and lessons. If the report is right about presentation but wrong about gating, preserve the pass/fail contract and add an explicit limit, warning, or prompt note instead. Evidence anchors: `src/cli/audit/audit.ts` (search: `addNonGatingEvidenceLimits`) and `src/cli/prompt/compose-quality-common.ts` (search: `metrics=${concern.metrics}`).
+
+---
+
+## Lesson: Inverse metrics need monotonic boundary tests
+
+**Status:** active | **Created:** 2026-07-18
+**Decision changed:** When a score names an inverse quantity such as uncovered fraction, verify both endpoint meaning and monotonic direction before trusting the formula.
+**Trigger phase:** VERIFY
+
+**What happened:** goat-qa A4 called its multiplier `uncovered fraction` but assigned NONE=0 and BEHAVIOURAL=1.0. The formula therefore ranked a CRITICAL fully covered path above a HIGH path with no coverage. Two isolated RED evaluators preserved the bad result because the explicit arithmetic and release-pressure framing outweighed the contradictory metric name.
+
+**Root cause:** The priority matrix classified buckets correctly, so tests covered bucket membership without checking the independent numeric ranking's direction. The prose label and constants could disagree while every matrix assertion remained green.
+
+**Prevention:** Pin inverse metrics with endpoint and monotonic assertions: no coverage must maximize uncovered fraction, full behavioural coverage must make it zero, and every intermediate level must decrease as coverage improves. Re-run application scenarios with varied risk/coverage combinations rather than checking one literal sequence. Evidence: `workflow/skills/goat-qa/SKILL.md` (search: `Risk × uncovered fraction`), `test/contract/skill-hardening-contracts.test.ts` (search: `uncovered fraction must decrease`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-qa-tdd.md`.
+
+---
+
+## Lesson: Mandatory specialist phases need admission and unavailable fallbacks
+
+**Status:** active | **Created:** 2026-07-18
+**Decision changed:** A required specialist phase must define admissible independence, authorization, return shape, and non-blocking unavailable behavior beside the trigger.
+**Trigger phase:** SCOPE
+
+**What happened:** goat-security required a narrow specialist cross-check when Full Assessment triggers fired but did not define who qualified, whether delegation was authorized, what evidence the specialist returned, or what happened when none was available. In isolated RED runs, one evaluator counted same-context rereading as the specialist while another blocked release indefinitely.
+
+**Root cause:** The word `required` supplied urgency without an executable orchestration contract. Agents filled the four missing decisions differently under release pressure, so the same prose permitted both false independence and unnecessary blocking.
+
+**Prevention:** Put admission and failure behavior next to every mandatory orchestration trigger: independent tool/reviewer, named failure class, structured return, current-session authorization, bounded attempts, and an explicit unavailable outcome that preserves uncertainty without waiting. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `An admissible specialist`; search: `specialist-unavailable`), `test/contract/skill-hardening-contracts.test.ts` (search: `defines goat-security specialist admission and unavailable fallback`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-security-tdd.md`.

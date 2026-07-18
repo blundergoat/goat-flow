@@ -317,6 +317,80 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  it("reports stale dispatcher control-flow, retrieval, and learning-loop claims", () => {
+    // Regression: docs/skills.md flattened every request into one route,
+    // attributed routed-skill retrieval to the dispatcher, and told every
+    // completed run to write durable learnings.
+    const fixtureRoot = setupFixture();
+    try {
+      const skillsDocPath = join(fixtureRoot, "docs", "skills.md");
+      mkdirSync(dirname(skillsDocPath), { recursive: true });
+      writeFileSync(
+        skillsDocPath,
+        "# Skills\n\nAnnounce: Routing to /goat-X\n\nFootgun matches\\nRecent git\n\nLearning loop - log lessons and footguns after completion\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.deepEqual(
+        report.findings
+          .filter((finding) => finding.path === "docs/skills.md")
+          .map((finding) => finding.rule)
+          .sort(),
+        [
+          "skills-dispatcher-control-flow-drift",
+          "skills-dispatcher-retrieval-drift",
+          "skills-learning-loop-write-drift",
+        ],
+        `expected every stale skills-doc claim to fail, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports stale public skill workflow gates and modes", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const skillsDocPath = join(fixtureRoot, "docs", "skills.md");
+      mkdirSync(dirname(skillsDocPath), { recursive: true });
+      writeFileSync(
+        skillsDocPath,
+        [
+          "# Skills",
+          'I1 -->|"BLOCKING GATE"| I2',
+          "Severity-Ordered Scan",
+          "**Threat model mode:**",
+          'P2 -->|"BLOCKING GATE"| P3',
+        ].join("\n"),
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.deepEqual(
+        report.findings
+          .filter((finding) => finding.path === "docs/skills.md")
+          .map((finding) => finding.rule)
+          .sort(),
+        [
+          "skills-debug-investigate-gate-drift",
+          "skills-qa-phase-gate-drift",
+          "skills-review-pass-drift",
+          "skills-security-mode-drift",
+        ],
+        `expected every stale public workflow to fail, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("reports a stale harness count in the glossary's exact phrasing", () => {
     // Regression: the glossary previously received only removed-command
     // scanning, so "17 checks across 5 concerns" survived a green audit

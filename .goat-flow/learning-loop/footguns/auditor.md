@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-07-13
+last_reviewed: 2026-07-18
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -93,8 +93,12 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 ## Footgun: Selected-agent drift can leak unselected agent surfaces
 
 **Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Every new drift surface must declare whether it is agent-owned or shared and carry the caller's agent filter into agent-owned scans.
+**Trigger phase:** ACT
 
-Running `audit --agent codex --check-drift` against a Codex-only consumer failed because drift still compared Claude and Copilot hook registrations. The audit orchestrator had selected one agent for setup and harness checks, but `checkDrift` rebuilt the full manifest-owned agent inventory internally. A selected-agent audit therefore reported phantom missing files that the user never installed.
+**Trap:** Agent selection is easy to preserve in the top-level audit and lose inside a nested drift helper. Any helper that rebuilds the manifest-owned agent inventory can silently widen a selected-agent audit, producing phantom missing files for agents the consumer did not install. The current implementation prevents this for known drift surfaces; each new agent-owned surface can reintroduce it if it ignores `agentFilter`.
+
+**Original incident:** On 2026-07-12, `audit --agent codex --check-drift` against a Codex-only consumer still compared Claude and Copilot hook registrations because `checkDrift` rebuilt the full agent inventory.
 
 **Evidence:**
 - `src/cli/audit/audit.ts` (search: `agentFilter: ctx.agentFilter`) passes the selected agent into drift instead of dropping the caller's scope.
@@ -108,8 +112,12 @@ Running `audit --agent codex --check-drift` against a Codex-only consumer failed
 ## Footgun: Extractor diagnostics can encode valid empty state
 
 **Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Diagnostic consumers must classify every documented state at their boundary; non-null diagnostic text is not an error flag.
+**Trigger phase:** ACT
 
-A fresh consumer with valid but empty footgun and lesson directories failed the Feedback Loop concern. The shared extractor used `formatDiagnostic` for both malformed metadata and the valid messages `Footgun directory exists but contains 0 entries` and `Lesson directory exists but contains 0 entries`; the harness treated every non-null diagnostic as failure even though its own contract says zero entries are a valid PASS.
+**Trap:** A shared diagnostic channel can carry malformed-metadata errors and valid status such as an empty first-run store. Any new consumer that treats every non-null diagnostic as failure can turn a valid fresh installation into a failed harness. The current Feedback Loop consumer classifies the known empty states; new diagnostics or consumers can reintroduce the conflation.
+
+**Original incident:** On 2026-07-12, a fresh consumer with valid but empty footgun and lesson directories failed the Feedback Loop concern because the harness treated the valid messages `Footgun directory exists but contains 0 entries` and `Lesson directory exists but contains 0 entries` as errors.
 
 **Evidence:**
 - `src/cli/audit/harness/check-feedback-loop.ts` (search: `EMPTY_LEARNING_LOOP_DIAGNOSTICS`) distinguishes the two valid first-run messages from actionable format failures.
