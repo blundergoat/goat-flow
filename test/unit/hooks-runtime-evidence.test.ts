@@ -85,6 +85,17 @@ function configuredReport(dependencies: HookRuntimeDependencies) {
 }
 
 describe("hooks runtime evidence", () => {
+  for (const [flag, field] of [
+    ["--help", "showHelp"],
+    ["--version", "showVersion"],
+  ] as const) {
+    it(`accepts hooks ${flag} without a hooks subcommand`, () => {
+      const parsed = parseCLIArgs(["hooks", flag]);
+      assert.equal(parsed.command, "hooks");
+      assert.equal(parsed[field], true);
+    });
+  }
+
   const PROBE_SCENARIO: HookProbeScenario = {
     id: "fixture-probe",
     label: "Fixture probe",

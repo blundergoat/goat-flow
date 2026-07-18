@@ -10,6 +10,17 @@ import { resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 
 describe("diagnostics command parsing", () => {
+  for (const [flag, field] of [
+    ["--help", "showHelp"],
+    ["--version", "showVersion"],
+  ] as const) {
+    it(`accepts diagnostics ${flag} without a diagnostics subcommand`, () => {
+      const parsed = parseCLIArgs(["diagnostics", flag]);
+      assert.equal(parsed.command, "diagnostics");
+      assert.equal(parsed[field], true);
+    });
+  }
+
   // A maintainer can select the static context readout and a target in one predictable order.
   it("parses diagnostics context with a project path", () => {
     const parsed = parseCLIArgs([

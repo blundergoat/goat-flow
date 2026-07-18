@@ -99,6 +99,17 @@ function symlinkOrSkip(
 }
 
 describe("plans export", () => {
+  for (const [flag, field] of [
+    ["--help", "showHelp"],
+    ["--version", "showVersion"],
+  ] as const) {
+    it(`accepts plans ${flag} without an export path`, () => {
+      const parsed = parseCLIArgs(["plans", flag]);
+      assert.equal(parsed.command, "plans");
+      assert.equal(parsed[field], true);
+    });
+  }
+
   // A complete plan keeps every gate and checkbox future issue adapters need.
   it("parses complete milestone fields without warnings", () => {
     const record = parseMilestoneMarkdown(

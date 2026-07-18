@@ -352,6 +352,10 @@ last_reviewed: 2026-07-18
 
 **Fix:** Extract lightweight positional/flag rules into `src/cli/skill-command-parser.ts` (search: `parseSkillPositionals`), keep doctor runtime imports behind `src/cli/cli-handlers.ts` (search: `handleSkillCommand`), and split collection decisions inside `src/cli/skill-doctor.ts` (search: `inspectFrontmatterFields`). Whole-file ESLint, typecheck, and targeted gruff then passed without suppressions or threshold changes.
 
+**Recurrence update (2026-07-18):** M02 informational-flag behavior reached 61/61 focused tests and typecheck exited 0 before whole-file ESLint rejected `parseCLIArgs` at complexity 12. Moving the branch into a helper fixed complexity, but targeted gruff then exposed growth beyond the already-marginal file-length threshold. Rewinding duplicate namespace parsing brought `src/cli/cli-parser.ts` (search: `selectCommandPositionals`) to zero targeted gruff findings without a suppression or new module.
+
+**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-07-18
+
 **Prevention:**
 1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
 2. Keep parser modules dependency-light. A diagnostic subcommand may lazy-load audit/manifest code after dispatch, but argv parsing must not import that runtime.

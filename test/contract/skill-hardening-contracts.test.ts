@@ -1833,6 +1833,107 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("keeps automated-review conclusions hidden until both local passes finish", () => {
+    const reviewSkillTargets = installedSkillPaths("goat-review");
+    assertForEachTarget(reviewSkillTargets, (skillPath) => {
+      const stepZero = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      const diffReview = readMarkdownSection(
+        skillPath,
+        "Diff Review (Quick) - Two-Pass Discipline",
+      );
+      const passOneIndex = diffReview.indexOf("### Pass 1 - Blind Suspicion");
+      const passTwoIndex = diffReview.indexOf(
+        "### Pass 2 - Grounded Verification",
+      );
+      const overlapIndex = diffReview.indexOf(
+        "### Automated-Review Overlap (PR mode, after local findings)",
+      );
+
+      assert.ok(passOneIndex >= 0, `${skillPath}: missing local Pass 1`);
+      assert.ok(
+        passTwoIndex > passOneIndex,
+        `${skillPath}: Pass 2 must follow Pass 1`,
+      );
+      assert.ok(
+        overlapIndex > passTwoIndex,
+        `${skillPath}: automated-review ingestion must follow both local passes`,
+      );
+      assert.match(
+        stepZero,
+        /Automated-review conclusions stay unread until both local passes finish/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        stepZero,
+        /--json\s+[^`\s]*(?:reviews|comments)/u,
+        skillPath,
+      );
+      assert.doesNotMatch(stepZero, /gh api --paginate/u, skillPath);
+    });
+
+    const canonicalSkill = readProjectFile(
+      "workflow/skills/goat-review/SKILL.md",
+    );
+    const canonicalOverlap = readProjectFile(
+      "workflow/skills/goat-review/references/automated-review.md",
+    );
+    const overlapReferenceTargets = INSTALLED_SKILL_ROOTS.map(
+      (skillRoot) => `${skillRoot}/goat-review/references/automated-review.md`,
+    );
+
+    assertForEachTarget(overlapReferenceTargets, (referencePath) => {
+      const overlapGuidance = readProjectFile(referencePath);
+      const localFindingsIndex = overlapGuidance.indexOf(
+        "Record the complete local findings list before fetching automated-review conclusions.",
+      );
+      const inlineFetchIndex = overlapGuidance.indexOf("gh api --paginate");
+      const briefIndex = overlapGuidance.indexOf("first 80 chars");
+      const overlapTaggingIndex = overlapGuidance.indexOf(
+        "## Post-Pass-2 Overlap Tagging",
+      );
+
+      assert.ok(
+        localFindingsIndex >= 0,
+        `${referencePath}: missing local-findings checkpoint`,
+      );
+      assert.ok(
+        inlineFetchIndex > localFindingsIndex,
+        `${referencePath}: bot comment bodies must follow the local findings checkpoint`,
+      );
+      assert.ok(
+        briefIndex > inlineFetchIndex,
+        `${referencePath}: bot comment briefs must be built only after ingestion`,
+      );
+      assert.ok(
+        overlapTaggingIndex > briefIndex,
+        `${referencePath}: overlap classification must follow conclusion ingestion`,
+      );
+      assert.doesNotMatch(overlapGuidance, /before Pass 1/u, referencePath);
+    });
+
+    for (const installedRoot of [
+      ".claude/skills",
+      ".agents/skills",
+      ".github/skills",
+    ]) {
+      assert.equal(
+        readProjectFile(`${installedRoot}/goat-review/SKILL.md`),
+        canonicalSkill,
+        `${installedRoot}/goat-review/SKILL.md`,
+      );
+      assert.equal(
+        readProjectFile(
+          `${installedRoot}/goat-review/references/automated-review.md`,
+        ),
+        canonicalOverlap,
+        `${installedRoot}/goat-review/references/automated-review.md`,
+      );
+    }
+  });
+
   it("distinguishes tool playbooks from skill-authoring methodology in setup", () => {
     const setupGuide = readProjectFile("workflow/setup/02-instruction-file.md");
     assert.match(

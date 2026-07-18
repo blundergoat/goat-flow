@@ -163,6 +163,56 @@ describe("user-facing CLI package identity", () => {
   });
 });
 
+describe("bounded hook verification guidance", () => {
+  const hookPolicyPlaybooks = [
+    "workflow/skills/playbooks/hook-policy-testing.md",
+    ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
+  ] as const;
+
+  it("documents the managed-hook proof command without claiming agent delivery", () => {
+    for (const relativePath of hookPolicyPlaybooks) {
+      const content = readFileSync(
+        resolve(PROJECT_ROOT, relativePath),
+        "utf-8",
+      );
+
+      assert.ok(
+        content.includes(
+          "goat-flow hooks verify . --agent <id> --scenario deny-hook",
+        ),
+        `${relativePath} must show the bounded managed-hook proof command`,
+      );
+      assert.match(content, /trusted checkout/u, relativePath);
+      assert.match(
+        content,
+        /four fixed inert classifier operands/u,
+        relativePath,
+      );
+      assert.match(
+        content,
+        /does not launch the external coding agent/u,
+        relativePath,
+      );
+      assert.match(
+        content,
+        /does not prove provider-side hook delivery/u,
+        relativePath,
+      );
+      assert.doesNotMatch(
+        content,
+        /proves external(?: coding)? agent delivery/u,
+        relativePath,
+      );
+    }
+
+    assert.equal(
+      readFileSync(resolve(PROJECT_ROOT, hookPolicyPlaybooks[0]), "utf-8"),
+      readFileSync(resolve(PROJECT_ROOT, hookPolicyPlaybooks[1]), "utf-8"),
+      "hook-policy playbooks must remain byte-identical",
+    );
+  });
+});
+
 describe("deployed landing evidence", () => {
   const landingPath = "docs/site/goat-flow-landing.html";
   const landingPage = readFileSync(resolve(PROJECT_ROOT, landingPath), "utf-8");

@@ -99,11 +99,11 @@ last_reviewed: 2026-07-18
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 11
+**Incident count:** 12
 
-**Latest occurrence:** 2026-07-17
+**Latest occurrence:** 2026-07-18
 
-**What happened:** Eleven edits crossed ADR-023 or bucket caps:
+**What happened:** Twelve edits crossed ADR-023 or bucket caps:
 
 - **2026-05-19/22:** TDD packs hit 3022/3008 words, the preamble exceeded 1500, and QA exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
 - **2026-06-14:** Dispatcher guidance hit 653/555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
@@ -116,6 +116,7 @@ last_reviewed: 2026-07-18
 - **2026-07-17 quality follow-up:** Path-only and checkpoint corrections pushed goat-plan to 2517; the focused contract failed, and compaction restored 2490 before broader verification. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
 - **2026-07-17 inline-review ingestion:** Adding the required PR-comments endpoint pushed goat-review to 2511; the focused contract failed, and compaction restored the skill below 2500 before broader verification. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `ingests path-bearing automated findings from inline PR comments`; `functional skills stay within the 2500-word cap across all mirrors`).
 - **2026-07-17 quality remediation:** Stale-index wording pushed the preamble to 1514; compaction restored it below 1500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
+- **2026-07-18 review independence:** Reordering bot ingestion pushed goat-review to 2527; an immediate count triggered compaction to 2488 before mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
 
 **Root cause:** Treated capped prose as tiny.
 

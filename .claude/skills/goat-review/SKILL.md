@@ -28,15 +28,15 @@ Use for diff/PR review or codebase-area quality audits.
 - If vague, ask one follow-up covering files, concerns, and mode.
 - Auto-detect: explicit input, staged, unstaged, PR-style branch ahead of base, then `git diff`.
 
-**PR mode:** prefer PR URL/number. Prompt: "PR URL or number? -- or say 'local' if not pushed." Resolve with `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,number,title,body,reviews,comments`; diff via `gh pr diff <ref>`. Record URL/base SHA. Derive owner/repo and number from the URL; fetch inline findings with `gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=100'`; see `references/automated-review.md`.
+**PR mode:** prefer URL/number; otherwise prompt or use `local`. Get metadata: `gh pr view <ref> --json baseRefName,headRefName,headRefOid,url,number,title,body`; diff: `gh pr diff <ref>`. Record URL/base SHA. Automated-review conclusions stay unread until both local passes finish; Step 0 fetches no review/comment bodies.
 
 **Base fallback:** when no PR link or `gh` unavailable, resolve base from explicit user base, `skills.goat-review.local_pr_base`, remote HEAD, user prompt, then `main` with `base-detection-failed`. Prefer existing refs; only `git fetch origin <base> --quiet` after explicit network approval. Diff `origin/<base>...HEAD` if present, else local `<base>...HEAD` with `base-fetch-skipped` or `base-fetch-failed`. Record base/source/SHA in Review Integrity.
 
-**Diff sizing:** before Pass 1, measure files/changed lines. If over **20 files OR 3000 changed lines**, propose file-group chunking; if user proceeds unchunked, record `large-diff-unchunked`.
+**Diff sizing:** before Pass 1, measure files/changed lines. Above **20 files OR 3000 changed lines**, propose chunking; record an unchunked choice as `large-diff-unchunked`.
 
 **Spec source (opt-in):** if `.goat-flow/plans/.active` points to an in-progress/testing milestone, offer: "Include Spec Drift check against M[NN] exit criteria?" Default skip for quick, offer for full. Record checked/skipped/unavailable in Review Integrity; optional skip is not degradation.
 
-**Temporary review artifacts:** write under `.goat-flow/logs/review/` only with a random suffix (`goat-review-<artifact>.<random>.txt`). Never write to repo root.
+**Temporary artifacts:** use `.goat-flow/logs/review/goat-review-<artifact>.<random>.txt` only.
 
 **Footgun check:** use preamble learning-loop retrieval on `.goat-flow/learning-loop/footguns/` for the target area. Present matches or retrieval miss; do not broad-load.
 
@@ -68,7 +68,7 @@ Pass 1 and Pass 2 anchor to BOTH the diff and the stated intent.
 
 ## Diff Review (Quick) - Two-Pass Discipline
 
-The review runs two sequential passes. You are the reviewer throughout; Pass 2 is the source of truth, and findings surface only after Pass 2.
+Run two sequential local passes; Pass 2 is authoritative and findings surface afterward.
 
 ### Pass 1 - Blind Suspicion (diff only)
 
@@ -90,6 +90,10 @@ Now read full files. For each Pass-1 suspicion:
 - **Refutation Ledger:** write REFUTED suspicions to `.goat-flow/logs/review/goat-review-refutations.<random>.txt` with original suspicion, refuting evidence, and one-sentence rationale. Do not surface refuted items in final output.
 - Add findings that only became visible with file context (integration breakage, call-site contract mismatch, regression in a sibling file).
 - Re-verify every `file + semantic anchor` reference exists before writing the final output.
+
+### Automated-Review Overlap (PR mode, after local findings)
+
+After Pass 2 records local findings, fetch inline comments with `gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=100'`, then apply `references/automated-review.md`; never suppress a finding as overlap.
 
 Full Excuse/Reality table: `references/examples.md`. Key entries:
 

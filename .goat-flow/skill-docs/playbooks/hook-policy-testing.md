@@ -151,6 +151,31 @@ A green classifier with a missing config pointer does not protect the user's
 session. A correct config pointer with stale policy modules protects against
 the wrong command set. Both layers must pass.
 
+### 6. Run the bounded managed-hook proof
+
+Use this deeper checkout-specific proof when validating managed hook registration
+and classifier behavior. The CLI must be available, and the selected agent must
+have the installed deny hook configured in a trusted checkout.
+
+```bash
+goat-flow hooks verify . --agent <id> --scenario deny-hook
+```
+
+The command passes four fixed inert classifier operands to the managed script as
+`--check` arguments; it inspects but never executes those operands. A proven run
+exits `0`, reports `pass` for all four scenarios, and records one local
+`hook.verify` event per scenario. `fail`, `unsupported`, `not-configured`,
+`error`, or a missing evidence event means the requested proof is incomplete.
+
+The selected checkout's hook code runs during this command. For an untrusted
+checkout, add `--untrusted-target`; the CLI returns explicit `unsupported`
+results without starting the hook, so that safe result is not classifier proof.
+
+This command proves only the selected checkout's managed script, registration
+state, and four fixed decisions. It does not launch the external coding agent
+and does not prove provider-side hook delivery. Never cite it as external-agent
+delivery evidence.
+
 ## Verification Gate
 
 After any hook-policy or registration change, require all of the following:
@@ -160,6 +185,7 @@ After any hook-policy or registration change, require all of the following:
 - every new deny case has a nearby allow control;
 - dispatcher and policy-module mirrors are identical;
 - supported agent configs point to the installed central dispatcher;
+- any requested managed-hook proof reports four passes and recorded events;
 - manifest, drift audit, shell syntax, and ShellCheck pass;
 - the original bypass or false-positive reproduction now has the intended exit.
 

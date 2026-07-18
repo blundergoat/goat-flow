@@ -352,38 +352,6 @@ function parseCommandPositionals(
 ): ReturnType<typeof parseQualityPositionals> {
   if (command === "quality")
     return parseQualityPositionals(positionals, draftFlag);
-  if (command === "skill")
-    return {
-      qualitySubcommand: "prompt",
-      projectPath: parseSkillPositionals(positionals).projectPath,
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  if (command === "hooks")
-    return {
-      qualitySubcommand: "prompt",
-      projectPath: parseHooksPositionals(positionals).projectPath,
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  if (command === "plans")
-    return {
-      qualitySubcommand: "prompt",
-      projectPath: parsePlansPositionals(positionals).projectPath,
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  if (command === "diagnostics")
-    return {
-      qualitySubcommand: "prompt",
-      projectPath: parseDiagnosticsPositionals(positionals).projectPath,
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
   return {
     qualitySubcommand: "prompt",
     projectPath: resolve(positionals[0] ?? "."),
@@ -419,6 +387,26 @@ function parsedString(
 ): string | undefined {
   const value = values[name];
   return typeof value === "string" ? value : undefined;
+}
+
+/** Supply ignored, valid namespace positionals while help or version short-circuits dispatch. */
+const INFORMATIONAL_POSITIONALS: Partial<Record<Command, string[]>> = {
+  diagnostics: ["context"],
+  events: ["tail"],
+  hooks: ["list"],
+  plans: ["export", "."],
+};
+/** Choose real positionals unless the CLI will stop after rendering information. */
+function selectCommandPositionals(
+  command: Command,
+  positionals: string[],
+  values: ParsedArgValues,
+): string[] {
+  const isInformational =
+    parsedFlag(values, "help") || parsedFlag(values, "version");
+  return isInformational
+    ? (INFORMATIONAL_POSITIONALS[command] ?? [])
+    : positionals;
 }
 
 /** Reject shared flags when they are attached to commands that do not support them. */
@@ -583,11 +571,15 @@ function selectCommandProjectPath(
   eventsProjectPath: string,
   hooksProjectPath: string,
   plansProjectPath: string,
+  diagnosticsProjectPath: string,
+  skillProjectPath: string,
 ): string {
   // Each namespaced command owns the path position its users supplied.
   if (command === "events") return eventsProjectPath;
   if (command === "hooks") return hooksProjectPath;
   if (command === "plans") return plansProjectPath;
+  if (command === "diagnostics") return diagnosticsProjectPath;
+  if (command === "skill") return skillProjectPath;
   return qualityProjectPath;
 }
 
@@ -640,18 +632,23 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   });
 
   const parsedValues = values as ParsedArgValues;
-  const qualityPositionals = parseCommandPositionals(
+  const commandPositionals = selectCommandPositionals(
     command,
     positionals,
+    parsedValues,
+  );
+  const qualityPositionals = parseCommandPositionals(
+    command,
+    commandPositionals,
     parsedString(parsedValues, "draft") ?? null,
   );
   const eventsPositionals =
     command === "events"
-      ? parseEventsPositionals(positionals)
+      ? parseEventsPositionals(commandPositionals)
       : { eventsSubcommand: null, projectPath: qualityPositionals.projectPath };
   const hooksPositionals =
     command === "hooks"
-      ? parseHooksPositionals(positionals)
+      ? parseHooksPositionals(commandPositionals)
       : {
           hookSubcommand: null,
           hookId: null,
@@ -659,16 +656,24 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
         };
   const plansPositionals =
     command === "plans"
-      ? parsePlansPositionals(positionals)
+      ? parsePlansPositionals(commandPositionals)
       : { plansSubcommand: null, projectPath: qualityPositionals.projectPath };
   const diagnosticsPositionals: {
     diagnosticsSubcommand: DiagnosticsSubcommand | null;
     projectPath: string;
   } =
     command === "diagnostics"
-      ? parseDiagnosticsPositionals(positionals)
+      ? parseDiagnosticsPositionals(commandPositionals)
       : {
           diagnosticsSubcommand: null,
+          projectPath: qualityPositionals.projectPath,
+        };
+  const skillPositionals: SkillPositionals =
+    command === "skill"
+      ? parseSkillPositionals(commandPositionals)
+      : {
+          skillSubcommand: null,
+          skillDescription: null,
           projectPath: qualityPositionals.projectPath,
         };
   const projectPath = selectCommandProjectPath(
@@ -677,15 +682,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     eventsPositionals.projectPath,
     hooksPositionals.projectPath,
     plansPositionals.projectPath,
+    diagnosticsPositionals.projectPath,
+    skillPositionals.projectPath,
   );
-  const skillPositionals: SkillPositionals =
-    command === "skill"
-      ? parseSkillPositionals(positionals)
-      : {
-          skillSubcommand: null,
-          skillDescription: null,
-          projectPath,
-        };
   const skillFields = buildSkillCLIFields(
     command,
     parsedValues,

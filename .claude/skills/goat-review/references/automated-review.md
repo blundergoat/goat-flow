@@ -5,18 +5,26 @@ goat-flow-reference-version: "1.14.0"
 
 Loaded by `/goat-review` in PR mode. Defines how to ingest existing
 automated-reviewer findings (Copilot, CodeQL/github-advanced-security,
-claude[bot], or any other repo bot) before Pass 1, and how to report
-the human-vs-automated finding split in Review Integrity.
+claude[bot], or any other repo bot) after Pass 2 records local findings,
+and how to report the human-vs-automated split in Review Integrity.
 
 Borrowed from awslabs/cli-agent-orchestrator PR #245 review pattern, where
 the human reviewer posted a Copilot/Manual finding tally that made the
 review accountable ("Copilot 11, Manual 3, accuracy 100%").
 
-## Ingestion
+## Post-Pass-2 Ingestion
 
-The Step 0 `gh pr view` payload provides PR metadata, review submissions,
-and issue-level comments. It does **not** provide the path-bearing inline
-review comments needed for finding overlap.
+Record the complete local findings list before fetching automated-review conclusions.
+Do not revise or suppress that list after seeing bot output. Step 0 provides the
+PR URL and number but deliberately omits review and comment bodies.
+
+After the local list is recorded, fetch review submissions and issue-level comments:
+
+```bash
+gh pr view <ref> --json reviews,comments
+```
+
+This payload still omits the path-bearing inline review comments needed for overlap.
 
 Resolve `<owner>/<repo>` and `<number>` from the PR URL and number, then
 fetch every inline review comment:
@@ -50,9 +58,9 @@ If the endpoint fails, pagination is incomplete, parsing loses path/body fields,
 or a known bot review claims findings but no usable inline entries are returned,
 flag `automated-review-uningested` in Review Integrity.
 
-## Pass 2 Overlap Tagging
+## Post-Pass-2 Overlap Tagging
 
-After Pass 2 produces its findings list, tag each finding:
+Compare the recorded local findings list with the automated-review index and tag each finding:
 
 - `[overlap:<reviewer>]` - this human finding matches a known finding in
   the automated-review index (same file, semantically similar brief).
@@ -99,6 +107,8 @@ human review filled (`[new]` count is the per-PR review value).
 
 ## Anti-Patterns
 
+- **Read bot conclusions before both local passes finish.** Contaminates the
+  blind review and makes the local delta unknowable.
 - **Silently omit overlap reporting when automated review exists.**
   Defeats the surface; presents human review as if it were standalone.
 - **Mark every finding `[new]` to inflate yield.** The semantic-match
