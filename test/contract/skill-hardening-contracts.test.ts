@@ -155,6 +155,119 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("carries explicit build intent through planning into ordinary ACT", () => {
+    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+      const routeMap = readMarkdownSection(skillPath, "Route Map");
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+
+      assert.match(
+        routeMap,
+        /Plan\/design or non-trivial build\/change[^\n]+return-to-implement[^\n]+plan\/design stops after planning/u,
+        skillPath,
+      );
+      assert.match(
+        constraints,
+        /return-to-implement` preserves build authorization, but Ask First boundaries still gate/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const delivery = readMarkdownSection(
+        skillPath,
+        "Phase 2 - Deliver Milestones",
+      );
+
+      assert.match(delivery, /\*\*Post-plan return:\*\*/u, skillPath);
+      assert.match(delivery, /After Phase 2 finishes/u, skillPath);
+      assert.match(delivery, /return-to-implement/u, skillPath);
+      assert.match(
+        delivery,
+        /hands ordinary ACT the existing build authorization/u,
+        skillPath,
+      );
+      assert.match(delivery, /new Ask First boundaries still gate/u, skillPath);
+      assert.match(delivery, /Plan-only stops/u, skillPath);
+    });
+
+    const publicGuidance = readProjectFile("docs/skills.md");
+    assert.match(publicGuidance, /return-to-implement/u);
+    assert.match(publicGuidance, /ordinary ACT implementation/u);
+    assert.match(publicGuidance, /new Ask First boundaries still gate/u);
+
+    const implementationDecision = readProjectFile(
+      ".goat-flow/learning-loop/decisions/ADR-005-no-implementation-skill.md",
+    );
+    assert.match(implementationDecision, /return-to-implement/u);
+    assert.match(
+      implementationDecision,
+      /authorized build\/change work to ordinary ACT/u,
+    );
+    assert.match(implementationDecision, /Ask First boundaries still gate/u);
+    assert.doesNotMatch(
+      implementationDecision,
+      /invoke the implementation directly after planning/u,
+    );
+  });
+
+  it("keeps area audits independent of diff-only metadata and verdicts", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const scopeSnapshot = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+      const outputFormat = readMarkdownSection(skillPath, "Output Format");
+
+      assert.match(scopeSnapshot, /\*\*Scope sizing:\*\*/u, skillPath);
+      assert.match(scopeSnapshot, /\*\*Source:\*\*[^\n]+area/u, skillPath);
+      assert.match(scopeSnapshot, /area `<files>`\/`<clusters>`/u, skillPath);
+      assert.match(
+        scopeSnapshot,
+        /Required `n\/a` is resolved, not degraded/u,
+        skillPath,
+      );
+      assert.match(scopeSnapshot, /Area: the user's audit brief/u, skillPath);
+      assert.match(
+        scopeSnapshot,
+        /Implied intent:\*\* observed behavior\/responsibility/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        scopeSnapshot,
+        /what the diff actually appears to do/u,
+        skillPath,
+      );
+      assert.match(scopeSnapshot, /declared area and audit intent/u, skillPath);
+      const areaAudit = readMarkdownSection(skillPath, "Area Audit (Full)");
+      assert.match(areaAudit, /N\/A - AREA AUDIT ONLY/u, skillPath);
+      const integrity = readMarkdownSection(
+        skillPath,
+        "Review Integrity (confidence signal)",
+      );
+      assert.match(integrity, /diff mode also lists paths/u, skillPath);
+      assert.match(constraints, /above 20 files in either mode/u, skillPath);
+      assert.match(outputFormat, /diff paths: <list or "n\/a">/u, skillPath);
+      assert.match(outputFormat, /N\/A - AREA AUDIT ONLY/u, skillPath);
+    });
+  });
+
+  it("records the current ceremony contract in ADR-006", () => {
+    const decision = readProjectFile(
+      ".goat-flow/learning-loop/decisions/ADR-006-autonomous-skill-mode.md",
+    );
+
+    assert.match(decision, /\*\*Status:\*\* Accepted\n/u);
+    assert.doesNotMatch(decision, /\*\*Status:\*\* Accepted \(partial\)/u);
+    assert.match(decision, /Complexity controls pre-invocation routing/u);
+    assert.match(
+      decision,
+      /Once a skill is invoked, complexity MUST NOT skip that skill's required phases or verification gates/u,
+    );
+    assert.match(decision, /Sub-agent gate conversion remains accepted/u);
+    assert.match(decision, /## Superseded Portion/u);
+  });
+
   it("keeps goat-security Quick Scan out of Full-only specialist work", () => {
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       const quickScanPath = readMarkdownSection(skillPath, "Quick Scan Path");

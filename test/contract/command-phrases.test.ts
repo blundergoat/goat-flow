@@ -368,6 +368,10 @@ fi
 });
 
 describe("coding-standard drift", () => {
+  const architecture = readFileSync(
+    resolve(PROJECT_ROOT, ".goat-flow/architecture.md"),
+    "utf-8",
+  );
   const conventions = readFileSync(
     resolve(PROJECT_ROOT, "docs/coding-standards/conventions.md"),
     "utf-8",
@@ -420,6 +424,30 @@ describe("coding-standard drift", () => {
     assert.match(conventions, /server\/.*types/u);
     assert.doesNotMatch(conventions, /# All type definitions/u);
     assert.doesNotMatch(conventions, /Don't put types outside `types\.ts`/u);
+  });
+
+  it("maps CLI parsing and type ownership to the live modules", () => {
+    assert.match(
+      architecture,
+      /cli\.ts\s+# CLI bootstrap, argv parsing handoff, command dispatch/u,
+    );
+    assert.match(architecture, /cli-parser\.ts\s+# Argument parsing/u);
+    assert.match(architecture, /cli-handlers\.ts\s+# Command dispatch/u);
+    assert.match(
+      architecture,
+      /cli-types\.ts\s+# Parsed command and option types/u,
+    );
+    assert.match(architecture, /types\.ts\s+# Shared cross-domain types/u);
+    assert.doesNotMatch(architecture, /cli\.ts\s+# Entry point, arg parsing/u);
+    assert.doesNotMatch(architecture, /types\.ts\s+# All type definitions/u);
+
+    assert.match(
+      conventions,
+      /cli\.ts\s+# CLI bootstrap, argv parsing handoff, command dispatch/u,
+    );
+    assert.match(conventions, /cli-parser\.ts\s+# Argument parsing/u);
+    assert.match(conventions, /cli-handlers\.ts\s+# Command dispatch/u);
+    assert.doesNotMatch(conventions, /cli\.ts\s+# Entry point, arg parsing/u);
   });
 
   it("documents the browser dashboard and narrow explicit-any exception", () => {

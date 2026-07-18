@@ -91,7 +91,7 @@ Explicit skill invocations pass through immediately. Otherwise, the dispatcher c
 | Test gaps, coverage, verification planning | /goat-qa |
 | Critique a plan/assessment | /goat-critique |
 
-**Planning Route:** For planning requests, the dispatcher routes intent only: Hotfix → direct execution; anything larger with a clear build/plan verb → `/goat-plan`. Bare or ambiguous task paths are read-only context, not planning or implementation requests. `/goat-plan` owns `.goat-flow/plans/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection. `/goat-plan` defaults to File-Write at Standard+ scope only when a clear build objective exists; analysis signals ("break this down for me", "how would you approach") trigger Read-Only Analysis mode instead.
+**Planning Route:** Hotfixes use direct execution. A plan/design verb routes to planning-only `/goat-plan`; a non-trivial build/change verb routes through `/goat-plan` with `return-to-implement`. After Phase 2, that handoff starts ordinary ACT implementation without repeating the build authorization; new Ask First boundaries still gate. Bare or ambiguous task paths remain read-only context. `/goat-plan` owns `.goat-flow/plans/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection; analysis signals ("break this down for me", "how would you approach") select Read-Only Analysis.
 
 **Task path classifier examples:**
 
@@ -172,14 +172,16 @@ flowchart TD
     end
 
     P1 -->|"CHECKPOINT"| P2["Phase 2: Output per mode\n(inline, file-write, or read-only)"]
-    P2 -->|"CHECKPOINT"| P3["Phase 3: Between milestones\nAI verification gate\nHuman verification gate"]
+    P2 -->|"Plan/design only"| Planned["Stop after plan handoff"]
+    P2 -->|"return-to-implement"| ACT["Ordinary ACT implementation"]
+    ACT --> P3["Phase 3: Between milestones\nAI verification gate\nHuman verification gate"]
     P3 -->|"BLOCKING GATE"| Next{"Next milestone?"}
     Next -->|Yes| P3
     Next -->|No| P4["Phase 4: Plan Complete\nAI verification gate\nHuman verification gate"]
     P4 -->|"BLOCKING GATE"| Close["Complete"]
 ```
 
-**Milestone archetypes:** Prove It Works (spike the riskiest part first) → Make It Real (end-to-end working) → Make It Solid (edge cases, security) → Make It Shine (polish, optional). Write modes persist milestone files immediately after breakdown; `/goat-plan` does not auto-chain `/goat-critique`. Each milestone has kill criteria, assumption tracking, and a dual AI + human verification gate (BLOCKING) before the next begins. Read-Only Analysis mode is available at any complexity level via analysis signals ("break this down for me", "how would you approach").
+**Milestone archetypes:** Prove It Works (spike the riskiest part first) → Make It Real (end-to-end working) → Make It Solid (edge cases, security) → Make It Shine (polish, optional). Write modes persist milestone files immediately after breakdown; `/goat-plan` does not auto-chain `/goat-critique`. For an authorized build/change route, `/goat-plan` hands the first milestone to ordinary ACT implementation and remains the owner of the between-milestone gates. Each milestone has kill criteria, assumption tracking, and a dual AI + human verification gate (BLOCKING) before the next begins. Read-Only Analysis mode is available at any complexity level via analysis signals ("break this down for me", "how would you approach").
 
 **Handoff-grade milestone artifacts:** Standard+ plans record a planned-at SHA/date, committed and uncommitted drift commands, semantic-anchor current state, explicit in/out scope, a verification baseline, expected command results, STOP conditions, and maintenance notes. Small low-risk plans stay compact.
 

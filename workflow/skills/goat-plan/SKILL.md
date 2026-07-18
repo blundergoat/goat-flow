@@ -151,7 +151,7 @@ Analysis signals triggered this mode.
 
 ### Mode 3: Small File-Write (Hotfix / Small Feature)
 
-The preamble's "skip goat-plan at Hotfix" is dispatcher routing; once goat-plan is invoked, Mode 3 is the Hotfix path. Low blast radius, 1-2 milestones, no analysis signals. Like Mode 4 but concise milestone files (minimal ceremony, no padding); both write immediately via File Artifact Rules and skip the inline-first prompt. Write artifacts, then present paths + summary.
+The preamble's "skip goat-plan at Hotfix" governs dispatch; invoked goat-plan uses Mode 3. Low-risk, 1-2 milestones, no analysis signals. Like Mode 4 but concise milestone files (minimal ceremony, no padding); both write immediately via File Artifact Rules and skip the inline-first prompt. Write artifacts, then present paths + summary.
 
 ### Mode 4: File-Write (Standard+ or explicit file request)
 
@@ -176,6 +176,8 @@ For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.
 **Reference verification:** After writing, grep every inline reference code and verify it resolves to a file on disk.
 
 For concrete Mode 0 and Mode 4 examples with expected paths and checkpoint output, see `references/milestone-examples.md`.
+
+**Post-plan return:** After Phase 2 finishes, `return-to-implement` hands ordinary ACT the existing build authorization; new Ask First boundaries still gate. Plan-only stops; Phase 3 gates milestones.
 
 ## Phase 3 - Between Milestones
 

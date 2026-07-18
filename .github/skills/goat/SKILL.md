@@ -53,17 +53,16 @@ Rationale: <verified routing rule and boundary state>
 | Multi-perspective critique | `/goat-critique` |
 | Security, compliance, dependency audit | `/goat-security` |
 | Testing gaps, coverage, verification planning | `/goat-qa` |
-| Feature planning, milestones | `/goat-plan` |
 | Bare task path (no action verb) | Bare or ambiguous task paths are read-only context. Do not update `.active`, milestone status, or code from a path alone |
-| Build/plan verb + scope | `/goat-plan` (Step 0 handles complexity and mode) |
+| Plan/design or non-trivial build/change | `/goat-plan`; build/change carries `return-to-implement`, plan/design stops after planning |
 | Simple implementation (single-file, obvious) | No skill; use execution loop directly |
 | Simple question | Answer directly |
 
 ## Constraints
 
-- MUST respect explicit skill invocations immediately - no reclassification
+- MUST respect explicit skill invocations - no reclassification
 - MUST NOT investigate implementation or make changes before routing; the Simple-fact fast path may read only the minimum source or reference needed to answer
 - MUST understand intent conversationally, not via keyword lookup - 0-2 clarification questions max; route with stated assumption if still ambiguous
 - MUST emit a Route Snapshot for every inferred skill or direct-execution dispatch - simple-fact answers are exempt
 - MUST split multi-intent requests into numbered intents and route each
-- MUST pass brief/depth to target skill and preserve context on re-route
+- MUST pass brief/depth and preserve context; `return-to-implement` preserves build authorization, but Ask First boundaries still gate

@@ -44,9 +44,12 @@ Consumer runs `npx @blundergoat/goat-flow@latest install . --agent <id> --dry-ru
 
 ```
 src/cli/
-  cli.ts              # Entry point, arg parsing
+  cli.ts              # CLI bootstrap, argv parsing handoff, command dispatch
+  cli-parser.ts       # Argument parsing and command/flag normalization
+  cli-handlers.ts     # Command dispatch and lazy handler loading
+  cli-types.ts        # Parsed command and option types
   index.ts            # Library re-exports
-  types.ts            # All type definitions
+  types.ts            # Shared cross-domain types
   constants.ts        # Shared constants
   paths.ts            # Path resolution utilities
   redact-command.ts   # Pre-write scrubber for readable session, handoff, review, quality, security, and export text

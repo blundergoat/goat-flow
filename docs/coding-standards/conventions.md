@@ -14,10 +14,12 @@ Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-ya
 
 ```
 src/cli/
-  cli.ts              # Entry point, arg parsing (node:util parseArgs)
+  cli.ts              # CLI bootstrap, argv parsing handoff, command dispatch
+  cli-parser.ts       # Argument parsing and command/flag normalization
+  cli-handlers.ts     # Command dispatch and lazy handler loading
+  cli-types.ts        # Parsed command and option types
   index.ts            # Library re-exports
   types.ts            # Cross-cutting shared types only
-  cli-types.ts        # CLI command and parser types
   constants.ts        # Shared constants (AUDIT_VERSION, SKILL_NAMES, etc.)
   paths.ts            # Path resolution utilities
   classify-state.ts   # Classify project setup state for prompt generation

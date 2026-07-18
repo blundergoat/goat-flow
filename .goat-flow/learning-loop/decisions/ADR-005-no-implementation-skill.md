@@ -2,7 +2,7 @@
 
 **Status:** Accepted (partial). Core decision stands - no implementation skill was added. Phase 5 (Execute) in goat-plan and the `persona` config field in the "Consequences" section were never shipped. Implementation is handled in the ordinary ACT step per the execution loop; goat-plan remains planning-only and can deliver inline/read-only or file-based milestones without an execution phase.
 **Date:** 2026-04-03
-**Updated:** 2026-05-18 - retired `docs/system-spec.md` line citations replaced with the current execution-loop successor anchor.
+**Updated:** 2026-07-18 - encoded dispatcher-to-plan carry-through while keeping implementation in ordinary ACT.
 
 ## Context
 
@@ -38,6 +38,6 @@ Three changes:
 
 - Supersedes the earlier dispatcher-counting split that now lives inside ADR-009. Dispatcher is now "6 skills + dispatcher" (7 total: goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa + goat dispatcher).
 - Dispatcher routing table gains implementation-intent rows (shipped).
-- goat-plan **did not** gain Phase 5 (Execute). Implementation remains the ordinary ACT step in the execution loop; goat-plan ends at milestone approval. Users wanting carry-through either invoke the implementation directly after planning or use `/goat-debug` D3/D4 for bug-fix flows.
+- goat-plan **did not** gain Phase 5 (Execute). After Phase 2, `return-to-implement` hands authorized build/change work to ordinary ACT; plan-only routes stop, and new Ask First boundaries still gate. Bug fixes use `/goat-debug` D3/D4.
 - `.goat-flow/config.yaml` **did not** gain a `persona` field. Persona-based mode locking was scoped out; CLAUDE.md `Autonomy Tiers` plus `Ask First` boundaries cover the same ground without a machine-readable lockout.
 - Historical note: the old gitignored override surface was removed in M13.

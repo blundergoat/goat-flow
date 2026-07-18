@@ -32,7 +32,7 @@ Use for diff/PR review or codebase-area quality audits.
 
 **Base fallback:** when no PR link or `gh` unavailable, resolve base from explicit user base, `skills.goat-review.local_pr_base`, remote HEAD, user prompt, then `main` with `base-detection-failed`. Prefer existing refs; only `git fetch origin <base> --quiet` after explicit network approval. Diff `origin/<base>...HEAD` if present, else local `<base>...HEAD` with `base-fetch-skipped` or `base-fetch-failed`. Record base/source/SHA in Review Integrity.
 
-**Diff sizing:** before Pass 1, measure files/changed lines. Above **20 files OR 3000 changed lines**, propose chunking; record an unchunked choice as `large-diff-unchunked`.
+**Scope sizing:** Diff: measure files/changed lines; above **20 files OR 3000 lines**, propose chunking and flag `large-diff-unchunked` if declined. Area: measure files/clusters; above 20 files, propose splitting and flag `large-area-unchunked` if declined.
 
 **Spec source (opt-in):** if `.goat-flow/plans/.active` points to an in-progress/testing milestone, offer: "Include Spec Drift check against M[NN] exit criteria?" Default skip for quick, offer for full. Record checked/skipped/unavailable in Review Integrity; optional skip is not degradation.
 
@@ -44,25 +44,25 @@ Use for diff/PR review or codebase-area quality audits.
 
 Before Pass 1, record the review surface:
 
-- **Source:** staged | unstaged | PR | branch diff | explicit path list
-- **Base/Head:** `<branch-or-sha>` / `<branch-or-sha>` (or n/a)
+- **Source:** staged | unstaged | PR | branch diff | area | explicit path list
+- **Base/Head:** `<branch-or-sha>` / `<branch-or-sha>` (n/a for area audit)
 - **Uncommitted included:** yes | no | n/a
-- **Size:** `<files>` files, `<changed-lines>` changed lines
+- **Size:** diff `<files>`/`<changed-lines>`; area `<files>`/`<clusters>`
 - **Chunking:** no | proposed | accepted | skipped-by-user
 - **Scope degradation:** `<flags or "none">`
 
-If any value is undetermined, write `unknown` and add a degradation flag.
+Unknown mode-applicable values add degradation. Required `n/a` is resolved, not degraded.
 
 ### Step 0.5 - Intent Reconstruction (mandatory)
 
-Before Pass 1, reconstruct WHY the change exists. Read, in order: PR description/linked issues, HEAD commit message, active milestone exit criteria. If none exist, flag `intent-unstated`.
+Before Pass 1, reconstruct intent. Diff/PR: PR/issues, HEAD, then active milestone; none means `intent-unstated`. Area: the user's audit brief plus responsibilities inferred from source/docs; change history is not required.
 
 Output three-bullet reconstruction:
-- **Stated intent:** what the change claims to do
-- **Implied intent:** what the diff actually appears to do
-- **Gap:** divergence between stated and implied, or "none"
+- **Stated intent:** change claim or area brief
+- **Implied intent:** observed behavior/responsibility
+- **Gap:** divergence or "none"
 
-Pass 1 and Pass 2 anchor to BOTH the diff and the stated intent.
+Anchor both passes to diff and stated intent, or the declared area and audit intent.
 
 **CHECKPOINT:** Scope locked, intent reconstructed. Proceeding to Pass 1.
 
@@ -132,7 +132,7 @@ Check each finding with targeted INDEX-first retrieval against `.goat-flow/learn
 
 ## Area Audit (Full)
 
-When the target is a codebase area (not a diff). For >20 files, recommend splitting. Two-pass discipline still applies per file cluster: skim the surface for suspicions, then open files for verification. Pre-existing issues ARE in scope (they are the point of an area audit).
+Area audit scans a declared area, not a diff. Run two passes per cluster; pre-existing issues are in scope. Without a release/merge question, emit `N/A - AREA AUDIT ONLY`.
 
 **BLOCKING GATE:** Present findings and pause. If calibration is uncertain, consider `/goat-critique`.
 
@@ -166,15 +166,15 @@ Offer Pass 3 when ANY of: (1) user opts in at Step 0, (2) Review Integrity would
 
 Confidence signal for review coverage.
 
-- **Files opened in Pass 2:** count / total. Paths read diff-only.
+- **Files opened in Pass 2:** count / total; diff mode also lists paths.
 - **Evidence tags:** N OBSERVED / M INFERRED.
-- **Size:** lines changed, files changed, chunking state. PR mode: resolved base, source annotation, short SHA.
+- **Size:** diff lines or area files/clusters, plus chunking. PR mode: base, source, short SHA.
 - **Scope snapshot:** source, base, head, uncommitted, chunking.
 - **Refutations logged:** `<N>`
 - **Spec drift:** `checked M[NN]` | `skipped` | `unavailable`. Optional skip is not degradation.
 - **PR-mode extension:** record `Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new`; use `no-automated-review-present` when absent and `n/a` outside PR mode.
 - **Pass-3 extension:** when Pass 3 runs, is triggered, or is skipped after a trigger, add `Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<id|n/a>`.
-- **Degradation flags:** `chunked-partial`, `large-diff-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`.
+- **Degradation flags:** `chunked-partial`, `large-diff-unchunked`, `large-area-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`.
 - **Conclusion:** `confident` | `coverage-degraded` | `high-inference` | `partial`.
 
 Always emit it; minimum: "confident - no degradation flags".
@@ -196,7 +196,7 @@ Always emit it; minimum: "confident - no degradation flags".
 - MUST grep `.goat-flow/learning-loop/footguns/` per finding; omit the tag on no direct match after the allowed reword
 - MUST order findings by severity, not by file or discovery order
 - MUST emit Review Integrity on every run
-- MUST propose chunking when the diff exceeds 20 files OR 3000 changed lines
+- MUST propose chunking above 20 files in either mode, or 3000 changed lines in diff mode
 - MUST emit Spec Drift only when opt-in triggered. If skipped, record `Spec drift: skipped` without a degradation flag
 - MUST split Spec Drift output by direction: exit-criteria drift as `[advisory]` (no severity tag), assumption invalidation as `[MUST:needs-decision]` under `## Findings`, open-criterion satisfaction as `[ready-to-tick]`
 - MUST store temporary review artifacts under `.goat-flow/logs/review/` with random suffix
@@ -204,7 +204,7 @@ Always emit it; minimum: "confident - no degradation flags".
 - MUST group 3+ related findings as systemic patterns
 - MUST NOT edit files unless user says "implement"; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.
-- **Ship Verdict rules:** unresolved MUST -> NO. SHOULD-only -> YES WITH CONDITIONS. MAY-only -> YES. INTENT-MISMATCH -> NO until author confirms intent. Review Integrity `coverage-degraded`, `high-inference`, or `partial` -> downgrade verdict one step.
+- **Ship Verdict rules (diff/PR or explicit release/merge question):** unresolved MUST -> NO. SHOULD-only -> YES WITH CONDITIONS. MAY-only -> YES. INTENT-MISMATCH -> NO until author confirms intent. Review Integrity `coverage-degraded`, `high-inference`, or `partial` -> downgrade verdict one step.
 - **Zero-findings HALT:** If Pass 2 produces zero findings, state what was checked and why no issues surfaced. Zero findings must be defended.
 - Universal constraints from skill-preamble.md apply.
 
@@ -215,10 +215,10 @@ Always emit it; minimum: "confident - no degradation flags".
 
 ## Review Integrity
 - Scope snapshot: source=<source>, base=<base>, head=<head>, uncommitted=<yes|no|n/a>, chunking=<state>
-- Files opened in Pass 2: <k>/<n>  (diff-only: <list or "none">)
+- Files opened in Pass 2: <k>/<n>  (diff paths: <list or "n/a">)
 - Evidence: <N> OBSERVED / <M> INFERRED
 - Refutations logged: <N>
-- Size: <files> files, <lines> lines  (chunked: <group or "no">)
+- Size: <files> files, <changed lines | clusters>  (chunked: <group or "no">)
 - Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new | no-automated-review-present | n/a
 - Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<id|n/a>
 - Spec drift: <checked M[NN] | skipped | unavailable>
@@ -245,11 +245,11 @@ Always emit it; minimum: "confident - no degradation flags".
 ## Breaking Changes
 
 ## Top 5 Risks (cross-tier)
-<!-- Five findings most likely to cause harm if merged, ranked regardless of tier. If <5 total, list all. If zero: "No surfaced risks." -->
+<!-- Five findings most likely to cause harm if unresolved, ranked regardless of tier. If <5 total, list all. If zero: "No surfaced risks." -->
 1. [SEVERITY:ACTION] **[title]** `file + semantic anchor` - one-sentence why
 
 ## Ship Verdict
-Decision: **YES** | **YES WITH CONDITIONS** | **NO** | **PARTIAL** | **PENDING REFUTER/HUMAN**
+Decision: **YES** | **YES WITH CONDITIONS** | **NO** | **PARTIAL** | **PENDING REFUTER/HUMAN** | **N/A - AREA AUDIT ONLY**
 Reasoning: <2-3 sentences anchored to Top 5 Risks and Review Integrity>
 Conditions to ship: <numbered list, only when YES WITH CONDITIONS>
 Confidence: HIGH | MEDIUM | LOW

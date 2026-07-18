@@ -125,6 +125,8 @@ last_reviewed: 2026-07-18
 
 **Recurrence (2026-07-13):** M07 added eight manifest-backed deprecated-hook comparisons, while the clean drift fixture still expected the old comparison total. The test now derives the added count from `hooks.stale_names` instead of copying another literal. Evidence anchor: `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`).
 
+**Recurrence (2026-07-18):** Generic authorization was mistaken for dispatcher → planner → ACT proof. Cross-skill routing tests must span producer, receiver, and endpoint. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`).
+
 ---
 
 ## Lesson: Defensive session rechecks can conflict with TypeScript narrowing
