@@ -1,12 +1,22 @@
 /** Scaffolds and validates `goat-flow skill new` skill/playbook drafts. */
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   statSync,
+  type Stats,
   writeFileSync,
 } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 
 import { getAgentProfile } from "./agents/registry.js";
@@ -22,6 +32,7 @@ const WORKFLOW_TEMPLATE = `---
 name: {{NAME}}
 description: "{{DESCRIPTION}}"
 goat-flow-skill-version: "{{VERSION}}"
+goat-flow-ownership: "user-owned"
 ---
 
 # /{{NAME}}
@@ -84,6 +95,7 @@ const DISPATCHER_TEMPLATE = `---
 name: {{NAME}}
 description: "{{DESCRIPTION}}"
 goat-flow-skill-version: "{{VERSION}}"
+goat-flow-ownership: "user-owned"
 ---
 
 # /{{NAME}}
@@ -117,6 +129,7 @@ const REPORT_TEMPLATE = `---
 name: {{NAME}}
 description: "{{DESCRIPTION}}"
 goat-flow-skill-version: "{{VERSION}}"
+goat-flow-ownership: "user-owned"
 ---
 
 # /{{NAME}}
@@ -823,6 +836,7 @@ async function writeResolvedScaffold(
     VERSION: getPackageVersion(),
   });
   const written = await maybeWrite(
+    projectRoot,
     resolvedScaffold.proposedPath,
     scaffold,
     options,
@@ -952,13 +966,73 @@ function scoreFreshSkill(
   };
 }
 
+/** Read one path entry without following a final symlink; a missing entry is safe to create later. */
+function lstatIfPresent(path: string): Stats | null {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return null;
+    }
+    throw new SkillNewInputError(
+      `Cannot inspect scaffold path safely: ${path}`,
+    );
+  }
+}
+
+/** Reject redirected or non-directory parent entries before creating a scaffold. */
+function assertSafeScaffoldDestination(
+  projectRoot: string,
+  proposedPath: string,
+): void {
+  const resolvedProjectRoot = resolve(projectRoot);
+  const resolvedDestination = resolve(proposedPath);
+  const relativeDestination = relative(
+    resolvedProjectRoot,
+    resolvedDestination,
+  );
+
+  if (
+    relativeDestination.length === 0 ||
+    relativeDestination === ".." ||
+    relativeDestination.startsWith(`..${sep}`) ||
+    isAbsolute(relativeDestination)
+  ) {
+    throw new SkillNewInputError(
+      `Unsafe scaffold destination outside the selected project: ${proposedPath}`,
+    );
+  }
+
+  const relativeParent = dirname(relativeDestination);
+  if (relativeParent === ".") return;
+
+  let inspectedPath = resolvedProjectRoot;
+  for (const component of relativeParent.split(sep)) {
+    inspectedPath = join(inspectedPath, component);
+    const pathStats = lstatIfPresent(inspectedPath);
+    if (pathStats === null) break;
+    if (pathStats.isSymbolicLink() || !pathStats.isDirectory()) {
+      throw new SkillNewInputError(
+        `Unsafe scaffold parent is a symlink or non-directory: ${inspectedPath}`,
+      );
+    }
+  }
+}
+
 async function maybeWrite(
+  projectRoot: string,
   proposedPath: string,
   scaffold: string,
   options: SkillNewOptions,
   prompts: InteractivePrompts,
 ): Promise<boolean> {
-  if (existsSync(proposedPath)) return false;
+  assertSafeScaffoldDestination(projectRoot, proposedPath);
+  if (lstatIfPresent(proposedPath) !== null) return false;
   const allow = options.shouldSkipConfirm
     ? true
     : await prompts.confirmWrite(proposedPath, scaffold);

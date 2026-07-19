@@ -30,7 +30,7 @@ const DURABLE_TEXT_REDACTION_RULES: readonly DurableTextRedactionRule[] = [
   },
   {
     pattern:
-      /^(\s*(?:export\s+)?[A-Z][A-Z0-9_]*(?:API_KEY|AUTH|COOKIE|PASSWORD|PASSWD|PRIVATE_KEY|SECRET|TOKEN)[A-Z0-9_]*\s*=\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s#\r\n]+)(.*)$/gimu,
+      /^(\s*(?:export\s+)?(?:[A-Z][A-Z0-9_]*(?:API_KEY|AUTH|COOKIE|PASSWORD|PASSWD|PRIVATE_KEY|SECRET|TOKEN)[A-Z0-9_]*|(?:API_KEY|AUTH|COOKIE|PASSWORD|PASSWD|PRIVATE_KEY|SECRET|TOKEN))\s*=\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s#\r\n]+)(.*)$/gimu,
     replacement: "$1[REDACTED:env-value]$2",
   },
   {

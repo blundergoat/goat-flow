@@ -80,6 +80,39 @@ describe("durable artifact redaction", () => {
     assert.match(scrubbed, /\[REDACTED:private-key\]/u);
   });
 
+  // Bare names are the most common `.env` spelling and must receive the same protection as prefixed names.
+  it("redacts bare secret environment names without consuming benign near-matches", () => {
+    const bareNames = [
+      "API_KEY",
+      "AUTH",
+      "COOKIE",
+      "PASSWORD",
+      "PASSWD",
+      "PRIVATE_KEY",
+      "SECRET",
+      "TOKEN",
+    ];
+
+    for (const name of bareNames) {
+      assert.equal(
+        scrubDurableText(`${name}=fixture-value`),
+        `${name}=[REDACTED:env-value]`,
+      );
+      assert.equal(
+        scrubDurableText(`export ${name}="fixture-value" # retained comment`),
+        `export ${name}=[REDACTED:env-value] # retained comment`,
+      );
+    }
+
+    const benignName = ["TOKEN", "COUNT"].join("_");
+    const benignAssignment = `${benignName}=4`;
+    assert.equal(scrubDurableText(benignAssignment), benignAssignment);
+    assert.equal(
+      scrubDurableText("API_TOKEN=fixture-value"),
+      "API_TOKEN=[REDACTED:env-value]",
+    );
+  });
+
   // Compact JSON keeps secrets mid-line; fields must scrub without a line anchor.
   it("redacts fields inside compact JSON objects", () => {
     const scrubbed = scrubDurableText(

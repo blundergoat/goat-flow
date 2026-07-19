@@ -105,11 +105,11 @@ last_reviewed: 2026-07-19
 
 **Recurrence update (2026-05-17):** M11 SARIF repeated this across three TypeScript files. Evidence: `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`).
 
-**Recurrences (2026-07-13, 2026-07-18, 2026-07-19):** M04/M09 contracts, the skill-quality truncation fixes, and M07 setup-truth contracts each reached GREEN before scoped Prettier rejected touched TypeScript. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), and `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
+**Recurrences (2026-07-13, 2026-07-18, 2026-07-19):** M04/M09 contracts, the skill-quality truncation fixes, M07 setup-truth contracts, and M10 scaffold/drift regressions each reached GREEN before scoped Prettier rejected touched TypeScript. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`), and `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`).
 
 **Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 5 | **Latest occurrence:** 2026-07-19
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 6 | **Latest occurrence:** 2026-07-19
 
 ---
 

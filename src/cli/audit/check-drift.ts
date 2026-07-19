@@ -26,6 +26,7 @@ import {
 } from "./check-artifact-integrity.js";
 
 const KNOWN_AGENT_IDS = new Set(["claude", "codex", "antigravity", "copilot"]);
+const USER_OWNED_SKILL_MARKER = "user-owned";
 
 /** Remove nullish values from nested data before comparing manifests. */
 function stripNullish(frontmatterValue: unknown): unknown {
@@ -293,6 +294,18 @@ function findOrphans(
           path: fullPath,
           message: `deprecated skill still installed: ${entry} at ${fullPath}`,
         });
+        continue;
+      }
+
+      const skillMarkdown = fs.readFile(`${fullPath}/SKILL.md`);
+      const skillFrontmatter =
+        skillMarkdown === null
+          ? null
+          : parseMarkdownFrontmatter(skillMarkdown).frontmatter;
+      if (
+        isRecord(skillFrontmatter) &&
+        skillFrontmatter["goat-flow-ownership"] === USER_OWNED_SKILL_MARKER
+      ) {
         continue;
       }
 

@@ -1,13 +1,15 @@
 /**
  * Integration tests for `goat-flow skill new` filesystem output and input validation.
  */
-import { describe, it } from "node:test";
+import { describe, it, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,6 +23,32 @@ type SkillNewResult = Awaited<ReturnType<typeof runSkillNew>>;
 /** Create an isolated project root for skill-author write tests. */
 function makeTempProject(): string {
   return mkdtempSync(join(tmpdir(), "goat-flow-skill-author-"));
+}
+
+/** Create a symlink or skip when the host cannot build the security fixture. */
+function symlinkOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+  type: "dir" | "file" = "dir",
+): boolean {
+  try {
+    symlinkSync(target, link, type);
+    return true;
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "EPERM"
+    ) {
+      testContext.skip(
+        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
+      );
+      return false;
+    }
+    throw error;
+  }
 }
 
 /** Write the minimum real RED receipt accepted before a fixture skill can be scaffolded. */
@@ -356,6 +384,7 @@ Rationalisations captured (verbatim):
 
     const content = readFileSync(result.proposedPath, "utf-8");
     assert.match(content, /name: pg-index/);
+    assert.match(content, /goat-flow-ownership: "user-owned"/);
     assert.match(content, /## Step 0/);
     assert.match(content, /## Verification/);
   });
@@ -437,6 +466,117 @@ Rationalisations captured (verbatim):
     assert.match(content, /## Availability Check/);
     assert.match(content, /## Boundary/);
     assert.match(content, /## Verification Gate/);
+  });
+
+  it("rejects a symlinked playbook scaffold parent", async (testContext) => {
+    const projectRoot = makeTempProject();
+    const outsideRoot = makeTempProject();
+    const playbookParent = join(
+      projectRoot,
+      ".goat-flow",
+      "skill-docs",
+      "playbooks",
+    );
+
+    try {
+      mkdirSync(join(projectRoot, ".goat-flow", "skill-docs"), {
+        recursive: true,
+      });
+      if (!symlinkOrSkip(testContext, outsideRoot, playbookParent)) {
+        return;
+      }
+
+      await assert.rejects(
+        runSkillNew({
+          description:
+            "I want to document how to use the lefthook pre-commit tool.",
+          name: "lefthook",
+          shouldSkipConfirm: true,
+          projectRoot,
+          stdinAnswers: [],
+        }),
+        (error) =>
+          error instanceof SkillNewInputError &&
+          /unsafe scaffold parent/iu.test(error.message),
+      );
+      assert.equal(existsSync(join(outsideRoot, "lefthook.md")), false);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not follow a dangling scaffold-file symlink", async (testContext) => {
+    const projectRoot = makeTempProject();
+    const outsideRoot = makeTempProject();
+    const playbookParent = join(
+      projectRoot,
+      ".goat-flow",
+      "skill-docs",
+      "playbooks",
+    );
+    const outsideFile = join(outsideRoot, "created.md");
+
+    try {
+      mkdirSync(playbookParent, { recursive: true });
+      if (
+        !symlinkOrSkip(
+          testContext,
+          outsideFile,
+          join(playbookParent, "lefthook.md"),
+          "file",
+        )
+      ) {
+        return;
+      }
+
+      const result = await runSkillNew({
+        description:
+          "I want to document how to use the lefthook pre-commit tool.",
+        name: "lefthook",
+        shouldSkipConfirm: true,
+        projectRoot,
+        stdinAnswers: [],
+      });
+
+      assert.equal(result.written, false);
+      assert.equal(existsSync(outsideFile), false);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a symlinked agent skill root", async (testContext) => {
+    const projectRoot = makeTempProject();
+    const outsideRoot = makeTempProject();
+    const skillRoot = join(projectRoot, ".agents", "skills");
+    const name = "redirected-skill";
+
+    try {
+      mkdirSync(join(projectRoot, ".agents"), { recursive: true });
+      if (!symlinkOrSkip(testContext, outsideRoot, skillRoot)) return;
+
+      await assert.rejects(
+        runSkillNew({
+          description:
+            "I want a workflow that walks through Postgres index changes.",
+          name,
+          agent: "codex",
+          redLogPath: writeRedLog(projectRoot, name),
+          shouldSkipConfirm: true,
+          projectRoot,
+          stdinAnswers: [],
+        }),
+        (error) =>
+          error instanceof SkillNewInputError &&
+          /unsafe scaffold parent/iu.test(error.message),
+      );
+      assert.equal(existsSync(join(outsideRoot, name, "SKILL.md")), false);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
   });
 
   it("does NOT write when candidacy returns a non-skill recommendation", async () => {

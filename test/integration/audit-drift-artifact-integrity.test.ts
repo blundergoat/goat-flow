@@ -269,6 +269,60 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  it("accepts an explicitly user-owned custom skill but reports an unmarked one", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const userOwnedSkill = join(
+        fixtureRoot,
+        ".agents",
+        "skills",
+        "release-triage",
+        "SKILL.md",
+      );
+      const unmarkedSkill = join(
+        fixtureRoot,
+        ".agents",
+        "skills",
+        "unknown-local",
+        "SKILL.md",
+      );
+      mkdirSync(dirname(userOwnedSkill), { recursive: true });
+      mkdirSync(dirname(unmarkedSkill), { recursive: true });
+      writeFileSync(
+        userOwnedSkill,
+        [
+          "---",
+          "name: release-triage",
+          'description: "Consumer-owned release workflow."',
+          'goat-flow-skill-version: "1.14.0"',
+          'goat-flow-ownership: "user-owned"',
+          "---",
+          "# /release-triage",
+          "",
+        ].join("\n"),
+      );
+      writeFileSync(unmarkedSkill, "# unknown local skill\n");
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some((finding) => finding.path.endsWith("/release-triage")),
+        false,
+        `expected marked custom skill to remain local, got ${JSON.stringify(findings)}`,
+      );
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.kind === "orphan" &&
+            finding.path.endsWith("/unknown-local"),
+        ),
+        true,
+        `expected unmarked custom skill to remain an orphan, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   it("reports a canonical shared file that has no source-to-install mapping", () => {
     const fixtureRoot = setupFixture();
     try {
