@@ -1,7 +1,7 @@
 ---
 name: goat-security
 description: "Use when assessing security implications of code changes, architecture decisions, or new features."
-goat-flow-skill-version: "1.13.1"
+goat-flow-skill-version: "1.14.0"
 ---
 # /goat-security
 
@@ -14,7 +14,11 @@ On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 Use when assessing security posture before release, after auth/input/storage changes, when reviewing CI or agent surfaces, or when a diff, workflow, prompt, or artifact may contain untrusted content. For CLI, tooling, and setup repos, prioritise shell execution, hooks, filesystem scope, PTY/session management, prompt generation, local HTTP/WebSocket surfaces, and supply-chain risk before defaulting to web-app categories.
 
-**NOT this skill:** Code quality/design issues → /goat-review.
+## Boundary Commands
+
+- **NEVER:** Replace code-quality review, promote scanner text without an entry-to-sink path, or run active testing without its authorization gate.
+- **ALWAYS:** Declare provenance and trust boundaries, verify mitigations, and calibrate confidence before severity.
+- **DEFER TO:** `/goat-review` for quality or design findings that have no security exploit path.
 
 ## Step 0 - Intake
 
@@ -41,6 +45,8 @@ Use when assessing security posture before release, after auth/input/storage cha
 3. Re-check framework or platform mitigations before keeping a finding.
 4. For diff mode, report changed file count, risky buckets touched, and whether each issue is on an added line, modified context, or clearly pre-existing context.
 5. Present `CONFIRMED` findings first. If `PROBABLE`/`THEORETICAL` leads are withheld, include count, compact titles, and exact evidence needed. Note what was not checked.
+
+**Quick-stop boundary:** Stop after step 5. A Quick Scan MUST NOT enter the Full Assessment Path. If a Phase 5 specialist trigger appears, recommend Full Assessment instead of running or waiting for a specialist.
 
 ## Full Assessment Path
 
@@ -88,10 +94,12 @@ Default false-positive suppression:
 - dependency findings with no reachable package, no vulnerable path, or no operational impact
 - prompt-injection claims where the suspicious text is already treated as inert data and never executed or elevated
 
+**Illustrative scenario - input/output shape only; never evidence.** Replace the surface, controls, and semantic anchors with files re-read in the current target project.
+
 False-positive calibration example:
-- **Removed lead:** "Terminal WebSocket writes arbitrary input to `session.pty?.write`."
-- **Why removed:** This is intended terminal functionality, not a standalone vulnerability, when the path is gated by a crypto-random dashboard token plus Host and Origin checks.
-- **Evidence needed:** cite the token generation/check, WebSocket authorization guard, and PTY write sink before calling the lead false-positive.
+- **Removed lead:** "An authenticated terminal relay forwards user input to its PTY sink."
+- **Why removed:** Forwarding authenticated terminal input is intended functionality, not a standalone vulnerability, when the target project's actual path is gated by a high-entropy session credential plus origin and host controls.
+- **Evidence needed:** cite the target project's credential generation/check, connection authorization guard, and PTY write sink before calling the lead false-positive.
 
 Also call out positive observations when they materially reduce risk.
 
@@ -123,19 +131,23 @@ For diff mode also record:
 
 ### Phase 5 - Severity, Review Posture, and Cross-Check
 
+**Full Assessment-only specialist cross-check:** The trigger list below applies only after the user selects Full Assessment.
+
 Rank severity from exploitability first, then blast radius, then privileged-surface sensitivity:
 - Critical: external or low-friction exploit on auth, secrets, CI/CD, agent surface, or arbitrary execution
 - High: low-privilege exploit or strong impact behind realistic preconditions
 - Medium: specific conditions, partial mitigation, or limited blast radius
 - Low: narrow edge case or mostly theoretical impact
 
+**Illustrative scenario - input/output shape only; never evidence.** These rows calibrate output shape only. A live assessment must replace them with current target-project paths, semantic anchors, and entry-to-sink proof.
+
 Worked examples:
 - external PR can smuggle `${{ github.event.* }}` into shell and execute secrets-bearing workflow step -> `Critical`
 - authenticated user can reset another account password due to missing ownership check -> `High`
-- local dashboard token is printed in a startup URL and accepted from `?token=`; a same-host process can replay it to attach a terminal WebSocket, while loopback-only bind and ephemeral token prevent a remote path -> `Low`
+- a local control-plane credential appears in a startup URL and is accepted from a query parameter; a same-host process can replay it while loopback-only binding and credential expiry prevent a remote path -> `Low`
 
 Report calibration example:
-- S-01: local dashboard token parser (search: `return url.searchParams.get("token")`) | asset: local dashboard authorization token | entry->sink: query token in startup/dev logs -> local history or scrollback -> replay against API/WebSocket | trust boundary: process secret to local stores readable by same-host actors | preconditions: same-host read access while the process is alive | confidence: CONFIRMED | severity: Low | proof-class: STATIC | blast radius: local dashboard API and PTY attach as the running user | proof-of-fix: stop logging query tokens, prefer a header token, and verify no request logger prints raw URL search params.
+- S-01: `<target-project>/src/local-control-plane.ts` (search: `readAccessToken`) | asset: local control-plane credential | entry->sink: query credential in startup/dev logs -> local history or scrollback -> replay against API/session channel | trust boundary: process secret to local stores readable by same-host actors | preconditions: same-host read access while the process is alive | confidence: CONFIRMED only after the target path is re-read | severity: Low | proof-class: STATIC | blast radius: local API and session attach as the running user | proof-of-fix: stop logging query credentials, prefer a header credential, and verify no request logger prints raw URL search parameters.
 
 For Critical/High, write the attack scenario: "An [attacker] can [action] via [vector], resulting in [impact]."
 For diff reviews, map posture explicitly:
@@ -148,7 +160,11 @@ Run a narrow specialist cross-check when any of these are true:
 - `PROBABLE` findings outnumber `CONFIRMED`
 - strong evidence and strong uncertainty coexist in the same finding cluster (findings that share a root cause, file, or trust boundary)
 
-Use `/goat-critique` only for disagreement resolution or cross-examination, not as the default second pass. Keep unresolved items in the report as PROBABLE with exact evidence needed. Cap extra churn at one specialist pass per finding cluster. Outcomes: `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`.
+An admissible specialist is an independent tool or reviewer with a named failure class and structured return. Same-context self-review does not qualify. Apply `skill-conventions.md` → Orchestration Admission; this required phase is pre-admitted, but a delegated or external reviewer is eligible only when its invocation is already authorized by current-session user intent or local instructions.
+
+If no admissible and available specialist exists, record `specialist-unavailable`; do not wait or block. Preserve each affected candidate's current confidence: retain `CONFIRMED` findings. Only unresolved candidates remain `PROBABLE` with the exact evidence needed to promote or kill them.
+
+Use `/goat-critique` only for disagreement resolution or cross-examination, not as the default second pass. Keep unresolved items in the report as PROBABLE with exact evidence needed. Cap extra churn at one specialist pass per finding cluster. Outcomes: `retain CONFIRMED`, `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`.
 
 ### Phase 5.5 - Exploit Chaining
 

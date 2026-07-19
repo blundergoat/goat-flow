@@ -133,7 +133,13 @@ function renderAuditPass(
 
   lines.push("**Run now:**");
   lines.push(
-    `Run \`goat-flow audit ${targetArg(facts.root)} --harness --agent ${agentId}\` and report the per-concern scores. This is the harness verification gate - do not skip it.`,
+    `- Run \`${harnessAuditCommand(facts, agentId)}\` and report the per-concern scores.`,
+  );
+  lines.push(
+    `- Run \`${contentAuditCommand(facts, agentId)}\` to verify supported cold-path content claims.`,
+  );
+  lines.push(
+    "These are the remaining setup verification gates - do not skip them.",
   );
   lines.push("");
   lines.push("**Maintenance:**");
@@ -236,18 +242,30 @@ function harnessAuditCommand(facts: ProjectFacts, agentId: AgentId): string {
   return `${getCliCommand()} audit ${targetArg(facts.root)} --agent ${agentId} --harness`;
 }
 
+/** Build the content-aware audit command required before setup completion. */
+function contentAuditCommand(facts: ProjectFacts, agentId: AgentId): string {
+  return `${getCliCommand()} audit ${targetArg(facts.root)} --agent ${agentId} --check-content`;
+}
+
 function pushFinalSetupGate(
   lines: string[],
   facts: ProjectFacts,
   agentId: AgentId,
 ): void {
-  lines.push("**Audit:** Run both required setup gates:");
+  lines.push("**Audit:** Run all three required setup gates:");
   lines.push(`- \`${auditCommand(facts, agentId)}\``);
   lines.push(`- \`${harnessAuditCommand(facts, agentId)}\``);
+  lines.push(`- \`${contentAuditCommand(facts, agentId)}\``);
   lines.push("");
-  lines.push("**Target: both audits pass with zero failures.**");
+  lines.push("**Target: all three audits pass with zero failures.**");
   lines.push(
-    `If either audit fails, run \`${getCliCommand()} setup ${targetArg(facts.root)} --agent ${agentId}\` for remaining fix instructions, then re-run both audit gates. Repeat until both pass (max 3 cycles).`,
+    `If the base or harness audit fails, run \`${getCliCommand()} setup ${targetArg(facts.root)} --agent ${agentId}\` for remaining structural fix instructions.`,
+  );
+  lines.push(
+    "If the content audit fails, follow its reported findings and suggestions; setup does not rerun the cold content scan.",
+  );
+  lines.push(
+    "Then re-run all three audit gates. Repeat until all three pass (max 3 cycles).",
   );
 }
 
@@ -463,10 +481,10 @@ function renderFullSetup(facts: ProjectFacts, agentId: AgentId): string {
     "- **04-architecture-code-map.md** - Create architecture and code map docs",
   );
   lines.push(
-    "- **05-customise-to-project.md** - Deep codebase read, real footguns/lessons, auto-seeded git signals, and project-specific instruction refinement",
+    "- **05-customise-to-project.md** - Deep codebase read, real footguns/lessons, evidence-gated history candidates, and project-specific instruction refinement",
   );
   lines.push(
-    "- **06-final-verification.md** - Audit passes, stale-ref check, file manifest, command smoke test",
+    "- **06-final-verification.md** - Three audit gates, stale-ref check, file manifest, command smoke test",
   );
   lines.push("");
   lines.push(

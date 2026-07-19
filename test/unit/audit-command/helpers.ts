@@ -1,5 +1,7 @@
 /**
- * Audit command tests - build checks, quality concerns, JSON contract.
+ * Shared audit-command fixtures for setup checks, harness concerns, and output contracts.
+ * Use them to give each focused test a complete healthy project baseline while
+ * overriding only the filesystem or agent behavior visible to the audit user.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -135,6 +137,7 @@ export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
     readFile: wrapPathArg(overrides.readFile, null),
     lineCount: wrapPathArg(overrides.lineCount, 0),
     readJson: wrapPathArg(overrides.readJson, null),
+    isReadableDirectory: wrapPathArg(overrides.isReadableDirectory, true),
     listDir: wrapPathArg(overrides.listDir, [] as string[]),
     isExecutable: wrapPathArg(overrides.isExecutable, false),
     glob: overrides.glob ?? ((): string[] => []),
@@ -529,7 +532,13 @@ export async function writeAuditSetupFixture(
       file === ".goat-flow/config.yaml"
         ? `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`
         : file === ".goat-flow/.gitignore"
-          ? "*\n!.gitignore\n!learning-loop/\n!learning-loop/**\n!skill-docs/\n!skill-docs/**\n!hooks/\n!hooks/**\n!plans/\n!plans/**\n"
+          ? readFileSync(
+              join(
+                PROJECT_ROOT,
+                "workflow/setup/reference/goat-flow-gitignore",
+              ),
+              "utf-8",
+            )
           : "# Stub\n";
     await writeProjectFile(root, file, content);
   }

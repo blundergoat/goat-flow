@@ -9,6 +9,7 @@ import {
   COPILOT_GRUFF_HOOK_ENTRY,
   createFS,
   describe,
+  existsSync,
   HOOK_STUB,
   it,
   join,
@@ -89,6 +90,105 @@ describe("checkDrift: hook templates", () => {
             finding.path === ".goat-flow/hooks/deny-dangerous.sh",
         ),
         `expected missing central hook finding, findings=${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // This fixture writes one retired hook; the audit contract reports it without mutation.
+  it("reports deprecated central hook files without deleting them", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      const deprecatedHookPath = join(
+        root,
+        ".goat-flow",
+        "hooks",
+        "plan-checkbox-guard.sh",
+      );
+      writeFileSync(deprecatedHookPath, HOOK_STUB);
+
+      const report = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+
+      assert.equal(report.status, "fail");
+      assert.ok(
+        report.findings.some(
+          (finding) =>
+            finding.kind === "deprecated" &&
+            finding.path === ".goat-flow/hooks/plan-checkbox-guard.sh" &&
+            finding.message.includes("goat-flow hooks sync"),
+        ),
+        `expected actionable deprecated-hook finding, findings=${JSON.stringify(report.findings)}`,
+      );
+      assert.equal(existsSync(deprecatedHookPath), true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // This fixture writes hook copies, removes Copilot's config, and proves Codex stays drift-clean.
+  it("limits hook drift to the selected agent", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      rmSync(join(root, ".github", "hooks", "hooks.json"), { force: true });
+
+      const report = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+        agentFilter: "codex",
+      });
+      assert.equal(
+        report.status,
+        "pass",
+        `Codex drift included another agent: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // A stale optional script for an unsupported lifecycle must not fail an agent-scoped audit.
+  it("ignores registry hook scripts unsupported by the selected agent", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+        `${HOOK_STUB}\n# stale unsupported copy\n`,
+      );
+
+      const codexReport = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+        agentFilter: "codex",
+      });
+      assert.equal(
+        codexReport.status,
+        "pass",
+        `Codex drift included an unsupported hook: ${JSON.stringify(codexReport.findings)}`,
+      );
+
+      const aggregateReport = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(aggregateReport.status, "fail");
+      assert.ok(
+        aggregateReport.findings.some(
+          (finding) =>
+            finding.path === ".goat-flow/hooks/gruff-code-quality.sh" &&
+            finding.kind === "content",
+        ),
+        `aggregate drift lost the stale hook: ${JSON.stringify(aggregateReport.findings)}`,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });

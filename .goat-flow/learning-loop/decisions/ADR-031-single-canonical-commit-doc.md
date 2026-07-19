@@ -64,3 +64,5 @@ file, at which point a generated pointer file could be reintroduced.
 - Downstream installs get the doc seeded by the generator, and the `## Commit Messages` section
   added during setup (Step 02 and the agent guides); the audit enforces both the doc and the
   instruction-file reference.
+- ADR-040 governs execution authority: commit-message guidance may help an agent draft a message,
+  but coding agents never run `git commit`; the user performs the commit manually.

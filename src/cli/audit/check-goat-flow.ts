@@ -1,17 +1,18 @@
 /**
- * GOAT Flow Setup checks for `goat-flow audit`.
- * 16 setup-scope checks that validate project structure:
- *   10 named (lessons, footguns, architecture, code-map, glossary, patterns,
- *             decisions, session-logs, plans, scratchpad)
- * + 1 skill-docs completeness and discoverability check
- * + 1 goat-flow-gitignore content check (catches pre-1.6.1 stale exceptions)
- * + 1 catch-all (other-files)
- * + 2 config (config-parses, config-version)
- * + 1 hook-version (installed hook dispatcher version stamps current)
+ * Defines the 16 setup-scope checks shown by `goat-flow audit`.
+ * Use them to tell a project owner whether required learning-loop, workspace,
+ * skill, config, and hook surfaces are structurally usable and version-current.
+ * These checks inspect the selected project but never execute its application.
  */
 import type { BuildCheck } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import { AUDIT_VERSION } from "../constants.js";
+import {
+  missingSkillReferenceInstructionRequirements,
+  presentInstructionFiles,
+  standalonePlaybookContractFailure,
+  STANDALONE_PLAYBOOK_FILES,
+} from "./skill-docs-contract.js";
 
 const VERIFIED_ON = "2026-05-03";
 
@@ -52,13 +53,7 @@ const NAMED_PATHS = new Set([
   ".goat-flow/skill-docs/skill-conventions.md",
   ".goat-flow/skill-docs/playbooks/",
   ".goat-flow/skill-docs/playbooks/README.md",
-  ".goat-flow/skill-docs/playbooks/browser-use.md",
-  ".goat-flow/skill-docs/playbooks/changelog.md",
-  ".goat-flow/skill-docs/playbooks/code-comments.md",
-  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-docs/playbooks/observability.md",
-  ".goat-flow/skill-docs/playbooks/page-capture.md",
-  ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ...STANDALONE_PLAYBOOK_FILES,
   ".goat-flow/skill-docs/skill-quality-testing/",
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
@@ -79,15 +74,6 @@ const NAMED_PATHS = new Set([
 // Optional exclusions from the manifest catch-all setup gate.
 const EXCLUDED_MANIFEST_PATHS = new Set<string>();
 
-const READ_RULE_PATTERNS = [
-  /Before declaring any tool(?: or capability)? unavailable/i,
-  /\.goat-flow\/skill-docs\/playbooks\//,
-  /Availability Check/i,
-];
-const ROUTER_POINTER_PATTERNS = [
-  /\.goat-flow\/skill-docs\/playbooks\//,
-  /tool playbooks?|skill docs?|skill playbooks?/i,
-];
 const REQUIRED_SKILL_DOC_FILES = [
   // Meta references
   ".goat-flow/skill-docs/README.md",
@@ -95,25 +81,28 @@ const REQUIRED_SKILL_DOC_FILES = [
   ".goat-flow/skill-docs/skill-conventions.md",
   // Standalone playbooks
   ".goat-flow/skill-docs/playbooks/README.md",
-  ".goat-flow/skill-docs/playbooks/browser-use.md",
-  ".goat-flow/skill-docs/playbooks/changelog.md",
-  ".goat-flow/skill-docs/playbooks/code-comments.md",
-  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-docs/playbooks/observability.md",
-  ".goat-flow/skill-docs/playbooks/page-capture.md",
-  ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ...STANDALONE_PLAYBOOK_FILES,
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
   ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
 ];
 
-// Un-ignore patterns the goat-flow-gitignore template installs into
-// `.goat-flow/.gitignore`. The template ignores everything (`*`) by default,
-// then re-includes these committed surfaces. Pre-1.6.1 installs are missing
-// the old skill-doc entries, which silently hides the committed docs and hook
-// policy files from git even though the files exist on disk.
-const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
+// Effective (non-comment) lines the goat-flow-gitignore template installs
+// into `.goat-flow/.gitignore`: the ignore-everything default, every
+// re-include of a committed surface, and the local-log content ignores.
+// Stale installs silently hide committed docs, hook policy, top-level guides,
+// or workspace anchors from git even though the files exist on disk.
+// Keep in sync with workflow/setup/reference/goat-flow-gitignore - a parity
+// test derives the expected list from that template, so drift fails CI.
+export const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
+  "*",
+  "!.gitignore",
+  "!config.yaml",
+  "!architecture.md",
+  "!code-map.md",
+  "!glossary.md",
+  "!security-policy.md",
   "!learning-loop/",
   "!learning-loop/**",
   "!skill-docs/",
@@ -122,140 +111,33 @@ const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!hooks/**",
   "!plans/",
   "!plans/**",
+  "!scratchpad/",
+  "!scratchpad/**",
+  "!logs/",
+  "!logs/sessions/",
+  "!logs/sessions/.gitkeep",
+  "logs/sessions/*.md",
+  "!logs/sessions/README.md",
+  "!logs/quality/",
+  "logs/quality/*.json",
+  "logs/quality/*.md",
+  "!logs/quality/README.md",
+  "!logs/events/",
+  "logs/events/*.jsonl",
+  "!logs/events/README.md",
+  "!logs/critiques/",
+  "logs/critiques/*.md",
+  "!logs/critiques/README.md",
+  "!logs/review/",
+  "logs/review/*.txt",
+  "logs/review/*.json",
+  "logs/review/*.md",
+  "!logs/review/README.md",
+  "!logs/security/",
+  "logs/security/*.md",
+  "logs/security/*.json",
+  "!logs/security/README.md",
 ];
-
-/**
- * Markdown heading slice used by instruction-file section checks.
- *
- * Offsets are JavaScript string indexes, not line numbers, because the audit
- * slices the original content and must preserve LF/CRLF handling.
- */
-interface MarkdownHeading {
-  index: number;
-  end: number;
-  level: number;
-  title: string;
-}
-
-function presentInstructionFiles(
-  ctx: Parameters<BuildCheck["run"]>[0],
-): string[] {
-  const paths = Object.values(ctx.structure.agents).map(
-    (agent) => agent.instruction_file,
-  );
-  return [...new Set(paths)].filter((path) => ctx.fs.exists(path));
-}
-
-/**
- * Parse ATX headings from instruction markdown without a full Markdown parser.
- *
- * The audit only needs section boundaries for AGENTS/CLAUDE/Copilot files, so a
- * small deterministic parser avoids adding a runtime dependency to setup checks.
- * The scan mutates only the local RegExp cursor used for this string.
- */
-function markdownHeadings(content: string): MarkdownHeading[] {
-  const headingPattern = /^(#{1,6})\s+(.+?)\s*$/gm;
-  const headings: MarkdownHeading[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = headingPattern.exec(content)) !== null) {
-    headings.push({
-      index: match.index,
-      end: match.index + match[0].length,
-      level: match[1]?.length ?? 0,
-      title: match[2] ?? "",
-    });
-  }
-  return headings;
-}
-
-/**
- * Return the first content offset after a heading line.
- *
- * CRLF and LF both appear in installed instruction files; normalizing the start
- * offset here keeps section extraction from carrying the heading newline.
- */
-function sectionStartOffset(content: string, headingEnd: number): number {
-  if (content.slice(headingEnd, headingEnd + 2) === "\r\n")
-    return headingEnd + 2;
-  if (content[headingEnd] === "\n") return headingEnd + 1;
-  return headingEnd;
-}
-
-/**
- * Extract one markdown section by heading title.
- *
- * The end boundary is the next heading at the same or higher level because READ
- * can be nested under Execution Loop without swallowing sibling steps.
- */
-function markdownSection(content: string, heading: RegExp): string | null {
-  const headings = markdownHeadings(content);
-  const headingIndex = headings.findIndex((entry) => heading.test(entry.title));
-  if (headingIndex < 0) return null;
-
-  const startHeading = headings[headingIndex];
-  if (!startHeading) return null;
-  const nextHeading = headings
-    .slice(headingIndex + 1)
-    .find((entry) => entry.level <= startHeading.level);
-  return content
-    .slice(sectionStartOffset(content, startHeading.end), nextHeading?.index)
-    .trim();
-}
-
-/**
- * Extract AGENTS-style bold execution-loop steps.
- *
- * Some installed instruction files encode READ/SCOPE/ACT/VERIFY as bold list
- * labels instead of headings; this fallback preserves compatibility with that
- * shape while keeping the skill-docs rule scoped to the Execution Loop.
- * The helper reads the provided string only; it does not touch project files.
- */
-function boldStepSection(content: string, step: string): string | null {
-  const pattern = new RegExp(
-    String.raw`(?:^|\n)\s*(?:[-*]\s*)?\*\*${step}\*\*[\s:–-]*(?<body>[\s\S]*?)(?=\n\s*(?:[-*]\s*)?\*\*(?:READ|SCOPE|ACT|VERIFY)\*\*[\s:–-]*|\n##\s|\n###\s|$)`,
-    "i",
-  );
-  return pattern.exec(content)?.groups?.body?.trim() ?? null;
-}
-
-/**
- * Check that READ tells agents to consult playbooks before declaring tools absent.
- *
- * The scan is scoped to the Execution Loop so incidental references elsewhere
- * do not satisfy the setup contract.
- */
-function hasSkillReferenceReadRule(content: string): boolean {
-  const executionLoop = markdownSection(content, /^Execution Loop\b/i);
-  if (!executionLoop) return false;
-  const readSection =
-    markdownSection(executionLoop, /^READ\b/i) ??
-    boldStepSection(executionLoop, "READ");
-  if (!readSection) return false;
-  return READ_RULE_PATTERNS.every((pattern) => pattern.test(readSection));
-}
-
-/**
- * Check that the Router Table exposes the skill-docs/playbook paths.
- *
- * Keeping this in Router Table makes the discovery path explicit for future
- * agents instead of relying on a one-off mention in surrounding prose.
- */
-function hasSkillReferenceRouterPointer(content: string): boolean {
-  const routerTable = markdownSection(content, /^Router Table\b/i);
-  if (!routerTable) return false;
-  return ROUTER_POINTER_PATTERNS.every((pattern) => pattern.test(routerTable));
-}
-
-function missingSkillReferenceInstructionRequirements(
-  content: string,
-): string[] {
-  const missing: string[] = [];
-  if (!hasSkillReferenceReadRule(content)) missing.push("READ rule");
-  if (!hasSkillReferenceRouterPointer(content)) {
-    missing.push("Router Table pointer");
-  }
-  return missing;
-}
 
 // === Named structure checks (10) ===
 
@@ -433,13 +315,19 @@ const sessionLogs: BuildCheck = {
   ]),
   /** Run the Session logs check. */
   run: (ctx) => {
-    if (ctx.fs.exists(".goat-flow/logs/sessions")) return null;
+    // A user needs a real readable directory; a same-named file cannot preserve session continuity.
+    if (
+      ctx.fs.exists(".goat-flow/logs/sessions") &&
+      ctx.fs.isReadableDirectory(".goat-flow/logs/sessions")
+    ) {
+      return null;
+    }
     return {
       check: "Session logs",
-      message: "Missing: .goat-flow/logs/sessions/",
+      message: "Missing or unusable: .goat-flow/logs/sessions/",
       evidence: ".goat-flow/logs/sessions/",
       howToFix:
-        "Create session logs directory by running `goat-flow setup` or `mkdir -p .goat-flow/logs/sessions`.",
+        "Ensure .goat-flow/logs/sessions/ is a readable directory, then run `goat-flow setup` if it is missing.",
     };
   },
 };
@@ -456,7 +344,14 @@ const plans: BuildCheck = {
   /** Run the Plans check. */
   run: (ctx) => {
     const missing: string[] = [];
-    if (!ctx.fs.exists(".goat-flow/plans")) missing.push(".goat-flow/plans/");
+
+    // A file named `plans` cannot hold the local milestones a user expects to resume.
+    if (
+      !ctx.fs.exists(".goat-flow/plans") ||
+      !ctx.fs.isReadableDirectory(".goat-flow/plans")
+    ) {
+      missing.push(".goat-flow/plans/");
+    }
     if (!ctx.fs.exists(".goat-flow/plans/.gitignore"))
       missing.push(".goat-flow/plans/.gitignore");
     if (!ctx.fs.exists(".goat-flow/plans/README.md"))
@@ -521,13 +416,27 @@ const goatFlowGitignoreContent: BuildCheck = {
       };
     }
     const content = ctx.fs.readFile(".goat-flow/.gitignore") ?? "";
+    const configuredPatterns = content
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
     const missing = REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.filter(
-      (pattern) => !content.includes(pattern),
+      (pattern) => !configuredPatterns.includes(pattern),
     );
-    if (missing.length === 0) return null;
+    const hasRequiredOrder =
+      configuredPatterns.length ===
+        REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.length &&
+      REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.every(
+        (pattern, index) => configuredPatterns[index] === pattern,
+      );
+    if (missing.length === 0 && hasRequiredOrder) return null;
+    const mismatch =
+      missing.length > 0
+        ? `is missing required entries: ${missing.join(", ")}`
+        : "does not use the required order; Git applies last-match-wins semantics";
     return {
       check: "goat-flow gitignore exceptions",
-      message: `.goat-flow/.gitignore is missing required un-ignore entries: ${missing.join(", ")}. Stale gitignores silently hide committed skill docs, hook policy, or plan anchors from git.`,
+      message: `.goat-flow/.gitignore ${mismatch}. Stale gitignores silently hide committed skill docs, hook policy, top-level guides, or workspace anchors from git - or over-commit local-only logs.`,
       evidence: ".goat-flow/.gitignore",
       howToFix:
         "Run `goat-flow install . --agent <id>` to refresh .goat-flow/.gitignore from the current template. After it overwrites, `git add .goat-flow/skill-docs/playbooks/ .goat-flow/skill-docs/` to track files that were previously hidden.",
@@ -560,6 +469,10 @@ const instructionFileSkillReferencePointer: BuildCheck = {
           "Refresh with `goat-flow install . --agent <agent>`. The index files are load-bearing and must be installed with the shared skill-docs/playbook pack.",
       };
     }
+
+    const playbookContractFailure = standalonePlaybookContractFailure(ctx);
+    // Contract failures explain why installed guidance is unsafe to load.
+    if (playbookContractFailure !== null) return playbookContractFailure;
 
     const missingRequirements = presentInstructionFiles(ctx).flatMap((path) => {
       const content = ctx.fs.readFile(path) ?? "";

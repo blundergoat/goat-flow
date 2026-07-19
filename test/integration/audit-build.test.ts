@@ -3,9 +3,14 @@
  */
 import { afterEach, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { assertExists } from "../helpers/assert-exists.ts";
 import { createRequire, syncBuiltinESMExports } from "node:module";
-import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
+import {
+  REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS,
+  SETUP_CHECKS,
+} from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
@@ -16,6 +21,10 @@ const skillDocsCheck = SETUP_CHECKS.find(
   (check) => check.id === "instruction-file-skill-docs-pointer",
 );
 assertExists(skillDocsCheck);
+const goatFlowGitignoreCheck = SETUP_CHECKS.find(
+  (check) => check.id === "goat-flow-gitignore",
+);
+assertExists(goatFlowGitignoreCheck);
 
 const requiredSkillDocsFiles = [
   // Meta references
@@ -28,9 +37,11 @@ const requiredSkillDocsFiles = [
   ".goat-flow/skill-docs/playbooks/changelog.md",
   ".goat-flow/skill-docs/playbooks/code-comments.md",
   ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+  ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
   ".goat-flow/skill-docs/playbooks/observability.md",
   ".goat-flow/skill-docs/playbooks/page-capture.md",
   ".goat-flow/skill-docs/playbooks/release-notes.md",
+  ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
@@ -67,6 +78,7 @@ function makeSkillDocsCtx(options: {
   instructionFiles?: Record<string, string>;
 }) {
   const present = new Set<string>();
+  const healthyFilesystem = stubFS();
   const instructionFiles = options.instructionFiles ?? {
     "CLAUDE.md": options.instructionContent ?? "",
   };
@@ -88,7 +100,10 @@ function makeSkillDocsCtx(options: {
   return makeCtx({
     fs: stubFS({
       exists: (path) => present.has(path),
-      readFile: (path) => instructionFiles[path] ?? "# Stub\n",
+      readFile: (path) =>
+        instructionFiles[path] ??
+        healthyFilesystem.readFile(path) ??
+        "# Stub\n",
     }),
     structure: {
       ...makeCtx().structure,
@@ -142,6 +157,86 @@ function assertBuildChecksPass(ctx: ReturnType<typeof makeCtx>): void {
 describe("audit build: all scopes pass on healthy project", () => {
   it("no failures when all checks pass", () => {
     assertBuildChecksPass(makeCtx());
+  });
+});
+
+describe("audit build: goat-flow gitignore exceptions", () => {
+  it("fails when committed log directories and README anchors stay ignored", () => {
+    const result = goatFlowGitignoreCheck.run(
+      makeCtx({
+        fs: stubFS({
+          readFile: (path) =>
+            path === ".goat-flow/.gitignore"
+              ? [
+                  "*",
+                  "!.gitignore",
+                  "!learning-loop/",
+                  "!learning-loop/**",
+                  "!skill-docs/",
+                  "!skill-docs/**",
+                  "!hooks/",
+                  "!hooks/**",
+                  "!plans/",
+                  "!plans/**",
+                  "!logs/sessions/",
+                  "!logs/sessions/README.md",
+                ].join("\n")
+              : null,
+        }),
+      }),
+    );
+
+    assertExists(result);
+    assert.match(result.message, /!logs\//u);
+    assert.match(result.message, /!logs\/quality\/README\.md/u);
+    assert.match(result.message, /!logs\/events\/README\.md/u);
+    assert.match(result.message, /!logs\/security\/README\.md/u);
+  });
+
+  it("fails when required gitignore entries have unsafe last-match order", () => {
+    const configuredPatterns = [...REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS];
+    const readmeInclude = "!logs/quality/README.md";
+    configuredPatterns.splice(configuredPatterns.indexOf(readmeInclude), 1);
+    configuredPatterns.splice(
+      configuredPatterns.indexOf("logs/quality/*.md"),
+      0,
+      readmeInclude,
+    );
+
+    const result = goatFlowGitignoreCheck.run(
+      makeCtx({
+        fs: stubFS({
+          readFile: (path) =>
+            path === ".goat-flow/.gitignore"
+              ? configuredPatterns.join("\n")
+              : null,
+        }),
+      }),
+    );
+
+    assertExists(result);
+    assert.match(result.message, /required order|last-match/u);
+  });
+
+  // The required-pattern list drifted from the shipped template once before
+  // (scratchpad/ and the top-level guide re-includes were audited as optional
+  // while the template shipped them). Deriving the expectation from the
+  // template file itself makes any future divergence fail here.
+  it("requires exactly the shipped template's effective gitignore lines", () => {
+    const templatePath = join(
+      resolve(import.meta.dirname, "..", ".."),
+      "workflow/setup/reference/goat-flow-gitignore",
+    );
+    const templateLines = readFileSync(templatePath, "utf-8")
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
+
+    assert.deepEqual(
+      [...REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS],
+      templateLines,
+      "REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS must match workflow/setup/reference/goat-flow-gitignore",
+    );
   });
 });
 

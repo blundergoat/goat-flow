@@ -53,6 +53,14 @@ Subtype detection contributes to the classification confidence shown in the dash
 
 Fallback-only subtype matches are intentionally low confidence. If a subtype only matched because it is the default fallback for a kind, the evaluator must not report that as certain.
 
+## Focused Semantic Review
+
+The dashboard's focused assessment scores five semantic dimensions: Clarity, Examples, Focus, Coherence, and Misuse / Limits. Misuse / Limits checks whether a skill states forbidden shortcuts, invocation limits, and where adjacent work belongs; the prompt also asks what checklist-shaped wording could satisfy the score without changing agent behavior.
+
+The deterministic trigger scorer accepts either the legacy `NOT this skill` wording or a complete `Boundary Commands` triplet with `NEVER`, `ALWAYS`, and `DEFER TO`. The triplet earns boundary credit only when all three commands are present.
+
+Skill and playbook prose also receives an advisory fit note for unconditioned phrases such as `as appropriate`, `as needed`, `where possible`, `if useful`, and `etc.`. A same-line or next-line trigger, condition, or owner suppresses the note, as does a fenced code example. This advisory never changes the deterministic score, recommendation, or release gate.
+
 ## Supported Keys
 
 | Key | Purpose |

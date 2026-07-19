@@ -1,7 +1,7 @@
 ---
 name: goat-qa
 description: "Use when evaluating test coverage gaps, planning test strategy, or assessing testing risk for code changes."
-goat-flow-skill-version: "1.13.1"
+goat-flow-skill-version: "1.14.0"
 ---
 # /goat-qa
 
@@ -14,25 +14,20 @@ On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 goat-qa is a **testing gap analyser**: it maps changed code or a codebase area to coverage and outputs prioritized must/should/skip guidance. It does not write tests or run full test commands.
 
-**Invoke when:**
-- Feature branch is ready for testing and you want to know what to focus on
-- QA has a test plan and you want to verify it covers the actual code changes
-- You're reviewing a PR and want to know what the tests miss
-- You want to find manual testing gaps before a release
-- You need a QA handoff artifact (flow diagram, risk matrix, manual test plan)
+**Invoke for:** changed-code testing focus, plan-to-code coverage checks, pre-release manual gaps, or a QA risk/handoff artifact.
 
-**NOT this skill:** Run-test requests → run them directly. Test failures or fix verification → /goat-debug. Code quality → /goat-review. Milestones → /goat-plan. Feature briefs → dispatcher. Merge certification → /goat-review plus Proof Gate.
+## Boundary Commands
+
+- **NEVER:** Run or write tests, verify fixes, review code, or certify merges.
+- **ALWAYS:** Map code risk to tests read; return tiers with Verification Integrity.
+- **DEFER TO:** Direct test execution, `/goat-debug`, `/goat-review`, `/goat-plan`, or the dispatcher.
 
 | Excuse | Reality |
 |--------|---------|
 | "CI is green so coverage is fine" | Scanner scored 100% while preflight failed with 8 errors. CI tests what was thought of; gap analysis looks for what wasn't. |
 | "Unit tests cover it" | Structural tests that import and snapshot pass at high coverage but miss every behavioural edge. STRUCTURAL is not BEHAVIOURAL. |
-| "Coverage report says 80%" | Coverage measures shape, not truth. 20+ content-accuracy failures survived a structural pass that reported high coverage. |
-| "Doer ran the tests, so we're covered" | Doer-verifier is theater in single-agent context. The verifier must have a context boundary the doer did not cross. |
 
 ## Coverage Depth
-
-Canonical coverage vocabulary used in Standard, Audit, and cross-skill output.
 
 | Level | Meaning |
 |-------|---------|
@@ -41,29 +36,38 @@ Canonical coverage vocabulary used in Standard, Audit, and cross-skill output.
 | PARTIAL-BEHAVIOURAL | Happy path or narrow behaviour only; error/edge paths untested |
 | BEHAVIOURAL | Meaningful output, side-effect, error-path, or invariant coverage |
 
+### Exhaustive priority matrix
+
+Use this matrix in Standard and Audit modes so every risk/coverage pair lands in exactly one tier:
+
+| Risk | NONE | STRUCTURAL | PARTIAL-BEHAVIOURAL | BEHAVIOURAL |
+|------|------|------------|---------------------|-------------|
+| CRITICAL | Blocking | Blocking | Blocking | Defer |
+| HIGH | Blocking | Blocking | High-value | Defer |
+| MEDIUM | High-value | High-value | High-value | Defer |
+| LOW | Defer | Defer | Defer | Defer |
+
+Standard maps Blocking to Must test, High-value to Should test, and Defer to Safe to skip. Audit uses the matrix labels directly.
+
 ## Step 0 - Intake
 
-**Mode detection - confirm, don't silently decide:**
+**Mode detection - scope wins over vocabulary:**
 
-- Changed files + no specific ask → offer standard or audit
-- "audit"/"coverage"/"gaps" → Audit mode (full depth)
-- "verify coverage"/"what's risky"/"what should I test" or scoped files → Standard mode (quick depth)
+- Explicit diff, PR, branch, changed-file, or recent-change scope → Standard mode (quick depth), even when the request also says "audit", "coverage", or "gaps"
+- Explicit codebase area, directory, module, or risk-class coverage audit with no recent-change scope → Audit mode (full depth)
+- Bare "audit", "coverage", or "gaps" with no change or area scope → ask whether the user means recent-change Standard or no-diff area Audit
 
-**Depth mapping:** Standard = quick changed-file analysis. Audit = full codebase-area analysis. Dispatcher depth maps quick → Standard, full → Audit.
+**Depth mapping:** Standard reads changed files; Audit reads a no-diff area. Scope semantics outrank dispatcher depth; on conflict, state it and follow scope.
 
-If mode and scope are clear, state "Running [mode] on [scope]." and proceed. Ask only on ambiguity.
+**Gather:** scope, existing test plan (if any), audience. Check instruction Essential Commands or `package.json` for test/lint commands.
 
-**Gather:** changed scope, existing test plan (if any), audience. Check the instruction file's Essential Commands section or `package.json` scripts for test/lint commands.
+**Footgun check:** Run the preamble's target-area learning-loop retrieval. Emit matches or an explicit miss; never broad-load a bucket.
 
-**Footgun check:** Use the preamble's learning-loop retrieval on `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, and `.goat-flow/learning-loop/decisions/` for the target area. Surface matches or an explicit retrieval miss; do not broad-load any bucket.
+**PR / issue link:** benchmark acceptance criteria. With `gh`, read the PR and diff; otherwise record `no-intent-spec`, lowering `safe to skip` confidence.
 
-**PR / issue link (strongly encouraged):** ask for PR/issue before Phase 1. Acceptance criteria are the benchmark. If `gh` is available, use `gh pr view` + `gh pr diff`; otherwise note `no-intent-spec`, which degrades `safe to skip` confidence.
+**No existing tests:** mark coverage `NONE`: "No automated tests; verification falls to human and AI reviewers."
 
-If arriving from the dispatcher with context already gathered, confirm and proceed.
-
-**No existing tests:** risk analysis still applies. Mark coverage `NONE` and state: "This project has no automated tests. Verification falls to human and AI reviewers."
-
-**CHECKPOINT:** "Analysing [N] changed files against [existing test plan / no test plan]. Audience: [dev/tester/both]." Proceed unless scope, audience, or test plan is ambiguous.
+**CHECKPOINT:** Standard: "Analysing [N] changed files against [existing test plan / no test plan]." Audit: "Auditing [scope] against [existing tests / no tests]." Proceed unless scope, audience, or test plan is ambiguous.
 
 ## Phase 1 - Change Risk Analysis
 
@@ -80,10 +84,7 @@ Classify each change:
 | MEDIUM | Internal logic with limited blast radius | Utilities, validators, formatters, isolated components |
 | LOW | Cosmetic, config, or changes with no behavioural impact | Styling, copy, constants, type-only changes |
 
-**For each CRITICAL/HIGH change, trace the blast radius:**
-- What depends on this code? (callers, consumers, downstream services)
-- What user-visible flows pass through this code path?
-- Has this area broken before? (check footguns/lessons)
+For each CRITICAL/HIGH change, trace callers, consumers, user-visible flows, downstream services, and matched footguns/lessons.
 
 **Output: Change Risk Map**
 
@@ -94,13 +95,11 @@ Classify each change:
 
 ## Phase 2 - Gap Analysis
 
-Compare risk vs coverage in both directions:
-- If a test plan exists, map cases to CRITICAL/HIGH changes and check reverse coverage.
-- If no plan exists, map changed files to automated tests and flag explicit behavior gaps.
-- For each changed file, read the matched test file (if any) and classify using Coverage Depth. If tests are unavailable, record `tests not read` in Verification Integrity.
-- Classify gaps as:
-  - **Undertested risk**
-  - **Misaligned effort**
+Compare risk and coverage bidirectionally:
+- With a test plan, map every case and CRITICAL/HIGH/MEDIUM change in both directions.
+- Without one, map every changed behaviour to automated tests and flag gaps.
+- Read each matched test file and classify coverage depth; record unavailable tests in Verification Integrity.
+- Apply the exhaustive priority matrix to every changed behaviour. Blocking/High-value gaps are **Undertested risk**; evidence-backed test-to-risk mismatches are **Misaligned effort**.
 
 For CRITICAL items with no coverage, annotate why: new path / missed coverage on existing path / hard-to-test.
 
@@ -110,26 +109,22 @@ For CRITICAL items with no coverage, annotate why: new path / missed coverage on
 
 Map each stated expectation to the code path that implements it. Gaps between intent and code are undertested-risk candidates.
 
-**Cross-agent verification:** suggest a different agent/model for blind-spot checks.
-
 **BLOCKING GATE (auto-released on explicit test-plan intent):** Present gap analysis plus Verification Integrity, then stop and ask "Continue to Phase 3, or adjust first?" - unless the invocation already gave explicit "what should I test" / "test plan" intent, in which case treat it as a CHECKPOINT and continue through Phase 3 without pausing. Reserve diagrams for Phase 3; then suggest `/goat-plan`.
 
-**Worked Standard example:** Diff touches a terminal launch helper. Read that diff and the smoke tests covering prompt injection plus delayed/fallback delivery. Expected row: HIGH risk runner launch contract; BEHAVIOURAL coverage for prompt injection and delayed/fallback delivery; safe to skip more PTY timing tests unless timer constants changed; proof class STATIC unless executed.
+**Illustrative scenario - input/output shape only; never evidence.**
+
+**Worked Standard example:** A terminal-launch diff is HIGH risk. Read its smoke tests; safe to skip more PTY timing tests only when current target evidence proves timing code is unchanged.
 
 ## Phase 3 - Targeted Testing Plan
 
 Based on the gaps, produce a focused plan and order by risk.
 
-**Must test (CRITICAL gaps):** table with what breaks and grounded effort estimate; if effort is unknown, write `unknown - needs harness/project context`
-**Should test if time allows (MEDIUM gaps):** same format, lower priority
-**Safe to skip this round:** low-risk or adequately covered areas
+**Must test (matrix Blocking):** table with what breaks and grounded effort estimate; if effort is unknown, write `unknown - needs harness/project context`
+**Should test if time allows (matrix High-value):** same format, lower priority
+**Safe to skip this round (matrix Defer):** name considered areas and why they can wait
 **Misaligned effort:** deprioritise plan cases not mapped to current changes
 
 **CHECKPOINT:** "Targeted testing plan ready. Want a flow diagram for any CRITICAL item?"
-
-## Phase 4 - Flow Diagram
-
-For flow diagrams, use Mermaid flowcharts with 8-15 nodes per diagram, happy path first, then branch points for error states and edge cases.
 
 ---
 
@@ -148,7 +143,7 @@ If unsure, ask the user before A1.5.
 
 ### A1.5 - Scope-Size Gate
 
-Inventory approximate file count before deep analysis. If too large, present a ranked slice prioritising load-bearing and interface-boundary files. Proceed to A2 only after manageable scope is confirmed.
+Count files before deep analysis. If too large, rank a load-bearing/interface slice; proceed after scope confirmation.
 
 ### A2 - Inventory and Risk Ranking
 
@@ -167,23 +162,29 @@ Load-bearing + Interface files get CRITICAL or HIGH risk ratings by default.
 ### A3 - Coverage Analysis
 
 For each in-scope file:
-1. Does a test file exist? If not → coverage `NONE`.
-2. If yes, read the test. Does it assert behaviour (outputs, side effects, error paths) or only construct the unit?
-3. Flag mock-heavy tests (everything mocked = behaviour untested) and integration-only blind spots (suite skips when the external service is unavailable).
+1. Inventory named behaviours/invariants with a code anchor and risk before coverage; CRITICAL/HIGH/MEDIUM inventory must be exhaustive.
+2. Create one row per named behaviour; files may have multiple rows/labels.
+3. Search all tests and exported-symbol references. No matching test/manual plan → coverage `NONE`.
+4. Read matches; classify assertions for that behaviour. Flag mocks/skipped integrations.
 
-Record coverage using the Coverage Depth vocabulary above.
+A file summary cannot promote a row. BEHAVIOURAL applies only to the named behaviour/invariant actually asserted.
+
+Misaligned effort is an observed test-to-risk mismatch. Evidence must show duplicate tests adding no distinct branch/invariant while higher-risk behaviour is uncovered; mock-heavy/structural tests displacing user-visible or error paths; or deeper LOW-risk coverage beside uncovered CRITICAL/HIGH paths. Do not infer misalignment from high coverage alone or recommend deleting safety coverage. If no item meets these evidence conditions, report `none found` and name the comparison.
 
 ### A4 - Gap Report
 
-Rank gaps by `Risk × (1 - CoverageLevel)` descending - Risk maps CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; CoverageLevel is a coverage fraction (NONE=0, STRUCTURAL=0.34, PARTIAL-BEHAVIOURAL=0.67, BEHAVIOURAL=1.0), so `(1 - CoverageLevel)` is the uncovered fraction and a CRITICAL+NONE file ranks top (4.0). Output:
+Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; NONE=1.0, STRUCTURAL=0.66, PARTIAL-BEHAVIOURAL=0.33, BEHAVIOURAL=0. Output:
 
-- **Blocking gaps** - CRITICAL-risk file with NONE or STRUCTURAL coverage. One line per file: missing behaviour + the test the user should add.
-- **High-value additions** - HIGH-risk file with PARTIAL coverage. Describe the untested path.
-- **Defer** - LOW-risk or already well-covered files. Name them explicitly so the user sees what was considered and why.
+- **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per behaviour/invariant: file + code anchor, missing assertion, and test to add.
+- **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path.
+- **Defer** - every matrix Defer pair: LOW-risk rows or a named behaviour with BEHAVIOURAL coverage. A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file.
+- **Misaligned effort** - evidence-backed test-to-risk mismatches, or `none found` with named comparison.
 
-**Worked Audit example:** Scope a small audit module; read tests, not filenames - the heuristic misleads both ways. An orchestrator can lack a same-name test yet run behaviourally through an integration suite, so it is PARTIAL-BEHAVIOURAL, not NONE. A content-integrity helper with no unit, integration, or exported-symbol references is genuinely NONE. Expected A4 blocking gap: that content-integrity check, CRITICAL by role, NONE coverage - add a test planting a wrong count and asserting it is flagged. Proof class STATIC.
+**Illustrative scenario - input/output shape only; never evidence.**
 
-**BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved.
+**Worked Audit example:** Read tests, not filenames: integration coverage can make a file PARTIAL-BEHAVIOURAL. Classify `<target-project>/src/content-check.ts` as NONE only after checking unit, integration, and exported-symbol references.
+
+**BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template below.
 
 ## Regression Guard Mode
 
@@ -200,8 +201,8 @@ This mode does NOT verify the fix itself.
 
 - goat-qa is a testing GAP ANALYSER - it finds mismatches between code (changed or existing) and testing coverage
 - MUST compare in-scope code against existing testing coverage (manual plan, automated tests, or neither)
-- MUST find gaps in BOTH directions: undertested risks AND misaligned test effort
-- MUST produce "must test / should test / safe to skip" tiers with rationale for skips
+- MUST assess gaps in BOTH directions: undertested risks AND misaligned test effort; report `none found` rather than inventing either
+- MUST use the declared mode's priority tiers: Standard uses "must test / should test / safe to skip"; Audit uses "Blocking / High-value / Defer"
 - MUST include Verification Integrity section
 - MUST apply the Proof Gate from `skill-preamble.md` to every claim made in the gap analysis or testing plan
 - MUST tag every finding/claim row with proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
@@ -224,7 +225,7 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 | File | Lines Changed | What Changed | Risk | Blast Radius | User-Visible Impact | Proof Class |
 
 ## Gap Analysis
-### Undertested Risks  <!-- CRITICAL/HIGH changes with no or partial test coverage -->
+### Undertested Risks  <!-- Matrix Blocking and High-value pairs -->
 | Code Change | Risk | Coverage Depth | Covered By | Gap | Proof Class |
 
 ### Misaligned Effort  <!-- test cases that don't match code changes in this branch -->
@@ -248,9 +249,9 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 
 ```markdown
 ## Targeted Testing Plan
-### Must test before shipping  <!-- CRITICAL gaps with manual steps, failure symptoms, time, proof class -->
-### Should test if time allows  <!-- HIGH/MEDIUM gaps, proof class -->
-### Safe to skip  <!-- with rationale and proof class -->
+### Must test before shipping  <!-- Matrix Blocking pairs; include manual steps, failure symptoms, time, proof class -->
+### Should test if time allows  <!-- Matrix High-value pairs; include proof class -->
+### Safe to skip  <!-- Matrix Defer pairs; include rationale and proof class -->
 
 ## Verification Integrity
 
@@ -276,13 +277,14 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 <!-- Roles: load-bearing / interface boundary / integration glue / UI / support -->
 
 ## Coverage Analysis
-| File | Test file | Coverage | Notes | Proof Class |
+| File | Behaviour / Invariant | Risk | Test file | Coverage | Notes | Proof Class |
 <!-- Coverage: NONE | STRUCTURAL | PARTIAL-BEHAVIOURAL | BEHAVIOURAL -->
 
 ## Gap Report
-### Blocking gaps  <!-- CRITICAL-risk + NONE/STRUCTURAL coverage; each item includes proof class -->
-### High-value additions  <!-- HIGH-risk + PARTIAL coverage; each item includes proof class -->
-### Defer  <!-- LOW-risk or well-covered; each item includes proof class -->
+### Blocking gaps  <!-- Matrix Blocking pairs; each item includes proof class -->
+### High-value additions  <!-- Matrix High-value pairs; each item includes proof class -->
+### Defer  <!-- Matrix Defer pairs; each item includes proof class -->
+### Misaligned effort  <!-- Evidence-backed test-to-risk mismatches, or `none found` -->
 
 ## Verification Integrity
 - Intent spec: [audit scope rationale or `no-intent-spec`]
@@ -297,4 +299,17 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 - Would-be testers: [who executes once gaps are filled]
 
 ## Flow Diagram  <!-- only on request -->
+```
+
+### Audit post-gate plan (after A4 approval)
+
+```markdown
+## Targeted Testing Plan
+### Blocking gaps
+### High-value additions
+### Defer
+### Misaligned effort
+
+## Verification Integrity
+<!-- Preserve A4 evidence limits; name test executors. -->
 ```

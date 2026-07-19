@@ -1,5 +1,7 @@
 /**
- * Integration tests for deterministic setup/install scaffolding.
+ * Shared fixture helpers for exercising the installer exactly as users run it.
+ * Use these helpers when a test needs disposable projects, CLI processes, or
+ * deterministic Git history without touching the developer's real workspace.
  */
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -50,6 +52,23 @@ export function makeTempProject(): string {
  * @returns the spawnSync result (status, stdout, stderr) for the installer process
  */
 export function runInstaller(root: string, ...extraArgs: string[]) {
+  return runInstallerWithEnvironment(root, {}, ...extraArgs);
+}
+
+/**
+ * Run the shell installer with controlled environment overrides for failure-path fixtures.
+ * Use when a user-visible installer outcome depends on a command or signal boundary.
+ *
+ * @param root - target project directory; an empty path is rejected by the installer
+ * @param environmentOverrides - child-only values; an empty object preserves the caller environment
+ * @param extraArgs - installer flags; an empty list runs the installer's normal validation path
+ * @returns process evidence; null status means the operating system terminated the installer
+ */
+export function runInstallerWithEnvironment(
+  root: string,
+  environmentOverrides: NodeJS.ProcessEnv,
+  ...extraArgs: string[]
+) {
   return spawnSync(
     "bash",
     [
@@ -60,6 +79,7 @@ export function runInstaller(root: string, ...extraArgs: string[]) {
     {
       cwd: PROJECT_ROOT,
       encoding: "utf-8",
+      env: { ...process.env, ...environmentOverrides },
       timeout: 30000,
     },
   );

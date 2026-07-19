@@ -1,11 +1,21 @@
 /**
- * Unit tests for the advisory agent enforcement capability matrix.
+ * Protects the advisory enforcement matrix from showing runners as equivalent without equivalent proof.
+ * Use these tests when capability status, evidence sources, or user-facing assurance labels change.
+ * Fixtures prove the output contract only; they do not execute an external coding agent.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildAgentEnforcementCapability } from "../../src/cli/audit/enforcement.js";
+import {
+  buildAgentEnforcementCapability,
+  validateEnforcementCapabilityEvidence,
+} from "../../src/cli/audit/enforcement.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
-import type { AuditScope } from "../../src/cli/audit/types.js";
+import {
+  getRepoAudit,
+  renderAuditJson,
+  renderAuditText,
+} from "./audit-command/helpers.js";
+import type { AuditReport, AuditScope } from "../../src/cli/audit/types.js";
 import type { AgentFacts, AgentProfile } from "../../src/cli/types.js";
 
 /** Build a minimal agent scope because enforcement capability logic only needs status-shaped checks. */
@@ -40,6 +50,7 @@ function agentScope(status: "pass" | "fail" | "skipped"): AuditScope {
   };
 }
 
+/** Build healthy local facts so each runner can be compared from the same user-visible audit baseline. */
 function facts(
   agent: AgentProfile,
   overrides: Partial<AgentFacts["hooks"]> = {},
@@ -112,6 +123,7 @@ function facts(
   };
 }
 
+/** Return one named capability so assertions explain which protection the audit user is comparing. */
 function byId(
   report: ReturnType<typeof buildAgentEnforcementCapability>,
   id: string,
@@ -129,16 +141,20 @@ function byId(
 function assertFactBackedStatusesForAgents(
   agents: ReadonlyArray<(typeof PROFILES)[keyof typeof PROFILES]>,
 ): void {
+  // Each supported runner must expose the same status, source, and assurance fields to the audit user.
   agents.forEach((agent) => {
     const matrix = buildAgentEnforcementCapability(facts(agent), {
       agentScope: agentScope("pass"),
       denyMechanismEvidenceLevel: "full",
     });
     assert.equal(byId(matrix, "shell-dangerous").status, "hard");
-    assert.equal(byId(matrix, "secret-file-read").status, "hard");
     assert.equal(byId(matrix, "secret-shell-read").status, "hard");
     assert.equal(byId(matrix, "hook-registration").status, "hard");
     assert.equal(byId(matrix, "hook-self-test").status, "hard");
+    assert.equal(byId(matrix, "hook-self-test").assurance, "runtime-local");
+    assert.deepEqual(byId(matrix, "hook-self-test").sources, [
+      "runtime-self-test",
+    ]);
     assert.match(
       byId(matrix, "hook-self-test").summary,
       /runtime-shaped payload smoke passed/,
@@ -147,19 +163,58 @@ function assertFactBackedStatusesForAgents(
   });
 }
 
+/** Assert one runner's file-tool protection without hiding runner-specific evidence in a test loop. */
+function assertSecretFileStatusForAgent(
+  agent: (typeof PROFILES)[keyof typeof PROFILES],
+  expectedStatus: "hard" | "limited",
+): void {
+  const matrix = buildAgentEnforcementCapability(facts(agent), {
+    agentScope: agentScope("pass"),
+    denyMechanismEvidenceLevel: "full",
+  });
+  assert.equal(byId(matrix, "secret-file-read").status, expectedStatus);
+  assert.equal(byId(matrix, "provider-native-enforcement").status, "limited");
+}
+
 describe("agent enforcement capability matrix", () => {
   it("derives fact-backed statuses for all supported agents", () => {
-    assertFactBackedStatusesForAgents([PROFILES.claude, PROFILES.codex]);
+    assertFactBackedStatusesForAgents([
+      PROFILES.claude,
+      PROFILES.codex,
+      PROFILES.antigravity,
+      PROFILES.copilot,
+    ]);
 
-    const copilot = buildAgentEnforcementCapability(facts(PROFILES.copilot), {
-      agentScope: agentScope("pass"),
-      denyMechanismEvidenceLevel: "full",
-    });
-    assert.equal(byId(copilot, "secret-file-read").status, "limited");
-    assert.equal(
-      byId(copilot, "provider-native-enforcement").status,
-      "limited",
+    // Script-only runners must not inherit the stronger file-tool protection available to settings-backed runners.
+    assertSecretFileStatusForAgent(PROFILES.claude, "hard");
+    assertSecretFileStatusForAgent(PROFILES.codex, "hard");
+    assertSecretFileStatusForAgent(PROFILES.antigravity, "limited");
+    assertSecretFileStatusForAgent(PROFILES.copilot, "limited");
+  });
+
+  it("rejects hard enforcement backed only by unobserved evidence", () => {
+    assert.throws(
+      () => validateEnforcementCapabilityEvidence("hard", ["not-observed"]),
+      /hard enforcement requires local static or runtime evidence/i,
     );
+  });
+
+  it("renders enforcement strength with its assurance and evidence source", () => {
+    const report = getRepoAudit({ agentFilter: "codex", harness: true });
+    const terminalOutput = renderAuditText(report);
+    const jsonOutput = JSON.parse(renderAuditJson(report)) as AuditReport;
+    const terminalCapability = report.enforcement?.[0]?.capabilities[0];
+    const jsonCapability = jsonOutput.enforcement?.[0]?.capabilities[0];
+
+    assert.ok(terminalCapability);
+    assert.ok(jsonCapability);
+    assert.match(
+      terminalOutput,
+      /\[assurance: static-local; source: local-hook\]/,
+    );
+    assert.match(terminalOutput, /not provider support/i);
+    assert.equal(jsonCapability.assurance, terminalCapability.assurance);
+    assert.deepEqual(jsonCapability.sources, terminalCapability.sources);
   });
 
   it("does not infer broad file read or write enforcement from secret-path coverage", () => {
@@ -170,6 +225,13 @@ describe("agent enforcement capability matrix", () => {
 
     assert.equal(byId(matrix, "file-read-restrictions").status, "unknown");
     assert.equal(byId(matrix, "file-write-restrictions").status, "unknown");
+    assert.equal(
+      byId(matrix, "file-read-restrictions").assurance,
+      "not-observed",
+    );
+    assert.deepEqual(byId(matrix, "file-write-restrictions").sources, [
+      "not-observed",
+    ]);
     assert.match(
       byId(matrix, "file-read-restrictions").summary,
       /Not inferred from secret-path coverage/,
@@ -211,6 +273,7 @@ describe("agent enforcement capability matrix", () => {
     });
 
     assert.equal(byId(matrix, "hook-self-test").status, "limited");
+    assert.equal(byId(matrix, "hook-self-test").assurance, "static-local");
     assert.match(
       byId(matrix, "hook-self-test").summary,
       /runtime self-test was skipped/,

@@ -84,13 +84,21 @@ export function isFileRef(filePath: string): boolean {
   return /\.[a-zA-Z0-9]+$/.test(filePath);
 }
 
-/** Check whether a file reference can be validated for staleness without guessing. */
 /** Paths under these dirs are intentionally gitignored per `.goat-flow/plans/.gitignore`
  *  (milestone files + plan subdirs + `.active` marker are local-session state by
- *  design). References to them in lessons/footguns are navigation pointers,
+ *  design). Narrative mentions of them in lessons/footguns are navigation pointers,
  *  not resolvable artifacts - treating absence as "stale" false-positives on
- *  any clean checkout or CI run. Keep this list short and specific. */
+ *  any clean checkout or CI run, so body-text references are skipped. The two
+ *  durable-evidence grammars (`(search: ...)` anchors and `Evidence anchors:` lines)
+ *  are the exception: gitignored paths there violate the never-anchor-to-local-state
+ *  invariant regardless of local existence and are flagged as
+ *  `gitignored path used as durable evidence anchor`. Keep this list short and specific. */
 function isIntentionallyGitignored(filePath: string): boolean {
+  // Anchor files (README.md, .gitignore, .gitkeep) under these trees ARE
+  // committed by design, so they are legitimate durable anchors and stay
+  // subject to normal existence checks.
+  if (/(?:^|\/)(README\.md|\.gitignore|\.gitkeep)$/.test(filePath))
+    return false;
   return (
     filePath.startsWith(".goat-flow/plans/") ||
     filePath.startsWith(".goat-flow/scratchpad/") ||
@@ -376,8 +384,10 @@ function scanBareEvidenceAnchors(
     if (!BARE_EVIDENCE_ANCHOR_LINE_REGEX.test(line)) continue;
 
     for (const match of line.matchAll(new RegExp(FILE_REF_REGEX.source, "g"))) {
-      const filePath = checkableBareEvidenceAnchorPath(fs, line, match);
+      const filePath = bareEvidenceAnchorPath(line, match);
       if (filePath === null) continue;
+      if (flagGitignoredEvidenceAnchor(filePath, summary)) continue;
+      if (!isCheckableForStaleness(filePath, fs)) continue;
 
       summary.totalRefs++;
       if (fs.exists(filePath)) {
@@ -389,8 +399,11 @@ function scanBareEvidenceAnchors(
   }
 }
 
-function checkableBareEvidenceAnchorPath(
-  fs: ReadonlyFS,
+/** Extract a plain file path from an `Evidence anchors:` line match, or null when
+ *  the token is a glob, a `file:line` ref (handled by the line-ref scan), a path
+ *  followed by a `(search: ...)` anchor (handled by the search-anchor scan), or
+ *  not a file reference at all. */
+function bareEvidenceAnchorPath(
   line: string,
   match: RegExpMatchArray,
 ): string | null {
@@ -400,8 +413,23 @@ function checkableBareEvidenceAnchorPath(
   if (/:[0-9]+/.test(match[0])) return null;
   if (isFollowedBySearchAnchor(line, match)) return null;
   if (!isFileRef(filePath)) return null;
-  if (!isCheckableForStaleness(filePath, fs)) return null;
   return filePath;
+}
+
+/** Flag a gitignored path used in a durable-evidence grammar as a policy violation.
+ *  Local-state paths (plans/scratchpad/logs) can never be durable anchors - they
+ *  vanish on clean checkouts - so the violation fires regardless of whether the
+ *  file exists right now. Returns true when the path was flagged (caller skips it). */
+function flagGitignoredEvidenceAnchor(
+  filePath: string,
+  summary: FootgunRefSummary,
+): boolean {
+  if (!isIntentionallyGitignored(filePath)) return false;
+  summary.totalRefs++;
+  summary.staleRefs.push(
+    `${filePath} (gitignored path used as durable evidence anchor)`,
+  );
+  return true;
 }
 
 function isFollowedBySearchAnchor(
@@ -429,12 +457,9 @@ function scanSearchAnchors(
   );
   for (const match of searchAnchors) {
     const anchor = searchAnchorFromMatch(match);
-    if (
-      anchor === null ||
-      !isFileRef(anchor.filePath) ||
-      !isCheckableForStaleness(anchor.filePath, fs)
-    )
-      continue;
+    if (anchor === null || !isFileRef(anchor.filePath)) continue;
+    if (flagGitignoredEvidenceAnchor(anchor.filePath, summary)) continue;
+    if (!isCheckableForStaleness(anchor.filePath, fs)) continue;
     summary.totalRefs++;
     if (!fs.exists(anchor.filePath)) {
       summary.staleRefs.push(

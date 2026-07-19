@@ -1,6 +1,6 @@
 ---
 category: review-feedback
-last_reviewed: 2026-06-05
+last_reviewed: 2026-07-19
 ---
 
 ## Lesson: Multi-agent critique finds findings single reviewers miss - but synthesis is the expensive part
@@ -22,7 +22,10 @@ last_reviewed: 2026-06-05
 ## Lesson: Blindly applying review feedback without verifying findings
 
 **Status:** active | **Created:** 2026-04-11
+**Incident count:** 2 | **Latest occurrence:** 2026-07-19
 **What happened:** After receiving 8 critic reviews of the goat-flow framework, the agent started fixing every cited `file:line` without first checking whether the findings were still valid. Several of the cited issues had already been fixed by sub-agents earlier in the same session. The agent was about to edit files that were already correct, potentially reintroducing bugs or making nonsensical changes.
+
+**Recurrence (2026-07-19):** A quality report treated replaying the `.codex/hooks.json` launcher directly from `/tmp` as proof that real Codex Bash calls wedge outside the repo. Before patching, a real Codex unified-exec call with `workdir=/tmp` completed, and the current official hook contract confirmed that hook commands run from the session cwd. The proposed launcher change was dropped because the replay proved only standalone launcher behaviour, not the agent runtime path.
 
 **Root cause:** Treating review output as a task list instead of as claims to verify. The agent read "CLAUDE.md:11 still has 6-step loop" and jumped to editing without running `sed -n '11p' CLAUDE.md` first. Reviews are evidence-tagged opinions, not commands. The evidence can be stale by the time you read it - especially when multiple agents are editing the same repo in the same session.
 
@@ -31,12 +34,19 @@ last_reviewed: 2026-06-05
 2. Batch-verify all findings first (`grep`, `sed -n`, `head`), then fix only what's actually broken
 3. Reviews from agents that didn't run the latest code are particularly likely to cite stale evidence
 4. "8 critics agree" does not mean "8 critics are right" - they may all be reading the same stale state
+5. For hook findings, reproduce through the actual agent event path; direct command-string replay is only launcher evidence
 
 ---
 ## Lesson: 14 self-dogfooding bugs survived 9 rounds of critique and 17 milestones
 
 **Status:** active | **Created:** 2026-04-11
+**Incident count:** 2 | **Latest occurrence:** 2026-07-19
+**Decision changed:** Multi-phase skill contracts must extract and compare the producing phase and its output template; whole-file phrase presence is insufficient.
 **What happened:** After M17, 6 external critics independently reviewed the goat-flow framework itself (not installed projects). They found 14 verified bugs that had survived all prior milestones: foundation.ts emitting v1.0, SKILL_TEMPLATES missing goat-sbao, config.yaml referencing a renamed script, README overclaiming hooks, stale test fixtures encoding the wrong skill count, setup fragments still creating coding-standards (removed in M13), classify-state marking "healthy" from version alone, and more. Every bug was a 1-5 line fix.
+
+**Recurrence (2026-07-19):** The goat-qa exhaustive matrix and its Phase 3 headings were contract-tested, but Standard Phase 2 still limited its test-plan mapping and Undertested Risks template to CRITICAL/HIGH, silently dropping MEDIUM High-value gaps at the blocking gate.
+
+**Evidence:** `workflow/skills/goat-qa/SKILL.md` (search: `Exhaustive priority matrix`; `Phase 2 - Gap Analysis`) contained the contradiction; `test/contract/skill-hardening-contracts.test.ts` (search: `carries MEDIUM high-value gaps into goat-qa Standard Phase 2`) now extracts both the phase and output template.
 
 **Name note:** `goat-sbao` was the predecessor of `goat-critique` per ADR-019.
 
@@ -51,6 +61,7 @@ last_reviewed: 2026-06-05
 2. After any rename, grep ALL file types (not just `.ts` and `.md` - also `.yaml`, `.json`, `.sh`)
 3. Periodically invite external review of the goat-flow repo itself, not just installed output
 4. `preflight-checks.sh` should verify SKILL_NAMES count consistency across surfaces
+5. For multi-phase prose contracts, assert that each classified tier reaches the phase and output where users act on it
 
 ---
 ## Lesson: Blindly applying critique recommendations without verifying claims
@@ -145,17 +156,19 @@ All three were wrong. Locally: `npm run typecheck` exits 0, `npm test` passes 83
 
 ## Lesson: Ordering findings ("section X must be first") are grep-position-independent - rate them by how the artifact is consumed
 
-**Status:** active | **Created:** 2026-06-05
+**Status:** resolved | **Created:** 2026-06-05 | **Resolved:** 2026-07-13
 
 **What happened:** A 3-agent goat-critique of `workflow/skills/playbooks/` reached HIGH consensus that the README's "first section MUST be `## Availability Check`" rule was violated by `gruff-code-quality.md` (leads with `## Gruff at a glance`) and `page-capture.md` (leads with `## Boundary`), and recommended reordering both. Orchestrator double-check downgraded it: agents locate the section by grepping `## Availability Check`, which succeeds at any line position, so "present but not first" is cosmetic - while the sections that precede it (gruff's at-a-glance TL;DR, page-capture's "am I in the right playbook?" routing table) legitimately earn the top slot. The only real defect was `skill-quality-testing.md` having NO such section (grep returns zero) - the one file actually fixed.
 
 **Root cause:** The finding conflated two consumption models. "Must be FIRST" serves *human top-down scanning*; "must be PRESENT and findable" serves *grep/agent retrieval*. These playbooks are consumed by agents that grep for the heading, so position is nearly irrelevant and absence is the only real failure. The README's own justification even says "This is what agents grep for" - i.e. position-independent. Three agents rated by the letter of the rule; consensus amplified the miscalibration instead of catching it.
 
-**Evidence:** `workflow/skills/playbooks/README.md` (search: "grep-findable `## Availability Check`"). First-H2 scan: gruff=`## Gruff at a glance`, page-capture=`## Boundary` (both have `## Availability Check` lower down); `skill-quality-testing.md` had none.
+**Evidence at the time:** `workflow/skills/playbooks/README.md` required a grep-findable Availability Check, while the first H2 remained different in two playbooks and the skill-quality-testing reference had no such section.
+
+**Resolution:** M12 later made Availability Check the deliberate first-H2 contract because cold-start users and agents need capability limits before procedural guidance. The audit now parses and enforces that order, and every standalone playbook conforms. Current anchors: `workflow/skills/playbooks/skill-playbook-authoring-sync.md` (search: "After the title and short orientation") and `src/cli/audit/skill-docs-contract.ts` (search: "standalonePlaybookContractFailure"). The original critique was over-scoped against the old contract; the later explicit contract change does not retroactively make that unverified recommendation correct.
 
 **Prevention:**
-1. For an ordering finding ("X must be first/before Y"), identify how the artifact is consumed (grep vs human scan vs parse) before assigning severity. Reorder findings are usually LOW when consumers locate by name; *absence* is the real defect.
-2. A brief orienting/routing section preceding a mandated section is often good design - don't mechanically enforce position.
+1. For an ordering finding ("X must be first/before Y"), identify how the artifact is consumed (grep, top-down scan, or parser) and read the current contract before assigning severity.
+2. Do not infer an ordering rule from a presence rule; add deterministic enforcement when ordering becomes intentional.
 3. Consensus severity is not a substitute for the consumption-model check. Verify the premise, then rate.
 
 ---

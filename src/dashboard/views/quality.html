@@ -1,4 +1,8 @@
-<!-- ═══ Quality View ═══ -->
+<!--
+  Quality view for comparing deterministic audit evidence with saved assessment history.
+  Use after selecting an agent and quality mode to inspect scores, findings, and launch prompts.
+  The baseline card keeps structural completeness separate from the broader quality judgment users request.
+-->
 <div
   x-show="activeView === 'quality'"
   x-cloak
@@ -168,7 +172,7 @@
              * Use when the user needs one line before opening detailed findings.
              *
              * @param agent - selected audit row; missing row means the agent has not been audited yet
-             * @returns concise recommendation summary for the visible Quality card
+             * @returns card summary; missing concerns show install progress rather than a false clean state
              */
             recommendationSummary(agent) {
               // No row means the selected agent has no audit result to summarize.
@@ -178,12 +182,13 @@
                 const passed = agent.agent.checks.filter(check => check.status === 'pass').length;
                 return `${passed}/${agent.agent.checks.length} installed`;
               }
+              // Missing optional arrays contribute zero, preserving older audit payloads in the card summary.
               const recommendationCount = this.concernKeys.reduce((total, key) => total + (agent.concerns[key]?.recommendations?.length || 0), 0);
-              const warnings = (agent.harness?.checks || []).filter(check => check.status === 'fail' && check.impact === 'score-only').length;
-              // With no recommendations or score warnings, the card can say the agent is clear.
-              if (recommendationCount === 0 && warnings === 0) return 'All checks passing';
+              const scoreWarningCount = (agent.harness?.checks || []).filter(check => check.status === 'fail' && check.impact === 'score-only').length;
+              // With no recommendations or score warnings, the Quality card can stay visually clear.
+              if (recommendationCount === 0 && scoreWarningCount === 0) return 'All checks passing';
               // Score-only warnings are surfaced before recommendations because they temper the grade.
-              if (warnings > 0) return `${warnings} score warning${warnings !== 1 ? 's' : ''}`;
+              if (scoreWarningCount > 0) return `${scoreWarningCount} score warning${scoreWarningCount !== 1 ? 's' : ''}`;
               return `${recommendationCount} recommendation${recommendationCount !== 1 ? 's' : ''}`;
             }
           }"
@@ -248,7 +253,8 @@
                     >
                       <div
                         style="
-                          display: flex;
+                          display: grid;
+                          grid-template-columns: 68px minmax(0, 1fr) 32px;
                           align-items: center;
                           gap: 8px;
                           padding: 2px 0;

@@ -1,6 +1,7 @@
 /**
  * Unit tests for project stack detection.
- * Pins the externalized table data so detector behavior stays stable.
+ * Use these fixtures to verify the setup UI reports frameworks and languages
+ * from observable files without depending on a developer's real workspace.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -35,6 +36,7 @@ function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
     readFile: () => null,
     lineCount: () => 0,
     readJson: () => null,
+    isReadableDirectory: () => false,
     listDir: () => [],
     isExecutable: () => false,
     glob: () => [],

@@ -1,19 +1,20 @@
 # TypeScript Conventions
 
-This is a **Node.js CLI tool** (not a browser app, not React/Vue). Pure TypeScript compiled to ESM.
+TypeScript spans the **Node.js CLI and server** under `src/cli/` and the **browser dashboard** under `src/dashboard/`. The CLI uses ESM; the dashboard compiles to classic scripts loaded by the HTML shell (not React/Vue).
 
 ## Module System
 
-- ESM: `"type": "module"`, target ES2022, `"module": "NodeNext"`
-- All imports use `.js` extensions: `import { foo } from './bar.js'`
-- Dynamic imports for lazy loading (see cli.ts -- keeps `--help` fast)
-- Node built-ins use `node:` prefix: `import { parseArgs } from 'node:util'`
+- CLI/server: ESM with `"type": "module"`, target ES2023, and `"module": "NodeNext"`
+- CLI/server imports use `.js` extensions: `import { foo } from './bar.js'`
+- CLI dynamic imports provide lazy loading (see `cli.ts` -- keeps `--help` fast)
+- CLI/server Node built-ins use the `node:` prefix: `import { parseArgs } from 'node:util'`
+- Dashboard files are classic browser scripts compiled by `tsconfig.dashboard.json`; cross-file symbols are resolved through their shared script scope
 
 ## Type System
 
 - Shared types in `src/cli/types.ts`; audit/check types in `src/cli/audit/types.ts`; CLI command types in `src/cli/cli-types.ts`
 - Strict mode: no implicit any, strict null checks, strict property initialization
-- No `any`. Use `unknown` and narrow with type guards. Minimize `as` casts.
+- Avoid explicit `any`. Use `unknown` and narrow with type guards. A load-bearing dynamic-interop exception requires an inline ESLint suppression with a same-line `-- rationale` comment. Minimize `as` casts.
 - Union types for constrained strings: `AgentId = 'claude' | 'codex' | 'antigravity' | 'copilot'`
 - `Record<string, unknown>` over `any` for parsed JSON
 
@@ -72,3 +73,4 @@ Harness checks feed the AI Harness Completeness score. When `audit --harness` is
 - New harness check? Add a `HarnessCheck` to the appropriate file in `audit/harness/`
 - New fact? Add to `SharedFacts` or `AgentFacts` in `types.ts`, extract in `facts/shared/` or `facts/agent/`
 - New CLI command? Add to the `Command` union in `cli-types.ts` and the command table in `cli-parser.ts`
+- New dashboard behavior? Add it under `src/dashboard/`, register any new classic script in `src/dashboard/index.html`, and cover the browser-visible flow

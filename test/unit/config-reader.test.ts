@@ -1,5 +1,7 @@
 /**
- * Config reader tests - defaults, merging, validation.
+ * Exercises config defaults, merging, and validation shown to setup users.
+ * Use these tests when configuration parsing changes so missing or malformed
+ * project settings still produce predictable operator-facing results.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -7,7 +9,7 @@ import { loadConfig } from "../../src/cli/config/reader.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import type { ReadonlyFS } from "../../src/cli/types.js";
 
-/** Build a config-only readonly filesystem for reader merge tests. */
+/** Build a config-only filesystem so each test models exactly what a setup user saved. */
 function configFS(content: string | null): ReadonlyFS {
   return {
     exists: (path: string) =>
@@ -16,6 +18,7 @@ function configFS(content: string | null): ReadonlyFS {
       path === ".goat-flow/config.yaml" ? content : null,
     lineCount: () => 0,
     readJson: () => null,
+    isReadableDirectory: () => false,
     listDir: () => [],
     isExecutable: () => false,
     glob: () => [],

@@ -1,6 +1,6 @@
 # Dashboard Reference
 
-Launch: `npx goat-flow dashboard .` (or `npx goat-flow dashboard . --dev` for live reload)
+Launch: `npx @blundergoat/goat-flow@latest dashboard .` (or `npx @blundergoat/goat-flow@latest dashboard . --dev` for live reload)
 
 ## Local Access Boundary
 

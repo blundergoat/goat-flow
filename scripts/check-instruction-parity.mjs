@@ -111,6 +111,44 @@ function pathLabel(path) {
   return relative(ROOT, resolve(ROOT, path)) || path;
 }
 
+/** Escape a package version before matching its exact CHANGELOG heading. */
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Read the current package release date from CHANGELOG.md for live-header validation. */
+function readReleaseMetadata(failures) {
+  let version;
+  try {
+    version = JSON.parse(
+      readFileSync(resolve(ROOT, "package.json"), "utf8"),
+    ).version;
+  } catch (error) {
+    failures.push(
+      `package.json: cannot read current version (${error.message})`,
+    );
+    return null;
+  }
+  if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) {
+    failures.push("package.json: current version is not stable semver");
+    return null;
+  }
+
+  const changelog = readFileSync(resolve(ROOT, "CHANGELOG.md"), "utf8");
+  const headingPattern = new RegExp(
+    `^## v${escapeRegExp(version)} - (\\d{4}-\\d{2}-\\d{2})$`,
+    "gm",
+  );
+  const matches = Array.from(changelog.matchAll(headingPattern));
+  if (matches.length !== 1) {
+    failures.push(
+      `CHANGELOG.md: expected exactly one release heading for v${version}, found ${matches.length}`,
+    );
+    return null;
+  }
+  return { version, date: matches[0][1] };
+}
+
 /** Normalize headings that include explanatory suffixes before parity comparison. */
 function normalizeHeading(text) {
   const trimmed = text.trim();
@@ -179,7 +217,12 @@ function normalizeSharedLoop(executionLoopBody) {
 }
 
 /** Validate shared H2/H3 and phrase contracts for one instruction file, mutating the failure report. */
-function validateInstructionFile(file, failures, setupLoopBodies) {
+function validateInstructionFile(
+  file,
+  failures,
+  setupLoopBodies,
+  releaseMetadata,
+) {
   const abs = resolve(ROOT, file);
   const label = pathLabel(file);
   if (!existsSync(abs)) {
@@ -240,7 +283,14 @@ function validateInstructionFile(file, failures, setupLoopBodies) {
     return;
   }
 
-  validateLiveInstructionFile(label, essentialCommands, routerTable, failures);
+  validateLiveInstructionFile(
+    label,
+    content,
+    essentialCommands,
+    routerTable,
+    releaseMetadata,
+    failures,
+  );
 }
 
 /** Mutate setup-guide parity state because setup files share generic commands and loop bodies. */
@@ -271,10 +321,21 @@ function validateSetupInstructionFile(
 /** Validate live instruction files because they must not retain setup placeholders. */
 function validateLiveInstructionFile(
   label,
+  content,
   essentialCommands,
   routerTable,
+  releaseMetadata,
   failures,
 ) {
+  if (releaseMetadata) {
+    const firstLine = content.split("\n", 1)[0] ?? "";
+    const expectedSuffix = ` - v${releaseMetadata.version} (${releaseMetadata.date})`;
+    if (!firstLine.endsWith(expectedSuffix)) {
+      failures.push(
+        `${label}: header must end with ${JSON.stringify(expectedSuffix)}, got ${JSON.stringify(firstLine)}`,
+      );
+    }
+  }
   if (/<(?:lint|typecheck|test) command>/.test(essentialCommands)) {
     failures.push(
       `${label}: live Essential Commands still contains setup placeholders`,
@@ -283,6 +344,15 @@ function validateLiveInstructionFile(
   if (!routerTable.includes("Peer instructions")) {
     failures.push(
       `${label}: Router Table must include peer instruction routing`,
+    );
+  }
+  if (
+    !content.includes(
+      "except explicitly labelled placeholder scenarios in shipped skill references",
+    )
+  ) {
+    failures.push(
+      `${label}: real-evidence rule must carry the architecture-approved shipped-skill example exception`,
     );
   }
 }
@@ -320,9 +390,10 @@ function exitOnInstructionParityFailures(failures) {
 function validateInstructionParity() {
   const failures = [];
   const setupLoopBodies = [];
+  const releaseMetadata = readReleaseMetadata(failures);
 
   for (const file of ALL_FILES) {
-    validateInstructionFile(file, failures, setupLoopBodies);
+    validateInstructionFile(file, failures, setupLoopBodies, releaseMetadata);
   }
 
   validateSharedSetupLoopBodies(setupLoopBodies, failures);

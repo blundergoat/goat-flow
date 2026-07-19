@@ -133,12 +133,16 @@ describe("quality subcommand parsing", () => {
 
 describe("skill subcommand parsing", () => {
   it("keeps projectPath at cwd instead of treating 'new' as a path", () => {
+    const redLogPath =
+      ".goat-flow/logs/sessions/2026-07-17-deploy-checks-tdd.md";
     const parsed = parseCLIArgs([
       "skill",
       "new",
       "I want a workflow for deploy checks",
       "--name",
       "deploy-checks",
+      "--red-log",
+      redLogPath,
       "--yes",
     ]);
     assert.equal(parsed.command, "skill");
@@ -148,16 +152,21 @@ describe("skill subcommand parsing", () => {
       parsed.skillDescription,
       "I want a workflow for deploy checks",
     );
+    assert.equal(parsed.skillRedLogPath, resolve(redLogPath));
   });
 
   it("parses an explicit project path after skill new", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-skill-cli-"));
+    const redLogPath =
+      ".goat-flow/logs/sessions/2026-07-17-deploy-checks-tdd.md";
     try {
       const parsed = parseCLIArgs([
         "skill",
         "new",
         projectRoot,
         "I want a workflow for deploy checks",
+        "--red-log",
+        redLogPath,
       ]);
       assert.equal(parsed.command, "skill");
       assert.equal(parsed.skillSubcommand, "new");
@@ -166,6 +175,7 @@ describe("skill subcommand parsing", () => {
         parsed.skillDescription,
         "I want a workflow for deploy checks",
       );
+      assert.equal(parsed.skillRedLogPath, resolve(projectRoot, redLogPath));
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -190,6 +200,62 @@ describe("skill subcommand parsing", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+
+  it("parses skill doctor with the shared agent/format flags and a skill filter", () => {
+    const parsed = parseCLIArgs([
+      "skill",
+      "doctor",
+      ".",
+      "--agent",
+      "codex",
+      "--skill",
+      "goat",
+      "--format",
+      "json",
+    ]);
+
+    assert.equal(parsed.command, "skill");
+    assert.equal(parsed.skillSubcommand, "doctor");
+    assert.equal(parsed.projectPath, resolve("."));
+    assert.equal(parsed.agent, "codex");
+    assert.equal(parsed.skillFilter, "goat");
+    assert.equal(parsed.format, "json");
+  });
+
+  it("parses a project path before skill doctor", () => {
+    const parsed = parseCLIArgs(["skill", ".", "doctor"]);
+
+    assert.equal(parsed.skillSubcommand, "doctor");
+    assert.equal(parsed.projectPath, resolve("."));
+  });
+
+  it("reports a missing skill subcommand after a project path", () => {
+    assert.throws(
+      () => parseCLIArgs(["skill", "./fixture-project"]),
+      (error: unknown) =>
+        error instanceof CLIError &&
+        error.exitCode === CLI_USAGE_EXIT_CODE &&
+        /project path.*missing a subcommand.*new.*doctor/iu.test(error.message),
+    );
+  });
+
+  it("rejects unsupported agent profiles before skill doctor dispatch", () => {
+    assert.throws(
+      () => parseCLIArgs(["skill", "doctor", "--agent", "unknown"]),
+      /Invalid agent: unknown/i,
+    );
+  });
+
+  it("keeps skill-new write flags out of the read-only doctor mode", () => {
+    assert.throws(
+      () => parseCLIArgs(["skill", "doctor", "--yes"]),
+      /--yes is only valid for skill new/i,
+    );
+    assert.throws(
+      () => parseCLIArgs(["skill", "new", "description", "--skill", "goat"]),
+      /--skill is only valid for skill doctor/i,
+    );
   });
 });
 

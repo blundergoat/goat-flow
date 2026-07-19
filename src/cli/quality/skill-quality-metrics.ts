@@ -52,6 +52,7 @@ function descriptionSummarizesWorkflow(content: string): boolean {
   );
 }
 
+/** Scores whether users can identify when to invoke the artifact and where adjacent work belongs. */
 // eslint-disable-next-line complexity -- intentional because exhaustive structural signal scoring keeps each trigger-clarity rule beside its note text
 const triggerClarity: MetricScorer = (input) => {
   const { artifact, rawContent: content, subtype } = input;
@@ -63,9 +64,15 @@ const triggerClarity: MetricScorer = (input) => {
       /^---[\s\S]*?description:\s*".+"[\s\S]*?---/m.test(content);
     const hasWhenToUse =
       hasSection(content, /##\s+When to Use/i) || /\bUse when\b/i.test(content);
+    const hasBoundaryCommands =
+      hasSection(content, /##\s+Boundary Commands/i) &&
+      /\*\*NEVER:\*\*/i.test(content) &&
+      /\*\*ALWAYS:\*\*/i.test(content) &&
+      /\*\*DEFER TO:\*\*/i.test(content);
     const hasExclusion =
       /NOT this skill/i.test(content) ||
-      /If the user names a skill explicitly/i.test(content);
+      /If the user names a skill explicitly/i.test(content) ||
+      hasBoundaryCommands;
 
     if (hasFrontmatterDesc) score += 5;
     else notes.push("missing frontmatter description");

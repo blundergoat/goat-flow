@@ -128,14 +128,8 @@ function inferQualityScope(projectPath: string): "framework-self" | "consumer" {
   }
 }
 
-/**
- * Render the audit summary block because reviewers need setup failures before qualitative judgment.
- *
- * @param report - completed audit report whose scope results and concern scores are summarised
- * @returns a Markdown block listing setup/agent pass-fail plus harness-completeness percentages
- */
-export function renderAuditSummary(report: AuditReport): string {
-  const lines: string[] = [];
+/** Append setup and agent scope failures to one audit summary. */
+function appendScopeSummary(lines: string[], report: AuditReport): void {
   const scopes: [string, string][] = [
     ["setup", "GOAT Flow Setup"],
     ["agent", "Agent Setup"],
@@ -145,36 +139,76 @@ export function renderAuditSummary(report: AuditReport): string {
     if (!scopeReport) continue;
     const status = scopeReport.status === "pass" ? "PASS" : "FAIL";
     lines.push(`- **${label}**: ${status}`);
-    if (scopeReport.failures.length > 0) {
-      for (const failure of scopeReport.failures) {
-        lines.push(`  - ${failure.check}: ${failure.message}`);
-      }
+    for (const failure of scopeReport.failures) {
+      lines.push(`  - ${failure.check}: ${failure.message}`);
     }
   }
+}
 
-  if (report.concerns) {
-    const keys: AuditConcernKey[] = [
-      "context",
-      "constraints",
-      "verification",
-      "recovery",
-      "feedback_loop",
-    ];
-    lines.push("");
+/** Append structural concern scores and evidence limits when harness facts exist. */
+function appendConcernSummary(lines: string[], report: AuditReport): void {
+  if (!report.concerns) return;
+  const keys: AuditConcernKey[] = [
+    "context",
+    "constraints",
+    "verification",
+    "recovery",
+    "feedback_loop",
+  ];
+  lines.push("");
+  lines.push(
+    "Harness completeness (structural integrity, not quality assessment):",
+  );
+  for (const key of keys) {
+    const concern = report.concerns[key];
+    const limits =
+      concern.limits.length > 0
+        ? `; limits: ${concern.limits.join(" | ")}`
+        : "";
     lines.push(
-      "Harness completeness (structural integrity, not quality assessment):",
+      `- ${key}: ${concern.status === "pass" ? "PASS" : "FAIL"} (${concern.score}%; metrics=${concern.metrics}${limits})`,
     );
-    for (const key of keys) {
-      const concern = report.concerns[key];
-      const limits =
-        concern.limits.length > 0
-          ? `; limits: ${concern.limits.join(" | ")}`
-          : "";
-      lines.push(
-        `- ${key}: ${concern.status === "pass" ? "PASS" : "FAIL"} (${concern.score}%; metrics=${concern.metrics}${limits})`,
-      );
-    }
   }
+}
+
+/** Append template-drift findings when the audit collected drift evidence. */
+function appendDriftSummary(lines: string[], report: AuditReport): void {
+  if (!report.drift) return;
+  lines.push("");
+  lines.push(
+    `- **Template Drift**: ${report.drift.status === "pass" ? "PASS" : "FAIL"} (${report.drift.checked} checked)`,
+  );
+  for (const finding of report.drift.findings) {
+    lines.push(`  - ${finding.path}: ${finding.message}`);
+  }
+}
+
+/** Append content-lint findings when the audit collected content evidence. */
+function appendContentSummary(lines: string[], report: AuditReport): void {
+  if (!report.content) return;
+  lines.push("");
+  lines.push(
+    `- **Content Claims**: ${report.content.status === "pass" ? "PASS" : "FAIL"} (${report.content.filesScanned} files scanned)`,
+  );
+  for (const finding of report.content.findings) {
+    lines.push(
+      `  - ${finding.path}${finding.line ? `:${finding.line}` : ""} [${finding.rule}]: ${finding.message}`,
+    );
+  }
+}
+
+/**
+ * Render the audit summary block because reviewers need setup failures before qualitative judgment.
+ *
+ * @param report - completed audit report whose scope results and concern scores are summarised
+ * @returns a Markdown block listing setup/agent pass-fail plus harness-completeness percentages
+ */
+export function renderAuditSummary(report: AuditReport): string {
+  const lines: string[] = [];
+  appendScopeSummary(lines, report);
+  appendConcernSummary(lines, report);
+  appendDriftSummary(lines, report);
+  appendContentSummary(lines, report);
 
   return lines.join("\n");
 }
@@ -510,7 +544,9 @@ export function appendQualityReportContract(
   );
   lines.push(`FILE="\${QUALITY_DIR}/\${STAMP}-${input.agent}-\${RAND}.json"`);
   lines.push('mkdir -p "$QUALITY_DIR"');
-  lines.push("# (then write the JSON below to $FILE)");
+  lines.push(
+    "# Keep the completed JSON in memory; the redaction gate below writes $FILE.",
+  );
   lines.push("```");
   lines.push("");
   lines.push("**JSON body shape:**");
@@ -627,17 +663,96 @@ export function appendQualityReportContract(
   );
   pushFull(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
-    "- If you write the file via a bash heredoc, QUOTE the delimiter (`<<'EOF'`, not `<<EOF`). Unquoted delimiters make the shell interpret `` `backticks` `` as command substitution, which silently eats your inline code references.",
+    "- When streaming the report through the redaction heredoc below, QUOTE the delimiter (`<<'NODE'`, not `<<NODE`). Unquoted delimiters make the shell interpret `` `backticks` `` as command substitution, which silently eats your inline code references.",
   );
   lines.push("");
-  lines.push("**Validate before confirming.** After writing the file, run:");
+  lines.push(
+    "**Redact before writing.** Build the complete JSON in memory, then replace the placeholder below and stream it through the readable scrubber. Only the redacted JSON may reach `$FILE`; never stage the raw draft in a file.",
+  );
+  lines.push("");
+  lines.push(
+    `**Select a compatible redactor.** The installed CLI must report \`goat-flow v${getPackageVersion()}\`. A stale CLI can interpret \`redact\` as an audit target and write the wrong JSON. The source fallback below is allowed only in the goat-flow framework checkout.`,
+  );
   lines.push("");
   lines.push("```bash");
   lines.push(
-    'goat-flow quality validate "$FILE"   # or: node --import tsx src/cli/cli.ts quality validate "$FILE"',
+    "node --input-type=module - \"$FILE\" <<'NODE'",
+    'import { spawnSync } from "node:child_process";',
+    'import { existsSync, readFileSync } from "node:fs";',
+    "",
+    "const outputPath = process.argv[2];",
+    `const expectedVersion = "goat-flow v${getPackageVersion()}";`,
+    "const report = <insert the complete report object here>;",
+    "",
+    "function probeCompatibleCli(command, args) {",
+    '  const result = spawnSync(command, [...args, "--version"], {',
+    '    encoding: "utf8",',
+    "  });",
+    "  if (result.error || result.status !== 0) return null;",
+    "  if (result.stdout.trim() !== expectedVersion) return null;",
+    "  return { command, args };",
+    "}",
+    "",
+    'let selectedCli = probeCompatibleCli("goat-flow", []);',
+    'if (!selectedCli && existsSync("package.json")) {',
+    "  let packageJson = null;",
+    "  try {",
+    '    packageJson = JSON.parse(readFileSync("package.json", "utf8"));',
+    "  } catch {",
+    "    packageJson = null;",
+    "  }",
+    '  if (packageJson && packageJson.name === "@blundergoat/goat-flow" && existsSync("src/cli/cli.ts")) {',
+    "    selectedCli = probeCompatibleCli(process.execPath, [",
+    '      "--import",',
+    '      "tsx",',
+    '      "src/cli/cli.ts",',
+    "    ]);",
+    "  }",
+    "}",
+    "",
+    "if (!selectedCli) {",
+    `  console.error("Compatible goat-flow v${getPackageVersion()} redactor unavailable; raw report not written");`,
+    "  process.exit(1);",
+    "}",
+    "",
+    "function runOrExit(command, args, { input } = {}) {",
+    "  const result = spawnSync(command, args, {",
+    "    input,",
+    '    stdio: input === undefined ? "inherit" : ["pipe", "inherit", "inherit"],',
+    "  });",
+    "  if (result.error) {",
+    "    console.error(result.error.message);",
+    "    process.exit(1);",
+    "  }",
+    "  if (result.signal) {",
+    "    console.error(`Subprocess terminated by ${result.signal}`);",
+    "    process.kill(process.pid, result.signal);",
+    "  }",
+    "  if (result.status !== 0) process.exit(result.status ?? 1);",
+    "}",
+    "",
+    'const reportJson = JSON.stringify(report, null, 2) + "\\n";',
+    "runOrExit(",
+    "  selectedCli.command,",
+    '  [...selectedCli.args, "redact", "--output", outputPath],',
+    "  { input: reportJson },",
+    ");",
+    "runOrExit(selectedCli.command, [",
+    "  ...selectedCli.args,",
+    '  "quality", "validate", outputPath,',
+    "]);",
+    'runOrExit("ls", ["-la", outputPath]);',
+    "NODE",
   );
-  lines.push('ls -la "$FILE"');
   lines.push("```");
+  lines.push("");
+  lines.push(
+    "If the compatibility block exits non-zero, keep the report non-durable and state the exact reason; do not write an unredacted fallback.",
+  );
+  lines.push("");
+  lines.push(
+    "**Validate before confirming.** The block above uses the same compatible CLI for redaction and validation, stops on either failure, and lists the resulting file only after validation passes.",
+  );
   lines.push("");
   lines.push(
     "If validate exits non-zero, read the reported error, fix the JSON, and re-write the file. Do NOT emit the confirmation below until validate passes.",

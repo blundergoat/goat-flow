@@ -21,6 +21,12 @@ const CUSTOM_PROMPTS_ACTIONS_PATH = resolve(
   "dashboard",
   "dashboard-custom-prompts-actions.ts",
 );
+const PRESET_PROMPTS_PATH = resolve(
+  PROJECT_ROOT,
+  "src",
+  "dashboard",
+  "preset-prompts.json",
+);
 
 type HelperContext = {
   /** Return a fresh browser-local custom prompt draft with default flags. */
@@ -183,6 +189,27 @@ function makeContext(helpers: HelperContext): TestContext {
 }
 
 describe("custom prompt helpers", () => {
+  it("keeps generic catalog workflows on the direct route", () => {
+    const presets = JSON.parse(
+      readFileSync(PRESET_PROMPTS_PATH, "utf-8"),
+    ) as Array<Record<string, unknown>>;
+    const deliverableMarkers = new Map<string, RegExp>([
+      ["flow-diagram", /```mermaid/u],
+      ["walkthrough-with-testing", /exactly three sections/iu],
+      ["browser-verify", /browser-use state/u],
+      ["page-capture", /one MD record per page/iu],
+    ]);
+
+    for (const [id, deliverableMarker] of deliverableMarkers) {
+      const preset = presets.find((candidate) => candidate.id === id);
+      assert.ok(preset, `missing ${id} preset`);
+      const prompt = String(preset.prompt);
+      assert.equal(preset.route, "direct", `${id} route`);
+      assert.doesNotMatch(prompt, /(?:^|\s)[/$]goat-qa\b/iu, id);
+      assert.match(prompt, deliverableMarker, `${id} deliverable`);
+    }
+  });
+
   it("infers direct and goat-skill routes without forcing plain text", () => {
     const { helpers } = loadHelpers();
     assert.equal(

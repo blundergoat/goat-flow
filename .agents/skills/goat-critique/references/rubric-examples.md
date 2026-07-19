@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Critique Rubric Examples (Reference Pack)
 
@@ -46,6 +46,8 @@ Each rubric has a context map that Step 0 reads and passes to sub-agent spawn di
 
 ## Worked examples
 
+> **Illustrative scenario - input/output shape only; never evidence.** Every artifact path, finding, command outcome, and prior-log id below is a placeholder. Live critique must substitute target-project files plus semantic anchors re-read in the current session.
+
 ### Full phase walkthrough: Phase 2 context-leak edge case
 
 - **Artifact:** `SKILL.md`
@@ -59,8 +61,8 @@ Each rubric has a context map that Step 0 reads and passes to sub-agent spawn di
 ```markdown
 ## Finding: Verification belongs after execution, not only during synthesis
 - **Severity:** HIGH | **Confidence:** HIGH
-- **Evidence:** a coordination lesson (search: "Phase 3 verification catches state drift invisible to plan-level reasoning") - live `wc -w` and `git show` checks found word-count and version drift after prior critique passes missed them
-- **Proof attempt:** Read the lesson entry and verified the recorded failure mode was post-plan state drift
+- **Evidence:** `<target-project>/plan.md` (search: "Verification gate") - current-session size and version checks found state drift after the draft plan was written
+- **Proof attempt:** Re-read the target plan's verification gate and ran the named current-state checks
 - **Proof class:** STATIC
 - **Evidence quality:** OBSERVED
 - **SKEPTIC:** A plan can look internally consistent while the repo has drifted underneath it
@@ -74,8 +76,8 @@ Each rubric has a context map that Step 0 reads and passes to sub-agent spawn di
 ```markdown
 ## Finding: Quick critique fallback would break the skill mechanism
 - **Severity:** HIGH | **Confidence:** HIGH
-- **Evidence:** local decision record (search: "goat-critique runs in one mode: full delegated") - accepted decision binds goat-critique to real delegated agents, not inline role-play
-- **Proof attempt:** Read the decision record and confirmed it rejects quick/inline fallback as self-talk under critique labels
+- **Evidence:** `<target-project>/decisions/critique-mode.md` (search: "delegated critique mode") - the current decision binds critique to isolated agents rather than inline role-play
+- **Proof attempt:** Re-read the target decision and confirmed that it rejects a quick inline fallback
 - **Proof class:** STATIC
 - **Evidence quality:** OBSERVED
 - **SKEPTIC:** Reintroducing quick mode would make the output promise multi-perspective critique without isolated contexts

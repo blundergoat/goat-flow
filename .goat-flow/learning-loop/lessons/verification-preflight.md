@@ -1,17 +1,17 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-19
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
 
 **Status:** active | **Created:** 2026-04-03
 
-**What happened:** While tightening scanner messages, verification included a `prettier --write` pass on three rubric files without the repo's single-quote flag. The code was still valid, but the formatter rewrote quote style across entire files and created a much larger diff than intended.
-**Root cause:** Treated formatting as a neutral cleanup step instead of part of the blast radius. The command matched the tool, but not the repo's existing style contract.
-**Fix:** When formatting targeted files during verification, use the same style flags the repo already uses or the same invocation pattern that previous maintenance/test scripts used. Always check `git diff --stat` immediately after formatter runs to catch accidental blast-radius expansion.
+**What happened:** Formatter verification twice rewrote more than intended: rubric files lost the repo's quote style, then a narrow landing-page edit reformatted most of the hand-authored HTML. On 2026-07-19, a scoped check also included `.gitignore`; Prettier correctly failed because that file has no inferred parser.
 
-**2026-04-25 amendment:** The same trap recurred on `docs/site/goat-flow-landing.html`: a targeted stale-copy edit plus broad `prettier --write` rewrote most of the hand-authored landing page. Keep formatter scopes to touched files that are already formatter-owned, and read `git diff --stat` before running expensive gates so formatting churn can be reverted before verification evidence is collected.
+**Root cause:** Formatting was treated as neutral cleanup instead of a file-type and blast-radius contract.
+
+**Prevention:** Use the repository scripts and their owned extensions (`package.json`, search: `"format:check"`). Scope direct Prettier calls only to formatter-owned files; verify files such as `.gitignore` with byte parity or `git diff --check`. Inspect `git diff --stat` after any formatter write.
 
 ---
 
@@ -72,6 +72,8 @@ last_reviewed: 2026-06-14
 
 **Prevention:** When a shell gate has an EXIT trap or report renderer, capture both its human-readable summary and `$?` before treating it as final evidence. A green report line is not sufficient if the process status disagrees.
 
+**Recurrence update (2026-07-12):** The new preflight runner passed focused checks, but `Doc/code drift` failed until `.goat-flow/code-map.md` listed it. Keep the top-level script inventory current. Evidence: `scripts/preflight-checks.sh` (search: `code-map.md scripts list drifts from scripts/ filesystem`).
+
 ---
 
 ## Lesson: New server helper files still count as repo-wide formatting debt
@@ -97,13 +99,17 @@ last_reviewed: 2026-06-14
 
 **Status:** active | **Created:** 2026-04-25
 
-**What happened:** Added source coverage for the M01 security preset contract and the focused test passed, but `npx prettier --check src/dashboard/preset-prompts.json <changed test file>` failed on the new file.
+**What happened:** M01's focused security-preset test passed before scoped Prettier rejected the new test file.
 
-**Root cause:** I treated the focused behavioral test as the first verification result for a new test file without running the repo formatter gate first.
+**Root cause:** I ran behavioural proof before the formatter gate for touched TypeScript.
 
-**Recurrence update (2026-05-17):** M11 SARIF added `src/cli/audit/sarif.ts`, `test/unit/audit-sarif.test.ts`, and a small CLI route edit. The focused SARIF tests passed first, but the next scoped formatter check failed on all three touched TypeScript files. Running `npx prettier --write src/cli/audit/sarif.ts src/cli/cli.ts test/unit/audit-sarif.test.ts` fixed the task-local formatter blocker before typecheck/full tests. Evidence anchors: `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`), `test/unit/audit-sarif.test.ts` (search: `routes audit --format sarif through the CLI renderer`).
+**Recurrence update (2026-05-17):** M11 SARIF repeated this across three TypeScript files. Evidence: `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`).
 
-**Prevention:** After adding or editing TypeScript tests, run `npx prettier --write <changed test files>` before claiming focused test verification. Keep the formatter check in the same verification bundle as the focused test so style failures are corrected before milestone boxes are ticked.
+**Recurrences (2026-07-13, 2026-07-18, 2026-07-19):** M04/M09 contracts, the skill-quality truncation fixes, M07 setup-truth contracts, and M10 scaffold/drift regressions each reached GREEN before scoped Prettier rejected touched TypeScript. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`), and `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`).
+
+**Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
+
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 6 | **Latest occurrence:** 2026-07-19
 
 ---
 
@@ -111,13 +117,11 @@ last_reviewed: 2026-06-14
 
 **Status:** active | **Created:** 2026-04-26
 
-**What happened:** After fixing quality-prompt and audit-provenance issues, `npm run test:slow` failed in `checkDrift: installer round-trip fixture` because the temp repo's preflight reported one ESLint error and one Prettier failure. The root causes were in the current working tree: `src/cli/prompt/compose-quality.ts` had an over-complex helper, and `test/unit/quality-command.test.ts` needed Prettier formatting. Direct `npx eslint src/cli src/dashboard` and `npm run format:check` reproduced both failures.
+**What happened:** Prompt changes cleared focused tests and typecheck but failed the installer round-trip embedded preflight three times: on 2026-04-26 an over-complex compose-quality.ts helper and unformatted quality-command fixture; on 2026-05-24 checkHookRuntimeSmoke exceeded ESLint complexity by one; on 2026-07-16 PR #56 renderAuditSummary reached complexity 17. Extracting narrow helpers and formatting the fixture cleared the direct gates. The first 2026-07-16 recurrence note also pushed this bucket to 40,353 bytes, so the incident history was consolidated below the cap.
 
-**Root cause:** I treated focused unit tests, typecheck, and fast-suite results as enough after changing a prompt helper and test fixture. The slow installer round-trip runs repo preflight inside a copied checkout, so it catches lint and format debt that focused tests do not.
+**Root cause:** Focused behavior tests and typecheck do not run the full-source lint and format gates that the copied checkout enforces.
 
-**Recurrence update (2026-05-24):** Adding registered deny-hook runtime smoke coverage passed focused audit tests and typecheck, but the first full `bash scripts/preflight-checks.sh` failed in the TypeScript gate because `src/cli/audit/check-agent-deny-runtime.ts` (search: `checkHookRuntimeSmoke`) exceeded ESLint complexity by one branch. Splitting path selection and smoke execution into helpers (search: `runConfiguredHookCommandSmoke`) cleared `npx eslint src/cli/audit/check-agent-deny-runtime.ts` and the rerun preflight TypeScript gate.
-
-**Prevention:** Before rerunning `npm run test:slow` after prompt/test changes, run `npx eslint src/cli src/dashboard` and `npm run format:check` locally. If the slow round-trip preflight fails, reproduce the reported gate directly in the source checkout before changing installer or drift logic.
+**Prevention:** Before rerunning npm run test:slow after prompt or test changes, run npx eslint src/cli src/dashboard and npm run format:check in the source checkout. Reproduce a reported gate directly before changing installer or drift logic. Evidence anchors: src/cli/prompt/compose-quality-common.ts (search: appendScopeSummary), src/cli/audit/check-agent-deny-runtime.ts (search: runConfiguredHookCommandSmoke), test/unit/quality-report-contract.test.ts (search: embeds drift and content failures).
 
 ---
 
@@ -136,6 +140,12 @@ last_reviewed: 2026-06-14
 **Recurrence update (2026-05-19):** M01 commit-guidance work added a new helper and tests. Focused `npx tsc --noEmit` and the new test file passed, but the first full preflight failed in the TypeScript gate: `Knip: 2 unused exports/types`. The exported names were internal helper types, not public API. Removing the unnecessary `export` keywords fixed `npx knip`. Evidence anchor: `src/cli/prompt/commit-guidance.ts` (search: `type CommitGuidanceStatus`).
 
 **Recurrence update (2026-07-03):** A batch of 1.13.0 milestones each passed its per-file scoped gates (fast `npm test`, targeted `npx eslint <changed files>`, focused test slices), yet the closing `npm run publish:check` failed three ways only a full-tree run surfaces: (1) an integration assertion still matched a CDN string after an asset was vendored locally (`test/integration/dashboard-server.test.ts`, `alpinejs@3` → `/assets/alpine.js`); (2) `appendQualityReportContract` shipped at complexity 21 because scoped eslint had only ever run on the file's own diff, not the whole `src/cli` tree - same fix as the M01 recurrence above, but a function this time (route branchy `full ? a : b` / `if (full)` lines through small `pushVariant`/`pushFull` helpers so each decision sits in the helper's scope); (3) deleting the `coming-soon` dashboard view left its name in three prose lists (`.goat-flow/code-map.md`, `docs/dashboard.md`, `.goat-flow/architecture.md`) and orphaned 7 backticked learning-loop file refs, tripping the round-trip fixture's embedded preflight (content-lint + doc/code drift + `stats --check`). Prevention: when a milestone deletes files, moves symbols between modules, or swaps a served asset, run `npm run publish:check` (or at least the round-trip fixture's full preflight, `npx eslint src/cli src/dashboard`, and `stats . --check`) as the FINAL gate - the fast suite and scoped eslint do not exercise full-tree complexity, cold-path doc drift, or learning-loop ref integrity.
+
+**Recurrence update (2026-07-12):** M02 policy-contract verification ran targeted ESLint against `test/contract/command-phrases.test.ts`; the normal command returned only an ignored-file warning, and `--no-ignore` then failed because the test is outside ESLint's configured TypeScript project. The focused Node test and `npm run typecheck` were the supported gates. After those two failed attempts, verification rewound to the repository-supported scopes instead of forcing ad hoc lint coverage. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`).
+
+**Recurrence update (2026-07-12):** M29's testing gate again listed ignored unit/integration test files in a targeted `npx eslint --max-warnings 0` command. ESLint reported three ignored-file warnings and exited 1 even though the changed source had no lint error. The gate was corrected to lint only the three changed `src/cli/audit/` files; TypeScript, Prettier, and focused Node tests remain the supported verification for the ignored test files. Evidence anchor: `eslint.config.mjs` (search: `"test/**"`) - test files are intentionally outside this repo's ESLint scope.
+
+**Recurrence update (2026-07-13):** M20 hit Prettier on three files, ESLint on tests outside its project, and Knip on four internal type exports. Correction used formatting, scoped source lint/tests, and private types. Evidence: `test/unit/context-report.test.ts` (search: `static context report`).
 
 **Prevention:** Use the repo's supported scopes for final gates (`npx eslint src/cli src/dashboard`, `npm run format:check`, `npx knip --no-progress`). Run full `npm test` alone or capture it to a log before starting parallel expensive checks. When Knip reports configuration hints after a dependency starts being used for real, remove the temporary ignore entry instead of carrying it forward. For performance sanity tests that run in the default fast suite and preflight coverage suite, keep fixtures representative and prefer same-process relative budgets over fixed local-run ceilings. Evidence anchors: `package.json` (search: `test:fast`), `knip.json` (search: `ignoreDependencies`). (The dashboard-markdown performance sanity test that first illustrated the same-process relative-budget fix was removed in 1.13.0 with the markdown viewer.)
 
@@ -241,7 +251,7 @@ last_reviewed: 2026-06-14
 
 **Recurrence update (2026-05-27):** During the M11 learning-loop consolidation, `stats --check` passed after lesson files were merged and renamed, but the targeted audit unit suite failed with `Invalid audit check provenance` because `src/cli/audit/harness/check-context.ts` still cited the deleted `auditor-and-rubric.md` lesson, and `src/cli/audit/harness/check-verification.ts` still cited the deleted `verification-review.md` and `agent-behavior-trust.md` lessons. The markdown cross-reference grep was clean; the stale paths lived in code-owned provenance metadata.
 
-**Recurrence update (2026-06-10):** Adding the Step 0 emission lesson made `stats --check` fail twice: first `bucket-size` because `.goat-flow/learning-loop/lessons/agent-behavior.md` exceeded `BUCKET_SIZE_WARN_BYTES`, then `stale-ref` because the evidence used bare `skill-preamble.md`. The fix was to compress the new entry, cite `.goat-flow/skill-docs/skill-preamble.md`, and re-run `goat-flow index` before rechecking. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Step 0 retrieval was advisory`) and `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
+**Recurrences (2026-06-10, 2026-07-19):** `stats --check` caught `bucket-size` after Step 0 and M07 recurrence edits crossed `BUCKET_SIZE_WARN_BYTES`; the first run also caught a bare-path `stale-ref`. Both fixes compacted redundant wording, preserved anchors, regenerated indexes, and reran stats. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Step 0 retrieval was advisory`) and `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
 
 **Root cause:** Filesystem/path checks prove that a local path currently resolves, not that the reference is committed, portable, or appropriate for a durable lesson/ADR. Ignored local workspaces and external examples require different citation forms from repo-local files.
 
@@ -267,6 +277,8 @@ last_reviewed: 2026-06-14
 
 **Status:** active | **Created:** 2026-06-07
 
+**Decision changed:** Run ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 6 | **Latest occurrence:** 2026-07-14
+
 **What happened:** During the M07-M10 closeout, focused hook checks, typecheck, focused tests, `npm test`, and `npm publish --dry-run` were clean, but the first full `bash scripts/preflight-checks.sh` still failed in the TypeScript section with `Knip: 4 unused exports/types` and `Prettier (1 unformatted files)`. Direct reproduction showed `npx knip` reporting unlisted command binaries (`where`, `which`, `diff`) and `npm run format:check` reporting `test/unit/hook-registrar.test.ts`.
 
 **Root cause:** I treated the focused behavioral and type gates as enough before preflight after touching CLI spawn logic and tests. Knip's binary-policy check is separate from typecheck and can be exposed by local tool/lockfile movement, while Prettier still checks all touched TypeScript tests even when they pass at runtime.
@@ -275,7 +287,7 @@ last_reviewed: 2026-06-14
 
 **Prevention:** Before full preflight after changing CLI command spawning, hook launchers, or TypeScript tests, run the direct sub-gates that preflight will aggregate: `npx knip` and `npm run format:check`. If preflight reports the TypeScript section as failed, reproduce the subtool reports directly and fix those exact findings before collecting final pass evidence.
 
-**Recurrence update (2026-06-10):** M05/M06b focused tests, format, stats, and typecheck were clean, but `npm run test:full` failed in the slow installer round-trip fixture because its copied repo ran preflight and exposed three ESLint errors plus two Knip unused exports from the new index/dashboard code. Direct `npx eslint ...` and `npx knip --include exports,types` reproduced the failures; fixing those exact findings was required before rerunning the full gate.
+**Measured recurrences:** M05/M06b (2026-06-10) exposed three ESLint errors and two unused exports; M08 (2026-07-13) exposed one unused export; M17 (2026-07-13) exposed one complexity error, three impossible conditions, and five unused exports; M23/M24 (2026-07-13/14) exposed internal-only support/readiness report types as unused exports. Direct ESLint and Knip runs isolated each failure before preflight was repeated.
 
 ---
 

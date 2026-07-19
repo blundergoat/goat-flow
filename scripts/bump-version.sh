@@ -11,7 +11,7 @@
 #
 # Updated files:
 #   - package.json + package-lock.json (via npm version --no-git-tag-version)
-#   - Instruction file headers (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md)
+#   - Instruction file header versions and release dates (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md)
 #   - .goat-flow/config.yaml version field
 #   - workflow/manifest.json
 #   - workflow/skills/*/SKILL.md frontmatter (7 templates)
@@ -59,6 +59,14 @@ echo "Bumping ${OLD_VERSION} → ${NEW_VERSION}"
 
 escaped_old=$(printf '%s' "$OLD_VERSION" | sed 's/\./\\./g')
 escaped_new="$NEW_VERSION"
+escaped_new_regex=$(printf '%s' "$NEW_VERSION" | sed 's/\./\\./g')
+
+release_heading=$(grep -E "^## v${escaped_new_regex} - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md | head -n 1 || true)
+if [[ -n "$release_heading" ]]; then
+  RELEASE_DATE="${release_heading##* - }"
+else
+  RELEASE_DATE=$(date +"%Y-%m-%d")
+fi
 
 update_file() {
   local file="$1"
@@ -74,11 +82,28 @@ update_file() {
   fi
 }
 
+update_instruction_header() {
+  local file="$1"
+  local first_line
+  if [[ ! -f "$file" ]]; then
+    echo "  WARN: $file not found, skipping"
+    return
+  fi
+  first_line=$(sed -n '1p' "$file")
+  if [[ ! "$first_line" =~ ^#\ .+\ -\ v[0-9]+\.[0-9]+\.[0-9]+\ \([0-9]{4}-[0-9]{2}-[0-9]{2}\)$ ]] ||
+    [[ "$first_line" != *" - v${OLD_VERSION} ("* ]]; then
+    echo "Error: $file has an unexpected version/date header: $first_line" >&2
+    exit 1
+  fi
+  sed -E -i "1s/- v${escaped_old} \\([0-9]{4}-[0-9]{2}-[0-9]{2}\\)$/- v${escaped_new} (${RELEASE_DATE})/" "$file"
+  echo "  ✓ $file"
+}
+
 # ── Source files (version string replacement) ──────────────────────────
 
 # Instruction file headers
 for ifile in CLAUDE.md AGENTS.md .github/copilot-instructions.md; do
-  update_file "$ifile"
+  update_instruction_header "$ifile"
 done
 
 # Config version field
@@ -242,4 +267,4 @@ if [[ -d ".goat-flow/skill-docs/skill-quality-testing" ]]; then
 fi
 
 echo ""
-echo "Done. Verify with: npm run check-versions"
+echo "Done. Verify with: npm run check-versions && npm run check-instruction-parity"

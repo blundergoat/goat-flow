@@ -39,6 +39,16 @@ describe("dashboard /api/quality", () => {
       /# GOAT Flow Skills Assessment - Claude Code/,
     );
     assert.match(String(data.prompt), /"quality_mode": "skills"/);
+    assert.match(
+      String(data.auditSummary),
+      /did not execute project build, test, lint, typecheck, or format commands/,
+    );
+    assert.match(
+      String(data.prompt),
+      /did not execute project build, test, lint, typecheck, or format commands/,
+    );
+    assert.match(String(data.auditSummary), /end-to-end resumability/);
+    assert.match(String(data.prompt), /end-to-end resumability/);
   });
 
   it("uses cache-only audit enrichment when fast=true is requested", async () => {

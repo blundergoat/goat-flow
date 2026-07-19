@@ -2,27 +2,33 @@
 
 ## Project Identity
 
-Documentation framework for AI coding agent workflows. Two parts:
-- **TypeScript CLI** (`src/cli/`): auditor, setup prompt generator, dashboard server
+Documentation framework for AI coding agent workflows. Four parts:
+- **TypeScript CLI and server** (`src/cli/`): auditor, setup prompt generator, and dashboard backend
+- **TypeScript dashboard** (`src/dashboard/`): browser-side Alpine.js UI compiled as classic scripts
 - **Markdown docs** (`docs/`, `workflow/`, `workflow/setup/`): framework documentation and agent templates
-- **Shell scripts** (`scripts/`, `workflow/hooks/`): maintenance, preflight checks, guardrail hooks
+- **Shell scripts** (`scripts/`, `workflow/hooks/`, `.goat-flow/hooks/`): maintenance, preflight checks, and guardrail hooks
 
-Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-yaml`, `ws`.
+Package: `@blundergoat/goat-flow`. Node >= 20.11.0. Runtime dependencies: `js-yaml`, `ws`; optional runtime dependency: `node-pty`.
 
 ## Architecture
 
 ```
 src/cli/
-  cli.ts              # Entry point, arg parsing (node:util parseArgs)
+  cli.ts              # CLI bootstrap, argv parsing handoff, command dispatch
+  cli-parser.ts       # Argument parsing and command/flag normalization
+  cli-handlers.ts     # Command dispatch and lazy handler loading
+  cli-types.ts        # Parsed command and option types
   index.ts            # Library re-exports
-  types.ts            # All type definitions
+  types.ts            # Cross-cutting shared types only
   constants.ts        # Shared constants (AUDIT_VERSION, SKILL_NAMES, etc.)
   paths.ts            # Path resolution utilities
   classify-state.ts   # Classify project setup state for prompt generation
   config/             # Configuration (index.ts, reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
-  audit/              # Audit engine (audit.ts, check-goat-flow.ts, check-agent-setup.ts, harness/, render.ts, types.ts)
+  audit/              # Audit engine (audit.ts, checks, harness/, render.ts, provenance-types.ts, types.ts)
+  manifest/           # Manifest reader and domain types (types.ts)
+  quality/            # Quality engine and schema/skill-quality type modules
   prompt/             # Prompt generation: commit-guidance.ts, compose-setup.ts, compose-quality.ts, compose-quality-agent-report.ts, compose-quality-agent-setup.ts, compose-quality-artifact.ts, compose-quality-common.ts, compose-quality-focused.ts, learning-loop-context.ts
   server/             # Dashboard server modules:
                       #   dashboard.ts (bootstrap, dispatch, live reload)
@@ -54,16 +60,16 @@ npm run test           # runs test:fast (node --test; excludes slow/dashboard/pe
 npm run typecheck      # tsc --noEmit
 npm run audit          # node dist/cli/cli.js audit .
 
-shellcheck scripts/*.sh scripts/maintenance/*.sh                                            # Lint shell scripts
-bash -n scripts/*.sh scripts/maintenance/*.sh                                                # Syntax-check scripts
+shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 bash scripts/preflight-checks.sh         # Full preflight gate
 
-# CLI commands (after build)
-npx goat-flow audit .                        # Validate setup correctness
-npx goat-flow audit . --harness              # AI harness completeness checks
-npx goat-flow install . --agent claude       # Copy/update system files
-npx goat-flow setup --agent claude           # Generate setup prompt
-npx goat-flow quality . --agent claude       # Generate quality-assessment prompt
+# CLI commands (from the framework checkout)
+node --import tsx src/cli/cli.ts audit .                        # Validate setup correctness
+node --import tsx src/cli/cli.ts audit . --harness              # AI harness completeness checks
+node --import tsx src/cli/cli.ts install . --agent claude       # Copy/update system files
+node --import tsx src/cli/cli.ts setup --agent claude           # Generate setup prompt
+node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quality-assessment prompt
 ```
 
 ## Conventions
@@ -72,12 +78,12 @@ npx goat-flow quality . --agent claude       # Generate quality-assessment promp
 - Use `.js` extensions in all TypeScript import paths (NodeNext requires it)
 - `node:test` + `node:assert/strict` for testing (not Jest, not Vitest)
 - Strict TypeScript: `"strict": true` in tsconfig.json
-- No `any` types. Minimize `as` casts. Use `unknown` and narrow.
-- All types in `src/cli/types.ts`. Audit-specific types in `src/cli/audit/types.ts`.
+- Avoid explicit `any`; use `unknown` and narrow. A load-bearing interop exception requires an inline ESLint suppression with a same-line rationale. Minimize `as` casts.
+- Types are distributed by domain: CLI command types in `cli-types.ts`; audit types in `audit/types.ts`; and config, manifest, quality, and server types in `config/types.ts`, `manifest/types.ts`, `quality/*types.ts`, and `server/*types.ts`. Keep only genuinely cross-cutting types in `src/cli/types.ts`.
 - AUDIT_VERSION lives in `src/cli/constants.ts`, derived from `package.json` at runtime (single source of truth)
 - Skill frontmatter must embed AUDIT_VERSION - CI enforces this in the "Skill template versions" step
 - `ReadonlyFS` interface for filesystem access -- auditor never writes to disk
-- Minimal runtime dependencies (js-yaml, ws). Dev-only: typescript, tsx, @types/node
+- Minimal runtime dependencies (js-yaml, ws), with optional node-pty support. Dev-only: typescript, tsx, @types/node
 
 ## DO
 
@@ -93,7 +99,7 @@ npx goat-flow quality . --agent claude       # Generate quality-assessment promp
 
 - Don't add unnecessary runtime dependencies (keep the dependency footprint minimal)
 - Don't use `console.log` outside `cli.ts` and `audit/render.ts` (preflight warns)
-- Don't put types outside `types.ts` or `audit/types.ts`
+- Don't turn `src/cli/types.ts` into a catch-all; colocate domain types with their owning module and reserve the shared file for cross-cutting contracts
 - Don't hardcode version strings (derive from package.json via constants.ts)
 - Don't use hypothetical examples in docs -- real incidents only
 - Don't reference removed ADR patterns (see `scripts/preflight-checks.sh` for the enforced list)

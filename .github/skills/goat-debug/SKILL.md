@@ -1,7 +1,7 @@
 ---
 name: goat-debug
 description: "Use when diagnosing a bug, unexpected behaviour, system failure, or unfamiliar code that needs structured investigation."
-goat-flow-skill-version: "1.13.1"
+goat-flow-skill-version: "1.14.0"
 ---
 # /goat-debug
 
@@ -26,7 +26,11 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 | "Reading the footgun during an incident looks like second-guessing" | Reading the footgun IS doing your job. Not reading it is what looks bad at post-mortem. |
 | "Adding the field is zero-risk - worst case we try the next thing" | This is how you enter the 3-fix abort loop. Hypothesis before code, always. |
 
-**NOT this skill:** Reviewing → /goat-review. Test plans → /goat-qa. Planning milestones → /goat-plan. Feature briefs → dispatcher Route Map.
+## Boundary Commands
+
+- **NEVER:** Turn diagnosis into review, test planning, milestone planning, or an ungated fix.
+- **ALWAYS:** Trace the live path, test competing hypothesis categories, and state the reproduction and evidence limits.
+- **DEFER TO:** `/goat-review` for quality, `/goat-qa` for test plans, `/goat-plan` for milestones, and the dispatcher for feature briefs.
 
 ## Step 0 - Choose Depth
 
@@ -66,7 +70,7 @@ Write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, C
 
 **Output:** Minimal failing case (literal command, input, or steps), removed variables list (proves they don't matter), updated hypothesis set (categories ruled out by minimisation).
 
-**Optional bisect path:** If the failure is a regression from a known-good ref, run `git bisect` with the repro as predicate - binary search across commits instead of inputs.
+**Optional bisect path (state-mutating):** Bisect is never required for a reporting-only diagnosis. In reporting-only or no-write mode, describe the option but do not run it. Otherwise require a clean worktree, validate known-good and known-bad refs plus a deterministic, non-destructive predicate at both endpoints, disclose the commands and rollback, then wait for explicit current-session approval. Urgency, an outage, or broad permission to diagnose does not override these gates. A dirty worktree stops this path; an isolated worktree is a separately approved option, not an automatic workaround. After approval, run only the diagnostic predicate. Run `git bisect reset` on success, error, cancellation, or interruption; on resumption, reset before any other repository work.
 
 **Hypothesis ranking:** After minimisation, rank surviving hypotheses by cost and likelihood:
 
@@ -80,7 +84,9 @@ Test cheap-and-likely first. Skip expensive-and-unlikely until cheap options are
 
 ### Worked Example - D1 to D4
 
-Use this as the output shape, not as a canned diagnosis. Real incident: a `goat-debug` quality review scored Examples `2/5` because the composed skill had no full phase walkthrough.
+**Illustrative scenario - input/output shape only; never evidence.** Replace every path, assessment result, command outcome, and semantic anchor below with current target-project evidence before using this structure in a live diagnosis.
+
+Use this as the output shape, not as a canned diagnosis. The scenario begins with a current quality report alleging that a target skill lacks a full phase walkthrough.
 
 - **D1 scope:** symptom boundary = Examples deduction; affected components = the target skill's `SKILL.md`, `skill-preamble.md`, `skill-conventions.md`; read estimate = 3 files.
 - **Hypotheses:**
@@ -90,7 +96,7 @@ Use this as the output shape, not as a canned diagnosis. Real incident: a `goat-
 | 1 | `SKILL.md` lacks a worked phase example | Data | `rg -n '### Worked Example' SKILL.md` | No `### Worked Example` heading CONFIRMS the deduction. |
 | 2 | Shared references already supply the missing example | Configuration | `rg -n 'D1|Minimal Failing Case|worked' skill-preamble.md skill-conventions.md` | If only rules/templates appear, ELIMINATE this as a fix. |
 
-- **D1.5 minimal case:** the three composed files reproduce the score; dashboard metadata and unrelated skill copies are removed because the missing walkthrough is visible in the composed bundle.
+- **D1.5 minimal case:** in this scenario, the three composed files preserve the reported deduction; dashboard metadata and unrelated skill copies are removed because the alleged missing walkthrough is visible in the composed bundle.
 - **D2 root cause shape:** `SKILL.md` (search: `## Output Format`) had an output skeleton but no concrete phase walkthrough; confidence is HIGH only after reproducing the assessment or rerunning the quality report.
 - **D3 fix plan (human-approved):** add a concrete phase walkthrough (this D1-D4 section) to `SKILL.md`; blast radius = docs only, no `.goat-flow/architecture.md` constraint touched; verification = rerun the quality assessment, then re-grep the file.
 - **D4 post-fix verification:** rerun the original reproduction (the skill quality assessment); the "no full phase walkthrough" deduction no longer fires. Static follow-up only: `rg -n '### Worked Example' SKILL.md` now returns this section where D1's grep found none. A code change is not a fix until the original repro passes, so downgrade to **UNVERIFIED** if the assessment cannot be rerun.
@@ -142,7 +148,7 @@ Every diagnose-mode report ends with this section. It tells the reader how much 
 
 Declare: **In scope** [files/dirs], **Out of scope** [what we skip], **Read estimate** [N files, pause at 3x].
 
-**BLOCKING GATE:** "I'll investigate [scope] reading up to [N] files. Adjust?"
+**CHECKPOINT:** "I'll investigate [scope] reading up to [N] files. Adjust?" When the goal and scope are explicit, continue to I2 without waiting. Pause only when the goal or boundary is ambiguous, or before exceeding the declared 3x read limit.
 
 ### I2 - Read (Progressive Depth)
 
@@ -167,6 +173,7 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 - Universal constraints from skill-preamble.md apply.
 - MUST verify fix doesn't violate architecture constraints
 - MUST run D1.5 minimisation before presenting D2 diagnosis unless reproduction is already minimal
+- MUST NOT run `git bisect` in reporting-only or no-write mode, or without explicit approval, a clean worktree, validated refs and predicate, and a reset plan
 - MUST include Debug Integrity section in every diagnose-mode report
 
 ## Output Format

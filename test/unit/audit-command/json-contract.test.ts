@@ -1,6 +1,7 @@
 /**
- * Audit JSON output contract: the emitted report has the expected shape in build-only mode and in harness mode,
- * so dashboard and tooling consumers can rely on its structure.
+ * Audit JSON contract for users and tools reading build-only or harness reports.
+ * It protects the fields the dashboard renders and the assurance caveats automation consumes.
+ * Use these checks when audit output changes so structural PASS is not mistaken for runtime proof.
  */
 import { assert, assertExists, describe, getRepoAudit, it } from "./helpers.js";
 
@@ -9,9 +10,10 @@ type AuditReport = ReturnType<typeof getRepoAudit>;
 /**
  * Assert build-only setup and agent scopes keep the JSON consumer contract.
  *
- * @param report - audit report emitted by the repository harness
+ * @param report - required repository audit; an absent report means no JSON contract can be checked
  */
 function assertBuildScopeShape(report: AuditReport): void {
+  // Both setup panels keep the same status and failure-list shape for dashboard users.
   (["setup", "agent"] as const).forEach((scope) => {
     const scopeReport = report.scopes[scope];
     assert.ok(
@@ -28,9 +30,10 @@ function assertBuildScopeShape(report: AuditReport): void {
 /**
  * Assert harness concerns expose the fields dashboard clients render.
  *
- * @param report - harness-mode audit report with concern details present
+ * @param report - required harness report; absent concerns mean harness mode was not requested
  */
 function assertHarnessConcernShape(report: AuditReport): void {
+  // Every concern card exposes the same fields so clients can render them without special cases.
   (
     [
       "context",
@@ -63,6 +66,33 @@ function assertHarnessConcernShape(report: AuditReport): void {
       `${key}.howToFix should be an array`,
     );
   });
+}
+
+/** Assert JSON distinguishes structural completeness from project execution and resumability evidence. */
+function assertHarnessAssuranceContract(report: AuditReport): void {
+  assertExists(report.concerns);
+  assert.ok(
+    report.concerns.verification.limits.includes(
+      "This audit inspected verification guidance and hook configuration; it did not execute project build, test, lint, typecheck, or format commands.",
+    ),
+  );
+  assert.ok(
+    report.concerns.recovery.limits.includes(
+      "Recovery storage is available, but this audit did not validate the current objective, completed work, last verification, next action, or end-to-end resumability.",
+    ),
+  );
+
+  const recoveryCheckIds = new Set(["milestone-tracking", "session-logs"]);
+  const recoveryChecks = report.scopes.harness?.checks.filter((check) =>
+    recoveryCheckIds.has(check.id),
+  );
+  assert.deepEqual(
+    recoveryChecks?.map((check) => [check.evidenceKind, check.assurance]),
+    [
+      ["structural", "limited"],
+      ["structural", "limited"],
+    ],
+  );
 }
 
 describe("audit JSON contract", () => {
@@ -103,6 +133,7 @@ describe("audit JSON contract", () => {
     assertExists(report.concerns);
 
     assertHarnessConcernShape(report);
+    assertHarnessAssuranceContract(report);
 
     assert.ok(["pass", "fail"].includes(report.overall.status));
   });

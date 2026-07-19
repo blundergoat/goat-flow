@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-19
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -43,7 +43,7 @@ last_reviewed: 2026-06-14
 
 **Root cause:** I checked only the targeted docs rule and assumed a comment-only patch could not change broader warning or lint counts.
 
-**Prevention:** After a large gruff docs batch, run `npx gruff-ts analyse --format json --fail-on none` and compare warning count, then run the lint/preflight gate for any helper extraction. Do not remove a useful comment just to hide a surfaced warning. Evidence anchors: `src/dashboard/app.ts` (search: `encodeTerminalUploadFiles`), `src/dashboard/app.ts` (search: `showTerminalUploadResult`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `_uploadTerminalImages`).
+**Prevention:** After a large gruff docs batch, run `npx gruff-ts analyse --format json --fail-on none` and compare warning count, then run the lint/preflight gate for any helper extraction. Do not remove a useful comment just to hide a surfaced warning. Evidence anchors: `src/dashboard/app.ts` (search: `encodeTerminalUploadFiles`), `src/dashboard/app.ts` (search: `showTerminalUploadResult`).
 
 ## Lesson: docs.missing-internal-function-doc must not be silenced; baseline the residue
 
@@ -53,7 +53,7 @@ last_reviewed: 2026-06-14
 
 **Root cause:** Two correct rules collide: gruff rules must not be disabled, but comments must only explain non-obvious WHY. This rule had no tuning options, leaving only fix, rename, or baseline.
 
-**Prevention:** Triage `docs.missing-internal-function-doc` with the gruff-code-quality playbook. Add comments only when they meet the contract bar; otherwise rename or baseline with rationale. Revisit when gruff-ts gains threshold/name-match tuning. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Doc comments are mandatory under that playbook`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `docs.missing-internal-function-doc`), `scripts/preflight-checks.sh` (search: `Gruff Policy`).
+**Prevention:** Triage `docs.missing-internal-function-doc` with the gruff-code-quality playbook. Add comments only when they meet the contract bar; otherwise rename or baseline with rationale. Revisit when gruff-ts gains threshold/name-match tuning. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Doc comments are mandatory under that playbook`), `scripts/preflight-checks.sh` (search: `Gruff Policy`).
 
 ## Lesson: RegExp constructor assertions need a real escape helper
 
@@ -117,11 +117,13 @@ last_reviewed: 2026-06-14
 
 **Status:** active | **Created:** 2026-05-04
 
-**What happened:** Several behavior-scope changes updated the main implementation but missed adjacent assertions: setup remediation still expected `--harness --agent codex`, `/goat-plan` prompts still expected inline-only wording, PTY paste launch still had env/argv expectations, and the tool-playbook router row still had an old regex.
+**What happened:** Behavior changes left adjacent assertions pinned to old flags, phrases, counts, routes, or errors, so focused checks failed only after implementation.
 
-**Root cause:** I updated the route contract and one obvious test, but did not grep for every old flag/phrase that encoded the previous behavior.
+**Root cause:** I changed the contract and obvious test without grepping every encoded form of the old behavior.
 
-**Prevention:** When changing endpoint, launch-context, setup-prompt, or router semantics, grep focused tests for the old flags and phrases before the first run. Search the implementation and smoke/audit tests for old launch-context wording, env vars, runner flags, and setup commands. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/smoke/dashboard-endpoints.test.ts` (search: `injects POSIX launch prompts through PTY input`), `src/cli/audit/check-goat-flow.ts` (search: `Instruction file skill-docs pointer`).
+**Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; update them with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-contracts.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
+
+**Latest recurrence (2026-07-19):** A path-safe evidence diagnostic replaced raw OS errors, but the adjacent non-fatal assertion still accepted only the old error forms; the first focused GREEN run stopped at 117/118.
 
 ---
 
@@ -157,6 +159,8 @@ last_reviewed: 2026-06-14
 
 **Fix:** After adding any validator that scans a project-wide artifact directory, run it against the live repository before the milestone gate and budget time for the live cleanup it exposes.
 
+**Recurrence (2026-07-13):** M07 ownership fixtures passed focused manifest tests, but full preflight found three packaged-mode `ManifestJson` fixtures that omitted the new required `file_ownership` contract. It also caught ESLint complexity and Knip exports outside the focused commands. After a manifest schema change, grep every `ManifestJson` fixture and run the full static/test gate, not only the new validator suite. Evidence anchors: `test/unit/packaged-install.test.ts` (search: `file_ownership`), `src/cli/manifest/manifest-json.ts` (search: `OWNERSHIP_EVIDENCE_FINDERS`).
+
 ---
 
 ## Lesson: Agent doesn't tick milestone checkboxes (recurrence x4, unresolved)
@@ -175,11 +179,13 @@ last_reviewed: 2026-06-14
 
 ## Lesson: Heading regexes can silently truncate router-table checks
 
-**Status:** historical | **Created:** 2026-04-03 | **Reason:** Rubric check 2.4.3 no longer exists (ADR-013); markdown-parsing principle survives in later parser lessons
+**Status:** active | **Created:** 2026-04-03 | **Last recurrence:** 2026-07-18
 
 **What happened:** Tightened `2.4.3` to parse the Router Table directly, but the first extractor used a multiline regex with `$` in the lookahead. In JavaScript regexes, `$` under `/m` matches end-of-line, so the match stopped after the `## Router Table` heading and never included the rows below it. The new regression also referenced an undefined fixture constant, so the first focused test run broke twice before the real logic was verified.
 **Root cause:** Reached for a compact heading regex instead of reusing the repo’s line-based section parsing style, then wrote a regression that depended on a fixture helper that did not exist in that file.
-**Fix:** For markdown section extraction, prefer line-based parsers over multiline heading regexes with `$`. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
+**Recurrence:** A goat-review regression read the `## Constraints` section with `readMarkdownSection`, but that helper treated a `## Constraints` heading inside the skill's fenced output template as the next real section. The test therefore reported a missing rule after the production fix was already present. Reading the full skill document exposed the false failure. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps an unselected optional Spec Drift pass out of review degradation`) and local TDD receipt `.goat-flow/logs/sessions/2026-07-18-goat-review-tdd.md`.
+
+**Fix:** For markdown section extraction, prefer a line-based parser that tracks fenced-code state over multiline heading regexes with `$`. When the invariant is file-wide, assert against the full document instead of a section helper. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
 
 ---
 
@@ -321,3 +327,65 @@ last_reviewed: 2026-06-14
 **Root cause:** Treated the installed Copilot hook config as the only file needing the UX copy change. The workflow template is the parity source for installed agent configs, so any installed hook-message change needs the template change in the same patch.
 
 **Prevention:** When changing `.github/hooks/hooks.json`, grep `workflow/hooks/agent-config/` for the same hook payload and update the matching template before the first preflight run. Evidence anchor: `scripts/preflight-checks.sh` (search: `Agent Config Parity`).
+
+---
+
+## Lesson: Quality diff compares saved report IDs, not report file paths
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** During final quality-report verification, I passed two JSON file paths to `quality diff`. The CLI exited 2 because an explicit comparison is one colon-delimited `<from-id>:<to-id>` argument; selecting the latest same-agent reports with `--agent codex --mode agent-setup` then completed successfully.
+
+**Root cause:** I inferred a conventional two-path diff interface instead of reading the command contract before the auxiliary close-out check.
+
+**Prevention:** Run `goat-flow quality diff --agent <id> --mode <mode>` for the latest matching pair, or pass one `<from-id>:<to-id>` argument as documented in `docs/cli.md` (search: `quality diff [<from-id>:<to-id>]`). Do not pass report filesystem paths.
+
+---
+
+## Lesson: New subcommands need parser headroom before the first GREEN refactor
+
+**Status:** active | **Created:** 2026-07-13
+
+**What happened:** The first M02 `skill doctor` implementation passed its behavioral suite (`20 passed`, `0 failed`) but failed the whole-file quality gate. `parseSkillPositionals` and `validateSkillFlags` exceeded ESLint complexity limits, the first doctor collector had two more complexity failures, and adding one branch pushed `cli-parser.ts` and `cli-handlers.ts` above the 750-line gruff threshold. The final preflight later caught an unnecessary `renderSkillDoctorMarkdown` export and a bare backticked filename in `docs/cli.md` (search: `Canonical workflow source`) that focused tests, ESLint, typecheck, Prettier, and targeted gruff did not cover.
+
+**Root cause:** I treated a behavioral GREEN as permission to finish the command inside two already-large shared modules. The tests proved output behavior, but they did not measure whether the new subcommand left the parser and dispatch surfaces easy to verify. Importing doctor helpers back into the parser would also have violated the existing lazy-import pattern by loading audit and manifest dependencies for unrelated commands.
+
+**Fix:** Extract lightweight positional/flag rules into `src/cli/skill-command-parser.ts` (search: `parseSkillPositionals`), keep doctor runtime imports behind `src/cli/cli-handlers.ts` (search: `handleSkillCommand`), and split collection decisions inside `src/cli/skill-doctor.ts` (search: `inspectFrontmatterFields`). Whole-file ESLint, typecheck, and targeted gruff then passed without suppressions or threshold changes.
+
+**Recurrence update (2026-07-18):** M02 informational-flag behavior reached 61/61 focused tests and typecheck exited 0 before whole-file ESLint rejected `parseCLIArgs` at complexity 12. Moving the branch into a helper fixed complexity, but targeted gruff then exposed growth beyond the already-marginal file-length threshold. Rewinding duplicate namespace parsing brought `src/cli/cli-parser.ts` (search: `selectCommandPositionals`) to zero targeted gruff findings without a suppression or new module.
+
+**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-07-18
+
+**Prevention:**
+1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
+2. Keep parser modules dependency-light. A diagnostic subcommand may lazy-load audit/manifest code after dispatch, but argv parsing must not import that runtime.
+3. Before the human gate, run Knip and path-integrity through full preflight; focused TypeScript and analyzer checks do not prove the command's public exports or documentation references are clean.
+3. After behavioral GREEN, run whole-file ESLint, typecheck, and gruff before documentation or task completion; the verification unit is the changed file set, not only the new test cases.
+
+---
+
+## Lesson: Required CLI choices need omission tests
+
+**Status:** active | **Created:** 2026-07-13
+**Decision changed:** Test valid, invalid, and omitted forms for every required CLI choice; omission must not silently select a default. | **Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-07-13
+
+**What happened:** M17's plan and handler required `--scenario deny-hook`, but the parser returned that value when the flag was absent. Positive, invalid-value, and live explicit-command checks all passed, so only a final omission probe exposed the false choice.
+
+**Root cause:** I treated the sole current scenario as a harmless default even though explicit user selection was part of the command's safety contract.
+
+**Fix and prevention:** Add an omission RED test before implementation and make the parser exit 2 when the required value is absent. Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`) and `test/unit/hooks-runtime-evidence.test.ts` (search: `requires an explicit hook verification scenario group`).
+
+---
+
+## Lesson: Milestone plans need exporter-contract verification before handoff
+
+**Status:** active | **Created:** 2026-07-17  
+**Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient. | **Trigger phase:** VERIFY  
+**Incident count:** 1 | **Latest occurrence:** 2026-07-17
+
+**What happened:** The 1.15.0 milestone files looked structurally complete and passed a custom heading/count check, but the first `plans export` preview warned that all 11 records lacked portable objectives and boundary notes. The files used a level-two `Objective` section instead of the exporter's bold `Objective` field, omitted `Boundary Notes`, and initially placed CAO incident gates in peer sections that the exporter would not include in task bodies.
+
+**Root cause:** I validated the authoring layout I had produced instead of the repository's consumer contract. A Markdown reader could infer the intended fields, while `parseMilestoneMarkdown` intentionally recognizes a narrower portable schema.
+
+**Fix and prevention:** Use `**Objective:**`, `## Scope`, `## Boundary Notes`, `## Tasks`, `## Testing Gate`, and `## Exit criteria` for portable milestones. Put task subgroups under level-three headings so they remain inside `Tasks`. Before handoff, run `node dist/cli/cli.js plans export <plan-path> --format json` and require every record to have zero warnings; when shell policy rejects a pipe into an interpreter, import `parseMilestoneMarkdown` directly in a read-only local verification script. Evidence anchors: `src/cli/plans-export.ts` (search: `addMissingFieldWarning`) and `src/cli/plans-export.ts` (search: `readMilestoneSection`).

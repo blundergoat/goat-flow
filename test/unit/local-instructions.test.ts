@@ -1,8 +1,21 @@
 /**
- * Unit tests for project-local instruction fact extraction.
+ * Exercises project-local instruction discovery and hot-path parity contracts.
+ * Use these fixtures when routing, extraction, or release metadata changes so
+ * users see only real paths and current instruction provenance.
  */
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { describe, it } from "node:test";
 import {
   extractInstructionFacts,
   extractSection,
@@ -16,6 +29,7 @@ import { extractLocalInstructions } from "../../src/cli/facts/shared/local-instr
 import type { AgentProfile } from "../../src/cli/types.js";
 import type { ReadonlyFS } from "../../src/cli/types.js";
 
+/** Build a small in-memory project tree for one user-visible instruction scenario. */
 function stubFS(
   files: Record<string, string>,
   dirs: Record<string, string[]>,
@@ -28,6 +42,8 @@ function stubFS(
     lineCount: (path) =>
       files[path] === undefined ? 0 : files[path]!.split("\n").length,
     readJson: () => null,
+    isReadableDirectory: (path) =>
+      Object.prototype.hasOwnProperty.call(dirs, path),
     listDir: (path) => dirs[path] ?? [],
     isExecutable: () => false,
     glob: () => [],
@@ -47,6 +63,8 @@ const AGENT_PROFILE: AgentProfile = {
   },
   denyHookFile: ".goat-flow/hooks/deny-dangerous.sh",
 };
+
+const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
 /** Provide a representative project-conventions document for extraction tests. */
 function conventionsContent(): string {
@@ -158,5 +176,54 @@ describe("extractLocalInstructions", () => {
         lines: 2,
       },
     ]);
+  });
+});
+
+describe("instruction release metadata", () => {
+  it("rejects a live instruction header date that differs from the changelog release", () => {
+    const fixtureRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-instruction-parity-"),
+    );
+    const fixtureFiles = [
+      "package.json",
+      "CHANGELOG.md",
+      "CLAUDE.md",
+      "AGENTS.md",
+      ".github/copilot-instructions.md",
+      "workflow/setup/agents/claude.md",
+      "workflow/setup/agents/codex.md",
+      "workflow/setup/agents/copilot.md",
+      "workflow/setup/agents/antigravity.md",
+    ];
+
+    try {
+      for (const relativePath of fixtureFiles) {
+        const destination = join(fixtureRoot, relativePath);
+        mkdirSync(dirname(destination), { recursive: true });
+        cpSync(join(PROJECT_ROOT, relativePath), destination);
+      }
+
+      const agentsPath = join(fixtureRoot, "AGENTS.md");
+      const agentsContent = readFileSync(agentsPath, "utf8");
+      writeFileSync(
+        agentsPath,
+        agentsContent.replace(
+          /^(# AGENTS\.md - v\d+\.\d+\.\d+) \(\d{4}-\d{2}-\d{2}\)$/m,
+          "$1 (1999-01-01)",
+        ),
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [join(PROJECT_ROOT, "scripts/check-instruction-parity.mjs")],
+        { cwd: fixtureRoot, encoding: "utf8" },
+      );
+
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(result.stderr, /AGENTS\.md: header must end with/);
+      assert.match(result.stderr, /1999-01-01/);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 });

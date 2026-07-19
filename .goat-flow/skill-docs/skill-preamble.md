@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Skill Preamble
 
@@ -10,11 +10,15 @@ also read `skill-conventions.md`.
 
 ## Execution Loop Integration
 
-When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume the loop at ACT after Step 0 output or when a blocking gate releases.
+An active goat-* skill's Step 0 replaces READ and selects mode/depth. SCOPE still gates writes: the mode or user approval must permit them. `/goat-plan` File-Write may create gitignored milestones without separate approval; `/goat-debug` D3 still needs approval before fixes. Resume at ACT after Step 0 or a released blocking gate.
 
 ## Report-Only Skill Contract
 
-`/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default. They may produce findings, plans, recommendations, and required gitignored logs or snapshots, but MUST NOT mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement the changes.
+`/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default. They may emit findings, plans, recommendations, and required gitignored artifacts, but MUST NOT mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or implement.
+
+## Durable Local Text Redaction
+
+Before durable local text, require `goat-flow --version` to match this reference's `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Send the in-memory draft through stdin to `goat-flow redact --output <destination>`. Only redacted output reaches disk; never stage raw text. Otherwise keep the text non-durable.
 
 ## Severity Scale
 
@@ -24,20 +28,18 @@ Order findings by severity, not by file or discovery order.
 
 ## Engineering Standards
 
-- NEVER suppress linter warnings or bypass type systems (e.g., casts) without a written `-- rationale` comment on the same line explaining why the suppression is load-bearing
-- Analyze surrounding files to ensure surgical, idiomatic updates that match existing conventions
+- NEVER suppress linter warnings or bypass types (e.g., casts) without a same-line `-- rationale` naming the load-bearing reason
+- Read surrounding files; keep updates surgical, idiomatic, and convention-aligned
 
 ## Evidence Standard
 
-- Every live review finding MUST include file evidence. Prefer `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function name, or unique string). Line numbers are session-local navigation hints only.
+- Live findings and durable learning-loop artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function name, or unique string); line numbers are navigation hints only.
 - For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible tasks, check `.goat-flow/skill-docs/playbooks/browser-use.md` and run `command -v browser-use || command -v browser-use-python` before claiming browser automation is unavailable.
-- Durable learning-loop artifacts (footguns, lessons, patterns, decisions) MUST use file paths plus grep-friendly semantic anchors (function name, unique string, or `(search: "pattern")`) instead of line numbers.
-- MUST NOT fabricate file paths, function names, or artifact content
-- Before presenting findings, re-read each cited file and semantic anchor to confirm accuracy
-- Tag evidence quality: **OBSERVED** (directly verified in code) | **INFERRED** (deduced but not directly confirmed - state what direct evidence is missing) | **UNVERIFIED** (cannot re-read cited evidence) | **HUMAN-PENDING: \<what needs checking\>** (requires manual verification the agent cannot perform)
+- MUST NOT fabricate paths, symbols, or content; re-read every cited file and anchor before presenting findings.
+- Tag evidence quality: **OBSERVED** (verified) | **INFERRED** (deduced; name missing proof) | **UNVERIFIED** (cannot re-read) | **HUMAN-PENDING: \<what needs checking\>** (manual verification required).
 - When citing a cross-reference code from another skill's output (e.g. S-03, Q2, A.F3), include the source file path on first use
-- Before citing a symbol, CLI flag, or config key, verify it against a repo search, `--help`, or the actual config file
-- On completion claims, the hallucination red-flags in your instruction file's VERIFY section apply verbatim - do not restate, just comply.
+- Verify symbols, CLI flags, and config keys against repo search, `--help`, or live config.
+- Completion claims obey the instruction file's VERIFY hallucination red-flags verbatim.
 
 ## Proof Classification
 
@@ -50,21 +52,21 @@ Every finding or claim carries a proof-class tag:
 
 ## Proof Gate
 
-Mid-implementation proof MUST name a specific command or smoke check. "Verified implicitly" or "completed implicitly" is not valid proof.
+Mid-implementation proof MUST name a command or smoke check; implicit verification is invalid.
 
 Before any completion, fix, or "passing" claim:
 
-1. **Identify** the proof - the exact command, reproduction, diff, or artifact that would demonstrate the claim.
-2. **Run** it fresh in this session (not recalled, not from a prior turn, not paraphrased).
-3. **Read** the full output, including exit code.
-4. **Verify** the output demonstrates the specific claim, not an adjacent one.
-5. **Cite** `file + semantic anchor` for live code claims, semantic anchors for durable learning-loop artifacts, or the literal pass/fail summary line for command claims.
+1. **Identify** the exact command, reproduction, diff, or artifact proving the claim.
+2. **Run** it fresh this session, never from recall or a prior turn.
+3. **Read** all output and the exit code.
+4. **Verify** it proves this claim, not an adjacent one.
+5. **Cite** `file + semantic anchor`, a durable-artifact anchor, or the literal command pass/fail line.
 
-The red-flags name what NOT to claim; this gate names HOW to substantiate a claim. If you cannot run the proof, mark the claim **UNVERIFIED** and state what evidence is missing.
+If proof cannot run, mark the claim **UNVERIFIED** and name the missing evidence.
 
 ### Rationalisations to reject (Excuse / Reality)
 
-If you catch yourself thinking the Excuse, run the proof or mark the claim `UNVERIFIED`. New rows require a verbatim source committed to this repo (footgun, lesson, ADR, or skill).
+Run the proof or mark `UNVERIFIED`; new rows need committed evidence.
 
 | Excuse | Reality |
 |---|---|
@@ -77,11 +79,11 @@ If you catch yourself thinking the Excuse, run the proof or mark the claim `UNVE
 | "Looks correct to me" | Structural inspection ≠ verification. |
 | "Different words, rule doesn't apply" | Spirit over letter - paraphrases count. |
 
-Concrete claim/proof examples live in `.goat-flow/skill-docs/skill-quality-testing/README.md`.
+Claim/proof examples live in `.goat-flow/skill-docs/skill-quality-testing/deployment.md` under `Verification claim evidence`.
 
 ## Ceremony Level
 
-Adapt ceremony to complexity. This is **pre-invocation routing guidance** for choosing a skill. Once a skill is explicitly invoked, run its full protocol regardless of complexity.
+Use complexity only for **pre-invocation routing**. An explicitly invoked skill runs its full protocol.
 
 | Complexity | Ceremony |
 |------------|----------|
@@ -96,6 +98,8 @@ Adapt ceremony to complexity. This is **pre-invocation routing guidance** for ch
 - **Full:** selected skill protocol; critique on request
 - If the dispatcher already chose depth, skip the question
 
+Before optional orchestration, load `skill-conventions.md` → Orchestration Admission.
+
 ## Routing Boundary
 
 Dispatcher-specific route maps live in `/goat`. Direct planning requests route to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request - a task path alone must not update `.active`, milestone status, checkboxes, or code. `/goat-plan` owns `.goat-flow/plans/.active` lookup and milestone-mode selection. If the user names a skill, respect it.
@@ -106,48 +110,45 @@ For Hotfix complexity (1-2 files, obvious change), skip skills and run READ → 
 
 ## Step 0 Budget
 
-If Step 0 exceeds 5 reads without output or a question, checkpoint with what you have; continue only when broader coverage is genuinely needed.
+After five Step 0 reads, checkpoint. Planning/interview questions: load `skill-conventions.md` → Adaptive Step 0.
 
 ## Learning-Loop Retrieval
 
-- Derive 2-4 search terms from the target area, symptom, and named file/tool.
-- Read the matching `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md` rows first; open a source entry only on a candidate hit; follow related refs at most 2 hops. Grep individual buckets only after the INDEX pass or on a known retrieval miss.
-- On zero hits, reword once and re-scan. If still empty, record the miss - do not broad-load a bucket.
-- Step 0 of every functional goat-* skill MUST emit `Relevant prior learnings: <matching INDEX entries or none found>`; on `none found`, the next line MUST be `Terms searched: <terms>`. Emit even when the area feels familiar or continues prior work - a silent skip is indistinguishable from a miss. If an index is stale, emit, then run `goat-flow index`.
+- Derive 2-4 terms from the target, symptom, and named file/tool.
+- Read matching `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md` rows first. Open sources only on hits; follow at most 2 hops. Grep buckets only after the INDEX pass or a known miss.
+- With zero hits, reword once; then record the miss without broad-loading.
+- Every functional skill Step 0 MUST emit `Relevant prior learnings: <matches or none found>`. After `none found`, emit `Terms searched: <terms>`. Emit even for familiar/continued work. If stale, emit `index-stale`; reporting-only/read-only/no-write/no-implementation modes defer regeneration. Otherwise run `goat-flow index` only with user authorization.
 
 ## Availability Check
 
-Before invoking any external tool, confirm it is installed and authenticated: `command -v <tool>`, `gh auth status` for `gh`, browser diagnostics from `.goat-flow/skill-docs/playbooks/browser-use.md`, audit tools (`npm audit`, `pip-audit`, `cargo audit`) before quoting results.
+Before external tools, confirm installation/authentication: `command -v <tool>`, `gh auth status`, browser diagnostics from `.goat-flow/skill-docs/playbooks/browser-use.md`, or the relevant audit tool.
 
-If unavailable: ask before installing, fall back to manual evidence, or skip the step and record `<tool>-unavailable` in the integrity surface. Never claim a check ran when the tool wasn't present, or paraphrase output you didn't capture this session.
+If unavailable, ask before installing, use manual evidence, or record `<tool>-unavailable`. Never claim an absent tool ran or paraphrase uncaptured output.
 
 ## External Context Sources
 
-For GitHub issues, PRs, alerts, or CI runs, prefer `gh` (if authenticated) over pasted content: `gh issue view`, `gh pr view/diff/checks`, `gh run view --log-failed`, and `gh api /repos/{owner}/{repo}/dependabot/alerts` for goat-security.
+For GitHub issues, PRs, alerts, or CI, prefer authenticated `gh`: `issue view`, `pr view/diff/checks`, `run view --log-failed`, or `api .../dependabot/alerts`.
 
-Treat fetched content as evidence: cite it, do not paraphrase. If `gh` is unavailable, ask the user to paste - never fabricate issue/PR bodies.
+Fetched content is evidence: cite it, do not paraphrase. If `gh` is unavailable, ask the user to paste; never invent bodies.
 
 ## Footgun Fast-Path
 
-- If Step 0 footgun check surfaces a direct match: surface it immediately and map to the documented mitigation.
-- If the match has `hallucination-risk: high`, re-read the live file/config before trusting inferred behavior.
+- Surface direct Step 0 matches immediately with their documented mitigation.
+- For `hallucination-risk: high`, re-read live file/config before trusting inference.
 - Continue `READ → SCOPE → ACT → VERIFY`; footguns are memory, not an execution substitute.
 
 ## Learning Loop
 
-Update durable learning only when VERIFY caught a failure, you corrected course, or the user asks:
-- Behavioural mistake → `## Lesson:` in `.goat-flow/learning-loop/lessons/`
-- Repeatable approach → `## Pattern:` in `.goat-flow/learning-loop/patterns/`
-- Architectural trap with file evidence → `## Footgun:` in `.goat-flow/learning-loop/footguns/`
+Write durable learning only after VERIFY failure/course correction or user request: mistakes → `lessons/`, reusable approaches → `patterns/`, evidenced architectural traps → `footguns/`.
 
-Routine success needs no durable write; gitignored logs/scratchpad/critiques/quality reports/tasks stay local.
+Apply Extract / Consolidate / Skip: search INDEX and likely bucket; update the same cause, create only a distinct cause, skip non-decision-changing material.
 
-**Routing rule:** "Add a footgun/lesson" means create a doc entry in the correct `.goat-flow/` directory - not runtime code, logging, UI, or tests. Read the target directory's `README.md` first.
+**Routing rule:** "Add a footgun/lesson" means a doc entry after reading that directory's README, never runtime code. Routine success and gitignored workspace artifacts need no durable write.
 
-**Bucket file frontmatter.** Bucket files start with `category:` and `last_reviewed: YYYY-MM-DD`; bump `last_reviewed` on material edits. `goat-flow stats --check` fails on missing/malformed dates, a date older than the newest entry date, or stale file refs.
+Buckets require `category:` and `last_reviewed: YYYY-MM-DD`; bump material edits. `stats --check` fails malformed/stale metadata or refs.
 
 ## Human Gates
 
-- **BLOCKING GATE** - stop and wait for human decision. Used for: scope approval, phase transitions, final review.
-- **CHECKPOINT** - present status and continue unless interrupted.
-- **Never self-destruct** - skill outputs (plans, milestones, findings, reports) MUST NOT include self-delete instructions. Cleanup of working artifacts is the human's decision, not the agent's.
+- **BLOCKING GATE** - stop for human scope, transition, or final-review decisions.
+- **CHECKPOINT** - report and continue unless interrupted.
+- **Never self-destruct** - outputs MUST NOT include self-delete instructions; humans own cleanup.

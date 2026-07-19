@@ -25,14 +25,23 @@ import {
   VALID_FORMATS,
   type CandidacyInputArg,
   type Command,
+  type DiagnosticsSubcommand,
   type EventsSubcommand,
+  type HookScenario,
   type HookSubcommand,
   type ParsedArgValues,
   type ParsedCLI,
+  type PlansSubcommand,
   type QualitySubcommand,
-  type SkillCLIFields,
   type SkillSubcommand,
 } from "./cli-types.js";
+import { parseDiagnosticsPositionals } from "./diagnostics-command-parser.js";
+import {
+  buildSkillCLIFields,
+  parseSkillPositionals,
+  validateSkillFlags,
+  type SkillPositionals,
+} from "./skill-command-parser.js";
 
 /** Parse the positional subcommand from raw CLI args; throws CLIError for removed commands with migration help. */
 function parseCommand(argv: string[]): {
@@ -256,7 +265,7 @@ function parseHooksPositionals(positionals: string[]): {
   const [first, second, third, ...rest] = positionals;
   if (!first || !HOOK_SUBCOMMANDS.has(first)) {
     throw new CLIError(
-      'hooks requires subcommand "list", "enable", "disable", or "sync".',
+      'hooks requires subcommand "list", "enable", "disable", "sync", or "verify".',
       2,
     );
   }
@@ -274,6 +283,46 @@ function parseHooksPositionals(positionals: string[]): {
     hookId: null,
     projectPath: resolve(second ?? "."),
   };
+}
+
+/** Parse the one bounded scenario group available to `hooks verify`. */
+function parseHookScenarioArg(
+  subcommand: HookSubcommand | null,
+  value: string | undefined,
+): HookScenario | null {
+  // Other hooks operations do not run runtime scenarios or receive a default group.
+  if (subcommand !== "verify") return null;
+  // Verification must not choose a proof group the user did not explicitly request.
+  if (value === undefined) {
+    throw new CLIError('hooks verify requires --scenario "deny-hook".', 2);
+  }
+  // Unknown groups must fail before the CLI can imply an unimplemented proof ran.
+  if (value !== "deny-hook") {
+    throw new CLIError('--scenario must be "deny-hook".', 2);
+  }
+  return "deny-hook";
+}
+
+/**
+ * Parse the required `plans export <plan-path>` user journey.
+ * Throws CLIError when the operation or plan-path arity is invalid.
+ */
+function parsePlansPositionals(positionals: string[]): {
+  plansSubcommand: PlansSubcommand;
+  projectPath: string;
+} {
+  const [subcommand, planPath, ...extraPositionals] = positionals;
+
+  // Export is the only local plan operation currently exposed by the CLI.
+  if (subcommand !== "export") {
+    throw new CLIError('plans requires subcommand "export".', 2);
+  }
+
+  // A concrete plan directory is required and extra paths would make output ambiguous.
+  if (!planPath || extraPositionals.length > 0) {
+    throw new CLIError("plans export requires exactly one <plan-path>.", 2);
+  }
+  return { plansSubcommand: "export", projectPath: resolve(planPath) };
 }
 
 function parseHookTogglePositionals(
@@ -303,22 +352,6 @@ function parseCommandPositionals(
 ): ReturnType<typeof parseQualityPositionals> {
   if (command === "quality")
     return parseQualityPositionals(positionals, draftFlag);
-  if (command === "skill")
-    return {
-      qualitySubcommand: "prompt",
-      projectPath: parseSkillPositionals(positionals).projectPath,
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  if (command === "hooks")
-    return {
-      qualitySubcommand: "prompt",
-      projectPath: parseHooksPositionals(positionals).projectPath,
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
   return {
     qualitySubcommand: "prompt",
     projectPath: resolve(positionals[0] ?? "."),
@@ -326,71 +359,6 @@ function parseCommandPositionals(
     qualityValidatePath: null,
     candidacyInput: null,
   };
-}
-
-/** Parsed skill command positionals before flag-derived fields are merged. */
-interface SkillPositionals {
-  skillSubcommand: SkillSubcommand | null;
-  skillDescription: string | null;
-  projectPath: string;
-}
-
-/** Detect positional skill project paths so descriptions do not accidentally consume them. */
-function isPathShapedSkillProject(value: string): boolean {
-  const normalized = value.replace(/\\/gu, "/");
-  return (
-    value === "." ||
-    value === ".." ||
-    normalized.startsWith("./") ||
-    normalized.startsWith("../") ||
-    normalized.startsWith("/") ||
-    /^[a-zA-Z]:[\\/]/u.test(value) ||
-    value.startsWith("\\\\")
-  );
-}
-
-/** Join free-form skill description parts after dropping absent argv values. */
-function parseSkillDescription(parts: string[]): string | null {
-  const description = parts
-    .filter(
-      (part): part is string => typeof part === "string" && part.length > 0,
-    )
-    .join(" ");
-  return description.length > 0 ? description : null;
-}
-
-/** Parse `skill [project-path] new [project-path] [description...]`; throws CLIError for unknown subcommands. */
-function parseSkillPositionals(positionals: string[]): SkillPositionals {
-  const [first, second, ...rest] = positionals;
-  if (first === undefined) {
-    return {
-      skillSubcommand: null,
-      skillDescription: null,
-      projectPath: resolve("."),
-    };
-  }
-  if (first === "new") {
-    const descriptionParts =
-      second !== undefined && isPathShapedSkillProject(second)
-        ? rest
-        : positionals.slice(1);
-    return {
-      skillSubcommand: "new",
-      skillDescription: parseSkillDescription(descriptionParts),
-      projectPath:
-        second !== undefined && isPathShapedSkillProject(second)
-          ? resolve(second)
-          : resolve("."),
-    };
-  }
-  if (second === "new") {
-    return {
-      skillSubcommand: "new",
-      skillDescription: parseSkillDescription(rest),
-      projectPath: resolve(first),
-    };
-  }
-  throw new CLIError(`unknown skill subcommand "${first}". Supported: new`, 2);
 }
 
 /** Validate flags shared across commands. */
@@ -419,6 +387,26 @@ function parsedString(
 ): string | undefined {
   const value = values[name];
   return typeof value === "string" ? value : undefined;
+}
+
+/** Supply ignored, valid namespace positionals while help or version short-circuits dispatch. */
+const INFORMATIONAL_POSITIONALS: Partial<Record<Command, string[]>> = {
+  diagnostics: ["context"],
+  events: ["tail"],
+  hooks: ["list"],
+  plans: ["export", "."],
+};
+/** Choose real positionals unless the CLI will stop after rendering information. */
+function selectCommandPositionals(
+  command: Command,
+  positionals: string[],
+  values: ParsedArgValues,
+): string[] {
+  const isInformational =
+    parsedFlag(values, "help") || parsedFlag(values, "version");
+  return isInformational
+    ? (INFORMATIONAL_POSITIONALS[command] ?? [])
+    : positionals;
 }
 
 /** Reject shared flags when they are attached to commands that do not support them. */
@@ -455,6 +443,25 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
   );
 }
 
+/** Reject runtime scenario flags outside the explicit hooks verification route. */
+function validateHookFlags(
+  command: Command,
+  values: ParsedArgValues,
+  hookSubcommand: HookSubcommand | null,
+): void {
+  const scenario = parsedString(values, "scenario");
+  // A scenario name has no meaning for listing, toggling, syncing, or another command.
+  if (
+    scenario !== undefined &&
+    (command !== "hooks" || hookSubcommand !== "verify")
+  ) {
+    throw new CLIError(
+      "--scenario is only valid for the hooks verify command.",
+      2,
+    );
+  }
+}
+
 /** Returns true when the command resolves to a deterministic install/apply path. */
 function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
   return (
@@ -462,14 +469,45 @@ function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
     (command === "setup" && parsedFlag(values, "apply"))
   );
 }
+/** Validate managed-preview combinations; throws CLIError before ignored write flags confuse users. */
+function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
+  const shouldDryRun = parsedFlag(values, "dry-run");
+  const commandSupportsDryRun = command === "install" || command === "setup";
+  // Preview is meaningful only where users can otherwise run deterministic setup writes.
+  if (shouldDryRun && !commandSupportsDryRun) {
+    throw new CLIError("--dry-run is only valid for install or setup.", 2);
+  }
+  const hasIgnoredWriteFlag =
+    parsedFlag(values, "force") ||
+    parsedFlag(values, "update-config-version") ||
+    parsedFlag(values, "clean-deprecated");
+  // Force and migration flags mutate broader surfaces and cannot change a read-only preview.
+  if (shouldDryRun && hasIgnoredWriteFlag) {
+    throw new CLIError(
+      "--dry-run cannot be combined with --force, --update-config-version, or --clean-deprecated. Preview first, then run the chosen write command separately.",
+      2,
+    );
+  }
+}
 
 /** Validate deterministic install/setup flags; throws CLIError when flags target the wrong command. */
 function validateInstallFlags(command: Command, values: ParsedArgValues): void {
+  validateDryRunFlag(command, values);
   if (command !== "setup" && parsedFlag(values, "apply")) {
     throw new CLIError("--apply is only valid for the setup command.", 2);
   }
+  // Plan exports may also use force, but only to regenerate an explicit local output path.
+  if (
+    parsedFlag(values, "force") &&
+    !isInstallCommand(command, values) &&
+    command !== "plans"
+  ) {
+    throw new CLIError(
+      "--force is only valid for install, setup --apply, or plans export.",
+      2,
+    );
+  }
   const installOnly: Array<[string, boolean | undefined]> = [
-    ["--force", parsedFlag(values, "force")],
     ["--update-config-version", parsedFlag(values, "update-config-version")],
     ["--clean-deprecated", parsedFlag(values, "clean-deprecated")],
   ];
@@ -484,7 +522,6 @@ function validateInstallFlags(command: Command, values: ParsedArgValues): void {
 }
 
 /** Validate quality mode flags against the selected quality subcommand. */
-// eslint-disable-next-line complexity -- intentional because one validator preserves the cross-command error contract
 function validateQualityFlags(
   command: Command,
   values: ParsedArgValues,
@@ -500,27 +537,6 @@ function validateQualityFlags(
       2,
     );
   }
-  if (
-    parsedString(values, "draft") !== undefined &&
-    !(
-      (command === "quality" && qualitySubcommand === "candidacy") ||
-      command === "skill"
-    )
-  ) {
-    throw new CLIError(
-      "--draft is only valid for quality candidacy and skill new.",
-      2,
-    );
-  }
-  if (parsedFlag(values, "interactive") && command !== "skill") {
-    throw new CLIError("--interactive is only valid for skill new.", 2);
-  }
-  if (parsedString(values, "name") !== undefined && command !== "skill") {
-    throw new CLIError("--name is only valid for skill new.", 2);
-  }
-  if (parsedFlag(values, "yes") && command !== "skill") {
-    throw new CLIError("--yes is only valid for skill new.", 2);
-  }
 }
 
 /** Validate flag combinations after strict parseArgs accepts their shapes. */
@@ -528,10 +544,14 @@ function validateFlagCombinations(
   command: Command,
   values: ParsedArgValues,
   qualitySubcommand: QualitySubcommand,
+  skillSubcommand: SkillSubcommand | null,
+  hookSubcommand: HookSubcommand | null,
 ): void {
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
   validateQualityFlags(command, values, qualitySubcommand);
+  validateSkillFlags(command, values, qualitySubcommand, skillSubcommand);
+  validateHookFlags(command, values, hookSubcommand);
 }
 
 /** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
@@ -544,24 +564,23 @@ function parseEventsLimitArg(value: string | undefined): number {
   return Math.min(parsed, 500);
 }
 
-function buildSkillCLIFields(
+/** Select the path consumed by the chosen command after each positional grammar is parsed. */
+function selectCommandProjectPath(
   command: Command,
-  values: ParsedArgValues,
-  positionals: SkillPositionals,
-): SkillCLIFields {
-  const isSkillCommand = command === "skill";
-  const skillDraftValue = isSkillCommand
-    ? parsedString(values, "draft")
-    : undefined;
-  return {
-    skillSubcommand: positionals.skillSubcommand,
-    skillDescription: positionals.skillDescription,
-    skillDraftPath:
-      skillDraftValue === undefined ? null : resolve(skillDraftValue),
-    skillName: isSkillCommand ? (parsedString(values, "name") ?? null) : null,
-    skillInteractive: isSkillCommand && parsedFlag(values, "interactive"),
-    skillSkipConfirm: isSkillCommand && parsedFlag(values, "yes"),
-  };
+  qualityProjectPath: string,
+  eventsProjectPath: string,
+  hooksProjectPath: string,
+  plansProjectPath: string,
+  diagnosticsProjectPath: string,
+  skillProjectPath: string,
+): string {
+  // Each namespaced command owns the path position its users supplied.
+  if (command === "events") return eventsProjectPath;
+  if (command === "hooks") return hooksProjectPath;
+  if (command === "plans") return plansProjectPath;
+  if (command === "diagnostics") return diagnosticsProjectPath;
+  if (command === "skill") return skillProjectPath;
+  return qualityProjectPath;
 }
 
 /**
@@ -592,13 +611,17 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       "no-audit-details": { type: "boolean", default: false },
       check: { type: "boolean", default: false },
       apply: { type: "boolean", default: false },
+      "dry-run": { type: "boolean", default: false },
       force: { type: "boolean", default: false },
       "update-config-version": { type: "boolean", default: false },
       "clean-deprecated": { type: "boolean", default: false },
       dev: { type: "boolean", default: false },
       draft: { type: "string" },
+      "red-log": { type: "string" },
       interactive: { type: "boolean", default: false },
       name: { type: "string" },
+      skill: { type: "string" },
+      scenario: { type: "string" },
       yes: { type: "boolean", short: "y", default: false },
       json: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -609,37 +632,59 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   });
 
   const parsedValues = values as ParsedArgValues;
-  const qualityPositionals = parseCommandPositionals(
+  const commandPositionals = selectCommandPositionals(
     command,
     positionals,
+    parsedValues,
+  );
+  const qualityPositionals = parseCommandPositionals(
+    command,
+    commandPositionals,
     parsedString(parsedValues, "draft") ?? null,
   );
   const eventsPositionals =
     command === "events"
-      ? parseEventsPositionals(positionals)
+      ? parseEventsPositionals(commandPositionals)
       : { eventsSubcommand: null, projectPath: qualityPositionals.projectPath };
   const hooksPositionals =
     command === "hooks"
-      ? parseHooksPositionals(positionals)
+      ? parseHooksPositionals(commandPositionals)
       : {
           hookSubcommand: null,
           hookId: null,
           projectPath: qualityPositionals.projectPath,
         };
-  const projectPath =
-    command === "events"
-      ? eventsPositionals.projectPath
-      : command === "hooks"
-        ? hooksPositionals.projectPath
-        : qualityPositionals.projectPath;
+  const plansPositionals =
+    command === "plans"
+      ? parsePlansPositionals(commandPositionals)
+      : { plansSubcommand: null, projectPath: qualityPositionals.projectPath };
+  const diagnosticsPositionals: {
+    diagnosticsSubcommand: DiagnosticsSubcommand | null;
+    projectPath: string;
+  } =
+    command === "diagnostics"
+      ? parseDiagnosticsPositionals(commandPositionals)
+      : {
+          diagnosticsSubcommand: null,
+          projectPath: qualityPositionals.projectPath,
+        };
   const skillPositionals: SkillPositionals =
     command === "skill"
-      ? parseSkillPositionals(positionals)
+      ? parseSkillPositionals(commandPositionals)
       : {
           skillSubcommand: null,
           skillDescription: null,
-          projectPath,
+          projectPath: qualityPositionals.projectPath,
         };
+  const projectPath = selectCommandProjectPath(
+    command,
+    qualityPositionals.projectPath,
+    eventsPositionals.projectPath,
+    hooksPositionals.projectPath,
+    plansPositionals.projectPath,
+    diagnosticsPositionals.projectPath,
+    skillPositionals.projectPath,
+  );
   const skillFields = buildSkillCLIFields(
     command,
     parsedValues,
@@ -649,6 +694,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     command,
     parsedValues,
     qualityPositionals.qualitySubcommand,
+    skillPositionals.skillSubcommand,
+    hooksPositionals.hookSubcommand,
   );
 
   return {
@@ -663,7 +710,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     isVerbose: parsedFlag(parsedValues, "verbose"),
     output: resolveOutputPath(
       parsedString(parsedValues, "output"),
-      projectPath,
+      command === "plans" ? resolve(".") : projectPath,
     ),
     includeHarness: parsedFlag(parsedValues, "harness"),
     checkDrift: parsedFlag(parsedValues, "check-drift"),
@@ -672,6 +719,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     auditDetails: !parsedFlag(parsedValues, "no-audit-details"),
     shouldCheck: parsedFlag(parsedValues, "check"),
     shouldApply: parsedFlag(parsedValues, "apply"),
+    shouldDryRun: parsedFlag(parsedValues, "dry-run"),
     shouldForce: parsedFlag(parsedValues, "force"),
     updateConfigVersion: parsedFlag(parsedValues, "update-config-version"),
     cleanDeprecated: parsedFlag(parsedValues, "clean-deprecated"),
@@ -685,6 +733,12 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     eventsLimit: parseEventsLimitArg(parsedString(parsedValues, "limit")),
     hookSubcommand: hooksPositionals.hookSubcommand,
     hookId: hooksPositionals.hookId,
+    hookScenario: parseHookScenarioArg(
+      hooksPositionals.hookSubcommand,
+      parsedString(parsedValues, "scenario"),
+    ),
+    plansSubcommand: plansPositionals.plansSubcommand,
+    diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,
     includeAll: parsedFlag(parsedValues, "all"),
     isDevMode: parsedFlag(parsedValues, "dev"),
     showHelp: parsedFlag(parsedValues, "help"),

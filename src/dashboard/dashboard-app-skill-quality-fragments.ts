@@ -18,6 +18,21 @@ interface SkillSummaryBanner {
 }
 
 /**
+ * Return evidence-limit notes that temper a score without pretending a structural metric failed.
+ *
+ * @param report - selected or evaluated report; `null` has no evidence surface to inspect
+ * @returns truncation notes in report order; other fit guidance remains recommendation context
+ */
+function dashboardSkillEvidenceLimitNotes(
+  report: SkillQualityReport | null,
+): string[] {
+  if (!report) return [];
+  return report.fitNotes.filter((note) =>
+    /^(?:artifact|composition) truncated at\b/iu.test(note),
+  );
+}
+
+/**
  * Build the headline banner for a selected skill-quality report.
  * Use when the Skills tab needs one user-readable status above the metric breakdown.
  *
@@ -32,6 +47,11 @@ function dashboardSkillSummaryBanner(
   // No report is selected yet, so the Skills tab keeps the headline placeholder neutral.
   if (!report) return { title: "", desc: "", severity: "warn" };
   const pct = ctx.skillReportPct(report);
+  const evidenceLimitNotes = dashboardSkillEvidenceLimitNotes(report);
+  const evidenceLimitSuffix =
+    evidenceLimitNotes.length > 0
+      ? ` Evidence limit: ${evidenceLimitNotes.join("; ")}.`
+      : "";
   // Warning count tells the user how much non-blocking cleanup remains.
   const warnCount = report.metrics.filter(
     (metric) => metric.severity === "warn",
@@ -47,7 +67,7 @@ function dashboardSkillSummaryBanner(
       title: "Critical structural issues require attention",
       desc: `${failCount} failing metric${failCount > 1 ? "s" : ""}${
         warnCount ? ` and ${warnCount} warning${warnCount > 1 ? "s" : ""}` : ""
-      }. Recommended: ${rec}.`,
+      }. Recommended: ${rec}.${evidenceLimitSuffix}`,
       severity: "fail",
     };
   }
@@ -61,7 +81,17 @@ function dashboardSkillSummaryBanner(
       title,
       desc: `${warnCount} non-blocking issue${
         warnCount > 1 ? "s" : ""
-      }. Recommended: ${rec}, address warnings.`,
+      }. Recommended: ${rec}, address warnings.${evidenceLimitSuffix}`,
+      severity: "warn",
+    };
+  }
+  // A bounded partial read can leave every observed metric green, but it is not a complete clean bill.
+  if (evidenceLimitNotes.length > 0) {
+    return {
+      title: "Assessment used partial evidence",
+      desc: `Evidence limit: ${evidenceLimitNotes.join(
+        "; ",
+      )}. Structural metrics only describe the content assessed. Recommended: ${rec}.`,
       severity: "warn",
     };
   }
@@ -185,7 +215,7 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
      * Count cached skills with warning or failure metrics.
      * Use for the Skills tab scope strip so users see how many artifacts still need attention.
      *
-     * @returns warning/failure count; zero means every cached report is currently clean
+     * @returns warning/failure/evidence-limit count; zero means every cached report is currently clean
      */
     skillsWithWarningsCount(): number {
       let count = 0;
@@ -194,12 +224,13 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
         const report = this.skillQualityReports[id];
         // Missing cache entries mean that skill has not produced a visible report yet.
         if (!report) continue;
-        // Any warn/fail metric makes this skill count as needing review.
+        // Any warn/fail metric or bounded evidence surface makes this skill count as needing review.
         if (
           report.metrics.some(
             (metric: SkillQualityMetric) =>
               metric.severity === "warn" || metric.severity === "fail",
-          )
+          ) ||
+          dashboardSkillEvidenceLimitNotes(report).length > 0
         )
           count++;
       }
@@ -270,6 +301,7 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
       const warnCount = report.metrics.filter(
         (metric) => metric.severity === "warn",
       ).length;
+      const evidenceLimitNotes = dashboardSkillEvidenceLimitNotes(report);
       const isHardVerdict =
         report.recommendation === "retire" ||
         report.recommendation === "consider-revision";
@@ -291,6 +323,8 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
         // Warnings are non-blocking, so the banner keeps the artifact reviewable.
       } else if (warnCount > 0) {
         title = `${warnCount} non-blocking warning${warnCount > 1 ? "s" : ""}`;
+      } else if (evidenceLimitNotes.length > 0) {
+        title = "Assessment used partial evidence";
       } else {
         title = "All structural metrics passing";
       }
@@ -314,9 +348,13 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
             : `${failCount + warnCount} non-passing metric${
                 failCount + warnCount === 1 ? "" : "s"
               }`;
+      const evidenceLimitDetail =
+        evidenceLimitNotes.length > 0
+          ? ` Evidence limit: ${evidenceLimitNotes.join("; ")}.`
+          : "";
       return {
         title,
-        desc: `${detail}. ${recHuman} before deciding to keep, convert, or discard.`,
+        desc: `${detail}.${evidenceLimitDetail} ${recHuman} before deciding to keep, convert, or discard.`,
       };
     },
 

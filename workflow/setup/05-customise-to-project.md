@@ -40,38 +40,37 @@ What looks broken but is intentional? (semi-manual workflows, expected auth fail
 
 - Read config files for stale project names, hardcoded paths, outdated references
 - Write findings to `.goat-flow/learning-loop/footguns/` bucket files with real file paths as evidence
-- Every entry MUST cite specific file paths. Use `ACTUAL_MEASURED` evidence labels.
+- Every entry MUST cite specific file paths. Use `OBSERVED` when current code or configuration directly demonstrates the trap. Use `ACTUAL_MEASURED` only when the failure was reproduced or measured locally.
 - Every bucket file MUST start with YAML frontmatter that includes both `category: <name>` and `last_reviewed: <YYYY-MM-DD, today>`. `goat-flow stats --check` fails without `last_reviewed`. See `workflow/setup/reference/footguns-readme.md` for the exact format.
 - Every footgun entry MUST begin with a `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <label>` line. Agents scan only entries above `## Resolved Entries`; without `Status` the active/resolved split is undefined.
 - Add `hallucination-risk: high` when the area is easy to misread from names alone (generated code, env-specific config, external contracts)
 - If `.goat-flow/learning-loop/footguns/` already has entries, MERGE - do not replace
 
-## Lessons - extract from git history
+## Lessons - verify incidents surfaced by git history
 
-- Use the same `git log` scan - for each incident, what was the root cause and what should have been done differently?
-- Write to `.goat-flow/learning-loop/lessons/` category bucket files
+- Use the same `git log` scan to locate possible incidents, then verify what failed, its root cause, and what should have been done differently.
+- A revert, fix, or rollback commit may support a lesson only after the incident and root cause are verified.
+- Write verified incidents to `.goat-flow/learning-loop/lessons/` category bucket files.
 - Every bucket file MUST start with YAML frontmatter that includes both `category: <name>` and `last_reviewed: <YYYY-MM-DD, today>`. See `workflow/setup/reference/lessons-readme.md` for the exact format.
 - If `.goat-flow/learning-loop/lessons/` already has entries, MERGE - do not replace
 
-## Auto-seed the learning loop from strong git signals
+## Mine git history for candidates
 
-After creating or merging the manual entries, seed 2-3 strong candidates from git history:
+After creating or merging entries backed by direct evidence, mine 2-3 strong candidates from git history:
 
-- High churn (5+ commits) → candidate footgun
-- 2+ revert/fix/rollback commits touching the same area → candidate lesson
-- 3+ files repeatedly co-committed → candidate coupling footgun
+- High churn may identify an area worth reading.
+- Repeated revert, fix, or rollback commits may identify an incident worth reconstructing.
+- Files repeatedly committed together may identify coupling worth checking in current code.
 
-Rules:
+History correlations are candidates only. You MUST NOT create a durable footgun or lesson from churn, revert/fix counts, or co-commit frequency alone. Record every unpromoted candidate in the shared setup session log under `History candidates`, including the paths or commits that prompted the investigation.
 
-- Evidence format for auto-seeded entries is **file path + commit hash**, not fabricated line numbers. `src/auth.ts` is valid evidence. `src/auth.ts:65` pointing at a closing brace is fabricated evidence - never cite a line number unless you have verified it shows the actual trap.
-- If you cannot identify the specific code that demonstrates the trap, use the file path without a line number. Path-only evidence is honest; fake line numbers are not.
-- Mark each generated entry with `**Source:** git history (auto-seeded)`
-- Only seed strong signals. Skip noisy one-off commits
+Promote a candidate only when all three gates pass:
 
-Examples:
+- Current code or configuration supplies a grep-friendly semantic anchor.
+- The evidence demonstrates a non-obvious failure mode and verified root cause, not only activity.
+- The durable entry changes a future decision by stating what an agent must do differently.
 
-- `` `src/auth/login.ts` (12 commits in 30 days, last: abc123) ``
-- `` `src/api/users.ts` + `src/db/users.ts` (co-committed 4 times, last: def456) ``
+For a promoted footgun, use `OBSERVED` when current code or configuration directly demonstrates the trap. Use `ACTUAL_MEASURED` only when the failure was reproduced or measured locally. A commit hash may support the incident history, but it does not replace the current semantic anchor. If any promotion gate fails, keep the item in the session log instead of weakening the durable evidence standard.
 
 ## Patterns - capture memory beyond mistakes
 
@@ -110,8 +109,9 @@ Re-run `goat-flow index` after adding, editing, renaming, or resolving entries; 
 
 **Verification gate:**
 - [ ] Every footgun entry references a real file path in this project
-- [ ] Every lesson references a real git commit or incident
-- [ ] Auto-seeded entries use file path + commit hash evidence (no fabricated line numbers) and include `**Source:** git history (auto-seeded)`
+- [ ] Every footgun entry has a grep-friendly semantic anchor, a non-obvious failure mode, and a calibrated `OBSERVED` or `ACTUAL_MEASURED` label
+- [ ] Every lesson references a verified incident and root cause; relevant commits support rather than replace that verification
+- [ ] No correlation-only history candidate was written as a durable footgun or lesson; unpromoted candidates remain under `History candidates` in the setup session log
 - [ ] Generated learning-loop indexes were regenerated after the final learning-loop edit: `node --import tsx src/cli/cli.ts index`
 - [ ] Every `.goat-flow/learning-loop/footguns/*.md` and `.goat-flow/learning-loop/lessons/*.md` bucket has `category:` + `last_reviewed:` frontmatter; `node --import tsx src/cli/cli.ts stats --check` exits 0
 - [ ] Every `## Footgun:` entry begins with `**Status:**` (active | resolved)

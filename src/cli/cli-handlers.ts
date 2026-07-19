@@ -1,12 +1,8 @@
 /**
- * Command-dispatch layer for the CLI: one handler per subcommand plus the COMMAND_HANDLERS table
- * and dispatchCommand entry that routes a parsed ParsedCLI to the right one. Handlers lazy-import
- * their heavy dependencies (audit, facts, quality, dashboard, stats) so a single command never pays
- * for modules it does not use. The shared error convention is to throw CLIError for user-facing
- * failures (the entry point maps that to an exit code) and to set process.exitCode (not exit) for
- * non-zero-but-successful outcomes like a failing audit, so buffered stdout still flushes.
+ * Routes parsed CLI commands through lazy handlers so unrelated commands avoid heavy imports.
+ * User failures throw CLIError; report failures set process.exitCode so stdout can flush.
+ * Use this layer when a command needs shared output and exit conventions.
  */
-
 import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { AgentId, ProjectFacts } from "./types.js";
@@ -14,6 +10,8 @@ import type { AuditReport, AuditScope, CheckResult } from "./audit/types.js";
 import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
+import { handleDiagnosticsCommand } from "./diagnostics-command.js";
+import { handleStatsCommand } from "./stats-command.js";
 import {
   MULTI_AGENT_SYNC_BANNER,
   validAgentFlags,
@@ -26,6 +24,15 @@ import {
   buildInstallerInvocation,
   buildInstallerSpawnSpec,
 } from "./install-invocation.js";
+import {
+  buildManagedSetupPreview,
+  managedSetupAdmissionFailure,
+  recordManagedInstallAfterVerification,
+} from "./managed-setup-preview.js";
+import {
+  emitManagedSetupDryRun,
+  validateManagedSetupRequest,
+} from "./managed-setup-command.js";
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import {
   emitIndexGenerationInstallResult,
@@ -37,9 +44,9 @@ import {
 } from "./prompt/commit-guidance.js";
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
-
+import { handleRedactCommand } from "./redact-command.js";
+import { handlePlansExportCommand } from "./plans-export.js";
 const PACKAGE_VERSION = getPackageVersion();
-
 function formatCandidacyArtifact(
   recommendation: CandidacyResult["recommendedArtifact"],
 ): string {
@@ -395,25 +402,37 @@ function emitCommitGuidanceInstallResult(projectPath: string): void {
   );
 }
 
-/** Handle deterministic install/update; spawns the bundled installer through the safe-exec gate and reports CLIError failures. */
+/**
+ * Run a managed preview or deterministic install after the user chooses an agent.
+ * Use for install or setup dry-run/apply; it throws CLI errors or preserves a non-zero child exit.
+ */
 async function handleInstallCommand(options: ParsedCLI): Promise<void> {
-  if (!options.agent) {
-    throw new CLIError(
-      `install requires --agent. Use one of: ${validAgentFlags()}\n  (--apply installs per-agent surfaces; each agent needs a separate run)`,
-      2,
-    );
+  const selectedAgent = validateManagedSetupRequest(options);
+  const managedPreview = buildManagedSetupPreview(
+    options.projectPath,
+    selectedAgent,
+  );
+  // A dry-run reports the exact managed-template result and exits before installer side effects.
+  if (options.shouldDryRun) {
+    emitManagedSetupDryRun(options, managedPreview);
+    return;
   }
-  if (options.output !== null) {
-    throw new CLIError("--output is not supported for install.", 2);
-  }
+
+  const admissionFailure = managedSetupAdmissionFailure(
+    managedPreview,
+    options.shouldForce,
+  );
+  // A conflict report is returned before Bash starts, so the user's target remains unchanged.
+  if (admissionFailure !== null) throw new CLIError(admissionFailure, 1);
 
   const invocation = buildInstallerInvocation({
     scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
     projectPath: options.projectPath,
-    agent: options.agent,
-    installerFlags: collectInstallerFlags(options, options.agent),
+    agent: selectedAgent,
+    installerFlags: collectInstallerFlags(options, selectedAgent),
     platform: process.platform,
   });
+  // Invalid launch arguments stop before Bash can change the selected target.
   if (!invocation.ok) {
     throw new CLIError(invocation.error, 1);
   }
@@ -426,18 +445,34 @@ async function handleInstallCommand(options: ParsedCLI): Promise<void> {
     allowedBasenames: ["bash", "bash.exe"],
     env: spawnSpec.env,
   });
+  // A spawn failure means the installer never started, so users receive the operating-system error.
   if (result.error) {
     throw new CLIError(
       `Could not run installer with ${spawnSpec.command}: ${result.error.message}`,
       1,
     );
   }
+  // A signal means installation ended mid-flow and cannot be recorded as a verified baseline.
   if (result.signal) {
     throw new CLIError(`Installer terminated by signal ${result.signal}`, 1);
   }
+  // A non-zero or missing child status is preserved as failure instead of running post-install writes.
   if (result.status !== 0) {
+    // Missing numeric status still maps to exit 1 so scripts never mistake it for success.
     process.exitCode = result.status ?? 1;
     return;
+  }
+
+  const installationMismatches = recordManagedInstallAfterVerification(
+    options.projectPath,
+    selectedAgent,
+  );
+  // A successful process exit is insufficient when managed bytes still differ from their templates.
+  if (installationMismatches.length > 0) {
+    throw new CLIError(
+      `Installer exited successfully, but ${installationMismatches.length} managed file(s) do not match their templates. Install state was not recorded.`,
+      1,
+    );
   }
   emitCommitGuidanceInstallResult(options.projectPath);
   emitIndexGenerationInstallResult(options.projectPath);
@@ -511,11 +546,7 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
   }
 }
 
-/**
- * Run the quality command by delegating to the quality module with CLI-side dependencies injected.
- * The error/output behaviour lives in the injected collaborators - CLIError for failures and
- * writeOutput for results - so this wrapper only supplies them and forwards the parsed options.
- */
+/** Delegate every quality mode with the CLI's shared error/output collaborators. */
 async function handleQualityCommand(options: ParsedCLI): Promise<void> {
   await runQualityCommand(options, {
     CLIError,
@@ -523,59 +554,6 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
     validAgents,
     writeOutput,
   });
-}
-
-/** Handle the stats command: report learning-loop health (live counts, stale refs, freshness). */
-async function handleStatsCommand(options: ParsedCLI): Promise<void> {
-  const { createFS } = await import("./facts/fs.js");
-  const { loadConfig } = await import("./config/reader.js");
-  const { extractFootgunFacts, extractLessonsFacts } =
-    await import("./facts/shared/learning-loop.js");
-  const { buildStatsReport, checkStats, buildDecisionsSection } =
-    await import("./stats/stats.js");
-  const {
-    renderStatsText,
-    renderStatsJson,
-    renderStatsMarkdown,
-    renderStatsCheckText,
-  } = await import("./stats/render.js");
-
-  const { collectIndexFreshness } = await import("./stats/index-freshness.js");
-  const { resolveIndexBucketPaths } =
-    await import("./learning-loop-index/parse-bucket.js");
-
-  const fs = createFS(options.projectPath);
-  const configState = loadConfig(options.projectPath, fs);
-  const report = buildStatsReport({
-    footguns: extractFootgunFacts(fs, configState),
-    lessons: extractLessonsFacts(fs, configState),
-    decisions: buildDecisionsSection(fs, configState.config.decisions.path),
-    indexes: collectIndexFreshness(
-      fs,
-      resolveIndexBucketPaths(configState.config),
-    ),
-  });
-
-  if (options.shouldCheck) {
-    const verdict = checkStats(report);
-    if (options.format === "json") {
-      writeOutput(options, JSON.stringify(verdict, null, 2));
-    } else {
-      writeOutput(options, renderStatsCheckText(verdict).trimEnd());
-    }
-    if (verdict.status === "fail") process.exitCode = 1;
-    return;
-  }
-
-  let rendered: string;
-  if (options.format === "json") {
-    rendered = renderStatsJson(report);
-  } else if (options.format === "markdown") {
-    rendered = renderStatsMarkdown(report);
-  } else {
-    rendered = renderStatsText(report);
-  }
-  writeOutput(options, rendered.trimEnd());
 }
 
 /**
@@ -597,13 +575,9 @@ async function handleEventsCommand(options: ParsedCLI): Promise<void> {
 }
 
 /**
- * Handle the manifest command: resolve + print the single-source-of-truth manifest.
- * The function forks up front on `--check` because the two modes are genuinely different outputs,
- * not formatting variants of one: `--check` is the CI gate that runs checkManifest and sets
- * process.exitCode to 1 on drift (so the pipeline fails), while the default branch just loads and
- * prints the resolved manifest with no exit-code side effect. They are kept in one handler so both
- * honour the same `--format` flag, but the early return after the check branch is intentional - it
- * avoids the printer ever running in CI mode.
+ * Print the resolved manifest or run its `--check` CI gate.
+ * Branches stay separate because check mode owns exit status while default only renders.
+ * Both paths preserve the same format contract without mixing their outputs.
  */
 async function handleManifestCommand(options: ParsedCLI): Promise<void> {
   const { loadManifest, checkManifest, renderManifestMarkdown } =
@@ -680,22 +654,32 @@ const COMMAND_HANDLERS: Partial<
   skill: handleSkillCommand,
   manifest: handleManifestCommand,
   stats: handleStatsCommand,
+  diagnostics: handleDiagnosticsCommand,
   index: handleIndexCommand,
+  redact: handleRedactCommand,
+  plans: handlePlansExportCommand,
   status: handleStatusCommand,
   dashboard: runDashboardCommand,
   info: handleInfoCommand,
 };
 
-/**
- * Run `skill new`, scaffolding a skill/playbook from a description, draft, or interactive prompt.
- * Throws a usage CLIError (exit 2) when the subcommand is not `new` or when the skill author
- * reports a SkillNewInputError (bad/missing input); any other author error is rethrown unchanged.
- * Emits a JSON candidacy/path/score summary under `--format json`, otherwise the author's text.
- */
+/** Route `skill new` authoring or read-only `skill doctor` diagnosis. */
 async function handleSkillCommand(options: ParsedCLI): Promise<void> {
+  // Doctor reports installed discovery evidence without entering the write-capable authoring flow.
+  if (options.skillSubcommand === "doctor") {
+    const { handleSkillDoctorCommand } = await import("./skill-doctor.js");
+    handleSkillDoctorCommand(options);
+    return;
+  }
+  await handleSkillNewCommand(options);
+}
+
+/** Run skill authoring; throws `CLIError` for usage/input failures and preserves JSON/text output. */
+async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
+  // Any remaining mode must be the existing skill-new authoring contract.
   if (options.skillSubcommand !== "new") {
     throw new CLIError(
-      'Usage: goat-flow skill new ["<description>" | --draft <path> | --interactive]',
+      "Usage: goat-flow skill <new|doctor> [project-path] [flags]",
       2,
     );
   }
@@ -703,8 +687,10 @@ async function handleSkillCommand(options: ParsedCLI): Promise<void> {
   let result: Awaited<ReturnType<typeof runSkillNew>>;
   try {
     result = await runSkillNew({
+      agent: options.agent,
       description: options.skillDescription ?? undefined,
       draftPath: options.skillDraftPath ?? undefined,
+      redLogPath: options.skillRedLogPath ?? undefined,
       shouldUseInteractivePrompt: options.skillInteractive,
       name: options.skillName ?? undefined,
       shouldSkipConfirm: options.skillSkipConfirm,
@@ -725,6 +711,7 @@ async function handleSkillCommand(options: ParsedCLI): Promise<void> {
           proposedPath: result.proposedPath,
           written: result.written,
           postScaffoldScore: result.postScaffoldScore ?? null,
+          nextSteps: result.nextSteps,
         },
         null,
         2,
@@ -742,7 +729,8 @@ export async function dispatchCommand(options: ParsedCLI): Promise<void> {
     await handler(options);
     return;
   }
-  if (options.shouldApply) {
+  // Setup preview and setup apply both use the deterministic install path instead of prompt composition.
+  if (options.shouldApply || options.shouldDryRun) {
     await handleInstallCommand(options);
     return;
   }

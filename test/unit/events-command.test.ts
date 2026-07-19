@@ -7,6 +7,17 @@ import { resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli.js";
 
 describe("events command parsing", () => {
+  for (const [flag, field] of [
+    ["--help", "showHelp"],
+    ["--version", "showVersion"],
+  ] as const) {
+    it(`accepts events ${flag} without the tail subcommand`, () => {
+      const parsed = parseCLIArgs(["events", flag]);
+      assert.equal(parsed.command, "events");
+      assert.equal(parsed[field], true);
+    });
+  }
+
   it("parses events tail with a project path and limit", () => {
     const requestedLimit = 5;
     const parsed = parseCLIArgs([

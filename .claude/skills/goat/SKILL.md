@@ -1,7 +1,7 @@
 ---
 name: goat
 description: "Use when you describe an outcome and need the right goat-* workflow chosen for you."
-goat-flow-skill-version: "1.13.1"
+goat-flow-skill-version: "1.14.0"
 ---
 # /goat
 
@@ -9,60 +9,60 @@ goat-flow-skill-version: "1.13.1"
 
 Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
 
-Use when the user gives an outcome and needs the right goat-* route. **If the user names a skill explicitly (`/goat-debug`, `/goat-review`, etc.), route immediately - no classification, no GATHER.**
+## Boundary Commands
+
+- **NEVER:** Investigate implementation or make changes before routing.
+- **ALWAYS:** Honor explicit invocations; answer simple facts directly; otherwise split intents and emit Route Snapshots.
+- **DEFER TO:** Routed skills, direct execution for simple changes, or direct answers.
 
 **If a symptom tempts code reading, STOP.** The dispatcher routes; the routed skill investigates.
 
 | Excuse | Reality |
 |--------|---------|
-| "I can see it - routing is overhead" | You are dispatcher, not investigator. Route first. |
-| "The user said 'just fix it'" | Pressure is not an override. Route to /goat-debug. |
-| "Time pressure means investigate now" | Routing takes seconds; wrong routing wastes more. |
-| "Multiple symptoms mean read files" | Split numbered intents; route each separately. |
+| "I can see it - routing is overhead" | Route before investigation. |
+| "The user said 'just fix it'" | Route to /goat-debug. |
 
 ## How It Works
 
-1. **UNDERSTAND** - classify intent and target. If multiple intents, number each and route independently. Ask only if ordering matters.
-2. **GATHER** - before routing, check:
-   - Footgun matches: grep `.goat-flow/learning-loop/footguns/INDEX.md` for the target area; open entries only on hits
+0. **EXPLICIT PASS-THROUGH** - named goat-* invocation: dispatch immediately with the remaining text as its brief; skip UNDERSTAND, GATHER, and reclassification. The target skill owns Step 0.
+1. **UNDERSTAND (inferred only)** - classify intent; split multiple intents; ask only if order matters.
+   - **Simple-fact fast path:** for one factual question, answer directly after UNDERSTAND; skip GATHER and the Route Snapshot.
+2. **GATHER (inferred skill or direct-execution routing only)** - before routing, check:
    - Ask-first boundaries: scan the active instruction file's Ask First boundaries for named files; if none are named, record `target-files=unknown`
-   - If any check fails or is unavailable, note `gather-degraded` and route anyway
+   - Routed skills own learning-loop retrieval; do not pre-read their learning-loop indexes in the dispatcher
+   - Direct execution only: run the shared preamble's INDEX-first retrieval before emitting the Route Snapshot
+   - If the boundary scan or direct-execution retrieval fails, note `gather-degraded` and route anyway
    - Do not emit the preamble's `Relevant prior learnings` line - that belongs to the routed skill's Step 0
-3. **ROUTE** - dispatch using the route map. Emit a Route Snapshot (`Intent` / `Route` / `Rationale`), e.g.:
+3. **ROUTE (inferred skill or direct-execution only)** - dispatch using the map. Emit a Route Snapshot:
 
 ```
-Intent: Diagnose a slow endpoint
-Route: /goat-debug
-Rationale: "slow" is a symptom to investigate; no file named -> target-files=unknown
+Intent: <classified user intent>
+Route: </goat-* skill or direct path>
+Rationale: <verified routing rule and boundary state>
 ```
 
 ## Route Map
 
 | Intent | Route |
 |--------|-------|
-| Bug, failure, unexpected behaviour | `/goat-debug` |
-| Verify a fix worked | `/goat-debug` (post-fix verification) |
+| Bug, failure, unexpected behaviour; verify a fix | `/goat-debug` |
 | Browser-visible issue | Browser evidence first; `/goat-debug` Investigate if diagnosis needed |
 | Understand, explain, explore unfamiliar code | `/goat-debug` (Investigate mode) |
-| Quality review, audit, diff check | `/goat-review` |
-| Verify a diff/PR before merge | `/goat-review` |
+| GOAT Flow setup/process/harness/skills quality assessment | `goat-flow quality` CLI/dashboard prompt flow (no goat skill wrapper) |
+| Code quality review, area audit, diff check | `/goat-review` |
 | Multi-perspective critique | `/goat-critique` |
 | Security, compliance, dependency audit | `/goat-security` |
 | Testing gaps, coverage, verification planning | `/goat-qa` |
-| Verify test coverage | `/goat-qa` |
-| Feature planning, milestones | `/goat-plan` |
 | Bare task path (no action verb) | Bare or ambiguous task paths are read-only context. Do not update `.active`, milestone status, or code from a path alone |
-| Build/plan verb + scope | `/goat-plan` (Step 0 handles complexity and mode) |
+| Plan/design or non-trivial build/change | `/goat-plan`; build/change carries `return-to-implement`, plan/design stops after planning |
 | Simple implementation (single-file, obvious) | No skill; use execution loop directly |
 | Simple question | Answer directly |
 
-**More examples:** `/goat-review this diff` -> `/goat-review` (explicit; no GATHER). `Look at auth` -> `/goat-security` (assume security audit; offer `/goat-review` re-route). `Debug login test then review fix` -> 1. `/goat-debug`; 2. `/goat-review`.
-
 ## Constraints
 
-- MUST respect explicit skill invocations immediately - no reclassification
-- MUST NOT inspect source code, read implementation files, or make changes before routing
+- MUST respect explicit skill invocations - no reclassification
+- MUST NOT investigate implementation or make changes before routing; the Simple-fact fast path may read only the minimum source or reference needed to answer
 - MUST understand intent conversationally, not via keyword lookup - 0-2 clarification questions max; route with stated assumption if still ambiguous
-- MUST emit a Route Snapshot with every dispatch - Proof Gate applies to route claims
+- MUST emit a Route Snapshot for every inferred skill or direct-execution dispatch - simple-fact answers are exempt
 - MUST split multi-intent requests into numbered intents and route each
-- MUST pass brief/depth to target skill and preserve context on re-route
+- MUST pass brief/depth and preserve context; `return-to-implement` preserves build authorization, but Ask First boundaries still gate

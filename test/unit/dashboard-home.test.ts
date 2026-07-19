@@ -1,5 +1,7 @@
 /**
- * Unit tests for the Home dashboard summary object embedded in home.html.
+ * Dashboard summary tests for the Home and Quality views users scan after an audit.
+ * They execute Alpine helpers in a browser-shaped VM and pin each page's score summaries.
+ * Use when audit presentation changes so Home evidence and Quality focus stay intentional.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -15,6 +17,13 @@ const HOME_VIEW_PATH = resolve(
   "dashboard",
   "views",
   "home.html",
+);
+const QUALITY_VIEW_PATH = resolve(
+  PROJECT_ROOT,
+  "src",
+  "dashboard",
+  "views",
+  "quality.html",
 );
 const SETUP_QUALITY_PATH = resolve(
   PROJECT_ROOT,
@@ -32,6 +41,8 @@ type HomeModel = {
   enforcementBadge(row: Record<string, unknown>): string;
   /** Return the CSS class used for one enforcement badge. */
   enforcementBadgeClass(row: Record<string, unknown>): string;
+  /** Return the proof label shown under one enforcement result. */
+  enforcementEvidence(row: Record<string, unknown>): string;
   /** Return the enforcement rows rendered in the Home detail panel. */
   enforcementRows(agent: Record<string, unknown>): Record<string, unknown>[];
   /** Return the concern summary text rendered for one concern key. */
@@ -62,6 +73,11 @@ type HomeModel = {
   runPrimaryAction(): Promise<void> | void;
   /** Return the section metadata text for the Home harness summary. */
   sectionMeta(): string;
+};
+
+type QualityBaselineModel = {
+  /** Return the baseline-card action summary for one audited agent. */
+  recommendationSummary(agent: Record<string, unknown> | null): string;
 };
 
 type LaunchPresetCall = {
@@ -152,6 +168,29 @@ function loadHomeRuntime(
   runInContext(`globalThis.__home = ({${body}\n});`, context);
   const runtimeContext = context as HomeRuntimeContext;
   return { home: runtimeContext.__home, context: runtimeContext };
+}
+
+/** Load the Quality baseline-card helpers a user triggers by opening the Quality view. */
+function loadQualityBaselineModel(): QualityBaselineModel {
+  const source = readFileSync(QUALITY_VIEW_PATH, "utf-8");
+  const startMarker = 'x-data="{\n            concernMeta:';
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, "quality.html should contain baseline x-data");
+  const bodyStart = start + 'x-data="{'.length;
+  const bodyEnd = source.indexOf('\n          }"', bodyStart);
+  assert.notEqual(
+    bodyEnd,
+    -1,
+    "quality.html baseline x-data should be extractable",
+  );
+  const body = source.slice(bodyStart, bodyEnd);
+  const context = createContext({
+    report: { agentScores: [] },
+    qualityAgent: "claude",
+  });
+  runInContext(`globalThis.__quality = ({${body}\n});`, context);
+  return (context as typeof context & { __quality: QualityBaselineModel })
+    .__quality;
 }
 
 /** Load setup-prompt helpers into a VM so request-ordering can be tested without a browser. */
@@ -307,12 +346,16 @@ function loadAdvisoryEnforcementHomeModel(): {
           id: "shell-dangerous",
           label: "Dangerous shell commands",
           status: "hard",
+          sources: ["local-hook"],
+          assurance: "static-local",
           summary: "Deny mechanism blocks dangerous commands",
         },
         {
           id: "file-read-restrictions",
           label: "General file-read restrictions",
           status: "unknown",
+          sources: ["not-observed"],
+          assurance: "not-observed",
           summary: "Not inferred from secret-path coverage",
         },
       ],
@@ -563,6 +606,57 @@ describe("Home harness summary", () => {
     );
   });
 
+  it("shows a passing concern's evidence limit instead of a clean-state summary", () => {
+    const evidenceLimit =
+      "This audit did not execute project build, test, lint, typecheck, or format commands.";
+    const home = loadHomeModel({
+      scopes: {
+        setup: {
+          status: "pass",
+          checks: [{ id: "config-parses", status: "pass" }],
+        },
+      },
+      agentScores: [],
+    });
+    const agent = {
+      concerns: {
+        verification: concern("pass", 100, {
+          limits: [evidenceLimit, "Runtime receipts were not inspected."],
+        }),
+      },
+    };
+
+    assert.equal(
+      home.formatConcernSummary(agent, "verification"),
+      `Evidence limit: ${evidenceLimit} (+1 more)`,
+    );
+    assert.equal(home.recommendationSummary(agent), "2 evidence limits");
+  });
+
+  it("keeps evidence limits out of the focused Quality baseline card", () => {
+    const evidenceLimit = "End-to-end resumability was not demonstrated.";
+    const quality = loadQualityBaselineModel();
+    const qualitySource = readFileSync(QUALITY_VIEW_PATH, "utf-8");
+
+    assert.equal(
+      quality.recommendationSummary({
+        concerns: {
+          context: concern("pass", 100),
+          constraints: concern("pass", 100),
+          verification: concern("pass", 100, {
+            limits: [evidenceLimit],
+          }),
+          recovery: concern("pass", 100),
+          feedback_loop: concern("pass", 100),
+        },
+        harness: { checks: [] },
+      }),
+      "All checks passing",
+    );
+    assert.doesNotMatch(qualitySource, /concernEvidenceLimitSummary/u);
+    assert.doesNotMatch(qualitySource, /title="Evidence limit"/u);
+  });
+
   it("exposes advisory enforcement rows for the detail panel", () => {
     const expectedEnforcementRows = 2;
     const { home, agent } = loadAdvisoryEnforcementHomeModel();
@@ -571,8 +665,16 @@ describe("Home harness summary", () => {
     assert.equal(rows.length, expectedEnforcementRows);
     assert.equal(home.enforcementBadge(rows[0]!), "Hard");
     assert.equal(home.enforcementBadgeClass(rows[0]!), "pass");
+    assert.equal(
+      home.enforcementEvidence(rows[0]!),
+      "Static local proof · Source: local hook",
+    );
     assert.equal(home.enforcementBadge(rows[1]!), "Unk");
     assert.equal(home.enforcementBadgeClass(rows[1]!), "skipped");
+    assert.equal(
+      home.enforcementEvidence(rows[1]!),
+      "Not observed · Source: not observed",
+    );
   });
 });
 

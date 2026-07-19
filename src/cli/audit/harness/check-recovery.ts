@@ -1,8 +1,13 @@
 /**
- * Recovery concern: Can the agent resume after crash or compaction?
- * 2 checks: milestone-tracking, session-logs.
+ * Recovery concern for users returning after a crash, compaction, or interrupted coding session.
+ * It checks whether milestone notes and session-log storage are available to the agent.
+ * The audit reports structural readiness separately from proof that the latest work can resume.
  */
-import type { HarnessCheck, HarnessCheckDetails } from "../types.js";
+import type {
+  HarnessCheck,
+  HarnessCheckDetails,
+  HarnessCheckResult,
+} from "../types.js";
 import type { CheckEvidence } from "../provenance-types.js";
 import { pass, fail } from "./helpers.js";
 import { collectMarkdownFiles } from "./helpers.js";
@@ -36,7 +41,18 @@ function recoveryProvenance(
  * state; they intentionally avoid scoring incomplete checkboxes as failures.
  */
 function countTaskMarkers(content: string): number {
+  // No markers means the user has not recorded checkbox-based task progress in this file.
   return content.match(/- \[[ xX]\]/g)?.length ?? 0;
+}
+
+/** Return a structural pass that warns users it is not proof of end-to-end recovery. */
+function limitedRecoveryPass(
+  findings: string[],
+  details: HarnessCheckDetails,
+): HarnessCheckResult {
+  const result = pass(findings, details);
+  result.assurance = "limited";
+  return result;
 }
 
 const milestoneTracking: HarnessCheck = {
@@ -44,14 +60,16 @@ const milestoneTracking: HarnessCheck = {
   name: "Milestone tracking configured",
   concern: "recovery",
   type: "integrity",
+  evidenceKind: "structural",
   provenance: recoveryProvenance("integrity", [
     "docs/harness-audit.md",
     ".goat-flow/architecture.md",
     ".goat-flow/plans/README.md",
   ]),
-  /** Run the Milestone tracking configured check. */
+  /** Show whether the project has a stable place for task progress when a user resumes work. */
   run: (ctx) => {
     const plansDir = ".goat-flow/plans";
+    /** Build per-agent storage details for the audit UI and JSON report. */
     const buildDetails = (fileCount: number): HarnessCheckDetails => ({
       recovery: ctx.agents.map((af) => ({
         agent: af.agent.id,
@@ -59,6 +77,7 @@ const milestoneTracking: HarnessCheck = {
         fileCount,
       })),
     });
+    // Without plan storage, the user has no standard local place to recover milestone progress.
     if (!ctx.fs.exists(plansDir)) {
       return fail(
         ["No plans directory found"],
@@ -69,9 +88,22 @@ const milestoneTracking: HarnessCheck = {
         buildDetails(0),
       );
     }
+
+    // A same-named file or unreadable directory cannot retain milestones for the returning user.
+    if (!ctx.fs.isReadableDirectory(plansDir)) {
+      return fail(
+        ["Plans path exists but is not a readable directory"],
+        ["Ensure .goat-flow/plans/ is a readable directory, not a file"],
+        [
+          "Remove or rename the file at .goat-flow/plans, recreate the directory, and restore any local plan notes.",
+        ],
+        buildDetails(0),
+      );
+    }
     const allMdFiles = collectMarkdownFiles(ctx.fs, plansDir);
+    // A new project can show an empty plan area without being treated as broken.
     if (allMdFiles.length === 0) {
-      return pass(
+      return limitedRecoveryPass(
         [
           "Plans directory exists (empty - valid for new projects; plan tracking is optional)",
         ],
@@ -79,16 +111,20 @@ const milestoneTracking: HarnessCheck = {
       );
     }
     const markerCounts: number[] = [];
+    // Count visible task markers in each note without judging whether the user's work is complete.
     for (const markdownFile of allMdFiles) {
       const content = ctx.fs.readFile(markdownFile);
-      if (content) markerCounts.push(countTaskMarkers(content));
+      // An unreadable or empty note contributes no recoverable checkbox state for the user.
+      if (content) {
+        markerCounts.push(countTaskMarkers(content));
+      }
     }
     const totalMarkers = markerCounts.reduce((sum, count) => sum + count, 0);
     const findings = [
       `Plans directory exists with ${allMdFiles.length} markdown file(s) and ${totalMarkers} checkbox marker(s)`,
       "Task and milestone content is optional local workflow state; checkbox completion, status, testing gates, and roadmap progress are not audited.",
     ];
-    return pass(findings, buildDetails(allMdFiles.length));
+    return limitedRecoveryPass(findings, buildDetails(allMdFiles.length));
   },
 };
 
@@ -97,13 +133,15 @@ const sessionLogs: HarnessCheck = {
   name: "Session logs directory",
   concern: "recovery",
   type: "integrity",
+  evidenceKind: "structural",
   provenance: recoveryProvenance("integrity", [
     "docs/harness-audit.md",
     ".goat-flow/architecture.md",
   ]),
-  /** Run the Session logs directory check. */
+  /** Show whether agents have a stable local log area when a user returns after interruption. */
   run: (ctx) => {
     const logsDir = ".goat-flow/logs/sessions";
+    /** Build per-agent session-log details for the audit UI and JSON report. */
     const buildDetails = (fileCount: number): HarnessCheckDetails => ({
       recovery: ctx.agents.map((af) => ({
         agent: af.agent.id,
@@ -111,6 +149,7 @@ const sessionLogs: HarnessCheck = {
         fileCount,
       })),
     });
+    // Without the directory, an interrupted user cannot rely on the standard continuity-log location.
     if (!ctx.fs.exists(logsDir)) {
       return fail(
         ["No session logs directory"],
@@ -121,12 +160,9 @@ const sessionLogs: HarnessCheck = {
         buildDetails(0),
       );
     }
-    let fileCount = 0;
-    try {
-      fileCount = ctx.fs
-        .listDir(logsDir)
-        .filter((fileName) => fileName.endsWith(".md")).length;
-    } catch {
+
+    // A restored file or unreadable folder cannot accept the continuity notes shown in the UI.
+    if (!ctx.fs.isReadableDirectory(logsDir)) {
       return fail(
         ["Session logs path exists but is not readable as a directory"],
         ["Ensure .goat-flow/logs/sessions/ is a directory, not a file"],
@@ -136,7 +172,27 @@ const sessionLogs: HarnessCheck = {
         buildDetails(0),
       );
     }
-    return pass(["Session logs directory exists"], buildDetails(fileCount));
+    let sessionLogFiles: string[];
+    try {
+      sessionLogFiles = ctx.fs.listDir(logsDir);
+    } catch {
+      // A filesystem adapter may lose read access between the directory probe and listing.
+      return fail(
+        ["Session logs directory could not be listed"],
+        ["Restore read access to .goat-flow/logs/sessions/"],
+        [
+          "Check directory permissions and retry the audit after .goat-flow/logs/sessions/ is readable.",
+        ],
+        buildDetails(0),
+      );
+    }
+    const fileCount = sessionLogFiles.filter((fileName) =>
+      fileName.endsWith(".md"),
+    ).length;
+    return limitedRecoveryPass(
+      ["Session logs directory exists"],
+      buildDetails(fileCount),
+    );
   },
 };
 

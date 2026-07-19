@@ -12,6 +12,26 @@ import type { CheckEvidence } from "../provenance-types.js";
 import { pass, fail } from "./helpers.js";
 
 const VERIFIED_ON = "2026-04-18";
+const EMPTY_LEARNING_LOOP_DIAGNOSTICS = new Set([
+  "Footgun directory exists but contains 0 entries",
+  "Lesson directory exists but contains 0 entries",
+]);
+
+/**
+ * Keep malformed bucket metadata actionable while accepting a new user's empty learning loop.
+ * Use before harness scoring; stats may still describe the empty state without failing setup.
+ *
+ * @param diagnostic - extractor message; null means the bucket metadata is already clean
+ * @returns true for a real format problem; false for null or the valid zero-entry state
+ */
+function isActionableFormatDiagnostic(
+  diagnostic: string | null,
+): diagnostic is string {
+  // No message is clean, while the two zero-entry messages describe a valid first-run state.
+  return (
+    diagnostic !== null && !EMPTY_LEARNING_LOOP_DIAGNOSTICS.has(diagnostic)
+  );
+}
 
 /** Return the feedback provenance. */
 function feedbackProvenance(
@@ -53,6 +73,7 @@ function learningLoopFreshnessDetails(ctx: AuditContext): HarnessCheckDetails {
     (bucket) => bucket.freshnessBand === "stale",
   ).length;
   return {
+    // Every audited agent sees the same project-level memory freshness in the dashboard.
     freshness: ctx.agents.map((agentFacts) => ({
       agent: agentFacts.agent.id,
       fresh,
@@ -71,6 +92,7 @@ function learningLoopFreshnessDetails(ctx: AuditContext): HarnessCheckDetails {
 function decisionsFreshnessDetails(ctx: AuditContext): HarnessCheckDetails {
   const { decisions } = ctx.facts.shared;
   return {
+    // Every audited agent sees whether the shared decision log is available for recovery.
     freshness: ctx.agents.map((agentFacts) => ({
       agent: agentFacts.agent.id,
       fresh: decisions.dirExists ? decisions.fileCount : 0,
@@ -98,26 +120,31 @@ const feedbackLoopActive: HarnessCheck = {
     const footgunsDir = ctx.config.config.footguns.path;
     const lessonsDir = ctx.config.config.lessons.path;
 
+    // An available footgun directory is valid even before the user's first incident.
     if (ctx.facts.shared.footguns.exists) {
       const fileCount = ctx.facts.shared.footguns.buckets.length;
       findings.push(
         `Footguns directory exists (${ctx.facts.shared.footguns.entryCount} entries across ${fileCount} files)`,
       );
     } else {
+      // Without the directory, future safety incidents have no durable destination.
       findings.push("Footguns directory missing");
       missing.push(footgunsDir);
     }
 
+    // An available lessons directory lets future verification failures become durable guidance.
     if (ctx.facts.shared.lessons.exists) {
       const fileCount = ctx.facts.shared.lessons.buckets.length;
       findings.push(
         `Lessons directory exists (${ctx.facts.shared.lessons.entryCount} entries across ${fileCount} files)`,
       );
     } else {
+      // Without the directory, corrected agent behavior cannot survive the current session.
       findings.push("Lessons directory missing");
       missing.push(lessonsDir);
     }
 
+    // Missing storage blocks the feedback loop before any content-quality check can help.
     if (missing.length > 0) {
       return fail(
         findings,
@@ -137,11 +164,12 @@ const feedbackLoopActive: HarnessCheck = {
     const formatDiagnostics = [
       ctx.facts.shared.footguns.formatDiagnostic,
       ctx.facts.shared.lessons.formatDiagnostic,
-    ].filter((item): item is string => typeof item === "string");
+    ].filter(isActionableFormatDiagnostic);
     const staleBuckets = [
       ...ctx.facts.shared.footguns.buckets,
       ...ctx.facts.shared.lessons.buckets,
     ].filter((bucket) => bucket.freshnessBand === "stale");
+    // Stale evidence can send the user to removed files, so it remains a blocking integrity failure.
     if (totalStale > 0) {
       findings.push(
         `${totalStale} stale file reference(s) in learning loop entries`,
@@ -152,11 +180,12 @@ const feedbackLoopActive: HarnessCheck = {
           "Fix stale footgun/lesson file references or remove local-path markup",
         ],
         [
-          "Run `goat-flow stats . --check` (or `npx goat-flow stats . --check`), then update the cited footgun/lesson entries so every backticked local path resolves or is rewritten as external incident prose.",
+          "Run `npx @blundergoat/goat-flow@latest stats . --check`, then update the cited footgun/lesson entries so every backticked local path resolves or is rewritten as external incident prose.",
         ],
         details,
       );
     }
+    // Invalid anchors or malformed metadata make apparently durable guidance untrustworthy.
     if (invalidLineRefs.length > 0 || formatDiagnostics.length > 0) {
       findings.push(
         ...invalidLineRefs.map(
@@ -175,6 +204,7 @@ const feedbackLoopActive: HarnessCheck = {
         details,
       );
     }
+    // Old bucket reviews warn that guidance may no longer match the user's current project.
     if (staleBuckets.length > 0) {
       findings.push(
         `${staleBuckets.length} learning-loop bucket(s) have stale last_reviewed dates: ${staleBuckets
@@ -207,6 +237,7 @@ const decisionsTracked: HarnessCheck = {
   run: (ctx) => {
     const { decisions } = ctx.facts.shared;
     const details = decisionsFreshnessDetails(ctx);
+    // Without a decision directory, major project choices have no durable recovery path.
     if (!decisions.dirExists) {
       return fail(
         ["No decisions directory"],

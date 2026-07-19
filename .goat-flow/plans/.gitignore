@@ -1,4 +1,4 @@
-# Ignore all tasks contents except the anchor files.
+# Ignore all plans contents except the anchor files.
 # Milestone files and plan subdirs are local session state by design.
 *
 !.gitignore

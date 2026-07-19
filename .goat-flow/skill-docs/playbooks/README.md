@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Skill Playbooks
 
@@ -24,19 +24,18 @@ For shared meta-references composed into every skill (preamble, conventions), se
 | [`observability.md`](./observability.md) | Instrumenting code with logs, metrics, span events, or trace context: severity, structured fields, naming, cardinality budget, sensitive-data rules, and the log-vs-metric decision | n/a (instrumentation discipline) |
 | [`code-comments.md`](./code-comments.md) | Writing or editing source code: user-perspective doc comments, self-documenting names, context comments above branches/loops/null checks, null/empty tag meaning, journey anchors, TODO/FIXME/HACK markers, and concise comment cleanup | n/a (commenting discipline) |
 | [`gruff-code-quality.md`](./gruff-code-quality.md) | Running `gruff-go`, `gruff-rs`, `gruff-ts`, `gruff-php`, or `gruff-py`; triaging findings and verifying analyzer-driven cleanup without low-value comments or suppressions | gruff CLI family |
+| [`hook-policy-testing.md`](./hook-policy-testing.md) | Verifying deny-hook policy, paired blocked/allowed command grammar, source/install parity, and central agent registration after hook changes | `deny-dangerous.sh --self-test` and `--check` |
 | [`changelog.md`](./changelog.md) | Writing or editing `CHANGELOG.md`: Keep a Changelog categories, SemVer alignment, breaking-change markers and migration paths, write-at-commit vs write-at-release cadence, version-surface sync | n/a (changelog discipline) |
 | [`release-notes.md`](./release-notes.md) | Writing a per-release narrative for end users (GitHub release body, blog post, email, in-app banner, social): theme identification, user-impact lens, inverted-pyramid structure, multi-surface consistency. Derives from `changelog.md` | n/a (release-notes discipline) |
+| [`skill-playbook-authoring-sync.md`](./skill-playbook-authoring-sync.md) | Adding or materially editing a built-in playbook while keeping source/install mirrors, discovery, audit registration, and manifest ownership aligned | n/a (playbook-authoring discipline) |
 
 ## Adding a new playbook
 
-When you add a new tool to the project that future agents need to discover:
-
-1. Drop a `<tool>.md` file in this directory.
-2. Start with a YAML frontmatter block that includes `goat-flow-reference-version`.
-3. Include a grep-findable `## Availability Check` section before any workflow that depends on a tool. For runnable tools/capabilities, include an exact shell-runnable verification command; for non-runnable authoring references, state the load condition and why no CLI check applies.
-4. Include the boundary, workflow, fallback/troubleshooting, and verification gate an agent needs to apply the playbook without inherited context.
-5. Add a row to the table above so the index stays complete.
-6. Check the current reference-pack budget tier before adding content: top-level playbooks in this directory are progressive references and must stay under 3000 body words.
+Before adding or materially editing a built-in playbook, load
+[`skill-playbook-authoring-sync.md`](./skill-playbook-authoring-sync.md). It owns
+the frontmatter, first-H2, bundling, README, audit-registration, manifest, and
+verification contract. Keep top-level progressive references below 3,000 body
+words and add the discovery row above in both README mirrors.
 
 ## Admission checklist
 

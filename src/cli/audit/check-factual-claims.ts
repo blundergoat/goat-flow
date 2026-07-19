@@ -1,18 +1,12 @@
 /**
- * Factual-claim extraction for cold-path docs.
- *
- * Catches the documented failure class from `.goat-flow/learning-loop/lessons/verification.md`
- * ("Structural audit passing hides cold-path content drift"): README/doc prose
- * that claims wrong skill counts, wrong check counts, or points at files that
- * no longer exist. All counts compared against the code constants that are the
- * single source of truth.
- *
- * Scope per milestone Assumption: `README.md`, `CONTRIBUTING.md`, `docs/*.md`,
- * `.goat-flow/architecture.md`, `.goat-flow/code-map.md`. Lesson and footgun
- * files legitimately discuss historical counts in prose - excluded.
+ * Factual-claim extraction for current, user-facing documentation.
+ * Use under `audit --check-content` to catch stale counts, paths, lifetime
+ * claims, and removed commands before users copy invalid guidance.
+ * Historical learning-loop records stay outside this current-guidance scan.
  */
 import type { AuditContext, ContentFinding } from "./types.js";
 import { getSkillNames } from "../constants.js";
+import { REMOVED_COMMANDS as CLI_REMOVED_COMMANDS } from "../cli-types.js";
 import { SETUP_CHECKS } from "./check-goat-flow.js";
 import { AGENT_CHECKS } from "./check-agent-setup.js";
 import { HARNESS_CHECKS } from "./harness/index.js";
@@ -174,7 +168,12 @@ const COUNT_CHECKS: CountClaimCheck[] = [
   },
   {
     rule: "harness-check-count-drift",
-    pattern: /\b(\d+)\s+checks\s+across\s+\d+\s+concerns\b/gi,
+    // Tolerates adjectives between the count and "checks" (code-map.md says
+    // "N advisory/integrity/metric checks") and "the N harness concerns"
+    // phrasing. Also covers the harness-specific inventory wording used by
+    // audit-checks.md, including Markdown-bold counts.
+    pattern:
+      /\b(\d+)(?:\*\*)?\s+(?:(?:[\w/-]+\s+){0,3}checks\s+across\s+(?:the\s+)?\d+\s+(?:harness\s+)?concerns|deterministic\s+harness-completeness\s+checks?)\b/gi,
     /** Return the live harness checks across 5 concerns count. */
     actual: () => HARNESS_CHECKS.length,
     label: "harness checks across 5 concerns",
@@ -245,7 +244,7 @@ interface RemovedCommand {
 /** CLI commands that were deliberately removed. Docs must not teach them.
  *  Unlike count/path checks, this scanner runs on fenced lines too, because
  *  the most common failure is copy-pasted command examples inside fences. */
-const REMOVED_COMMANDS: RemovedCommand[] = [
+const REMOVED_COMMAND_CHECKS: RemovedCommand[] = [
   {
     rule: "removed-command-quality-capture",
     // Match the fully-qualified form (`goat-flow quality capture`) and the
@@ -254,6 +253,14 @@ const REMOVED_COMMANDS: RemovedCommand[] = [
     message:
       "`goat-flow quality capture` was removed in v1.2.0; agents now write reports directly to `.goat-flow/logs/quality/`.",
   },
+  ...Object.entries(CLI_REMOVED_COMMANDS).map(([command, message]) => ({
+    rule: `removed-command-${command}`,
+    pattern: new RegExp(
+      `(?:\`goat-flow\\s+${command}(?=\\s|\`)[^\`]*\`|^\\s*(?:\\$\\s*)?goat-flow\\s+${command}(?=\\s|$))`,
+      "g",
+    ),
+    message,
+  })),
 ];
 
 /**
@@ -270,14 +277,20 @@ const REMOVED_COMMANDS: RemovedCommand[] = [
 function scanRemovedCommands(
   path: string,
   text: string,
-  removed: RemovedCommand[] = REMOVED_COMMANDS,
+  removed: RemovedCommand[] = REMOVED_COMMAND_CHECKS,
 ): ContentFinding[] {
   const findings: ContentFinding[] = [];
   const lines = text.split(/\r?\n/);
+
+  // Each current documentation line may teach a command the CLI no longer accepts.
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
+
+    // Every retired command pattern carries its parser-backed migration guidance.
     for (const cmd of removed) {
       const rx = new RegExp(cmd.pattern.source, cmd.pattern.flags);
+
+      // A matched command would send the user down a removed CLI path.
       if (rx.test(line)) {
         findings.push({
           severity: "warning",
@@ -577,8 +590,14 @@ export function runFactualClaimChecks(ctx: AuditContext): {
     findings.push(...scanRemovedCommands(rel, text));
     findings.push(...scanLifetimeClaimEvidence(rel, text));
   }
+  // The glossary gets count and removed-command scans only: its deprecated-term
+  // entries ("Removed in v1.1.0") would false-positive the path-reference and
+  // lifetime-claim scans that full PROSE_TARGETS members receive.
   const glossary = ctx.fs.readFile(GLOSSARY_TARGET);
   if (glossary !== null) {
+    filesScanned++;
+    findings.push(...scanCountClaims(GLOSSARY_TARGET, glossary));
+    findings.push(...scanConcernCountClaims(GLOSSARY_TARGET, glossary));
     findings.push(...scanRemovedCommands(GLOSSARY_TARGET, glossary));
   }
   // Dashboard-specific loose patterns (safe only on dashboard docs).

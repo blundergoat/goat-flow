@@ -1,5 +1,7 @@
 /**
- * Unit tests for selecting and rendering learning-loop context snippets.
+ * Verifies which durable memories prompt users receive and why.
+ * Use these fixtures to protect ranking, byte budgets, stale-reference handling,
+ * and the stable metadata defaults shared with stats and dashboard consumers.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -9,21 +11,33 @@ import {
   selectLearningLoopContext,
 } from "../../src/cli/prompt/learning-loop-context.js";
 
-function entry(
+/**
+ * Build one complete memory fact for a prompt-selection scenario.
+ * Use when a test needs one user-visible override without repeating stable metadata defaults.
+ */
+function memoryEntry(
   overrides: Partial<LearningLoopEntryFact> & {
     title: string;
     kind?: LearningLoopEntryFact["kind"];
   },
 ): LearningLoopEntryFact {
-  const kind = overrides.kind ?? "footgun";
+  // An omitted kind models the most common active-hazard memory shown to users.
+  const memoryKind = overrides.kind ?? "footgun";
   return {
-    sourcePath: `.goat-flow/${kind}s/${overrides.title.toLowerCase().replace(/\s+/g, "-")}.md`,
-    kind,
+    sourcePath: `.goat-flow/${memoryKind}s/${overrides.title.toLowerCase().replace(/\s+/g, "-")}.md`,
+    kind: memoryKind,
     title: overrides.title,
-    status: kind === "footgun" ? "active" : null,
+    // Footgun fixtures use the hazard heading users see; lesson fixtures use the lesson heading.
+    heading: `## ${memoryKind === "footgun" ? "Footgun" : "Lesson"}: ${overrides.title}`,
+    // Only footguns have an active/resolved status in the current authoring contract.
+    status: memoryKind === "footgun" ? "active" : null,
     created: "2026-05-01",
     updated: null,
     resolved: null,
+    hasDecisionChangedGuidance: true,
+    triggerPhase: null,
+    incidentCount: null,
+    latestOccurrence: null,
     excerpt: `${overrides.title} excerpt with compact evidence.`,
     staleRefs: [],
     invalidLineRefs: [],
@@ -38,8 +52,8 @@ describe("selectLearningLoopContext", () => {
   it("excludes resolved footguns from normal curated context", () => {
     const selection = selectLearningLoopContext({
       learningLoopEntries: [
-        entry({ title: "active trap" }),
-        entry({
+        memoryEntry({ title: "active trap" }),
+        memoryEntry({
           title: "resolved trap",
           status: "resolved",
           resolved: "2026-05-02",
@@ -57,11 +71,11 @@ describe("selectLearningLoopContext", () => {
     const selection = selectLearningLoopContext(
       {
         learningLoopEntries: [
-          entry({ title: "trap one", order: 1 }),
-          entry({ title: "trap two", order: 2 }),
-          entry({ title: "trap three", order: 3 }),
-          entry({ title: "lesson one", kind: "lesson", order: 4 }),
-          entry({ title: "lesson two", kind: "lesson", order: 5 }),
+          memoryEntry({ title: "trap one", order: 1 }),
+          memoryEntry({ title: "trap two", order: 2 }),
+          memoryEntry({ title: "trap three", order: 3 }),
+          memoryEntry({ title: "lesson one", kind: "lesson", order: 4 }),
+          memoryEntry({ title: "lesson two", kind: "lesson", order: 5 }),
         ],
       },
       {
@@ -84,7 +98,7 @@ describe("selectLearningLoopContext", () => {
   });
 
   it("excludes stale refs normally but surfaces them in maintenance mode", () => {
-    const stale = entry({
+    const stale = memoryEntry({
       title: "stale trap",
       staleRefs: ["src/missing.ts"],
     });
@@ -106,8 +120,16 @@ describe("selectLearningLoopContext", () => {
     const selection = selectLearningLoopContext(
       {
         learningLoopEntries: [
-          entry({ title: "long trap one", excerpt: longExcerpt, order: 1 }),
-          entry({ title: "long trap two", excerpt: longExcerpt, order: 2 }),
+          memoryEntry({
+            title: "long trap one",
+            excerpt: longExcerpt,
+            order: 1,
+          }),
+          memoryEntry({
+            title: "long trap two",
+            excerpt: longExcerpt,
+            order: 2,
+          }),
         ],
       },
       { maxBytes: 620, perEntryMaxBytes: 220 },
@@ -122,14 +144,18 @@ describe("selectLearningLoopContext", () => {
 
   it("orders repeated selections deterministically", () => {
     const learningLoopEntries = [
-      entry({
+      memoryEntry({
         title: "newer lesson",
         kind: "lesson",
         created: "2026-05-03",
         order: 3,
       }),
-      entry({ title: "anchored trap", created: "2026-05-01", order: 2 }),
-      entry({ title: "older lesson", kind: "lesson", order: 1 }),
+      memoryEntry({
+        title: "anchored trap",
+        created: "2026-05-01",
+        order: 2,
+      }),
+      memoryEntry({ title: "older lesson", kind: "lesson", order: 1 }),
     ];
 
     const first = selectLearningLoopContext({ learningLoopEntries });

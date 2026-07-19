@@ -1,5 +1,5 @@
 /**
- * Implements the `hooks` command family (list / sync / enable / disable) for the CLI.
+ * Implements the `hooks` command family (list / sync / enable / disable / verify) for the CLI.
  * It is a thin presentation+validation layer over the server-side hook registrar: it lazy-imports
  * the registrar so the heavy module only loads when a hooks command actually runs, picks JSON vs
  * the compact text table from `--format`, and translates the registrar's typed errors into
@@ -68,6 +68,44 @@ function renderHookToggleResult(options: ParsedCLI, hook: unknown): void {
 }
 
 /**
+ * Run and render the explicit managed-hook proof selected by a terminal or CI user.
+ * A failed or unavailable proof keeps its structured report on stdout and sets exit 1.
+ *
+ * @param options - Parsed hook request; agent and scenario must be non-null and supported.
+ * @returns Nothing; the user receives the report through stdout and the process exit code.
+ * @throws CLIError When the agent or fixed scenario choice is missing or invalid.
+ */
+async function handleHookVerification(options: ParsedCLI): Promise<void> {
+  // Runtime evidence must name one agent so support and registration state stay unambiguous.
+  if (options.agent === null) {
+    throw new CLIError("hooks verify requires --agent <id>.", 2);
+  }
+  // Direct callers must select the only bounded scenario group shipped in this release.
+  if (options.hookScenario !== "deny-hook") {
+    throw new CLIError('hooks verify requires --scenario "deny-hook".', 2);
+  }
+  const {
+    renderHookRuntimeReportJson,
+    renderHookRuntimeReportText,
+    verifyManagedDenyHook,
+  } = await import("./hooks-runtime-evidence.js");
+  const report = verifyManagedDenyHook({
+    projectPath: options.projectPath,
+    agent: options.agent,
+    scenarioGroup: options.hookScenario,
+    isTargetUntrusted: options.isTargetUntrusted,
+  });
+  writeOutput(
+    options,
+    options.format === "json"
+      ? renderHookRuntimeReportJson(report)
+      : renderHookRuntimeReportText(report),
+  );
+  // CI must receive failure when any requested scenario lacks matching recorded proof.
+  if (report.status === "fail") process.exitCode = 1;
+}
+
+/**
  * Handle the hooks command, dispatching list/sync/enable/disable to the lazily-imported registrar.
  * Reports registrar failures as CLIErrors: a HookRegistrarError 404 (unknown hook) throws exit 2,
  * any other registrar error throws exit 1, and non-registrar errors are rethrown unchanged. An
@@ -107,6 +145,9 @@ export async function handleHooksCommand(options: ParsedCLI): Promise<void> {
           ),
         );
         return;
+      case "verify":
+        await handleHookVerification(options);
+        return;
     }
   } catch (err) {
     if (err instanceof HookRegistrarError) {
@@ -116,7 +157,7 @@ export async function handleHooksCommand(options: ParsedCLI): Promise<void> {
   }
 
   throw new CLIError(
-    "Usage: goat-flow hooks <list|sync|enable <hook-id>|disable <hook-id>> [path]",
+    "Usage: goat-flow hooks <list|sync|enable <hook-id>|disable <hook-id>|verify> [path] [--agent <id>]",
     2,
   );
 }

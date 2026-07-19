@@ -92,7 +92,9 @@ The user's point: "if it wasn't for that we wouldn't have found the better name.
 
 **What happened:** Earlier skill templates said "If `.goat-flow/logs/` exists → write session summary" in a closing protocol that fired after every skill run. A goat-review audit ran the full skill process but no session log was written. 0% compliance. The instruction fired at the END of a skill - after the agent had already delivered output and was mentally "done."
 
-**Current contract** (per `skill-preamble.md` + `skill-conventions.md`, post-2026-04-18): session logs are OPTIONAL continuity notes. Write one only when (a) `/compact` fires without an active milestone file, or (b) a milestone sequence completes. Otherwise skip - the old blanket "every invocation" rule is retired.
+**Current contract** (per `skill-preamble.md` + `skill-conventions.md`, post-2026-04-18): session logs are OPTIONAL continuity notes. Write one only when (a) `/compact` fires without an active milestone file, or (b) the human explicitly requests a session summary. Otherwise skip - the old blanket "every invocation" rule is retired.
+
+**Recurrence 2026-07-17:** `.goat-flow/glossary.md` (search: `| Handoff |`) still called the entire handoff concept deprecated, while `Working Memory` made every `/compact` write a session log. The glossary now distinguishes the retired mandatory workflow from the current optional redacted receipt; `test/contract/skill-hardening-contracts.test.ts` (search: `keeps glossary continuity terms aligned with the conditional session-log contract`) pins the condition.
 
 **Prevention:** Do not put a "write a session log" bullet in every skill's closing protocol. Keep the conditional phrasing in `skill-preamble.md` / `skill-conventions.md` and let skills opt in via the Milestone Retrospective pattern. The Notification/compact hook that was meant to mechanize this was silently dead (see `.goat-flow/learning-loop/footguns/hooks.md` Resolved Entries 2026-04-19) - don't revive that approach.
 
@@ -123,6 +125,8 @@ The user's point: "if it wasn't for that we wouldn't have found the better name.
 **Created:** 2026-04-22
 
 **What happened:** During a quality follow-up, the agent treated the active-plan marker pointing at a missing subdir as a MAJOR setup defect. The user corrected that the active marker is local working state: its target can disappear when a project completes, can change multiple times a day as users switch projects, or can be irrelevant when the user is only using goat-flow for bug work. The same review treated `/goat-critique` writing gitignored critique logs as a read-only violation. The user corrected the contract: read-only/reporting work means no committed-file changes and no implementation, not "never write gitignored continuity logs or task checkboxes."
+
+**Recurrence 2026-07-17:** `.goat-flow/skill-docs/skill-preamble.md` (search: `If stale, emit`) required `goat-flow index` whenever an index was stale, even during reporting-only work; `generateIndexes` writes tracked `INDEX.md` files. The preamble now defers regeneration in reporting-only/read-only/no-write/no-implementation modes, guarded by `test/contract/skill-hardening-contracts.test.ts` (search: `defers stale-index regeneration when committed writes are forbidden`).
 
 **Root cause:** The agent applied generic quality-report assumptions without first checking goat-flow's persistence tiers and local-state semantics. It judged stale local pointers and gitignored continuity writes as setup defects instead of asking whether the skill handles them gracefully and whether committed state changes.
 

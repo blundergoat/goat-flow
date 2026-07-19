@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { createFS } from "../../src/cli/facts/fs.js";
 import {
   extractFootgunFacts,
+  extractLearningLoopEntries,
   extractLessonsFacts,
 } from "../../src/cli/facts/shared/learning-loop.js";
 import {
@@ -29,7 +30,11 @@ import type {
   GoatFlowConfig,
 } from "../../src/cli/config/types.js";
 
-/** Build a valid loaded config because stats fixtures only need a few targeted overrides. */
+/**
+ * Build valid selected-project config for one stats scenario.
+ * Use targeted overrides when the test needs a different path; empty overrides keep user defaults.
+ * The full shape exists because extraction requires canonical config; fixed defaults isolate failures.
+ */
 function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
   return {
     exists: true,
@@ -67,61 +72,98 @@ function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
   };
 }
 
-/** Build a throw-away repo containing footgun + lesson buckets and return its root path. */
+/**
+ * Build a disposable project with the memory buckets a stats user would inspect.
+ * Use when a test needs real filesystem extraction; absent decisions create an empty directory.
+ */
 function makeFixtureRepo(spec: {
   footguns: Record<string, string>;
   lessons: Record<string, string>;
   decisions?: Record<string, string>;
 }): string {
-  const root = mkdtempSync(join(tmpdir(), "goatflow-stats-"));
-  const footgunsDir = join(root, ".goat-flow/learning-loop/footguns");
-  const lessonsDir = join(root, ".goat-flow/learning-loop/lessons");
-  const decisionsDir = join(root, ".goat-flow/learning-loop/decisions");
-  mkdirSync(footgunsDir, { recursive: true });
-  mkdirSync(lessonsDir, { recursive: true });
-  mkdirSync(decisionsDir, { recursive: true });
-  for (const [name, body] of Object.entries(spec.footguns)) {
-    writeFileSync(join(footgunsDir, name), body);
+  const fixtureProjectRoot = mkdtempSync(join(tmpdir(), "goatflow-stats-"));
+  const footgunDirectory = join(
+    fixtureProjectRoot,
+    ".goat-flow/learning-loop/footguns",
+  );
+  const lessonDirectory = join(
+    fixtureProjectRoot,
+    ".goat-flow/learning-loop/lessons",
+  );
+  const decisionDirectory = join(
+    fixtureProjectRoot,
+    ".goat-flow/learning-loop/decisions",
+  );
+  mkdirSync(footgunDirectory, { recursive: true });
+  mkdirSync(lessonDirectory, { recursive: true });
+  mkdirSync(decisionDirectory, { recursive: true });
+  // Each footgun fixture becomes a real bucket the selected-project extractor can discover.
+  for (const [bucketFilename, bucketContent] of Object.entries(spec.footguns)) {
+    writeFileSync(join(footgunDirectory, bucketFilename), bucketContent);
   }
-  for (const [name, body] of Object.entries(spec.lessons)) {
-    writeFileSync(join(lessonsDir, name), body);
+  // Each lesson fixture becomes a real bucket the stats user would see.
+  for (const [bucketFilename, bucketContent] of Object.entries(spec.lessons)) {
+    writeFileSync(join(lessonDirectory, bucketFilename), bucketContent);
   }
-  for (const [name, body] of Object.entries(spec.decisions ?? {})) {
-    writeFileSync(join(decisionsDir, name), body);
+  // Omitted decisions model a user project with an empty but valid decision directory.
+  const decisionFixtures = spec.decisions ?? {};
+  // Each decision fixture becomes a real ADR row for structure validation.
+  for (const [decisionFilename, decisionContent] of Object.entries(
+    decisionFixtures,
+  )) {
+    writeFileSync(join(decisionDirectory, decisionFilename), decisionContent);
   }
-  return root;
+  return fixtureProjectRoot;
 }
 
 const pinnedNow = new Date("2026-04-18T12:00:00Z");
-const disposables: string[] = [];
+const disposableProjectDirectories: string[] = [];
 
 after(() => {
-  for (const dir of disposables) rmSync(dir, { recursive: true, force: true });
+  // Every temporary project is removed so the test runner leaves no user-visible workspace debris.
+  for (const disposableProjectDirectory of disposableProjectDirectories) {
+    rmSync(disposableProjectDirectory, { recursive: true, force: true });
+  }
 });
 
-/** Load a stats report from a seeded learning-loop fixture repo. */
+/**
+ * Load a complete stats report from one seeded project fixture.
+ * Use when tests need the same extraction and report path a CLI user triggers.
+ */
 function loadReport(spec: Parameters<typeof makeFixtureRepo>[0]) {
-  const root = makeFixtureRepo(spec);
-  disposables.push(root);
-  const fs = createFS(root);
-  const config = stubConfig();
+  const fixtureProjectRoot = makeFixtureRepo(spec);
+  disposableProjectDirectories.push(fixtureProjectRoot);
+  const projectFiles = createFS(fixtureProjectRoot);
+  const configState = stubConfig();
   return buildStatsReport({
-    footguns: extractFootgunFacts(fs, config, pinnedNow),
-    lessons: extractLessonsFacts(fs, config, pinnedNow),
-    decisions: buildDecisionsSection(fs, config.config.decisions.path),
+    footguns: extractFootgunFacts(projectFiles, configState, pinnedNow),
+    lessons: extractLessonsFacts(projectFiles, configState, pinnedNow),
+    decisions: buildDecisionsSection(
+      projectFiles,
+      configState.config.decisions.path,
+    ),
+    learningLoopEntries: extractLearningLoopEntries(projectFiles, configState),
   });
 }
 
-/** Load a stats report when the learning-loop directories are absent. */
+/**
+ * Load a stats report for a project whose memory directories are absent.
+ * Use when a test verifies the setup failure a user sees before goat-flow initialization.
+ */
 function loadReportWithoutLoopDirs() {
-  const root = mkdtempSync(join(tmpdir(), "goatflow-stats-missing-"));
-  disposables.push(root);
-  const fs = createFS(root);
-  const config = stubConfig();
+  const fixtureProjectRoot = mkdtempSync(
+    join(tmpdir(), "goatflow-stats-missing-"),
+  );
+  disposableProjectDirectories.push(fixtureProjectRoot);
+  const projectFiles = createFS(fixtureProjectRoot);
+  const configState = stubConfig();
   return buildStatsReport({
-    footguns: extractFootgunFacts(fs, config, pinnedNow),
-    lessons: extractLessonsFacts(fs, config, pinnedNow),
-    decisions: buildDecisionsSection(fs, config.config.decisions.path),
+    footguns: extractFootgunFacts(projectFiles, configState, pinnedNow),
+    lessons: extractLessonsFacts(projectFiles, configState, pinnedNow),
+    decisions: buildDecisionsSection(
+      projectFiles,
+      configState.config.decisions.path,
+    ),
   });
 }
 
@@ -157,6 +199,91 @@ describe("goat-flow stats - happy path", () => {
 
     const json = JSON.parse(renderStatsJson(report));
     assert.equal(json.footguns.totalEntries, expectedFootgunEntries);
+  });
+
+  it("recognizes the three canonical footgun evidence labels", () => {
+    const fixtureProjectRoot = makeFixtureRepo({
+      footguns: {
+        "evidence.md":
+          "---\ncategory: evidence\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: measured\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\n**Evidence:** `src/measured.ts` (search: `measured`) - reproduced.\n\n## Footgun: observed\n\n**Status:** active | **Evidence:** OBSERVED\n\n- `src/observed.ts` (search: `observed`) - read directly.\n\n## Footgun: external\n\n**Status:** active | **Evidence:** EXTERNAL_REFERENCE\n\n- `docs/external.md` (search: `external`) - cited source with local applicability.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(fixtureProjectRoot);
+
+    const facts = extractFootgunFacts(
+      createFS(fixtureProjectRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(facts.entryCount, 3);
+    assert.equal(facts.labelCount, 3);
+    assert.equal(facts.hasEvidenceLabels, true);
+
+    const invalidFixtureRoot = makeFixtureRepo({
+      footguns: {
+        "legacy.md":
+          "---\ncategory: legacy\nlast_reviewed: 2026-04-18\n---\n\n# Legacy footgun\n\n**Evidence type:** HYPOTHETICAL_EXAMPLE\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(invalidFixtureRoot);
+    const invalidFacts = extractFootgunFacts(
+      createFS(invalidFixtureRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(invalidFacts.labelCount, 0);
+    assert.equal(invalidFacts.hasEvidenceLabels, false);
+
+    const multiLabelFixtureRoot = makeFixtureRepo({
+      footguns: {
+        "copied-template.md":
+          "---\ncategory: copied-template\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: copied all labels\n\n**Evidence:** ACTUAL_MEASURED | OBSERVED | EXTERNAL_REFERENCE\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(multiLabelFixtureRoot);
+    const multiLabelFacts = extractFootgunFacts(
+      createFS(multiLabelFixtureRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(multiLabelFacts.labelCount, 0);
+    assert.equal(multiLabelFacts.hasEvidenceLabels, false);
+
+    const lowercaseFixtureRoot = makeFixtureRepo({
+      footguns: {
+        "lowercase.md":
+          "---\ncategory: lowercase\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: lowercase label\n\n**Status:** active | **Evidence:** observed\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(lowercaseFixtureRoot);
+    const lowercaseFacts = extractFootgunFacts(
+      createFS(lowercaseFixtureRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(lowercaseFacts.labelCount, 0);
+    assert.equal(lowercaseFacts.hasEvidenceLabels, false);
+
+    const duplicateMaskFixtureRoot = makeFixtureRepo({
+      footguns: {
+        "duplicate-mask.md":
+          "---\ncategory: duplicate-mask\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: duplicate labels\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n**Evidence type:** OBSERVED\n\nBody.\n\n## Footgun: missing label\n\n**Status:** active\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    disposableProjectDirectories.push(duplicateMaskFixtureRoot);
+    const duplicateMaskFacts = extractFootgunFacts(
+      createFS(duplicateMaskFixtureRoot),
+      stubConfig(),
+      pinnedNow,
+    );
+    assert.equal(duplicateMaskFacts.entryCount, 2);
+    assert.equal(duplicateMaskFacts.labelCount, 0);
+    assert.equal(duplicateMaskFacts.hasEvidenceLabels, false);
   });
 });
 
@@ -205,11 +332,16 @@ describe("goat-flow stats - graduation candidates", () => {
     assert.ok(markdown.includes("verification.md :: beta (2 recurrences)"));
   });
 
-  it("stays report-only: --check passes while candidates exist", () => {
+  it("keeps recurrence candidates report-only without optional-metadata warning noise", () => {
     const verdict = checkStats(loadRecurrenceReport());
     assert.equal(verdict.status, "pass");
     assert.deepEqual(verdict.findings, []);
-    assert.deepEqual(verdict.warnings, []);
+    assert.equal(
+      verdict.warnings.filter((warning) => warning.rule === "memory-quality")
+        .length,
+      0,
+      "missing optional guidance must not turn every legacy bucket into a warning",
+    );
   });
 
   it("renders no graduation section when no entry has recurrence updates", () => {
@@ -231,6 +363,54 @@ describe("goat-flow stats - graduation candidates", () => {
 });
 
 describe("goat-flow stats --check", () => {
+  it("exposes legacy optional metadata in JSON without flooding warnings", () => {
+    const report = loadReport({
+      footguns: {
+        "quality.md":
+          "---\ncategory: quality\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: legacy alpha\n\n**Status:** active | **Created:** 2026-04-01 | **Evidence:** ACTUAL_MEASURED\n\n- `.goat-flow/learning-loop/footguns/quality.md` (search: `legacy alpha`) - live anchor.\n\n## Footgun: legacy beta\n\n**Status:** active | **Created:** 2026-04-02 | **Evidence:** ACTUAL_MEASURED\n\n- `.goat-flow/learning-loop/footguns/quality.md` (search: `legacy beta`) - live anchor.\n",
+      },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    const json = JSON.parse(renderStatsJson(report));
+
+    assert.equal(verdict.status, "pass");
+    assert.deepEqual(verdict.findings, []);
+    assert.equal(
+      verdict.warnings.filter((warning) => warning.rule === "memory-quality")
+        .length,
+      0,
+      "optional Decision changed backfill stays visible in JSON, not --check warnings",
+    );
+    assert.equal(json.learningLoopEntries.length, 2);
+    assert.equal(json.learningLoopEntries[0].hasDecisionChangedGuidance, false);
+  });
+
+  it("warns on invalid trigger and occurrence order without failing", () => {
+    const report = loadReport({
+      footguns: {},
+      lessons: {
+        "verification.md":
+          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: invalid recurrence metadata\n\n**Created:** 2026-04-10\n**Decision changed:** Re-run the original reproduction before closing.\n**Trigger phase:** DEPLOY\n**Latest occurrence:** 2026-04-09\n\nBody.\n",
+      },
+    });
+    const verdict = checkStats(report);
+
+    assert.equal(verdict.status, "pass");
+    assert.deepEqual(verdict.findings, []);
+    assert.ok(
+      verdict.warnings.some(
+        (warning) =>
+          warning.rule === "memory-quality" &&
+          warning.message.includes('invalid Trigger phase "DEPLOY"') &&
+          warning.message.includes(
+            "Latest occurrence 2026-04-09 predates Created 2026-04-10",
+          ),
+      ),
+      "expected both metadata issues in the bucket warning",
+    );
+  });
+
   it("passes when every bucket has valid last_reviewed and no stale refs", () => {
     const report = loadReport({
       footguns: {
@@ -245,6 +425,28 @@ describe("goat-flow stats --check", () => {
     const verdict = checkStats(report);
     assert.equal(verdict.status, "pass");
     assert.deepEqual(verdict.findings, []);
+  });
+
+  it("fails when footgun entries do not have exactly one canonical evidence label", () => {
+    const report = loadReport({
+      footguns: {
+        "labels.md":
+          "---\ncategory: labels\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: duplicate labels\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n**Evidence type:** OBSERVED\n\nBody.\n\n## Footgun: missing label\n\n**Status:** active\n\nBody.\n",
+      },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+
+    assert.equal(verdict.status, "fail");
+    assert.ok(
+      verdict.findings.some(
+        (finding) =>
+          finding.rule === "evidence-label" &&
+          finding.message.includes("labels.md") &&
+          finding.message.includes("0 of 2"),
+      ),
+      "expected a blocking per-bucket evidence-label diagnostic",
+    );
   });
 
   it("passes with warnings for fresh empty learning-loop directories", () => {
@@ -598,7 +800,11 @@ describe("goat-flow stats --check", () => {
     const verdict = checkStats(report);
     assert.equal(verdict.status, "pass");
     assert.deepEqual(verdict.findings, []);
-    assert.equal(verdict.warnings.length, 0);
+    assert.equal(
+      verdict.warnings.filter((warning) => warning.rule === "decision-metadata")
+        .length,
+      0,
+    );
   });
 
   it("passes when optional ADR metadata is missing", () => {
@@ -621,7 +827,11 @@ describe("goat-flow stats --check", () => {
     const verdict = checkStats(report);
     assert.equal(verdict.status, "pass");
     assert.deepEqual(verdict.findings, []);
-    assert.equal(verdict.warnings.length, 0);
+    assert.equal(
+      verdict.warnings.filter((warning) => warning.rule === "decision-metadata")
+        .length,
+      0,
+    );
   });
 
   it("fails when an active footgun has no file:line or (search:) evidence", () => {

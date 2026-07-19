@@ -1,13 +1,13 @@
 ---
 category: coordination
-last_reviewed: 2026-05-25
+last_reviewed: 2026-07-17
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
 
 **Status:** active | **Created:** 2026-05-25
 
-**What happened (external — mini-swe-agent PR #755, merged 2026-02-19, plus the conftest fixture pattern):** Tests modifying global state via env vars contaminated each other when CI ran in parallel. Mini's fix at `.goat-flow/scratchpad/related/mini-swe-agent/tests/conftest.py` wraps tests that touch `GLOBAL_MODEL_STATS` (a module-level singleton) with a threading lock + reset before AND after each test. PR #755 specifically — "Fix tests because of env var overwrite" — addressed tests setting `MSWEA_DOCKER_EXECUTABLE`, `MSWEA_SILENT_STARTUP`, etc. leaking into siblings that depended on those vars being unset. The flakiness was rank-ordering-dependent and invisible until a CI run reordered the affected pair.
+**What happened (external — mini-swe-agent PR #755, merged 2026-02-19, plus the conftest fixture pattern):** Tests modifying global state via env vars contaminated each other when CI ran in parallel. Mini's fix in the upstream mini-swe-agent repo at tests/conftest.py (search: `GLOBAL_MODEL_STATS`) wraps tests that touch `GLOBAL_MODEL_STATS` (a module-level singleton) with a threading lock + reset before AND after each test. PR #755 specifically — "Fix tests because of env var overwrite" — addressed tests setting `MSWEA_DOCKER_EXECUTABLE`, `MSWEA_SILENT_STARTUP`, etc. leaking into siblings that depended on those vars being unset. The flakiness was rank-ordering-dependent and invisible until a CI run reordered the affected pair.
 
 **Root cause:** Globals are shared across the test process. Pytest's per-test isolation does not extend to module-level state. Without explicit teardown, any test that writes a global leaks to every subsequent test in the same process. Parallel test runners that share a process surface this faster.
 
@@ -71,3 +71,17 @@ last_reviewed: 2026-05-25
 **Created:** 2026-05-01
 **What happened:** Programme headline stated ~33 weekends (council's estimate). Phase breakdowns summed to ~26. The gap was unexplained - some combination of CF items, overhead, and double-counted shared infrastructure. The headline lost legitimacy when the math didn't add up.
 **Prevention:** Future programme documents should show effort accounting explicitly: per-skill serial sum (~35.5 weekends), phased estimate (~31 weekends), and a note on why they differ (shared infrastructure counted once in phased estimate, per-consumer in serial). Set the headline to the phased estimate with the accounting visible.
+
+---
+
+## Lesson: Activate prerequisites before the numerically next milestone
+
+**Created:** 2026-07-13
+
+**What happened:** After M05 approval, M06 was marked in progress before its dependency header was read. M06 required M08 to land first, so both statuses had to be corrected before implementation.
+
+**Root cause:** Numeric ordering was treated as execution ordering without checking the next milestone's live dependency contract.
+
+**Evidence:** The 1.14.0 M06 durable-handoff-receipt milestone (local gitignored plan file - no durable anchor exists) declared "Depends on: M08 completed"; M06 was returned to pending and M08 activated first. This is a behavioral lesson; milestone files are local session state and must not be cited as durable anchors.
+
+**Prevention:** Before changing milestone statuses, read `Depends on` in the candidate and every unmet prerequisite. Activate the prerequisite, not the next number.

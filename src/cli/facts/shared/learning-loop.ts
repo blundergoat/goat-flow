@@ -24,7 +24,10 @@ import {
   summarizeFootgunRefs,
   summarizeLessonRefs,
 } from "./learning-loop-common.js";
-import { collectFootgunStructureDiagnostics } from "./learning-loop-sections.js";
+import {
+  collectFootgunStructureDiagnostics,
+  splitFootgunSections,
+} from "./learning-loop-sections.js";
 
 export {
   computeFreshness,
@@ -43,6 +46,24 @@ const LESSON_SURFACE_CANDIDATES = [
   "docs/lessons/",
   "docs/lessons.md",
 ];
+/** Exact evidence labels accepted by current learning-loop templates. */
+const CANONICAL_EVIDENCE_LABELS = new Set([
+  "ACTUAL_MEASURED",
+  "OBSERVED",
+  "EXTERNAL_REFERENCE",
+]);
+/** Label-like standalone values; narrative evidence text is not taxonomy metadata. */
+const EVIDENCE_LABEL_VALUE_PATTERN =
+  /^[A-Za-z_]+(?:[ \t]*\|[ \t]*[A-Za-z_]+)*$/;
+/** Evidence taxonomy value embedded in the required Status metadata line. */
+const STATUS_EVIDENCE_VALUE_PATTERN =
+  /^\*\*Status:\*\*.*?\*\*Evidence:\*\*[ \t]*(.+?)[ \t]*$/;
+/** Explicit legacy evidence-type metadata line. */
+const TYPED_EVIDENCE_VALUE_PATTERN =
+  /^\*\*Evidence[ \t]+type:\*\*[ \t]*(.+?)[ \t]*$/;
+/** Standalone Evidence line, accepted only when its value is label-shaped. */
+const STANDALONE_EVIDENCE_VALUE_PATTERN =
+  /^\*\*Evidence:\*\*[ \t]*(.+?)[ \t]*$/;
 
 /** Count `## Lesson:` or `## Pattern:` bucket entries in one markdown file. */
 function countLessonEntries(content: string): number {
@@ -61,14 +82,21 @@ function countFootgunEntries(content: string): number {
 /** Count footgun evidence labels so stats can compare labels to entry count. */
 function countFootgunLabels(content: string): number {
   const { body } = parseMarkdownFrontmatter(content);
-  const bucketCount = countMatches(body, /^##\s+Footgun:\s+/gm);
-  if (bucketCount > 0) {
-    return countMatches(
-      body,
-      /\*\*Evidence(?:\s+type)?:\*\*\s*(?:ACTUAL_MEASURED|DESIGN_TARGET|HYPOTHETICAL_EXAMPLE)/gim,
-    );
-  }
+  const sections = splitFootgunSections(body);
+  if (sections.length > 0)
+    return sections.filter((section) => hasEvidenceLabel(section.content))
+      .length;
   return hasEvidenceLabel(content) ? 1 : 0;
+}
+
+/** Explain a bucket whose entries do not each carry one canonical evidence label. */
+function getEvidenceLabelDiagnostic(
+  path: string,
+  entryCount: number,
+  labelCount: number,
+): string | null {
+  if (entryCount === 0 || labelCount === entryCount) return null;
+  return `${path}: invalid evidence-label count: ${labelCount} of ${entryCount} footgun entries have exactly one canonical evidence label`;
 }
 
 /** Accumulate directory mention counts from file references in markdown content. */
@@ -83,14 +111,50 @@ function mergeDirMentions(target: Map<string, number>, content: string): void {
   }
 }
 
-/** Detect whether a footgun entry declares an explicit evidence label. */
+/** Extract and normalize one captured metadata value. */
+function matchEvidenceValue(line: string, pattern: RegExp): string | null {
+  return line.match(pattern)?.[1]?.trim() || null;
+}
+
+/** Extract taxonomy metadata from one Markdown line without consuming narrative evidence. */
+function extractMarkdownEvidenceLabel(line: string): string | null {
+  const explicitValue =
+    matchEvidenceValue(line, STATUS_EVIDENCE_VALUE_PATTERN) ??
+    matchEvidenceValue(line, TYPED_EVIDENCE_VALUE_PATTERN);
+  if (explicitValue !== null) return explicitValue;
+
+  const standaloneValue = matchEvidenceValue(
+    line,
+    STANDALONE_EVIDENCE_VALUE_PATTERN,
+  );
+  return standaloneValue !== null &&
+    EVIDENCE_LABEL_VALUE_PATTERN.test(standaloneValue)
+    ? standaloneValue
+    : null;
+}
+
+/** Return every non-empty frontmatter or Markdown evidence-label declaration. */
+function extractEvidenceLabelValues(content: string): string[] {
+  const { frontmatter, body } = parseMarkdownFrontmatter(content);
+  const markdownValues = body
+    .split(/\r?\n/)
+    .map(extractMarkdownEvidenceLabel)
+    .filter((value): value is string => value !== null);
+  if (frontmatter === null) return markdownValues;
+
+  const frontmatterValue =
+    parseFrontmatterFields(frontmatter).evidence_type?.trim() || null;
+  return frontmatterValue === null
+    ? markdownValues
+    : [frontmatterValue, ...markdownValues];
+}
+
+/** Detect exactly one canonical evidence label on a footgun entry. */
 function hasEvidenceLabel(content: string): boolean {
+  const declaredValues = extractEvidenceLabelValues(content);
   return (
-    /^evidence_type:\s*.+$/im.test(content) ||
-    /^\*\*Evidence type:\*\*/m.test(content) ||
-    /\*\*Evidence:\*\*\s*(?:ACTUAL_MEASURED|DESIGN_TARGET|HYPOTHETICAL_EXAMPLE)/m.test(
-      content,
-    )
+    declaredValues.length === 1 &&
+    CANONICAL_EVIDENCE_LABELS.has(declaredValues[0] ?? "")
   );
 }
 
@@ -274,8 +338,9 @@ function summarizeFootgunEntries(
   for (const entry of entries) {
     const { content, path } = entry;
     const bucketEntryCount = countFootgunEntries(content);
+    const bucketLabelCount = countFootgunLabels(content);
     entryCount += bucketEntryCount;
-    labelCount += countFootgunLabels(content);
+    labelCount += bucketLabelCount;
     hasEvidence ||= hasFootgunEvidence(content);
     mergeDirMentions(dirMentions, content);
     const refSummary = summarizeFootgunRefs(fs, content);
@@ -285,6 +350,12 @@ function summarizeFootgunEntries(
     invalidLineRefs.push(...refSummary.invalidLineRefs);
     const diagnostic = getMissingFrontmatterDiagnostic(path, content);
     if (diagnostic) diagnostics.push(diagnostic);
+    const evidenceLabelDiagnostic = getEvidenceLabelDiagnostic(
+      path,
+      bucketEntryCount,
+      bucketLabelCount,
+    );
+    if (evidenceLabelDiagnostic) diagnostics.push(evidenceLabelDiagnostic);
     diagnostics.push(...collectFootgunStructureDiagnostics(path, content));
     buckets.push(
       buildBucketFreshness(
@@ -384,7 +455,7 @@ export function extractFootgunFacts(
     entryCount: summary.entryCount,
     labelCount: summary.labelCount,
     hasEvidenceLabels:
-      summary.entryCount > 0 && summary.labelCount >= summary.entryCount,
+      summary.entryCount > 0 && summary.labelCount === summary.entryCount,
     dirMentions: summary.dirMentions,
     staleRefs: summary.staleRefs,
     invalidLineRefs: summary.invalidLineRefs,

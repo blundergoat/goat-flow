@@ -1,6 +1,7 @@
 /**
  * Shared test fixtures for audit/quality tests.
- * Exports stubFS, stubConfig, stubAgentFacts, and pre-built project fixtures.
+ * Use these defaults to model a healthy selected project before one focused
+ * setup or harness condition is overridden for a user-visible assertion.
  */
 import type {
   AgentFacts,
@@ -12,29 +13,81 @@ import type {
   ProjectStructure,
   ReadonlyFS,
 } from "../../src.js";
-import { AUDIT_VERSION, getSkillNames } from "../../src.js";
+import {
+  AUDIT_VERSION,
+  getSkillNames,
+  REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS,
+} from "../../src.js";
 
 const HEALTHY_GOAT_FLOW_GITIGNORE = [
-  "*",
-  "!.gitignore",
-  "!config.yaml",
-  "!learning-loop/",
-  "!learning-loop/**",
-  "!skill-docs/",
-  "!skill-docs/**",
-  "!hooks/",
-  "!hooks/**",
-  "!plans/",
-  "!plans/**",
+  ...REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS,
   "",
 ].join("\n");
+
+const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
+  "browser-use.md",
+  "changelog.md",
+  "code-comments.md",
+  "gruff-code-quality.md",
+  "hook-policy-testing.md",
+  "observability.md",
+  "page-capture.md",
+  "release-notes.md",
+  "skill-playbook-authoring-sync.md",
+] as const;
+
+/** Render the default playbook index a healthy-project audit fixture exposes to users. */
+function healthyPlaybookReadme(): string {
+  const rows = HEALTHY_STANDALONE_PLAYBOOK_FILENAMES.map(
+    (filename) => `| [\`${filename}\`](./${filename}) | Fixture | n/a |`,
+  );
+  return `---
+goat-flow-reference-version: "${AUDIT_VERSION}"
+---
+# Skill Playbooks
+
+## Available playbooks
+
+${rows.join("\n")}
+`;
+}
+
+/** Render one versioned playbook with the first section users expect to load. */
+function healthyPlaybook(filename: string): string {
+  return `---
+goat-flow-reference-version: "${AUDIT_VERSION}"
+---
+# ${filename}
+
+## Availability Check
+
+Fixture capability is available.
+`;
+}
 
 // Test helper: a ReadonlyFS whose defaults describe a healthy project (a valid
 // .goat-flow/.gitignore, everything else empty/present). Pass overrides to
 // simulate the specific filesystem condition a check is meant to detect.
 export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   const defaultReadFile = (path: string): string | null => {
+    // The default project keeps committed goat-flow files visible to audit users.
     if (path === ".goat-flow/.gitignore") return HEALTHY_GOAT_FLOW_GITIGNORE;
+    // The playbook README lets agents discover every registered built-in reference.
+    if (path === ".goat-flow/skill-docs/playbooks/README.md") {
+      return healthyPlaybookReadme();
+    }
+    const playbookFilename = path.split("/").at(-1);
+    // Registered playbooks default to the contract shape unless a test overrides them.
+    if (
+      path.startsWith(".goat-flow/skill-docs/playbooks/") &&
+      playbookFilename !== undefined &&
+      HEALTHY_STANDALONE_PLAYBOOK_FILENAMES.includes(
+        playbookFilename as (typeof HEALTHY_STANDALONE_PLAYBOOK_FILENAMES)[number],
+      )
+    ) {
+      return healthyPlaybook(playbookFilename);
+    }
+    // Required hook fixtures carry the current version users receive from setup.
     if (
       [
         ".goat-flow/hooks/deny-dangerous.sh",
@@ -50,6 +103,7 @@ export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
     readFile: defaultReadFile,
     lineCount: () => 0,
     readJson: () => null,
+    isReadableDirectory: () => true,
     listDir: () => [],
     isExecutable: () => false,
     glob: () => [],

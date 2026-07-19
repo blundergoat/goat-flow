@@ -30,7 +30,7 @@ npm install --save-dev @blundergoat/goat-flow    # npm
 then run this for the dashboard:
 
 ```bash
-npx goat-flow dashboard .
+npm exec --package=@blundergoat/goat-flow -- goat-flow dashboard .
 ```
 
 For the dashboard's embedded terminal, you'll need `node-pty` to compile. See [Troubleshooting](#troubleshooting) if the terminal doesn't appear.
@@ -124,9 +124,12 @@ For a brand new project, copy the goat-flow system files first. This step is det
 
 ```bash
 npx @blundergoat/goat-flow@latest install . --agent claude
+npx @blundergoat/goat-flow@latest install . --agent claude --dry-run
 ```
 
-Use `--force` only when you want to overwrite existing settings, `.goat-flow/config.yaml`, and remove deprecated skills. For outdated or v0.9 projects, the installer automatically updates the config version and cleans deprecated skill directories.
+The manifest labels each installed file as system-owned, user-owned, generated, deprecated, or external. `--dry-run` previews source-backed managed templates and selected-agent skills without invoking the installer; normal CLI installs block local managed edits, deletions, and unknown baselines until you inspect them. System files then refresh from canonical sources while user-owned and external files stay untouched by default. Use `--force` only when you explicitly accept managed content conflicts and may also replace user-owned settings, config, policies, or other seeded guidance; it cannot bypass symlinked, non-regular, or unreadable target paths. For outdated or v0.9 projects, the installer automatically updates the config version and cleans deprecated skill directories.
+
+Installer replacements are atomic per file: goat-flow completes copied or transformed bytes beside the destination, then renames the finished payload into place. A failed copy, interruption, or rename preserves the previous file and does not fall back to a partial copy. This is a per-file guarantee, not an all-or-nothing transaction across the entire installation; if a later file fails, earlier completed replacements remain applied and the error names what to inspect.
 
 The installer keeps `.goat-flow/config.yaml` free of agent allowlists by default. Dashboard Home and aggregate `goat-flow audit .` read the supported agent registry from `workflow/manifest.json`, so they always show or check the current manifest-backed setup status. Use `--agent <id>` when you intentionally want one agent.
 
@@ -165,17 +168,23 @@ Run `npx @blundergoat/goat-flow@latest manifest` to inspect the live agent matri
 The dashboard covers most workflows visually. For CI or scripting, the same features are available as CLI commands:
 
 ```bash
-npx goat-flow dashboard .                  # Launch the dashboard
-npx goat-flow audit .                      # Run audit (pass/fail output)
-npx goat-flow audit . --harness            # Add AI harness scoring
-npx goat-flow audit . --format json        # JSON output for CI
-npx goat-flow audit . --format sarif       # SARIF output for code scanning upload
-npx goat-flow install . --agent claude     # Copy/update system files
-npx goat-flow setup . --agent claude       # Generate setup prompt
-npx goat-flow quality . --agent claude     # Generate quality-assessment prompt
-npx goat-flow status .                     # Project state (bare/partial/v0.9/outdated/current/error)
-npx goat-flow manifest                     # Agent support matrix
+npx @blundergoat/goat-flow@latest dashboard .                  # Launch the dashboard
+npx @blundergoat/goat-flow@latest audit .                      # Run audit (pass/fail output)
+npx @blundergoat/goat-flow@latest audit . --harness            # Add AI harness scoring
+npx @blundergoat/goat-flow@latest audit . --format json        # JSON output for CI
+npx @blundergoat/goat-flow@latest audit . --format sarif       # SARIF output for code scanning upload
+npx @blundergoat/goat-flow@latest install . --agent claude     # Copy/update system files
+npx @blundergoat/goat-flow@latest setup . --agent claude       # Generate setup prompt
+npx @blundergoat/goat-flow@latest quality . --agent claude     # Generate quality-assessment prompt
+npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format markdown
+npx @blundergoat/goat-flow@latest status .                     # Project state (bare/partial/v0.9/outdated/current/error)
+npx @blundergoat/goat-flow@latest manifest                     # Agent support matrix
 ```
+
+Use `redact` before saving a session, handoff, review, quality, security, or export draft. It replaces common credential shapes while preserving useful continuation context; it is not perfect DLP or a substitute for reviewing the output.
+
+For interrupted work without an active milestone, `.goat-flow/logs/sessions/README.md` provides the optional handoff receipt schema. Run the command, paste the receipt into stdin, and send EOF so raw text is scrubbed before the output file is created.
 
 The dashboard prints a tokenized localhost URL. Open that URL from the terminal output; the token is process-local and is removed from the visible address bar after the page boots.
 

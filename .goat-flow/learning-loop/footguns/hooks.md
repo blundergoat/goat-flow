@@ -1,11 +1,11 @@
 ---
 category: hooks
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-17
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-dangerous.md](deny-dangerous.md).
 
-**Last independent review:** 2026-05-26 - Active entries re-verified against current split guardrail anchors and the central self-test (`PASS` across Workflow/Claude/GitHub/Codex/Antigravity). Antigravity uses `.agents/hooks.json` + `.agents/hooks/` for PreToolUse; `cat .env` is blocked by `patterns-paths.sh`.
+**Last independent review:** 2026-07-17 - Optional-hook migration and configured-analyzer diagnostics were re-run against their focused regression anchors and moved to Resolved. Other active entries were not reclassified by that check.
 
 ## Footgun: Hook toggles can scaffold uninstalled agent surfaces
 
@@ -114,23 +114,6 @@ last_reviewed: 2026-06-14
 
 **Prevention:** In release QA, label Copilot coverage as script/config evidence unless live capture writes a payload or emits `hook.start`. `POLICY_HOOKS: false` means runtime enforcement is unavailable/limited.
 
-## Footgun: Installed settings.json deny patterns can silently drift from workflow templates
-
-**Status:** active | **Created:** 2026-04-26 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** An agent can perform an action (e.g. `git push origin feature-branch`) that the workflow template blocks, because the installed settings.json drifted to a weaker deny pattern than the template it was installed from (or the hook only blocks a narrower set). Now covered by preflight's Agent Config Parity check, so the active trap is skipping that check or changing deny semantics without updating the parity rules.
-
-**Why it happens:** `workflow/hooks/agent-config/claude.json` is the install template for `.claude/settings.json`. The template had `Bash(*git push*)` (block all push) but the installed copy drifted to `Bash(*git push*--force*)` (block force only). At incident time, preflight covered skill files and shared references but not settings.json deny patterns; the `Agent Config Parity` section now verifies installed settings with `covers()`.
-
-**Evidence:**
-- `workflow/hooks/agent-config/claude.json` (search: `git push`) - template had the correct blanket pattern; `.claude/settings.json` (search: `git push`) - installed copy had drifted to force-only, fixed 2026-04-26 per ADR-025.
-- `scripts/preflight-checks.sh` (search: `Agent Config Parity`) - parity check validates installed agent settings against workflow templates.
-
-**Prevention:**
-1. After changing any deny pattern in a settings template (`workflow/hooks/agent-config/*.json`), run `bash scripts/preflight-checks.sh` and confirm `Agent Config Parity` still passes.
-2. When reviewing hook or settings changes, compare the installed file against its workflow template, not just the other agent mirrors.
-3. If a new agent config surface is added, extend the Agent Config Parity map and `covers()` validation in the same change.
-
 ## Footgun: Codex permission profiles must match the local CLI grammar
 
 **Status:** active | **Created:** 2026-05-19 | **Evidence:** ACTUAL_MEASURED
@@ -173,75 +156,6 @@ last_reviewed: 2026-06-14
 
 ---
 
-## Footgun: Optional hook migration must remove old registrations and re-add enabled central entries
-
-**Status:** active | **Created:** 2026-06-07 | **Evidence:** OBSERVED
-
-**Symptoms:** The installer can successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure only appears after upgrade because fresh installs use the new template shape and disabled optional hooks do not expose the stale entry.
-
-**Why it happens:** `workflow/install-goat-flow.sh` originally treated only deny-dangerous and the old split guardrail scripts as managed during hook-config migration. Optional `gruff-code-quality.sh` registrations were outside that managed set, so pruning `.claude/hooks/`, `.codex/hooks/`, `.agents/hooks/`, or `.github/hooks/` could delete the script while preserving the old registration. Since gruff is optional, migration must remove stale managed entries everywhere and then re-add the central registration only when `.goat-flow/config.yaml` explicitly enables `gruff-code-quality`.
-
-**Evidence:**
-- `workflow/install-goat-flow.sh` (search: `managedScripts`) includes `gruff-code-quality.sh` in the managed migration set.
-- `workflow/install-goat-flow.sh` (search: `appendGruffHookEntries`) re-adds central gruff registrations from the enabled hook toggle rather than preserving stale per-agent paths.
-- `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`) reads the existing config toggle so enabled optional hooks survive upgrades while disabled hooks stay absent.
-
-**Prevention:**
-1. Any future optional hook must be in the installer managed-hook removal list before legacy files are pruned.
-2. Do not preserve old hook entries by path during a centralization migration; regenerate from the current registry/config toggle.
-3. Add upgrade fixtures for enabled and disabled optional hooks whenever a hook's install path changes.
-
----
-
-## Footgun: Re-adding a removed agent tool (MultiEdit) reprints "matches no known tool" every launch
-
-**Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
-
-**Regression symptom:** Claude Code printed `Permission deny rule "MultiEdit(**/secrets/**)" matches no known tool — check for typos.` (x12) on every launch. Claude Code v2.x removed the `MultiEdit` tool (folded into `Edit`), and permission deny rules are validated against known tools at startup, so each `MultiEdit(...)` deny rule warns. This exact issue was fixed once already (CHANGELOG: "Stale `MultiEdit` permission rules removed (Claude Code v2.x)") and then silently came back.
-
-**Why it happened:** Commit `4e54072e` ("add gruff code quality hook and update matcher for multi-edit events") added the gruff PostToolUse hook and, modelling on the existing `Edit`/`Write` blocks, re-added 12 `MultiEdit(...)` deny rules plus a `"matcher": "MultiEdit"` hook entry to `.claude/settings.json` and `.codex/hooks.json`. Mirroring the `Edit`/`Write` pattern *looks* correct, but `MultiEdit` no longer exists. The prior fix lived only in CHANGELOG prose and a few file edits — **no test asserted the absence of MultiEdit**, so re-adding it kept every check green and shipped. Same blind spot as [the silent settings-drift footgun above]; deny rules referencing removed tools warn but never fail a build.
-
-**Evidence:**
-- Removed-tool deny rules surface as launch-time warnings, not test failures: pre-fix `npm run test:fast` was green with the 12 `MultiEdit(...)` rules present.
-- The `Edit(...)` deny rules covering the same 12 secret paths already exist, so dropping the `MultiEdit(...)` rules loses zero coverage (verified: deny count 57 → 45, all paths retain Read/Edit/Write).
-- Sources scrubbed: `.claude/settings.json`, `.codex/hooks.json`, template `workflow/hooks/agent-config/claude.json`, generators `src/cli/server/hooks-registry.ts` (matcher `Edit|Write`) + `workflow/install-goat-flow.sh` (`gruffHookEntries`), docs `workflow/hooks/README.md`, and the hook self-test in `workflow/hooks/gruff-code-quality.sh` (synced to the installed `.goat-flow/hooks/` copy or `audit` drift fails).
-
-**Prevention:**
-1. A "fixed" config regression needs a test, not just a CHANGELOG line. Guards now in place: `test/unit/agent-config-template-parity.test.ts` (search: `never denies a removed/unknown Claude tool`) locks every Claude deny rule to `{Bash,Read,Edit,Write}`; `test/unit/hook-registrar.test.ts` (search: `Edit|Write`) and `test/integration/setup-install-migrations.test.ts` (search: `/"matcher": "MultiEdit"/`) lock the gruff matcher.
-2. When mirroring `Edit`/`Write` permission or hook entries for a new tool, confirm the tool still exists in the target agent version first — Claude Code v2.x has `Edit`/`Write`/`NotebookEdit`, not `MultiEdit`.
-3. Editing a `workflow/hooks/*.sh` template means re-syncing the installed `.goat-flow/hooks/` copy in the same change; `audit` drift (search: `hook template ... and installed copy ... differ`) fails otherwise.
-
-**Follow-up (2026-06-08): the template guard was necessary but NOT sufficient — upgrades didn't clean existing installs.** The 1.10.0 fix above scrubbed the templates and added `test/unit/agent-config-template-parity.test.ts` (allow-set `{Bash,Read,Edit,Write}`). Both green — yet every real user still saw the 13 warnings on launch. All five `gruff-workspace` projects (`gruff-go|rs|ts|php|py`), upgraded to 1.10.x, still carried 13 `MultiEdit(...)` rules in `.claude/settings.json`. Root cause: `workflow/install-goat-flow.sh` settings block (search: `SETTINGS_MIGRATIONS=()`) only ran *Codex* migrations on an existing settings file; for Claude it fell through to "exists, skipped", and the Claude hook-config migration `migrate_agent_hook_config` only rewrites `current.hooks`, never `permissions.deny`. **A test on the template can't see the thousands of user-owned installed files that already hold the bad value.** Removing/renaming anything that lands in a user-owned config (a deny rule, a hook matcher, a config key) needs an UPGRADE MIGRATION that prunes the orphaned value from existing files — not just a clean template (cf. the standing rule: upgrades MUST prune orphaned/renamed artifacts).
-
-Fix shipped 1.10.1: `migrate_claude_permission_deny` in `workflow/install-goat-flow.sh` (search: `migrate_claude_permission_deny`), invoked under `[[ "$AGENT" == "claude" ]]` in the settings block. **Remove-list, not allow-list:** it strips only `REMOVED_CLAUDE_TOOLS = {MultiEdit}`, never "anything not in the allow-set" — a user may legitimately deny valid unmanaged tools (`WebFetch`, `NotebookEdit`, `mcp__*`), and clobbering those in a user-owned file is data loss. Keep the two lists (template allow-set, migration remove-set) in sync when Claude's toolset changes. Regression test: `test/integration/setup-install-migrations.test.ts` (search: `prunes stale removed-tool`) seeds an existing settings file with MultiEdit + Edit + WebFetch denies and asserts MultiEdit is pruned, the others survive, and a second run is a no-op. Verified on the real gruff-go payload: 13 → 0, `Bash/Read/Edit/Write` preserved, JSON valid, idempotent.
-
-**Prevention (4):** When you remove or rename anything that ships into a user-owned config, add BOTH a template guard AND an upgrade migration, and a test that seeds the OLD value in an *existing* file then asserts the upgrade prunes it. A template-only test is false confidence — it passes while every already-installed project stays broken.
-
----
-
-## Footgun: Fail-soft analyzer skips can silently uncover a configured language
-
-**Status:** active | **Created:** 2026-06-09 | **Evidence:** OBSERVED
-
-**Symptoms:** A project has a root `.gruff-<lang>.yaml` config, the matching language file is edited, and the PostToolUse hook exits 0 with no output. The agent sees no gruff feedback and may infer the changed lines are clean, while the analyzer never ran.
-
-**Why it happens:** `gruff-code-quality.sh` is intentionally fail-soft. That is correct for missing config, unsupported files, no `jq`, and no changed-line range. It is dangerous when a matching config exists but `discover_binary` misses the analyzer, because the project has opted that language into gruff coverage. A real monorepo kept `gruff-py` only under `strands_agents/.venv/bin/gruff-py`; ADR-032 correctly removed automatic `*/.venv/bin` discovery, so the old hook returned 0 silently and left Python uncovered.
-
-**Evidence:**
-- Hook contract and search paths: `workflow/hooks/gruff-code-quality.sh` (search: `BINARY_SEARCH_PATHS`) and (search: `GRUFF_PY_BIN`).
-- Diagnostic path: `workflow/hooks/gruff-code-quality.sh` (search: `present but %s not found on search paths`).
-- Config-error surfacing path: `workflow/hooks/gruff-code-quality.sh` (search: `config_error_message`).
-- Regression tests: `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses an explicit env override for a non-standard monorepo gruff binary`) and (search: `surfaces legacy JSON config diagnostics with empty findings`).
-- Security constraint: `.goat-flow/learning-loop/decisions/ADR-032-scope-gruff-hook-binary-discovery.md` (search: `Scope gruff-code-quality hook binary discovery to standard install locations`).
-
-**Prevention:**
-1. Treat config-present/binary-absent as a visible misconfiguration: emit one stderr line naming the config, binary, standard search paths, and the per-language env override. Keep exit 0.
-2. Preserve ADR-032's no-recursive-discovery rule. Do not add `*/.venv/bin`, `target/debug`, or arbitrary subtree search back to `discover_binary`.
-3. For monorepos with managed analyzers outside standard install paths, use explicit executable overrides such as `GRUFF_PY_BIN=/path/to/subproject/.venv/bin/gruff-py`.
-4. When analyzer JSON has empty `findings` but config diagnostics or `filesDiscovered: 0`, surface the diagnostic before reporting a clean changed-line count.
-
----
-
 ## Footgun: Registered Stop hooks can be dead config behind agent trust gates
 
 **Status:** active | **Created:** 2026-06-13 | **Evidence:** ACTUAL_MEASURED
@@ -249,7 +163,7 @@ Fix shipped 1.10.1: `migrate_claude_permission_deny` in `workflow/install-goat-f
 **Trap:** Writing a Stop entry into `.codex/hooks.json` or `.agents/hooks.json` does not mean the agent will ever execute it. On 2026-06-13, a capture fixture with Stop hooks registered for all three agents showed: Claude fired and delivered the full payload; Codex (codex-cli 0.139.0, `features` reports `hooks stable true`, docs document the `Stop` event) never executed the hook across four `codex exec` runs even with `--dangerously-bypass-hook-trust`, project trust, and a project config layer; Antigravity (agy 1.0.6) logged `Loaded hooks.json ... 1 total handlers` and `JSON hook "jsonhook__stop-capture_Stop_0_0": executing command` but the command never ran because execution waits on `~/.gemini/trusted_hooks.json` review (`toolPermission=request-review`) and print mode exits first.
 
 **Evidence:**
-- M02b Evidence section, `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` (search: `Stop payload fields and supported-agent notes`).
+- The 2026-06-13 capture-fixture runs recorded in the M02b plan-checkbox-guard milestone (local gitignored plan file; the per-agent delivery results are restated in full in the Trap paragraph above).
 - ADR-039 (search: `Remove Plan Checkbox Guard`) removes the plan checkbox guard from current shipped hooks and keeps only a tombstone cleanup path.
 - `post-turn-safety` was held to the same standard on 2026-06-14: `antigravity` was added to its `unsupportedAgents` (codex was already gated), so goat-flow does not ship a default-on Stop hook to an agent whose delivery is unverified. A default-on *secret scanner* whose Stop event may never fire is false assurance - arguably worse than shipping nothing, because the dashboard still reports it "installed."
 
@@ -281,3 +195,38 @@ Fix shipped 1.10.1: `migrate_claude_permission_deny` in `workflow/install-goat-f
 - **Advisory hooks create unfixable quality warning after setup** (resolved 2026-04-14) - hooks ship enforce-mode (`GOAT_LINT_ENFORCE` defaults to 1).
 - **Codex hooks registered in config.toml instead of hooks.json** (resolved 2026-04-15) - moved to `.codex/hooks.json`; TOML hook sections were silently ignored.
 - **Codex hook migrations drift across files, templates, installer, docs** (resolved 2026-04-15) - restored Codex guardrail registration; aligned all four surfaces.
+
+## Footgun: Optional hook migration must remove old registrations and re-add enabled central entries
+
+**Status:** resolved | **Created:** 2026-06-07 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
+
+**Resolution:** Current migration code removes managed legacy gruff registrations before pruning per-agent scripts and rebuilds only supported/enabled central entries. The focused regression `test/integration/setup-install-migrations.test.ts` (search: `prunes legacy Codex gruff hook registrations because Codex gruff is unsupported`) verifies unsupported Codex registrations are pruned while the deny hook remains registered. `test/unit/hook-registrar.test.ts` (search: `enables gruff-code-quality for a detected Antigravity surface`) verifies a supported, detected surface receives the enabled central gruff registration.
+
+**Original symptoms:** The installer could successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure appeared only after upgrade because fresh installs used the new template shape and disabled optional hooks did not expose the stale entry.
+
+**Why it happened:** `workflow/install-goat-flow.sh` originally treated only deny-dangerous and the old split guardrail scripts as managed during hook-config migration. Optional `gruff-code-quality.sh` registrations were outside that managed set, so pruning `.claude/hooks/`, `.codex/hooks/`, `.agents/hooks/`, or `.github/hooks/` could delete the script while preserving the old registration.
+
+**Durable anchors:**
+- `workflow/install-goat-flow.sh` (search: `managedScripts`) includes `gruff-code-quality.sh` in the managed migration set.
+- `workflow/install-goat-flow.sh` (search: `appendGruffHookEntries`) re-adds central gruff registrations from the enabled hook toggle rather than preserving stale per-agent paths.
+- `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`) reads the existing config toggle so enabled optional hooks survive upgrades while disabled hooks stay absent.
+
+**Prevention:** Any future optional hook must enter the managed-hook removal list before legacy files are pruned. Regenerate current registrations from registry/config state, and add upgrade fixtures whenever an optional hook's install path changes.
+
+## Footgun: Fail-soft analyzer skips can silently uncover a configured language
+
+**Status:** resolved | **Created:** 2026-06-09 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
+
+**Resolution:** Missing project configuration still exits silently, but a matching `.gruff-<lang>.yaml` with no discoverable analyzer now emits a targeted stderr diagnostic while preserving fail-soft exit 0. The focused regression `test/integration/gruff-code-quality-smoke.test.ts` (search: `exits silently when project config is missing and diagnoses configured languages without a binary`) verifies both sides of that boundary.
+
+**Original symptoms:** A project had a root `.gruff-<lang>.yaml` config, the matching language file was edited, and the PostToolUse hook exited 0 with no output. The agent saw no gruff feedback and could infer the changed lines were clean while the analyzer never ran.
+
+**Why it happened:** `gruff-code-quality.sh` is intentionally fail-soft for missing config, unsupported files, no `jq`, and no changed-line range. It was dangerous when a matching config existed but `discover_binary` missed the analyzer, because the project had opted that language into gruff coverage. A measured monorepo incident kept `gruff-py` only under `strands_agents/.venv/bin/gruff-py`; ADR-032 correctly rejected automatic `*/.venv/bin` discovery, so the old hook returned 0 silently and left Python uncovered.
+
+**Durable anchors:**
+- Diagnostic path: `workflow/hooks/gruff-code-quality.sh` (search: `present but %s not found on search paths`).
+- Config-error path: `workflow/hooks/gruff-code-quality.sh` (search: `config_error_message`).
+- Explicit override coverage: `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses an explicit env override for a non-standard monorepo gruff binary`).
+- Security constraint: `.goat-flow/learning-loop/decisions/ADR-032-scope-gruff-hook-binary-discovery.md` (search: `Scope gruff-code-quality hook binary discovery to standard install locations`).
+
+**Prevention:** Keep config-present/binary-absent visible while preserving fail-soft exit 0 and ADR-032's no-recursive-discovery rule. Monorepos with managed analyzers outside standard paths must use an explicit executable override.

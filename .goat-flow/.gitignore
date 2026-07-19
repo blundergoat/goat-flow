@@ -28,6 +28,7 @@
 !logs/sessions/
 !logs/sessions/.gitkeep
 logs/sessions/*.md
+!logs/sessions/README.md
 # Keep the quality-history path and README committed, but ignore captured reports.
 # Order matters: the `logs/quality/*.md` rule must come BEFORE the README re-include
 # so the last matching pattern keeps `README.md` tracked.

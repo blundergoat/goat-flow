@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-05-31
+last_reviewed: 2026-07-13
 ---
 
 ## Lesson: Prove hook capability before marking an agent unsupported
@@ -11,7 +11,9 @@ last_reviewed: 2026-05-31
 
 **Root cause:** I collapsed "payload path may be absent" into "the hook cannot work for this agent" before testing the writer mapping and available fallback data. The UI label made that mistaken runtime exclusion look like an agent-level capability failure.
 
-**Prevention:** Before adding `unsupportedAgents` or similar capability gates, verify the agent-specific matcher names and whether the hook can infer the needed data from repository state without widening enforcement beyond changed lines. For gruff, Antigravity uses `write_to_file`, `replace_file_content`, and `multi_replace_file_content`; the hook should prefer payload paths and use git-changed supported files only as a fallback. Evidence anchors: `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`), `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`), `workflow/hooks/gruff-code-quality.sh` (search: `git_changed_supported_paths`), `test/unit/hook-registrar.test.ts` (search: `enables gruff-code-quality for a detected Antigravity surface`), and `test/integration/gruff-code-quality-smoke.test.ts` (search: `runs for Antigravity file-tool payloads without a file path`).
+**Recurrence update (2026-07-13):** M18's first four-runner capability fixture reused a helper that asserted hard secret file-read protection for every agent. The RED run disproved that assumption: Antigravity and Copilot are script-only and correctly report limited file-tool protection, while Claude and Codex have settings-backed coverage. Shared shell/hook assertions were separated from explicit per-runner file-read expectations. A final negative reader fixture also showed that a `hard` row with an empty source list survived dashboard decoding; source-less rows are now dropped before rendering. Evidence anchors: `test/unit/enforcement-capability.test.ts` (search: `assertSecretFileStatusForAgent`), `src/cli/audit/enforcement.ts` (search: `secretFileReadCapability`), and `src/dashboard/dashboard-readers.ts` (search: `hasVisibleEvidence`).
+
+**Prevention:** Before adding unsupported labels or shared capability expectations, verify each agent's mechanism and available evidence separately. Keep common hook behavior in shared assertions, but make settings-backed, script-only, unknown, and unsupported expectations explicit per runner. For gruff, Antigravity uses `write_to_file`, `replace_file_content`, and `multi_replace_file_content`; the hook should prefer payload paths and use git-changed supported files only as a fallback. Evidence anchors: `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`), `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`), `workflow/hooks/gruff-code-quality.sh` (search: `git_changed_supported_paths`), `test/unit/hook-registrar.test.ts` (search: `enables gruff-code-quality for a detected Antigravity surface`), and `test/integration/gruff-code-quality-smoke.test.ts` (search: `runs for Antigravity file-tool payloads without a file path`).
 
 ---
 
@@ -52,6 +54,8 @@ last_reviewed: 2026-05-31
 **What happened:** The Home, Quality, and Setup pages showed every harness concern at 100 and "All checks passing", but still showed each agent at 94%. The API payload correctly marked `test-runner-configured` as a failing `metric` check, but the dashboard reader dropped the field that lets views treat metric evidence differently from ordinary audit failures.
 
 **Root cause:** The browser-side dashboard reader dropped `check.type` when decoding `/api/audit` payloads. Later, the opposite bug appeared in the view layer: filtering metrics out of dashboard percentages hid score-only verification gaps and restored misleading 100% headlines.
+
+**Recurrence update (2026-07-12):** M30's first GREEN slice made expanded Home concern rows and the Quality baseline show `Evidence limit`, but the collapsed Home agent cards still said `All checks passing`. The focused helper tests had not asserted that primary headline. Fresh browser state exposed the contradiction; a new RED assertion now requires `recommendationSummary` to count concern limits before it can emit the clean-state copy. Evidence anchors: `src/dashboard/views/home.html` (search: `evidenceLimitCount`), `test/unit/dashboard-home.test.ts` (search: `2 evidence limits`).
 
 **Prevention:** When dashboard views derive percentages from API fields, add a regression that proves both the reader and the rendered summary preserve score-only warnings. Browser evidence must check summary cards, concern rows, and the "All checks passing" label because those are separate computations. Verify the rendered dashboard against the built `dist/` assets, not source only. Evidence anchors: `src/dashboard/dashboard-readers.ts` (search: `rawCheck.type`), `test/unit/dashboard-readers.test.ts` (search: `preserves harness check type so metric failures can be shown as non-gating score evidence`), `test/unit/dashboard-home.test.ts` (search: `surfaces score-only metric warnings`).
 

@@ -108,7 +108,7 @@
             "name": "How does goat-flow prevent AI agents from making dangerous changes?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "goat-flow uses pre-action hooks that block dangerous commands before they execute. The default guardrails hook catches unsafe recursive deletion, all git push, direct literal secret-path reads, subshell escapes, and database truncation. These are tool-layer boundaries rather than prompt-only guidance."
+              "text": "goat-flow uses pre-action hooks that block known dangerous command shapes before they execute. The default guardrails hook covers unsafe recursive deletion, all git push, direct literal secret-path reads, and selected destructive shell and database patterns. These are best-effort tool-layer controls, not complete runtime isolation."
             }
           },
           {
@@ -1219,18 +1219,17 @@
 
             <!-- Terminal mock -->
             <p class="sr-only">
-              Terminal output showing goat-flow audit results: 18 of 18 build
-              checks passing, harness scores for Claude Code (94%), Codex (91%),
-              Antigravity (87%), and Copilot CLI (85%), plus five-concern
-              coverage for context, constraints, verification, recovery, and
-              feedback loop.
+              Illustrative audit output showing 20 of 20 build checks passing,
+              four supported agent integrations, and 18 harness checks across
+              context, constraints, verification, recovery, and feedback loop.
+              Actual results depend on the target project.
             </p>
             <div class="terminal" aria-hidden="true">
               <div class="terminal-bar">
                 <span class="term-dot r"></span>
                 <span class="term-dot y"></span>
                 <span class="term-dot g"></span>
-                <span class="label">~/projects/myapp - audit</span>
+                <span class="label">Illustrative audit output</span>
               </div>
               <div class="terminal-body">
                 <div class="t-prompt">
@@ -1240,78 +1239,64 @@
                 <div>
                   <span style="color: var(--text-dim)">$</span>
                   <span class="t-prompt cmd"
-                    >npx goat-flow audit --harness</span
+                    >npx @blundergoat/goat-flow@latest audit . --harness</span
                   >
                 </div>
                 <div style="height: 10px"></div>
                 <div class="t-row">
                   <span class="t-check">✓</span>
                   <span class="name">Build checks</span>
-                  <span class="val">18/18 passing</span>
+                  <span class="val">20/20 passing</span>
                 </div>
-                <div class="t-section">Agent harness</div>
+                <div class="t-section">Agent integrations</div>
                 <div class="t-row">
-                  <span class="t-check">✓</span>
+                  <span class="t-check">•</span>
                   <span class="name">Claude Code</span>
-                  <span class="t-grade">A</span>
-                  <span class="val">94%</span>
+                  <span class="val">project-specific</span>
                 </div>
                 <div class="t-row">
-                  <span class="t-check">✓</span>
+                  <span class="t-check">•</span>
                   <span class="name">Codex</span>
-                  <span class="t-grade">A</span>
-                  <span class="val">91%</span>
+                  <span class="val">project-specific</span>
                 </div>
                 <div class="t-row">
-                  <span class="t-check">✓</span>
+                  <span class="t-check">•</span>
                   <span class="name">Antigravity</span>
-                  <span class="t-grade">B</span>
-                  <span class="val">87%</span>
+                  <span class="val">project-specific</span>
                 </div>
                 <div class="t-row">
-                  <span class="t-check">✓</span>
+                  <span class="t-check">•</span>
                   <span class="name">Copilot CLI</span>
-                  <span class="t-grade">B</span>
-                  <span class="val">85%</span>
+                  <span class="val">project-specific</span>
                 </div>
                 <div class="t-section">Five concerns</div>
-                <div class="t-concern">
-                  <span class="lbl">Context</span>
-                  <div class="t-bar">
-                    <div class="fill" style="width: 87%"></div>
-                  </div>
-                  <span class="pct">87%</span>
+                <div class="t-row">
+                  <span class="t-check">•</span>
+                  <span class="name">Context</span>
+                  <span class="val">evaluated</span>
                 </div>
-                <div class="t-concern">
-                  <span class="lbl">Constraints</span>
-                  <div class="t-bar">
-                    <div class="fill" style="width: 100%"></div>
-                  </div>
-                  <span class="pct">100%</span>
+                <div class="t-row">
+                  <span class="t-check">•</span>
+                  <span class="name">Constraints</span>
+                  <span class="val">evaluated</span>
                 </div>
-                <div class="t-concern">
-                  <span class="lbl">Verification</span>
-                  <div class="t-bar">
-                    <div class="fill" style="width: 85%"></div>
-                  </div>
-                  <span class="pct">85%</span>
+                <div class="t-row">
+                  <span class="t-check">•</span>
+                  <span class="name">Verification</span>
+                  <span class="val">evaluated</span>
                 </div>
-                <div class="t-concern">
-                  <span class="lbl">Recovery</span>
-                  <div class="t-bar">
-                    <div class="fill" style="width: 82%"></div>
-                  </div>
-                  <span class="pct">82%</span>
+                <div class="t-row">
+                  <span class="t-check">•</span>
+                  <span class="name">Recovery</span>
+                  <span class="val">evaluated</span>
                 </div>
-                <div class="t-concern">
-                  <span class="lbl">Feedback loop</span>
-                  <div class="t-bar">
-                    <div class="fill" style="width: 89%"></div>
-                  </div>
-                  <span class="pct">89%</span>
+                <div class="t-row">
+                  <span class="t-check">•</span>
+                  <span class="name">Feedback loop</span>
+                  <span class="val">evaluated</span>
                 </div>
                 <div class="t-foot">
-                  17 harness checks · all critical paths passing
+                  18 harness checks · results depend on target
                 </div>
               </div>
             </div>
@@ -1378,7 +1363,9 @@
                 it's installed or it isn't. Scores each agent's harness
                 completeness across the five concerns.
               </p>
-              <div class="sub">goat-flow audit --harness</div>
+              <div class="sub">
+                npx @blundergoat/goat-flow@latest audit . --harness
+              </div>
             </div>
 
             <div class="piece">
@@ -1426,16 +1413,18 @@
                 </svg>
               </div>
               <div class="piece-num">03 / Hooks</div>
-              <h3>Safety nets that can't be skipped</h3>
+              <h3>Guardrails with explicit limits</h3>
               <p>
-                Pre-action guards block dangerous commands before they run.
-                Post-action guards catch silent breakage after.
+                Pre-action guards block known dangerous command shapes before
+                they run. Where an agent runtime supports them, post-action
+                guards can surface selected hazards after edits.
                 <code style="font-size: 12.5px; color: var(--accent)"
                   >guardrails</code
                 >
-                ships by default, blocking destructive filesystem commands, all
-                git push, direct literal secret-path access, and risky
-                subshells.
+                ships by default, covering unsafe recursive deletion, all git
+                push, direct literal secret-path access, and selected
+                destructive shell and database patterns. These are best-effort
+                local controls, not complete runtime isolation.
               </p>
               <div class="sub">.goat-flow/hooks/</div>
             </div>
@@ -1666,10 +1655,11 @@
                 <code style="color: var(--accent); font-size: 13.5px"
                   >guardrails</code
                 >
-                catches the patterns agents hit most often when they go
-                off-script: destructive filesystem commands, all git push,
-                direct literal secret-path reads, subshell escapes, and database
-                truncation.
+                catches selected patterns agents hit when they go off-script:
+                unsafe recursive deletion, all git push, direct literal
+                secret-path reads, and selected destructive shell and database
+                commands. It is a local guardrail, not a complete shell
+                sandbox.
               </p>
               <h3 style="margin-top: 24px">Extend with your own</h3>
               <p>

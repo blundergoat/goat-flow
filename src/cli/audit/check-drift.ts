@@ -1,40 +1,10 @@
 /**
- * Template-vs-installed drift detection for goat-flow skills.
- *
- * Compares the canonical templates shipped in goat-flow against the
- * installed copies inside a consumer project (or the goat-flow repo
- * itself when run on its own root):
- *
- *   - Per-skill SKILL.md for every name in getSkillNames():
- *       workflow/skills/<name>/SKILL.md  vs
- *       .claude/skills/<name>/SKILL.md
- *       .agents/skills/<name>/SKILL.md
- *   - Shared meta references (template → installed in .goat-flow/skill-docs/):
- *       workflow/skills/reference/README.md                 vs .goat-flow/skill-docs/README.md
- *       workflow/skills/reference/skill-preamble.md         vs .goat-flow/skill-docs/skill-preamble.md
- *       workflow/skills/reference/skill-conventions.md      vs .goat-flow/skill-docs/skill-conventions.md
- *   - Standalone playbooks (template → installed in .goat-flow/skill-docs/playbooks/):
- *       workflow/skills/playbooks/README.md                 vs .goat-flow/skill-docs/playbooks/README.md
- *       workflow/skills/playbooks/browser-use.md            vs .goat-flow/skill-docs/playbooks/browser-use.md
- *       workflow/skills/playbooks/code-comments.md          vs .goat-flow/skill-docs/playbooks/code-comments.md
- *       workflow/skills/playbooks/gruff-code-quality.md            vs .goat-flow/skill-docs/playbooks/gruff-code-quality.md
- *       workflow/skills/playbooks/observability.md          vs .goat-flow/skill-docs/playbooks/observability.md
- *       workflow/skills/playbooks/changelog.md              vs .goat-flow/skill-docs/playbooks/changelog.md
- *       workflow/skills/playbooks/page-capture.md           vs .goat-flow/skill-docs/playbooks/page-capture.md
- *       workflow/skills/playbooks/release-notes.md          vs .goat-flow/skill-docs/playbooks/release-notes.md
- *       workflow/skills/playbooks/skill-quality-testing.md  vs .goat-flow/skill-docs/skill-quality-testing/README.md
- *   - Orphan directories under .claude/skills or .agents/skills whose
- *     name is not in getSkillNames(). Names that appear in manifest.stale_names
- *     are reported as deprecated instead of a plain orphan.
- *
- * Comparison is semantic: YAML frontmatter is parsed and compared
- * structurally (after stripping null/undefined leaves to avoid false
- * negatives on bare keys like `description:`), body content is
- * compared after trimEnd() + single trailing newline normalization.
- * This avoids false positives on key reorder or trailing whitespace.
+ * Canonical-template versus installed-artifact drift detection.
+ * Use during setup audits so operators learn which skill, shared document,
+ * hook, or agent mirror differs from the workflow package they intended to run.
+ * Semantic Markdown comparison ignores harmless YAML order and trailing-space changes.
  */
-import { readFileSync, existsSync } from "node:fs";
-import { posix as pathPosix, resolve as resolvePath } from "node:path";
+import { posix as pathPosix } from "node:path";
 import { load } from "js-yaml";
 import { isDeepStrictEqual } from "node:util";
 import type { ReadonlyFS } from "../types.js";
@@ -49,8 +19,14 @@ import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
 import type { AgentId } from "../types.js";
 import type { AgentProfile } from "../manifest/types.js";
 import type { DriftFinding, DriftReport } from "./types.js";
+import {
+  checkArtifactIntegrity,
+  readTemplateText,
+  SHARED_ARTIFACT_MIRRORS,
+} from "./check-artifact-integrity.js";
 
 const KNOWN_AGENT_IDS = new Set(["claude", "codex", "antigravity", "copilot"]);
+const USER_OWNED_SKILL_MARKER = "user-owned";
 
 /** Remove nullish values from nested data before comparing manifests. */
 function stripNullish(frontmatterValue: unknown): unknown {
@@ -75,10 +51,8 @@ function stripNullish(frontmatterValue: unknown): unknown {
 
 /**
  * Parse YAML frontmatter and body text from a markdown file.
- *
  * The parser swallows malformed YAML into a sentinel object and never throws so
  * drift checks can report content mismatch without aborting the whole audit.
- *
  * @param raw - Full markdown file contents, including optional YAML frontmatter.
  * @returns Parsed frontmatter plus body text after the closing marker.
  */
@@ -107,11 +81,7 @@ function normalizeBody(body: string): string {
 
 /**
  * Compare skill markdown using goat-flow's drift semantics.
- *
- * Installed skill copies can reorder YAML keys or trim trailing whitespace
- * during setup; those edits are not functional drift, but body or frontmatter
- * value changes still are.
- *
+ * Ignore harmless YAML order and trailing-space changes while preserving contract differences.
  * @param expected - Template markdown content from `workflow/skills`.
  * @param existing - Installed markdown content from an agent or skill-docs tree.
  * @returns True when normalized frontmatter and body content match.
@@ -137,121 +107,18 @@ export function skillContentsEquivalent(
 }
 
 /**
- * Runtime dependencies for `checkDrift`.
- *
- * The filesystem is rooted at the audited project, while `templateRoot` points
- * at goat-flow's package layout; separating them keeps consumer-project audits
- * from accidentally reading templates from the target project.
+ * Runtime sources for installed-project and canonical-package comparisons.
+ * The separation prevents consumer audits from reading templates from the target.
  */
 interface CheckDriftOptions {
   /** ReadonlyFS rooted at the project being audited (for installed-copy reads). */
   fs: ReadonlyFS;
-  /** Absolute path to the project being audited. Present for parity with other audit options; not currently used for IO. */
+  /** Audited project root retained for parity with other audit option contracts. */
   projectPath: string;
-  /**
-   * Absolute path whose layout mirrors goat-flow's own root (must contain
-   * workflow/skills/...). Defaults to the goat-flow package root resolved
-   * at runtime so consumer projects work out of the box.
-   */
+  /** Package/fixture root containing workflow sources; absent uses the shipped package. */
   templateRoot?: string;
-}
-
-/**
- * Pair one canonical workflow file with its installed project copy.
- *
- * Shared references and playbooks are not per-skill directories, so the drift
- * audit keeps this explicit map in lockstep with the setup manifest.
- */
-interface SharedFileSpec {
-  /** Relative to templateRoot. */
-  template: string;
-  /** Relative to projectPath. */
-  installed: string;
-}
-
-const SHARED_FILES: SharedFileSpec[] = [
-  // Meta references (composed into every skill)
-  {
-    template: "workflow/skills/reference/README.md",
-    installed: ".goat-flow/skill-docs/README.md",
-  },
-  {
-    template: "workflow/skills/reference/skill-preamble.md",
-    installed: ".goat-flow/skill-docs/skill-preamble.md",
-  },
-  {
-    template: "workflow/skills/reference/skill-conventions.md",
-    installed: ".goat-flow/skill-docs/skill-conventions.md",
-  },
-  // Standalone playbooks (loaded on-demand)
-  {
-    template: "workflow/skills/playbooks/README.md",
-    installed: ".goat-flow/skill-docs/playbooks/README.md",
-  },
-  {
-    template: "workflow/skills/playbooks/browser-use.md",
-    installed: ".goat-flow/skill-docs/playbooks/browser-use.md",
-  },
-  {
-    template: "workflow/skills/playbooks/code-comments.md",
-    installed: ".goat-flow/skill-docs/playbooks/code-comments.md",
-  },
-  {
-    template: "workflow/skills/playbooks/gruff-code-quality.md",
-    installed: ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-  },
-  {
-    template: "workflow/skills/playbooks/observability.md",
-    installed: ".goat-flow/skill-docs/playbooks/observability.md",
-  },
-  {
-    template: "workflow/skills/playbooks/changelog.md",
-    installed: ".goat-flow/skill-docs/playbooks/changelog.md",
-  },
-  {
-    template: "workflow/skills/playbooks/page-capture.md",
-    installed: ".goat-flow/skill-docs/playbooks/page-capture.md",
-  },
-  {
-    template: "workflow/skills/playbooks/release-notes.md",
-    installed: ".goat-flow/skill-docs/playbooks/release-notes.md",
-  },
-  {
-    template: "workflow/skills/playbooks/skill-quality-testing.md",
-    installed: ".goat-flow/skill-docs/skill-quality-testing/README.md",
-  },
-  {
-    template:
-      "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
-    installed: ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
-  },
-  {
-    template:
-      "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md",
-    installed:
-      ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
-  },
-  {
-    template: "workflow/skills/playbooks/skill-quality-testing/deployment.md",
-    installed: ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
-  },
-];
-
-/**
- * Read a workflow template file relative to the package root.
- *
- * Missing or unreadable templates return null; this swallows file-read failures
- * so callers can report the exact drift finding path instead of turning one
- * filesystem failure into an exception that hides the rest of the audit.
- */
-function readTemplate(templateRoot: string, relative: string): string | null {
-  const abs = resolvePath(templateRoot, relative);
-  if (!existsSync(abs)) return null;
-  try {
-    return readFileSync(abs, "utf-8");
-  } catch {
-    return null;
-  }
+  /** Selected agent whose installed mirrors should be compared; null or absent checks every installed agent. */
+  agentFilter?: AgentId | null;
 }
 
 /** Narrow parsed YAML/JSON values before reading hook and manifest properties. */
@@ -273,26 +140,48 @@ function getStaleSkillNames(): Set<string> {
   return new Set(loadManifest().facts.skills.stale_names);
 }
 
-/** Compare installed skills against their workflow templates for drift.
- *
- *  The manifest declares every supported agent's `skills_dir`, but a given
- *  consumer project may only have installed one agent (e.g. only `.claude/`).
- *  Iterating over absent agent roots reports phantom drift ("file missing")
- *  for every uninstalled tree. Filter to roots present on disk so single-
- *  agent installs report honest results. */
+/**
+ * Return installed skill roots in the scope the user selected for audit.
+ * Use an agent filter for one runtime; an empty result leaves missing-install reporting to agent checks.
+ */
+function selectedInstalledSkillRoots(
+  fs: ReadonlyFS,
+  agentFilter: AgentId | null | undefined,
+): string[] {
+  // A selected runtime should not make the user repair mirrors for agents they did not audit.
+  const candidateSkillRoots = agentFilter
+    ? [loadManifest().agents[agentFilter]?.skills_dir]
+    : getInstalledSkillRoots();
+
+  // Absent roots belong to setup checks; drift compares only copies the user actually installed.
+  return candidateSkillRoots.filter(
+    (skillRoot): skillRoot is string =>
+      skillRoot !== undefined && fs.exists(skillRoot),
+  );
+}
+
+/**
+ * Compare installed skill copies with the templates users receive on setup or upgrade.
+ * Use an agent filter to keep a selected-runtime audit from reporting another runtime's drift.
+ */
 function compareSkills(
   fs: ReadonlyFS,
   templateRoot: string,
   findings: DriftFinding[],
+  agentFilter: AgentId | null | undefined,
 ): number {
   let checked = 0;
-  const skillRoots = getInstalledSkillRoots().filter((dir) => fs.exists(dir));
+  const skillRoots = selectedInstalledSkillRoots(fs, agentFilter);
+
   // Compare each canonical skill's template against every installed copy so
   // drift shows up no matter which agent's folder went stale.
   for (const name of getSkillNames()) {
+    // Every manifest-listed reference belongs to the same skill users invoke.
     for (const relativeFile of getSkillFiles(name)) {
       const templateRel = `workflow/skills/${name}/${relativeFile}`;
-      const template = readTemplate(templateRoot, templateRel);
+      const template = readTemplateText(templateRoot, templateRel);
+
+      // A missing source template means every future consumer install would be incomplete.
       if (template === null) {
         findings.push({
           kind: "missing",
@@ -302,9 +191,12 @@ function compareSkills(
         continue;
       }
 
+      // Each selected mirror must carry the same user-facing skill contract.
       for (const agentDir of skillRoots) {
         const installedRel = `${agentDir}/${name}/${relativeFile}`;
         checked++;
+
+        // Missing installed content tells the user exactly which selected mirror needs repair.
         if (!fs.exists(installedRel)) {
           findings.push({
             kind: "missing",
@@ -314,7 +206,11 @@ function compareSkills(
           continue;
         }
         const installed = fs.readFile(installedRel);
+
+        // An unreadable copy is handled by filesystem/setup evidence instead of inventing a content diff.
         if (installed === null) continue;
+
+        // Different skill text means the selected agent would follow a stale workflow.
         if (!skillContentsEquivalent(template, installed)) {
           findings.push({
             kind: "content",
@@ -335,8 +231,8 @@ function compareSharedFiles(
   findings: DriftFinding[],
 ): number {
   let checked = 0;
-  for (const spec of SHARED_FILES) {
-    const template = readTemplate(templateRoot, spec.template);
+  for (const spec of SHARED_ARTIFACT_MIRRORS) {
+    const template = readTemplateText(templateRoot, spec.template);
     if (template === null) {
       findings.push({
         kind: "missing",
@@ -368,37 +264,57 @@ function compareSharedFiles(
 }
 
 /**
- * Find installed skill directories that are no longer canonical.
- *
- * This branch-heavy scan exists because agent skill roots can contain editor
- * files, docs, or partially-created directories. The SKILL.md guard avoids
- * false positives. The function reports deprecated manifest names separately
- * from unexpected orphans so cleanup messaging stays actionable.
+ * Find non-canonical skills in the mirrors selected for audit.
+ * Use the SKILL.md marker to ignore editor files while keeping cleanup guidance actionable.
  */
-function findOrphans(fs: ReadonlyFS, findings: DriftFinding[]): void {
+function findOrphans(
+  fs: ReadonlyFS,
+  findings: DriftFinding[],
+  agentFilter: AgentId | null | undefined,
+): void {
   const canonical = new Set<string>(getSkillNames());
   const stale = getStaleSkillNames();
-  for (const agentDir of getInstalledSkillRoots()) {
-    if (!fs.exists(agentDir)) continue;
+
+  // Only the runtime mirrors in this audit can produce user-visible orphan findings.
+  for (const agentDir of selectedInstalledSkillRoots(fs, agentFilter)) {
+    // Each directory entry may be a skill, documentation file, or editor artifact.
     for (const entry of fs.listDir(agentDir)) {
+      // Canonical skills are expected and need no cleanup guidance.
       if (canonical.has(entry)) continue;
       const fullPath = `${agentDir}/${entry}`;
+
       // Only flag real skill directories. listDir returns files too
       // (.DS_Store, README.md, etc.); a skill is identified by SKILL.md.
       if (!fs.exists(`${fullPath}/SKILL.md`)) continue;
+
+      // Known retired skills get the migration-specific message users can act on.
       if (stale.has(entry)) {
         findings.push({
           kind: "deprecated",
           path: fullPath,
           message: `deprecated skill still installed: ${entry} at ${fullPath}`,
         });
-      } else {
-        findings.push({
-          kind: "orphan",
-          path: fullPath,
-          message: `orphan directory in ${agentDir}: ${entry} (not a canonical goat-flow skill)`,
-        });
+        continue;
       }
+
+      const skillMarkdown = fs.readFile(`${fullPath}/SKILL.md`);
+      const skillFrontmatter =
+        skillMarkdown === null
+          ? null
+          : parseMarkdownFrontmatter(skillMarkdown).frontmatter;
+      if (
+        isRecord(skillFrontmatter) &&
+        skillFrontmatter["goat-flow-ownership"] === USER_OWNED_SKILL_MARKER
+      ) {
+        continue;
+      }
+
+      // Unknown skill directories are kept separate from named deprecations.
+      findings.push({
+        kind: "orphan",
+        path: fullPath,
+        message: `orphan directory in ${agentDir}: ${entry} (not a canonical goat-flow skill)`,
+      });
     }
   }
 }
@@ -499,14 +415,6 @@ function readExplicitHooks(fs: ReadonlyFS): Record<string, unknown> | null {
   return parsed.hooks;
 }
 
-function expectedHookScript(
-  _fs: ReadonlyFS,
-  _hookFile: string,
-  template: string,
-): string {
-  return template;
-}
-
 /** Extract an explicit enabled boolean without treating missing config as disabled. */
 function enabledFromHookConfig(value: unknown): boolean | null {
   if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
@@ -523,21 +431,18 @@ function explicitHookEnabled(fs: ReadonlyFS, hookId: string): boolean | null {
   return enabledFromHookConfig(hooks["gruff-on-change"]);
 }
 
-/** Keep hook-object access centralized because callers mutate the returned config object. */
-function hooksObject(config: Record<string, unknown>): Record<string, unknown> {
-  return ensureHooksObject(config);
-}
-
+/** Remove an empty event so users do not see a registered hook with no commands. */
 function deleteHookEventIfEmpty(
   config: Record<string, unknown>,
   event: string,
 ): void {
-  const hooks = hooksObject(config);
+  const hooks = ensureHooksObject(config);
   if (Array.isArray(hooks[event]) && hooks[event].length === 0) {
     Reflect.deleteProperty(hooks, event);
   }
 }
 
+/** Remove one managed hook while preserving unrelated commands in the same event. */
 function removeHookEntries(
   config: Record<string, unknown>,
   event: string,
@@ -545,7 +450,7 @@ function removeHookEntries(
 ): void {
   const entries = ensureHookEntries(config, event);
   const next = entries.filter((entry) => !entryReferencesSpec(entry, spec));
-  const hooks = hooksObject(config);
+  const hooks = ensureHooksObject(config);
   if (next.length === 0) {
     Reflect.deleteProperty(hooks, event);
     return;
@@ -611,10 +516,8 @@ function applyExplicitHookToggles(
 }
 
 /**
- * Copilot keeps hook registrations in `.github/hooks/hooks.json`, which is
- * also the manifest-declared installed hook artifact. The static template only
- * represents default guardrails; dashboard/CLI toggles can add optional hooks.
- * Drift therefore compares against template plus desired toggle state.
+ * Build Copilot's expected hook registry from its template plus explicit toggles.
+ * Use during drift checks so dashboard choices do not look like accidental edits.
  */
 function expectedHookConfig(
   fs: ReadonlyFS,
@@ -645,7 +548,7 @@ function compareHookArtifact(
   installedRel: string,
   expectedFromTemplate: (template: string) => string,
 ): void {
-  const template = readTemplate(templateRoot, templateRel);
+  const template = readTemplateText(templateRoot, templateRel);
   if (template === null) {
     findings.push({
       kind: "missing",
@@ -674,18 +577,32 @@ function compareHookArtifact(
   }
 }
 
-/** Compare installed hook scripts against their workflow templates. */
+/**
+ * Compare hook artifacts for the runtime scope the user selected.
+ * A filter keeps one runtime from reporting another runtime's absent config.
+ */
 function compareHooks(
   fs: ReadonlyFS,
   templateRoot: string,
   findings: DriftFinding[],
   checkedHookArtifacts: Set<string>,
+  agentFilter: AgentId | null | undefined,
 ): number {
   let checked = 0;
   const manifest = loadManifest();
+
+  // Every selected agent contributes its own hook launcher and runtime files.
   for (const [agentId, agent] of Object.entries(manifest.agents)) {
+    // A selected-agent audit must not require hook artifacts owned by another runtime.
+    if (agentFilter && agentId !== agentFilter) continue;
+
+    // Hookless agents have no local artifacts for drift to compare.
     if (!agent.hooks_dir || !agent.hooks) continue;
+
+    // An uninstalled hook root belongs to agent setup checks, not content drift.
     if (!fs.exists(agent.hooks_dir)) continue;
+
+    // Each declared hook file must match what setup would install for this runtime.
     for (const hookFile of agent.hooks) {
       const templateRel = hookTemplateRel(agentId, agent, hookFile);
       const installedRel = pathPosix.join(agent.hooks_dir, hookFile);
@@ -700,9 +617,11 @@ function compareHooks(
         (template) =>
           hookFile === agent.hook_config_file
             ? expectedHookConfig(fs, agentId, agent, template)
-            : expectedHookScript(fs, hookFile, template),
+            : template,
       );
     }
+
+    // Copilot's shared registry is compared once because it is not always listed with scripts.
     if (agentId === "copilot" && agent.hook_config_file) {
       const templateRel = "workflow/hooks/agent-config/copilot-hooks.json";
       const installedRel = agent.hook_config_file;
@@ -722,14 +641,7 @@ function compareHooks(
 
 /**
  * Decide whether the registry safety-net should compare one optional hook script.
- *
- * Drift only compares copies that actually exist on disk or that config explicitly
- * enables - it never demands that a default-on hook be present. Whether a default
- * guardrail like deny-dangerous is installed at all is the audit's agent-guardrail
- * check's concern, not drift's; flagging it here would double-report and would mark
- * hook-free installs (e.g. skills-only projects) as drifted. Gating on
- * `spec.defaultEnabled` is therefore intentionally omitted.
- *
+ * Setup owns missing defaults; drift checks only installed or explicitly enabled copies.
  * @param fs - ReadonlyFS rooted at the audited project.
  * @param spec - Registry hook spec whose script is a comparison candidate.
  * @param installedRel - Project-relative path of the installed hook script.
@@ -750,9 +662,12 @@ function compareRegistryHookScripts(
   templateRoot: string,
   findings: DriftFinding[],
   checkedHookArtifacts: Set<string>,
+  agentFilter: AgentId | null | undefined,
 ): number {
   let checked = 0;
   for (const spec of listHookSpecs()) {
+    // Agent-scoped drift must not report scripts the selected runner cannot execute.
+    if (agentFilter && spec.unsupportedAgents?.[agentFilter]) continue;
     for (const script of spec.scriptFiles) {
       if (script.includes("/")) continue;
       const installedRel = pathPosix.join(".goat-flow/hooks", script);
@@ -766,7 +681,7 @@ function compareRegistryHookScripts(
         findings,
         `workflow/hooks/${script}`,
         installedRel,
-        (template) => expectedHookScript(fs, script, template),
+        (template) => template,
       );
     }
   }
@@ -774,27 +689,75 @@ function compareRegistryHookScripts(
 }
 
 /**
+ * Report retired central hook files without changing the user's project.
+ * Use after an upgrade so operators get the supported sync command while audit stays read-only.
+ */
+function findDeprecatedHookFiles(
+  fs: ReadonlyFS,
+  findings: DriftFinding[],
+): number {
+  const deprecatedHookNames = loadManifest().hooks.stale_names;
+  // Each historical filename is checked because an old install may still execute it.
+  for (const deprecatedHookName of deprecatedHookNames) {
+    const installedHookPath = pathPosix.join(
+      ".goat-flow/hooks",
+      deprecatedHookName,
+    );
+    // Missing retired hooks are the desired state and need no operator action.
+    if (!fs.exists(installedHookPath)) continue;
+    findings.push({
+      kind: "deprecated",
+      path: installedHookPath,
+      message: `deprecated hook remains installed; run goat-flow hooks sync to remove ${installedHookPath}`,
+    });
+  }
+  return deprecatedHookNames.length;
+}
+
+/**
  * Run all drift comparisons and return a consolidated report.
  *
  * @param options - Project filesystem plus optional goat-flow template root.
  * @returns Drift status, findings, and count of compared template/install pairs.
+ * @throws when the canonical manifest or hook registry cannot be loaded
  */
 export function checkDrift(options: CheckDriftOptions): DriftReport {
-  const { fs } = options;
+  const { fs, agentFilter } = options;
+
+  // Consumer runs use the package templates when the caller does not supply a test fixture root.
   const templateRoot = options.templateRoot ?? getTemplatePath("");
   const findings: DriftFinding[] = [];
   let checked = 0;
   const checkedHookArtifacts = new Set<string>();
-  checked += compareSkills(fs, templateRoot, findings);
+  checked += compareSkills(fs, templateRoot, findings, agentFilter);
   checked += compareSharedFiles(fs, templateRoot, findings);
-  checked += compareHooks(fs, templateRoot, findings, checkedHookArtifacts);
+  checked += compareHooks(
+    fs,
+    templateRoot,
+    findings,
+    checkedHookArtifacts,
+    agentFilter,
+  );
   checked += compareRegistryHookScripts(
     fs,
     templateRoot,
     findings,
     checkedHookArtifacts,
+    agentFilter,
   );
-  findOrphans(fs, findings);
+  checked += findDeprecatedHookFiles(fs, findings);
+  findOrphans(fs, findings, agentFilter);
+
+  // Identity, resource, and complete-set checks catch packaging failures that byte parity cannot see.
+  findings.push(
+    ...checkArtifactIntegrity({
+      fs,
+      templateRoot,
+      installedSkillRoots: selectedInstalledSkillRoots(fs, agentFilter),
+    }),
+  );
+
+  // Any mismatch means setup or upgrade would give the user a different workflow than this checkout.
   return {
     status: findings.length === 0 ? "pass" : "fail",
     findings,

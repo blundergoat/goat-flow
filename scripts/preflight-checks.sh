@@ -6,8 +6,10 @@
 
 # preflight-checks.sh
 #
-# Purpose:
-#   Runs the local pre-flight quality gate used before risky edits or releases.
+# Runs the local quality gate a developer uses before accepting risky work or a release.
+# Use it to see one phased verdict for shell policy, source checks, tests, drift, and links.
+# Interactive Tests runs show bounded progress while their output stays captured for diagnostics.
+# Redirected and CI runs keep a deterministic report that automation can parse safely.
 #
 # Usage:
 #   bash scripts/preflight-checks.sh
@@ -45,6 +47,9 @@ Usage: preflight-checks.sh [--verbose] [--no-color] [--ascii] [--help]
 
 Runs the local pre-flight quality gate. Exits 0 when all checks pass,
 non-zero otherwise.
+
+Interactive Tests runs show one elapsed-time heartbeat every 10 seconds.
+Redirected and CI output remains deterministic and contains no heartbeat lines.
 
 Options:
   -v, --verbose    Expand every sub-check (default collapses to one row per
@@ -154,6 +159,7 @@ NODE
 # ── Capability detection ─────────────────────────────────────────────
 _is_tty=0
 [[ -t 1 ]] && _is_tty=1
+preflight_test_heartbeat_seconds=10
 
 _use_color=1
 if [[ -n "$no_color" ]] || [[ -n "${NO_COLOR:-}" ]]; then
@@ -317,72 +323,36 @@ details_pipe() {
     done
 }
 
+# Run one Tests command while retaining final diagnostics and showing bounded TTY liveness.
+# Use the same helper for first-run and retry paths so users receive one timeout contract.
 run_command_capture_with_timeout() {
     local __output_var="$1"
     local __status_var="$2"
     local timeout_seconds="$3"
-    shift 3
+    local progress_label="$4"
+    shift 4
     local output status
+    local operator_progress_fd=""
+    local -a command_runner_arguments=(
+        scripts/preflight-command-runner.mjs
+        --timeout-seconds "$timeout_seconds"
+        --heartbeat-seconds "$preflight_test_heartbeat_seconds"
+        --label "$progress_label"
+    )
 
-    output="$(
-        node - "$timeout_seconds" "$@" <<'NODE' 2>&1
-const { spawn } = require("node:child_process");
+    # e.g. a developer ran preflight before release; long Tests show liveness outside captured CI output.
+    if [[ "$_is_tty" -eq 1 ]]; then
+        exec {operator_progress_fd}>&1
+        command_runner_arguments+=(--progress-fd "$operator_progress_fd")
+    fi
+    command_runner_arguments+=(-- "$@")
 
-const timeoutSeconds = Number(process.argv[2] || "0");
-const command = process.argv[3];
-const args = process.argv.slice(4);
-let timedOut = false;
-let forceKillTimer = null;
-const chunks = [];
-const child = spawn(command, args, {
-  detached: process.platform !== "win32",
-  stdio: ["ignore", "pipe", "pipe"],
-});
+    output="$(node "${command_runner_arguments[@]}" 2>&1)" && status=0 || status=$?
 
-function killChild(signal) {
-  if (!child.pid) return;
-  try {
-    if (process.platform === "win32") child.kill(signal);
-    else process.kill(-child.pid, signal);
-  } catch {
-    // The child may already have exited between the timeout and signal.
-  }
-}
-
-child.stdout.on("data", (chunk) => chunks.push(chunk));
-child.stderr.on("data", (chunk) => chunks.push(chunk));
-child.on("error", (error) => {
-  chunks.push(Buffer.from(String(error.message || error)));
-});
-
-const timer =
-  Number.isFinite(timeoutSeconds) && timeoutSeconds > 0
-    ? setTimeout(() => {
-        timedOut = true;
-        killChild("SIGTERM");
-        forceKillTimer = setTimeout(() => killChild("SIGKILL"), 1000);
-        forceKillTimer.unref();
-      }, timeoutSeconds * 1000)
-    : null;
-
-child.on("close", (code) => {
-  if (timer) clearTimeout(timer);
-  if (forceKillTimer) clearTimeout(forceKillTimer);
-  const outputChunks = [Buffer.concat(chunks)];
-  if (timedOut) {
-    outputChunks.push(
-      Buffer.from(`\n[preflight] command timed out after ${timeoutSeconds}s: ${[
-        command,
-        ...args,
-      ].join(" ")}\n`),
-    );
-  }
-  process.stdout.write(Buffer.concat(outputChunks), () => {
-    process.exit(timedOut ? 124 : code === null ? 1 : code);
-  });
-});
-NODE
-    )" && status=0 || status=$?
+    # No descriptor means redirected output stayed quiet; an interactive descriptor closes after this command.
+    if [[ -n "$operator_progress_fd" ]]; then
+        exec {operator_progress_fd}>&-
+    fi
 
     printf -v "$__output_var" '%s' "$output"
     printf -v "$__status_var" '%s' "$status"
@@ -1425,6 +1395,24 @@ if [[ "$contract_ok" == true ]]; then
     pass "goat-critique direct invocation has no obsolete Codex delegation exception"
 fi
 
+# Deployed HTML must never resolve the deprecated unscoped `goat-flow` npm
+# package. Keep this direct grep in preflight even though the TypeScript
+# contract suite also covers user-facing command surfaces: this fails early
+# with the exact deployed file and line.
+site_package_commands_ok=true
+for f in docs/site/*.html; do
+    [[ -f "$f" ]] || continue
+    unscoped_site_commands=$(grep -nE 'npx[[:space:]]+goat-flow([[:space:]]|$)' "$f" || true)
+    if [[ -n "$unscoped_site_commands" ]]; then
+        fail "$f contains an unscoped npx goat-flow command"
+        printf '%s\n' "$unscoped_site_commands" | details_pipe
+        site_package_commands_ok=false
+    fi
+done
+if [[ "$site_package_commands_ok" == true ]]; then
+    pass "Deployed site npx commands name @blundergoat/goat-flow"
+fi
+
 # ── Reference Budget Headroom ────────────────────────────────────────
 section "Reference Budgets"
 budget_headroom_output=$(
@@ -1449,9 +1437,11 @@ const files = [
       "changelog.md",
       "code-comments.md",
       "gruff-code-quality.md",
+      "hook-policy-testing.md",
       "observability.md",
       "page-capture.md",
       "release-notes.md",
+      "skill-playbook-authoring-sync.md",
     ].flatMap((name) => [
       `workflow/skills/playbooks/${name}`,
       `.goat-flow/skill-docs/playbooks/${name}`,
@@ -1763,7 +1753,8 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
         warn "Invalid GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=$test_timeout_seconds; using 600"
         test_timeout_seconds=600
     fi
-    run_command_capture_with_timeout test_output test_exit "$test_timeout_seconds" "${test_command[@]}"
+    run_command_capture_with_timeout \
+        test_output test_exit "$test_timeout_seconds" "Tests" "${test_command[@]}"
 
     test_count=$(echo "$test_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
     pass_count=$(echo "$test_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
@@ -1780,7 +1771,8 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     elif [[ "$test_retryable" == true ]]; then
         retry_output=""
         retry_exit=1
-        run_command_capture_with_timeout retry_output retry_exit "$test_timeout_seconds" "${test_command[@]}"
+        run_command_capture_with_timeout \
+            retry_output retry_exit "$test_timeout_seconds" "Tests retry" "${test_command[@]}"
         retry_test_count=$(echo "$retry_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
         retry_pass_count=$(echo "$retry_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
         retry_fail_count=$(echo "$retry_output" | grep '# fail' | grep -oE '[0-9]+' || echo "0")
@@ -2188,6 +2180,28 @@ if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill
     fi
 else
     skip "release-notes.md sync (one or both files missing)"
+fi
+# Hook maintainers need the same policy-test workflow that consumer agents receive.
+if [[ -f workflow/skills/playbooks/hook-policy-testing.md ]] && [[ -f .goat-flow/skill-docs/playbooks/hook-policy-testing.md ]]; then
+    # Matching copies prevent a local policy test from differing from shipped guidance.
+    if diff -q workflow/skills/playbooks/hook-policy-testing.md .goat-flow/skill-docs/playbooks/hook-policy-testing.md >/dev/null 2>&1; then
+        pass "hook-policy-testing.md: template and installed copy match"
+    else
+        fail "hook-policy-testing.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "hook-policy-testing.md sync (one or both files missing)"
+fi
+# The authoring reference must match so users receive the same enrollment contract as maintainers.
+if [[ -f workflow/skills/playbooks/skill-playbook-authoring-sync.md ]] && [[ -f .goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md ]]; then
+    # Matching content means installed users receive the exact contract maintained in workflow source.
+    if diff -q workflow/skills/playbooks/skill-playbook-authoring-sync.md .goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md >/dev/null 2>&1; then
+        pass "skill-playbook-authoring-sync.md: template and installed copy match"
+    else
+        fail "skill-playbook-authoring-sync.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "skill-playbook-authoring-sync.md sync (one or both files missing)"
 fi
 if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-docs/skill-quality-testing/README.md ]]; then
     if diff -q workflow/skills/playbooks/skill-quality-testing.md .goat-flow/skill-docs/skill-quality-testing/README.md >/dev/null 2>&1; then

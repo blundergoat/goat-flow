@@ -2,7 +2,8 @@
 
 /**
  * Command-line entry point for goat-flow.
- * Handles argv parsing, command dispatch, exit codes, and on-disk output for audit, quality, setup, dashboard, events, and info workflows.
+ * Handles argv parsing, command dispatch, exit codes, and output for audit,
+ * quality, setup, diagnostics, dashboard, events, redaction, and information workflows.
  */
 
 import { realpathSync } from "node:fs";
@@ -40,13 +41,21 @@ Commands:
   dashboard         Launch browser dashboard with audit, setup, and terminal
   manifest          Print the resolved single-source-of-truth manifest (--check validates consistency)
   stats             Learning-loop health report (live entry counts, stale refs, freshness). Use --check for CI.
+  diagnostics context  Measure static local context pressure without runner telemetry
+  diagnostics readiness  Show advisory five-concern preparedness without running target code
+  diagnostics bundle   Create redacted local setup and runtime support evidence
+  diagnostics threat-model  Show static agent/tool posture without executing target hooks
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
+  redact            Scrub durable text from stdin before stdout or --output persistence
+  plans export      Preview or write redacted local milestone bundles
   events tail       Read local gitignored evidence-envelope events
   skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
+  skill doctor      Explain installed skill paths, invocation syntax, and static load blockers.
   hooks list        List registered hook state for this project
   hooks enable      Enable one registered hook and sync agent configs
   hooks disable     Disable one registered hook and sync agent configs
   hooks sync        Re-apply config.yaml hook truth to agent configs
+  hooks verify      Run bounded managed deny-hook classifier proof for one agent
 Arguments:
   project-path    Target project directory (default: .)
 
@@ -59,12 +68,16 @@ Flags:
   --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
   --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
   --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
-  --untrusted-target Audit: skip executing the target's deny-hook code (static checks only; use for a checkout you don't trust)
+  --untrusted-target Audit/hooks verify: skip executing target deny-hook code; use for a checkout you don't trust
   --no-audit-details Audit JSON: omit structured harness detail payloads
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
-  --json            Hooks: emit machine-readable JSON (alias for --format json)
+  --json            Emit machine-readable JSON (alias for --format json)
+  --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
+  --red-log <file>  Skill new: failing RED receipt required before a skill write
+  --scenario <name> Hooks verify: required bounded scenario group (deny-hook)
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
-  --force           Install/setup --apply: overwrite settings, config, and remove deprecated skills
+  --dry-run         Install/setup: preview managed template drift without changing the target
+  --force           Install/setup --apply: overwrite managed seeds; plans export: regenerate output
   --update-config-version  Install: update only the version field in existing config.yaml
   --clean-deprecated       Install: remove deprecated skill directories
   --verbose         Show per-check details
@@ -81,6 +94,7 @@ Examples:
   goat-flow audit . --format json      JSON output for CI
   goat-flow audit . --format sarif     SARIF output for CI/code scanning upload
   goat-flow install . --agent claude   Copy/update goat-flow system files
+  goat-flow install . --agent claude --dry-run
   goat-flow setup . --agent claude --apply
   goat-flow setup --agent claude       Setup prompt for Claude
   goat-flow quality . --agent claude   Quality assessment prompt for Claude
@@ -94,14 +108,30 @@ Examples:
   goat-flow hooks list --json          Print hook state as JSON
   goat-flow hooks enable gruff-code-quality
   goat-flow hooks sync                 Re-apply hook toggles from config.yaml
+  goat-flow hooks verify . --agent codex --scenario deny-hook
   goat-flow stats                      Learning-loop health report
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
+  goat-flow diagnostics context . --agent codex
+  goat-flow diagnostics context . --agent codex --format json
+  goat-flow diagnostics readiness . --agent codex
+  goat-flow diagnostics readiness . --agent codex --format json
+  goat-flow diagnostics bundle . --agent codex --format json
+  goat-flow diagnostics bundle . --format json --output support-bundle.json
+  goat-flow diagnostics threat-model . --agent codex
+  goat-flow diagnostics threat-model . --agent codex --format json
   goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries
+  goat-flow redact --output .goat-flow/logs/sessions/handoff.md
+  goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
+  goat-flow plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
   goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
-  goat-flow skill new "<description>"  Scaffold a skill from a natural-language description
-  goat-flow skill ./repo new "<description>"
+  goat-flow skill new "<description>" --red-log <file>
+                                      Scaffold a skill after failing RED evidence
+  goat-flow skill ./repo new "<description>" --red-log <file>
   goat-flow skill new --draft <path>   Validate an existing draft against the candidacy check
-  goat-flow skill new --interactive    Prompt for description and name, then scaffold
+  goat-flow skill new --interactive --red-log <file>
+                                      Prompt for description and name, then scaffold after RED
+  goat-flow skill doctor . --agent codex
+  goat-flow skill doctor . --agent codex --skill goat --format json
   goat-flow --format markdown          PR-comment friendly output
   goat-flow --output report.json       Write results to file
 `);
@@ -113,14 +143,14 @@ function printVersion(): void {
 }
 
 /**
- * Entry point that dispatches to the appropriate command handler.
- * Installs an EPIPE guard that exits 0 when stdout is closed early (e.g. piped to `head`); any
- * other stdout error is rethrown. Parse and dispatch errors are not handled here - they throw and
- * are caught by the top-level runner below, which maps CLIError to its exit code.
+ * Route the user's command and keep closed output pipes from showing false failures.
+ * @returns completion after help, version, or the selected project command finishes
+ * @throws non-EPIPE output, parse, and command errors for consistent top-level handling
  */
 async function main(): Promise<void> {
   // Gracefully handle EPIPE (e.g., output piped to `head`)
   process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+    // A user may close `head` early; that successful partial read should exit quietly.
     if (err.code === "EPIPE") process.exit(0);
     throw err;
   });
@@ -130,10 +160,12 @@ async function main(): Promise<void> {
   // Empty argv opens the menu; path-only argv still uses the audit shorthand.
   const options = parseCLIArgs(rawArgs);
 
+  // Help requests show guidance without running a project command.
   if (options.showHelp) {
     printHelp();
     return;
   }
+  // Version requests give package identity without reading the target project.
   if (options.showVersion) {
     printVersion();
     return;
@@ -143,14 +175,13 @@ async function main(): Promise<void> {
 }
 
 /**
- * True when this module is the CLI entry point, including when launched through a symlink like
- * `node_modules/.bin/goat-flow`. Resolves both the invoked path and this module's URL through
- * realpath so the symlink and its target compare equal. A resolution error (missing or
- * unreadable path) is swallowed and treated as a fallback `false`, so importing this module as a
- * library never accidentally triggers the CLI runner.
+ * Detect direct or symlinked CLI launches so library imports stay side-effect free.
+ * @returns true for a runnable CLI entry; missing/unreadable paths safely return false
+ * @throws Never; path-resolution failures are caught so imports remain safe
  */
 function isMainModule(): boolean {
   const entry = process.argv[1];
+  // An imported module has no launch path and must not start the CLI for the user.
   if (!entry) return false;
   try {
     return (
@@ -158,12 +189,15 @@ function isMainModule(): boolean {
       realpathSync(fileURLToPath(import.meta.url))
     );
   } catch {
+    // Example: a deleted package symlink leaves the user's launch path unreadable.
     return false;
   }
 }
 
+// A direct CLI launch runs once; library consumers only receive exported helpers.
 if (isMainModule()) {
   main().catch((err: unknown) => {
+    // Expected input errors keep their actionable message and documented exit code.
     if (err instanceof CLIError) {
       console.error(err.message);
       process.exit(err.exitCode);

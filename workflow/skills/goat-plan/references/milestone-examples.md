@@ -1,9 +1,11 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Milestone Template - Detailed Field Reference
 
-Extracted from the goat-plan SKILL.md to keep the skill file within word budget. The SKILL.md retains a concise summary; this file has the full field descriptions and worked examples.
+This reference keeps handoff detail out of the always-scanned skill body.
+Use it when a Standard+ plan must survive a new agent, a later session, or source drift.
+Small low-risk plans keep the compact field set in `SKILL.md`.
 
 ## Contents
 
@@ -14,6 +16,108 @@ Extracted from the goat-plan SKILL.md to keep the skill file within word budget.
 - Risk-tagged milestone example
 - Phase 3 human verification gate example
 - Kill-criteria-triggered stop example
+
+## Handoff-grade milestone template
+
+Use this shape for Standard+ work or any milestone handed to a different implementer. Capture the baseline before writing tasks; a failing baseline becomes an explicit prerequisite instead of hidden plan context.
+
+```markdown
+# M01: <outcome>
+
+**Status:** not-started
+**Planned at:** `<sha>`, YYYY-MM-DD
+**Depends on:** <milestone, decision, or none>
+
+## Objective
+
+<Binary outcome this milestone proves or delivers.>
+
+## Read first
+
+- `<file>` (search: `<semantic anchor>`) - why the implementer must read it.
+
+## Drift check before implementation
+
+`git diff --stat <sha> -- <in-scope paths>`
+`git status --short -- <in-scope paths>`
+
+If either command shows movement, re-read the live anchors and amend the milestone before implementation. The status command is required because uncommitted drift matters.
+
+## Current-state evidence
+
+- `<file>` (search: `<semantic anchor>`) - current behavior the task changes.
+
+## Verification baseline
+
+| Command | Expected result |
+|---|---|
+| `<read-only command>` | `<literal success condition, or known failure recorded as a prerequisite>` |
+
+## Scope
+
+### In scope
+- `<path>` - why this file belongs to the user-visible outcome.
+
+### Out of scope
+- `<tempting path>` - why touching it would expand the approved outcome.
+
+## Assumptions to validate
+
+- [ ] `<belief that must be proven>` - validation evidence required.
+
+## Tasks
+- [ ] [RISKY] `<uncertainty-first action with target and proof>`
+- [ ] [CORE] `<implementation action with target and proof>`
+
+## Exit criteria
+
+- [ ] `<binary observable condition>`
+
+## Kill criteria
+
+- Stop if `<measured condition that invalidates the milestone>`.
+
+## Testing Gate
+
+### Static / Contract Check
+
+- [ ] `<static command>` exits 0.
+
+### Automated
+
+- [ ] `<focused test command>` exits 0.
+
+### Manual
+
+- [ ] `<one action>`; expected: `<one observable result>`.
+
+### Acceptance
+
+- [ ] Developer self-check completed.
+
+## Mid-implementation proof
+
+Run `<bounded command or smoke check>` after `<named edit boundary>` and stop on failure.
+
+## STOP conditions
+- Stop when drift invalidates an anchor, work crosses the named scope, an assumption fails, or the same verification approach fails twice.
+
+## Command table
+
+| Command | Expected result |
+|---|---|
+| `<focused check>` | `<observable pass condition>` |
+
+## Deferred
+
+- `<item with destination pointer, or explicitly none>`
+
+## Maintenance notes
+- Re-check `<anchor>` when `<known dependency>` changes.
+- Preserve `<user-facing behavior or compatibility boundary>`.
+```
+
+The template records evidence and verification ownership; it never delegates implementation, commit, or push work.
 
 ## Milestone Field Descriptions
 
@@ -33,6 +137,8 @@ For each milestone, produce:
 - **Depends on** - Which milestone must complete first
 - **Read first** - Files the implementing agent should read before starting this milestone
 
+> **Illustrative scenario - input/output shape only; never evidence.** The assumption block and worked examples below specify shapes for whatever project this skill is installed in. Paths, measurements, endpoints, and outcomes are placeholders, not real incidents - never cite them as evidence.
+
 ## Assumption Tracking
 
 Assumptions are not tasks - they're beliefs about the system that affect the plan:
@@ -45,13 +151,13 @@ Assumptions are not tasks - they're beliefs about the system that affect the pla
 - [ ] Rate limiting handles concurrent requests correctly (assumed, not tested)
 ```
 
-When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, update the milestone plan immediately - don't continue building on a false premise.
+When an assumption is validated, tick it and note the evidence. When an assumption is invalidated, record it immediately and stop dependent work. Apply the plan amendment only when the selected mode or required human approval permits; at a blocking gate, show the proposed amendment and wait.
 
 ## Worked Example - Path-Only Intake
 
 User message: `.goat-flow/plans/oauth-refresh/`
 
-Evidence read: `.goat-flow/plans/.active` says `checkout-hardening`; `.goat-flow/plans/oauth-refresh/M01-prove-refresh-token-rotation.md` has `Status: complete`; `.goat-flow/plans/oauth-refresh/M02-wire-login-refresh-flow.md` has `Status: in-progress`.
+Evidence read: `.goat-flow/plans/.active` says `checkout-hardening`; milestone status fields show `.goat-flow/plans/oauth-refresh/M01-prove-refresh-token-rotation.md` is complete and `.goat-flow/plans/oauth-refresh/M02-wire-login-refresh-flow.md` is the single in-progress milestone; the bounded follow-up read returns only its first unchecked task line, `[CORE] Implement refresh callback`.
 
 Expected output:
 
@@ -131,7 +237,7 @@ Expected checkpoint: `Milestone files + ISSUE.md written to .goat-flow/plans/oau
 Continuing the OAuth refresh-token example: M01 (`Prove refresh-token rotation`) finishes, the agent runs the AI Verification Gate, then presents the BLOCKING Human Verification Gate from SKILL.md Phase 3. Concrete presentation:
 
 ```markdown
-M01 complete - Human Verification Gate (BLOCKING)
+M01 implementation evidence ready - Human Verification Gate (BLOCKING)
 
 Files changed this session:
 - `src/auth/refresh.ts` - added `rotateRefreshToken()` persistence path
@@ -145,12 +251,12 @@ Exit criteria (evidence from this session):
 
 Assumptions:
 - [x] Provider returns a replacement refresh token (validated - observed in the provider response during the spike)
-- [ ] Session store handles concurrent refresh atomically - INVALIDATED: two parallel refreshes raced and one restored a stale token. M02 scope updated to add a per-session lock before wiring the login flow.
+- [ ] Session store handles concurrent refresh atomically - INVALIDATED: two parallel refreshes raced and one restored a stale token. Proposed M02 amendment: add a per-session lock before wiring the login flow. No plan file changed yet.
 
-M01 complete. Approve to proceed with M02, or adjust?
+M01 remains `in-progress` pending approval. Approve the proposed M02 amendment and completion transition, or adjust?
 ```
 
-The agent stops here and waits. It does not set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. The invalidated assumption has already amended M02's scope per the Milestone Retrospective protocol in `skill-conventions.md` - the plan is never changed silently.
+The agent stops here and waits. It does not amend M02, set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. After the human approves the proposed amendment, the agent re-reads M02, applies the M02 amendment before changing statuses, records the assumption evidence, then sets M01 to `complete` and M02 to `in-progress`. It may touch M02 code only after those plan updates.
 
 ## Worked Example - Kill-Criteria-Triggered Stop
 

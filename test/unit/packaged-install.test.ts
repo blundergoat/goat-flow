@@ -59,7 +59,9 @@ function makeDriftedInputs(): {
   const json: ManifestJson = {
     version: "1.2.3",
     required_files: [],
+    file_ownership: {},
     required_dirs: [],
+    optional_files: {},
     skills: {
       canonical: [...getSkillNames()],
       stale_names: [],
@@ -141,7 +143,9 @@ describe("validateManifest: packaged vs dev mode", () => {
     const json: ManifestJson = {
       version: "1.2.3",
       required_files: [],
+      file_ownership: {},
       required_dirs: [],
+      optional_files: {},
       skills: {
         canonical: ["this-skill-does-not-exist"],
         stale_names: [],

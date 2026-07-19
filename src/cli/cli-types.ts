@@ -23,14 +23,24 @@ export type Command =
   | "hooks"
   | "menu"
   | "stats"
+  | "diagnostics"
   | "index"
+  | "redact"
+  | "plans"
   | "skill";
 
+/** Local plan operations; export previews or writes portable milestone bodies. */
+export type PlansSubcommand = "export";
+
+/** Read-only diagnostics views an operator can run without changing the selected project. */
+export type DiagnosticsSubcommand =
+  "context" | "readiness" | "bundle" | "threat-model";
+
 /**
- * The only second positional accepted after `skill`. A single-member union today, kept as a named
- * type so a future authoring verb (e.g. "edit") is added in one place the parser and handler share.
+ * Second positionals accepted after `skill`: authoring (`new`) and read-only diagnostics (`doctor`).
+ * Keep this named so the parser and handler expose the same user-facing skill command set.
  */
-export type SkillSubcommand = "new";
+export type SkillSubcommand = "new" | "doctor";
 
 /**
  * The only second positional accepted after `events`; `tail` reads the local evidence-envelope log.
@@ -39,17 +49,21 @@ export type SkillSubcommand = "new";
 export type EventsSubcommand = "tail";
 
 /**
- * Second positional accepted after `hooks`: the read-only `list`/`sync` operations and the
- * `enable`/`disable` toggles. `enable`/`disable` additionally require a `<hook-id>`; the others do
- * not. Kept in sync with HOOK_SUBCOMMANDS, which is the runtime membership check for the same set.
+ * Second positional accepted after `hooks`: state operations, toggles, and explicit verification.
+ * `enable`/`disable` additionally require a `<hook-id>`; `verify` requires one selected agent.
+ * Keep this in sync with HOOK_SUBCOMMANDS, the parser's runtime membership check.
  */
-export type HookSubcommand = "list" | "enable" | "disable" | "sync";
+export type HookSubcommand = "list" | "enable" | "disable" | "sync" | "verify";
 export const HOOK_SUBCOMMANDS = new Set<string>([
   "list",
   "enable",
   "disable",
   "sync",
+  "verify",
 ]);
+
+/** Bounded runtime scenario groups users may request through `hooks verify`. */
+export type HookScenario = "deny-hook";
 
 /**
  * The mutually exclusive modes of the `quality` command. `prompt` (the default when no subcommand
@@ -87,7 +101,10 @@ export const COMMANDS: Command[] = [
   "hooks",
   "menu",
   "stats",
+  "diagnostics",
   "index",
+  "redact",
+  "plans",
   "skill",
 ];
 
@@ -118,6 +135,7 @@ export interface ParsedCLI extends CLIOptions {
   auditDetails: boolean;
   shouldCheck: boolean;
   shouldApply: boolean;
+  shouldDryRun: boolean;
   shouldForce: boolean;
   updateConfigVersion: boolean;
   cleanDeprecated: boolean;
@@ -129,13 +147,18 @@ export interface ParsedCLI extends CLIOptions {
   skillSubcommand: SkillSubcommand | null;
   skillDescription: string | null;
   skillDraftPath: string | null;
+  skillRedLogPath: string | null;
   skillName: string | null;
+  skillFilter: string | null;
   skillInteractive: boolean;
   skillSkipConfirm: boolean;
   eventsSubcommand: EventsSubcommand | null;
   eventsLimit: number;
   hookSubcommand: HookSubcommand | null;
   hookId: string | null;
+  hookScenario: HookScenario | null;
+  plansSubcommand: PlansSubcommand | null;
+  diagnosticsSubcommand: DiagnosticsSubcommand | null;
   includeAll: boolean;
 }
 
@@ -143,14 +166,16 @@ export interface ParsedCLI extends CLIOptions {
  * The slice of ParsedCLI that the `skill` command path populates, projected out so the parser can
  * build and spread just the skill-authoring fields without restating each one. Every member is
  * meaningful only when the command is `skill`; for any other command the parser fills these with
- * their null/false defaults, so a non-null value here signals a `skill new` invocation.
+ * their null/false defaults, so the subcommand identifies authoring versus read-only diagnosis.
  */
 export type SkillCLIFields = Pick<
   ParsedCLI,
   | "skillSubcommand"
   | "skillDescription"
   | "skillDraftPath"
+  | "skillRedLogPath"
   | "skillName"
+  | "skillFilter"
   | "skillInteractive"
   | "skillSkipConfirm"
 >;

@@ -1,6 +1,6 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-17
 ---
 
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
@@ -41,7 +41,7 @@ last_reviewed: 2026-06-14
 
 **Root cause:** I trusted a milestone's directory-shaped test command instead of checking `package.json` and `scripts/run-tests.mjs`. In this repo, test file discovery and slow/fast partitioning live in `scripts/run-tests.mjs`; direct Node `--test` invocations should name specific `*.test.ts` files, not a directory.
 
-**Prevention:** For suite-wide verification, use `node scripts/run-tests.mjs fast` or the matching npm script from `package.json`. Use `node --import tsx --test <specific-file.test.ts>` only for focused files. Treat `ERR_MODULE_NOT_FOUND` on a test directory or `index.json` as an invocation-shape failure before diagnosing product code. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), `.goat-flow/plans/1.12.0/M01-verification-score-spike-and-decision.md` (search: `node scripts/run-tests.mjs fast`).
+**Prevention:** For suite-wide verification, use `node scripts/run-tests.mjs fast` or the matching npm script from `package.json`. Use `node --import tsx --test <specific-file.test.ts>` only for focused files. Treat `ERR_MODULE_NOT_FOUND` on a test directory or `index.json` as an invocation-shape failure before diagnosing product code. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`).
 
 ---
 
@@ -61,11 +61,15 @@ last_reviewed: 2026-06-14
 
 **Status:** active | **Created:** 2026-05-30
 
+**Decision changed:** Process-lifecycle tests wait for an observable ready state before sending termination signals; elapsed time alone is never readiness. | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-07-17
+
 **What happened:** During `docs.missing-internal-function-doc` cleanup, a combined focused command that grouped the dashboard smoke test with heavier unit suites failed `uses the fallback deadline when runner output keeps updating`: `spawned.writes` was still `[]` at the 5600ms assertion. The touched code was comment-only. Rerunning `node --import tsx --test test/smoke/dashboard-endpoints.test.ts` immediately afterward passed with `# pass 15` / `# fail 0`; the two edited unit files also passed in isolated runs.
 
-**Root cause:** The terminal smoke test uses real timers to assert a fallback deadline, while heavy audit-command coverage performs CPU-heavy repo audits in the same Node test process. Grouping them made the timer-sensitive assertion fail like a product regression even though the smoke file passed alone.
+**Recurrence 2026-07-17:** PR #56 CI run `29530759253` failed `cleans the child process group before returning a parent termination` after 255ms. The test sent SIGTERM 200ms after launching an intermediate Node runner, before its nested fixture emitted either PID marker. My first correction tried to wait for those markers on the runner's stdout, but the production runner intentionally buffers child output until close; exact Node 20 verification then failed `124 !== 143`. The corrected fixture uses an out-of-band readiness file created only after both processes exist.
 
-**Prevention:** When `test/smoke/dashboard-endpoints.test.ts` is in focused verification, run it as its own `node --import tsx --test` command. Run heavy audit suites separately, and treat a combined-run fallback-deadline failure as an invocation-shape suspect until the isolated smoke file fails too. Evidence anchors: `test/smoke/dashboard-endpoints.test.ts` (search: `uses the fallback deadline when runner output keeps updating`), `src/cli/audit/audit.ts` (search: `runAuditBatch`).
+**Root cause:** Real-timer tests treated scheduler time as proof that an asynchronous process or terminal had reached the state their assertions required. Heavy concurrent work can delay that state independently of the timer, and buffered output cannot serve as a live readiness signal.
+
+**Prevention:** Isolate real-timer smoke tests from heavy suites. For process lifecycle tests, synchronize on an observable ready state through a channel whose contract is live at that point; do not sleep for an assumed startup window or wait on output that is documented to flush only at close. Reproduce failures on the CI-supported Node runtime before treating a newer local runtime as disproof. Evidence anchors: `test/smoke/dashboard-endpoints.test.ts` (search: `uses the fallback deadline when runner output keeps updating`), `test/integration/preflight-progress.test.ts` (search: `parentStopAfterFile`), `scripts/preflight-command-runner.mjs` (search: `capturedOutputChunks`).
 
 ---
 

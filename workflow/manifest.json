@@ -1,6 +1,6 @@
 {
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.13.1",
+  "version": "1.14.0",
 
   "required_files": [
     ".goat-flow/.gitignore",
@@ -12,6 +12,7 @@
     ".goat-flow/logs/critiques/README.md",
     ".goat-flow/logs/review/README.md",
     ".goat-flow/logs/security/README.md",
+    ".goat-flow/logs/sessions/README.md",
     ".goat-flow/scratchpad/.gitignore",
     ".goat-flow/scratchpad/README.md",
     ".goat-flow/learning-loop/lessons/README.md",
@@ -26,9 +27,11 @@
     ".goat-flow/skill-docs/playbooks/changelog.md",
     ".goat-flow/skill-docs/playbooks/code-comments.md",
     ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
+    ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
     ".goat-flow/skill-docs/playbooks/observability.md",
     ".goat-flow/skill-docs/playbooks/page-capture.md",
     ".goat-flow/skill-docs/playbooks/release-notes.md",
+    ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
     ".goat-flow/skill-docs/skill-quality-testing/README.md",
     ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
     ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
@@ -45,6 +48,190 @@
     ".goat-flow/glossary.md",
     ".goat-flow/learning-loop/patterns/README.md"
   ],
+
+  "file_ownership": {
+    ".goat-flow/.gitignore": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/goat-flow-gitignore"
+    },
+    ".goat-flow/config.yaml": {
+      "ownership": "user-owned",
+      "generator": "goat-flow install"
+    },
+    ".goat-flow/plans/.gitignore": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/plans-gitignore"
+    },
+    ".goat-flow/plans/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/plans-readme.md"
+    },
+    ".goat-flow/logs/quality/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/quality-readme.md"
+    },
+    ".goat-flow/logs/events/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/events-readme.md"
+    },
+    ".goat-flow/logs/critiques/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/critiques-readme.md"
+    },
+    ".goat-flow/logs/review/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/review-readme.md"
+    },
+    ".goat-flow/logs/security/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/security-readme.md"
+    },
+    ".goat-flow/logs/sessions/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/session-logs-readme.md"
+    },
+    ".goat-flow/scratchpad/.gitignore": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/scratchpad-gitignore"
+    },
+    ".goat-flow/scratchpad/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/scratchpad-readme.md"
+    },
+    ".goat-flow/learning-loop/lessons/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/lessons-readme.md"
+    },
+    ".goat-flow/learning-loop/footguns/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/footguns-readme.md"
+    },
+    ".goat-flow/learning-loop/decisions/README.md": {
+      "ownership": "user-owned",
+      "source": "workflow/setup/reference/decisions-readme.md"
+    },
+    ".goat-flow/logs/sessions/.gitkeep": {
+      "ownership": "generated",
+      "generator": "goat-flow install"
+    },
+    ".goat-flow/skill-docs/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/reference/README.md"
+    },
+    ".goat-flow/skill-docs/skill-preamble.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/reference/skill-preamble.md"
+    },
+    ".goat-flow/skill-docs/skill-conventions.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/reference/skill-conventions.md"
+    },
+    ".goat-flow/skill-docs/playbooks/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/README.md"
+    },
+    ".goat-flow/skill-docs/playbooks/browser-use.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/browser-use.md"
+    },
+    ".goat-flow/skill-docs/playbooks/changelog.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/changelog.md"
+    },
+    ".goat-flow/skill-docs/playbooks/code-comments.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/code-comments.md"
+    },
+    ".goat-flow/skill-docs/playbooks/gruff-code-quality.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/gruff-code-quality.md"
+    },
+    ".goat-flow/skill-docs/playbooks/hook-policy-testing.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/hook-policy-testing.md"
+    },
+    ".goat-flow/skill-docs/playbooks/observability.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/observability.md"
+    },
+    ".goat-flow/skill-docs/playbooks/page-capture.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/page-capture.md"
+    },
+    ".goat-flow/skill-docs/playbooks/release-notes.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/release-notes.md"
+    },
+    ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/skill-playbook-authoring-sync.md"
+    },
+    ".goat-flow/skill-docs/skill-quality-testing/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/skill-quality-testing.md"
+    },
+    ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md"
+    },
+    ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md"
+    },
+    ".goat-flow/skill-docs/skill-quality-testing/deployment.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/skill-quality-testing/deployment.md"
+    },
+    ".goat-flow/hooks/deny-dangerous.sh": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous.sh"
+    },
+    ".goat-flow/hooks/gruff-code-quality.sh": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gruff-code-quality.sh"
+    },
+    ".goat-flow/hooks/post-turn-safety.sh": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/post-turn-safety.sh"
+    },
+    ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/patterns-shell.sh"
+    },
+    ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/patterns-paths.sh"
+    },
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/patterns-writes.sh"
+    },
+    ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh"
+    },
+    ".goat-flow/architecture.md": {
+      "ownership": "generated",
+      "generator": "goat-flow setup"
+    },
+    ".goat-flow/code-map.md": {
+      "ownership": "generated",
+      "generator": "goat-flow setup"
+    },
+    ".goat-flow/glossary.md": {
+      "ownership": "generated",
+      "generator": "goat-flow setup"
+    },
+    ".goat-flow/learning-loop/patterns/README.md": {
+      "ownership": "system-owned",
+      "source": "workflow/setup/reference/patterns-readme.md"
+    },
+    ".goat-flow/security-policy.md": {
+      "ownership": "user-owned",
+      "source": "workflow/setup/reference/security-policy.md"
+    },
+    ".cursorignore": { "ownership": "external" }
+  },
 
   "required_dirs": [
     ".goat-flow/learning-loop/decisions/",
@@ -70,7 +257,7 @@
     ".goat-flow/learning-loop/decisions/": "Committed ADR history. Durable architectural, product-surface, and tooling decisions with context and rationale; part of the project's persistent knowledge, not session-scoped WIP.",
     ".goat-flow/learning-loop/footguns/": "Committed architectural trap records. Use for codebase or system footguns that exist independent of one agent mistake; entries should carry grep-friendly file evidence and remain part of durable project knowledge.",
     ".goat-flow/learning-loop/lessons/": "Committed behavioural mistake records. Use for real agent or workflow mistakes learned from incidents; these entries are durable project knowledge, not local session notes.",
-    ".goat-flow/logs/sessions/": "Workspace-local, gitignored-by-design session logs. Continuity notes for the current checkout only; not part of committed project history. Only .gitkeep is committed.",
+    ".goat-flow/logs/sessions/": "Workspace-local, gitignored-by-design session logs. Continuity notes for the current checkout only; not part of committed project history. README.md defines the optional redacted handoff receipt; README.md and .gitkeep are committed.",
     ".goat-flow/logs/quality/": "Workspace-local, gitignored-by-design quality report history. Saved agent quality reports (JSON) and their captured prose companions (MD); feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. Only README.md is committed.",
     ".goat-flow/logs/events/": "Workspace-local, gitignored-by-design evidence envelope event log. Dashboard and future runtime producers append redacted JSONL records for local continuity; durable project knowledge must be promoted to lessons/, footguns/, or decisions/. Only README.md is committed.",
     ".goat-flow/logs/critiques/": "Workspace-local, gitignored-by-design critique run history. Phase 3 snapshots from `/goat-critique` runs persisted before the Phase 4 blocking gate so work survives session interruptions. Only README.md is committed.",
@@ -78,7 +265,7 @@
     ".goat-flow/logs/security/": "Workspace-local, gitignored-by-design security assessment history. Saved `/goat-security` run outputs for reference across sessions. Only README.md is committed.",
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
     ".goat-flow/skill-docs/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
-    ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, and release-notes.md for per-release narrative discipline. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
+    ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, hook-policy-testing.md for deny-hook policy, mirror, and registration verification, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline, and skill-playbook-authoring-sync.md for built-in playbook shape, mirroring, discovery, registration, and verification. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
     ".goat-flow/skill-docs/skill-quality-testing/": "Committed skill-authoring methodology pack. README.md indexes the pack; tdd-iteration.md, adversarial-framing.md, and deployment.md cover skill TDD, pressure-testing, and deployment discipline.",
     ".goat-flow/hooks/": "Committed central hook runtime. Holds deny-dangerous.sh, gruff-code-quality.sh, post-turn-safety.sh, and hook-specific policy modules under subdirectories.",
     ".goat-flow/hooks/deny-dangerous/": "Committed shared hook policy store sourced by each agent's deny-dangerous.sh dispatcher. Holds the destructive-shell, secret-path, repository-write policy modules and the central deny-dangerous self-test.",
@@ -87,6 +274,7 @@
 
   "optional_files": {
     "_note": "Optional files created when the project needs them, not during base setup.",
+    ".goat-flow/security-policy.md": "Optional project security policy seeded once and preserved for user customization.",
     ".cursorignore": "Excludes secret/sensitive paths from Cursor context."
   },
 
@@ -241,10 +429,7 @@
         "pre_tool": "PreToolUse",
         "post_turn": null
       },
-      "hooks": [
-        "deny-dangerous.sh",
-        "gruff-code-quality.sh"
-      ]
+      "hooks": ["deny-dangerous.sh", "gruff-code-quality.sh"]
     },
     "copilot": {
       "name": "Copilot CLI",

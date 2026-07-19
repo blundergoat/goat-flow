@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-18
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -49,10 +49,12 @@ Some harness checks can report a missing directory as present if they rely on `c
 
 **Evidence:**
 - `src/cli/facts/fs.ts` (search: `swallows readdir errors as a cached [] fallback`) - catches `readdirSync` failures and returns `[]`.
-- `src/cli/audit/harness/check-recovery.ts` (search: `if (!ctx.fs.exists(logsDir))`) - the session-log check now guards existence before `listDir()`; future harness checks need the same pattern.
+- `src/cli/audit/harness/check-recovery.ts` (search: `if (!ctx.fs.isReadableDirectory(logsDir))`) - the session-log check now verifies directory readability before using the non-throwing listing.
 - Runtime probe from 2026-05-05: `createFS("/home/hxdev/projects/feature/api-main").exists(".goat-flow/logs/sessions")` returned `false`, while `listDir(".goat-flow/logs/sessions")` returned `[]`.
 
-**Prevention:** Harness checks that need existence semantics must call `ctx.fs.exists(path)` first. Use `listDir()` only after existence is established, or explicitly document that missing and empty are equivalent for that check.
+**Recurrence update (2026-07-12):** M33 found that existence alone still false-passed when `.goat-flow/plans` or `.goat-flow/logs/sessions` was an ordinary file. Setup and Recovery both reported PASS because `exists()` returned true and `listDir()` collapsed `ENOTDIR` to `[]`. `ReadonlyFS.isReadableDirectory` now shares the adapter's cached directory read, and both checks fail unusable paths while valid empty directories still pass. Evidence: `test/integration/audit-quality.test.ts` (search: `fails setup and recovery when required storage paths are files`).
+
+**Prevention:** When a check promises directory storage, require both `exists(path)` and `isReadableDirectory(path)` before using `listDir()`. Use `listDir()` alone only when missing, unreadable, and empty intentionally mean the same thing.
 
 ---
 
@@ -88,6 +90,44 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 ---
 
+## Footgun: Selected-agent drift can leak unselected agent surfaces
+
+**Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Every new drift surface must declare whether it is agent-owned or shared and carry the caller's agent filter into agent-owned scans.
+**Trigger phase:** ACT
+
+**Trap:** Agent selection is easy to preserve in the top-level audit and lose inside a nested drift helper. Any helper that rebuilds the manifest-owned agent inventory can silently widen a selected-agent audit, producing phantom missing files for agents the consumer did not install. The current implementation prevents this for known drift surfaces; each new agent-owned surface can reintroduce it if it ignores `agentFilter`.
+
+**Original incident:** On 2026-07-12, `audit --agent codex --check-drift` against a Codex-only consumer still compared Claude and Copilot hook registrations because `checkDrift` rebuilt the full agent inventory.
+
+**Evidence:**
+- `src/cli/audit/audit.ts` (search: `agentFilter: ctx.agentFilter`) passes the selected agent into drift instead of dropping the caller's scope.
+- `src/cli/audit/check-drift.ts` (search: `selectedInstalledSkillRoots`) filters agent-owned skills, orphan scans, and hook registrations while leaving shared references and central hook policy global.
+- `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `limits hook drift to the selected agent`) reproduces the Codex-only consumer and fails if another agent leaks back into the report.
+
+**Prevention:** Any new drift surface must declare whether it is agent-owned or shared. Apply `agentFilter` to agent-owned files and keep shared framework assets global; prove both with a single-agent consumer fixture.
+
+---
+
+## Footgun: Extractor diagnostics can encode valid empty state
+
+**Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Diagnostic consumers must classify every documented state at their boundary; non-null diagnostic text is not an error flag.
+**Trigger phase:** ACT
+
+**Trap:** A shared diagnostic channel can carry malformed-metadata errors and valid status such as an empty first-run store. Any new consumer that treats every non-null diagnostic as failure can turn a valid fresh installation into a failed harness. The current Feedback Loop consumer classifies the known empty states; new diagnostics or consumers can reintroduce the conflation.
+
+**Original incident:** On 2026-07-12, a fresh consumer with valid but empty footgun and lesson directories failed the Feedback Loop concern because the harness treated the valid messages `Footgun directory exists but contains 0 entries` and `Lesson directory exists but contains 0 entries` as errors.
+
+**Evidence:**
+- `src/cli/audit/harness/check-feedback-loop.ts` (search: `EMPTY_LEARNING_LOOP_DIAGNOSTICS`) distinguishes the two valid first-run messages from actionable format failures.
+- `test/integration/audit-quality.test.ts` (search: `accepts extractor diagnostics that only report zero learning-loop entries`) pins the empty-install behavior without suppressing malformed-bucket diagnostics.
+- `test/integration/setup-quality-lifecycle.test.ts` (search: `consumer setup to quality-report lifecycle`) proves a newly installed consumer reaches a passing selected-agent harness before any incident entries exist.
+
+**Prevention:** Do not interpret a general-purpose diagnostic field as an error flag. Classify each documented diagnostic state at the consuming boundary, and keep a fresh-install fixture beside malformed-metadata coverage.
+
+---
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
@@ -96,7 +136,7 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 **Status:** resolved | **Created:** 2026-06-04 | **Resolved:** 2026-06-05 | **Evidence:** ACTUAL_MEASURED
 
-**Resolution:** `src/cli/facts/shared/decision-files.ts` (search: `isDecisionRecordMarkdown`) now owns the shared ADR/meta split; `src/cli/facts/shared/index.ts` (search: `filter(isDecisionRecordMarkdown)`) and `src/cli/facts/shared/learning-loop-entries.ts` (search: `isDecisionRecordMarkdown(basename(file.path))`) use it. `test/unit/learning-loop.test.ts` (search: `excludes the decisions INDEX from shared decision counts and prompt entries`) pins the inflated-count and prompt-entry regression.
+**Resolution:** `src/cli/facts/shared/decision-files.ts` (search: `isDecisionRecordMarkdown`) now owns the shared ADR/meta split; `src/cli/facts/shared/index.ts` (search: `filter(isDecisionRecordMarkdown)`) and `src/cli/facts/shared/learning-loop-entries.ts` (search: `isDecisionRecordMarkdown(sourceFilename(decisionFile.path))`) use it. `test/unit/learning-loop.test.ts` (search: `excludes the decisions INDEX from shared decision counts and prompt entries`) pins the inflated-count and prompt-entry regression.
 
 **Original symptoms:** Adding a hand-maintained `.goat-flow/learning-loop/decisions/INDEX.md` could pass `stats --check` filename validation while shared decision facts and prompt learning-loop entries still counted or surfaced it as a real decision. The dashboard, harness, and prompt context then reported inflated decision counts or included a "Decisions Index" entry beside ADR records.
 

@@ -1,14 +1,8 @@
 /**
- * Builds the compact, ranked list of learning-loop entries (footguns, lessons,
- * patterns, decisions) used for bounded prompt retrieval - each bucket file is
- * split into sections, summarized into a small fact with a byte-capped excerpt,
- * and tagged with reference-validation results.
- *
- * The final ordering is deterministic by design (kind, then newest-first by
- * updated/created date, then path, then discovery order) so prompt context is
- * stable across runs and machines. The per-kind order offsets (0, 10k, 20k, 30k)
- * are tiebreak seeds that keep entries from different buckets from interleaving
- * unpredictably; they are not limits on entry count.
+ * Builds compact learning-loop entry facts for stats, dashboard, and prompts.
+ * Use this parser when users need stable memory health without scraping Markdown.
+ * Entries retain user-facing headings, recurrence metadata, reference health,
+ * bounded excerpts, and deterministic ordering without changing project files.
  */
 import type {
   LearningLoopEntryFact,
@@ -26,235 +20,408 @@ import {
 import { isDecisionRecordMarkdown } from "./decision-files.js";
 import { splitFootgunSections } from "./learning-loop-sections.js";
 
-/** Extract one metadata date from an entry body. */
-function extractEntryDate(
-  content: string,
-  label: "Created" | "Updated" | "Resolved" | "Date",
+/**
+ * Read one metadata value from an entry body.
+ * Use when stats needs an optional author-supplied field; missing or empty means null.
+ */
+function extractEntryMetadata(
+  entryContent: string,
+  metadataLabel: string,
 ): string | null {
-  const match = content.match(
-    new RegExp(`\\*\\*${label}:\\*\\*\\s*(\\d{4}-\\d{2}-\\d{2})`, "i"),
+  const metadataMatch = entryContent.match(
+    new RegExp(`\\*\\*${metadataLabel}:\\*\\*\\s*([^|\\r\\n]+)`, "i"),
   );
-  return match?.[1] ?? null;
+  // A missing or blank field means the author has not supplied this optional metadata.
+  const metadataValue = metadataMatch?.[1]?.trim() ?? "";
+  return metadataValue.length > 0 ? metadataValue : null;
 }
 
-/** Return the first markdown heading, or a stable filename fallback. */
-function firstHeadingTitle(content: string, fallback: string): string {
-  const heading = content.match(/^#\s+(.+)$/m)?.[1]?.trim();
-  return heading?.length ? heading : fallback;
+/**
+ * Read one ISO metadata date from an entry body.
+ * Use when users sort or validate memory chronology; missing or malformed means null.
+ */
+function extractEntryDate(
+  entryContent: string,
+  metadataLabel:
+    "Created" | "Updated" | "Resolved" | "Date" | "Latest occurrence",
+): string | null {
+  const metadataValue = extractEntryMetadata(entryContent, metadataLabel);
+  // Only exact ISO dates enter the user-facing chronology; other values stay unknown.
+  if (metadataValue === null || !/^\d{4}-\d{2}-\d{2}$/.test(metadataValue)) {
+    return null;
+  }
+  return metadataValue;
 }
 
-/** Return the last slash-delimited path segment. */
-function basename(path: string): string {
-  const idx = path.lastIndexOf("/");
-  return idx === -1 ? path : path.slice(idx + 1);
+/**
+ * Return the first Markdown title used to identify a decision to users.
+ * Use the filename fallback when a malformed ADR has no readable heading.
+ */
+function firstHeadingTitle(
+  markdownContent: string,
+  fallbackTitle: string,
+): string {
+  // Missing or empty headings fall back to a stable filename-derived label in the UI.
+  const headingTitle = markdownContent.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? "";
+  return headingTitle.length > 0 ? headingTitle : fallbackTitle;
 }
 
-/** Strip light markdown syntax and metadata for prompt-safe excerpts. */
-function compactEntryExcerpt(content: string, maxBytes = 900): string {
-  const cleaned = content
+/**
+ * Return the filename users see for a slash-delimited source path.
+ * Use when decision filters or fallbacks should not expose the whole project path.
+ */
+function sourceFilename(sourcePath: string): string {
+  const lastSeparatorIndex = sourcePath.lastIndexOf("/");
+  // A bare filename is already ready for display; a project path is reduced to its final segment.
+  if (lastSeparatorIndex === -1) {
+    return sourcePath;
+  }
+  return sourcePath.slice(lastSeparatorIndex + 1);
+}
+
+/**
+ * Strip Markdown noise and cap one entry excerpt for prompt users.
+ * Use when retrieval needs readable context without loading the complete bucket.
+ */
+function compactEntryExcerpt(
+  entryContent: string,
+  maximumExcerptBytes = 900,
+): string {
+  const entryLines = entryContent
     .replace(/^##\s+(?:Footgun|Lesson|Pattern):\s+.+$/gm, "")
     .replace(/^#\s+.+$/gm, "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(
-      (line) =>
-        line.length > 0 &&
-        line !== "---" &&
-        !/^\*\*Status:\*\*/i.test(line) &&
-        !/^>/.test(line),
-    )
+    .split("\n");
+  // Each line is normalized so users receive one predictable excerpt sentence.
+  const normalizedEntryLines = entryLines.map((entryLine) => entryLine.trim());
+  // Empty, frontmatter, status, and quoted lines add no decision-bearing prompt context.
+  const userFacingEntryLines = normalizedEntryLines.filter(
+    (entryLine) =>
+      entryLine.length > 0 &&
+      entryLine !== "---" &&
+      !/^\*\*Status:\*\*/i.test(entryLine) &&
+      !/^>/.test(entryLine),
+  );
+  const cleanedExcerpt = userFacingEntryLines
     .join(" ")
     .replace(/\*\*/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  if (Buffer.byteLength(cleaned, "utf8") <= maxBytes) return cleaned;
-
-  let out = "";
-  for (const char of cleaned) {
-    const next = out + char;
-    if (Buffer.byteLength(next + "...", "utf8") > maxBytes) break;
-    out = next;
+  // Short entries fit the prompt budget and can be shown without truncation.
+  if (Buffer.byteLength(cleanedExcerpt, "utf8") <= maximumExcerptBytes) {
+    return cleanedExcerpt;
   }
-  return `${out.trimEnd()}...`;
+
+  let boundedExcerpt = "";
+  // Characters are added until the rendered ellipsis would exceed the user's byte budget.
+  for (const excerptCharacter of cleanedExcerpt) {
+    const nextExcerpt = boundedExcerpt + excerptCharacter;
+    // Stop before this character would make the prompt excerpt exceed its configured cap.
+    if (Buffer.byteLength(nextExcerpt + "...", "utf8") > maximumExcerptBytes) {
+      break;
+    }
+    boundedExcerpt = nextExcerpt;
+  }
+  return `${boundedExcerpt.trimEnd()}...`;
 }
 
-/** Date used for deterministic newest-first ranking. */
+/**
+ * Pick the date used for newest-first memory ordering.
+ * Use the creation date when users have never updated the entry; no dates means null.
+ */
 function entrySortDate(
   entry: Pick<LearningLoopEntryFact, "updated" | "created">,
-) {
+): string | null {
+  // An absent update falls back to creation; entries with neither date remain unsorted by date.
   return entry.updated ?? entry.created ?? null;
 }
 
-/** Parsed lesson/pattern section with its inferred learning-loop entry kind. */
+/**
+ * Parse an optional recurrence count for stats and dashboard users.
+ * Missing or non-numeric values stay null so malformed metadata never invents incidents.
+ */
+function extractIncidentCount(entryContent: string): number | null {
+  const incidentCountText = extractEntryMetadata(
+    entryContent,
+    "Incident count",
+  );
+  // Missing or non-numeric counts mean the UI cannot claim a measured recurrence total.
+  if (incidentCountText === null || !/^\d+$/.test(incidentCountText)) {
+    return null;
+  }
+  return Number.parseInt(incidentCountText, 10);
+}
+
+/**
+ * Return forward-looking metadata shared by footgun and lesson facts.
+ * Use when stats or dashboard users inspect why and when one memory should trigger.
+ */
+function extractMemoryQualityMetadata(
+  entryContent: string,
+): Pick<
+  LearningLoopEntryFact,
+  | "hasDecisionChangedGuidance"
+  | "triggerPhase"
+  | "incidentCount"
+  | "latestOccurrence"
+> {
+  // Missing optional guidance remains visible in JSON without flooding --check warnings.
+  const hasDecisionChangedGuidance =
+    extractEntryMetadata(entryContent, "Decision changed") !== null;
+  return {
+    hasDecisionChangedGuidance,
+    triggerPhase: extractEntryMetadata(entryContent, "Trigger phase"),
+    incidentCount: extractIncidentCount(entryContent),
+    latestOccurrence: extractEntryDate(entryContent, "Latest occurrence"),
+  };
+}
+
+/**
+ * Stores one parsed lesson or pattern section for user-facing fact creation.
+ * Use while splitting a shared bucket into independently inspectable memories.
+ */
 interface LearningSection {
   title: string;
+  heading: string;
   kind: LearningLoopEntryKind;
   start: number;
   content: string;
 }
 
-/** Split lessons/patterns buckets into individual markdown sections. */
+/**
+ * Split a lesson or pattern bucket into individual user-facing memories.
+ * Use before extraction so each heading receives its own metadata and health record.
+ */
 function splitLearningSections(
-  body: string,
-  defaultKind: "lesson" | "pattern",
+  bucketBody: string,
+  defaultEntryKind: "lesson" | "pattern",
 ): LearningSection[] {
-  const headings = Array.from(
-    body.matchAll(/^##\s+(Lesson|Pattern):\s+(.+)$/gm),
-    (match) => ({
-      kind:
-        (match[1] ?? defaultKind).toLowerCase() === "pattern"
-          ? "pattern"
-          : defaultKind,
-      title: (match[2] ?? "").trim(),
-      start: match.index,
-    }),
+  // Every matching heading becomes one memory row a stats or dashboard user can inspect.
+  const sectionHeadings = Array.from(
+    bucketBody.matchAll(/^##\s+(Lesson|Pattern):\s+(.+)$/gm),
+    (headingMatch) => {
+      // Missing captures use the bucket's known kind and an empty title instead of inventing text.
+      const headingKind = headingMatch[1] ?? defaultEntryKind;
+      const headingTitle = (headingMatch[2] ?? "").trim();
+      const normalizedKind =
+        headingKind.toLowerCase() === "pattern" ? "pattern" : defaultEntryKind;
+      return {
+        kind: normalizedKind,
+        title: headingTitle,
+        heading: `## ${headingKind}: ${headingTitle}`,
+        start: headingMatch.index,
+      };
+    },
   );
-  return headings.map((heading, index) => {
-    const end = headings[index + 1]?.start ?? body.length;
+  // Each heading owns content until the next memory heading or the bucket's end.
+  return sectionHeadings.map((sectionHeading, headingIndex) => {
+    // The final memory has no sibling, so its user-facing content continues to EOF.
+    const sectionEnd =
+      sectionHeadings[headingIndex + 1]?.start ?? bucketBody.length;
     return {
-      ...heading,
-      content: body.slice(heading.start, end),
+      ...sectionHeading,
+      content: bucketBody.slice(sectionHeading.start, sectionEnd),
     };
   });
 }
 
-/** Build compact entry facts from footgun buckets. */
+/**
+ * Build compact footgun facts for retrieval, stats, and dashboard users.
+ * Use after bucket discovery so every hazard keeps its own metadata and reference health.
+ */
 function extractFootgunEntries(
-  fs: ReadonlyFS,
-  dir: EntryDir,
-  startOrder: number,
+  projectFiles: ReadonlyFS,
+  learningDirectory: EntryDir,
+  firstDisplayOrder: number,
 ): LearningLoopEntryFact[] {
-  let order = startOrder;
-  const entries: LearningLoopEntryFact[] = [];
-  for (const file of dir.files) {
-    const { body } = parseMarkdownFrontmatter(file.content);
-    const bucketSizeBytes = Buffer.byteLength(file.content, "utf8");
-    for (const section of splitFootgunSections(body)) {
-      const refs = summarizeFootgunRefs(fs, section.content);
-      entries.push({
-        sourcePath: file.path,
+  let nextDisplayOrder = firstDisplayOrder;
+  const learningEntries: LearningLoopEntryFact[] = [];
+  // Each bucket file can hold several hazards that users need to inspect separately.
+  for (const bucketFile of learningDirectory.files) {
+    const { body: bucketBody } = parseMarkdownFrontmatter(bucketFile.content);
+    const bucketSizeBytes = Buffer.byteLength(bucketFile.content, "utf8");
+    // Each footgun section becomes one independently ranked memory fact.
+    for (const footgunSection of splitFootgunSections(bucketBody)) {
+      const referenceHealth = summarizeFootgunRefs(
+        projectFiles,
+        footgunSection.content,
+      );
+      // Malformed status remains null so the existing structure check can explain the repair.
+      const canonicalStatus =
+        footgunSection.status === "active" ||
+        footgunSection.status === "resolved"
+          ? footgunSection.status
+          : null;
+      learningEntries.push({
+        sourcePath: bucketFile.path,
         kind: "footgun",
-        title: section.title,
-        status:
-          section.status === "active" || section.status === "resolved"
-            ? section.status
-            : null,
-        created: extractEntryDate(section.content, "Created"),
-        updated: extractEntryDate(section.content, "Updated"),
-        resolved: extractEntryDate(section.content, "Resolved"),
-        excerpt: compactEntryExcerpt(section.content),
-        staleRefs: refs.staleRefs,
-        invalidLineRefs: refs.invalidLineRefs,
-        hasValidAnchor: refs.validRefs > 0,
+        title: footgunSection.title,
+        heading: `## Footgun: ${footgunSection.title}`,
+        status: canonicalStatus,
+        created: extractEntryDate(footgunSection.content, "Created"),
+        updated: extractEntryDate(footgunSection.content, "Updated"),
+        resolved: extractEntryDate(footgunSection.content, "Resolved"),
+        ...extractMemoryQualityMetadata(footgunSection.content),
+        excerpt: compactEntryExcerpt(footgunSection.content),
+        staleRefs: referenceHealth.staleRefs,
+        invalidLineRefs: referenceHealth.invalidLineRefs,
+        hasValidAnchor: referenceHealth.validRefs > 0,
         bucketSizeBytes,
-        order: order++,
+        order: nextDisplayOrder++,
       });
     }
   }
-  return entries;
+  return learningEntries;
 }
 
-/** Build compact entry facts from lessons or patterns buckets. */
+/**
+ * Build lesson or pattern facts for retrieval, stats, and dashboard users.
+ * Use when one bucket mixes entry headings but shares the same source file.
+ */
 function extractLessonLikeEntries(
-  fs: ReadonlyFS,
-  dir: EntryDir,
-  defaultKind: "lesson" | "pattern",
-  startOrder: number,
+  projectFiles: ReadonlyFS,
+  learningDirectory: EntryDir,
+  defaultEntryKind: "lesson" | "pattern",
+  firstDisplayOrder: number,
 ): LearningLoopEntryFact[] {
-  let order = startOrder;
-  const entries: LearningLoopEntryFact[] = [];
-  for (const file of dir.files) {
-    const { body } = parseMarkdownFrontmatter(file.content);
-    const bucketSizeBytes = Buffer.byteLength(file.content, "utf8");
-    for (const section of splitLearningSections(body, defaultKind)) {
-      const refs = summarizeLessonRefs(fs, section.content);
-      entries.push({
-        sourcePath: file.path,
-        kind: section.kind,
-        title: section.title,
+  let nextDisplayOrder = firstDisplayOrder;
+  const learningEntries: LearningLoopEntryFact[] = [];
+  // Each bucket file can hold several lessons or patterns shown as separate user memories.
+  for (const bucketFile of learningDirectory.files) {
+    const { body: bucketBody } = parseMarkdownFrontmatter(bucketFile.content);
+    const bucketSizeBytes = Buffer.byteLength(bucketFile.content, "utf8");
+    // Each heading receives its own metadata rather than inheriting a neighboring entry's fields.
+    for (const learningSection of splitLearningSections(
+      bucketBody,
+      defaultEntryKind,
+    )) {
+      const referenceHealth = summarizeLessonRefs(
+        projectFiles,
+        learningSection.content,
+      );
+      learningEntries.push({
+        sourcePath: bucketFile.path,
+        kind: learningSection.kind,
+        title: learningSection.title,
+        heading: learningSection.heading,
         status: null,
-        created: extractEntryDate(section.content, "Created"),
-        updated: extractEntryDate(section.content, "Updated"),
-        resolved: extractEntryDate(section.content, "Resolved"),
-        excerpt: compactEntryExcerpt(section.content),
-        staleRefs: refs.staleRefs,
-        invalidLineRefs: refs.invalidLineRefs,
-        hasValidAnchor: refs.validRefs > 0,
+        created: extractEntryDate(learningSection.content, "Created"),
+        updated: extractEntryDate(learningSection.content, "Updated"),
+        resolved: extractEntryDate(learningSection.content, "Resolved"),
+        ...extractMemoryQualityMetadata(learningSection.content),
+        excerpt: compactEntryExcerpt(learningSection.content),
+        staleRefs: referenceHealth.staleRefs,
+        invalidLineRefs: referenceHealth.invalidLineRefs,
+        hasValidAnchor: referenceHealth.validRefs > 0,
         bucketSizeBytes,
-        order: order++,
+        order: nextDisplayOrder++,
       });
     }
   }
-  return entries;
+  return learningEntries;
 }
 
-/** Build compact entry facts from ADR files. */
+/**
+ * Build compact decision facts for architecture-oriented retrieval users.
+ * Use when ADR files need the same stable ordering shape as other learning entries.
+ */
 function extractDecisionEntries(
-  dir: EntryDir,
-  startOrder: number,
+  learningDirectory: EntryDir,
+  firstDisplayOrder: number,
 ): LearningLoopEntryFact[] {
-  let order = startOrder;
-  return dir.files
-    .filter((file) => isDecisionRecordMarkdown(basename(file.path)))
-    .map((file) => {
-      const filename = basename(file.path);
-      return {
-        sourcePath: file.path,
-        kind: "decision" as const,
-        title: firstHeadingTitle(
-          file.content,
-          filename.replace(/\.md$/i, "").replace(/^ADR-\d+-/, ""),
-        ),
-        status: null,
-        created: extractEntryDate(file.content, "Date"),
-        updated: extractEntryDate(file.content, "Updated"),
-        resolved: null,
-        excerpt: compactEntryExcerpt(file.content),
-        staleRefs: [],
-        invalidLineRefs: [],
-        hasValidAnchor: true,
-        bucketSizeBytes: Buffer.byteLength(file.content, "utf8"),
-        order: order++,
-      };
-    });
+  let nextDisplayOrder = firstDisplayOrder;
+  // README and INDEX files are excluded because users need actual ADR memories only.
+  const decisionFiles = learningDirectory.files.filter((decisionFile) =>
+    isDecisionRecordMarkdown(sourceFilename(decisionFile.path)),
+  );
+  // Each ADR becomes one retrieval fact with neutral forward-memory metadata.
+  return decisionFiles.map((decisionFile) => {
+    const filename = sourceFilename(decisionFile.path);
+    const decisionTitle = firstHeadingTitle(
+      decisionFile.content,
+      filename.replace(/\.md$/i, "").replace(/^ADR-\d+-/, ""),
+    );
+    return {
+      sourcePath: decisionFile.path,
+      kind: "decision" as const,
+      title: decisionTitle,
+      heading: `# ${decisionTitle}`,
+      status: null,
+      created: extractEntryDate(decisionFile.content, "Date"),
+      updated: extractEntryDate(decisionFile.content, "Updated"),
+      resolved: null,
+      hasDecisionChangedGuidance: true,
+      triggerPhase: null,
+      incidentCount: null,
+      latestOccurrence: null,
+      excerpt: compactEntryExcerpt(decisionFile.content),
+      staleRefs: [],
+      invalidLineRefs: [],
+      hasValidAnchor: true,
+      bucketSizeBytes: Buffer.byteLength(decisionFile.content, "utf8"),
+      order: nextDisplayOrder++,
+    };
+  });
 }
 
 /**
  * Extract compact learning-loop entries for bounded prompt retrieval.
  *
- * @param fs - filesystem adapter for the target project
- * @param configState - loaded config with footgun, lesson, and decision paths
- * @returns ordered compact entries suitable for prompt context selection
+ * @param projectFiles - selected-project files; an empty project produces no memory rows for users.
+ * @param configState - memory paths; absent directories produce no entries for that memory kind.
+ * @returns ordered facts; an empty array means the selected project has no durable memories to show.
  */
 export function extractLearningLoopEntries(
-  fs: ReadonlyFS,
+  projectFiles: ReadonlyFS,
   configState: LoadedConfig,
 ): LearningLoopEntryFact[] {
-  const footgunDir = listMarkdownEntries(fs, configState.config.footguns.path);
-  const lessonDir = listMarkdownEntries(fs, configState.config.lessons.path);
-  const patternDir = listMarkdownEntries(
-    fs,
+  const footgunDirectory = listMarkdownEntries(
+    projectFiles,
+    configState.config.footguns.path,
+  );
+  const lessonDirectory = listMarkdownEntries(
+    projectFiles,
+    configState.config.lessons.path,
+  );
+  const patternDirectory = listMarkdownEntries(
+    projectFiles,
     ".goat-flow/learning-loop/patterns/",
   );
-  const decisionDir = listMarkdownEntries(
-    fs,
+  const decisionDirectory = listMarkdownEntries(
+    projectFiles,
     configState.config.decisions.path,
   );
-  const entries = [
-    ...extractFootgunEntries(fs, footgunDir, 0),
-    ...extractLessonLikeEntries(fs, lessonDir, "lesson", 10_000),
-    ...extractLessonLikeEntries(fs, patternDir, "pattern", 20_000),
-    ...extractDecisionEntries(decisionDir, 30_000),
+  const learningEntries = [
+    ...extractFootgunEntries(projectFiles, footgunDirectory, 0),
+    ...extractLessonLikeEntries(
+      projectFiles,
+      lessonDirectory,
+      "lesson",
+      10_000,
+    ),
+    ...extractLessonLikeEntries(
+      projectFiles,
+      patternDirectory,
+      "pattern",
+      20_000,
+    ),
+    ...extractDecisionEntries(decisionDirectory, 30_000),
   ];
-  return entries.sort((left, right) => {
-    const kindDiff = left.kind.localeCompare(right.kind);
-    if (kindDiff !== 0) return kindDiff;
-    const dateDiff = (entrySortDate(right) ?? "").localeCompare(
-      entrySortDate(left) ?? "",
+  // Stable ordering keeps the same memory rows in the same user-visible order across runs.
+  return learningEntries.sort((leftEntry, rightEntry) => {
+    const kindOrder = leftEntry.kind.localeCompare(rightEntry.kind);
+    // Different memory kinds retain their deterministic grouping for prompt consumers.
+    if (kindOrder !== 0) return kindOrder;
+    // Missing dates sort as empty so undated legacy entries remain readable and deterministic.
+    const dateOrder = (entrySortDate(rightEntry) ?? "").localeCompare(
+      entrySortDate(leftEntry) ?? "",
     );
-    if (dateDiff !== 0) return dateDiff;
-    const pathDiff = left.sourcePath.localeCompare(right.sourcePath);
-    if (pathDiff !== 0) return pathDiff;
-    return left.order - right.order;
+    // Newer entries appear first within their kind when users review selected memory.
+    if (dateOrder !== 0) return dateOrder;
+    const sourcePathOrder = leftEntry.sourcePath.localeCompare(
+      rightEntry.sourcePath,
+    );
+    // Source paths break date ties so machines discover the same user-visible order.
+    if (sourcePathOrder !== 0) return sourcePathOrder;
+    return leftEntry.order - rightEntry.order;
   });
 }

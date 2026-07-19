@@ -1,6 +1,6 @@
 ---
 category: skills
-last_reviewed: 2026-06-08
+last_reviewed: 2026-07-13
 ---
 
 ## Footgun: Skill parity edits can miss `.github/skills/` and fail repo-level drift checks
@@ -34,7 +34,7 @@ last_reviewed: 2026-06-08
 - `.goat-flow/skill-docs/skill-preamble.md` (search: `Routing rule`) contains the runtime rule that triggered the current drift.
 - `workflow/skills/reference/skill-preamble.md` (search: `Learning-Loop Retrieval`) is the corresponding template source that must remain byte-equivalent except for intentionally synchronized edits.
 - `scripts/preflight-checks.sh` (search: `Skill Docs Sync`) fails when shared skill-doc templates and installed copies differ.
-- `src/cli/audit/check-drift.ts` (search: `workflow/skills/reference/skill-preamble.md`) also checks shared-reference template/install parity through the audit path.
+- `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`) owns the canonical shared-reference mirror registry used by the audit path.
 
 **Prevention:** When changing shared skill-reference files (`skill-preamble.md`, `skill-conventions.md`) or topical files under `workflow/skills/reference/`, edit the workflow template and installed copy together. When changing standalone playbooks under `workflow/skills/playbooks/`, update the matching `.goat-flow/skill-docs/playbooks/` surfaces too. Exception: the `skill-quality-testing` methodology source starts at `workflow/skills/playbooks/skill-quality-testing.md` plus topical files under `workflow/skills/playbooks/skill-quality-testing/`, but installs to `.goat-flow/skill-docs/skill-quality-testing/README.md` plus the installed topical files. Re-run `bash scripts/preflight-checks.sh` or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json` before treating the change as complete.
 

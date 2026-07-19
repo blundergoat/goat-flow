@@ -2,7 +2,7 @@
  * setup --apply installer upgrade migrations: legacy artifacts are migrated or pruned
  * without overwriting target collisions - tasks workspace/config to plans, learning-loop
  * dirs, hook-lib content and fat per-agent hook copies, enabled gruff hook registrations,
- * Codex permission entries, stale Claude MultiEdit deny rules, legacy skill docs, 1.8.0
+ * Codex permission entries, stale Claude MultiEdit/unmatched-form deny rules, legacy skill docs, 1.8.0
  * split guard hooks and registrations, and stale per-skill reference files.
  */
 import { describe, it } from "node:test";
@@ -504,26 +504,40 @@ describe("setup --apply installer upgrade migrations", () => {
 
     const config = readFileSync(join(root, ".codex", "config.toml"), "utf-8");
     assert.match(config, /"private\/\*\*" = "deny"/);
-    assert.match(config, /"\*\*\/\.env\*" = "deny"/);
+    assert.match(config, /"\*\*\/\.env" = "deny"/);
+    assert.doesNotMatch(config, /"\*\*\/\.env\*" = "deny"/);
   });
 
-  // Fixture purpose: writes stale Claude deny settings to cover removed-tool pruning.
-  it("prunes stale removed-tool (MultiEdit) deny rules from existing Claude settings on upgrade", () => {
+  // Fixture purpose: writes stale Claude permission rules to cover removed-tool
+  // pruning, unmatched-rule rewriting, and broad env read-deny expansion.
+  it("prunes removed-tool (MultiEdit) denies and rewrites unmatched Write/NotebookEdit/Glob denies on upgrade", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".claude"), { recursive: true });
-    // Claude Code v2.x removed MultiEdit; surviving MultiEdit(...) deny rules
-    // print "matches no known tool" on every launch. The upgrade must strip
-    // them WITHOUT touching managed (Edit) or user-added unmanaged (WebFetch)
-    // denies for tools Claude still recognises.
+    // Claude Code v2.x removed MultiEdit ("matches no known tool" on every
+    // launch), Write/NotebookEdit/Glob permission rules are never matched by
+    // file permission checks (only Edit/Read path rules are), and the broad
+    // env read deny shadowed the shipped .env.example allow (deny wins). The
+    // upgrade must drop removed-tool rules, rewrite unmatched forms to the
+    // covering tool (or drop them when the covering rule already exists),
+    // expand the broad env read and edit denies in the deny array only, and
+    // leave managed (Edit) plus user-added unmanaged (WebFetch) rules alone.
     writeFileSync(
       join(root, ".claude", "settings.json"),
       JSON.stringify(
         {
           permissions: {
+            allow: ["Read(**/.env.example)", "Write(docs/**)"],
+            ask: ["Glob(**/dist/**)"],
             deny: [
               "MultiEdit(**/secrets/**)",
               "MultiEdit(**/*.key)",
               "Edit(**/*.key)",
+              "Write(**/*.key)",
+              "Write(**/custom-cert.pem)",
+              "NotebookEdit(**/notebooks/**)",
+              "Glob(**/generated/**)",
+              "Read(**/.env*)",
+              "Edit(**/.env*)",
               "WebFetch(**/internal/**)",
             ],
           },
@@ -535,35 +549,99 @@ describe("setup --apply installer upgrade migrations", () => {
 
     const result = runInstaller(root, "--agent", "claude");
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.match(result.stdout, /stale removed-tool deny rules/);
+    assert.match(result.stdout, /stale or superseded permission rules/);
 
     const settings = JSON.parse(
       readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
-    ) as { permissions?: { deny?: string[] } };
+    ) as { permissions?: Record<string, string[]> };
     const deny = settings.permissions?.deny ?? [];
-    assert.ok(
-      deny.every((rule) => !rule.startsWith("MultiEdit(")),
-      `MultiEdit deny rules should be pruned, got: ${deny.join(", ")}`,
+    const allow = settings.permissions?.allow ?? [];
+    const ask = settings.permissions?.ask ?? [];
+    const staleForms = ["MultiEdit(", "Write(", "NotebookEdit(", "Glob("];
+    for (const rules of [deny, allow, ask]) {
+      for (const staleForm of staleForms) {
+        assert.ok(
+          rules.every((rule) => !rule.startsWith(staleForm)),
+          `${staleForm}...) rules should be gone, got: ${rules.join(", ")}`,
+        );
+      }
+    }
+    // Write(**/*.key) deduped into the existing Edit rule, not duplicated.
+    assert.deepEqual(
+      deny.filter((rule) => rule === "Edit(**/*.key)"),
+      ["Edit(**/*.key)"],
+      "managed Edit deny preserved exactly once",
     );
-    // No collateral damage to valid managed/unmanaged tool denies.
-    assert.ok(deny.includes("Edit(**/*.key)"), "managed Edit deny preserved");
+    // Unmatched forms without a covering rule keep their intent via rewrite.
+    assert.ok(deny.includes("Edit(**/custom-cert.pem)"), "Write rewritten");
+    assert.ok(deny.includes("Edit(**/notebooks/**)"), "NotebookEdit rewritten");
+    assert.ok(deny.includes("Read(**/generated/**)"), "Glob rewritten");
+    // Broad env denies expanded so .env.example matches no deny rule.
+    assert.ok(!deny.includes("Read(**/.env*)"), "broad env read deny expanded");
+    assert.ok(deny.includes("Read(**/.env)"), "exact env deny added");
+    assert.ok(deny.includes("Read(**/.envrc)"), "envrc deny added");
+    assert.ok(
+      deny.includes("Read(**/.env.*.local)"),
+      "local-variant deny added",
+    );
+    assert.ok(!deny.includes("Edit(**/.env*)"), "broad env edit deny expanded");
+    assert.ok(deny.includes("Edit(**/.env)"), "exact env edit deny added");
+    assert.ok(
+      deny.includes("Edit(**/.env.*.local)"),
+      "local-variant edit deny added",
+    );
+    // Allow/ask arrays repaired without env expansion.
+    assert.ok(allow.includes("Edit(docs/**)"), "allow Write rewritten to Edit");
+    assert.ok(
+      allow.includes("Read(**/.env.example)"),
+      "sample env allow preserved",
+    );
+    assert.ok(ask.includes("Read(**/dist/**)"), "ask Glob rewritten to Read");
+    // No collateral damage to valid user-added unmanaged tool denies.
     assert.ok(
       deny.includes("WebFetch(**/internal/**)"),
       "user-added WebFetch deny preserved",
     );
 
-    // Idempotent: a second upgrade reports no further deny migration.
+    // Idempotent: a second upgrade reports no further permission migration.
     const second = runInstaller(root, "--agent", "claude");
     assert.equal(second.status, 0, second.stderr || second.stdout);
-    assert.doesNotMatch(second.stdout, /stale removed-tool deny rules/);
-    const settings2 = JSON.parse(
-      readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
-    ) as { permissions?: { deny?: string[] } };
-    assert.ok(
-      (settings2.permissions?.deny ?? []).every(
-        (rule) => !rule.startsWith("MultiEdit("),
-      ),
+    assert.doesNotMatch(second.stdout, /stale or superseded permission rules/);
+  });
+
+  // Fixture purpose: seeds a personal settings.local.json to cover local-override repair.
+  it("repairs stale permission rules in .claude/settings.local.json on upgrade", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    writeFileSync(
+      join(root, ".claude", "settings.local.json"),
+      JSON.stringify(
+        {
+          permissions: {
+            deny: ["Write(**/scratch/**)", "MultiEdit(**/*.pem)"],
+          },
+        },
+        null,
+        2,
+      ) + "\n",
     );
+
+    const result = runInstaller(root, "--agent", "claude");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(
+      result.stdout,
+      /settings\.local\.json \(migrated: stale or superseded permission rules\)/,
+    );
+
+    const local = JSON.parse(
+      readFileSync(join(root, ".claude", "settings.local.json"), "utf-8"),
+    ) as { permissions?: { deny?: string[] } };
+    assert.deepEqual(local.permissions?.deny ?? [], ["Edit(**/scratch/**)"]);
+
+    // Idempotent: a second upgrade leaves the repaired local file alone.
+    const second = runInstaller(root, "--agent", "claude");
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    assert.doesNotMatch(second.stdout, /settings\.local\.json \(migrated/);
   });
 
   // Fixture purpose: writes legacy skill docs to cover collision-safe skill-doc migration.

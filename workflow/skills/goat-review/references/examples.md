@@ -1,13 +1,35 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # goat-review Reference Examples
 
-Extended Excuse/Reality table, finding-format examples, and constraint rationale for `/goat-review`.
+This reference carries detailed examples that would overload the review protocol.
+Use it to calibrate refutations, final output, and explicit direction audits.
+Every live claim still requires a verified file plus semantic anchor.
+
+> **Illustrative scenario - input/output shape only; never evidence.** All example paths, suspicions, outcomes, and findings below must be replaced with current target-project evidence before they appear in a live review.
+
+## Direction / Opportunity Audit
+
+Run this area-audit variant only when the user explicitly asks what the repository should do next. Record the current read-only verification baseline first. A failing build or test remains a defect finding and must not be reclassified as an opportunity; establish a passing or explicitly failing current baseline before proposing opportunities. Every item needs repo-grounded evidence and exactly one class:
+
+- **unfinished intent** - TODO/FIXME clusters, dead flags, or stubs.
+- **stated-but-undelivered** - docs or flags promise behavior no live surface provides.
+- **surface asymmetry** - an export has no import, CRUD lacks one operation, or an integration works one way.
+- **adjacent possible** - a cheap extension is implied by the existing architecture.
+- **friction worth productizing** - docs, examples, issues, or support text repeat the same manual workaround.
+
+Emit these under `## Direction / Opportunity Audit`, without MUST/SHOULD/MAY tags. Rank only this opportunity/backlog output by impact divided by effort, discounted by confidence and fix risk. Defect findings remain severity-ordered and continue to control Ship Verdict. Generic ideas without a live anchor are rejected, not padded into the list.
+
+Route rejected material by lifespan:
+
+- **Per-run refutations:** keep Pass-2 evidence in random-suffixed `.goat-flow/logs/review/` ledgers.
+- **Local cross-run rejections:** record the rationale in the active plan's `backlog.md` or a named plan-local rejection section.
+- **Durable policy decisions:** use an ADR or learning-loop entry only when the decision changes future work beyond the current plan.
 
 ## Worked Example - Refuted Template Suspicion
 
-Use this shape when Pass 1 raises a plausible template or output-format suspicion and Pass 2 disproves it. This example uses real `goat-review` files and anchors.
+Use this shape when Pass 1 raises a plausible template or output-format suspicion and Pass 2 disproves it. The sibling skill filenames demonstrate the shape only; re-resolve and re-read them in the current installation before making a claim.
 
 **Review surface:** `SKILL.md`, `references/automated-review.md`, `references/refuter-spec.md`
 
@@ -30,66 +52,23 @@ Use this shape when Pass 1 raises a plausible template or output-format suspicio
 
 **Zero-finding final note:** "Checked Review Integrity against both optional references; no issue surfaced because the output template includes the required conditional lines."
 
-## Worked Example - Full Output Block (end-to-end)
+## Worked Example - Confirmed Finding Shape
 
-The refuted-suspicion example above walks one Pass 1 -> Pass 2 transition. This example shows the **entire Output Format filled in**, so a cold reader sees how every section is populated with real values rather than the empty template in `SKILL.md` (search: `## Output Format`). Following the convention in `## Finding Format Examples` below, it uses real `goat-review` anchors: treat it as the block to emit when a reviewed diff *weakens* the cited rules. The illustrative review surface is a small PR that (a) replaces the Blast Radius Rule's external call-site grep with a `// TODO` comment and (b) deletes the refuter authentication pre-flight. Proof class is `STATIC` for both findings because the review surface is documentation: the reviewer verifies by re-reading the live file, not by executing it.
+This scenario shows how a generator/auditor contract mismatch becomes a confirmed finding only after a current reproduction.
 
-**Review surface:** PR mode (`gh pr view 412`); base `origin/main`, head `a1b2c3d`; 2 files, 86 changed lines; under the 20-file / 3000-line chunking threshold, so no chunking. Copilot reviewed the PR. Pass 3 auto-triggered by the `[MUST:needs-decision]` finding (trigger 3); the refuter received the full findings list and upheld both.
+**Review surface:** `<target-project>/src/artifact-audit.ts` (search: `classifyInstalledArtifact`), `<target-project>/src/artifact-generator.ts` (search: `userOwnedMarker`), and `<target-project>/test/artifact-drift.test.ts` (search: `accepts a user-owned generated artifact`).
 
-```markdown
-## TL;DR
-Reviewed PR #412 (2 files, 86 lines): the diff removes the contract-change call-site search and the refuter auth gate. One MUST and one SHOULD surfaced; both confirmed in Pass 2 and upheld cross-model. Do not merge as-is.
+**Pass 1 suspicion:** The drift audit appeared to classify every unmapped installed playbook as stale even though `goat-flow skill new` creates consumer-only playbooks at that location.
 
-## Review Integrity
-- Scope snapshot: source=PR, base=origin/main, head=a1b2c3d, uncommitted=no, chunking=no
-- Files opened in Pass 2: 2/2  (diff-only: none)
-- Evidence: 2 OBSERVED / 0 INFERRED
-- Refutations logged: 1
-- Size: 2 files, 86 lines  (chunked: no)
-- Automated-reviewer overlap: 1 overlap with copilot-pull-request-reviewer, 1 net-new
-- Refuter pass: yes; confirmed=2, refuted=0, unresolved=0, leads-verified=0, model=codex
-- Degradation flags: spec-drift-skipped
-- Conclusion: confident
+**Pass 2 reproduction:** In this scenario, a generated user-owned playbook produces a `stale installed shared artifact` finding because it is absent from the package mirror map.
 
-## Findings
+**Finding:** The audit contradicted the documented consumer-project route and made a valid local playbook fail drift checks.
 
-### MUST
-- [MUST:needs-decision] [CONFIRMED-CROSS-MODEL] [overlap:copilot-pull-request-reviewer] **Blast Radius Rule no longer forces a call-site search on contract changes** `SKILL.md` (search: `Blast Radius Rule`) - the diff replaces the `rg`/`grep` consumer search with a `// TODO`, so a signature, return-type, or event-shape change can now ship without a single consumer verified; downstream callers break at runtime with no review signal. Needs-decision because relaxing the rule is a policy call the author may have intended. | Footgun: none | Evidence: OBSERVED | Proof: STATIC
-
-### SHOULD
-- [SHOULD:patch] [CONFIRMED-CROSS-MODEL] [new] **Refuter pre-flight auth check deleted** `references/refuter-spec.md` (search: `Pre-flight Check`) - removing the `codex login status` / `claude auth status` gate lets Pass 3 spawn an unauthenticated refuter that fails silently and is recorded as a clean `confirmed=0` instead of `cross-model-refuter-failed`; reviews then read as cross-verified when they were not. | Footgun: none | Evidence: OBSERVED | Proof: STATIC
-
-## Systemic Patterns
-<!-- 2 findings with distinct root causes and distinct fixes - no systemic parent emitted -->
-
-## Pre-existing Nearby
-- None.
-
-## Pre-existing Issues
-- None in scope for this diff.
-
-## Breaking Changes
-- None to the emitted skill contract; both findings remove safeguards rather than change a public interface.
-
-## Top 5 Risks (cross-tier)
-1. [MUST:needs-decision] **Contract changes ship without call-site verification** `SKILL.md` (search: `Blast Radius Rule`) - highest-harm regression: silent runtime breakage in unverified consumers.
-2. [SHOULD:patch] **Unauthenticated refuter passes as success** `references/refuter-spec.md` (search: `Pre-flight Check`) - false cross-model confidence on every Pass 3.
-
-## Ship Verdict
-Decision: **NO**
-Reasoning: The MUST finding (Blast Radius Rule removal) remains unaddressed by the diff, which forces NO per the Ship Verdict rule (unresolved MUST -> NO); the cross-model refuter upheld both findings. The SHOULD compounds the risk by masking refuter failures. Review Integrity is `confident`, so the verdict is not downgraded further.
-Confidence: HIGH
-
-## What's Good
-- The diff keeps the two-pass discipline and the Refutation Ledger path intact.
-
-## What I Didn't Examine
-- The CI workflow that invokes the refuter (out of diff scope); flagged for the author.
-```
+**Resolution:** Generated consumer playbooks now carry explicit `goat-flow-ownership: "user-owned"` frontmatter. The audit exempts only playbooks with that marker, while unmarked stale package artifacts remain findings. The regression covers both outcomes.
 
 ## Finding Format Examples
 
-Use concrete harm and proof class. These examples use real anchors from this skill surface; apply them when a reviewed diff removes, bypasses, or contradicts the cited rule.
+Use concrete harm and proof class. These examples use sibling skill anchors only to show the required shape; apply them only after a reviewed diff is checked against the current installed files.
 
 **Systemic pattern:**
 
@@ -101,7 +80,7 @@ Use concrete harm and proof class. These examples use real anchors from this ski
 **PR automated-review overlap:**
 
 ```markdown
-- [SHOULD:patch] [overlap:copilot-pull-request-reviewer] **Report PR metadata ingestion failure explicitly** `references/automated-review.md` (search: `automated-review-uningested`) - If `gh pr view` returns `reviews,comments` but parsing fails, the review must degrade explicitly instead of reporting no bot findings; otherwise duplicated findings look net-new. | Footgun: none | Evidence: OBSERVED | Proof: STATIC
+- [SHOULD:patch] [overlap:copilot-pull-request-reviewer] **Report inline-review ingestion failure explicitly** `references/automated-review.md` (search: `automated-review-uningested`) - If the paginated `pulls/<number>/comments` request fails or loses path-bearing entries, the review must degrade explicitly instead of reporting no bot findings; otherwise duplicated findings look net-new. | Footgun: none | Evidence: OBSERVED | Proof: STATIC
 ```
 
 ## Excuse/Reality Table (Full)

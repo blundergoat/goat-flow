@@ -17,6 +17,7 @@ import {
   composeArtifactContent,
   discoverArtifacts,
   readArtifactContent,
+  stripYamlFrontmatter,
 } from "./skill-quality-content.js";
 import {
   classifyArtifact,
@@ -30,6 +31,75 @@ import type {
   MetricInput,
   SkillQualityReport,
 } from "./skill-quality-types.js";
+
+const VAGUE_AUTHORING_PATTERNS = [
+  { label: "as appropriate", pattern: /\bas appropriate\b/i },
+  { label: "as needed", pattern: /\bas needed\b/i },
+  { label: "where possible", pattern: /\bwhere possible\b/i },
+  { label: "if useful", pattern: /\bif useful\b/i },
+  { label: "etc.", pattern: /\betc\./i },
+] as const;
+const ACTIONABLE_VAGUE_CONTEXT_PATTERN =
+  /\b(?:when|unless|before|after|because|until|only if|only for|owned by|owner:|responsible|requires?|trigger(?:ed)? by)\b/i;
+
+/**
+ * Finds vague prose that leaves a skill author without a trigger, condition, or owner.
+ * The dashboard uses these strings as advisory fit notes; scores remain unchanged.
+ */
+function findVagueLanguageAdvisories(content: string): string[] {
+  const proseLines = stripYamlFrontmatter(content).split("\n");
+  const advisoryNotes: string[] = [];
+  let readingCodeFence = false;
+
+  // Each prose line maps to the guidance a skill author sees in the quality panel.
+  for (
+    let proseLineIndex = 0;
+    proseLineIndex < proseLines.length;
+    proseLineIndex += 1
+  ) {
+    // An absent array entry means the user supplied an empty final line.
+    const currentProseLine = proseLines[proseLineIndex] ?? "";
+
+    // Code fences show literal examples, so their wording must not create authoring advice.
+    if (/^\s*```/.test(currentProseLine)) {
+      readingCodeFence = !readingCodeFence;
+      continue;
+    }
+
+    // Literal sample content is not an instruction the user must make actionable.
+    if (readingCodeFence) {
+      continue;
+    }
+
+    const vaguePhrase = VAGUE_AUTHORING_PATTERNS.find(({ pattern }) =>
+      pattern.test(currentProseLine),
+    );
+
+    // A line without one of the calibrated phrases needs no advisory.
+    if (!vaguePhrase) {
+      continue;
+    }
+
+    const currentLineWithoutVaguePhrase = currentProseLine.replace(
+      vaguePhrase.pattern,
+      "",
+    );
+    // A missing next line means the vague phrase has no follow-on condition.
+    const nextProseLine = proseLines[proseLineIndex + 1] ?? "";
+    const userFacingContext = `${currentLineWithoutVaguePhrase} ${nextProseLine}`;
+
+    // A nearby trigger, condition, or owner tells the user exactly when the advice applies.
+    if (ACTIONABLE_VAGUE_CONTEXT_PATTERN.test(userFacingContext)) {
+      continue;
+    }
+
+    advisoryNotes.push(
+      `advisory vague-language: unconditioned "${vaguePhrase.label}" in prose line ${proseLineIndex + 1}; add a same-line or next-line trigger, condition, or owner`,
+    );
+  }
+
+  return advisoryNotes;
+}
 
 /**
  * Score raw content against the rubric without reading any file from disk.
@@ -75,8 +145,14 @@ export function scoreContent(
   };
   const metrics = ALL_METRICS.map((scorer) => scorer(metricInput));
 
-  const totalScore = metrics.reduce((sum, m) => sum + m.score, 0);
-  const maxTotalScore = metrics.reduce((sum, m) => sum + m.maxScore, 0);
+  const totalScore = metrics.reduce(
+    (scoreSum, metric) => scoreSum + metric.score,
+    0,
+  );
+  const maxTotalScore = metrics.reduce(
+    (maximumSum, metric) => maximumSum + metric.maxScore,
+    0,
+  );
   const { recommendation, fitNotes } = deriveRecommendation(
     artifact,
     metrics,
@@ -85,6 +161,10 @@ export function scoreContent(
     classification,
     shape,
   );
+  const vagueLanguageAdvisories =
+    artifact.kind === "skill" || subtype === "playbook"
+      ? findVagueLanguageAdvisories(composed.raw)
+      : [];
 
   return {
     artifact,
@@ -99,10 +179,22 @@ export function scoreContent(
     recommendation,
     metrics,
     composedFrom: composed.sources,
-    fitNotes: [...preReadNotes, ...composed.notes, ...fitNotes],
+    fitNotes: [
+      ...preReadNotes,
+      ...composed.notes,
+      ...vagueLanguageAdvisories,
+      ...fitNotes,
+    ],
   };
 }
 
+/**
+ * Scores one installed artifact for the dashboard's user-facing quality detail.
+ * @param projectRoot - project whose installed artifact and quality config are read
+ * @param artifact - artifact selected by the user; its path identifies the file to score
+ * @param config - resolved project rubric; defaults preserve zero-config behavior
+ * @returns the current report, including advisory notes; an unreadable file scores as empty input.
+ */
 export function scoreArtifact(
   projectRoot: string,
   artifact: ArtifactEntry,
@@ -112,11 +204,17 @@ export function scoreArtifact(
   return scoreContent(projectRoot, artifact, raw.content, config, raw.notes);
 }
 
+/**
+ * Scores every discovered artifact for inventory and release-wide quality views.
+ * @param projectRoot - project whose complete quality inventory the user requested
+ * @param config - resolved project rubric applied consistently to every artifact
+ * @returns all current reports; an empty inventory means the user has no discoverable artifacts.
+ */
 export function scoreAllArtifacts(
   projectRoot: string,
   config: QualityConfig = loadQualityConfig(projectRoot),
 ): SkillQualityReport[] {
-  return discoverArtifacts(projectRoot, config).map((a) =>
-    scoreArtifact(projectRoot, a, config),
+  return discoverArtifacts(projectRoot, config).map((artifact) =>
+    scoreArtifact(projectRoot, artifact, config),
   );
 }

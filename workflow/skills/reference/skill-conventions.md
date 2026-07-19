@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.13.1"
+goat-flow-reference-version: "1.14.0"
 ---
 # Skill Conventions
 
@@ -10,13 +10,11 @@ in `skill-preamble.md` is always loaded first.
 
 ## Learning Loop - Entry Formats
 
-Bucket conventions (examples - actual bucket names are project-specific):
-- Lessons: category files like `verification.md`, `workflow.md`, `coordination.md`
-- Footguns: category files like `runtime.md`, `integration.md`, `data-stores.md`
+Use project-specific category buckets such as `verification.md` or `runtime.md`.
 
-Do not append to a monolithic log or directory README. Route entries to `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, or `.goat-flow/learning-loop/footguns/`.
+Route entries to `.goat-flow/learning-loop/lessons/`, `patterns/`, or `footguns/`; never append to a monolithic log or README.
 
-Use the standard entry formats:
+Before adding, Extract / Consolidate / Skip: search the relevant INDEX and bucket; update the same root cause even when symptoms differ; create only for a distinct cause; skip non-decision-changing material.
 ```markdown
 <!-- Lesson bucket -->
 ---
@@ -26,6 +24,8 @@ last_reviewed: YYYY-MM-DD
 
 ## Lesson: [Title]
 **Created:** YYYY-MM-DD
+**Decision changed:** [what future work does differently]
+**Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **What happened:** [description]
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found] (required for code-specific lessons; omit for behavioral lessons)
 **Prevention:** [rule to prevent recurrence]
@@ -39,13 +39,17 @@ last_reviewed: YYYY-MM-DD
 ---
 
 ## Footgun: [Title]
-**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>
+**Decision changed:** [what future work does differently]
+**Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **hallucination-risk:** high
 **Symptoms:** [what breaks]
 **Why it happens:** [root cause]
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found]
 **Prevention:** [rule to prevent recurrence]
 ```
+
+Evidence labels: `ACTUAL_MEASURED` = reproduced/measured locally; `OBSERVED` = direct code/config evidence; `EXTERNAL_REFERENCE` = cited real external incident with local applicability. Never use hypotheticals.
 
 ```markdown
 # Successful Patterns
@@ -55,27 +59,19 @@ last_reviewed: YYYY-MM-DD
 **Approach:** [what to do]
 ```
 
-The `hallucination-risk` field is optional. Use it when an area is easy to misread from names alone, such as generated code, environment-specific config, or external API contracts.
+Use optional `hallucination-risk` when names alone can mislead, including generated code, environment config, or external contracts.
 
 ## Adaptive Step 0
 
-Before Step 0:
+Reuse 2-3 overlapping session logs instead of re-deriving settled context.
 
-- Read the 2-3 most recent files in `.goat-flow/logs/sessions/` when the task overlaps recent work
-- If a recent session log already covers the same area, prefer building on that context instead of re-deriving it
+**The gate rule:** Infer answers already supplied. If intent, target, and boundary are clear, confirm once and proceed. Ask only at a genuine fork. A detailed brief or "skip Step 0" proceeds.
 
-Then continue with the normal Step 0 flow:
+**Planning/interview boundary:** Default interview budget: one decision-bearing question at a time, no more than three per message or three rounds. Extend only when the user requests a deeper interview. When the budget is exhausted, present remaining choices with a recommended default and stop. Planning permission is not implementation permission. Do not implement unless the original directive authorized implementation or the user now selects it.
 
-Skills that gather context before acting follow this pattern:
+A clear implementation directive proceeds after required READ and SCOPE; do not manufacture interview questions. "Update the plan" means write the plan, not execute it: a plan-only request stops at the handoff while explicit implementation authorizes execution.
 
-1. Read the user's invocation for context already provided
-2. For each Step 0 question: if the answer is already clear from context → **confirm**: "I see [answer]. Correct?" Otherwise → **ask**
-3. If ALL questions are answered by the invocation → present a condensed confirmation and proceed
-4. If the user says "skip Step 0" or provides a detailed brief → confirm understanding and proceed
-
-**The gate rule:** If intent, target, and boundary are clear from the user's request, proceed without asking. Ask only at a genuine fork where the user's preference is not obvious. Bare invocation with no arguments = zero context = ask all structural questions and wait.
-
-**Dispatcher invocation:** When a skill is invoked via `/goat`, Step 0 is the single entry gate. The dispatcher already announced the skill - Step 0 goes straight to its questions without re-announcing. There is no double-gate: one announcement from the dispatcher, one gate (Step 0) in the skill.
+**Dispatcher invocation:** `/goat` announces the route; Step 0 asks any remaining questions without re-announcing. One dispatch, one intake gate.
 
 ## Contradiction Check
 
@@ -93,17 +89,26 @@ If 3 consecutive file reads produce no new signal relevant to the current questi
 2. State what you were looking for and didn't find
 3. Ask the human to redirect, narrow scope, or close
 
-**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** safety-critical gates (goat-debug D2→D3 "human decides before fixing", goat-security final report) MUST remain blocking even in sub-agent mode - these exist to prevent auto-fixing without human review.
+**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** the goat-debug D2→D3 "human decides before fixing" safety gate MUST remain blocking even in sub-agent mode - it prevents auto-fixing without human review.
 
 ## Task Tracking
 
 When working from a plan or milestone file:
-- Tick each task `- [x]` immediately when completed - not at the end of a batch, not later from memory, not in the closing protocol
-- The checkbox is the single source of truth for progress
-- If interrupted, compacted, or crashed, the checkboxes are how the next session knows where to resume
-- If you completed a task 3 steps ago and forgot to tick it - go tick it NOW before continuing
+- Tick each task `- [x]` immediately, never at batch end or closeout.
+- Checkboxes are the recovery source after interruption or compaction.
+- If a completed task was missed, tick it before continuing.
 
 On `/compact` with no active milestone file: write a session log to `.goat-flow/logs/sessions/` summarizing current state. Milestone files are the primary continuity mechanism; session logs are the fallback.
+
+Handoff receipts: read `.goat-flow/logs/sessions/README.md`; redact before writing.
+
+## Durable Artifact Redaction
+
+For session, handoff, critique, review, quality, security, or export text, use the version-compatible CLI required by `skill-preamble.md` and send the in-memory draft via stdin to `goat-flow redact --output <destination>`; only redacted output reaches disk. Never stage raw text. Redact before disk, not after.
+
+Example after the version check: `goat-flow redact --output .goat-flow/logs/sessions/handoff.md`, then paste stdin and send EOF.
+
+The hash-only `redactEvidenceText` evidence API is not a readable scrubber. This reduces common credential leakage; it is not perfect DLP and does not replace secret review.
 
 ## Presenting Findings
 
@@ -142,6 +147,33 @@ Sub-agents: one objective, structured return, 5-call budget.
 
 When blocked: ask one question with a recommended default.
 
+## Orchestration Admission
+
+Before any optional repeated, parallel, delegated, review, QA, or critique pass, record:
+
+Budget Ledger:
+- Phase:
+- Initial budget:
+- Spent evidence:
+- Proposed extra pass:
+- New evidence expected:
+- Failure class:
+- Independence boundary:
+- Objective per subagent:
+- Why tasks are independent:
+- Merge boundary:
+- Budget/call cap:
+- Return schema:
+- Conflict owner:
+- Stop condition:
+- Decision: admitted | deferred | denied
+
+A repeated pass must name a new failure class, independence boundary, or explicit user request. Admit it when the change crosses a blast-radius threshold, failed verification needs targeted evidence, an independent context adds evidence, security or correctness risk outweighs cost, or the user requested it.
+
+Same-context reassurance with no new evidence is denied. Do not parallelize tasks sharing files unless the merge boundary and conflict owner are named. Subagents keep one objective, structured return, 5-call budget.
+
+Required skill phases and verification are pre-admitted; estimated cost cannot degrade or block them. Explicit `goat-critique` stays full delegated mode and preserves existing consent. This is rough admission control, not token accounting or a hard failure based only on estimated cost.
+
 ## Recovery
 
 When a skill fails mid-execution (context limit, sub-agent dies, tool error):
@@ -166,13 +198,4 @@ boundaries. If the proposed change crosses an Ask First boundary, flag it:
 
 ## Authoring a Skill
 
-When creating a new goat-* skill or materially hardening an existing one, consult
-`.goat-flow/skill-docs/skill-quality-testing/README.md` (short index) and then load
-the topical file(s) in `.goat-flow/skill-docs/skill-quality-testing/` named by
-the index - `tdd-iteration.md` for TDD methodology (load first), `adversarial-framing.md`
-for review-class skills, `deployment.md` for the deployment checklist. Together they
-document the skill-authoring methodology: pressure-testing prompts against known failure
-modes, recording Excuse/Reality rationalization tables from real incidents, and verifying
-the skill's `goat-flow-skill-version` and reference docs' `goat-flow-reference-version`
-match `AUDIT_VERSION` before publishing. Do not
-add or materially revise a skill without running the pressure-test protocol they describe.
+For new or materially hardened goat-* skills, load `.goat-flow/skill-docs/skill-quality-testing/README.md`, then its topical files: `tdd-iteration.md` first, `adversarial-framing.md` for review-class skills, and `deployment.md` before release. Run the pressure tests and verify skill/reference versions match `AUDIT_VERSION` before publishing.

@@ -58,6 +58,32 @@ describe("main-module guard via symlink", () => {
       timeout: 10_000,
     });
     assert.match(stdout.trim(), /^goat-flow v\d+\.\d+\.\d+$/);
+
+    const doctorStdout = execFileSync(
+      process.execPath,
+      [
+        link,
+        "skill",
+        "doctor",
+        PROJECT_ROOT,
+        "--agent",
+        "codex",
+        "--skill",
+        "goat",
+        "--format",
+        "json",
+      ],
+      { encoding: "utf-8", timeout: 10_000 },
+    );
+    const doctorReport = JSON.parse(doctorStdout) as {
+      status: string;
+      summary: { checked: number };
+      agents: Array<{ skills: Array<{ invocation: string }> }>;
+    };
+
+    assert.equal(doctorReport.status, "pass");
+    assert.equal(doctorReport.summary.checked, 1);
+    assert.equal(doctorReport.agents[0]?.skills[0]?.invocation, "$goat");
   });
 
   it("CLI runs when launched via the real path", () => {

@@ -27,3 +27,4 @@ Block **all** git push commands from agents, at both the settings layer and the 
 - All settings.json deny lists must use `Bash(*git push*)`, not `Bash(*git push*--force*)`.
 - Self-test cases updated: feature-branch pushes, bare `git push`, and `git push -u` all expect exit 2.
 - Instruction file Never lists should be updated to say "Push" instead of "Push to main. Force push." (separate change, Ask First boundary).
+- ADR-040 separately reserves `git commit` for the user; together the two decisions keep history creation and remote publication out of agent authority.

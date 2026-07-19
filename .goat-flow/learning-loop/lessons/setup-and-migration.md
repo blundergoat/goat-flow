@@ -1,6 +1,16 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-05-27
+last_reviewed: 2026-07-18
+---
+
+## Lesson: Skill edits must fan out to all four installed mirrors, and removed anchors cascade
+
+**Created:** 2026-07-18
+
+**What happened:** A goat-critique SKILL.md + reference-pack edit was synced to `workflow/skills/`, `.claude/skills/`, and `.agents/skills/` and the contract suite passed - but `goat-flow audit . --check-drift` failed on the fourth mirror, `.github/skills/goat-critique/` (Copilot), and the workspace-self support-bundle test failed with it. Separately, removing a hook helper (`is_env_example_redirect_write`) made two footgun evidence anchors stale, failing the `feedback-loop-active` harness check; rewriting those anchors then pushed the footgun bucket over the 39KB size gate.
+
+**Prevention:** Treat one canonical skill edit as a four-target fan-out - `workflow/skills/` plus the `.claude/`, `.agents/`, and `.github/` mirrors - and verify with `goat-flow audit . --check-drift`. After deleting or renaming any anchored function, run `goat-flow stats . --check` and rewrite the citing footgun/lesson anchors as dated resolved-history prose, then re-check bucket size. Evidence anchors: `test/unit/support-bundle.test.ts` (search: `emits clean JSON through the CLI`), `.goat-flow/learning-loop/footguns/deny-dangerous.md` (search: `removed 2026-07-18`).
+
 ---
 
 ## Lesson: Agents given broad setup tasks rewrite shared docs as agent-specific

@@ -1,19 +1,38 @@
 /** Scaffolds and validates `goat-flow skill new` skill/playbook drafts. */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  type Stats,
+  writeFileSync,
+} from "node:fs";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { createInterface, type Interface } from "node:readline/promises";
 
+import { getAgentProfile } from "./agents/registry.js";
 import { getPackageVersion } from "./paths.js";
 import {
   runCandidacyCheck,
   type CandidacyResult,
 } from "./quality/candidacy.js";
 import { findArtifact, scoreArtifact } from "./quality/skill-quality.js";
+import type { AgentId } from "./types.js";
 
 const WORKFLOW_TEMPLATE = `---
 name: {{NAME}}
 description: "{{DESCRIPTION}}"
 goat-flow-skill-version: "{{VERSION}}"
+goat-flow-ownership: "user-owned"
 ---
 
 # /{{NAME}}
@@ -76,6 +95,7 @@ const DISPATCHER_TEMPLATE = `---
 name: {{NAME}}
 description: "{{DESCRIPTION}}"
 goat-flow-skill-version: "{{VERSION}}"
+goat-flow-ownership: "user-owned"
 ---
 
 # /{{NAME}}
@@ -109,6 +129,7 @@ const REPORT_TEMPLATE = `---
 name: {{NAME}}
 description: "{{DESCRIPTION}}"
 goat-flow-skill-version: "{{VERSION}}"
+goat-flow-ownership: "user-owned"
 ---
 
 # /{{NAME}}
@@ -162,6 +183,7 @@ BLOCKING GATE: human reviews findings before any action is taken.
 
 const PLAYBOOK_TEMPLATE = `---
 goat-flow-reference-version: "{{VERSION}}"
+goat-flow-ownership: "user-owned"
 ---
 
 # {{NAME}}
@@ -225,10 +247,14 @@ const TEMPLATES_BY_SUBTYPE: Record<string, string> = {
 
 /** Input contract for the three mutually exclusive `skill new` modes. */
 interface SkillNewOptions {
+  /** Agent whose manifest-defined skill directory receives skill scaffolds. */
+  agent?: AgentId | null | undefined;
   /** A natural-language description of the skill (description mode). */
   description?: string | undefined;
   /** Path to an existing markdown draft (draft-validation mode). */
   draftPath?: string | undefined;
+  /** RED-phase evidence required before a skill scaffold becomes discoverable. */
+  redLogPath?: string | undefined;
   /** Open the interactive prompt flow even when other inputs are provided. */
   shouldUseInteractivePrompt?: boolean;
   /** Skip the y/n confirmation prompt before writing (used by tests). */
@@ -248,14 +274,302 @@ interface SkillNewResult extends Record<"written", boolean> {
   proposedPath: string | null;
   /** Filled scaffold content. */
   scaffold: string | null;
-  /** Quality score after scaffold (skill kind only). */
-  postScaffoldScore?: { totalScore: number; profileMax: number } | undefined;
+  /** Quality score for a substantive draft; untouched scaffolds defer scoring. */
+  postScaffoldScore?:
+    { totalScore: number; profileMax: number } | null | undefined;
+  /** Machine-readable handoff after a placeholder scaffold is written. */
+  nextSteps?: string[] | undefined;
   /** Human-readable lines for terminal output. */
   output: string[];
 }
 
-const SKILL_DIR = ".claude/skills";
 const PLAYBOOK_DIR = ".goat-flow/skill-docs/playbooks";
+const SKILL_TDD_LOG_DIR = ".goat-flow/logs/sessions";
+const RED_PRESSURE_TYPES = [
+  "time",
+  "sunk cost",
+  "authority",
+  "economic",
+  "exhaustion",
+  "social",
+  "pragmatic",
+] as const;
+const VERBATIM_QUOTE_PAIRS = [
+  ['"', '"'],
+  ["'", "'"],
+  ["“", "”"],
+  ["‘", "’"],
+  ["`", "`"],
+] as const;
+
+/** Result of checking the failing-first receipt required by the skill TDD contract. */
+interface RedLogValidation {
+  relativePath: string | null;
+  errors: string[];
+}
+
+/** Build the blocked-flow handoff without writing or exposing a skill draft. */
+function redGateNextSteps(name: string): string[] {
+  return [
+    "Run a concrete failing scenario without the skill using at least three distinct documented pressures.",
+    `Capture RED evidence at ${SKILL_TDD_LOG_DIR}/YYYY-MM-DD-${name}-tdd.md.`,
+    `Re-run skill new with --red-log ${SKILL_TDD_LOG_DIR}/YYYY-MM-DD-${name}-tdd.md.`,
+  ];
+}
+
+/** Continue the authoring loop from accepted RED evidence instead of restarting after a draft. */
+function scaffoldNextSteps(redLogPath: string): string[] {
+  return [
+    `Use the accepted RED evidence in ${redLogPath}.`,
+    "Replace scaffold placeholders only to close failures captured during RED.",
+    "Run GREEN, REFACTOR, and STAY GREEN from .goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md before scoring.",
+    "Complete .goat-flow/skill-docs/skill-quality-testing/deployment.md before merge.",
+  ];
+}
+
+/** Return whether a candidate evidence file escapes the canonical session-log root. */
+function isOutsideLogRoot(logRoot: string, absolutePath: string): boolean {
+  const pathWithinLogRoot = relative(logRoot, absolutePath);
+  return (
+    pathWithinLogRoot === ".." ||
+    pathWithinLogRoot.startsWith("../") ||
+    pathWithinLogRoot.startsWith("..\\")
+  );
+}
+
+/** Return only the first RED iteration so later GREEN evidence cannot satisfy the gate. */
+function redIterationSection(content: string): string | null {
+  const heading = /^## Iteration \d+ \(RED\)\s*$/mu.exec(content);
+  if (heading?.index === undefined) return null;
+  const remaining = content.slice(heading.index + heading[0].length);
+  const nextHeading = remaining.search(/^## /mu);
+  return nextHeading === -1 ? remaining : remaining.slice(0, nextHeading);
+}
+
+/** Read one canonical single-line field from the isolated RED iteration. */
+function redField(section: string, label: string): string {
+  const prefix = `${label}:`;
+  const line = section
+    .split(/\r?\n/u)
+    .find((candidate) => candidate.startsWith(prefix));
+  return line?.slice(prefix.length).trim() ?? "";
+}
+
+/** Reject empty values and the placeholders shipped by the authoring template. */
+function isConcreteRedValue(value: string): boolean {
+  const normalized = value.trim();
+  return (
+    normalized.length > 0 &&
+    !/^(?:\[.*\]|<.*>|none|n\/a|unknown|tbd)$/iu.test(normalized)
+  );
+}
+
+/** Detect a direct denial immediately after a field's positive classification. */
+function startsWithNegatedAssertion(value: string): boolean {
+  const normalized = value.trim().replace(/^[?:;,.\u2013\u2014-]+\s*/u, "");
+  return /^(?:(?:no|not|none|never|false|absent|without|unknown|tbd|n\/a|zero|0)\b|(?:did|does|was|were)\s+not\b)/iu.test(
+    normalized,
+  );
+}
+
+/** Map one pressure description to the documented pressure taxonomy. */
+function documentedPressure(
+  value: string,
+): (typeof RED_PRESSURE_TYPES)[number] | null {
+  const normalized = value
+    .toLowerCase()
+    .replace(/[-_]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  const pressure = RED_PRESSURE_TYPES.find(
+    (candidate) =>
+      normalized === candidate ||
+      normalized.startsWith(`${candidate} `) ||
+      normalized.startsWith(`${candidate}:`),
+  );
+  if (pressure === undefined) return null;
+  const detail = normalized.slice(pressure.length);
+  return startsWithNegatedAssertion(detail) ? null : pressure;
+}
+
+/** Count distinct recognized pressures instead of arbitrary comma-separated tokens. */
+function documentedPressureCount(section: string): number {
+  const pressureLine = redField(section, "Pressures applied");
+  const pressures = pressureLine
+    .split(/[,;|]/u)
+    .map(documentedPressure)
+    .filter(
+      (pressure): pressure is (typeof RED_PRESSURE_TYPES)[number] =>
+        pressure !== null,
+    );
+  return new Set(pressures).size;
+}
+
+/** Require the behaviour field to lead with a failure classification, not mention one. */
+function hasExplicitFailureOutcome(section: string): boolean {
+  const behaviour = redField(section, "Agent behaviour");
+  if (!isConcreteRedValue(behaviour)) return false;
+  const classification =
+    /^(?:(?:the\s+)?agent\s+)?(?:fail(?:ed|ure)?|skip(?:ped)?|partial(?:ly)?|bypass(?:ed)?|rationali[sz](?:ed|ation)?|chose\s+[bc]\b|non[- ]compliant\b|wrong\b)/iu.exec(
+      behaviour,
+    );
+  if (classification === null) return false;
+  const remainder = behaviour.slice(classification[0].length).trim();
+  return (
+    !startsWithNegatedAssertion(remainder) &&
+    !/^(?:to\s+fail|was\s+not|did\s+not)\b/iu.test(remainder)
+  );
+}
+
+/** Strip one supported quote pair from a rationalisation bullet. */
+function verbatimRationalisationValue(line: string): string | null {
+  const bullet = line.trim();
+  if (!bullet.startsWith("- ")) return null;
+  const value = bullet.slice(2).trim();
+  const quotePair = VERBATIM_QUOTE_PAIRS.find(
+    ([open, close]) => value.startsWith(open) && value.endsWith(close),
+  );
+  if (quotePair === undefined || value.length <= 2) return null;
+  return value.slice(quotePair[0].length, -quotePair[1].length);
+}
+
+/** Reject quoted prose that explicitly reports an absent rationalisation. */
+function isAbsentRationalisation(value: string): boolean {
+  const normalized = value.trim().replace(/\s+/gu, " ");
+  return /^(?:(?:none|nothing)\s+(?:(?:(?:was|were)\s+)?(?:observed|captured|recorded|provided|available|said|heard|offered)|occurred|to\s+(?:capture|record|quote|say|provide|offer))|no\s+(?:rationali[sz]ations?|quotes?|excuses?)\s+(?:(?:(?:was|were)\s+)?(?:observed|captured|recorded|provided|available|given|made)|occurred)|(?:(?:the\s+)?agent\s+)?(?:did\s+not|never)\s+(?:rationali[sz]e|say|provide|offer|give))\b/iu.test(
+    normalized,
+  );
+}
+
+/** Accept only a substantive quoted bullet in the canonical rationalisation block. */
+function hasVerbatimRationalisation(section: string): boolean {
+  const lines = section.split(/\r?\n/u);
+  const markerIndex = lines.findIndex(
+    (line) => line.trim() === "Rationalisations captured (verbatim):",
+  );
+  if (markerIndex === -1) return false;
+  for (const line of lines.slice(markerIndex + 1)) {
+    if (/^[A-Z][^:]{1,60}:\s*/u.test(line)) break;
+    const quoted = verbatimRationalisationValue(line);
+    if (
+      quoted !== null &&
+      isConcreteRedValue(quoted) &&
+      !isAbsentRationalisation(quoted)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Validate the RED fields whose content proves a failure rather than file presence. */
+function validateRedLogContent(content: string): string[] {
+  const errors: string[] = [];
+  const redSection = redIterationSection(content);
+  if (redSection === null) {
+    errors.push("RED log must contain an `## Iteration N (RED)` section.");
+  }
+  const isolatedRedSection = redSection ?? "";
+  if (!isConcreteRedValue(redField(isolatedRedSection, "Scenario"))) {
+    errors.push(
+      "RED log must include a concrete `Scenario:` inside the RED section.",
+    );
+  }
+  if (documentedPressureCount(isolatedRedSection) < 3) {
+    errors.push(
+      "RED log must record at least three pressures using three distinct documented pressures on `Pressures applied:`.",
+    );
+  }
+  if (!hasExplicitFailureOutcome(isolatedRedSection)) {
+    errors.push(
+      "RED log `Agent behaviour:` must start with an explicit failure outcome.",
+    );
+  }
+  if (!hasVerbatimRationalisation(isolatedRedSection)) {
+    errors.push(
+      "RED log must include at least one quoted verbatim rationalisation bullet.",
+    );
+  }
+  return errors;
+}
+
+/** Verify that one canonical session log records a real failing RED scenario. */
+function validateRedLog(
+  projectRoot: string,
+  name: string,
+  redLogPath: string | undefined,
+): RedLogValidation {
+  if (!redLogPath) {
+    return {
+      relativePath: null,
+      errors: ["No --red-log receipt was supplied."],
+    };
+  }
+
+  const absolutePath = resolve(projectRoot, redLogPath);
+  const logRoot = resolve(projectRoot, SKILL_TDD_LOG_DIR);
+  const relativePath = relative(projectRoot, absolutePath).replace(/\\/gu, "/");
+  const errors: string[] = [];
+  if (isOutsideLogRoot(logRoot, absolutePath)) {
+    errors.push(`RED log must be inside ${SKILL_TDD_LOG_DIR}/.`);
+    return { relativePath, errors };
+  }
+  const expectedName = new RegExp(
+    `^\\d{4}-\\d{2}-\\d{2}-${name}-tdd\\.md$`,
+    "u",
+  );
+  if (!expectedName.test(basename(absolutePath))) {
+    errors.push(`RED log filename must be YYYY-MM-DD-${name}-tdd.md.`);
+  }
+  let redLogStats;
+  try {
+    redLogStats = statSync(absolutePath);
+  } catch {
+    errors.push(`RED log not found: ${relativePath}.`);
+    return { relativePath, errors };
+  }
+  if (!redLogStats.isFile()) {
+    errors.push(`RED log must be a regular file: ${relativePath}.`);
+    return { relativePath, errors };
+  }
+
+  let content: string;
+  try {
+    content = readFileSync(absolutePath, "utf-8");
+  } catch {
+    errors.push(`RED log could not be read: ${relativePath}.`);
+    return { relativePath, errors };
+  }
+
+  return {
+    relativePath,
+    errors: [...errors, ...validateRedLogContent(content)],
+  };
+}
+
+/** Resolve the manifest-defined destination while preserving Claude as the legacy default. */
+function skillDirectoryFor(agent: AgentId | null | undefined): string {
+  return getAgentProfile(agent ?? "claude").skillsDir;
+}
+
+/** Align skill-placement guidance with the same manifest profile used for the resolved path. */
+function withSkillDestination(
+  candidacy: CandidacyResult,
+  skillsDirectory: string,
+): CandidacyResult {
+  if (candidacy.recommendedArtifact.type !== "skill") return candidacy;
+  return {
+    ...candidacy,
+    nextSteps: candidacy.nextSteps.map((step) =>
+      step.action.startsWith("Place under ")
+        ? {
+            ...step,
+            action: `Place under ${skillsDirectory}/<name>/SKILL.md`,
+          }
+        : step,
+    ),
+  };
+}
 
 /** User-facing validation error for invalid `skill new` mode combinations. */
 class SkillNewInputError extends Error {
@@ -302,6 +616,7 @@ function resolveScaffold(
   projectRoot: string,
   name: string,
   recommendation: CandidacyResult["recommendedArtifact"],
+  skillsDirectory: string,
 ): ResolvedScaffold | null {
   const choice = templateForRecommendation(recommendation);
   if (!choice) return null;
@@ -312,7 +627,7 @@ function resolveScaffold(
   const proposedPath = (
     choice.isReference
       ? join(projectRoot, PLAYBOOK_DIR, `${name}.md`)
-      : join(projectRoot, SKILL_DIR, name, "SKILL.md")
+      : join(projectRoot, skillsDirectory, name, "SKILL.md")
   ).replace(/\\/g, "/");
   return { template, proposedPath, isReference: choice.isReference };
 }
@@ -328,6 +643,11 @@ function selectedInputModes(options: SkillNewOptions): string[] {
 
 /** Throws on mixed modes because description, draft, and interactive flows branch early. */
 function assertSingleInputMode(options: SkillNewOptions): void {
+  if (options.redLogPath && options.draftPath) {
+    throw new SkillNewInputError(
+      "--red-log is not valid with --draft; draft validation is read-only and does not scaffold.",
+    );
+  }
   const modes = selectedInputModes(options);
   if (modes.length <= 1) return;
   throw new SkillNewInputError(
@@ -417,7 +737,7 @@ function suggestName(
 ): string {
   if (options.name && isValidSkillName(options.name)) return options.name;
   if (options.draftPath) {
-    const stem = basename(options.draftPath).replace(/\.md$/, "");
+    const stem = draftNameForPath(options.draftPath);
     if (isValidSkillName(stem)) return stem;
   }
   if (options.description) {
@@ -429,6 +749,14 @@ function suggestName(
     if (isValidSkillName(slug)) return slug;
   }
   return `new-${candidacy.recommendedArtifact.type}`;
+}
+
+/** Installed skills use their parent directory as the artifact name, not the generic SKILL.md stem. */
+function draftNameForPath(draftPath: string): string {
+  const filename = basename(draftPath);
+  return filename.toLowerCase() === "skill.md"
+    ? basename(dirname(draftPath))
+    : filename.replace(/\.md$/iu, "");
 }
 
 function describeArtifact(
@@ -467,21 +795,103 @@ function nonScaffoldOutput(candidacy: CandidacyResult): string[] {
   ];
 }
 
+/** Enforce RED for skills, then write the confirmed scaffold and emit its handoff. */
+async function writeResolvedScaffold(
+  projectRoot: string,
+  name: string,
+  description: string,
+  candidacy: CandidacyResult,
+  resolvedScaffold: ResolvedScaffold,
+  options: SkillNewOptions,
+  prompts: InteractivePrompts,
+): Promise<SkillNewResult> {
+  const redLog = resolvedScaffold.isReference
+    ? { relativePath: null, errors: [] }
+    : validateRedLog(projectRoot, name, options.redLogPath);
+  if (redLog.errors.length > 0) {
+    const nextSteps = redGateNextSteps(name);
+    return {
+      candidacy,
+      proposedPath: resolvedScaffold.proposedPath,
+      scaffold: null,
+      written: false,
+      nextSteps,
+      output: [
+        `Candidacy: ${describeArtifact(candidacy.recommendedArtifact)} (confidence ${Math.round(
+          candidacy.confidence * 100,
+        )}%)`,
+        `Path: ${relative(projectRoot, resolvedScaffold.proposedPath)}`,
+        "RED gate blocked: no skill scaffold was written.",
+        "Evidence problems:",
+        ...redLog.errors.map((error) => `  - ${error}`),
+        "Next steps:",
+        ...nextSteps.map((step) => `  - ${step}`),
+      ],
+    };
+  }
+
+  const scaffold = fillTemplate(resolvedScaffold.template, {
+    NAME: name,
+    DESCRIPTION: description,
+    VERSION: getPackageVersion(),
+  });
+  const written = await maybeWrite(
+    projectRoot,
+    resolvedScaffold.proposedPath,
+    scaffold,
+    options,
+    prompts,
+  );
+  const output: string[] = [
+    `Candidacy: ${describeArtifact(candidacy.recommendedArtifact)} (confidence ${Math.round(
+      candidacy.confidence * 100,
+    )}%)`,
+    `Path: ${relative(projectRoot, resolvedScaffold.proposedPath)}`,
+    written ? "Wrote scaffold." : "Scaffold not written.",
+  ];
+  let postScaffoldScore: SkillNewResult["postScaffoldScore"];
+  let nextSteps: string[] | undefined;
+  if (written && !resolvedScaffold.isReference) {
+    postScaffoldScore = null;
+    nextSteps = scaffoldNextSteps(redLog.relativePath ?? "accepted RED log");
+    output.push(
+      `RED gate passed: ${redLog.relativePath}.`,
+      "Scoring deferred until GREEN, REFACTOR, and STAY GREEN have run.",
+      "Next steps:",
+      ...nextSteps.map((step) => `  - ${step}`),
+    );
+  }
+  return {
+    candidacy,
+    proposedPath: resolvedScaffold.proposedPath,
+    scaffold,
+    written,
+    postScaffoldScore,
+    nextSteps,
+    output,
+  };
+}
+
 async function runDescriptionMode(
   description: string,
   options: SkillNewOptions,
   prompts: InteractivePrompts,
 ): Promise<SkillNewResult> {
   const projectRoot = options.projectRoot ?? process.cwd();
-  const candidacy = runCandidacyCheck({
-    kind: "description",
-    text: description,
-  });
+  const skillsDirectory = skillDirectoryFor(options.agent);
+  const candidacy = withSkillDestination(
+    runCandidacyCheck({
+      kind: "description",
+      text: description,
+    }),
+    skillsDirectory,
+  );
 
   const scaffolded = resolveScaffold(
     projectRoot,
     suggestName(options, candidacy),
     candidacy.recommendedArtifact,
+    skillsDirectory,
   );
 
   if (!scaffolded) {
@@ -512,6 +922,7 @@ async function runDescriptionMode(
     projectRoot,
     name,
     candidacy.recommendedArtifact,
+    skillsDirectory,
   );
   if (!final) {
     return {
@@ -522,67 +933,106 @@ async function runDescriptionMode(
       output: nonScaffoldOutput(candidacy),
     };
   }
-  const scaffold = fillTemplate(final.template, {
-    NAME: name,
-    DESCRIPTION: description,
-    VERSION: getPackageVersion(),
-  });
-
-  const written = await maybeWrite(
-    final.proposedPath,
-    scaffold,
+  return writeResolvedScaffold(
+    projectRoot,
+    name,
+    description,
+    candidacy,
+    final,
     options,
     prompts,
   );
-
-  const output: string[] = [
-    `Candidacy: ${describeArtifact(candidacy.recommendedArtifact)} (confidence ${Math.round(
-      candidacy.confidence * 100,
-    )}%)`,
-    `Path: ${relative(projectRoot, final.proposedPath)}`,
-    written ? "Wrote scaffold." : "Scaffold not written.",
-  ];
-
-  let postScaffoldScore: SkillNewResult["postScaffoldScore"];
-  if (written && !final.isReference) {
-    postScaffoldScore = scoreFreshSkill(projectRoot, name);
-    if (postScaffoldScore) {
-      output.push(
-        `Initial quality: ${postScaffoldScore.totalScore}/${postScaffoldScore.profileMax}`,
-      );
-    }
-  }
-
-  return {
-    candidacy,
-    proposedPath: final.proposedPath,
-    scaffold,
-    written,
-    postScaffoldScore,
-    output,
-  };
 }
 
 function scoreFreshSkill(
   projectRoot: string,
   name: string,
+  absolutePath: string,
 ): SkillNewResult["postScaffoldScore"] {
   const artifact = findArtifact(projectRoot, `skill:${name}`);
   if (!artifact) return undefined;
-  const report = scoreArtifact(projectRoot, artifact);
+  const selectedPath = relative(projectRoot, absolutePath).replace(/\\/g, "/");
+  const selectedArtifact =
+    artifact.path === selectedPath
+      ? artifact
+      : artifact.mirrorPaths?.includes(selectedPath)
+        ? { ...artifact, path: selectedPath }
+        : null;
+  if (!selectedArtifact) return undefined;
+  const report = scoreArtifact(projectRoot, selectedArtifact);
   return {
     totalScore: report.totalScore,
     profileMax: report.profileMax,
   };
 }
 
+/** Read one path entry without following a final symlink; a missing entry is safe to create later. */
+function lstatIfPresent(path: string): Stats | null {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return null;
+    }
+    throw new SkillNewInputError(
+      `Cannot inspect scaffold path safely: ${path}`,
+    );
+  }
+}
+
+/** Reject redirected or non-directory parent entries before creating a scaffold. */
+function assertSafeScaffoldDestination(
+  projectRoot: string,
+  proposedPath: string,
+): void {
+  const resolvedProjectRoot = resolve(projectRoot);
+  const resolvedDestination = resolve(proposedPath);
+  const relativeDestination = relative(
+    resolvedProjectRoot,
+    resolvedDestination,
+  );
+
+  if (
+    relativeDestination.length === 0 ||
+    relativeDestination === ".." ||
+    relativeDestination.startsWith(`..${sep}`) ||
+    isAbsolute(relativeDestination)
+  ) {
+    throw new SkillNewInputError(
+      `Unsafe scaffold destination outside the selected project: ${proposedPath}`,
+    );
+  }
+
+  const relativeParent = dirname(relativeDestination);
+  if (relativeParent === ".") return;
+
+  let inspectedPath = resolvedProjectRoot;
+  for (const component of relativeParent.split(sep)) {
+    inspectedPath = join(inspectedPath, component);
+    const pathStats = lstatIfPresent(inspectedPath);
+    if (pathStats === null) break;
+    if (pathStats.isSymbolicLink() || !pathStats.isDirectory()) {
+      throw new SkillNewInputError(
+        `Unsafe scaffold parent is a symlink or non-directory: ${inspectedPath}`,
+      );
+    }
+  }
+}
+
 async function maybeWrite(
+  projectRoot: string,
   proposedPath: string,
   scaffold: string,
   options: SkillNewOptions,
   prompts: InteractivePrompts,
 ): Promise<boolean> {
-  if (existsSync(proposedPath)) return false;
+  assertSafeScaffoldDestination(projectRoot, proposedPath);
+  if (lstatIfPresent(proposedPath) !== null) return false;
   const allow = options.shouldSkipConfirm
     ? true
     : await prompts.confirmWrite(proposedPath, scaffold);
@@ -616,12 +1066,16 @@ function runDraftMode(
     };
   }
   const content = readFileSync(absolutePath, "utf-8");
-  const suggestedName = basename(absolutePath, ".md");
-  const candidacy = runCandidacyCheck({
-    kind: "draft",
-    content,
-    suggestedName,
-  });
+  const suggestedName = draftNameForPath(absolutePath);
+  const skillsDirectory = skillDirectoryFor(options.agent);
+  const candidacy = withSkillDestination(
+    runCandidacyCheck({
+      kind: "draft",
+      content,
+      suggestedName,
+    }),
+    skillsDirectory,
+  );
 
   const output: string[] = [
     `Draft: ${relative(projectRoot, absolutePath)}`,
@@ -637,6 +1091,7 @@ function runDraftMode(
     projectRoot,
     suggestedName,
     candidacy.recommendedArtifact,
+    skillsDirectory,
   );
   if (!scaffolded) {
     output.push(
@@ -654,6 +1109,7 @@ function runDraftMode(
   }
 
   const expectedPath = scaffolded.proposedPath;
+  let postScaffoldScore: SkillNewResult["postScaffoldScore"];
   if (resolve(expectedPath) !== absolutePath) {
     output.push("");
     output.push(`Expected location: ${relative(projectRoot, expectedPath)}`);
@@ -662,10 +1118,14 @@ function runDraftMode(
     );
     output.push("(not executed; review before moving.)");
   } else if (!scaffolded.isReference) {
-    const postScore = scoreFreshSkill(projectRoot, suggestedName);
-    if (postScore) {
+    postScaffoldScore = scoreFreshSkill(
+      projectRoot,
+      suggestedName,
+      absolutePath,
+    );
+    if (postScaffoldScore) {
       output.push(
-        `Quality: ${postScore.totalScore}/${postScore.profileMax} (snapshot of current draft)`,
+        `Quality: ${postScaffoldScore.totalScore}/${postScaffoldScore.profileMax} (snapshot of current draft)`,
       );
     }
   }
@@ -675,6 +1135,7 @@ function runDraftMode(
     proposedPath: expectedPath,
     scaffold: null,
     written: false,
+    postScaffoldScore,
     output,
   };
 }

@@ -4,6 +4,7 @@
 **Date:** 2026-04-19
 **Updated:** 2026-05-18 - stale file-line citations replaced with current anchors or historical notes where Quick-mode text was removed.
 **Updated:** 2026-05-27 - Runtime slot updated per ADR-030; delegation revisit trigger now names Claude, Codex, Antigravity, and Copilot.
+**Updated:** 2026-07-17 - lifecycle and delegation counts aligned with mandatory meta-audit and outcome capture.
 
 ## Context
 
@@ -16,9 +17,9 @@
 
 ## Decision
 
-1. **goat-critique runs in one mode: full delegated.** 5 phases, 2-3 sub-agents by default; optionally 4 when cross-model spawning is available (see critique improvement plan M1/M5). Spawned via the Agent tool. Phase 1 MUST use isolated Agent-tool calls; no inline role-play substitute is permitted.
+1. **goat-critique runs in one mode: full delegated.** The mandatory lifecycle is Phases 1-5 plus Phase 5.5 meta-audit and Phase 5.6 outcome capture. Phase 1 spawns three isolated critique sub-agents, Phase 3 may spawn up to three cross-exam agents when disputes require them, and Phase 5.5 always spawns one meta-agent. No inline role-play substitute is permitted.
 2. ~~**If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.~~ **Superseded (2026-04-23; updated 2026-05-27):** All four supported agents (Claude Code, Codex, Antigravity, Copilot) ship sub-agent delegation. The redirect is dead ceremony per `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Sub-agent delegation is universal`). Removed from `docs/skills.md` and skill files.
-3. **Skill-chained entry still runs the full 5-phase flow.** The only concession granted by skill-chaining is skipping the intake confirmation; it does not unlock a quick variant.
+3. **Skill-chained entry still runs the full lifecycle (Phases 1-5, 5.5, and 5.6).** The only concession granted by skill-chaining is skipping the intake confirmation; it does not unlock a quick variant.
 4. **`Output Format` ships one template.** The dual Quick/Full template is removed.
 5. **The `SKILLS_DOC_STALE_PHRASES` detector entry that asserted "quick mode skips cross-examination and clarification" (`src/cli/audit/check-factual-claims.ts` (search: `SKILLS_DOC_STALE_PHRASES`); formerly `skills-critique-contract-drift`) is removed.** With Quick mode retired, the detector's own claim is no longer true; keeping it would false-positive on correct docs.
 

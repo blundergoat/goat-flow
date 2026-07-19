@@ -38,12 +38,13 @@ FORMAT - create or update a category bucket file like this:
 
 ---
 category: hooks
+last_reviewed: YYYY-MM-DD
 ---
 
 ## Footgun: [descriptive title]
-**Status:** active
-**Created:** YYYY-MM-DD
-**Evidence type:** ACTUAL_MEASURED
+**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>
+**Decision changed:** [the future READ/SCOPE/ACT/VERIFY decision this changes]
+**Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **Symptoms:** [what a human sees go wrong]
 **Why it happens:** [the hidden coupling or drift]
 **Evidence:**
@@ -56,6 +57,7 @@ entry and add:
 **Status:** RESOLVED - [short reason]
 
 RULES:
+- Choose exactly one evidence label: ACTUAL_MEASURED for reproduced/measured project evidence; OBSERVED for direct current code/config evidence without runtime measurement; EXTERNAL_REFERENCE for a cited real external incident with explicit local applicability.
 - Every entry MUST include file path evidence pointing to REAL code. Use grep-friendly semantic anchors - function names, unique strings, section headings, or `(search: "pattern")` markers - NOT line numbers. Line numbers shift on every edit and silently go stale (see ADR-024).
 - Do NOT invent hypothetical footguns
 - Do NOT include generic advice like "write tests" or "review carefully"

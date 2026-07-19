@@ -1,10 +1,8 @@
 /**
- * Audit checks for the agent deny hook under spawn and sandbox failure: EPERM denials are
- * reported distinctly from hook syntax errors and deny-dangerous failures, the self-test
- * honours GOAT_DENY_DANGEROUS_HOOK dispatcher selection, completed-status metadata beats
- * error shells, nested-cwd replays and shell-hidden script paths fail, and leftover legacy
- * split guardrail installs are flagged. Template-drift and pass cases live in
- * agent-deny-hooks-drift.test.ts.
+ * Verifies that agent guardrail audits reflect the hook developers actually run.
+ * Use when a user audits a project and needs sandbox failures, launcher drift, and
+ * policy outcomes reported separately instead of collapsed into one generic failure.
+ * Runtime payload checks keep installed-hook behavior aligned with the audit result.
  */
 import {
   AGENT_CHECKS,
@@ -113,6 +111,70 @@ describe("agent deny hook template comparison", () => {
     };
     return readInstalledGuardrail;
   }
+
+  /** Exercise the configured Codex launcher with quoted evidence and a real write-shaped payload. */
+  it("allows quoted repository evidence while the registered hook still blocks repository writes", () => {
+    const registeredHookConfig = JSON.parse(
+      readFileSync(resolve(PROJECT_ROOT, ".codex/hooks.json"), "utf-8"),
+    ) as {
+      hooks: {
+        PreToolUse: Array<{
+          matcher: string;
+          hooks: Array<{ command: string }>;
+        }>;
+      };
+    };
+
+    // The Bash registration is what Codex users actually cross before their command can run.
+    const registeredCodexHook = registeredHookConfig.hooks.PreToolUse.find(
+      (registration) => registration.matcher === "Bash",
+    );
+    assert.ok(registeredCodexHook, "expected a registered Codex Bash hook");
+    const registeredCodexHookCommand = registeredCodexHook.hooks[0]?.command;
+    assert.ok(
+      registeredCodexHookCommand,
+      "expected the Codex Bash hook to expose its launcher command",
+    );
+
+    const quotedEvidencePayload = JSON.stringify({
+      tool_name: "Bash",
+      tool_input: {
+        command:
+          "rg -n 'git commit|git push' workflow/hooks/deny-dangerous | head -n 10",
+      },
+    });
+    const quotedEvidenceResult = originalSpawnSync(
+      "bash",
+      ["-lc", registeredCodexHookCommand],
+      {
+        cwd: PROJECT_ROOT,
+        input: quotedEvidencePayload,
+        encoding: "utf-8",
+      },
+    );
+    assert.equal(
+      quotedEvidenceResult.status,
+      0,
+      quotedEvidenceResult.stderr || "quoted evidence should be allowed",
+    );
+    assert.equal(quotedEvidenceResult.stderr, "");
+
+    const blockedRepositoryWritePayload = JSON.stringify({
+      tool_name: "Bash",
+      tool_input: { command: "printf message | git commit -F -" },
+    });
+    const blockedRepositoryWriteResult = originalSpawnSync(
+      "bash",
+      ["-lc", registeredCodexHookCommand],
+      {
+        cwd: PROJECT_ROOT,
+        input: blockedRepositoryWritePayload,
+        encoding: "utf-8",
+      },
+    );
+    assert.equal(blockedRepositoryWriteResult.status, 2);
+    assert.match(blockedRepositoryWriteResult.stderr, /Policy repository/);
+  });
 
   it("reports sandbox spawn denial separately from hook syntax errors", () => {
     assert.ok(denyCheck, "agent deny check should exist");

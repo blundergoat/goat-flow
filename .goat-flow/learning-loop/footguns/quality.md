@@ -1,6 +1,6 @@
 ---
 category: quality
-last_reviewed: 2026-07-04
+last_reviewed: 2026-07-17
 ---
 
 ## Footgun: Quality reviews disappear when the agent skips the final JSON write
@@ -95,6 +95,10 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 ## Footgun: Advisory warnings without enforcement train users to ignore output
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Optional missing metadata remains visible in structured facts; warnings are reserved for malformed supplied values.
+**Trigger phase:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-07-17
 
 **Symptoms:** A command emits the same wall of warnings on every run, but the warnings never fail the gate and have no migration path. Users and agents learn to scroll past them, including warnings that might matter later.
 
@@ -103,6 +107,8 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 **Evidence:** `stats --check` previously emitted decision-metadata warnings for every ADR missing optional Author(s) and Ticket/Context fields. The current stats warning pipeline is anchored at `src/cli/stats/stats.ts` (search: `Collect advisory learning-loop warnings`), and `.goat-flow/learning-loop/decisions/README.md` (search: `Author(s):`) still recommends the metadata without forcing unavoidable warnings.
 
 **Prevention:** Advisory warnings must have an enforcement timeline, a migration path, or be removed. A warning that fires on 100% of the corpus is not a safety net.
+
+**Recurrence update (2026-07-17):** `stats --check` passed while emitting 35 memory-quality warning groups covering 342 missing optional `Decision changed` values. The remediation kept `hasDecisionChangedGuidance` in JSON and removed absence-only warnings from `src/cli/stats/stats.ts` (search: `describeMemoryQualityIssues`).
 
 ## Footgun: YAML heredocs can break tooling before shell execution
 
@@ -115,6 +121,24 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 **Evidence:** `.github/workflows/ci.yml` (search: `run: |`) and `.github/actions/goat-flow-audit/action.yml` (search: `run: |`) are the current YAML `run` block surfaces where heredoc edits would need YAML-aware validation. `scripts/preflight-checks.sh` (search: `Knip`) is the tooling gate that previously exposed workflow-shape drift.
 
 **Prevention:** For generated multi-line files inside workflow `run: |` blocks, prefer `printf '%s\n' ... > file` unless the heredoc indentation has been validated against both the YAML parser and the shell.
+
+## Footgun: Pre-release prompts can resolve an older global CLI
+
+**Status:** active | **Created:** 2026-07-17 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Framework-checkout commands use the source CLI (or a freshly built local CLI) and verify its version instead of trusting a bare PATH binary; generated write instructions retain the package-identity-gated source fallback.
+**Trigger phase:** ACT
+**Incident count:** 2
+**Latest occurrence:** 2026-07-17
+
+**Symptoms:** A prompt generated from the current source tree invokes a newly added CLI command, prints a success-looking write message, but exits non-zero and persists the output of an older command instead of the requested artifact.
+
+**Why it happens:** During pre-release work, `node --import tsx src/cli/cli.ts` can generate v1.14.0 instructions while the first `goat-flow` on `PATH` is still the globally installed v1.13.0 package. The old parser treated the unknown `redact` token as an audit target, so `goat-flow redact --output <quality-file>` wrote audit JSON to the quality-report path.
+
+**Evidence:** `src/cli/prompt/compose-quality-common.ts` (search: `Select a compatible redactor`) now requires the installed binary to report the current package version and permits the source fallback only when `package.json` identifies the framework checkout. The 2026-07-17 reproduction resolved `goat-flow` to v1.13.0, printed `Written to /tmp/goat-redact-benign.json`, and exited 1; the source command exited 0 and its redacted quality report passed `quality validate`.
+
+**Recurrence 2026-07-17:** Current consumer guidance still used `npx goat-flow`, although the unscoped registry package is deprecated and a clean-directory probe resolved a stale global v1.13.0 binary instead of source v1.14.0. Current command surfaces now name `@blundergoat/goat-flow`; `test/contract/command-phrases.test.ts` (search: `does not let unscoped npx resolve the deprecated goat-flow package`) guards the package identity. Skill hardening receipt: `.goat-flow/logs/sessions/2026-07-17-goat-tdd.md` (local, gitignored).
+
+**Prevention:** In the framework checkout, use `node --import tsx src/cli/cli.ts <command>` before build or `npm run goat-flow:cli -- <command>` only after a fresh build, and verify `--version` matches `package.json`; do not use bare `goat-flow` during pre-release work. Consumer examples must name the scoped `@blundergoat/goat-flow` package. When a generated prompt calls a command added in the current release, verify the exact version before any output write and gate source fallbacks on both the expected package name and source entry path.
 
 ## Resolved Entries
 

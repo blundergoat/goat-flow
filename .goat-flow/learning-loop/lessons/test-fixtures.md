@@ -1,6 +1,21 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-06-07
+last_reviewed: 2026-07-17
+---
+
+## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
+
+**Status:** active | **Created:** 2026-07-14
+**Decision changed:** Failure-injection wrappers now scan the complete argument vector for the semantic path instead of assuming a fixed position.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-07-14
+
+**What happened:** M28's migration-failure fixture wrapped `mv` and matched the legacy source only at argument one. The hardened installer invoked `mv -n -- <source> <destination>`, so the wrapper delegated to the real command, installation exited 0, and the focused suite reported one failure even though the migration helper was behaving correctly.
+
+**Root cause:** The fixture encoded the old command shape instead of the behavior under test. Safety flags and the option terminator shifted the source operand without changing its meaning.
+
+**Prevention:** Command-wrapper fixtures must scan all arguments, or parse options when operand order matters, and match a unique semantic path. Keep the failure assertion alongside source/destination byte assertions so a wrapper that never activates cannot pass silently. Evidence anchor: `test/integration/setup-install-atomic-staging.test.ts` (search: `Migration helpers add safety flags`).
+
 ---
 
 ## Lesson: Migration-output fixtures must match the collision branch
@@ -34,6 +49,26 @@ last_reviewed: 2026-06-07
 **What happened:** While tightening CI-validation checks, the first pass on the workflow `run:` parser read the wrong regex capture group and then used a router heuristic that only matched commands containing the word `router`. The focused regression suite and `tsc` both failed before the broader test run finished.
 **Root cause:** Changed parsing and heuristics together without first validating the extracted command shape. The new regression covered the shell pattern, but the implementation still assumed the old capture layout and overfit to existing workflow wording.
 **Fix:** For parser refactors, verify in this order: (1) print/exercise the extracted intermediate values, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, then (4) run the full test suite. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
+
+---
+
+## Lesson: Builder defaults do not protect direct verifier callers
+
+**Status:** active | **Created:** 2026-07-13
+
+**Decision changed:** Default migration-light fields at every exported consumer boundary, then run the full package suite to find callers outside focused fixtures.
+
+**Trigger phase:** VERIFY
+
+**Incident count:** 1
+
+**Latest occurrence:** 2026-07-13
+
+**What happened:** M13 defaulted missing learning-loop entries in `buildStatsReport`, and focused stats tests passed. The full `npm test` run found three `TypeError: learningLoopEntries is not iterable` failures because `test/unit/index-fresh.test.ts` calls exported `checkStats` with a legacy report object that bypasses the builder.
+
+**Root cause:** The compatibility fallback lived only in the preferred construction path, not the exported verifier that also consumes report-shaped objects at runtime. Source typecheck did not inspect the TypeScript test caller.
+
+**Prevention:** When adding migration-light report fields, search for every exported consumer and default absent collections at those boundaries. Run focused tests plus the package suite. Evidence anchors: `src/cli/stats/stats.ts` (search: `Older direct callers may omit entry facts`), `test/unit/index-fresh.test.ts` (search: `reportWith(indexes)`).
 
 ---
 
@@ -100,12 +135,19 @@ last_reviewed: 2026-06-07
 ## Lesson: Audit check tests should assert the public failure field
 
 **Status:** active | **Created:** 2026-05-06
+**Decision changed:** Assert each public result field according to its declared role before matching prose.
+**Trigger phase:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-07-16
 
 **What happened:** While tightening the execution-loop smoke check, the first focused `test/unit/audit-command.test.ts` run failed because the new regression asserted that `CheckResult.failure.message` would contain the raw finding text `inside the section`. The implementation was already failing the check correctly; `failure.message` exposed the public recommendation text (`Add READ, SCOPE, ACT, VERIFY steps under the "Execution Loop" heading...`) instead.
 
 **Root cause:** I wrote the test against an internal diagnostic phrase rather than the audit result field users and dashboard consumers actually receive.
 
 **Prevention:** For harness-audit regressions, assert the serialized/public `CheckResult` contract first: `status`, `displayStatus`, `impact`, `failure.message`, and `howToFix` when relevant. Only assert raw finding phrasing if that phrasing is intentionally part of the public contract. Evidence anchors: `src/cli/audit/audit.ts` (search: `Convert a harness check`), `src/cli/audit/harness/check-context.ts` (search: `missing step words inside the section`).
+
+**Recurrence (2026-07-13):** The M07 ownership test matched a detailed validator finding against `ManifestValidationError.message`, but the public summary intentionally contains only the finding count. The validator was correct; the assertion now inspects `ManifestValidationError.findings`, matching existing manifest tests. Evidence anchor: `test/unit/manifest-file-ownership.test.ts` (search: `rejects ownership records without a usable source or generator`).
+
+**Recurrence (2026-07-16):** The PR #56 recovery regression correctly received separate `recommendations` and `howToFix` arrays from `HarnessCheckResult`, but the first assertion looked for recommendation text in `howToFix`. The runtime fix was correct; the focused run reported `pass 161`, `fail 1` until the assertion was aligned with the public field contract. Evidence anchors: `src/cli/audit/harness/helpers.ts` (search: `Build a failing harness-check result with recommendations`), `test/integration/audit-quality.test.ts` (search: `reports an unreadable session-log listing without aborting the audit`).
 
 ---
 
@@ -117,4 +159,53 @@ last_reviewed: 2026-06-07
 
 **Root cause:** The default threshold is tuned for small unit tests. goat-flow has many contract tests where visible fixture construction is part of the evidence. Extracting all of that setup into generic helpers would hide the behavioural contract the test is meant to preserve.
 
-**Prevention:** Keep `test-quality.setup-bloat.threshold` at `30` in `.gruff-ts.yaml` unless a future fixture helper makes those setup blocks clearer without hiding the SUT call or assertion. Still fix tests above that threshold case-by-case: extract reusable temp-project builders, keep assertions visible, and do not add empty `arrange()` wrappers only to satisfy the analyzer. Evidence anchors: `.gruff-ts.yaml` (search: `test-quality.setup-bloat`), `.goat-flow/plans/1.9.0/M00-gruff-ts-cleanup.md` (search: `test-quality.setup-bloat`).
+**Prevention:** Keep `test-quality.setup-bloat.threshold` at `30` in `.gruff-ts.yaml` unless a future fixture helper makes those setup blocks clearer without hiding the SUT call or assertion. Still fix tests above that threshold case-by-case: extract reusable temp-project builders, keep assertions visible, and do not add empty `arrange()` wrappers only to satisfy the analyzer. Evidence anchors: `.gruff-ts.yaml` (search: `test-quality.setup-bloat`).
+
+---
+
+## Lesson: Current-version fixtures must derive from package metadata
+
+**Status:** active | **Created:** 2026-07-16
+**Decision changed:** Healthy current-version fixtures now interpolate the package-derived audit version instead of pinning a release literal.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-07-16
+
+**What happened:** After goat-flow was bumped from 1.13.1 to 1.14.0, the full test suite failed two skill-doctor cases. Their shared healthy fixture still emitted goat-flow-skill-version 1.13.1, so the runtime correctly classified the fixture as warn rather than pass.
+
+**Root cause:** The fixture represented the current installed version but hard-coded the previous release number. The version sweep covered runtime and release surfaces without checking this semantic test fixture.
+
+**Prevention:** Fixtures that mean current must import package-derived version metadata; literals are reserved for tests that intentionally model old or mismatched installs. After a release bump, search the test tree for the prior version before running the full suite. Evidence anchors: test/unit/skill-doctor.test.ts (search: skillMarkdown), src/cli/constants.ts (search: export const AUDIT_VERSION).
+
+---
+
+## Lesson: Aggregate metadata counts can mask invalid individual entries
+
+**Status:** active | **Created:** 2026-07-17
+**Decision changed:** Schema-health and evidence gates validate every parsed value and required relation independently before aggregating counts or declaring presence.
+**Trigger phase:** VERIFY
+**Incident count:** 3
+**Latest occurrence:** 2026-07-17
+
+**What happened:** Evidence-label health compared a bucket-wide label count with its entry count. A two-entry fixture with two labels in the first entry and none in the second reported `labelCount: 2` and `hasEvidenceLabels: true`; the same matcher also accepted lowercase `observed` even though every template defines uppercase canonical labels. The first per-entry correction still collapsed two declarations in one section to one valid boolean, so the regression expectation had to tighten from one accepted entry to zero before the parser enforced mutual exclusivity. A final live-repo probe then found the strict matcher recognized only 91 of 107 labels because `**Evidence:**` also introduces narrative evidence blocks; the parser had to distinguish taxonomy metadata from prose. When the corrected fact was wired into `stats --check`, the first diagnostic used the aggregator's reserved `; ` separator and split one actionable error into two findings until the message changed to a colon.
+
+**Root cause:** `countFootgunLabels` counted regex matches across the complete bucket and `hasEvidenceLabels` accepted `labelCount >= entryCount`. The aggregate could not preserve which section owned each match, the global case-insensitive flag weakened the documented enum, and one undifferentiated Markdown regex treated evidence-body headings as evidence-type declarations.
+
+**Recurrence 2026-07-17:** The first `skill new --red-log` gate counted any three comma-separated tokens as pressures, accepted `fail` inside `did not fail`, accepted `- none` as a verbatim rationalisation, and searched later GREEN sections for fields missing from RED. In the same review, the shipped-scenario contract checked only that an illustrative label existed, so moving it below `## Assumption Tracking` still satisfied the test. The focused suite and full preflight both passed before adversarial probes reproduced the two semantic bypasses. Evidence anchors: `src/cli/skill-author.ts` (search: `documentedPressureCount`) now validates the isolated RED section; `test/integration/skill-author.test.ts` (search: `rejects RED receipts whose fields describe success instead of failure`) locks the near-miss; `test/contract/skill-hardening-contracts.test.ts` (search: `scenario label must immediately precede the assumption block`) locks the required ordering relation.
+
+**Recurrence 2026-07-17 (quality recheck):** A follow-up RED-log probe used every canonical token only inside explicit negations: `no time pressure`, `failed? no`, and `none observed because it complied`. The gate still accepted the receipt and wrote a discoverable skill because each field validator recognized tokens without validating the field's asserted meaning. The first literal fix blocked that receipt, but an immediate boundary probe reproduced the same bypass with label-prefixed absence claims: `time: no pressure`, `failed: false`, and `No rationalisation occurred`. The pressure validator now rejects a directly negated detail after a canonical label, the outcome validator rejects directly negated failure classifications, and the rationalisation validator rejects prose that explicitly reports absence. Evidence anchors: `src/cli/skill-author.ts` (search: `startsWithNegatedAssertion` and `isAbsentRationalisation`), `test/integration/skill-author.test.ts` (search: `rejects negated RED evidence that includes canonical tokens` and `rejects alternate absence claims after canonical RED labels`), and the paired acceptance control (search: `accepts positive pressure details and a substantive no-prefixed rationalisation`).
+
+**Prevention:** Split structured Markdown into entries first, classify only frontmatter, Status-line, typed, or label-shaped standalone declarations, validate each value against its documented vocabulary, validate ordering and ownership relations explicitly, reduce each entry to at most one valid schema result, then aggregate. Pair empty-input fixtures with semantic near-misses: duplicate or unknown values, negated pressure and failure claims, explicit absence presented as evidence, placeholders presented as evidence, fields in the wrong section, labels on the wrong side of a boundary, and non-file paths. Keep the existing negative fixtures for duplicate-masks-missing, multiple labels in one value, legacy labels, wrong casing, a canonical label followed by narrative `**Evidence:**` content, and the blocking `stats --check` result. Diagnostic text must not contain the aggregator's `; ` delimiter. Evidence anchors: `src/cli/facts/shared/learning-loop.ts` (search: `getEvidenceLabelDiagnostic`) separates taxonomy metadata from prose and emits the bucket error; `src/cli/stats/stats.ts` (search: `evidence-label`) maps it to a stable rule; `test/integration/stats-command.test.ts` (search: `exactly one canonical evidence label`) locks parsing and enforcement.
+
+---
+
+## Lesson: Pressure scenarios must isolate the rule under test
+
+**Status:** active | **Created:** 2026-07-12
+
+**What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-040 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
+
+**Root cause:** The scenario varied both test ordering and repository-history authority. Its wrong answer was independently invalid under always-loaded policy.
+
+**Fix:** The replacement uses an explicitly labelled illustrative security-depth scenario and holds file scope plus mirror duties constant; only test-first ordering differs. The shipped scenario defines input/output shape, never incident evidence; live runs must substitute current target-project facts. Evidence anchors: `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Illustrative four-pressure scenario`) and `test/contract/skill-hardening-contracts.test.ts` (search: `isolated from repository-history policy`).
+
+**Prevention:** Before using an A/B/C pressure fixture, compare every option with always-loaded instructions and accepted ADRs. Keep all non-target obligations equal so only the rule under test explains the result.

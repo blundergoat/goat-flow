@@ -1,6 +1,7 @@
 /**
  * Type declarations for the GOAT Flow dashboard (browser environment).
  * These types are shared across all dashboard script files.
+ * Use them when API payloads add fields that browser helpers must preserve for users.
  */
 
 type AuditStatus = "pass" | "fail" | "skipped";
@@ -17,6 +18,12 @@ type EnforcementCapabilitySource =
   | "runtime-self-test"
   | "manifest"
   | "provider-docs"
+  | "not-observed";
+type EnforcementCapabilityAssurance =
+  | "runtime-local"
+  | "static-local"
+  | "manifest-declared"
+  | "provider-documented"
   | "not-observed";
 /** Dashboard-local runner union. Keep this aligned with `AgentId` in `src/cli/types.ts`.
  *  Do not import CLI types here; the dashboard ambient build must stay browser-only. */
@@ -99,6 +106,7 @@ interface EnforcementCapability {
   label: string;
   status: EnforcementCapabilityStatus;
   sources: EnforcementCapabilitySource[];
+  assurance: EnforcementCapabilityAssurance;
   summary: string;
   evidence: string[];
 }

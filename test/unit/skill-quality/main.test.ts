@@ -11,6 +11,7 @@ import {
   writeFileSync,
   join,
   discoverArtifacts,
+  evaluateContent,
   findArtifact,
   scoreArtifact,
   symlinkOrSkip,
@@ -19,7 +20,45 @@ import {
   writeText,
   writeSkill,
   getRepoArtifacts,
+  cloneQualityConfig,
+  DEFAULT_QUALITY_CONFIG,
 } from "./helpers.js";
+import { composeArtifactQualityPrompt } from "../../../src/cli/prompt/compose-quality.js";
+import { composeArtifactContent } from "../../../src/cli/quality/skill-quality-content.js";
+
+describe("artifact composition", () => {
+  it("keeps the primary skill ahead of shared context when composition truncates", () => {
+    const projectRoot = makeTempProject();
+    const config = cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
+    config.composition.skillPreamblePath = "preamble.md";
+    config.composition.skillConventionsPath = null;
+    config.composition.maxComposedBytes = 1024;
+    writeText(join(projectRoot, "preamble.md"), "P".repeat(2000));
+    const rawContent = [
+      "# /primary-probe",
+      "Primary workflow evidence must be assessed before shared context.",
+      "PRIMARY-SKILL-TAIL",
+    ].join("\n");
+
+    const composed = composeArtifactContent(
+      projectRoot,
+      {
+        id: "skill:primary-probe",
+        name: "primary-probe",
+        path: ".claude/skills/primary-probe/SKILL.md",
+        kind: "skill",
+        source: "installed",
+      },
+      rawContent,
+      config,
+      { scanDisk: false },
+    );
+
+    assert.equal(composed.sources[0], "SKILL.md");
+    assert.match(composed.composed, /PRIMARY-SKILL-TAIL/u);
+    assert.deepEqual(composed.notes, ["composition truncated at 1KB"]);
+  });
+});
 
 describe("artifact discovery", () => {
   it("discovers installed skills from .claude/skills/", () => {
@@ -161,5 +200,110 @@ describe("artifact discovery", () => {
     const report = scoreArtifact(projectRoot, artifact);
     const tokenCost = report.metrics.find((m) => m.metric === "token-cost")!;
     assert.match(tokenCost.detail, /3 sub-reference\(s\)/);
+  });
+
+  it("credits the canonical boundary-command triplet as an exclusion contract", () => {
+    const report = evaluateContent(PROJECT_ROOT, {
+      kind: "skill",
+      suggestedName: "boundary-probe",
+      content: [
+        "---",
+        "name: boundary-probe",
+        'description: "Use when checking boundary behavior."',
+        'goat-flow-skill-version: "1.13.1"',
+        "---",
+        "# /boundary-probe",
+        "## When to Use",
+        "Use when the user needs a bounded workflow.",
+        "## Boundary Commands",
+        "- **NEVER:** Implement adjacent work inside this workflow.",
+        "- **ALWAYS:** Preserve the selected reporting boundary.",
+        "- **DEFER TO:** `/goat-review` for code-quality review.",
+      ].join("\n"),
+    });
+    const triggerClarity = report.metrics.find(
+      (metric) => metric.metric === "trigger-clarity",
+    );
+    assert.ok(triggerClarity, "expected trigger-clarity metric");
+    assert.equal(triggerClarity.score, 15);
+  });
+
+  it("reports unconditioned vague prose without changing score or recommendation", () => {
+    const baseSkill = [
+      "---",
+      "name: vague-probe",
+      'description: "Use when checking author guidance."',
+      'goat-flow-skill-version: "1.13.1"',
+      "---",
+      "# /vague-probe",
+      "## When to Use",
+      "Use when a maintainer needs a documented fallback.",
+      "## Step 0",
+      "Read the current artifact before deciding.",
+      "## Boundary Commands",
+      "- **NEVER:** Change the artifact during assessment.",
+      "- **ALWAYS:** Report the observed evidence.",
+      "- **DEFER TO:** `/goat-plan` for implementation planning.",
+    ];
+    const unconditionedReport = evaluateContent(PROJECT_ROOT, {
+      kind: "skill",
+      suggestedName: "vague-unconditioned",
+      content: [...baseSkill, "Use the manual fallback as needed.", ""].join(
+        "\n",
+      ),
+    });
+    const conditionedReport = evaluateContent(PROJECT_ROOT, {
+      kind: "skill",
+      suggestedName: "vague-conditioned",
+      content: [
+        ...baseSkill,
+        "Use the manual fallback as needed.",
+        "When the browser tool is unavailable, follow the manual steps.",
+      ].join("\n"),
+    });
+    const fencedReport = evaluateContent(PROJECT_ROOT, {
+      kind: "skill",
+      suggestedName: "vague-fenced",
+      content: [
+        ...baseSkill,
+        "```text",
+        "Use the manual fallback as needed.",
+        "```",
+      ].join("\n"),
+    });
+
+    assert.match(
+      unconditionedReport.fitNotes.join("\n"),
+      /advisory vague-language.+as needed/i,
+    );
+    assert.doesNotMatch(
+      conditionedReport.fitNotes.join("\n"),
+      /advisory vague-language/i,
+    );
+    assert.doesNotMatch(
+      fencedReport.fitNotes.join("\n"),
+      /advisory vague-language/i,
+    );
+    assert.equal(unconditionedReport.totalScore, conditionedReport.totalScore);
+    assert.equal(
+      unconditionedReport.recommendation,
+      conditionedReport.recommendation,
+    );
+  });
+
+  it("asks reviewers to score misuse limits and resist metric gaming", () => {
+    const artifact = findArtifact(PROJECT_ROOT, "skill:goat-plan");
+    assert.ok(artifact, "expected goat-plan artifact");
+    const report = scoreArtifact(PROJECT_ROOT, artifact);
+    const prompt = composeArtifactQualityPrompt(report);
+
+    assert.match(prompt, /\*\*Misuse \/ Limits \(1-5\)\*\*/);
+    assert.match(
+      prompt,
+      /What could an author add to satisfy this score without improving agent behavior\?/,
+    );
+    assert.match(prompt, /default `\/25` across the five dimensions/);
+    assert.match(prompt, /"misuseLimits": 4/);
+    assert.match(prompt, /"max": 25/);
   });
 });

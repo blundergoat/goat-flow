@@ -1,0 +1,568 @@
+/**
+ * Artifact-integrity pressure tests for the drift and factual-content audits.
+ * Use these fixtures when changing skill packaging so users receive complete,
+ * uniquely named workflow artifacts without stale files or retired commands.
+ */
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { runFactualClaimChecks } from "../../src/cli/audit/check-factual-claims.js";
+import { findDuplicateArtifactIds } from "../../src/cli/audit/check-artifact-integrity.js";
+import type { AuditContext } from "../../src/cli/audit/types.js";
+import {
+  checkDrift,
+  createFS,
+  getInstalledSkillRoots,
+  setupFixture,
+} from "./audit-drift.helpers.ts";
+
+/**
+ * Write one matching skill contract to the canonical source and every installed mirror.
+ * Use when a fixture must isolate identity or reference integrity from ordinary content drift.
+ *
+ * @param fixtureRoot - temporary project root; an empty path is invalid because no fixture exists
+ * @param skillName - canonical skill directory; an empty name means there is no skill to update
+ * @param skillMarkdown - complete user-facing skill contract; empty text creates an intentionally blank contract
+ */
+function writeMatchingSkillContract(
+  fixtureRoot: string,
+  skillName: string,
+  skillMarkdown: string,
+): void {
+  writeFileSync(
+    join(fixtureRoot, "workflow", "skills", skillName, "SKILL.md"),
+    skillMarkdown,
+  );
+
+  // Every installed agent should see the same fixture contract, so only artifact integrity can fail.
+  for (const installedSkillRoot of getInstalledSkillRoots()) {
+    writeFileSync(
+      join(fixtureRoot, installedSkillRoot, skillName, "SKILL.md"),
+      skillMarkdown,
+    );
+  }
+}
+
+/**
+ * Run drift against one temporary project and return its findings.
+ * Use after arranging a fixture to observe exactly what an audit user would receive.
+ *
+ * @param fixtureRoot - temporary project root; an empty path means the audit has no project to inspect
+ * @returns drift findings shown to the user; empty means the arranged fixture is accepted
+ */
+function driftFindings(fixtureRoot: string) {
+  return checkDrift({
+    fs: createFS(fixtureRoot),
+    projectPath: fixtureRoot,
+    templateRoot: fixtureRoot,
+  }).findings;
+}
+
+/**
+ * Add retired skill and shared Markdown to an otherwise current installed fixture.
+ * Use to reproduce upgrades that merged new files without pruning old user guidance;
+ * writes two temporary Markdown files that the caller removes with the fixture root.
+ *
+ * @param fixtureRoot - temporary project root; empty means no installed mirrors can be arranged
+ */
+function writeStaleInstalledArtifacts(fixtureRoot: string): void {
+  const staleSkillReference = join(
+    fixtureRoot,
+    ".agents",
+    "skills",
+    "goat",
+    "references",
+    "retired.md",
+  );
+  mkdirSync(dirname(staleSkillReference), { recursive: true });
+  writeFileSync(staleSkillReference, "# retired\n");
+  const staleSharedReference = join(
+    fixtureRoot,
+    ".goat-flow",
+    "skill-docs",
+    "playbooks",
+    "retired.md",
+  );
+  writeFileSync(staleSharedReference, "# retired\n");
+}
+
+describe("checkDrift: artifact integrity", () => {
+  it("reports duplicate command identifiers with the canonical registry path", () => {
+    const findings = findDuplicateArtifactIds(
+      ["audit", "quality", "audit"],
+      "src/cli/cli-types.ts",
+      "active command ID",
+    );
+
+    assert.deepEqual(findings, [
+      {
+        kind: "content",
+        path: "src/cli/cli-types.ts",
+        message:
+          'duplicate active command ID "audit" appears 2 times in src/cli/cli-types.ts',
+      },
+    ]);
+  });
+
+  it("reports a skill frontmatter name that differs from its directory", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      writeMatchingSkillContract(
+        fixtureRoot,
+        "goat-debug",
+        "---\nname: renamed-debug\ndescription: fixture\n---\n# renamed\n",
+      );
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.path === "workflow/skills/goat-debug/SKILL.md" &&
+            finding.message.includes("frontmatter name") &&
+            finding.message.includes("goat-debug"),
+        ),
+        true,
+        `expected frontmatter/directory finding, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports duplicate skill frontmatter names with both canonical sources", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      writeMatchingSkillContract(
+        fixtureRoot,
+        "goat-debug",
+        "---\nname: goat\ndescription: fixture\n---\n# duplicate\n",
+      );
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.message.includes("duplicate skill frontmatter name") &&
+            finding.message.includes("workflow/skills/goat/SKILL.md") &&
+            finding.message.includes("workflow/skills/goat-debug/SKILL.md"),
+        ),
+        true,
+        `expected duplicate-name finding, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a missing resource named inside a skill contract", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      writeMatchingSkillContract(
+        fixtureRoot,
+        "goat",
+        "---\nname: goat\ndescription: fixture\n---\n# goat\nRead `references/missing-guide.md`.\n",
+      );
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.path ===
+              "workflow/skills/goat/references/missing-guide.md" &&
+            finding.message.includes("workflow/skills/goat/SKILL.md"),
+        ),
+        true,
+        `expected missing-resource finding, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves installed shared-document paths through the explicit mirror map", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      writeMatchingSkillContract(
+        fixtureRoot,
+        "goat",
+        "---\nname: goat\ndescription: fixture\n---\n# goat\nRead `.goat-flow/skill-docs/skill-quality-testing/README.md`.\n",
+      );
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.path ===
+            "workflow/skills/playbooks/skill-quality-testing/README.md",
+        ),
+        false,
+        `expected explicit mirror mapping to resolve the shared README, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports stale installed skill and shared-reference files", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      writeStaleInstalledArtifacts(fixtureRoot);
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.path === ".agents/skills/goat/references/retired.md",
+        ),
+        true,
+        `expected stale skill-reference finding, got ${JSON.stringify(findings)}`,
+      );
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.path === ".goat-flow/skill-docs/playbooks/retired.md",
+        ),
+        true,
+        `expected stale shared-reference finding, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts an explicitly user-owned consumer playbook", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const consumerPlaybook = join(
+        fixtureRoot,
+        ".goat-flow",
+        "skill-docs",
+        "playbooks",
+        "lefthook.md",
+      );
+      writeFileSync(
+        consumerPlaybook,
+        [
+          "---",
+          'goat-flow-reference-version: "1.14.0"',
+          'goat-flow-ownership: "user-owned"',
+          "---",
+          "# lefthook",
+          "",
+          "## Availability Check",
+          "",
+        ].join("\n"),
+      );
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.path === ".goat-flow/skill-docs/playbooks/lefthook.md",
+        ),
+        false,
+        `expected user-owned playbook to remain local, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("accepts an explicitly user-owned custom skill but reports an unmarked one", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const userOwnedSkill = join(
+        fixtureRoot,
+        ".agents",
+        "skills",
+        "release-triage",
+        "SKILL.md",
+      );
+      const unmarkedSkill = join(
+        fixtureRoot,
+        ".agents",
+        "skills",
+        "unknown-local",
+        "SKILL.md",
+      );
+      mkdirSync(dirname(userOwnedSkill), { recursive: true });
+      mkdirSync(dirname(unmarkedSkill), { recursive: true });
+      writeFileSync(
+        userOwnedSkill,
+        [
+          "---",
+          "name: release-triage",
+          'description: "Consumer-owned release workflow."',
+          'goat-flow-skill-version: "1.14.0"',
+          'goat-flow-ownership: "user-owned"',
+          "---",
+          "# /release-triage",
+          "",
+        ].join("\n"),
+      );
+      writeFileSync(unmarkedSkill, "# unknown local skill\n");
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some((finding) => finding.path.endsWith("/release-triage")),
+        false,
+        `expected marked custom skill to remain local, got ${JSON.stringify(findings)}`,
+      );
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.kind === "orphan" &&
+            finding.path.endsWith("/unknown-local"),
+        ),
+        true,
+        `expected unmarked custom skill to remain an orphan, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a canonical shared file that has no source-to-install mapping", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      writeFileSync(
+        join(fixtureRoot, "workflow", "skills", "playbooks", "unmapped.md"),
+        "# unmapped\n",
+      );
+
+      const findings = driftFindings(fixtureRoot);
+      assert.equal(
+        findings.some(
+          (finding) =>
+            finding.path === "workflow/skills/playbooks/unmapped.md" &&
+            finding.message.includes("no installed mirror mapping"),
+        ),
+        true,
+        `expected unmapped-source finding, got ${JSON.stringify(findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a retired top-level command taught in current documentation", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      writeFileSync(
+        join(fixtureRoot, "README.md"),
+        "# Fixture\n\nStable goat-flow check IDs drive SARIF.\n\nRun `goat-flow scan .` to inspect the project.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.deepEqual(
+        report.findings
+          .filter((finding) => finding.rule.startsWith("removed-command-"))
+          .map((finding) => finding.rule),
+        ["removed-command-scan"],
+        `expected only the invoked retired command to fail, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports stale dispatcher control-flow, retrieval, and learning-loop claims", () => {
+    // Regression: docs/skills.md flattened every request into one route,
+    // attributed routed-skill retrieval to the dispatcher, and told every
+    // completed run to write durable learnings.
+    const fixtureRoot = setupFixture();
+    try {
+      const skillsDocPath = join(fixtureRoot, "docs", "skills.md");
+      mkdirSync(dirname(skillsDocPath), { recursive: true });
+      writeFileSync(
+        skillsDocPath,
+        "# Skills\n\nAnnounce: Routing to /goat-X\n\nFootgun matches\\nRecent git\n\nLearning loop - log lessons and footguns after completion\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.deepEqual(
+        report.findings
+          .filter((finding) => finding.path === "docs/skills.md")
+          .map((finding) => finding.rule)
+          .sort(),
+        [
+          "skills-dispatcher-control-flow-drift",
+          "skills-dispatcher-retrieval-drift",
+          "skills-learning-loop-write-drift",
+        ],
+        `expected every stale skills-doc claim to fail, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports stale public skill workflow gates and modes", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const skillsDocPath = join(fixtureRoot, "docs", "skills.md");
+      mkdirSync(dirname(skillsDocPath), { recursive: true });
+      writeFileSync(
+        skillsDocPath,
+        [
+          "# Skills",
+          'I1 -->|"BLOCKING GATE"| I2',
+          "Severity-Ordered Scan",
+          "**Threat model mode:**",
+          'P2 -->|"BLOCKING GATE"| P3',
+        ].join("\n"),
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.deepEqual(
+        report.findings
+          .filter((finding) => finding.path === "docs/skills.md")
+          .map((finding) => finding.rule)
+          .sort(),
+        [
+          "skills-debug-investigate-gate-drift",
+          "skills-qa-phase-gate-drift",
+          "skills-review-pass-drift",
+          "skills-security-mode-drift",
+        ],
+        `expected every stale public workflow to fail, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a stale harness count in the glossary's exact phrasing", () => {
+    // Regression: the glossary previously received only removed-command
+    // scanning, so "17 checks across 5 concerns" survived a green audit
+    // while the live registry said 18 (2026-07-16 quality reports).
+    const fixtureRoot = setupFixture();
+    try {
+      const glossaryPath = join(fixtureRoot, ".goat-flow", "glossary.md");
+      mkdirSync(dirname(glossaryPath), { recursive: true });
+      writeFileSync(
+        glossaryPath,
+        "| Harness | Validates agent governance installation via 999 checks across 5 concerns (context, constraints, verification, recovery, feedback-loop). | `docs/harness-audit.md` | AI Harness |\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "harness-check-count-drift" &&
+            finding.path === ".goat-flow/glossary.md",
+        ),
+        true,
+        `expected a harness-check-count-drift finding for the glossary, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a stale harness count in the code map's adjectival phrasing", () => {
+    // Regression: "N advisory/integrity/metric checks across the 5 harness
+    // concerns" evaded the count regex, which required the digit directly
+    // before "checks across N concerns" (2026-07-16 quality reports).
+    const fixtureRoot = setupFixture();
+    try {
+      const codeMapPath = join(fixtureRoot, ".goat-flow", "code-map.md");
+      mkdirSync(dirname(codeMapPath), { recursive: true });
+      writeFileSync(
+        codeMapPath,
+        "│   └── harness/ = 999 advisory/integrity/metric checks across the 5 harness concerns\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "harness-check-count-drift" &&
+            finding.path === ".goat-flow/code-map.md",
+        ),
+        true,
+        `expected a harness-check-count-drift finding for the code map, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports a stale harness count in the audit guide's exact phrasing", () => {
+    // Regression: docs/audit-checks.md bolds the number and describes
+    // "deterministic harness-completeness checks" without a concern-count
+    // suffix, so the earlier harness-specific regex skipped the false claim.
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "`goat-flow audit . --harness` adds **999** deterministic harness-completeness checks on top of the build checks.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "harness-check-count-drift" &&
+            finding.path === "docs/audit-checks.md",
+        ),
+        true,
+        `expected a harness-check-count-drift finding for the audit guide, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not treat an active command with a retired-command prefix as removed", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      writeFileSync(
+        join(fixtureRoot, "README.md"),
+        "# Fixture\n\nRun `goat-flow scan-report .` to inspect the saved report.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) => finding.rule === "removed-command-scan",
+        ),
+        false,
+        `command prefix produced a removed-command finding: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+});

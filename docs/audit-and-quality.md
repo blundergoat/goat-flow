@@ -5,13 +5,13 @@ goat-flow has two evaluation commands. `audit` is deterministic - it runs checks
 ## Quick reference
 
 ```bash
-npx goat-flow audit .                              # Build correctness (pass/fail)
-npx goat-flow audit . --harness                    # Include AI harness completeness checks
-npx goat-flow audit . --agent claude               # Scope to one agent
-npx goat-flow audit . --format sarif               # Export audit findings as SARIF 2.1.0
-npx goat-flow quality . --agent antigravity             # Generate quality-assessment prompt for one agent
-npx goat-flow quality history --agent antigravity       # Review saved trend history
-npx goat-flow quality diff --agent antigravity          # Compare the latest two saved runs
+npx @blundergoat/goat-flow@latest audit .                              # Build correctness (pass/fail)
+npx @blundergoat/goat-flow@latest audit . --harness                    # Include AI harness completeness checks
+npx @blundergoat/goat-flow@latest audit . --agent claude               # Scope to one agent
+npx @blundergoat/goat-flow@latest audit . --format sarif               # Export audit findings as SARIF 2.1.0
+npx @blundergoat/goat-flow@latest quality . --agent antigravity             # Generate quality-assessment prompt for one agent
+npx @blundergoat/goat-flow@latest quality history --agent antigravity       # Review saved trend history
+npx @blundergoat/goat-flow@latest quality diff --agent antigravity          # Compare the latest two saved runs
 ```
 
 | Command | Output | Deterministic? | Gates CI? | Requires --agent? |
@@ -58,7 +58,7 @@ Checks are grouped by **scope**:
 - `agent-settings` - selected agent settings/config file parses as valid JSON or TOML
 - `agent-guardrails` - selected agent has a deny mechanism, shell-hook syntax is valid, deny patterns exist, installed deny hook files match the workflow templates, and the smoke deny self-test passes when the script exists
 
-**Agent scope:** `audit` checks every supported manifest-backed agent from `workflow/manifest.json` unless `--agent <id>` is supplied. Run `npx goat-flow manifest` to inspect the current support matrix; use `--agent <id>` to scope checks to one supported runtime.
+**Agent scope:** `audit` checks every supported manifest-backed agent from `workflow/manifest.json` unless `--agent <id>` is supplied. Run `npx @blundergoat/goat-flow@latest manifest` to inspect the current support matrix; use `--agent <id>` to scope checks to one supported runtime.
 
 ### Enforcement matrix
 
@@ -76,13 +76,13 @@ When `--check-drift` or `--check-content` is enabled, drift and content findings
 
 ### Harness mode (`--harness`)
 
-Adds 17 checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Harness checks are deterministic but classified by type (see `HarnessCheckType` in `src/cli/audit/types.ts`): **integrity** (drift from install state - affects concern status), **advisory** (best practice - affects status unless the check id is listed in `harness.acknowledge` in `config.yaml`), and **metric** (workflow maturity signal - affects concern score, never affects pass/fail status). JSON results also include `displayStatus`, `impact`, optional `evidenceKind`, optional `assurance`, and split provenance path bases (`framework_evidence_paths` vs `target_evidence_paths`) so score-only, structural-smoke, platform-limited, and framework-rationale evidence can be rendered honestly.
+Adds 18 checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Harness checks are deterministic but classified by type (see `HarnessCheckType` in `src/cli/audit/types.ts`): **integrity** (drift from install state - affects concern status), **advisory** (best practice - affects status unless the check id is listed in `harness.acknowledge` in `config.yaml`), and **metric** (workflow maturity signal - affects concern score, never affects pass/fail status). JSON results also include `displayStatus`, `impact`, optional `evidenceKind`, optional `assurance`, and split provenance path bases (`framework_evidence_paths` vs `target_evidence_paths`) so score-only, structural-smoke, platform-limited, and framework-rationale evidence can be rendered honestly.
 
 Harness checks are grouped by **concern** -- the five things that matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
 
-**harness scope** (AI Harness Completeness) - 17 checks across 5 concerns:
+**harness scope** (AI Harness Completeness) - 18 checks across 5 concerns:
 - **Context** (5) - instruction file within line limit, execution loop present, doc paths resolve, required instruction sections present, workspace boundary guidance present
-- **Constraints** (4) - deny blocks direct literal secret paths, deny blocks dangerous commands, deny blocks pipe-to-shell, deny hook registered in agent settings
+- **Constraints** (5) - deny blocks direct literal secret paths, deny blocks dangerous commands, deny blocks pipe-to-shell, deny hook registered in agent settings, permission rules use forms the agent matches
 - **Verification** (4) - hooks in sync, commit guidance, evidence-before-claims coverage, post-turn hook integrity. The post-turn metric applies only to agents whose manifest declares a post-turn event; agents without that runtime capability are skipped, not scored as missing evidence.
 - **Recovery** (2) - milestone tracking, session logs
 - **Feedback Loop** (2) - feedback loop directories exist, decisions tracked
@@ -92,7 +92,7 @@ Sample harness output:
 ```
 GOAT Flow Setup:          PASS
   Skills:                 7/7 installed
-  Config:                 valid, version 1.13.1
+  Config:                 valid, version 1.14.0
   InstructionFile:        118 lines
 
 Agent Setup:              PASS
@@ -101,7 +101,7 @@ Agent Setup:              PASS
 
 AI Harness Completeness:  PASS
   Context:                PASS (5/5)
-  Constraints:            FAIL (3/4) - pipe-to-shell not blocked for codex
+  Constraints:            FAIL (4/5) - pipe-to-shell not blocked for codex
   Verification:           PASS (4/4)
   Recovery:               PASS (2/2)
   Feedback Loop:          PASS (2/2)
@@ -122,7 +122,7 @@ For single-agent projects the check is opt-in via the flag. For multi-agent proj
 Generates a structured quality-assessment prompt for a coding agent to evaluate goat-flow quality and usefulness on the current project. This is fundamentally different from `audit` - it produces a prompt, not findings.
 
 ```bash
-npx goat-flow quality . --agent antigravity
+npx @blundergoat/goat-flow@latest quality . --agent antigravity
 ```
 
 The generated prompt asks the agent to:
@@ -143,17 +143,17 @@ CLI `quality` command request fresh audit context before composing the prompt.
 
 ### Quality report lifecycle
 
-`npx goat-flow quality` composes the prompt and instructs the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` - a gitignored path. No separate capture step is needed; the agent owns the write, and `history` / `diff` operate on whatever the agent saved.
+`npx @blundergoat/goat-flow@latest quality` composes the prompt and instructs the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` - a gitignored path. No separate capture step is needed; the agent owns the write, and `history` / `diff` operate on whatever the agent saved.
 
 ```bash
-npx goat-flow quality . --agent antigravity             # Default: Agent Installation mode
-npx goat-flow quality . --agent claude --mode process   # GOAT Flow Process mode
-npx goat-flow quality . --agent claude --mode harness   # Harness Engineering mode
-npx goat-flow quality . --agent claude --mode skills    # Skills mode
-npx goat-flow quality history --agent antigravity            # List saved reports + same-agent score deltas
-npx goat-flow quality history --mode process            # Filter history to one quality mode
-npx goat-flow quality diff --agent antigravity               # Derive resolved / new / persisted / stuck vs prior run
-npx goat-flow quality diff --mode skills                # Compare within one mode only
+npx @blundergoat/goat-flow@latest quality . --agent antigravity             # Default: Agent Installation mode
+npx @blundergoat/goat-flow@latest quality . --agent claude --mode process   # GOAT Flow Process mode
+npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness   # Harness Engineering mode
+npx @blundergoat/goat-flow@latest quality . --agent claude --mode skills    # Skills mode
+npx @blundergoat/goat-flow@latest quality history --agent antigravity            # List saved reports + same-agent score deltas
+npx @blundergoat/goat-flow@latest quality history --mode process            # Filter history to one quality mode
+npx @blundergoat/goat-flow@latest quality diff --agent antigravity               # Derive resolved / new / persisted / stuck vs prior run
+npx @blundergoat/goat-flow@latest quality diff --mode skills                # Compare within one mode only
 ```
 
 ### Quality modes
@@ -193,9 +193,9 @@ This keeps audit and quality separated in both terminology and storage: audit re
 ## How they work together
 
 ```
-npx goat-flow audit .              →  "Is it installed correctly?"        →  Fix structural issues
-npx goat-flow audit . --harness    →  "Is the harness complete?"          →  Fix failing concerns
-npx goat-flow quality . --agent X  →  "What does an agent actually think?" →  Get fresh perspective
+npx @blundergoat/goat-flow@latest audit .              →  "Is it installed correctly?"        →  Fix structural issues
+npx @blundergoat/goat-flow@latest audit . --harness    →  "Is the harness complete?"          →  Fix failing concerns
+npx @blundergoat/goat-flow@latest quality . --agent X  →  "What does an agent actually think?" →  Get fresh perspective
 ```
 
 Typical workflow after setup:

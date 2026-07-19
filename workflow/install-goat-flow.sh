@@ -1,20 +1,12 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install-goat-flow.sh - Install goat-flow files into a target project
-# =============================================================================
-# Usage: bash /path/to/goat-flow/workflow/install-goat-flow.sh /path/to/project --agent claude
-#
-# Deterministic file copy - no detection, no adaptation. Creates directories,
-# copies skill templates, hooks, settings, and shared reference files.
-# Agent-driven setup steps handle project-specific content afterward.
-#
-# Safe by design:
-# - Skills and reference files are always overwritten (verbatim copies)
-# - Settings are NOT overwritten if they already exist
-# - Existing config.yaml is preserved but legacy agents allowlists are removed
-# - Pass --force to overwrite settings and config
-# - Pass --update-config-version to update only the version field in existing config.yaml
-# - Pass --clean-deprecated to remove deprecated skill directories
+# install-goat-flow.sh installs canonical goat-flow files into a selected project.
+# Use it through `goat-flow install` or `setup --apply` when refreshing one agent.
+# Each file is completed beside its destination before becoming user-visible.
+# System files refresh; user-owned settings and config stay preserved by default.
+# `--force` permits supported content replacement but never unsafe path redirection.
+# Project-specific instruction and architecture content remains a later setup step.
+# Usage: bash workflow/install-goat-flow.sh /path/to/project --agent claude
 # =============================================================================
 set -euo pipefail
 
@@ -59,6 +51,54 @@ if (mode === "stale-hooks") {
     console.log(hook);
   }
   process.exit(0);
+}
+
+if (mode === "file-ownership") {
+  const destinationPath = process.argv[4];
+  const declaredFile = manifest.file_ownership?.[destinationPath];
+
+  // Exact manifest records explain canonical files shown by `goat-flow manifest`.
+  if (declaredFile) {
+    console.log(`${declaredFile.ownership}\t${declaredFile.source || ""}`);
+    process.exit(0);
+  }
+
+  // Agent settings are seeded once, then kept for the user's local preferences.
+  for (const [agentId, agent] of Object.entries(manifest.agents || {})) {
+    const settingsPath = typeof agent.settings === "string" ? agent.settings : "";
+    const settingsExtension = settingsPath ? settingsPath.split(".").pop() : "";
+    const hookConfigPath =
+      typeof agent.hook_config_file === "string" ? agent.hook_config_file : "";
+
+    // A settings destination lets users retain local permissions and UI choices.
+    if (destinationPath === settingsPath) {
+      console.log(
+        `user-owned\tworkflow/hooks/agent-config/${agentId}.${settingsExtension}`,
+      );
+      process.exit(0);
+    }
+
+    // A separate hook config is also preserved after the first install.
+    if (destinationPath === hookConfigPath && hookConfigPath !== settingsPath) {
+      console.log(`user-owned\tworkflow/hooks/agent-config/${agentId}-hooks.json`);
+      process.exit(0);
+    }
+
+    // Installed skill mirrors are refreshed so users receive the current workflow.
+    if (destinationPath.startsWith(trimDir(agent.skills_dir) + "/")) {
+      console.log("system-owned\t");
+      process.exit(0);
+    }
+
+    // Installed guardrails are refreshed so every selected agent gets current policy.
+    if (destinationPath.startsWith(trimDir(agent.hooks_dir) + "/")) {
+      console.log("system-owned\t");
+      process.exit(0);
+    }
+  }
+
+  process.stderr.write(`unclassified installer destination: ${destinationPath}\n`);
+  process.exit(3);
 }
 
 if (mode === "skill-files") {
@@ -210,28 +250,319 @@ fi
 COPIED=0
 SKIPPED=0
 REMOVED=0
+ACTIVE_STAGING_DIRECTORIES=()
+STAGED_PAYLOAD_PATH=""
+STAGED_PAYLOAD_DIRECTORY=""
+LAST_TRANSFORM_RESULT=""
 
+# Validate every component of one user-visible installer destination.
+# Use before directory creation and final replacement so setup cannot follow a target symlink.
+assert_safe_installer_destination() {
+  local destination_path="$1"
+  local inspected_path="."
+  local path_component
+  local -a path_components=()
+
+  # Empty, absolute, or parent-traversing destinations cannot belong to the selected project.
+  if [[ -z "$destination_path" || "$destination_path" == /* ]]; then
+    echo "ERROR: unsafe installer destination '$destination_path': expected a project-relative path" >&2
+    return 1
+  fi
+  IFS='/' read -r -a path_components <<< "$destination_path"
+  # Each existing parent must be a real directory, not a redirect into another project.
+  for path_component in "${path_components[@]:0:${#path_components[@]}-1}"; do
+    # Dot segments are harmless; parent traversal is not a project-local destination.
+    if [[ -z "$path_component" || "$path_component" == "." ]]; then
+      continue
+    fi
+    # A parent segment would let a manifest path escape the project root.
+    if [[ "$path_component" == ".." ]]; then
+      echo "ERROR: unsafe installer destination '$destination_path': parent traversal is not allowed" >&2
+      return 1
+    fi
+    inspected_path="$inspected_path/$path_component"
+    # A symlinked parent could redirect a managed write outside the selected project.
+    if [[ -L "$inspected_path" ]]; then
+      echo "ERROR: unsafe installer destination '$destination_path': symlink component '$inspected_path'" >&2
+      return 1
+    fi
+    # A file parent cannot contain the destination the user expects setup to replace.
+    if [[ -e "$inspected_path" && ! -d "$inspected_path" ]]; then
+      echo "ERROR: unsafe installer destination '$destination_path': non-directory component '$inspected_path'" >&2
+      return 1
+    fi
+  done
+
+  # A symlink leaf is also a redirect and must stay blocked even under --force.
+  if [[ -L "$destination_path" ]]; then
+    echo "ERROR: unsafe installer destination '$destination_path': destination is a symlink" >&2
+    return 1
+  fi
+  # Existing replacement destinations must be regular files; directories and devices need manual repair.
+  if [[ -e "$destination_path" && ! -f "$destination_path" ]]; then
+    echo "ERROR: unsafe installer destination '$destination_path': destination is not a regular file" >&2
+    return 1
+  fi
+}
+
+# Validate one setup directory by treating a never-created child as a file destination.
+# Use before mkdir so users never receive directories through a symlinked project component.
+assert_safe_installer_directory() {
+  local directory_path="$1"
+  local safety_error
+
+  # The synthetic child makes every directory component participate in the parent walk.
+  if ! safety_error="$(
+    assert_safe_installer_destination "$directory_path/.goat-flow-directory-check" 2>&1
+  )"; then
+    echo "ERROR: unsafe installer directory '$directory_path': ${safety_error#ERROR: }" >&2
+    return 1
+  fi
+}
+
+# Remove one installer-owned sibling payload without recursively deleting user paths.
+# Use after success or failure; an unexpected leftover stays visible with a cleanup warning.
+cleanup_staging_directory() {
+  local staging_directory="$1"
+
+  # Only directories carrying the installer marker are eligible for automatic cleanup.
+  if [[ -z "$staging_directory" || "$staging_directory" != *"/.goat-flow-stage."* ]]; then
+    return 0
+  fi
+  # A replaced staging path is no longer trustworthy, so leave it for the user to inspect.
+  if [[ -L "$staging_directory" ]]; then
+    echo "WARNING: staging cleanup skipped redirected path: $staging_directory" >&2
+    return 0
+  fi
+  # A partial copy may have created the single payload file before setup stopped.
+  if [[ -d "$staging_directory" ]]; then
+    rm -f -- "$staging_directory/payload"
+    # Extra or unexpected content remains visible instead of being recursively deleted.
+    if ! rmdir -- "$staging_directory" 2>/dev/null; then
+      echo "WARNING: staging cleanup incomplete; inspect: $staging_directory" >&2
+    fi
+  fi
+}
+
+# Forget one completed staging directory so the exit trap does not inspect it again.
+# Use only after cleanup or a successful rename has removed the installer-owned directory.
+forget_staging_directory() {
+  local completed_directory="$1"
+  local staging_index
+
+  # The array may contain several completed writes from one installer run.
+  for staging_index in "${!ACTIVE_STAGING_DIRECTORIES[@]}"; do
+    # Removing the matching slot keeps unrelated in-flight payloads protected by the trap.
+    if [[ "${ACTIVE_STAGING_DIRECTORIES[$staging_index]}" == "$completed_directory" ]]; then
+      unset 'ACTIVE_STAGING_DIRECTORIES[staging_index]'
+      return 0
+    fi
+  done
+}
+
+# Clean every in-flight payload when installation exits or the user interrupts it.
+# Use as the final safety net after individual helpers perform their immediate cleanup.
+cleanup_all_staging_directories() {
+  local staging_directory
+
+  # Each entry was created by mktemp during this installer process.
+  for staging_directory in "${ACTIVE_STAGING_DIRECTORIES[@]}"; do
+    cleanup_staging_directory "$staging_directory"
+  done
+}
+
+# Convert an interrupt into scoped staging cleanup and a conventional shell exit code.
+# For example, Ctrl-C during a large skill copy preserves the previous installed file.
+handle_installer_signal() {
+  local signal_name="$1" exit_code="$2"
+  trap - HUP INT TERM
+  cleanup_all_staging_directories
+  echo "ERROR: installer interrupted by $signal_name; previous destinations were preserved" >&2
+  exit "$exit_code"
+}
+
+trap cleanup_all_staging_directories EXIT
+trap 'handle_installer_signal HUP 129' HUP
+trap 'handle_installer_signal INT 130' INT
+trap 'handle_installer_signal TERM 143' TERM
+
+# Create one empty adjacent payload after validating its project-local destination.
+# Use before copying or generating bytes that must appear all at once to the user.
+prepare_staged_payload() {
+  local destination_path="$1"
+  local destination_parent destination_name
+
+  assert_safe_installer_destination "$destination_path"
+  destination_parent="$(dirname "$destination_path")"
+  destination_name="$(basename "$destination_path")"
+  mkdir -p -- "$destination_parent"
+  # Directory creation must not race into a symlinked component before staging begins.
+  assert_safe_installer_destination "$destination_path"
+  # A staging allocation failure leaves the old destination untouched and needs a repair clue.
+  if ! STAGED_PAYLOAD_DIRECTORY="$(
+    mktemp -d "$destination_parent/.goat-flow-stage.${destination_name}.XXXXXX"
+  )"; then
+    STAGED_PAYLOAD_DIRECTORY=""
+    STAGED_PAYLOAD_PATH=""
+    echo "ERROR: could not create adjacent staging directory for '$destination_path'; previous destination was preserved" >&2
+    return 1
+  fi
+  STAGED_PAYLOAD_PATH="$STAGED_PAYLOAD_DIRECTORY/payload"
+  ACTIVE_STAGING_DIRECTORIES+=("$STAGED_PAYLOAD_DIRECTORY")
+}
+
+# Discard the current payload and clear its process-local pointers.
+# Use when generation fails or a staged transform determines no user-visible change is needed.
+discard_staged_payload() {
+  cleanup_staging_directory "$STAGED_PAYLOAD_DIRECTORY"
+  forget_staging_directory "$STAGED_PAYLOAD_DIRECTORY"
+  STAGED_PAYLOAD_PATH=""
+  STAGED_PAYLOAD_DIRECTORY=""
+}
+
+# Rename one complete adjacent payload into place without a copy fallback.
+# Use replace for supported managed writes and create-only for collision-sensitive user files.
+commit_staged_payload() {
+  local destination_path="$1" replacement_mode="$2"
+  local staging_directory="$STAGED_PAYLOAD_DIRECTORY"
+
+  # A final component check catches target changes that happened while bytes were staged.
+  assert_safe_installer_destination "$destination_path"
+  # User-owned or generated create-only writes must not win a destination race.
+  if [[ "$replacement_mode" == "create-only" ]]; then
+    # mv -n leaves the payload in staging when another process created the destination first.
+    if ! mv -n -- "$STAGED_PAYLOAD_PATH" "$destination_path"; then
+      echo "ERROR: atomic create failed for '$destination_path'; no existing destination was replaced" >&2
+      discard_staged_payload
+      return 1
+    fi
+    # A remaining payload proves mv -n preserved a destination that appeared after validation.
+    if [[ -e "$STAGED_PAYLOAD_PATH" ]]; then
+      echo "ERROR: destination appeared during install: '$destination_path'; existing bytes were preserved" >&2
+      discard_staged_payload
+      return 1
+    fi
+  else
+    # Managed replacement is supported, but a failed adjacent rename must never degrade to copying.
+    if ! mv -f -- "$STAGED_PAYLOAD_PATH" "$destination_path"; then
+      echo "ERROR: atomic replacement failed for '$destination_path'; previous destination was preserved and no non-atomic fallback was attempted" >&2
+      discard_staged_payload
+      return 1
+    fi
+  fi
+
+  rmdir -- "$staging_directory"
+  forget_staging_directory "$staging_directory"
+  STAGED_PAYLOAD_PATH=""
+  STAGED_PAYLOAD_DIRECTORY=""
+}
+
+# Stage the current destination bytes, or an empty payload when the user has no file yet.
+# Use before append and structured transforms so parsing never mutates the visible file directly.
+stage_existing_destination() {
+  local destination_path="$1"
+
+  prepare_staged_payload "$destination_path"
+  # Existing regular files keep their current bytes and mode inside the adjacent payload.
+  if [[ -f "$destination_path" ]]; then
+    # A failed staging copy cannot damage the user's still-visible destination.
+    if ! cp "$destination_path" "$STAGED_PAYLOAD_PATH"; then
+      echo "ERROR: staging copy failed for '$destination_path'; previous destination was preserved" >&2
+      discard_staged_payload
+      return 1
+    fi
+  else
+    : > "$STAGED_PAYLOAD_PATH"
+  fi
+}
+
+# Publish a changed transform or discard an unchanged payload, then expose its result to the caller.
+# Use after an inline Node transform so installer counters and messages retain their current behavior.
+complete_staged_transform() {
+  local destination_path="$1" transform_result="$2"
+
+  # Unchanged transforms leave the original inode and bytes untouched for the user.
+  if [[ "$transform_result" == "unchanged" ]]; then
+    discard_staged_payload
+  else
+    commit_staged_payload "$destination_path" "replace"
+  fi
+  LAST_TRANSFORM_RESULT="$transform_result"
+}
+
+# Confirm one installer action matches the update behavior users see in the manifest report.
+# Use this before a copy or generated write so an unclassified destination stops safely.
+assert_file_ownership() {
+  local destination_path="$1" expected_ownership="$2" source_path="${3:-}"
+  local ownership_line actual_ownership declared_source
+
+  # An unknown destination has no safe overwrite or preserve behavior.
+  if ! ownership_line="$(manifest_eval file-ownership "$destination_path")"; then
+    echo "ERROR: no manifest ownership for installer destination: $destination_path"
+    exit 1
+  fi
+
+  IFS=$'\t' read -r actual_ownership declared_source <<< "$ownership_line"
+
+  # A mismatched action means setup would behave differently from its user-facing report.
+  if [[ "$actual_ownership" != "$expected_ownership" ]]; then
+    echo "ERROR: $destination_path is $actual_ownership, installer expected $expected_ownership"
+    exit 1
+  fi
+
+  # Exact manifest sources must match the template the user is about to receive.
+  if [[ -n "$declared_source" && -n "$source_path" && "$source_path" != "$GOAT_FLOW_ROOT/$declared_source" ]]; then
+    echo "ERROR: $destination_path source differs from manifest: $declared_source"
+    exit 1
+  fi
+}
+
+# Copy one canonical or explicitly forced seed into the user's selected project.
+# Use for files whose ownership class permits this installer write.
 copy_file() {
-  local src="$1" dst="$2"
+  local src="$1" dst="$2" expected_ownership="${3:-system-owned}" requested_mode="${4:-}"
+  local replacement_mode="replace"
+  assert_file_ownership "$dst" "$expected_ownership" "$src"
+
+  # Missing packaged content would leave the user's installation incomplete.
   if [[ ! -f "$src" ]]; then
     echo "ERROR: missing installer template: $src"
     echo "Manifest/template drift detected. Restore the referenced template before running install."
     exit 1
   fi
-  mkdir -p "$(dirname "$dst")"
-  cp "$src" "$dst"
+  prepare_staged_payload "$dst"
+  # Copy failure leaves only the sibling payload, which cleanup removes without touching old bytes.
+  if ! cp "$src" "$STAGED_PAYLOAD_PATH"; then
+    echo "ERROR: staging copy failed for '$dst'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  # Executable hook modes belong on the payload before users can observe the replacement.
+  if [[ -n "$requested_mode" ]]; then
+    chmod "$requested_mode" "$STAGED_PAYLOAD_PATH"
+  fi
+  # User-owned seeds remain create-only unless the user explicitly selected force.
+  if [[ "$expected_ownership" == "user-owned" && "$FORCE" == false ]]; then
+    replacement_mode="create-only"
+  fi
+  commit_staged_payload "$dst" "$replacement_mode"
   COPIED=$((COPIED + 1))
   echo "  ✓ $dst"
 }
 
+# Seed a customizable file without replacing the user's existing content.
+# Use for policies, settings, and local decision guidance users may edit later.
 copy_if_missing() {
   local src="$1" dst="$2"
+  assert_file_ownership "$dst" "user-owned" "$src"
+
+  # Existing user content remains authoritative unless the user explicitly passed --force.
   if [[ -f "$dst" ]] && ! $FORCE; then
     SKIPPED=$((SKIPPED + 1))
     echo "  · $dst (exists, skipped)"
     return
   fi
-  copy_file "$src" "$dst"
+  copy_file "$src" "$dst" "user-owned"
 }
 
 prune_unlisted_skill_references() {
@@ -328,26 +659,93 @@ prune_unlisted_hook_files() {
   done
 }
 
+# Verify source and destination parent share a device before invoking mv.
+# Use for legacy migrations so mv never silently degrades into a cross-device copy.
+assert_atomic_migration_filesystem() {
+  local source_path="$1" destination_parent="$2"
+
+  if ! node - "$source_path" "$destination_parent" <<'NODE'
+const fs = require("node:fs");
+
+const sourcePath = process.argv[2];
+const destinationParent = process.argv[3];
+const sourceDevice = fs.statSync(sourcePath).dev;
+const destinationDevice = fs.statSync(destinationParent).dev;
+
+// Different devices cannot provide the atomic rename users were promised.
+if (sourceDevice !== destinationDevice) {
+  process.exit(18);
+}
+NODE
+  then
+    echo "ERROR: atomic migration rename failed for '$source_path': source and destination are on different filesystems; source was preserved and no copy fallback was attempted" >&2
+    return 1
+  fi
+}
+
+# Move one complete legacy path only when the destination is still absent.
+# Use for user-authored migration content so collision or rename failure preserves the source.
+rename_migration_path_no_overwrite() {
+  local source_path="$1" destination_path="$2"
+  local destination_parent
+
+  assert_safe_installer_destination "$destination_path"
+  destination_parent="$(dirname "$destination_path")"
+  mkdir -p -- "$destination_parent"
+  # Directory creation must not introduce a redirected component before migration.
+  assert_safe_installer_destination "$destination_path"
+  assert_atomic_migration_filesystem "$source_path" "$destination_parent"
+  # mv -n preserves a destination that appears after the caller's collision check.
+  if ! mv -n -- "$source_path" "$destination_path"; then
+    echo "ERROR: atomic migration rename failed for '$source_path' → '$destination_path'; source was preserved and no copy fallback was attempted" >&2
+    return 1
+  fi
+  # A remaining source means another process won the destination race.
+  if [[ -e "$source_path" || -L "$source_path" ]]; then
+    return 2
+  fi
+}
+
 move_file_no_overwrite() {
   local src="$1" dst="$2"
+  local rename_status=0
   [[ -f "$src" ]] || return 0
-  mkdir -p "$(dirname "$dst")"
   if [[ -e "$dst" ]]; then
     SKIPPED=$((SKIPPED + 1))
     echo "  · $src → $dst (target exists, left old file in place)"
     return 0
   fi
-  mv "$src" "$dst"
+  rename_migration_path_no_overwrite "$src" "$dst" || rename_status=$?
+  # A racing destination keeps both the existing target and legacy source intact.
+  if [[ "$rename_status" -eq 2 ]]; then
+    SKIPPED=$((SKIPPED + 1))
+    echo "  · $src → $dst (target appeared, left old file in place)"
+    return 0
+  fi
+  # Any other rename failure has already emitted a user-actionable preservation message.
+  if [[ "$rename_status" -ne 0 ]]; then
+    return "$rename_status"
+  fi
   COPIED=$((COPIED + 1))
   echo "  ✓ $src → $dst"
 }
 
 migrate_dir_no_overwrite() {
   local src="$1" dst="$2"
+  local rename_status=0
   [[ -d "$src" ]] || return 0
   if [[ ! -e "$dst" ]]; then
-    mkdir -p "$(dirname "$dst")"
-    mv "$src" "$dst"
+    rename_migration_path_no_overwrite "$src" "$dst" || rename_status=$?
+    # A racing destination preserves the complete legacy directory for manual resolution.
+    if [[ "$rename_status" -eq 2 ]]; then
+      SKIPPED=$((SKIPPED + 1))
+      echo "  · $src/ → $dst/ (target appeared, left old directory in place)"
+      return 0
+    fi
+    # A filesystem or rename failure keeps the source intact and stops later installer writes.
+    if [[ "$rename_status" -ne 0 ]]; then
+      return "$rename_status"
+    fi
     COPIED=$((COPIED + 1))
     echo "  ✓ $src/ → $dst/"
     return 0
@@ -365,7 +763,18 @@ migrate_dir_no_overwrite() {
       echo "  · $entry → $target (target exists, left old entry in place)"
       continue
     fi
-    mv "$entry" "$target"
+    rename_status=0
+    rename_migration_path_no_overwrite "$entry" "$target" || rename_status=$?
+    # A racing entry stays in the legacy source directory for the user to inspect.
+    if [[ "$rename_status" -eq 2 ]]; then
+      SKIPPED=$((SKIPPED + 1))
+      echo "  · $entry → $target (target appeared, left old entry in place)"
+      continue
+    fi
+    # A filesystem or rename failure stops the merge before any fallback copy can occur.
+    if [[ "$rename_status" -ne 0 ]]; then
+      return "$rename_status"
+    fi
     moved=true
     COPIED=$((COPIED + 1))
     echo "  ✓ $entry → $target"
@@ -394,13 +803,17 @@ prune_legacy_agent_hook_copies() {
 
 touch_anchor() {
   local dst="$1"
+  assert_file_ownership "$dst" "generated"
+
+  # An existing anchor already keeps the user's empty workspace directory available.
   if [[ -f "$dst" ]]; then
     SKIPPED=$((SKIPPED + 1))
     echo "  · $dst (exists, skipped)"
     return
   fi
-  mkdir -p "$(dirname "$dst")"
-  : > "$dst"
+  prepare_staged_payload "$dst"
+  : > "$STAGED_PAYLOAD_PATH"
+  commit_staged_payload "$dst" "create-only"
   COPIED=$((COPIED + 1))
   echo "  ✓ $dst"
 }
@@ -408,7 +821,9 @@ touch_anchor() {
 ensure_gitignore_entry() {
   local path="$1"
   local entry="$2"
-  node - "$path" "$entry" <<'NODE'
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$entry" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
@@ -436,23 +851,40 @@ next += `${entry}${eol}`;
 fs.writeFileSync(path, next);
 console.log("changed");
 NODE
+  )"; then
+    echo "ERROR: could not stage gitignore entry for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
 }
 
 update_config_version_line() {
   local path="$1"
-  node - "$path" "$VERSION" <<'NODE'
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$VERSION" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
 const version = process.argv[3];
 const content = fs.readFileSync(path, "utf8");
 fs.writeFileSync(path, content.replace(/^version:.*$/m, `version: "${version}"`));
+console.log("changed");
 NODE
+  )"; then
+    echo "ERROR: could not stage config version for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
 }
 
 remove_config_agents_entry() {
   local path="$1"
-  node - "$path" <<'NODE'
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
@@ -493,11 +925,19 @@ while (lines.length > 1 && lines[index] === "" && lines[index - 1] === "") {
 fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
 console.log("changed");
 NODE
+  )"; then
+    echo "ERROR: could not stage legacy agent cleanup for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
 }
 
 migrate_config_tasks_entry() {
   local path="$1"
-  node - "$path" <<'NODE'
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
@@ -546,11 +986,19 @@ if (plansRange) {
 fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
 console.log("changed");
 NODE
+  )"; then
+    echo "ERROR: could not stage plans config migration for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
 }
 
 ensure_config_hooks_entry() {
   local path="$1"
-  node - "$path" <<'NODE'
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
@@ -626,11 +1074,19 @@ next += [
 fs.writeFileSync(path, next);
 console.log("changed");
 NODE
+  )"; then
+    echo "ERROR: could not stage hook config for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
 }
 
 remove_config_plan_guard_entry() {
   local path="$1"
-  node - "$path" <<'NODE'
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
@@ -668,13 +1124,25 @@ const next = [...lines.slice(0, prefixStart), ...lines.slice(end)]
 fs.writeFileSync(path, `${next.replace(/\s+$/u, "")}${hadFinalNewline ? eol : ""}`);
 console.log("changed");
 NODE
+  )"; then
+    echo "ERROR: could not stage retired plan config cleanup for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
 }
 
 migrate_agent_hook_config() {
   local dst="$1"
   local src="$2"
-  [[ -n "$dst" && -n "$src" && -f "$dst" && -f "$GOAT_FLOW_ROOT/$src" ]] || return 0
-  node - "$dst" "$GOAT_FLOW_ROOT/$src" "$AGENT" <<'NODE'
+  local transform_result
+  LAST_TRANSFORM_RESULT="unchanged"
+  # Missing optional hook surfaces mean this selected agent has nothing to migrate.
+  if [[ -z "$dst" || -z "$src" || ! -f "$dst" || ! -f "$GOAT_FLOW_ROOT/$src" ]]; then
+    return 0
+  fi
+  stage_existing_destination "$dst"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$GOAT_FLOW_ROOT/$src" "$AGENT" <<'NODE'
 const fs = require("node:fs");
 
 const [dst, src, agent] = process.argv.slice(2);
@@ -958,11 +1426,19 @@ if (changed) {
   console.log("unchanged");
 }
 NODE
+  )"; then
+    echo "ERROR: could not stage hook registration migration for '$dst'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$dst" "$transform_result"
 }
 
 migrate_codex_hooks_feature_flag() {
   local path="$1"
-  node - "$path" <<'NODE'
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
@@ -1030,11 +1506,19 @@ const next = lines.filter((_, index) => !remove.has(index)).join(eol);
 fs.writeFileSync(path, next + (hadFinalNewline ? eol : ""));
 console.log("migrated");
 NODE
+  )"; then
+    echo "ERROR: could not stage Codex hook flag migration for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
 }
 
 migrate_codex_filesystem_permissions() {
   local path="$1"
-  node - "$path" <<'NODE'
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
@@ -1129,7 +1613,14 @@ function isInvalidNoneKey(key) {
 }
 
 const canonicalDenyPatterns = new Set([
-  "**/.env*",
+  "**/.env",
+  "**/.env.local",
+  "**/.env.development",
+  "**/.env.production",
+  "**/.env.staging",
+  "**/.env.test",
+  "**/.envrc",
+  "**/.env.*.local",
   "**/secrets/**",
   "**/.ssh/**",
   "**/.aws/**",
@@ -1151,13 +1642,7 @@ const oldGeneratedPatterns = new Set([
   ".docker/**",
   ".gnupg/**",
   ".kube/**",
-  "**/.env",
-  "**/.env.local",
-  "**/.env.development",
-  "**/.env.production",
-  "**/.env.staging",
-  "**/.env.test",
-  "**/.envrc",
+  "**/.env*",
   "**/credentials",
 ]);
 
@@ -1272,11 +1757,18 @@ const canonicalBlock = [
   "glob_scan_max_depth = 3",
   "",
   `[permissions.${activeProfile}.filesystem.":workspace_roots"]`,
-  "# Codex deny rules win over same-profile read rules. Unlike Claude settings,",
-  "# Codex cannot re-allow recursive sample env reads behind a broad filename",
-  "# deny, so .env.example is intentionally denied here to keep .env* variants",
-  "# protected consistently across agents.",
-  '"**/.env*" = "deny"',
+  "# Deny rules win over allow/read rules on both Codex and Claude, so a broad",
+  "# .env* deny cannot be re-opened for the sample file. Real env variants are",
+  "# denied individually so .env.example stays readable, matching the Bash deny",
+  "# hook; nonstandard variants (e.g. .env.backup) are covered by that hook.",
+  '"**/.env" = "deny"',
+  '"**/.env.local" = "deny"',
+  '"**/.env.development" = "deny"',
+  '"**/.env.production" = "deny"',
+  '"**/.env.staging" = "deny"',
+  '"**/.env.test" = "deny"',
+  '"**/.envrc" = "deny"',
+  '"**/.env.*.local" = "deny"',
   '"**/secrets/**" = "deny"',
   '"**/.ssh/**" = "deny"',
   '"**/.aws/**" = "deny"',
@@ -1328,26 +1820,81 @@ if (trailingStart < after.length) {
 fs.writeFileSync(path, rebuilt.join(eol) + (hadFinalNewline ? eol : ""));
 console.log("migrated");
 NODE
+  )"; then
+    echo "ERROR: could not stage Codex permission migration for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
 }
 
-# Strip deny rules for tools Claude Code has removed from an existing
-# .claude/settings.json. Claude Code v2.x removed MultiEdit (folded into Edit);
-# any surviving MultiEdit(...) deny rule prints "matches no known tool" on every
-# launch. 1.10.0 scrubbed the templates but left already-installed deny lists
-# untouched, so a non-force upgrade never cleaned them. Remove-list (not
-# allow-list) on purpose: only prune tools Claude has REMOVED, never user-added
-# denies for valid unmanaged tools (WebFetch, NotebookEdit, mcp__*). Keep
-# REMOVED_CLAUDE_TOOLS in sync with the allow-set in
-# test/unit/agent-config-template-parity.test.ts. Writes back only when a rule
-# was actually removed, so MultiEdit-free files are never reformatted. Echoes
-# "migrated" or "unchanged".
+# Repair the permission rule arrays (deny/allow/ask) of an existing
+# .claude/settings.json so they stop printing Claude Code launch warnings and
+# match the current env policy. Three stale rule classes:
+#   - MultiEdit(...) rules ("matches no known tool" - Claude Code v2.x removed
+#     MultiEdit, folded into Edit): dropped.
+#   - Write/NotebookEdit/Glob path rules ("not matched by file permission
+#     checks - only Edit(path) rules are"; Edit covers all file-editing tools,
+#     Read covers reads): rewritten to the matched equivalent, or dropped when
+#     the covering rule already exists.
+#   - The broad Read(**/.env*) and Edit(**/.env*) denies (shadowed the shipped
+#     .env.example allow and blocked sample-file edits - deny wins): expanded
+#     to the enumerated real env variants, deny only.
+# Remove/rewrite-list (not allow-list) on purpose: never touch user-added
+# rules for valid matched tools (Bash, Read, Edit, WebFetch, mcp__*). Keep
+# REMOVED_CLAUDE_TOOLS, UNMATCHED_RULE_REWRITES, and ENV_DENY_EXPANSIONS
+# in sync with test/unit/agent-config-template-parity.test.ts. Untouched rules
+# keep their exact position; writes back only when a rule was actually
+# removed, rewritten, or expanded, so already-clean files are never
+# reformatted. Echoes "migrated" or "unchanged".
 migrate_claude_permission_deny() {
   local path="$1"
-  node - "$path" <<'NODE'
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 const path = process.argv[2];
 
 const REMOVED_CLAUDE_TOOLS = new Set(["MultiEdit"]);
+// Permission checks only match Edit(path)/Read(path) file rules; these forms
+// warn at launch and enforce nothing, so rewrite them to the covering tool.
+const UNMATCHED_RULE_REWRITES = new Map([
+  ["Write", "Edit"],
+  ["NotebookEdit", "Edit"],
+  ["Glob", "Read"],
+]);
+// Deny rules win over allow rules, so the broad env read deny silently
+// blocked .env.example despite the shipped allow entries, and the broad env
+// edit deny blocked sample-file writes. Expand both to the enumerated real
+// env variants; .env.example then matches no deny.
+const ENV_DENY_EXPANSIONS = new Map([
+  [
+    "Read(**/.env*)",
+    [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.development)",
+      "Read(**/.env.production)",
+      "Read(**/.env.staging)",
+      "Read(**/.env.test)",
+      "Read(**/.envrc)",
+      "Read(**/.env.*.local)",
+    ],
+  ],
+  [
+    "Edit(**/.env*)",
+    [
+      "Edit(**/.env)",
+      "Edit(**/.env.local)",
+      "Edit(**/.env.development)",
+      "Edit(**/.env.production)",
+      "Edit(**/.env.staging)",
+      "Edit(**/.env.test)",
+      "Edit(**/.envrc)",
+      "Edit(**/.env.*.local)",
+    ],
+  ],
+]);
 
 let raw;
 try {
@@ -1366,24 +1913,78 @@ try {
   process.exit(0);
 }
 
-const deny = settings && settings.permissions && settings.permissions.deny;
-if (!Array.isArray(deny)) {
+const perms = settings && settings.permissions;
+if (!perms || typeof perms !== "object") {
   console.log("unchanged");
   process.exit(0);
 }
 
-const kept = deny.filter((entry) => {
-  if (typeof entry !== "string") return true;
-  const tool = entry.match(/^([A-Za-z]+)\(/u)?.[1];
-  return !(tool && REMOVED_CLAUDE_TOOLS.has(tool));
-});
+// Split a permission rule into tool name and path pattern; null for non-rules.
+const parseRule = (entry) =>
+  typeof entry === "string" ? entry.match(/^([A-Za-z]+)\((.*)\)$/u) : null;
 
-if (kept.length === deny.length) {
+// Return replacement entries for a stale rule, or null to keep it untouched.
+const replacementsFor = (entry, expandEnv) => {
+  if (expandEnv && ENV_DENY_EXPANSIONS.has(entry)) {
+    return ENV_DENY_EXPANSIONS.get(entry);
+  }
+  const rule = parseRule(entry);
+  if (rule && UNMATCHED_RULE_REWRITES.has(rule[1])) {
+    return [`${UNMATCHED_RULE_REWRITES.get(rule[1])}(${rule[2]})`];
+  }
+  return null;
+};
+
+// Drop removed-tool rules, rewrite/expand stale forms, and dedupe against
+// rules already present. Untouched rules keep their exact position. Returns
+// the repaired array, or null when nothing changed.
+const repairRules = (rules, expandEnv) => {
+  if (!Array.isArray(rules)) return null;
+  const survivors = rules.filter((entry) => {
+    const rule = parseRule(entry);
+    return !(rule && REMOVED_CLAUDE_TOOLS.has(rule[1]));
+  });
+  const present = new Set(
+    survivors.filter((entry) => replacementsFor(entry, expandEnv) === null),
+  );
+  const kept = [];
+  for (const entry of survivors) {
+    const replacements = replacementsFor(entry, expandEnv);
+    if (replacements === null) {
+      kept.push(entry);
+      continue;
+    }
+    for (const replacement of replacements) {
+      if (present.has(replacement)) continue;
+      present.add(replacement);
+      kept.push(replacement);
+    }
+  }
+  const changed =
+    kept.length !== rules.length ||
+    kept.some((entry, index) => entry !== rules[index]);
+  return changed ? kept : null;
+};
+
+let migrated = false;
+// Env expansion applies to deny only: expanding an allow would revoke the
+// user's .env.example read intent instead of preserving it.
+for (const [arrayName, expandEnv] of [
+  ["deny", true],
+  ["allow", false],
+  ["ask", false],
+]) {
+  const repaired = repairRules(perms[arrayName], expandEnv);
+  if (repaired) {
+    perms[arrayName] = repaired;
+    migrated = true;
+  }
+}
+
+if (!migrated) {
   console.log("unchanged");
   process.exit(0);
 }
-
-settings.permissions.deny = kept;
 const eol = raw.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(raw);
 let out = JSON.stringify(settings, null, 2);
@@ -1391,6 +1992,12 @@ if (eol === "\r\n") out = out.replace(/\n/gu, "\r\n");
 fs.writeFileSync(path, out + (hadFinalNewline ? eol : ""));
 console.log("migrated");
 NODE
+  )"; then
+    echo "ERROR: could not stage Claude permission migration for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
 }
 
 validate_codex_settings_after_install() {
@@ -1539,6 +2146,9 @@ echo ""
 
 cd "$PROJECT"
 
+# The shared setup root must be local before migrations or directory scaffolding can write.
+assert_safe_installer_directory ".goat-flow"
+
 # ==========================================================================
 # 1. Migrate old .goat-flow/ layout without overwriting user content
 # ==========================================================================
@@ -1561,6 +2171,8 @@ echo ""
 # ==========================================================================
 echo "Directories:"
 for dir in .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/patterns .goat-flow/learning-loop/decisions .goat-flow/plans .goat-flow/scratchpad .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/events .goat-flow/logs/critiques .goat-flow/logs/review .goat-flow/logs/security .goat-flow/skill-docs .goat-flow/skill-docs/playbooks .goat-flow/skill-docs/skill-quality-testing .goat-flow/hooks .goat-flow/hooks/deny-dangerous; do
+  assert_safe_installer_directory "$dir"
+  # Missing safe directories are created for the user's local workflow surfaces.
   if [[ ! -d "$dir" ]]; then
     mkdir -p "$dir"
     echo "  ✓ $dir/"
@@ -1587,6 +2199,7 @@ copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/events-readme.md" ".goat-flo
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/critiques-readme.md" ".goat-flow/logs/critiques/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/review-readme.md" ".goat-flow/logs/review/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/security-readme.md" ".goat-flow/logs/security/README.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/setup/reference/session-logs-readme.md" ".goat-flow/logs/sessions/README.md"
 copy_if_missing "$GOAT_FLOW_ROOT/workflow/setup/reference/decisions-readme.md" ".goat-flow/learning-loop/decisions/README.md"
 touch_anchor ".goat-flow/logs/sessions/.gitkeep"
 echo ""
@@ -1595,7 +2208,9 @@ echo ""
 # 3b. Maintain project root .gitignore (append-only)
 # ==========================================================================
 echo "Project .gitignore:"
-if [[ "$(ensure_gitignore_entry ".gitignore" "node_modules/")" == "changed" ]]; then
+ensure_gitignore_entry ".gitignore" "node_modules/"
+# A changed result means the user can now keep dependency installs out of version control.
+if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
   COPIED=$((COPIED + 1))
   echo "  ✓ .gitignore (node_modules/ ignored)"
 else
@@ -1644,10 +2259,12 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skil
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/browser-use.md" ".goat-flow/skill-docs/playbooks/browser-use.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/code-comments.md" ".goat-flow/skill-docs/playbooks/code-comments.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/gruff-code-quality.md" ".goat-flow/skill-docs/playbooks/gruff-code-quality.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/hook-policy-testing.md" ".goat-flow/skill-docs/playbooks/hook-policy-testing.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/observability.md" ".goat-flow/skill-docs/playbooks/observability.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/changelog.md" ".goat-flow/skill-docs/playbooks/changelog.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flow/skill-docs/playbooks/page-capture.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/release-notes.md" ".goat-flow/skill-docs/playbooks/release-notes.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-playbook-authoring-sync.md" ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-docs/skill-quality-testing/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md"
@@ -1704,12 +2321,9 @@ fi
 # ==========================================================================
 if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
-  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh"
-  chmod +x "$HOOKS_DIR/deny-dangerous.sh"
-  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh"
-  chmod +x "$HOOKS_DIR/gruff-code-quality.sh"
-  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh"
-  chmod +x "$HOOKS_DIR/post-turn-safety.sh"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh" "system-owned" "755"
   prune_unlisted_hook_files "$HOOKS_DIR"
   prune_legacy_agent_hook_copies
   echo "Hook policy → .goat-flow/hooks/deny-dangerous/:"
@@ -1719,21 +2333,26 @@ if $HOOKS_ENABLED; then
     patterns-writes.sh \
     deny-dangerous-self-test.sh
   do
-    copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/$hook_policy_script" ".goat-flow/hooks/deny-dangerous/$hook_policy_script"
-    chmod +x ".goat-flow/hooks/deny-dangerous/$hook_policy_script"
+    copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous/$hook_policy_script" ".goat-flow/hooks/deny-dangerous/$hook_policy_script" "system-owned" "755"
   done
-  if [[ "$(ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/")" == "changed" ]]; then
+  ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/"
+  # A changed result makes the shipped hook directory visible to version control.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     COPIED=$((COPIED + 1))
     echo "  ✓ .goat-flow/.gitignore (hooks/ un-ignored)"
   fi
-  if [[ "$(ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/**")" == "changed" ]]; then
+  ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/**"
+  # A changed result makes each shipped hook file visible to version control.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     COPIED=$((COPIED + 1))
     echo "  ✓ .goat-flow/.gitignore (hooks/** un-ignored)"
   fi
   if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
     echo "Hooks config:"
     copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
-    if [[ "$(migrate_agent_hook_config "$HOOK_CONFIG_DST" "$HOOK_CONFIG_SRC")" == "changed" ]]; then
+    migrate_agent_hook_config "$HOOK_CONFIG_DST" "$HOOK_CONFIG_SRC"
+    # A changed registration makes the central guardrail active for the selected agent.
+    if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
       COPIED=$((COPIED + 1))
       echo "  ✓ $HOOK_CONFIG_DST (migrated deny hook registration)"
     fi
@@ -1753,15 +2372,22 @@ if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
   if [[ -f "$SETTINGS_DST" ]] && ! $FORCE; then
     SETTINGS_MIGRATIONS=()
     if [[ "$AGENT" == "codex" ]]; then
-      if [[ "$(migrate_codex_hooks_feature_flag "$SETTINGS_DST")" == "migrated" ]]; then
+      migrate_codex_hooks_feature_flag "$SETTINGS_DST"
+      # A migrated result means Codex will recognize the current hooks feature name.
+      if [[ "$LAST_TRANSFORM_RESULT" == "migrated" ]]; then
         SETTINGS_MIGRATIONS+=("deprecated hooks flag")
       fi
-      if [[ "$(migrate_codex_filesystem_permissions "$SETTINGS_DST")" == "migrated" ]]; then
+      migrate_codex_filesystem_permissions "$SETTINGS_DST"
+      # A migrated result means Codex can load the canonical secret-path policy.
+      if [[ "$LAST_TRANSFORM_RESULT" == "migrated" ]]; then
         SETTINGS_MIGRATIONS+=("Codex permission profile")
       fi
     elif [[ "$AGENT" == "claude" ]]; then
-      if [[ "$(migrate_claude_permission_deny "$SETTINGS_DST")" == "migrated" ]]; then
-        SETTINGS_MIGRATIONS+=("stale removed-tool deny rules")
+      migrate_claude_permission_deny "$SETTINGS_DST"
+      # A migrated result removes launch warnings (removed tools, unmatched
+      # Write/NotebookEdit/Glob rules) and applies the enumerated env policy.
+      if [[ "$LAST_TRANSFORM_RESULT" == "migrated" ]]; then
+        SETTINGS_MIGRATIONS+=("stale or superseded permission rules")
       fi
     fi
     if [[ ${#SETTINGS_MIGRATIONS[@]} -gt 0 ]]; then
@@ -1774,10 +2400,21 @@ if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
       echo "  · $SETTINGS_DST (exists, skipped)"
     fi
   else
-    copy_file "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST"
+    copy_file "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST" "user-owned"
   fi
 else
   echo "  · no settings file for $AGENT"
+fi
+# Personal Claude overrides carry the same shipped rule shapes; repair them too.
+if [[ "$AGENT" == "claude" && -n "${SETTINGS_DST:-}" ]]; then
+  SETTINGS_LOCAL_DST="${SETTINGS_DST%.json}.local.json"
+  if [[ -f "$SETTINGS_LOCAL_DST" ]]; then
+    migrate_claude_permission_deny "$SETTINGS_LOCAL_DST"
+    if [[ "$LAST_TRANSFORM_RESULT" == "migrated" ]]; then
+      COPIED=$((COPIED + 1))
+      echo "  ✓ $SETTINGS_LOCAL_DST (migrated: stale or superseded permission rules)"
+    fi
+  fi
 fi
 if [[ "$AGENT" == "codex" && -n "${SETTINGS_DST:-}" && -f "$SETTINGS_DST" ]]; then
   CODEX_VALIDATION="$(validate_codex_settings_after_install "$SETTINGS_DST")"
@@ -1793,7 +2430,9 @@ if [[ "$AGENT" == "codex" && -n "${SETTINGS_DST:-}" && -f "$SETTINGS_DST" ]]; th
   fi
 fi
 if $HOOKS_ENABLED && [[ -z "${HOOK_CONFIG_DST:-}" && -n "${SETTINGS_DST:-}" && -n "${SETTINGS_SRC:-}" && -f "$SETTINGS_DST" ]]; then
-  if [[ "$(migrate_agent_hook_config "$SETTINGS_DST" "$SETTINGS_SRC")" == "changed" ]]; then
+  migrate_agent_hook_config "$SETTINGS_DST" "$SETTINGS_SRC"
+  # A changed embedded registration makes the central guardrail active for this agent.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     COPIED=$((COPIED + 1))
     SETTINGS_SKIPPED=false
     echo "  ✓ $SETTINGS_DST (migrated deny hook registration)"
@@ -1806,6 +2445,9 @@ echo ""
 # ==========================================================================
 echo "Config:"
 CONFIG_PATH=".goat-flow/config.yaml"
+assert_file_ownership "$CONFIG_PATH" "user-owned"
+
+# Existing config keeps user-selected hooks and skills unless migration is requested.
 if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
   CONFIG_CHANGED=false
   CONFIG_NOTES=()
@@ -1815,24 +2457,34 @@ if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
       CONFIG_CHANGED=true
       CONFIG_NOTES+=("version updated to $VERSION")
     else
-      echo "version: \"$VERSION\"" >> "$CONFIG_PATH"
+      stage_existing_destination "$CONFIG_PATH"
+      printf 'version: "%s"\n' "$VERSION" >> "$STAGED_PAYLOAD_PATH"
+      commit_staged_payload "$CONFIG_PATH" "replace"
       CONFIG_CHANGED=true
       CONFIG_NOTES+=("version field added: $VERSION")
     fi
   fi
-  if [[ "$(remove_config_agents_entry "$CONFIG_PATH")" == "changed" ]]; then
+  remove_config_agents_entry "$CONFIG_PATH"
+  # A changed result removes a legacy agent allowlist that no longer controls setup.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("legacy agents allowlist removed")
   fi
-  if [[ "$(migrate_config_tasks_entry "$CONFIG_PATH")" == "changed" ]]; then
+  migrate_config_tasks_entry "$CONFIG_PATH"
+  # A changed result points planning workflows at the current local-state directory.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("legacy tasks config migrated to plans")
   fi
-  if [[ "$(ensure_config_hooks_entry "$CONFIG_PATH")" == "changed" ]]; then
+  ensure_config_hooks_entry "$CONFIG_PATH"
+  # A changed result gives users explicit controls for each shipped hook.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("hook toggles added")
   fi
-  if [[ "$(remove_config_plan_guard_entry "$CONFIG_PATH")" == "changed" ]]; then
+  remove_config_plan_guard_entry "$CONFIG_PATH"
+  # A changed result removes configuration for the retired plan guard.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("removed retired plan guard config")
   fi
@@ -1845,7 +2497,14 @@ if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
     echo "  · $CONFIG_PATH (exists, no config changes)"
   fi
 else
-  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$CONFIG_PATH"
+  prepare_staged_payload "$CONFIG_PATH"
+  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$STAGED_PAYLOAD_PATH"
+  # Force explicitly permits config replacement; a normal first install remains create-only.
+  if $FORCE; then
+    commit_staged_payload "$CONFIG_PATH" "replace"
+  else
+    commit_staged_payload "$CONFIG_PATH" "create-only"
+  fi
   COPIED=$((COPIED + 1))
   echo "  ✓ $CONFIG_PATH (scaffolded)"
 fi
@@ -1870,7 +2529,14 @@ else
   done
   shopt -u nullglob
   if [[ ${#version_subdirs[@]} -eq 1 ]]; then
-    echo "${version_subdirs[0]}" > "$ACTIVE_FILE"
+    prepare_staged_payload "$ACTIVE_FILE"
+    printf '%s\n' "${version_subdirs[0]}" > "$STAGED_PAYLOAD_PATH"
+    # Force refreshes the marker; normal setup creates it only when still absent.
+    if $FORCE; then
+      commit_staged_payload "$ACTIVE_FILE" "replace"
+    else
+      commit_staged_payload "$ACTIVE_FILE" "create-only"
+    fi
     COPIED=$((COPIED + 1))
     echo "  ✓ $ACTIVE_FILE → ${version_subdirs[0]}"
   elif [[ ${#version_subdirs[@]} -eq 0 ]]; then

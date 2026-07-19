@@ -215,39 +215,75 @@ function emptyConcern(): AuditConcern {
   };
 }
 
+const PROJECT_VALIDATION_EXECUTION_LIMIT =
+  "This audit inspected verification guidance and hook configuration; it did not execute project build, test, lint, typecheck, or format commands.";
+const RECOVERY_RESUMABILITY_LIMIT =
+  "Recovery storage is available, but this audit did not validate the current objective, completed work, last verification, next action, or end-to-end resumability.";
+
+/** Add a caveat once so users do not see repeated limits from overlapping checks. */
+function addUniqueConcernLimit(concern: AuditConcern, limit: string): void {
+  // A repeated caveat adds noise without giving the user stronger evidence.
+  if (concern.limits.includes(limit)) return;
+  concern.limits.push(limit);
+}
+
+/** Explain what perfect structural scores still did not prove for the audit reader. */
+function addStructuralAssuranceLimits(
+  concerns: Record<AuditConcernKey, AuditConcern>,
+): void {
+  addUniqueConcernLimit(
+    concerns.verification,
+    PROJECT_VALIDATION_EXECUTION_LIMIT,
+  );
+
+  // Passing recovery checks prove storage exists, not that a user can resume the latest work.
+  if (concerns.recovery.status === "pass") {
+    addUniqueConcernLimit(concerns.recovery, RECOVERY_RESUMABILITY_LIMIT);
+  }
+}
+
+/** Copy user actions from a failed check into the concern summary shown after the audit. */
 function addRemediation(
   concern: AuditConcern,
   result: HarnessCheckResult,
 ): void {
   concern.recommendations.push(...result.recommendations);
+  // Checks without a concrete repair leave the user with guidance instead of an invented command.
   if (result.howToFix) concern.howToFix.push(...result.howToFix);
 }
 
+/** Apply one score-only signal without turning a structurally valid concern into a failure. */
 function applyMetricCheck(
   concern: AuditConcern,
   result: HarnessCheckResult,
 ): void {
   concern.metrics++;
+  // A passing metric needs no score caveat or remediation in the user-facing result.
   if (result.status !== "fail") return;
-  concern.limits.push(
+  addUniqueConcernLimit(
+    concern,
     `Score-only metric failed: ${result.findings.join("; ")}`,
   );
   addRemediation(concern, result);
 }
 
+/** Count whether one required setup check passed for the concern the user is viewing. */
 function applyIntegrityCheck(
   concern: AuditConcern,
   result: HarnessCheckResult,
 ): void {
+  // A required pass raises completeness; a failure keeps the missing setup visible.
   if (result.status === "pass") concern.integrityPass++;
   else concern.integrityFail++;
 }
 
+/** Count an optional recommendation while respecting an explicit user acknowledgement. */
 function applyAdvisoryCheck(
   concern: AuditConcern,
   result: HarnessCheckResult,
   acknowledged: boolean,
 ): void {
+  // Passing advice is complete; acknowledged gaps remain visible without failing the audit.
   if (result.status === "pass") concern.advisoryPass++;
   else if (acknowledged) concern.advisoryAcknowledged++;
   else concern.advisoryFail++;
@@ -261,16 +297,23 @@ function applyCheckToConcern(
   acknowledged: boolean,
 ): void {
   concern.findings.push(...result.findings);
-  if (result.limits) concern.limits.push(...result.limits);
+  // Check-specific caveats stay visible once, even when checks report the same limitation.
+  if (result.limits) {
+    // Each distinct caveat gives the audit reader one additional evidence boundary.
+    for (const limit of result.limits) addUniqueConcernLimit(concern, limit);
+  }
+  // Metrics affect the displayed score without turning the concern into a hard failure.
   if (check.type === "metric") {
     applyMetricCheck(concern, result);
     return;
   }
+  // Integrity checks represent required setup; advisories can be acknowledged explicitly.
   if (check.type === "integrity") {
     applyIntegrityCheck(concern, result);
   } else {
     applyAdvisoryCheck(concern, result, acknowledged);
   }
+  // Unacknowledged failures stop a user from treating the concern as configured correctly.
   if (result.status === "fail" && !acknowledged) {
     concern.status = "fail";
     addRemediation(concern, result);
@@ -294,7 +337,8 @@ function skippedHarnessCheck(check: HarnessCheck): CheckResult {
 /**
  * Run harness checks and return the scope results plus per-concern scores.
  *
- * @param ctx - audit context containing facts, config, checks, and target filesystem access
+ * @param ctx - required target facts and read-only filesystem; absent context means the audit cannot run
+ * @returns scope and five concerns; an empty applicable-check set receives score zero, not false assurance
  */
 export function computeHarness(ctx: AuditContext): {
   scope: AuditScope;
@@ -317,8 +361,10 @@ export function computeHarness(ctx: AuditContext): {
     feedback_loop: { total: 0, passing: 0 },
   };
 
+  // Run each deterministic check so the user receives one complete harness result.
   for (const check of HARNESS_CHECKS) {
     assertCheckCanRunWithoutStack(ctx, check);
+    // Unsupported capabilities are shown as skipped instead of lowering the project score.
     if (check.skip?.(ctx)) {
       checks.push(skippedHarnessCheck(check));
       continue;
@@ -331,13 +377,17 @@ export function computeHarness(ctx: AuditContext): {
     checks.push(toCheckResult(check, result, acknowledged));
     applyCheckToConcern(concerns[check.concern], check, result, acknowledged);
     counts[check.concern].total++;
+    // Passing checks contribute to the percentage the user sees for this concern.
     if (result.status === "pass") counts[check.concern].passing++;
   }
 
+  // Calculate each concern independently so one weak area cannot hide behind another.
   for (const key of Object.keys(concerns) as AuditConcernKey[]) {
     const { total, passing } = counts[key];
     concerns[key].score = total > 0 ? Math.round((passing / total) * 100) : 0;
   }
+
+  addStructuralAssuranceLimits(concerns);
 
   return { scope: buildScope(checks, {}), concerns };
 }
@@ -373,18 +423,24 @@ function enforcementLimitSummary(
   return `Constraint score covers verified deny patterns only, not broad filesystem enforcement; enforcement matrix still reports ${parts.join(" and ")} ${capabilityLabel}.`;
 }
 
+/** Add aggregate-only caveats without changing the audit status or concern scores users see. */
 function addNonGatingEvidenceLimits(
   agentScope: AuditScope,
   concerns: Record<AuditConcernKey, AuditConcern> | null,
   enforcement: AgentEnforcementCapability[],
 ): void {
   const agentSkipSummary = describeAggregateAgentSkips(agentScope);
+  // Aggregate mode tells users when selected-agent runtime evidence was intentionally omitted.
   if (agentSkipSummary) {
     agentScope.summary.agentSpecificEvidence = agentSkipSummary;
   }
+  // Build-only audits have no harness concerns to annotate.
   if (!concerns) return;
   const constraintsLimit = enforcementLimitSummary(enforcement);
-  if (constraintsLimit) concerns.constraints.limits.push(constraintsLimit);
+  // Partial enforcement remains explicit without converting a supported agent into a failure.
+  if (constraintsLimit) {
+    addUniqueConcernLimit(concerns.constraints, constraintsLimit);
+  }
 }
 
 /** Run build checks and return per-scope results. */
@@ -591,6 +647,17 @@ function shouldRunDriftCheck(
   return options.shouldRunAutoDrift !== false && shouldAutoRunDrift(ctx);
 }
 
+/**
+ * Run drift for the selected audit scope while preserving profiler attribution.
+ * Use after structural checks so users see stale content for only the agent they requested.
+ *
+ * @param ctx - target audit context; a null agent filter means inspect every installed runtime
+ * @param fs - read-only selected-target filesystem; empty projects yield setup findings elsewhere
+ * @param projectPath - selected target shown in audit output; empty paths are rejected before this layer
+ * @param options - audit switches; omitted drift keeps this result null unless auto-drift applies
+ * @param profileScope - profiler label for aggregate, per-agent, or single-user audit work
+ * @returns drift report for the chosen scope, or null when the user did not request drift
+ */
 function computeDriftWithProfile(
   ctx: AuditContext,
   fs: ReadonlyFS,
@@ -598,9 +665,10 @@ function computeDriftWithProfile(
   options: AuditOptions,
   profileScope: string,
 ): ReturnType<typeof checkDrift> | null {
+  // Without an explicit or automatic drift request, the user receives no stale-copy section.
   if (!shouldRunDriftCheck(ctx, options)) return null;
   return span(options.profile, `${profileScope} drift`, () =>
-    checkDrift({ fs, projectPath }),
+    checkDrift({ fs, projectPath, agentFilter: ctx.agentFilter }),
   );
 }
 

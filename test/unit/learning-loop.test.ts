@@ -5,6 +5,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { assertExists } from "../helpers/assert-exists.ts";
 import {
   computeFreshness as computeFreshnessFromLearningLoop,
   extractFootgunFacts,
@@ -27,26 +28,41 @@ import type {
   GoatFlowConfig,
 } from "../../src/cli/config/types.js";
 
+/**
+ * Build selected-project memory files and directories for one extraction scenario.
+ * Use when tests need exact missing-file, empty-directory, or readable-content behavior.
+ */
 function stubFS(
-  files: Record<string, string>,
-  dirs: Record<string, string[]>,
+  projectFileContents: Record<string, string>,
+  readableDirectories: Record<string, string[]>,
 ): ReadonlyFS {
   return {
-    exists: (path) =>
-      Object.prototype.hasOwnProperty.call(files, path) ||
-      Object.prototype.hasOwnProperty.call(dirs, path),
-    readFile: (path) => files[path] ?? null,
-    lineCount: (path) =>
-      files[path] === undefined ? 0 : files[path]!.split("\n").length,
+    exists: (projectPath) =>
+      Object.prototype.hasOwnProperty.call(projectFileContents, projectPath) ||
+      Object.prototype.hasOwnProperty.call(readableDirectories, projectPath),
+    // A missing fixture file is unreadable to the selected-project extractor.
+    readFile: (projectPath) => projectFileContents[projectPath] ?? null,
+    // A missing fixture file has no user-visible lines to count.
+    lineCount: (projectPath) =>
+      projectFileContents[projectPath] === undefined
+        ? 0
+        : projectFileContents[projectPath]!.split("\n").length,
     readJson: () => null,
-    listDir: (path) => dirs[path] ?? [],
+    isReadableDirectory: (projectPath) =>
+      Object.prototype.hasOwnProperty.call(readableDirectories, projectPath),
+    // An absent directory lists no entries instead of inventing memory rows for users.
+    listDir: (projectPath) => readableDirectories[projectPath] ?? [],
     isExecutable: () => false,
     glob: () => [],
     existsGlob: () => false,
   };
 }
 
-/** Build a valid loaded config because learning-loop fact tests only need targeted path overrides. */
+/**
+ * Build valid selected-project config for one learning-loop fact scenario.
+ * Use targeted overrides for alternate paths; empty overrides keep the standard user layout.
+ * The full shape exists because extraction requires canonical config; fixed defaults isolate failures.
+ */
 function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
   return {
     exists: true,
@@ -307,6 +323,22 @@ describe("extractLessonsFacts freshness + placeholder filtering", () => {
     const facts = extractLessonsFacts(fs, stubConfig(), pinnedNow);
     assert.deepEqual(facts.staleRefs, []);
   });
+
+  it("flags a lesson search anchor pointing at a gitignored plans path", () => {
+    // Narrative mentions of local-state paths stay exempt (previous test);
+    // the `(search: ...)` durable-evidence grammar does not.
+    const fs = stubFS(
+      {
+        [`${fixtureDir}verification.md`]:
+          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: anchored to plan\n\nEvidence anchors: `.goat-flow/plans/1.12.0/M01-spike.md` (search: `run-tests`).\n",
+      },
+      { [fixtureDir]: ["verification.md"] },
+    );
+    const facts = extractLessonsFacts(fs, stubConfig(), pinnedNow);
+    assert.deepEqual(facts.staleRefs, [
+      ".goat-flow/plans/1.12.0/M01-spike.md (gitignored path used as durable evidence anchor)",
+    ]);
+  });
 });
 
 describe("extractFootgunFacts search-anchor staleness", () => {
@@ -391,9 +423,99 @@ describe("extractFootgunFacts search-anchor staleness", () => {
       "src/cli/cli.ts:1 (missing semantic anchor)",
     ]);
   });
+
+  it("flags a gitignored plans path used as a search anchor even when the file exists", () => {
+    // The never-anchor-to-local-state invariant (footguns/auditor.md): plan
+    // files vanish on clean checkouts, so they can never be durable evidence.
+    // Local existence must not suppress the violation.
+    const fs = stubFS(
+      {
+        [`${fixtureDir}quality.md`]:
+          "---\ncategory: quality\nlast_reviewed: 2026-04-19\n---\n\n## Footgun: plans anchor\n\n**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED\n\nEvidence anchors: `.goat-flow/plans/1.9.0/M00-cleanup.md` (search: `setup-bloat`).\n",
+        ".goat-flow/plans/1.9.0/M00-cleanup.md": "setup-bloat threshold\n",
+      },
+      { [fixtureDir]: ["quality.md"] },
+    );
+    const facts = extractFootgunFacts(fs, stubConfig(), pinnedNow);
+    assert.deepEqual(facts.staleRefs, [
+      ".goat-flow/plans/1.9.0/M00-cleanup.md (gitignored path used as durable evidence anchor)",
+    ]);
+  });
+
+  it("flags a gitignored path on a bare Evidence anchors line", () => {
+    const fs = stubFS(
+      {
+        [`${fixtureDir}auditor.md`]:
+          "---\ncategory: auditor\nlast_reviewed: 2026-04-19\n---\n\n## Footgun: local log anchor\n\n**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED\n\n**Evidence anchors:** `.goat-flow/logs/quality/2026-04-19-codex-abcde.json`\n",
+      },
+      { [fixtureDir]: ["auditor.md"] },
+    );
+    const facts = extractFootgunFacts(fs, stubConfig(), pinnedNow);
+    assert.deepEqual(facts.staleRefs, [
+      ".goat-flow/logs/quality/2026-04-19-codex-abcde.json (gitignored path used as durable evidence anchor)",
+    ]);
+  });
 });
 
 describe("extractLearningLoopEntries", () => {
+  it("exposes forward memory metadata while preserving legacy entries", () => {
+    const fs = stubFS(
+      {
+        ".goat-flow/learning-loop/footguns/quality.md":
+          "---\ncategory: quality\nlast_reviewed: 2026-07-13\n---\n\n## Footgun: metadata-rich trap\n\n**Status:** active | **Created:** 2026-07-01 | **Updated:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED\n**Decision changed:** Verify the live audit before trusting cached quality state.\n**Trigger phase:** VERIFY\n**Incident count:** 3\n**Latest occurrence:** 2026-07-12\n\n- `src/cli/cli.ts` (search: `quality`) - live anchor.\n",
+        ".goat-flow/learning-loop/lessons/legacy.md":
+          "---\ncategory: legacy\nlast_reviewed: 2026-07-13\n---\n\n## Lesson: legacy entry\n\n**Created:** 2026-01-10\n\nPreserved without forward metadata.\n",
+        "src/cli/cli.ts": "const quality = true;\n",
+      },
+      {
+        ".goat-flow/learning-loop/footguns/": ["quality.md"],
+        ".goat-flow/learning-loop/lessons/": ["legacy.md"],
+        ".goat-flow/learning-loop/patterns/": [],
+        ".goat-flow/learning-loop/decisions/": [],
+      },
+    );
+    const entries = extractLearningLoopEntries(fs, stubConfig());
+    const richEntry = entries.find(
+      (entry) => entry.title === "metadata-rich trap",
+    );
+    const legacyEntry = entries.find((entry) => entry.title === "legacy entry");
+
+    assertExists(richEntry, "expected the metadata-rich footgun entry");
+    assert.deepEqual(
+      {
+        heading: richEntry.heading,
+        hasDecisionChangedGuidance: richEntry.hasDecisionChangedGuidance,
+        triggerPhase: richEntry.triggerPhase,
+        incidentCount: richEntry.incidentCount,
+        latestOccurrence: richEntry.latestOccurrence,
+      },
+      {
+        heading: "## Footgun: metadata-rich trap",
+        hasDecisionChangedGuidance: true,
+        triggerPhase: "VERIFY",
+        incidentCount: 3,
+        latestOccurrence: "2026-07-12",
+      },
+    );
+    assertExists(legacyEntry, "expected the legacy lesson entry");
+    assert.deepEqual(
+      {
+        heading: legacyEntry.heading,
+        hasDecisionChangedGuidance: legacyEntry.hasDecisionChangedGuidance,
+        triggerPhase: legacyEntry.triggerPhase,
+        incidentCount: legacyEntry.incidentCount,
+        latestOccurrence: legacyEntry.latestOccurrence,
+      },
+      {
+        heading: "## Lesson: legacy entry",
+        hasDecisionChangedGuidance: false,
+        triggerPhase: null,
+        incidentCount: null,
+        latestOccurrence: null,
+      },
+    );
+  });
+
   it("excludes the decisions INDEX from shared decision counts and prompt entries", () => {
     const fs = stubFS(
       {

@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased
+
+## v1.14.0 - 2026-07-19
+
+- **BREAKING: skill scaffolding now requires failing RED evidence** - Capture `.goat-flow/logs/sessions/YYYY-MM-DD-<name>-tdd.md` first and pass it with `skill new --red-log`; playbook scaffolding and draft validation are unchanged.
+- **PR review overlap reads inline bot findings** - `/goat-review` fetches paginated pull-request comments with file positions and normalizes the actual Copilot and GitHub Advanced Security identities.
+- **Plan assumption examples stay non-evidence** - The shipped assumption block now sits inside its illustrative-scenario boundary, and the contract covers every installed mirror.
+- **Content audits catch standalone harness totals** - Harness-completeness count claims no longer need an `across N concerns` suffix to be checked against the live registry.
+- **Instruction release headers are gated** - Version bumps stamp release dates, and instruction parity rejects headers that disagree with the current changelog release.
+- **Skill evidence and QA audit contracts stay coherent** - Hot-path evidence rules carry the shipped-example exception, and QA preserves Blocking/High-value/Defer tiers after its audit gate.
+- **QA and critique outputs remain exhaustive without fabrication** - Risk/coverage matrices route every gap, clean delegated critiques use verified attestations, and shipped issue examples are explicitly non-evidence placeholders.
+- **Simple questions skip dispatcher ceremony** - Direct factual answers bypass learning-loop gathering and Route Snapshots while real skill and execution routes keep both gates.
+- **Quality reports redact before disk** - Generated prompts stream completed JSON through `goat-flow redact` before validation instead of teaching a raw file write.
+- **Learning-loop warnings preserve signal** - Missing optional guidance remains visible in JSON, malformed supplied metadata still warns, and templates define measured, observed, and external evidence labels.
+- **Local writers reject redirected project paths** - Evidence logs and plan exports refuse symlinked directory components and symlinked or hardlinked destinations; untrusted hook verification writes no target evidence, and forced setup cannot admit an invalid baseline.
+- **Audit remediation matches executable behavior** - The managed gitignore check enforces last-match-safe ordering, and setup sends content failures to content-audit findings instead of claiming setup reruns the scan.
+- **Managed setup supports dry-run previews** - Reports classify drift; writes require safe destinations, baselines, and `--force` when ambiguous.
+- **Installer replacements are atomic** - Sibling staging preserves destinations and exposes failures; unsafe paths and non-atomic legacy moves fail.
+- **Static readiness gives a repair order** - `diagnostics readiness` reports qualified concern labels and three file-backed repairs without project execution.
+- **Redacted support bundles replace evidence commands** - `diagnostics bundle` emits allowlisted summaries and hash-only fingerprints with parseable failures.
+- **Threat posture is statically reviewable** - `diagnostics threat-model` reports evidence-backed shell, network, write, push, secret, and logging surfaces without execution.
+- **Managed hooks gain deep verification** - `hooks verify` runs bounded probes with honest verdicts and metadata-only events, disclaiming external delivery.
+- **Claude deny rules repaired** - Templates/upgrades replace unmatched `Write`/`NotebookEdit`/`Glob` rules with `Edit`/`Read`; audit flags survivors without weakening secret coverage.
+- **`.env.example` stays readable** - Concrete env denies replace the shadowing wildcard; upgrades preserve allows while `.env*` writes remain blocked.
+- **Commits and pushes remain user-operated** - Agents refuse both; GitHub comments require current-session approval, never forwarded third-party authorization.
+- **Durable text can be scrubbed pre-write** - `goat-flow redact` removes common secret shapes, preserves benign references, and disclaims perfect DLP.
+- **Mutating diagnostics and external refuters require approval** - Debug bisect and external review disclose risks first; declining preserves the completed local review.
+- **Milestones support local preview/export** - `plans export` preserves structure in redacted Markdown/JSON and requires `--force` to overwrite.
+- **Skill doctor explains static eligibility** - Reports manifest discovery, mirrors, blockers, and repairs as text/Markdown/JSON without model auto-trigger claims.
+- **Static context pressure is measurable** - `diagnostics context` ranks instruction, skill, playbook, and memory surfaces with credential-free token estimates.
+- **Install ownership is explicit** - Manifest classes protect unclassified/custom files; audit reports retired hooks and repair commands.
+- **Runner comparisons disclose proof strength** - Enforcement Matrix assurance classes reject unsupported hard claims and document external-delivery limits.
+- **Harness scores disclose structural evidence limits** - Audit/UI qualify Verification and Recovery, reject unusable storage, accept valid empty directories, and keep Quality focused.
+- **Selected-agent audits stay scoped; fresh loops pass** - Drift ignores other profiles; lifecycle fixtures cover consumer setup, audit, quality, and cleanup.
+- **Drift audits reject ambiguous guidance** - Drift/content checks catch missing, duplicate, mismatched, undeclared, stale, traversing, or local-state skill resources.
+- **Quoted policy searches remain read-only** - Quote-aware pipeline scanning permits benign evidence searches while blocking wrapped, nested, or piped history/publication commands.
+- **Preflight shows bounded Tests progress** - Interactive 10-second heartbeats preserve captured output, CI silence, statuses, timeout escalation, and cleanup.
+- **Preflight timeouts survive escaped output holders** - An independent deadline prevents detached hangs; a regression covers the observed failure.
+- **Optional handoff receipts support resumption** - Installs include a conditional, redacted, gitignored receipt template that never replaces milestones.
+- **Planning interviews end at handoff** - Step 0 bounds questions, supplies defaults, and separates planning from implementation permission.
+- **Planning handoffs detect drift; reviews separate opportunities** - Standard+ plans capture evidence/boundaries; reconciliation stays local and delegated review remains independent and bounded.
+- **Planning transitions and local-state guidance are clear** - Milestones await approval, scratchpads resolve locally, and agent sessions use sanctioned hook self-tests.
+- **Quality workflows honor depth and evaluator** - Routing, security depth, refuter consent, and skill-TDD stay scoped and forbid agent commits.
+- **Optional orchestration requires evidence** - Repeated passes need a Budget Ledger covering novelty, independence, scope, caps, ownership, and stopping.
+- **Canonical skills state executable limits** - Workflows use `NEVER`/`ALWAYS`/`DEFER TO`; quality accepts them and flags vague or gaming prose.
+- **Quality closeout uses supported comparisons** - `quality diff` accepts `<from-id>:<to-id>` or the latest `--agent`/`--mode` pair, not file paths.
+- **Learning-loop health is machine-readable** - Stats expose metadata/warnings; templates require search-first Extract, Consolidate, or Skip decisions.
+- **Local evidence gets privacy/promotion budgets** - Architecture defines evidence/trust limits; guidance/tests enforce provenance and forbidden payload keys.
+- **Cross-agent fixtures expose profile drift** - Installs, damages, diagnoses, and repairs profiles while preserving content and testing portable invocation.
+- **Hook-policy playbook shipped** - Standardizes self-tests, classifier/push probes, parity, registration, and reproduction evidence across installs.
+- **Built-in playbooks have an authoring contract** - Enforces boundaries, frontmatter, discovery, mirrors, ownership, installation, audit registration, and word budgets.
+
 ## v1.13.1 - 2026-07-05
 
 Patch release for deny-dangerous interpreter-pipe precision and comment-playbook clarity.

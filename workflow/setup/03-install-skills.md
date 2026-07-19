@@ -14,7 +14,7 @@ Read the detailed templates in `workflow/skills/` (each skill is a directory con
 2. **goat-review/SKILL.md** - Structured code review + quality audit. RFC 2119 severity, negative verification, footgun matching.
 3. **goat-security/SKILL.md** - Threat-model-driven security assessment. Exploitability ranking, dependency auditing.
 4. **goat-plan/SKILL.md** - Milestone planner and manager. Routes to inline or file-write mode based on scope and signals: inline for hotfix/small features, file-write for Standard+ scope.
-5. **goat-critique/SKILL.md** - Multi-perspective critique using sub-agent orchestration. 3 agents (risk, alternatives, fresh eyes), 5 phases, cross-examination, and synthesis.
+5. **goat-critique/SKILL.md** - Multi-perspective critique using sub-agent orchestration. Phases 1-5 plus mandatory Phase 5.5 meta-audit and Phase 5.6 outcome capture; 3 critique agents (risk, alternatives, fresh eyes), up to 3 conditional cross-exam agents, and 1 mandatory meta-agent.
 6. **goat-qa/SKILL.md** - Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort.
 7. **goat/SKILL.md** - Dispatcher. Routes natural language to the right skill. Required - audit checks for it (audit check: agent-skills).
 
@@ -42,9 +42,11 @@ Install the playbook pack from `workflow/skills/playbooks/`:
 - `.goat-flow/skill-docs/playbooks/browser-use.md` from `workflow/skills/playbooks/browser-use.md` - browser evidence capture reference used when tasks involve URLs, local HTML, screenshots, localhost pages, or rendered UI
 - `.goat-flow/skill-docs/playbooks/changelog.md` from `workflow/skills/playbooks/changelog.md` - changelog writing discipline for Keep a Changelog, SemVer, breaking markers, and version-surface sync
 - `.goat-flow/skill-docs/playbooks/code-comments.md` from `workflow/skills/playbooks/code-comments.md` - inline comment, docstring, TODO/FIXME/HACK, and annotation discipline
+- `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` from `workflow/skills/playbooks/hook-policy-testing.md` - deny-hook policy, source/install parity, and central agent-registration verification
 - `.goat-flow/skill-docs/playbooks/observability.md` from `workflow/skills/playbooks/observability.md` - instrumentation discipline for logs, metrics, spans, trace context, and sensitive-data rules
 - `.goat-flow/skill-docs/playbooks/page-capture.md` from `workflow/skills/playbooks/page-capture.md` - batch page capture reference for multi-page browser evidence workflows
 - `.goat-flow/skill-docs/playbooks/release-notes.md` from `workflow/skills/playbooks/release-notes.md` - per-release narrative discipline derived from the changelog source of truth
+- `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` from `workflow/skills/playbooks/skill-playbook-authoring-sync.md` - built-in playbook shape, source/install enrollment, discovery, and verification contract
 - `.goat-flow/skill-docs/skill-quality-testing/README.md` from `workflow/skills/playbooks/skill-quality-testing.md` - short index for skill authoring and hardening
 - `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` from `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
 - `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
@@ -97,9 +99,11 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-docs/playbooks/browser-use.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/changelog.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/code-comments.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/observability.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/page-capture.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/release-notes.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/README.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` exists

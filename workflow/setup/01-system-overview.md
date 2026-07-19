@@ -9,7 +9,7 @@ Read this first. This is what you're installing and why.
 
 ## State check
 
-If `.goat-flow/config.yaml` exists and its version matches the current goat-flow release, AND `goat-flow audit . --agent {agent}` passes, AND `goat-flow audit . --agent {agent} --harness` passes, verify cold-path truth before stopping: spot-check that architecture doc claims match code reality (dashboard views, check counts, component paths). If structural audit + harness + cold-path spot-check all pass, **STOP**. If the version matches but audit fails or skills/instruction file/preamble are missing, continue with setup to repair the incomplete install.
+If `.goat-flow/config.yaml` exists and its version matches the current goat-flow release, AND `goat-flow audit . --agent {agent}` passes, AND `goat-flow audit . --agent {agent} --harness` passes, AND `goat-flow audit . --agent {agent} --check-content` passes, verify cold-path truth before stopping: spot-check that architecture doc claims match code reality (dashboard views, check counts, component paths). If structural audit + harness + content lint + cold-path spot-check all pass, **STOP**. If the version matches but any audit fails or skills/instruction file/preamble are missing, continue with setup to repair the incomplete install.
 
 If the version is older, there is no maintained in-place upgrade guide. Refresh the current agent files, then continue through the current numbered setup flow:
 - **Always run the installer first** - on any version mismatch, before touching anything else:
@@ -20,6 +20,18 @@ If the version is older, there is no maintained in-place upgrade guide. Refresh 
 - After the installer overwrites `.goat-flow/.gitignore`, run `git add .goat-flow/learning-loop/ .goat-flow/skill-docs/ .goat-flow/hooks/ .goat-flow/plans/` to track files that were previously hidden. The `goat-flow-gitignore` audit check (in `goat-flow audit . --agent {agent}`) confirms the exceptions are present; fix any failure before moving on.
 - Then continue with `workflow/setup/02-instruction-file.md` and the remaining numbered setup steps.
 - If you encounter legacy flat learning-loop docs, old skill names, or legacy task-state files, promote durable content into `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/footguns/`, or `.goat-flow/learning-loop/decisions/` before removing them. Session logs are local continuity only.
+
+## File ownership during install and setup
+
+`workflow/manifest.json` gives every required or optional file one update policy. Run `goat-flow manifest` for class totals or `goat-flow manifest --format json` for the exact path records.
+
+- **system-owned:** the installer replaces the file from its declared workflow source.
+- **user-owned:** the installer seeds the file when missing and otherwise preserves local content; `--force` is the explicit override.
+- **generated:** the declared command regenerates the file from current project evidence.
+- **deprecated:** audit reports the retired path and its supported cleanup command before removal.
+- **external:** goat-flow may verify the path but never writes it.
+
+If a destination has no ownership record, stop instead of guessing. Never treat a directory as one ownership unit: `.goat-flow/` intentionally mixes canonical templates, user knowledge, generated indexes, and gitignored local state.
 
 ## What goat-flow is
 

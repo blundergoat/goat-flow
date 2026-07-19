@@ -1,5 +1,7 @@
 /**
- * Unit tests for browser-local dashboard payload readers.
+ * Browser-local dashboard reader tests for audit, agent, and task payloads.
+ * They protect fields the Home and Quality views use after the API response crosses into classic scripts.
+ * Use when wire contracts change so evidence limits and status metadata cannot disappear before rendering.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -61,6 +63,7 @@ type HelperContext = {
           details?: Record<string, unknown>;
         }[];
       } | null;
+      concerns: Record<string, { limits: string[] }> | null;
       enforcement: {
         capabilities: {
           id: string;
@@ -323,6 +326,7 @@ function readAdvisoryEnforcementReport(): ReturnType<
               label: "Dangerous shell commands",
               status: "hard",
               sources: ["local-hook"],
+              assurance: "static-local",
               summary: "Deny mechanism blocks dangerous commands",
               evidence: ["AgentFacts.hooks"],
             },
@@ -331,7 +335,17 @@ function readAdvisoryEnforcementReport(): ReturnType<
               label: "General file-read restrictions",
               status: "unknown",
               sources: ["not-observed"],
+              assurance: "not-observed",
               summary: "Not inferred from secret-path coverage",
+              evidence: [],
+            },
+            {
+              id: "malformed-hard-row",
+              label: "Malformed hard row",
+              status: "hard",
+              sources: [],
+              assurance: "static-local",
+              summary: "This row has no evidence source",
               evidence: [],
             },
           ],
@@ -484,6 +498,50 @@ describe("dashboard payload readers", () => {
     assert.equal(score, expectedTwoPassesOutOfFourScore);
   });
 
+  it("preserves concern limits and treats older missing limits as an empty list", () => {
+    const report = loadHelpers().readDashboardReport({
+      status: "pass",
+      target: "/repo",
+      overall: { status: "pass" },
+      scopes: {
+        setup: scope(),
+        agent: scope(),
+        harness: scope(),
+      },
+      learningLoop: null,
+      recentLessons: [],
+      agentScores: [
+        {
+          id: "claude",
+          name: "Claude Code",
+          agent: scope(),
+          harness: scope(),
+          concerns: {
+            verification: {
+              status: "pass",
+              score: 100,
+              limits: ["Project validation was not executed."],
+            },
+            recovery: {
+              status: "pass",
+              score: 100,
+            },
+          },
+          enforcement: null,
+        },
+      ],
+    });
+
+    assert.deepEqual(
+      Array.from(report.agentScores[0]?.concerns?.verification?.limits ?? []),
+      ["Project validation was not executed."],
+    );
+    assert.deepEqual(
+      Array.from(report.agentScores[0]?.concerns?.recovery?.limits ?? []),
+      [],
+    );
+  });
+
   it("preserves advisory enforcement matrix rows", () => {
     const report = readAdvisoryEnforcementReport();
 
@@ -494,6 +552,8 @@ describe("dashboard payload readers", () => {
     assert.equal(enforcement.capabilities.length, expectedCapabilityCount);
     assert.equal(enforcement.capabilities[1]?.status, "unknown");
     assert.deepEqual(enforcement.capabilities[0]?.sources, ["local-hook"]);
+    assert.equal(enforcement.capabilities[0]?.assurance, "static-local");
+    assert.equal(enforcement.capabilities[1]?.assurance, "not-observed");
     assert.equal(enforcement.summary.hard, 1);
     assert.equal(enforcement.summary.limited, 0);
     assert.equal(enforcement.summary.soft, 0);

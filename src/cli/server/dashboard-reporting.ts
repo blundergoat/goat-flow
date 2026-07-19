@@ -149,10 +149,17 @@ export function buildLatestQualitySummary(
   };
 }
 
-/** Return compact learning-loop health for Home without exposing the full stats report. */
+/**
+ * Build the compact learning-loop health card shown on Dashboard Home.
+ * Use when a user opens a project and needs the next memory-maintenance action at a glance.
+ *
+ * @param projectPath - selected project; empty or unreadable paths make the Home card unavailable.
+ * @returns Home-card data, or null when the selected project cannot provide safe memory facts.
+ */
 function buildDashboardLearningLoopSummary(
   projectPath: string,
 ): DashboardReport["learningLoop"] {
+  // e.g. the user selected a project on Home and the dashboard now assembles its memory card.
   try {
     const fs = createFS(projectPath);
     const configState = loadConfig(projectPath, fs);
@@ -164,62 +171,83 @@ function buildDashboardLearningLoopSummary(
     const stats = buildStatsReport({
       footguns: shared.footguns,
       lessons: shared.lessons,
+      // Home derives memory warnings from the same stable facts used by prompt retrieval.
+      learningLoopEntries: shared.learningLoopEntries,
       indexes,
     });
     const check = checkStats(stats);
+    // Users see one count for outdated review dates and broken semantic references.
     const staleCount = check.findings.filter(
       (finding) =>
         finding.rule === "stale-last-reviewed" || finding.rule === "stale-ref",
     ).length;
+    // Brittle line evidence gets a separate count because it needs semantic-anchor repair.
     const invalidLineRefCount = check.findings.filter(
       (finding) => finding.rule === "invalid-line-ref",
     ).length;
+    // Oversized buckets tell users where retrieval context needs splitting.
     const oversizedCount = check.findings.filter(
       (finding) => finding.rule === "bucket-size",
     ).length;
+    // Stale generated indexes prevent users from trusting current retrieval results.
     const indexStaleCount = indexes.filter(
-      (entry) => entry.state === "stale",
+      (indexStatus) => indexStatus.state === "stale",
     ).length;
+    // Missing indexes remain a setup nudge rather than a false health claim.
     const indexMissingCount = indexes.filter(
-      (entry) => entry.state === "missing",
+      (indexStatus) => indexStatus.state === "missing",
     ).length;
     const recordCount =
       stats.footguns.totalEntries + stats.lessons.totalEntries;
 
     const allBuckets = [...stats.footguns.buckets, ...stats.lessons.buckets];
+    // Only real review dates participate in the oldest-review indicator shown to users.
     const reviewedDates = allBuckets
       .map((bucket) => bucket.lastReviewed)
       .filter((lastReviewed): lastReviewed is string => lastReviewed !== null)
       .sort();
+    // No reviewed buckets leaves the card date empty instead of inventing recency.
     const oldestLastReviewed = reviewedDates[0] ?? null;
 
+    // Only buckets with direct repair work appear in the Home action list.
     const topBucketsNeedingAction = allBuckets
       .filter(
-        (b) =>
-          b.staleRefs.length > 0 ||
-          b.invalidLineRefs.length > 0 ||
-          b.sizeBytes > 40_000,
+        (bucket) =>
+          bucket.staleRefs.length > 0 ||
+          bucket.invalidLineRefs.length > 0 ||
+          bucket.sizeBytes > 40_000,
       )
+      // Buckets with more broken evidence rise above lower-impact maintenance work.
       .sort(
-        (a, b) =>
-          b.staleRefs.length +
-          b.invalidLineRefs.length -
-          (a.staleRefs.length + a.invalidLineRefs.length),
+        (leftBucket, rightBucket) =>
+          rightBucket.staleRefs.length +
+          rightBucket.invalidLineRefs.length -
+          (leftBucket.staleRefs.length + leftBucket.invalidLineRefs.length),
       )
       .slice(0, 3)
-      .map((b) => ({
-        path: b.path,
+      // Each action row explains the visible reason the user should open that bucket.
+      .map((bucket) => ({
+        path: bucket.path,
         reason: [
-          b.staleRefs.length > 0 ? `${b.staleRefs.length} stale refs` : "",
-          b.invalidLineRefs.length > 0
-            ? `${b.invalidLineRefs.length} invalid line refs`
+          // No stale references means this reason stays out of the user's action label.
+          bucket.staleRefs.length > 0
+            ? `${bucket.staleRefs.length} stale refs`
             : "",
-          b.sizeBytes > 40_000 ? `${Math.round(b.sizeBytes / 1024)}KB` : "",
+          // No invalid line references means this reason stays out of the action label.
+          bucket.invalidLineRefs.length > 0
+            ? `${bucket.invalidLineRefs.length} invalid line refs`
+            : "",
+          // Only oversized buckets show a size reason to the user.
+          bucket.sizeBytes > 40_000
+            ? `${Math.round(bucket.sizeBytes / 1024)}KB`
+            : "",
         ]
+          // Empty reasons are removed so the card shows plain, comma-separated repair guidance.
           .filter(Boolean)
           .join(", "),
       }));
 
+    // Missing memory directories make the card unavailable; real defects escalate it for review.
     const status =
       !shared.footguns.exists && !shared.lessons.exists
         ? "unavailable"
@@ -236,9 +264,11 @@ function buildDashboardLearningLoopSummary(
       staleCount,
       invalidLineRefCount,
       oversizedCount,
-      indexes: indexes.map((entry) => ({
-        ...entry,
-        entryCount: parseBucket(fs, entry.dirPath, entry.bucket).length,
+      // Each index row includes its live entry count for the user's Home summary.
+      indexes: indexes.map((indexStatus) => ({
+        ...indexStatus,
+        entryCount: parseBucket(fs, indexStatus.dirPath, indexStatus.bucket)
+          .length,
       })),
       indexStaleCount,
       indexMissingCount,
@@ -247,6 +277,7 @@ function buildDashboardLearningLoopSummary(
       status,
     };
   } catch {
+    // For example, the user selected a deleted or unreadable project; Home shows no stale card.
     return null;
   }
 }

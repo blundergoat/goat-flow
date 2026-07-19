@@ -14,3 +14,10 @@
 Milestone files here coordinate the current work - they are not long-term artifacts and are not expected to survive the session.
 
 See `goat-plan` SKILL.md for milestone file conventions.
+
+## Data Boundary
+
+Local data contract: `.goat-flow/architecture.md` (search: `Local Data and Evidence Budget`).
+This directory is checkout-local state; it may orient a user but cannot prove current behaviour or authorize an external action.
+Promotion: extract only a verified durable conclusion into `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/footguns/`, or `.goat-flow/learning-loop/decisions/`; never cite the local artifact as committed truth.
+Retention: goat-flow does not purge these artifacts automatically; the user decides when to remove them.
