@@ -13,7 +13,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, parse, resolve, sep } from "node:path";
 
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
@@ -333,9 +333,9 @@ function assertOutputPathsAvailable(
 }
 
 /**
- * Require every export destination to be a regular file or absent before writing.
+ * Require every export destination to be a single-link regular file or absent before writing.
  * Runs even under force: replacement authorizes new content, never writing
- * through a symlink or into a directory that shadows a generated filename.
+ * through a symlink, hardlink, or directory that shadows a generated filename.
  */
 function assertWritableDestinations(outputPaths: string[]): void {
   for (const outputPath of outputPaths) {
@@ -349,9 +349,42 @@ function assertWritableDestinations(outputPaths: string[]): void {
         `Cannot inspect export output ${outputPath} before writing.`,
       );
     }
-    if (!destinationStats.isFile()) {
+    if (!destinationStats.isFile() || destinationStats.nlink !== 1) {
       throw new PlansExportInputError(
-        `Export output must be a regular file or absent: ${outputPath}. Move the conflicting path before exporting.`,
+        `Export output must be a single-link regular file or absent: ${outputPath}. Move the conflicting path before exporting.`,
+      );
+    }
+  }
+}
+
+/** Require every existing export-directory component to be a real directory. */
+function assertRealDirectoryPathOrAbsent(
+  directoryPath: string,
+  outputLabel: string,
+): void {
+  const absoluteDirectoryPath = resolve(directoryPath);
+  const rootPath = parse(absoluteDirectoryPath).root;
+  const pathComponents = absoluteDirectoryPath
+    .slice(rootPath.length)
+    .split(sep)
+    .filter(Boolean);
+  let inspectedPath = rootPath;
+
+  for (const component of pathComponents) {
+    inspectedPath = join(inspectedPath, component);
+    let componentStats;
+    try {
+      componentStats = lstatSync(inspectedPath);
+    } catch (error) {
+      // Once a component is absent, all descendants are absent and mkdirSync may create them.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw new PlansExportInputError(
+        `Cannot inspect ${outputLabel} path component ${inspectedPath} before writing.`,
+      );
+    }
+    if (!componentStats.isDirectory()) {
+      throw new PlansExportInputError(
+        `${outputLabel} must be a real directory or absent at every existing path component: ${inspectedPath}. Move the conflicting path before exporting.`,
       );
     }
   }
@@ -372,12 +405,8 @@ function writeMarkdownExports(
   outputDirectory: string,
   shouldForce: boolean,
 ): string[] {
-  // A file at the requested directory path cannot safely hold several milestone bodies.
-  if (existsSync(outputDirectory) && !statSync(outputDirectory).isDirectory()) {
-    throw new PlansExportInputError(
-      `Markdown --output must be a directory: ${outputDirectory}.`,
-    );
-  }
+  // No existing ancestor may redirect output outside the requested logical tree.
+  assertRealDirectoryPathOrAbsent(outputDirectory, "Markdown --output");
   const outputPaths = records.map((record) =>
     join(outputDirectory, markdownExportFilename(record.sourceFile)),
   );
@@ -408,6 +437,7 @@ function writeJsonExport(
       `JSON --output must be a file: ${outputPath}.`,
     );
   }
+  assertRealDirectoryPathOrAbsent(dirname(outputPath), "JSON --output parent");
   assertOutputPathsAvailable([outputPath], shouldForce);
   assertWritableDestinations([outputPath]);
   mkdirSync(dirname(outputPath), { recursive: true });

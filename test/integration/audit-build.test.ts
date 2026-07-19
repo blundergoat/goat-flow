@@ -193,6 +193,31 @@ describe("audit build: goat-flow gitignore exceptions", () => {
     assert.match(result.message, /!logs\/security\/README\.md/u);
   });
 
+  it("fails when required gitignore entries have unsafe last-match order", () => {
+    const configuredPatterns = [...REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS];
+    const readmeInclude = "!logs/quality/README.md";
+    configuredPatterns.splice(configuredPatterns.indexOf(readmeInclude), 1);
+    configuredPatterns.splice(
+      configuredPatterns.indexOf("logs/quality/*.md"),
+      0,
+      readmeInclude,
+    );
+
+    const result = goatFlowGitignoreCheck.run(
+      makeCtx({
+        fs: stubFS({
+          readFile: (path) =>
+            path === ".goat-flow/.gitignore"
+              ? configuredPatterns.join("\n")
+              : null,
+        }),
+      }),
+    );
+
+    assertExists(result);
+    assert.match(result.message, /required order|last-match/u);
+  });
+
   // The required-pattern list drifted from the shipped template once before
   // (scratchpad/ and the top-level guide re-includes were audited as optional
   // while the template shipped them). Deriving the expectation from the

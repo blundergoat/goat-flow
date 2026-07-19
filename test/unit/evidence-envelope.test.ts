@@ -1,14 +1,17 @@
 /**
  * Unit tests for evidence-envelope validation, redaction, writing, and tailing.
  */
-import { describe, it } from "node:test";
+import { describe, it, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -72,6 +75,27 @@ function withTempProject<T>(fn: (root: string) => T): T {
     return fn(root);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+}
+
+/** Create a symlink, or skip when the host blocks unprivileged link fixtures. */
+function symlinkOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+  type?: "dir",
+): boolean {
+  try {
+    symlinkSync(target, link, type);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EPERM") {
+      testContext.skip(
+        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
+      );
+      return false;
+    }
+    throw error;
   }
 }
 
@@ -223,8 +247,124 @@ describe("EvidenceEnvelope", () => {
       });
 
       assert.equal(result.ok, false);
-      assert.match(result.error ?? "", /EEXIST|ENOTDIR|not a directory/i);
+      assert.match(
+        result.error ?? "",
+        /EEXIST|ENOTDIR|not a directory|project-local directory/i,
+      );
       assert.match(warnings[0] ?? "", /failed to append event/i);
+    });
+  });
+
+  it("rejects a symlinked events directory without writing outside the project", (testContext) => {
+    withTempProject((root) => {
+      const outsideDirectory = mkdtempSync(
+        join(tmpdir(), "goat-flow-evidence-outside-"),
+      );
+      try {
+        mkdirSync(join(root, ".goat-flow", "logs"), { recursive: true });
+        if (
+          !symlinkOrSkip(
+            testContext,
+            outsideDirectory,
+            join(root, ".goat-flow", "logs", "events"),
+            "dir",
+          )
+        ) {
+          return;
+        }
+        const envelope = createEvidenceEnvelope({
+          eventType: "hook.verify",
+          actor: "cli",
+          projectRoot: root,
+          timestamp: "2026-05-17T00:00:00.000Z",
+          payload: { status: "unsupported" },
+        });
+
+        const result = appendEvidenceEnvelope(root, envelope, {
+          onWarning: () => undefined,
+        });
+
+        assert.equal(result.ok, false);
+        assert.deepEqual(readdirSync(outsideDirectory), []);
+      } finally {
+        rmSync(outsideDirectory, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it("rejects a symlinked daily event file without changing its target", (testContext) => {
+    withTempProject((root) => {
+      const outsideDirectory = mkdtempSync(
+        join(tmpdir(), "goat-flow-evidence-victim-"),
+      );
+      try {
+        const eventsDirectory = join(root, ".goat-flow", "logs", "events");
+        const victimPath = join(outsideDirectory, "victim.jsonl");
+        mkdirSync(eventsDirectory, { recursive: true });
+        writeFileSync(victimPath, "keep\n", "utf-8");
+        if (
+          !symlinkOrSkip(
+            testContext,
+            victimPath,
+            join(eventsDirectory, "2026-05-17.jsonl"),
+          )
+        ) {
+          return;
+        }
+        const envelope = createEvidenceEnvelope({
+          eventType: "audit.run",
+          actor: "server",
+          projectRoot: root,
+          timestamp: "2026-05-17T00:00:00.000Z",
+          payload: { status: "pass" },
+        });
+
+        const result = appendEvidenceEnvelope(root, envelope, {
+          onWarning: () => undefined,
+        });
+
+        assert.equal(result.ok, false);
+        assert.equal(readFileSync(victimPath, "utf-8"), "keep\n");
+      } finally {
+        rmSync(outsideDirectory, { recursive: true, force: true });
+      }
+    });
+  });
+
+  it("rejects a hardlinked daily event file without changing its peer", (testContext) => {
+    withTempProject((root) => {
+      const eventsDirectory = join(root, ".goat-flow", "logs", "events");
+      const victimPath = join(root, "victim.jsonl");
+      mkdirSync(eventsDirectory, { recursive: true });
+      writeFileSync(victimPath, "keep\n", "utf-8");
+      try {
+        linkSync(victimPath, join(eventsDirectory, "2026-05-17.jsonl"));
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          ["EACCES", "EPERM", "EXDEV"].includes(
+            (error as NodeJS.ErrnoException).code ?? "",
+          )
+        ) {
+          testContext.skip("Skipped: host filesystem blocks hardlinks");
+          return;
+        }
+        throw error;
+      }
+      const envelope = createEvidenceEnvelope({
+        eventType: "audit.run",
+        actor: "server",
+        projectRoot: root,
+        timestamp: "2026-05-17T00:00:00.000Z",
+        payload: { status: "pass" },
+      });
+
+      const result = appendEvidenceEnvelope(root, envelope, {
+        onWarning: () => undefined,
+      });
+
+      assert.equal(result.ok, false);
+      assert.equal(readFileSync(victimPath, "utf-8"), "keep\n");
     });
   });
 });

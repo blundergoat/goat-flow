@@ -5,6 +5,7 @@
  * Users should see conflicts before any installer mutation occurs.
  */
 import { describe, it } from "node:test";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
@@ -19,6 +20,26 @@ import { join } from "node:path";
 
 import { getTemplatePath } from "../../src/cli/paths.js";
 import { makeTempProject, runCliInstaller } from "./setup-install.helpers.js";
+
+/** Create a directory symlink, or skip when the host forbids the fixture. */
+function symlinkDirectoryOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+): boolean {
+  try {
+    symlinkSync(target, link, "dir");
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EPERM") {
+      testContext.skip(
+        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
+      );
+      return false;
+    }
+    throw error;
+  }
+}
 
 describe("managed setup preview", () => {
   it("reports a fresh target without writing any project files", () => {
@@ -280,7 +301,7 @@ describe("managed setup preview", () => {
    * This fixture writes and removes disposable target directories around a managed symlink.
    * It reproduces redirected install risk and proves admission preserves outside-project bytes.
    */
-  it("blocks symlinked managed parents even when force is supplied", () => {
+  it("blocks symlinked managed parents even when force is supplied", (testContext) => {
     const projectPath = makeTempProject();
     const redirectedDirectory = makeTempProject();
     const redirectedReadmePath = join(redirectedDirectory, "README.md");
@@ -298,7 +319,15 @@ describe("managed setup preview", () => {
           getTemplatePath("workflow/setup/reference/quality-readme.md"),
         ),
       );
-      symlinkSync(redirectedDirectory, managedQualityParent, "dir");
+      if (
+        !symlinkDirectoryOrSkip(
+          testContext,
+          redirectedDirectory,
+          managedQualityParent,
+        )
+      ) {
+        return;
+      }
       const redirectedBytesBefore = readFileSync(redirectedReadmePath);
 
       const preview = runCliInstaller(
@@ -345,6 +374,51 @@ describe("managed setup preview", () => {
     } finally {
       rmSync(projectPath, { recursive: true, force: true });
       rmSync(redirectedDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks an invalid symlinked install-state baseline under force before writes", (testContext) => {
+    const projectPath = makeTempProject();
+    const redirectedStatePath = makeTempProject();
+    try {
+      mkdirSync(join(projectPath, ".goat-flow"), { recursive: true });
+      writeFileSync(
+        join(redirectedStatePath, "codex.json"),
+        `${JSON.stringify({
+          schemaVersion: "goat-flow.install-state.v1",
+          agent: "codex",
+          goatFlowVersion: "1.13.1",
+          files: [],
+        })}\n`,
+        "utf-8",
+      );
+      if (
+        !symlinkDirectoryOrSkip(
+          testContext,
+          redirectedStatePath,
+          join(projectPath, ".goat-flow", "install-state"),
+        )
+      ) {
+        return;
+      }
+
+      const forcedInstall = runCliInstaller(
+        projectPath,
+        "--agent",
+        "codex",
+        "--force",
+      );
+
+      assert.notEqual(forcedInstall.status, 0);
+      assert.match(forcedInstall.stderr, /--force cannot bypass path safety/u);
+      assert.equal(
+        existsSync(join(projectPath, ".agents", "skills", "goat", "SKILL.md")),
+        false,
+        "invalid baseline state must block before any managed destination changes",
+      );
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+      rmSync(redirectedStatePath, { recursive: true, force: true });
     }
   });
 });

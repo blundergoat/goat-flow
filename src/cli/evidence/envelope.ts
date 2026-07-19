@@ -9,9 +9,11 @@
 import {
   appendFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   readdirSync,
+  type Stats,
 } from "node:fs";
 import { join } from "node:path";
 import type { CheckEvidence } from "../audit/provenance-types.js";
@@ -107,6 +109,43 @@ const VALID_ACTORS = new Set<EvidenceActor>(["dashboard", "cli", "server"]);
 /** Resolve the gitignored event-log directory under the selected project root. */
 function eventsLogDir(projectRoot: string): string {
   return join(projectRoot, EVENTS_LOG_RELATIVE_DIR);
+}
+
+/** Inspect one target-controlled evidence path without following a symlink. */
+function evidencePathStats(path: string, displayPath: string): Stats | null {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new Error(
+      `Could not inspect ${displayPath} before writing evidence.`,
+    );
+  }
+}
+
+/** Create the event-log path one real directory at a time, rejecting redirection. */
+function ensureSafeEventsLogDirectory(projectRoot: string): string {
+  const directories = [
+    { path: join(projectRoot, ".goat-flow"), displayPath: ".goat-flow" },
+    {
+      path: join(projectRoot, ".goat-flow", "logs"),
+      displayPath: ".goat-flow/logs",
+    },
+    {
+      path: eventsLogDir(projectRoot),
+      displayPath: EVENTS_LOG_RELATIVE_DIR,
+    },
+  ];
+  for (const directory of directories) {
+    const stats = evidencePathStats(directory.path, directory.displayPath);
+    if (stats !== null && !stats.isDirectory()) {
+      throw new Error(
+        `${directory.displayPath} must be a project-local directory.`,
+      );
+    }
+    if (stats === null) mkdirSync(directory.path);
+  }
+  return directories.at(-1)?.path ?? eventsLogDir(projectRoot);
 }
 
 /** Normalize optional caller timestamps while defaulting local events to current time. */
@@ -278,9 +317,17 @@ export function appendEvidenceEnvelope(
       warn(options, `[evidence] ${error}`);
       return { ok: false, path: null, error };
     }
-    const dir = eventsLogDir(projectRoot);
-    mkdirSync(dir, { recursive: true });
+    const dir = ensureSafeEventsLogDirectory(projectRoot);
     const path = join(dir, `${envelope.timestamp.slice(0, 10)}.jsonl`);
+    const pathStats = evidencePathStats(
+      path,
+      `${EVENTS_LOG_RELATIVE_DIR}/${envelope.timestamp.slice(0, 10)}.jsonl`,
+    );
+    if (pathStats !== null && (!pathStats.isFile() || pathStats.nlink !== 1)) {
+      throw new Error(
+        "Evidence event destination must be a single-link regular file.",
+      );
+    }
     appendFileSync(path, `${JSON.stringify(envelope)}\n`, "utf-8");
     return { ok: true, path };
   } catch (error) {

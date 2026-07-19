@@ -563,6 +563,22 @@ describe("setup truth and evidence contracts", () => {
     assert.doesNotMatch(setupPrompt, /both required setup gates|both audits/iu);
   });
 
+  it("routes content-audit failures to their reported findings", () => {
+    const setupPrompt = readFileSync(
+      resolve(PROJECT_ROOT, "src/cli/prompt/compose-setup.ts"),
+      "utf-8",
+    );
+
+    assert.match(
+      setupPrompt,
+      /If the content audit fails, follow its reported findings/u,
+    );
+    assert.doesNotMatch(
+      setupPrompt,
+      /If any audit fails, run .* setup .* for remaining fix instructions/u,
+    );
+  });
+
   it("keeps git-history correlations as candidates until semantic proof exists", () => {
     const customise = readFileSync(
       resolve(PROJECT_ROOT, "workflow/setup/05-customise-to-project.md"),

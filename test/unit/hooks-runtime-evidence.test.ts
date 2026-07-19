@@ -363,6 +363,7 @@ describe("hooks runtime evidence", () => {
   // An explicit untrusted-target choice suppresses checkout code execution and records no pass.
   it("skips target hook execution when the user marks the checkout untrusted", () => {
     let executionCount = 0;
+    let evidenceRecordCount = 0;
     const report = verifyManagedDenyHook(
       {
         projectPath: "/fixture",
@@ -375,12 +376,17 @@ describe("hooks runtime evidence", () => {
           executionCount += 1;
           return ALLOWED_EXECUTION;
         },
+        recordEvidence: () => {
+          evidenceRecordCount += 1;
+          return { ok: true, path: "/fixture/events.jsonl" };
+        },
       }),
     );
 
     assert.equal(report.summary.unsupported, DENY_HOOK_SCENARIO_COUNT);
     assert.equal(report.summary.pass, 0);
     assert.equal(executionCount, 0);
+    assert.equal(evidenceRecordCount, 0);
   });
 
   // A failed event append prevents a probe result from claiming complete local evidence.

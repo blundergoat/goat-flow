@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-07-18
+last_reviewed: 2026-07-19
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -117,15 +117,13 @@ last_reviewed: 2026-07-18
 
 **Status:** active | **Created:** 2026-05-04
 
-**What happened:** Several behavior-scope changes updated the main implementation but missed adjacent assertions: setup remediation still expected `--harness --agent codex`, `/goat-plan` prompts still expected inline-only wording, PTY paste launch still had env/argv expectations, and the tool-playbook router row still had an old regex.
+**What happened:** Behavior changes left adjacent assertions pinned to old flags, phrases, counts, routes, or errors, so focused checks failed only after implementation.
 
-**Root cause:** I updated the route contract and one obvious test, but did not grep for every old flag/phrase that encoded the previous behavior.
+**Root cause:** I changed the contract and obvious test without grepping every encoded form of the old behavior.
 
-**Prevention:** When changing endpoint, launch-context, setup-prompt, or router semantics, grep focused tests for the old flags and phrases before the first run. Search the implementation and smoke/audit tests for old launch-context wording, env vars, runner flags, and setup commands. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/smoke/dashboard-endpoints.test.ts` (search: `injects POSIX launch prompts through PTY input`), `src/cli/audit/check-goat-flow.ts` (search: `Instruction file skill-docs pointer`).
+**Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; update them with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-contracts.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
 
-**Recurrence (2026-07-13):** M07 added eight manifest-backed deprecated-hook comparisons, while the clean drift fixture still expected the old comparison total. The test now derives the added count from `hooks.stale_names` instead of copying another literal. Evidence anchor: `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`).
-
-**Recurrence (2026-07-18):** Generic authorization was mistaken for dispatcher → planner → ACT proof. Cross-skill routing tests must span producer, receiver, and endpoint. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`).
+**Latest recurrence (2026-07-19):** A path-safe evidence diagnostic replaced raw OS errors, but the adjacent non-fatal assertion still accepted only the old error forms; the first focused GREEN run stopped at 117/118.
 
 ---
 

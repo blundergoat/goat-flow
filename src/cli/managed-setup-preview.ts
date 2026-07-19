@@ -544,7 +544,8 @@ export function managedSetupAdmissionFailure(
   preview: ManagedSetupPreview,
   shouldForce: boolean,
 ): string | null {
-  const unsafeManagedTarget = hasUnsafeManagedTarget(preview);
+  const unsafeManagedTarget =
+    preview.baselineStatus === "invalid" || hasUnsafeManagedTarget(preview);
   // A ready or warning preview needs no override and can continue to the installer.
   if (preview.verdict !== "blocked") return null;
   // Force resolves content conflicts, but never symlink redirection or unreadable target evidence.

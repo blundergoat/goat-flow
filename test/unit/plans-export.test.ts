@@ -9,6 +9,7 @@ import { describe, it, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -92,6 +93,29 @@ function symlinkOrSkip(
       testContext.skip(
         "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
       );
+      return false;
+    }
+    throw error;
+  }
+}
+
+/** Create a hardlink, or skip when the host filesystem does not support it. */
+function hardlinkOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+): boolean {
+  try {
+    linkSync(target, link);
+    return true;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      ["EACCES", "EPERM", "EXDEV"].includes(
+        (error as NodeJS.ErrnoException).code ?? "",
+      )
+    ) {
+      testContext.skip("Skipped: host filesystem blocks hardlinks");
       return false;
     }
     throw error;
@@ -425,6 +449,92 @@ describe("plans export", () => {
     }
   });
 
+  it("refuses JSON export through a symlinked parent directory", (testContext: TestContext) => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
+    const planPath = join(temporaryRoot, "plan");
+    const redirectedDirectory = join(temporaryRoot, "outside");
+    const outputParent = join(temporaryRoot, "out");
+    writePlanFixture(planPath, completeMilestoneBody());
+    mkdirSync(redirectedDirectory, { recursive: true });
+
+    try {
+      if (!symlinkOrSkip(testContext, redirectedDirectory, outputParent)) {
+        return;
+      }
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "json",
+        "--output",
+        join(outputParent, "bundle.json"),
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /real directory or absent/u);
+      assert.equal(existsSync(join(redirectedDirectory, "bundle.json")), false);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses JSON export through a symlinked intermediate ancestor", (testContext: TestContext) => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
+    const planPath = join(temporaryRoot, "plan");
+    const redirectedDirectory = join(temporaryRoot, "outside");
+    const linkedAncestor = join(temporaryRoot, "linked-ancestor");
+    writePlanFixture(planPath, completeMilestoneBody());
+    mkdirSync(join(redirectedDirectory, "nested"), { recursive: true });
+
+    try {
+      if (!symlinkOrSkip(testContext, redirectedDirectory, linkedAncestor)) {
+        return;
+      }
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "json",
+        "--output",
+        join(linkedAncestor, "nested", "bundle.json"),
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /real directory or absent/u);
+      assert.equal(
+        existsSync(join(redirectedDirectory, "nested", "bundle.json")),
+        false,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a hardlinked JSON destination even with force", (testContext: TestContext) => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
+    const planPath = join(temporaryRoot, "plan");
+    const outputPath = join(temporaryRoot, "bundle.json");
+    const victimPath = join(temporaryRoot, "victim.txt");
+    writePlanFixture(planPath, completeMilestoneBody());
+    writeFileSync(victimPath, "keep\n", "utf-8");
+
+    try {
+      if (!hardlinkOrSkip(testContext, victimPath, outputPath)) return;
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "json",
+        "--output",
+        outputPath,
+        "--force",
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /single-link regular file or absent/u);
+      assert.equal(readFileSync(victimPath, "utf-8"), "keep\n");
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   // A directory shadowing one generated filename must fail before ANY milestone
   // is written; a forced regeneration must never leave a partial bundle.
   it("fails atomically when a forced Markdown destination is a directory", () => {
@@ -493,6 +603,75 @@ describe("plans export", () => {
         readFileSync(victimPath, "utf-8"),
         "keep\n",
         "the symlink target must remain untouched",
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a symlinked Markdown output directory", (testContext: TestContext) => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
+    const planPath = join(temporaryRoot, "plan");
+    const redirectedDirectory = join(temporaryRoot, "outside");
+    const outputDirectory = join(temporaryRoot, "out");
+    writePlanFixture(planPath, completeMilestoneBody());
+    mkdirSync(redirectedDirectory, { recursive: true });
+
+    try {
+      if (!symlinkOrSkip(testContext, redirectedDirectory, outputDirectory)) {
+        return;
+      }
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "markdown",
+        "--output",
+        outputDirectory,
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /real directory or absent/u);
+      assert.equal(
+        existsSync(join(redirectedDirectory, "M42-portable-plan.md")),
+        false,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses Markdown export through a symlinked intermediate ancestor", (testContext: TestContext) => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
+    const planPath = join(temporaryRoot, "plan");
+    const redirectedDirectory = join(temporaryRoot, "outside");
+    const linkedAncestor = join(temporaryRoot, "linked-ancestor");
+    writePlanFixture(planPath, completeMilestoneBody());
+    mkdirSync(join(redirectedDirectory, "nested"), { recursive: true });
+
+    try {
+      if (!symlinkOrSkip(testContext, redirectedDirectory, linkedAncestor)) {
+        return;
+      }
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "markdown",
+        "--output",
+        join(linkedAncestor, "nested", "exports"),
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /real directory or absent/u);
+      assert.equal(
+        existsSync(
+          join(
+            redirectedDirectory,
+            "nested",
+            "exports",
+            "M42-portable-plan.md",
+          ),
+        ),
+        false,
       );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });

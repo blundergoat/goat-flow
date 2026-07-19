@@ -416,16 +416,27 @@ const goatFlowGitignoreContent: BuildCheck = {
       };
     }
     const content = ctx.fs.readFile(".goat-flow/.gitignore") ?? "";
-    const configuredPatterns = new Set(
-      content.split(/\r?\n/u).map((line) => line.trim()),
-    );
+    const configuredPatterns = content
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#"));
     const missing = REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.filter(
-      (pattern) => !configuredPatterns.has(pattern),
+      (pattern) => !configuredPatterns.includes(pattern),
     );
-    if (missing.length === 0) return null;
+    const hasRequiredOrder =
+      configuredPatterns.length ===
+        REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.length &&
+      REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.every(
+        (pattern, index) => configuredPatterns[index] === pattern,
+      );
+    if (missing.length === 0 && hasRequiredOrder) return null;
+    const mismatch =
+      missing.length > 0
+        ? `is missing required entries: ${missing.join(", ")}`
+        : "does not use the required order; Git applies last-match-wins semantics";
     return {
       check: "goat-flow gitignore exceptions",
-      message: `.goat-flow/.gitignore is missing required entries: ${missing.join(", ")}. Stale gitignores silently hide committed skill docs, hook policy, top-level guides, or workspace anchors from git - or over-commit local-only logs.`,
+      message: `.goat-flow/.gitignore ${mismatch}. Stale gitignores silently hide committed skill docs, hook policy, top-level guides, or workspace anchors from git - or over-commit local-only logs.`,
       evidence: ".goat-flow/.gitignore",
       howToFix:
         "Run `goat-flow install . --agent <id>` to refresh .goat-flow/.gitignore from the current template. After it overwrites, `git add .goat-flow/skill-docs/playbooks/ .goat-flow/skill-docs/` to track files that were previously hidden.",

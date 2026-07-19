@@ -259,7 +259,13 @@ function pushFinalSetupGate(
   lines.push("");
   lines.push("**Target: all three audits pass with zero failures.**");
   lines.push(
-    `If any audit fails, run \`${getCliCommand()} setup ${targetArg(facts.root)} --agent ${agentId}\` for remaining fix instructions, then re-run all three audit gates. Repeat until all three pass (max 3 cycles).`,
+    `If the base or harness audit fails, run \`${getCliCommand()} setup ${targetArg(facts.root)} --agent ${agentId}\` for remaining structural fix instructions.`,
+  );
+  lines.push(
+    "If the content audit fails, follow its reported findings and suggestions; setup does not rerun the cold content scan.",
+  );
+  lines.push(
+    "Then re-run all three audit gates. Repeat until all three pass (max 3 cycles).",
   );
 }
 

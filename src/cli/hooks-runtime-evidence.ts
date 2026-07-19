@@ -556,15 +556,17 @@ export function verifyManagedDenyHook(
     dependencies,
   );
 
-  // Every attempted or skipped scenario receives the same metadata-only local event contract.
-  const recordedScenarios = scenarioResults.map((scenario) =>
-    recordScenarioEvidence(
-      request,
-      hookState.scriptPath,
-      scenario,
-      dependencies.recordEvidence,
-    ),
-  );
+  // An untrusted-target choice suppresses every target-local side effect, including event writes.
+  const recordedScenarios = request.isTargetUntrusted
+    ? scenarioResults
+    : scenarioResults.map((scenario) =>
+        recordScenarioEvidence(
+          request,
+          hookState.scriptPath,
+          scenario,
+          dependencies.recordEvidence,
+        ),
+      );
   const summary = summarizeScenarioResults(recordedScenarios);
   return {
     schema: REPORT_SCHEMA,
