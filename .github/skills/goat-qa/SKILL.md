@@ -164,7 +164,7 @@ Load-bearing + Interface files get CRITICAL or HIGH risk ratings by default.
 ### A3 - Coverage Analysis
 
 For each in-scope file:
-1. Inventory named behaviours/invariants with a code anchor and risk before coverage; CRITICAL/HIGH inventory must be exhaustive.
+1. Inventory named behaviours/invariants with a code anchor and risk before coverage; CRITICAL/HIGH/MEDIUM inventory must be exhaustive.
 2. Create one row per named behaviour; files may have multiple rows/labels.
 3. Search all tests and exported-symbol references. No matching test/manual plan → coverage `NONE`.
 4. Read matches; classify assertions for that behaviour. Flag mocks/skipped integrations.

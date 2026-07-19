@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.14.0 - 2026-07-19
+
 - **BREAKING: skill scaffolding now requires failing RED evidence** - Capture `.goat-flow/logs/sessions/YYYY-MM-DD-<name>-tdd.md` first and pass it with `skill new --red-log`; playbook scaffolding and draft validation are unchanged.
 - **PR review overlap reads inline bot findings** - `/goat-review` fetches paginated pull-request comments with file positions and normalizes the actual Copilot and GitHub Advanced Security identities.
 - **Plan assumption examples stay non-evidence** - The shipped assumption block now sits inside its illustrative-scenario boundary, and the contract covers every installed mirror.
@@ -12,9 +14,8 @@
 - **Simple questions skip dispatcher ceremony** - Direct factual answers bypass learning-loop gathering and Route Snapshots while real skill and execution routes keep both gates.
 - **Quality reports redact before disk** - Generated prompts stream completed JSON through `goat-flow redact` before validation instead of teaching a raw file write.
 - **Learning-loop warnings preserve signal** - Missing optional guidance remains visible in JSON, malformed supplied metadata still warns, and templates define measured, observed, and external evidence labels.
-
-## v1.14.0 - 2026-07-17
-
+- **Local writers reject redirected project paths** - Evidence logs and plan exports refuse symlinked directory components and symlinked or hardlinked destinations; untrusted hook verification writes no target evidence, and forced setup cannot admit an invalid baseline.
+- **Audit remediation matches executable behavior** - The managed gitignore check enforces last-match-safe ordering, and setup sends content failures to content-audit findings instead of claiming setup reruns the scan.
 - **Managed setup supports dry-run previews** - Reports classify drift; writes require safe destinations, baselines, and `--force` when ambiguous.
 - **Installer replacements are atomic** - Sibling staging preserves destinations and exposes failures; unsafe paths and non-atomic legacy moves fail.
 - **Static readiness gives a repair order** - `diagnostics readiness` reports qualified concern labels and three file-backed repairs without project execution.

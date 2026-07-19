@@ -1039,7 +1039,7 @@ describe("skill hardening contracts", () => {
       const auditMode = readMarkdownSection(skillPath, "Audit Mode");
       assert.match(
         auditMode,
-        /Inventory named behaviours\/invariants with a code anchor and risk before coverage; CRITICAL\/HIGH inventory must be exhaustive/u,
+        /Inventory named behaviours\/invariants with a code anchor and risk before coverage; CRITICAL\/HIGH\/MEDIUM inventory must be exhaustive/u,
         skillPath,
       );
       assert.match(
