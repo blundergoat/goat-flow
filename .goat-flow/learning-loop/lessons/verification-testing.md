@@ -130,20 +130,21 @@ last_reviewed: 2026-07-19
 
 **Status:** active | **Created:** 2026-07-12
 
-**Decision changed:** After parser or skill prose renames, run `stats --check` and preserve or update every durable anchor.
+**Decision changed:** After prose/parser renames, run `stats --check` and preserve or update durable anchors.
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 4
+**Incident count:** 5
 
-**Latest occurrence:** 2026-07-17
+**Latest occurrence:** 2026-07-19
 
-**What happened:** Four compactions broke durable references:
+**What happened:** Five compactions broke durable references:
 
-- **M15:** Removed `Use when work needs milestone tracking`; stats caught the footgun reference.
-- **2026-07-13 M13:** Removed `Routing rule` and renamed a parser call; stats caught both. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`), `src/cli/facts/shared/learning-loop-entries.ts` (search: `isDecisionRecordMarkdown(sourceFilename(decisionFile.path))`).
-- **2026-07-16 PR #56:** Removed `Emit a Route Snapshot`; stats forced restoration. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
-- **2026-07-17:** Reworded `safe to skip more PTY timing tests`; stats forced restoration across QA mirrors. Evidence: `workflow/skills/goat-qa/SKILL.md` (search: `safe to skip more PTY timing tests`).
+- **M15:** Removed `Use when work needs milestone tracking`; stats caught its footgun.
+- **2026-07-13:** `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`); `src/cli/facts/shared/learning-loop-entries.ts` (search: `isDecisionRecordMarkdown`).
+- **2026-07-16:** `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
+- **2026-07-17:** `workflow/skills/goat-qa/SKILL.md` (search: `safe to skip more PTY timing tests`).
+- **2026-07-19:** `workflow/skills/reference/skill-preamble.md` (search: "If stale, emit"; "Claim/proof examples live in"); stats and `preamble-sync.test.ts` restored both.
 
 **Root cause:** Treated prose as self-contained despite durable cross-file anchors.
 

@@ -1,6 +1,6 @@
 ---
 category: review-feedback
-last_reviewed: 2026-07-13
+last_reviewed: 2026-07-19
 ---
 
 ## Lesson: Multi-agent critique finds findings single reviewers miss - but synthesis is the expensive part
@@ -22,7 +22,10 @@ last_reviewed: 2026-07-13
 ## Lesson: Blindly applying review feedback without verifying findings
 
 **Status:** active | **Created:** 2026-04-11
+**Incident count:** 2 | **Latest occurrence:** 2026-07-19
 **What happened:** After receiving 8 critic reviews of the goat-flow framework, the agent started fixing every cited `file:line` without first checking whether the findings were still valid. Several of the cited issues had already been fixed by sub-agents earlier in the same session. The agent was about to edit files that were already correct, potentially reintroducing bugs or making nonsensical changes.
+
+**Recurrence (2026-07-19):** A quality report treated replaying the `.codex/hooks.json` launcher directly from `/tmp` as proof that real Codex Bash calls wedge outside the repo. Before patching, a real Codex unified-exec call with `workdir=/tmp` completed, and the current official hook contract confirmed that hook commands run from the session cwd. The proposed launcher change was dropped because the replay proved only standalone launcher behaviour, not the agent runtime path.
 
 **Root cause:** Treating review output as a task list instead of as claims to verify. The agent read "CLAUDE.md:11 still has 6-step loop" and jumped to editing without running `sed -n '11p' CLAUDE.md` first. Reviews are evidence-tagged opinions, not commands. The evidence can be stale by the time you read it - especially when multiple agents are editing the same repo in the same session.
 
@@ -31,12 +34,19 @@ last_reviewed: 2026-07-13
 2. Batch-verify all findings first (`grep`, `sed -n`, `head`), then fix only what's actually broken
 3. Reviews from agents that didn't run the latest code are particularly likely to cite stale evidence
 4. "8 critics agree" does not mean "8 critics are right" - they may all be reading the same stale state
+5. For hook findings, reproduce through the actual agent event path; direct command-string replay is only launcher evidence
 
 ---
 ## Lesson: 14 self-dogfooding bugs survived 9 rounds of critique and 17 milestones
 
 **Status:** active | **Created:** 2026-04-11
+**Incident count:** 2 | **Latest occurrence:** 2026-07-19
+**Decision changed:** Multi-phase skill contracts must extract and compare the producing phase and its output template; whole-file phrase presence is insufficient.
 **What happened:** After M17, 6 external critics independently reviewed the goat-flow framework itself (not installed projects). They found 14 verified bugs that had survived all prior milestones: foundation.ts emitting v1.0, SKILL_TEMPLATES missing goat-sbao, config.yaml referencing a renamed script, README overclaiming hooks, stale test fixtures encoding the wrong skill count, setup fragments still creating coding-standards (removed in M13), classify-state marking "healthy" from version alone, and more. Every bug was a 1-5 line fix.
+
+**Recurrence (2026-07-19):** The goat-qa exhaustive matrix and its Phase 3 headings were contract-tested, but Standard Phase 2 still limited its test-plan mapping and Undertested Risks template to CRITICAL/HIGH, silently dropping MEDIUM High-value gaps at the blocking gate.
+
+**Evidence:** `workflow/skills/goat-qa/SKILL.md` (search: `Exhaustive priority matrix`; `Phase 2 - Gap Analysis`) contained the contradiction; `test/contract/skill-hardening-contracts.test.ts` (search: `carries MEDIUM high-value gaps into goat-qa Standard Phase 2`) now extracts both the phase and output template.
 
 **Name note:** `goat-sbao` was the predecessor of `goat-critique` per ADR-019.
 
@@ -51,6 +61,7 @@ last_reviewed: 2026-07-13
 2. After any rename, grep ALL file types (not just `.ts` and `.md` - also `.yaml`, `.json`, `.sh`)
 3. Periodically invite external review of the goat-flow repo itself, not just installed output
 4. `preflight-checks.sh` should verify SKILL_NAMES count consistency across surfaces
+5. For multi-phase prose contracts, assert that each classified tier reaches the phase and output where users act on it
 
 ---
 ## Lesson: Blindly applying critique recommendations without verifying claims

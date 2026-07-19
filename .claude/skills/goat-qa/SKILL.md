@@ -95,13 +95,11 @@ For each CRITICAL/HIGH change, trace callers, consumers, user-visible flows, dow
 
 ## Phase 2 - Gap Analysis
 
-Compare risk vs coverage in both directions:
-- If a test plan exists, map cases to CRITICAL/HIGH changes and check reverse coverage.
-- If no plan exists, map changed files to automated tests and flag explicit behavior gaps.
-- For each changed file, read the matched test file (if any) and classify using Coverage Depth. If tests are unavailable, record `tests not read` in Verification Integrity.
-- Classify gaps as:
-  - **Undertested risk**
-  - **Misaligned effort**
+Compare risk and coverage bidirectionally:
+- With a test plan, map every case and CRITICAL/HIGH/MEDIUM change in both directions.
+- Without one, map every changed behaviour to automated tests and flag gaps.
+- Read each matched test file and classify coverage depth; record unavailable tests in Verification Integrity.
+- Apply the exhaustive priority matrix to every changed behaviour. Blocking/High-value gaps are **Undertested risk**; evidence-backed test-to-risk mismatches are **Misaligned effort**.
 
 For CRITICAL items with no coverage, annotate why: new path / missed coverage on existing path / hard-to-test.
 
@@ -227,7 +225,7 @@ Output shape depends on the mode declared in Step 0. Pick the template that matc
 | File | Lines Changed | What Changed | Risk | Blast Radius | User-Visible Impact | Proof Class |
 
 ## Gap Analysis
-### Undertested Risks  <!-- CRITICAL/HIGH changes with no or partial test coverage -->
+### Undertested Risks  <!-- Matrix Blocking and High-value pairs -->
 | Code Change | Risk | Coverage Depth | Covered By | Gap | Proof Class |
 
 ### Misaligned Effort  <!-- test cases that don't match code changes in this branch -->

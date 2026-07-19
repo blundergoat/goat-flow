@@ -1135,6 +1135,47 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("carries MEDIUM high-value gaps into goat-qa Standard Phase 2", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      const phase2 = readMarkdownSection(skillPath, "Phase 2 - Gap Analysis");
+      const outputStartMarker =
+        "### Standard mode - Phase 2 output (diff-driven, present at BLOCKING GATE)";
+      const outputEndMarker =
+        "### Standard mode - Phase 3 output (generate only after Phase 2 gate approval)";
+      const outputStartIndex = skillGuidance.indexOf(outputStartMarker);
+      const outputEndIndex = skillGuidance.indexOf(outputEndMarker);
+
+      assert.notEqual(outputStartIndex, -1, skillPath);
+      assert.ok(outputEndIndex > outputStartIndex, skillPath);
+      const standardPhase2Output = skillGuidance.slice(
+        outputStartIndex,
+        outputEndIndex,
+      );
+
+      assert.match(
+        phase2,
+        /map every case and CRITICAL\/HIGH\/MEDIUM change in both directions/u,
+        skillPath,
+      );
+      assert.match(
+        phase2,
+        /Apply the exhaustive priority matrix to every changed behaviour/u,
+        skillPath,
+      );
+      assert.match(
+        standardPhase2Output,
+        /Matrix Blocking and High-value pairs/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        standardPhase2Output,
+        /CRITICAL\/HIGH changes with no or partial test coverage/u,
+        skillPath,
+      );
+    });
+  });
+
   it("labels goat-plan issue examples as non-evidence placeholders", () => {
     const issueFormatPaths = INSTALLED_SKILL_ROOTS.map(
       (skillRoot) => `${skillRoot}/goat-plan/references/issue-format.md`,
