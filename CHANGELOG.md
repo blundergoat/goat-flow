@@ -7,6 +7,9 @@
 - **QA output templates load only when needed** - `/goat-qa` keeps analysis and blocking gates in the hot-path skill, then loads its mirrored Standard and Audit response templates only when rendering the matching phase.
 - **Skill checks describe their actual evidence** - Preflight labels wording and structure checks as static contracts, the optional machine-finding schema no longer claims `/goat-qa` implements it, and mirror/manifest contracts verify the progressive QA reference.
 - **Runtime approval and orientation boundaries cover the implemented surface** - Agent instructions place the complete dashboard server directory behind Ask First, the code map includes managed-setup and deny-enforcement modules, and the learning loop records the workspace/reporting split plus multi-root permission-profile path rules.
+- **Shared-reference loading is described accurately** - Instruction router tables and the shipped playbooks index no longer claim `skill-conventions.md` is composed into every skill; it loads on full-depth only, and `/goat` never loads it.
+- **Orientation docs match the implemented dashboard surface** - The code map lists every `src/cli/server/` and `src/dashboard/` module, and architecture stops describing `src/dashboard/` as HTML and views when it holds about 20 client TypeScript modules.
+- **Stale evidence anchors resolve** - The glossary points `handleQualityCommand` at `src/cli/quality/quality-command.ts`, and the end-to-end deny footgun records that `hooks verify` shipped in 1.14.0 while external-runtime proof stays unbuilt.
 
 ## v1.14.0 - 2026-07-19
 
