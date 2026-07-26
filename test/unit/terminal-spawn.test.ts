@@ -3,6 +3,10 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 
 import {
   buildTerminalSpawnSpec,
@@ -94,5 +98,112 @@ describe("buildTerminalSpawnSpec", () => {
 
     assert.equal(spec.initialInput, null);
     assert.equal(spec.env.GOAT_PROMPT, undefined);
+  });
+
+  it("launches Codex reporting sessions with a restricted permission profile", () => {
+    const spec = buildTerminalSpawnSpec(
+      "codex",
+      "/usr/local/bin/codex",
+      "",
+      { SHELL: "/bin/bash" },
+      "linux",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+
+    const shellCommand = spec.args.join("\n");
+    const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
+    assert.doesNotMatch(shellCommand, /--sandbox danger-full-access/);
+    assert.match(shellCommand, /--ask-for-approval never/);
+    assert.match(shellCommand, /GOAT_CODEX_REPORTING_PROFILE/);
+    assert.match(shellCommand, /default_permissions/);
+    assert.match(profile, /extends=":read-only"/);
+    assert.ok(profile.includes(`${JSON.stringify(process.cwd())}=true`));
+    assert.match(profile, /"\.goat-flow\/logs"="write"/);
+    assert.match(profile, /"\.goat-flow\/logs\/quality\/README\.md"="read"/);
+    assert.match(profile, /"\*\*\/\.env"="deny"/);
+  });
+
+  it("grants build-directory writes only when Git proves they are ignored", () => {
+    const spec = buildTerminalSpawnSpec(
+      "codex",
+      "/usr/local/bin/codex",
+      "",
+      { SHELL: "/bin/bash" },
+      "linux",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+
+    const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
+    assert.match(profile, /"dist"="write"/);
+    assert.doesNotMatch(profile, /"build"="write"/);
+    assert.match(profile, /"\.goat-flow\/plans\/README\.md"="read"/);
+  });
+
+  it("omits shared write roots when their protected layouts differ", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-profile-"));
+    const controllerPath = join(tempRoot, "controller");
+    const targetPath = join(tempRoot, "target");
+    try {
+      for (const rootPath of [controllerPath, targetPath]) {
+        mkdirSync(join(rootPath, ".goat-flow/logs/quality"), {
+          recursive: true,
+        });
+        mkdirSync(join(rootPath, "dist"), { recursive: true });
+        writeFileSync(join(rootPath, ".gitignore"), "dist/\n");
+        writeFileSync(join(rootPath, "dist/local.txt"), "ignored\n");
+        execFileSync("git", ["-C", rootPath, "init", "--quiet"]);
+        execFileSync("git", ["-C", rootPath, "add", ".gitignore"]);
+      }
+      writeFileSync(
+        join(controllerPath, ".goat-flow/logs/quality/custom.md"),
+        "tracked\n",
+      );
+      execFileSync("git", [
+        "-C",
+        controllerPath,
+        "add",
+        ".goat-flow/logs/quality/custom.md",
+      ]);
+
+      const spec = buildTerminalSpawnSpec(
+        "codex",
+        "/usr/local/bin/codex",
+        "",
+        { SHELL: "/bin/bash" },
+        "linux",
+        {
+          accessMode: "reporting",
+          projectPath: controllerPath,
+          targetPath,
+        },
+      );
+
+      const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
+      assert.doesNotMatch(profile, /"\.goat-flow\/logs"="write"/);
+      assert.match(profile, /"dist"="write"/);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps ordinary Codex terminals on the write-enabled dashboard profile", () => {
+    const spec = buildTerminalSpawnSpec(
+      "codex",
+      "/usr/local/bin/codex",
+      "",
+      { SHELL: "/bin/bash" },
+      "linux",
+    );
+
+    assert.match(spec.args.join("\n"), /--sandbox danger-full-access/);
+    assert.equal(spec.env.GOAT_CODEX_REPORTING_PROFILE, undefined);
   });
 });

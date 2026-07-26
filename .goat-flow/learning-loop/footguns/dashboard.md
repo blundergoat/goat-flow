@@ -1,6 +1,6 @@
 ---
 category: dashboard
-last_reviewed: 2026-06-14
+last_reviewed: 2026-07-26
 ---
 
 <!-- Note: pre-v1.8.0 entries below may reference "Gemini"; Antigravity replaced Gemini in v1.8.0. Where the underlying trap shape applies equally to Antigravity (box-bordered menus, selection-bullet glyphs, CUP positioning), the Gemini references are kept as historical evidence. Where they describe current code behavior, they have been updated to Antigravity. -->
@@ -227,24 +227,29 @@ last_reviewed: 2026-06-14
 
 ---
 
-## Footgun: Dashboard-launched Codex must override the default restricted sandbox
+## Footgun: Dashboard-launched Codex access must match the task's write intent
 
-**Status:** active | **Created:** 2026-06-14 | **Evidence:** OBSERVED
+**Status:** active | **Created:** 2026-06-14 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Preserve separate workspace and reporting launch policies; never collapse every dashboard Codex session onto one sandbox shape.
+**Trigger phase:** ACT
 
-**Symptoms:** A Codex session launched from the Workspace terminal fails `bash scripts/preflight-checks.sh` even though Claude Code and a normal terminal pass. The failure shape looks like product regressions at first: four child-process-heavy test files fail, `npm audit` reports `getaddrinfo EAI_AGAIN registry.npmjs.org`, and the package README check reports `spawnSync npm EPERM`.
+**Symptoms:** A write-enabled Codex session launched from the Workspace terminal fails `bash scripts/preflight-checks.sh` when it inherits the default restricted sandbox, while a reporting-only session can modify tracked files if it inherits the blanket `danger-full-access` override. The first failure shape looks like product regressions: child-process-heavy tests fail, registry DNS is unavailable, and nested npm spawns report `EPERM`.
 
 **Evidence:**
-- `src/cli/server/terminal.ts` (search: `CODEX_DASHBOARD_ARGS`) keeps dashboard-launched Codex on `--sandbox danger-full-access`.
-- `src/cli/server/terminal.ts` (search: `terminalRunnerCommand`) is the PTY shell command builder; the previous bare `$GOAT_RUNNER` launch inherited Codex's restricted command sandbox.
+- `src/cli/server/terminal.ts` (search: `CODEX_DASHBOARD_ARGS`) keeps ordinary write-enabled Codex sessions on `--sandbox danger-full-access`; `buildCodexReportingProfile` supplies the restricted reporting alternative.
+- `src/dashboard/dashboard-terminal-paste.ts` (search: `dashboardTerminalAccessMode`) maps prompt and role intent to `workspace` or `reporting`, while retry/reconnect state preserves that decision.
 - `test/smoke/dashboard-endpoints.test.ts` (search: `preflight-capable sandbox`) pins the POSIX and Windows Codex launch shapes.
+- `test/unit/terminal-spawn.test.ts` (search: `restricted permission profile`) pins reporting profile construction and Git-proven ignored-directory admission.
 - Live probe on 2026-06-14: bare `codex doctor --summary` reported `restricted fs + restricted network`, while `codex --sandbox danger-full-access doctor --summary` reported `unrestricted fs + enabled network`.
+- Live profile probe on 2026-07-26: ignored report/build writes exited 0; source, canonical-anchor, dynamic tracked-anchor, rename, and delete attempts exited 1 and left protected files unchanged.
 
-**Why it happens:** The dashboard starts a real agent runner, and the runner owns the command sandbox used by that agent's tool calls. A bare Codex launch can default to restricted filesystem/network behavior, which breaks verification commands that depend on nested Node child processes, `git`, `npm`, and npm registry DNS. The same checkout can pass in Claude Code because Claude's runner is not using Codex's restricted bwrap/seccomp command sandbox.
+**Why it happens:** The dashboard starts a real agent runner, and the runner owns the command sandbox used by that agent's tool calls. Implementation and full verification need nested processes, network, and project writes; quality/reporting prompts need reads plus narrowly admitted local artifacts. A single global override cannot satisfy both contracts.
 
 **Prevention:**
-1. When refactoring `buildTerminalSpawnSpec`, preserve the Codex-specific `--sandbox danger-full-access` launch argument unless Codex provides a safer profile that still permits nested `child_process` calls and npm registry access.
+1. When refactoring `buildTerminalSpawnSpec`, preserve `--sandbox danger-full-access` for workspace sessions and the native read-mostly permission profile for reporting sessions.
 2. For Codex-only preflight failures, run `codex doctor --summary` and a Node `child_process.spawnSync` probe before treating child-process test failures as product regressions.
-3. Do not weaken `scripts/preflight-checks.sh` or skip subprocess tests to satisfy a restricted Codex runner; fix the runner launch/profile instead.
+3. Test both directions: allowed local artifact writes and blocked tracked-file overwrite/rename/delete attempts. Prompt wording alone is not enforcement.
+4. Preserve `accessMode` through create, session metadata, retry, reconnect, and recent-session projection; a dropped field silently returns the session to workspace access.
 
 ---
 

@@ -459,6 +459,7 @@ async function dashboardLaunchPreset(
   const promptLabel = label || preset?.name || "Custom prompt";
   const presetId = preset?.id || options.presetId || null;
   const runnerResolved = runner || ctx.activeRunner;
+  const accessMode = dashboardTerminalAccessMode(preset, ctx.userRole);
   // Preset badges show running state while the terminal session is active.
   if (presetId) ctx.promptRunStates[presetId] = "running";
   let adapted = ctx.adaptPrompt(prompt, runnerResolved);
@@ -480,6 +481,7 @@ async function dashboardLaunchPreset(
     presetId,
     cwdPath: options.cwdPath ?? null,
     targetPath: options.targetPath ?? ctx.projectPath,
+    accessMode,
   });
 }
 
@@ -534,6 +536,7 @@ function dashboardDetachTerminal(
       agent: s.runner,
       cwd: s.cwd,
       targetPath: s.targetPath,
+      accessMode: s.accessMode,
     }));
   if (toSave.length > 0) {
     ctx._projectSessions[savePath] = toSave;
@@ -607,6 +610,7 @@ async function dashboardReconnectTerminal(
       projectPath: alive.projectPath,
       cwd: alive.cwd || saved.cwd || alive.projectPath,
       targetPath: alive.targetPath || saved.targetPath || alive.projectPath,
+      accessMode: alive.accessMode,
       startTime: saved.startTime,
       lastInputTime: alive.lastInputAt,
       connected: false,
@@ -627,6 +631,7 @@ async function dashboardReconnectTerminal(
       retryPresetId: null,
       retryCwdPath: session.cwd,
       retryTargetPath: session.targetPath,
+      retryAccessMode: session.accessMode,
     };
     dashboardArmTerminalLoadingTimers(ctx, session.id, session);
   }
@@ -656,11 +661,13 @@ async function dashboardLaunchInTerminal(
     presetId = null,
     cwdPath = null,
     targetPath = null,
+    accessMode = "workspace",
   }: {
     promptLabel?: string | null;
     presetId?: string | null;
     cwdPath?: string | null;
     targetPath?: string | null;
+    accessMode?: TerminalAccessMode;
   } = {},
 ): Promise<void> {
   if (
@@ -694,6 +701,7 @@ async function dashboardLaunchInTerminal(
         projectPath: controllingCwd,
         targetPath: selectedTargetPath,
         runner,
+        accessMode,
       }),
     });
     const payload = readRecord(await res.json(), "Terminal create response");
@@ -711,6 +719,7 @@ async function dashboardLaunchInTerminal(
       projectPath: selectedTargetPath,
       cwd: controllingCwd,
       targetPath: selectedTargetPath,
+      accessMode,
       startTime: Date.now(),
       lastInputTime: Date.now(),
       connected: false,
@@ -732,6 +741,7 @@ async function dashboardLaunchInTerminal(
       retryPresetId: presetId,
       retryCwdPath: controllingCwd,
       retryTargetPath: selectedTargetPath,
+      retryAccessMode: accessMode,
     };
     dashboardArmTerminalLoadingTimers(ctx, session.id, session);
     ctx.activeSessionId = session.id;

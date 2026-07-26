@@ -379,6 +379,16 @@ function dashboardHandlePasteSubmitOutput(
   }
 }
 
+/** Resolve the terminal filesystem mode from preset intent and investigator posture. */
+function dashboardTerminalAccessMode(
+  preset: Preset | null,
+  userRole: string,
+): TerminalAccessMode {
+  return preset?.mayWriteFiles === true && userRole !== "investigator"
+    ? "workspace"
+    : "reporting";
+}
+
 /** Build target context appended to launched preset prompts. */
 function dashboardGlobalLaunchContext(
   ctx: DashboardTerminalContext,
@@ -386,13 +396,16 @@ function dashboardGlobalLaunchContext(
   preset: Preset | null,
 ): string {
   const controllingWorkspace = dashboardControllingWorkspace();
-  const mayWrite = preset?.mayWriteFiles === true;
+  const accessMode = dashboardTerminalAccessMode(preset, ctx.userRole);
   const presetPrompt = preset?.prompt.trim() ?? "";
   // Launched prompts may suggest learning-loop follow-up, but automatic
   // durable lesson/footgun/pattern/decision writes require opted-in CLI capture.
-  const writeLine = mayWrite
-    ? "Write behavior: this preset may write only after the prompt or user explicitly approves it."
-    : "Write behavior: default to read-only analysis; do not write files in the selected target unless the user explicitly asks.";
+  const writeLine =
+    accessMode === "workspace"
+      ? "Write behavior: this preset may write only after the prompt or user explicitly approves it."
+      : runner === "codex"
+        ? "Write behavior: this terminal is reporting-only. Local report/build artifacts may be written, but the Codex permission profile blocks tracked project writes; start a write-enabled preset or manual session for implementation."
+        : "Write behavior: this terminal is reporting-only. Do not write tracked project files; this runner relies on prompt and hook guardrails rather than the Codex filesystem profile.";
   const routeLine =
     preset?.route === "goat-plan" && /^\/goat-plan\b/.test(presetPrompt)
       ? "goat-plan global mode: honor Step 0 modes; analysis/path-only stay read-only, while File-Write modes may create target .goat-flow/plans when this preset allows writes or the prompt explicitly requests files."

@@ -14,7 +14,7 @@ import {
   decodeTerminalCreateBody,
   decodeTerminalUploadBody,
 } from "./decoders.js";
-import type { Runner } from "./types.js";
+import type { Runner, TerminalAccessMode } from "./types.js";
 import type { TerminalManager } from "./terminal.js";
 import { MAX_SESSIONS } from "./terminal.js";
 import {
@@ -65,6 +65,7 @@ interface DecodedTerminalCreate {
   projectPath: string;
   targetPath: string;
   runner: Runner;
+  accessMode: TerminalAccessMode;
 }
 
 /**
@@ -151,12 +152,15 @@ export function createDashboardTerminalHandlers(
     manager: TerminalManager,
     decoded: DecodedTerminalCreate,
   ) {
-    const { prompt, projectPath, targetPath, runner } = decoded;
+    const { prompt, projectPath, targetPath, runner, accessMode } = decoded;
     const result = await manager.create(
       prompt,
       projectPath || absDefault,
       runner,
-      { targetPath: targetPath || projectPath || absDefault },
+      {
+        targetPath: targetPath || projectPath || absDefault,
+        accessMode,
+      },
     );
     const session = manager.get(result.id);
     return {
@@ -173,12 +177,13 @@ export function createDashboardTerminalHandlers(
     session: ReturnType<TerminalManager["get"]>,
     resolvedTargetPath: string,
   ): void {
-    const { prompt, projectPath, runner } = decoded;
+    const { prompt, projectPath, runner, accessMode } = decoded;
     recordTerminalEvent(resolvedTargetPath, "terminal.create", {
       session_id: sessionId,
       runner,
       cwd: session?.cwd || projectPath || absDefault,
       target_path: resolvedTargetPath,
+      access_mode: accessMode,
     });
     if (prompt.trim().length > 0) {
       recordTerminalEvent(resolvedTargetPath, "prompt.launch", {

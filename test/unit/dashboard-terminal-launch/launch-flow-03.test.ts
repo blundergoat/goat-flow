@@ -45,6 +45,7 @@ function makePreOutputRetryHarness(): {
     cwd: "/tmp/example",
     targetPath: "/tmp/target",
     loadingPhase: "connecting",
+    accessMode: "reporting",
   });
   const ctx = makeContext({
     activeSessionId: "session-error",
@@ -56,6 +57,7 @@ function makePreOutputRetryHarness(): {
         retryPresetId: "preset-setup",
         retryCwdPath: "/tmp/example",
         retryTargetPath: "/tmp/target",
+        retryAccessMode: "reporting",
         // Stub that records the backend-shell teardown the retry path must perform before relaunching.
         cleanup(): void {
           calls.push("cleanup:session-error");
@@ -362,6 +364,7 @@ describe("dashboard terminal launch flow", () => {
           presetId: "preset-setup",
           cwdPath: "/tmp/example",
           targetPath: "/tmp/target",
+          accessMode: "reporting",
         },
       },
     ]);
@@ -475,6 +478,7 @@ describe("dashboard terminal launch flow", () => {
       projectPath: "/tmp/example",
       cwd: "/tmp/example",
       targetPath: "/tmp/example",
+      accessMode: "workspace",
       lastInputAt: Date.now(),
     });
 

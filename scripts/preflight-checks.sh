@@ -368,7 +368,7 @@ phase_for() {
         "Shell Scripts"|"TypeScript") printf 'STATIC' ;;
         "Deny Policy"|"ADR Enforcement"|"Gruff Policy") printf 'POLICY' ;;
         "Agent Config Parity"|"Skill and Reference Versions"|"Version Consistency") printf 'CONFIG INTEGRITY' ;;
-        "Skill Behavioral Contracts"|"Reference Budgets"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
+        "Skill Static Contracts"|"Reference Budgets"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
         "Tests"|"Dependency Audit") printf 'TESTS' ;;
         "GOAT Flow Audit"|"Learning-Loop Schema"|"Doc/Code Drift"|"Content Drift"|"Skill Docs Sync"|"Skill SKILL.md Parity") printf 'DRIFT' ;;
         "Path Integrity"|"Markdown Links"|"Package README Links") printf 'LINKS' ;;
@@ -386,7 +386,7 @@ display_for() {
         "Agent Config Parity") printf 'Agent config parity' ;;
         "Skill and Reference Versions") printf 'Skill versions' ;;
         "Version Consistency") printf 'Version consistency' ;;
-        "Skill Behavioral Contracts") printf 'Skill behavioural' ;;
+        "Skill Static Contracts") printf 'Skill static' ;;
         "Reference Budgets") printf 'Reference budgets' ;;
         "Cross-Agent Consistency") printf 'Cross-agent' ;;
         "Instruction Parity Contract") printf 'Instruction parity' ;;
@@ -416,7 +416,7 @@ collapsed_desc_for() {
         "Agent Config Parity") printf 'claude · codex · antigravity · copilot' ;;
         "Skill and Reference Versions") printf 'templates + installed match version' ;;
         "Version Consistency") printf 'package.json · config.yaml' ;;
-        "Skill Behavioral Contracts") printf 'goat-critique invocation' ;;
+        "Skill Static Contracts") printf 'skill wording and structure' ;;
         "Reference Budgets") printf 'ADR-023 headroom' ;;
         "Cross-Agent Consistency") printf 'execution loop · router table' ;;
         "Instruction Parity Contract") printf 'agent files share contract' ;;
@@ -519,7 +519,7 @@ _compute_widths() {
         "Shell Scripts" "TypeScript"
         "Deny Policy" "ADR Enforcement" "Gruff Policy"
         "Agent Config Parity" "Skill and Reference Versions" "Version Consistency"
-        "Skill Behavioral Contracts" "Cross-Agent Consistency"
+        "Skill Static Contracts" "Cross-Agent Consistency"
         "Reference Budgets"
         "Instruction Parity Contract" "Instruction File Quality"
         "Tests"
@@ -1368,8 +1368,8 @@ else
     skip "Version check (missing package.json)"
 fi
 
-# ── Skill Behavioral Contracts ───────────────────────────────────────
-section "Skill Behavioral Contracts"
+# ── Skill Static Contracts ───────────────────────────────────────────
+section "Skill Static Contracts"
 contract_ok=true
 bad_goat_critique_patterns=(
     "Exception: on C""odex"

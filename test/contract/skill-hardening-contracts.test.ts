@@ -85,6 +85,16 @@ function installedSkillPaths(skillName: string): string[] {
   );
 }
 
+/** Builds every installed path for one progressive skill reference. */
+function installedSkillReferencePaths(
+  skillName: string,
+  referencePath: string,
+): string[] {
+  return INSTALLED_SKILL_ROOTS.map(
+    (skillRoot) => `${skillRoot}/${skillName}/${referencePath}`,
+  );
+}
+
 /**
  * Applies one contract to every user-facing target while preserving its failure label.
  * Use this for mirror parity rather than accepting one correct installation as enough.
@@ -919,13 +929,75 @@ describe("skill hardening contracts", () => {
         /gap analysis plus Verification Integrity/,
         skillPath,
       );
+    });
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      (referencePath) => {
+        const outputTemplates = readProjectFile(referencePath);
+        assert.match(
+          outputTemplates,
+          /Intent spec: \[PR\/issue\/test plan URL or `no-intent-spec`\]/,
+          referencePath,
+        );
+        assert.match(outputTemplates, /Evidence limit:/, referencePath);
+      },
+    );
+  });
+
+  it("loads goat-qa output templates progressively from mirrored references", () => {
+    assertForEachTarget(INSTALLED_SKILL_ROOTS, (skillRoot) => {
+      const skillPath = `${skillRoot}/goat-qa/SKILL.md`;
+      const referencePath = `${skillRoot}/goat-qa/references/output-templates.md`;
+      const skillGuidance = readProjectFile(skillPath);
+      const outputTemplates = readProjectFile(referencePath);
+
       assert.match(
-        skillGuidance,
-        /Intent spec: \[PR\/issue\/test plan URL or `no-intent-spec`\]/,
+        readMarkdownSection(skillPath, "Output Format"),
+        /After analysis, read `references\/output-templates\.md`/,
         skillPath,
       );
-      assert.match(skillGuidance, /Evidence limit:/, skillPath);
+      assert.match(
+        outputTemplates,
+        /### Standard mode - Phase 2 output/,
+        referencePath,
+      );
+      assert.match(outputTemplates, /### Audit post-gate plan/, referencePath);
     });
+
+    const manifest = JSON.parse(readProjectFile("workflow/manifest.json")) as {
+      skills: { references: Record<string, string[]> };
+    };
+    assert.deepStrictEqual(manifest.skills.references["goat-qa"], [
+      "references/output-templates.md",
+    ]);
+  });
+
+  it("keeps optional machine findings distinct from goat-qa Markdown output", () => {
+    assertForEachTarget(
+      [
+        "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md",
+        ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
+      ],
+      (referencePath) => {
+        const guidance = readProjectFile(referencePath);
+        assert.match(
+          guidance,
+          /Use this optional schema only when a real downstream consumer requires machine-readable findings/,
+          referencePath,
+        );
+        assert.match(
+          guidance,
+          /`\/goat-qa` skill \| Human-readable gap tables; not an implementation of the optional JSON schema/,
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("labels the preflight goat-critique wording gate as static", () => {
+    const preflight = readProjectFile("scripts/preflight-checks.sh");
+    assert.match(preflight, /section "Skill Static Contracts"/);
+    assert.doesNotMatch(preflight, /Skill Behavioral Contracts/);
   });
 
   it("routes goat-qa by evidence scope before generic gap vocabulary", () => {
@@ -963,43 +1035,46 @@ describe("skill hardening contracts", () => {
   it("keeps goat-qa Audit priorities coherent through the post-gate plan", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
-      const auditPostGateHeading =
-        "### Audit post-gate plan (after A4 approval)";
       assert.match(
         skillGuidance,
         /Audit uses "Blocking \/ High-value \/ Defer"/,
         skillPath,
       );
-      assert.notEqual(
-        skillGuidance.indexOf(auditPostGateHeading),
-        -1,
-        skillPath,
-      );
-      const auditPostGateTemplate = skillGuidance.slice(
-        skillGuidance.indexOf(auditPostGateHeading),
-      );
-      assert.match(auditPostGateTemplate, /### Blocking gaps/, skillPath);
-      assert.match(
-        auditPostGateTemplate,
-        /### High-value additions/,
-        skillPath,
-      );
-      assert.match(auditPostGateTemplate, /### Defer/, skillPath);
       assert.doesNotMatch(
         readMarkdownSection(skillPath, "Constraints"),
         /MUST produce "must test \/ should test \/ safe to skip"/,
         skillPath,
       );
     });
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      (referencePath) => {
+        const outputTemplates = readProjectFile(referencePath);
+        const auditPostGateHeading =
+          "### Audit post-gate plan (after A4 approval)";
+        assert.notEqual(
+          outputTemplates.indexOf(auditPostGateHeading),
+          -1,
+          referencePath,
+        );
+        const auditPostGateTemplate = outputTemplates.slice(
+          outputTemplates.indexOf(auditPostGateHeading),
+        );
+        assert.match(auditPostGateTemplate, /### Blocking gaps/, referencePath);
+        assert.match(
+          auditPostGateTemplate,
+          /### High-value additions/,
+          referencePath,
+        );
+        assert.match(auditPostGateTemplate, /### Defer/, referencePath);
+      },
+    );
   });
 
   it("makes goat-qa Audit mode assess misaligned effort without inventing it", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
-      const skillGuidance = readProjectFile(skillPath);
       const auditMode = readMarkdownSection(skillPath, "Audit Mode");
       const constraints = readMarkdownSection(skillPath, "Constraints");
-      const auditOutputHeading = "### Audit mode (no diff - A1–A4 shape)";
-      const auditOutputIndex = skillGuidance.indexOf(auditOutputHeading);
 
       assert.match(
         auditMode,
@@ -1021,17 +1096,25 @@ describe("skill hardening contracts", () => {
         /MUST assess gaps in BOTH directions/u,
         skillPath,
       );
-      assert.notEqual(
-        auditOutputIndex,
-        -1,
-        `${skillPath}: missing Audit output`,
-      );
-      assert.match(
-        skillGuidance.slice(auditOutputIndex),
-        /### Misaligned effort/u,
-        skillPath,
-      );
     });
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      (referencePath) => {
+        const outputTemplates = readProjectFile(referencePath);
+        const auditOutputHeading = "### Audit mode (no diff - A1–A4 shape)";
+        const auditOutputIndex = outputTemplates.indexOf(auditOutputHeading);
+        assert.notEqual(
+          auditOutputIndex,
+          -1,
+          `${referencePath}: missing Audit output`,
+        );
+        assert.match(
+          outputTemplates.slice(auditOutputIndex),
+          /### Misaligned effort/u,
+          referencePath,
+        );
+      },
+    );
   });
 
   it("classifies goat-qa Audit coverage per named behaviour or invariant", () => {
@@ -1062,12 +1145,7 @@ describe("skill hardening contracts", () => {
 
   it("keeps covered behaviours from deferring uncovered siblings", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
-      const skillGuidance = readProjectFile(skillPath);
       const auditMode = readMarkdownSection(skillPath, "Audit Mode");
-      const auditOutputHeading = "### Audit mode (no diff - A1–A4 shape)";
-      const auditOutput = skillGuidance.slice(
-        skillGuidance.indexOf(auditOutputHeading),
-      );
 
       assert.match(
         auditMode,
@@ -1080,12 +1158,22 @@ describe("skill hardening contracts", () => {
         /A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file/u,
         skillPath,
       );
-      assert.match(
-        auditOutput,
-        /\| File \| Behaviour \/ Invariant \| Risk \| Test file \| Coverage \| Notes \| Proof Class \|/u,
-        skillPath,
-      );
     });
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      (referencePath) => {
+        const outputTemplates = readProjectFile(referencePath);
+        const auditOutputHeading = "### Audit mode (no diff - A1–A4 shape)";
+        const auditOutput = outputTemplates.slice(
+          outputTemplates.indexOf(auditOutputHeading),
+        );
+        assert.match(
+          auditOutput,
+          /\| File \| Behaviour \/ Invariant \| Risk \| Test file \| Coverage \| Notes \| Proof Class \|/u,
+          referencePath,
+        );
+      },
+    );
   });
 
   it("routes every goat-qa risk and coverage combination exhaustively", () => {
@@ -1117,41 +1205,33 @@ describe("skill hardening contracts", () => {
         /Illustrative scenario - input\/output shape only; never evidence/,
         skillPath,
       );
-      assert.match(
-        skillGuidance,
-        /### Must test before shipping  <!-- Matrix Blocking pairs/,
-        skillPath,
-      );
-      assert.match(
-        skillGuidance,
-        /### Should test if time allows  <!-- Matrix High-value pairs/,
-        skillPath,
-      );
       assert.doesNotMatch(
         skillGuidance,
         /content-integrity helper with no unit, integration, or exported-symbol references is genuinely NONE/,
         skillPath,
       );
     });
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      (referencePath) => {
+        const outputTemplates = readProjectFile(referencePath);
+        assert.match(
+          outputTemplates,
+          /### Must test before shipping  <!-- Matrix Blocking pairs/,
+          referencePath,
+        );
+        assert.match(
+          outputTemplates,
+          /### Should test if time allows  <!-- Matrix High-value pairs/,
+          referencePath,
+        );
+      },
+    );
   });
 
   it("carries MEDIUM high-value gaps into goat-qa Standard Phase 2", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
-      const skillGuidance = readProjectFile(skillPath);
       const phase2 = readMarkdownSection(skillPath, "Phase 2 - Gap Analysis");
-      const outputStartMarker =
-        "### Standard mode - Phase 2 output (diff-driven, present at BLOCKING GATE)";
-      const outputEndMarker =
-        "### Standard mode - Phase 3 output (generate only after Phase 2 gate approval)";
-      const outputStartIndex = skillGuidance.indexOf(outputStartMarker);
-      const outputEndIndex = skillGuidance.indexOf(outputEndMarker);
-
-      assert.notEqual(outputStartIndex, -1, skillPath);
-      assert.ok(outputEndIndex > outputStartIndex, skillPath);
-      const standardPhase2Output = skillGuidance.slice(
-        outputStartIndex,
-        outputEndIndex,
-      );
 
       assert.match(
         phase2,
@@ -1163,17 +1243,36 @@ describe("skill hardening contracts", () => {
         /Apply the exhaustive priority matrix to every changed behaviour/u,
         skillPath,
       );
-      assert.match(
-        standardPhase2Output,
-        /Matrix Blocking and High-value pairs/u,
-        skillPath,
-      );
-      assert.doesNotMatch(
-        standardPhase2Output,
-        /CRITICAL\/HIGH changes with no or partial test coverage/u,
-        skillPath,
-      );
     });
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      (referencePath) => {
+        const outputTemplates = readProjectFile(referencePath);
+        const outputStartMarker =
+          "### Standard mode - Phase 2 output (diff-driven, present at BLOCKING GATE)";
+        const outputEndMarker =
+          "### Standard mode - Phase 3 output (generate only after Phase 2 gate approval)";
+        const outputStartIndex = outputTemplates.indexOf(outputStartMarker);
+        const outputEndIndex = outputTemplates.indexOf(outputEndMarker);
+
+        assert.notEqual(outputStartIndex, -1, referencePath);
+        assert.ok(outputEndIndex > outputStartIndex, referencePath);
+        const standardPhase2Output = outputTemplates.slice(
+          outputStartIndex,
+          outputEndIndex,
+        );
+        assert.match(
+          standardPhase2Output,
+          /Matrix Blocking and High-value pairs/u,
+          referencePath,
+        );
+        assert.doesNotMatch(
+          standardPhase2Output,
+          /CRITICAL\/HIGH changes with no or partial test coverage/u,
+          referencePath,
+        );
+      },
+    );
   });
 
   it("labels goat-plan issue examples as non-evidence placeholders", () => {
@@ -1584,18 +1683,24 @@ describe("skill hardening contracts", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, proofClassContract, skillPath);
-      assert.match(
-        skillGuidance,
-        /\| File \| Lines Changed[^\n]+\| Proof Class \|/,
-        skillPath,
-      );
-      assert.match(
-        skillGuidance,
-        /\| Code Change \| Risk[^\n]+\| Proof Class \|/,
-        skillPath,
-      );
-      assert.match(skillGuidance, /Proof classes:/, skillPath);
     });
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      (referencePath) => {
+        const outputTemplates = readProjectFile(referencePath);
+        assert.match(
+          outputTemplates,
+          /\| File \| Lines Changed[^\n]+\| Proof Class \|/,
+          referencePath,
+        );
+        assert.match(
+          outputTemplates,
+          /\| Code Change \| Risk[^\n]+\| Proof Class \|/,
+          referencePath,
+        );
+        assert.match(outputTemplates, /Proof classes:/, referencePath);
+      },
+    );
 
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);

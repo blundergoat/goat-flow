@@ -414,6 +414,7 @@ async function dashboardRetryTerminalSession(
   const presetId = refs?.retryPresetId ?? session.presetId;
   const cwdPath = refs?.retryCwdPath ?? session.cwd;
   const targetPath = refs?.retryTargetPath ?? session.targetPath;
+  const accessMode = refs?.retryAccessMode ?? session.accessMode;
 
   dashboardClearTerminalLoadingTimers(ctx, sessionId);
   if (refs?.cleanup) refs.cleanup();
@@ -429,6 +430,7 @@ async function dashboardRetryTerminalSession(
     presetId,
     cwdPath,
     targetPath,
+    accessMode,
   });
 }
 
@@ -462,6 +464,7 @@ async function dashboardOpenServerSession(
         retryPresetId: null,
         retryCwdPath: local.cwd,
         retryTargetPath: local.targetPath,
+        retryAccessMode: local.accessMode,
       };
       dashboardArmTerminalLoadingTimers(ctx, local.id, local);
       const self = ctx as DashboardTerminalContext &
@@ -482,6 +485,7 @@ async function dashboardOpenServerSession(
     projectPath: serverSession.projectPath,
     cwd: serverSession.cwd,
     targetPath: serverSession.targetPath,
+    accessMode: serverSession.accessMode,
     startTime: new Date(serverSession.createdAt).getTime(),
     lastInputTime: serverSession.lastInputAt || Date.now(),
     connected: false,
@@ -502,6 +506,7 @@ async function dashboardOpenServerSession(
     retryPresetId: null,
     retryCwdPath: session.cwd,
     retryTargetPath: session.targetPath,
+    retryAccessMode: session.accessMode,
   };
   dashboardArmTerminalLoadingTimers(ctx, session.id, session);
   ctx.activeSessionId = session.id;

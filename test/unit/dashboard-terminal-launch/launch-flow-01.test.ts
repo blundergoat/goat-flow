@@ -58,6 +58,32 @@ function makeRequestedSessionRoutingHarness(): {
 }
 
 describe("dashboard terminal launch flow", () => {
+  it("maps read-only presets and investigator sessions to reporting access", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+
+    assert.equal(
+      helpers.dashboardTerminalAccessMode({ mayWriteFiles: false }, "builder"),
+      "reporting",
+    );
+    assert.equal(
+      helpers.dashboardTerminalAccessMode({ mayWriteFiles: true }, "builder"),
+      "workspace",
+    );
+    assert.equal(
+      helpers.dashboardTerminalAccessMode(
+        { mayWriteFiles: true },
+        "investigator",
+      ),
+      "reporting",
+    );
+    assert.equal(
+      helpers.dashboardTerminalAccessMode(null, "builder"),
+      "reporting",
+    );
+  });
+
   it("keeps controlling cwd and selected target separate in terminal create payloads", async () => {
     const createBodies: unknown[] = [];
     const helpers = loadHelpers(async (input, init) => {
@@ -80,6 +106,7 @@ describe("dashboard terminal launch flow", () => {
       cwdPath: "/tmp/controlling-goat-flow",
       targetPath: "/tmp/selected-target",
       promptLabel: "Boundary check",
+      accessMode: "reporting",
     });
 
     assert.deepStrictEqual(createBodies, [
@@ -88,11 +115,13 @@ describe("dashboard terminal launch flow", () => {
         projectPath: "/tmp/controlling-goat-flow",
         targetPath: "/tmp/selected-target",
         runner: "claude",
+        accessMode: "reporting",
       },
     ]);
     assert.equal(ctx.sessions[0]?.cwd, "/tmp/controlling-goat-flow");
     assert.equal(ctx.sessions[0]?.targetPath, "/tmp/selected-target");
     assert.equal(ctx.sessions[0]?.projectPath, "/tmp/selected-target");
+    assert.equal(ctx.sessions[0]?.accessMode, "reporting");
   });
 
   it("sends terminal text to the requested session instead of the current active tab", async () => {

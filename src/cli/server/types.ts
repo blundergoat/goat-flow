@@ -30,6 +30,9 @@ export type SessionStatus = "starting" | "active" | "terminated";
 /** Supported CLI runners that can be spawned in a terminal session. */
 export type Runner = AgentId;
 
+/** Filesystem access selected when the dashboard starts a runner session. */
+export type TerminalAccessMode = "workspace" | "reporting";
+
 /** Metadata for an active or recently terminated terminal session. */
 export interface SessionInfo {
   id: string;
@@ -42,6 +45,8 @@ export interface SessionInfo {
   /** Explicit target project path passed to the launched agent. */
   targetPath: string;
   runner: Runner;
+  /** Reporting sessions restrict Codex to reads plus known local artifact paths. */
+  accessMode: TerminalAccessMode;
   /** Epoch milliseconds of last user input (for idle duration calculation) */
   lastInputAt: number;
 }

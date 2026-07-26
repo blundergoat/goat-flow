@@ -1,11 +1,11 @@
 ---
 category: hooks
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-26
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-dangerous.md](deny-dangerous.md).
 
-**Last independent review:** 2026-07-17 - Optional-hook migration and configured-analyzer diagnostics were re-run against their focused regression anchors and moved to Resolved. Other active entries were not reclassified by that check.
+**Last independent review:** 2026-07-26 - Codex reporting-profile path admission was runtime-probed for allowed local writes, blocked tracked writes, and absent-path startup failures. Other active entries were not reclassified by that check.
 
 ## Footgun: Hook toggles can scaffold uninstalled agent surfaces
 
@@ -117,10 +117,12 @@ last_reviewed: 2026-07-17
 ## Footgun: Codex permission profiles must match the local CLI grammar
 
 **Status:** active | **Created:** 2026-05-19 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Admit writable subpaths only after checking their real layout, then exercise the generated profile with an allowed and denied runtime write.
+**Trigger phase:** VERIFY
 
-**Symptoms:** Codex warns or fails before shell startup when the profile names a workspace-root token, access value, or base-profile shape the runtime can't load. On 0.136.0, the old profile that set `"." = "write"` and `"secrets/**" = "none"` under `:workspace_roots` failed before startup with the `bwrap: execvp ... codex: No such file or directory` error (full string in evidence). On 0.131.0, `:project_roots` was ignored and absent exact entries (`.env.example`, `.docker/config.json`, `.kube/config`) could break startup. The TOML can still look like it denies `.env`, `.ssh/**`, `.aws/**`, and credential roots, so static review misses that Codex discarded the rules or built a namespace that can't see its own managed binary.
+**Symptoms:** Codex warns or fails before shell startup when the profile names a workspace-root token, access value, base-profile shape, or exact path the runtime can't load. On 0.136.0, the old profile that set `"." = "write"` and `"secrets/**" = "none"` under `:workspace_roots` failed before startup with the `bwrap: execvp ... codex: No such file or directory` error (full string in evidence). On 0.131.0, `:project_roots` was ignored and absent exact entries (`.env.example`, `.docker/config.json`, `.kube/config`) could break startup. On 0.145.0, a generated reporting profile that named absent `.goat-flow/plans` and `.goat-flow/scratchpad` write roots failed every command with `bwrap: Can't create file ... Read-only file system`.
 
-**Why it happens:** Codex permission grammar is version-sensitive. On 0.136.0, rebuilding the workspace profile from raw `:workspace_roots` entries instead of extending `:workspace` with `deny` omits Codex-managed runtime paths from the bwrap namespace, hiding Codex's own binary. On 0.131.0 the workspace token was `:workspace_roots` (not `:project_roots`) and exact workspace-root entries had to name files present in the checkout. A profile can be syntactically plausible yet unlaunchable for the installed version.
+**Why it happens:** Codex permission grammar is version-sensitive. On 0.136.0, rebuilding the workspace profile from raw `:workspace_roots` entries instead of extending `:workspace` with `deny` omits Codex-managed runtime paths from the bwrap namespace, hiding Codex's own binary. On 0.131.0 the workspace token was `:workspace_roots` (not `:project_roots`) and exact workspace-root entries had to name files present in the checkout. Exact rules are materialized for every selected workspace root, so a path present in one root but absent in another can also abort startup. A profile can be syntactically plausible yet unlaunchable for the installed version.
 
 **Evidence:**
 - `.codex/config.toml` (search: `extends = ":workspace"`) - installed config now extends Codex's built-in workspace profile and uses `deny` entries; `workflow/hooks/agent-config/codex.toml` (search: `extends = ":workspace"`) is the install template mirroring that loadable shape.
@@ -128,6 +130,8 @@ last_reviewed: 2026-07-17
 - `src/cli/facts/agent/settings.ts` (search: `isCodexDenyMode`) - audit fact extraction recognizes both legacy `none` and current `deny` entries; `src/cli/audit/check-agent-setup.ts` (search: `checkCodexWorkspaceRootExactPaths`) - audit fails when Codex config lists absent exact workspace-root paths.
 - Runtime capture 2026-06-04: `codex sandbox --permissions-profile goat-flow -C /home/devgoat/projects/goat-flow pwd` failed with `bwrap: execvp .../vendor/x86_64-unknown-linux-musl/bin/codex: No such file or directory`; same command succeeded when the profile was supplied as `permissions.goat-flow={extends=":workspace", filesystem={... "blocked/**"="deny"}}`.
 - 2026-05-19 startup failure showed repeated `':project_roots' is not recognized by this version of Codex and will be ignored` warnings; a binary probe that day found `:workspace_roots` (and no `:project_roots`) in Codex 0.131.0's embedded schema.
+- `src/cli/server/terminal.ts` (search: `sharedProtectedPaths`) now admits a reporting write root only when it exists and has the same protected-file layout across all selected roots; `isGitIgnoredPath` separately gates build-directory candidates.
+- Runtime capture 2026-07-26 on Codex 0.145.0: the pre-fix generated profile failed allowed report/build writes because an absent exact local-state rule prevented bwrap startup; after layout filtering, allowed writes exited 0 while tracked overwrite/rename/delete probes exited 1.
 
 **Prevention:**
 1. For Codex 0.136+, make goat-flow profiles extend `:workspace` and use `deny` access entries; don't rebuild workspace write access with `"." = "write"` and `none`.
@@ -135,6 +139,8 @@ last_reviewed: 2026-07-17
 3. Verify Codex config changes with `codex sandbox --permissions-profile goat-flow -C <project> pwd` as well as `codex doctor`; install health alone misses project-profile namespace failures.
 4. Keep `.codex/config.toml`, `workflow/hooks/agent-config/codex.toml`, and `src/cli/facts/agent/settings.ts` in the same patch whenever Codex permission grammar changes.
 5. Treat Codex permission-profile secret coverage as a loadable set, not a future-file deny list. Prefer recursive `deny` globs that leave `.env.example` readable over absent exact root-file entries.
+6. For generated multi-root profiles, include only real shared directories with identical protected-file layouts; prove candidate build paths are Git-ignored in every root before granting writes.
+7. Runtime-probe one allowed write and blocked tracked overwrite/rename/delete. String assertions and `doctor` output do not prove path materialization succeeds.
 
 ## Footgun: Codex config preservation can leave old permission profiles behind
 

@@ -92,6 +92,7 @@ interface DashboardTerminalContext extends Record<
       presetId?: string | null;
       cwdPath?: string | null;
       targetPath?: string | null;
+      accessMode?: TerminalAccessMode;
     },
   ): Promise<void>;
   /** Load xterm assets once before a browser terminal attaches. */
@@ -176,6 +177,7 @@ function dashboardRememberRecentSession(
     cwd: session.cwd,
     targetPath: session.targetPath,
     runner: session.runner,
+    accessMode: session.accessMode,
     lastInputAt: session.lastInputTime,
     age: Math.max(0, Math.floor((Date.now() - session.startTime) / 1000)),
     projectName: ctx.displayNameFor(session.projectPath),

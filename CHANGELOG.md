@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Dashboard terminals separate reporting from workspace access** - Non-writing and unclassified preset launches plus investigator sessions request `reporting`; write-enabled presets and ordinary direct sessions retain `workspace`, while the API defaults omitted modes to `workspace` and preserves the selected mode through listings, reconnects, and retries.
+- **Codex reporting terminals enforce tracked-file read-only access** - A per-session native profile keeps selected project roots and network access readable, permits goat-flow local artifacts plus real shared build paths Git proves ignored in every selected root, carves tracked anchors back to read-only, denies secret paths, and disables approval escalation; other runners continue to rely on reporting prompts and hook guardrails.
+- **QA output templates load only when needed** - `/goat-qa` keeps analysis and blocking gates in the hot-path skill, then loads its mirrored Standard and Audit response templates only when rendering the matching phase.
+- **Skill checks describe their actual evidence** - Preflight labels wording and structure checks as static contracts, the optional machine-finding schema no longer claims `/goat-qa` implements it, and mirror/manifest contracts verify the progressive QA reference.
+- **Runtime approval and orientation boundaries cover the implemented surface** - Agent instructions place the complete dashboard server directory behind Ask First, the code map includes managed-setup and deny-enforcement modules, and the learning loop records the workspace/reporting split plus multi-root permission-profile path rules.
+
 ## v1.14.0 - 2026-07-19
 
 - **BREAKING: skill scaffolding now requires failing RED evidence** - Capture `.goat-flow/logs/sessions/YYYY-MM-DD-<name>-tdd.md` first and pass it with `skill new --red-log`; playbook scaffolding and draft validation are unchanged.

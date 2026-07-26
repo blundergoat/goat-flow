@@ -310,7 +310,8 @@
         "references/file-upload-and-paths.md",
         "references/supply-chain-and-cicd.md",
         "references/project-policy-template.md"
-      ]
+      ],
+      "goat-qa": ["references/output-templates.md"]
     },
     "stale_names": [
       "goat-audit",

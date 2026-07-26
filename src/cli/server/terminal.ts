@@ -3,7 +3,8 @@
  * It validates runner and project inputs, spawns CLI sessions, and brokers WebSocket traffic.
  */
 import { randomUUID } from "node:crypto";
-import { extname } from "node:path";
+import { lstatSync } from "node:fs";
+import { extname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { WebSocket } from "ws";
 import type {
@@ -13,6 +14,7 @@ import type {
   HealthResponse,
   ServerMessage,
   Runner,
+  TerminalAccessMode,
 } from "./types.js";
 import { decodeClientMessage } from "./decoders.js";
 import { getAgentProfiles } from "../agents/registry.js";
@@ -38,10 +40,66 @@ const WINDOWS_RUNNER_EXTENSION_PRIORITY = [
   ".ps1",
 ] as const;
 const WINDOWS_TERMINAL_SHELL = "powershell.exe";
-const POSIX_PROMPT_ENV_CLEANUP = "unset GOAT_RUNNER";
+const POSIX_PROMPT_ENV_CLEANUP =
+  "unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE";
 const WINDOWS_PROMPT_ENV_CLEANUP =
-  "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue";
+  "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CODEX_REPORTING_PROFILE -ErrorAction SilentlyContinue";
 const CODEX_DASHBOARD_ARGS = "--sandbox danger-full-access";
+const CODEX_REPORTING_PROFILE_NAME = "goat_flow_reporting";
+const CODEX_REPORTING_DEFAULT_PERMISSION = `default_permissions="${CODEX_REPORTING_PROFILE_NAME}"`;
+const CODEX_REPORTING_APPROVAL_ARGS = "--ask-for-approval never";
+const REPORTING_LOCAL_STATE_PATHS = [
+  ".goat-flow/logs",
+  ".goat-flow/scratchpad",
+  ".goat-flow/plans",
+] as const;
+const REPORTING_IGNORED_PATH_CANDIDATES = [
+  ".claude/worktrees",
+  "dist",
+  "node_modules",
+  "out",
+  "_temp",
+  "logs",
+  "coverage",
+  ".nyc_output",
+  "build",
+  ".tools",
+] as const;
+const REPORTING_COMMITTED_ANCHOR_FALLBACKS = [
+  ".goat-flow/logs/critiques/README.md",
+  ".goat-flow/logs/events/README.md",
+  ".goat-flow/logs/quality/README.md",
+  ".goat-flow/logs/review/README.md",
+  ".goat-flow/logs/security/README.md",
+  ".goat-flow/logs/sessions/.gitkeep",
+  ".goat-flow/logs/sessions/README.md",
+  ".goat-flow/plans/.gitignore",
+  ".goat-flow/plans/README.md",
+  ".goat-flow/scratchpad/.gitignore",
+  ".goat-flow/scratchpad/README.md",
+] as const;
+const REPORTING_SECRET_DENIES = [
+  "**/.env",
+  "**/.env.local",
+  "**/.env.development",
+  "**/.env.production",
+  "**/.env.staging",
+  "**/.env.test",
+  "**/.envrc",
+  "**/.env.*.local",
+  "**/secrets/**",
+  "**/.ssh/**",
+  "**/.aws/**",
+  "**/.docker/**",
+  "**/.gnupg/**",
+  "**/.kube/**",
+  "**/credentials*",
+  "**/.npmrc",
+  "**/.pypirc",
+  "**/*.pem",
+  "**/*.key",
+  "**/*.pfx",
+] as const;
 const INITIAL_PROMPT_AFTER_OUTPUT_DELAY_MS = 150;
 const INITIAL_PROMPT_FALLBACK_DELAY_MS = 5000;
 export const INITIAL_PROMPT_CHUNK_SIZE = 2048;
@@ -60,6 +118,7 @@ interface TerminalSession {
   /** Explicit target project path passed to the launched agent. */
   targetPath: string;
   runner: Runner;
+  accessMode: TerminalAccessMode;
   lastInputAt: number;
   pty: IPty | null;
   ws: WebSocket | null;
@@ -76,6 +135,18 @@ interface TerminalSpawnSpec {
   args: string[];
   env: NodeJS.ProcessEnv;
   initialInput: string | null;
+}
+
+/** Extra access and workspace context needed for runner-specific launch policy. */
+interface TerminalSpawnOptions {
+  accessMode?: TerminalAccessMode;
+  projectPath?: string;
+  targetPath?: string;
+}
+
+interface TerminalSpawnContext {
+  accessMode: TerminalAccessMode;
+  env: NodeJS.ProcessEnv;
 }
 
 type TerminalTraceEventKind = "terminal.send" | "prompt.send";
@@ -154,17 +225,219 @@ export function pickWindowsRunnerPath(
   return cleaned[0] ?? null;
 }
 
+/** Encode one TOML basic string for a CLI inline-table override. */
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+/** Encode string-keyed TOML inline-table entries in stable insertion order. */
+function tomlInlineTable(
+  entries: ReadonlyArray<readonly [string, string | boolean]>,
+): string {
+  return `{${entries
+    .map(([key, value]) => {
+      const encodedValue =
+        typeof value === "string" ? tomlString(value) : value;
+      return `${tomlString(key)}=${encodedValue}`;
+    })
+    .join(",")}}`;
+}
+
+/** Return true only when Git proves a local/build path is ignored in one root. */
+function isGitIgnoredPath(projectPath: string, relativePath: string): boolean {
+  try {
+    execFileSync(
+      "git",
+      ["-C", projectPath, "check-ignore", "--quiet", "--", relativePath],
+      { stdio: "ignore", timeout: 5000 },
+    );
+    return true;
+  } catch {
+    // A non-repository root or unavailable Git cannot safely authorize writes.
+    return false;
+  }
+}
+
+/** Read tracked files beneath candidate writable paths so exact files stay read-only. */
+function trackedReportingAnchors(
+  projectPath: string,
+  candidatePaths: readonly string[],
+): string[] {
+  try {
+    return execFileSync(
+      "git",
+      ["-C", projectPath, "ls-files", "-z", "--", ...candidatePaths],
+      {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 5000,
+      },
+    )
+      .split("\0")
+      .filter((path) => path.length > 0);
+  } catch {
+    // Canonical committed anchors below remain the conservative fallback.
+    return [];
+  }
+}
+
+/** Confirm a candidate write root exists as a real directory in every workspace. */
+function isSharedDirectory(
+  rootPaths: readonly string[],
+  relativePath: string,
+): boolean {
+  return rootPaths.every((rootPath) => {
+    try {
+      const stat = lstatSync(join(rootPath, relativePath));
+      return stat.isDirectory() && !stat.isSymbolicLink();
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** List tracked and canonical protected paths beneath one candidate in one root. */
+function protectedPathsForCandidate(
+  rootPath: string,
+  candidatePath: string,
+): string[] {
+  const canonicalAnchors = REPORTING_COMMITTED_ANCHOR_FALLBACKS.filter(
+    (anchorPath) => {
+      if (!anchorPath.startsWith(`${candidatePath}/`)) return false;
+      try {
+        lstatSync(join(rootPath, anchorPath));
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  );
+  return Array.from(
+    new Set([
+      ...canonicalAnchors,
+      ...trackedReportingAnchors(rootPath, [candidatePath]),
+    ]),
+  ).sort();
+}
+
+/**
+ * Return the protected paths when every workspace has an identical layout.
+ * Shared profile rules apply to every root, so asymmetric layouts cannot safely
+ * receive the same write rule without either a missing-path startup failure or
+ * an unprotected tracked file.
+ */
+function sharedProtectedPaths(
+  rootPaths: readonly string[],
+  candidatePath: string,
+): string[] | null {
+  const perRootPaths = rootPaths.map((rootPath) =>
+    protectedPathsForCandidate(rootPath, candidatePath),
+  );
+  const first = perRootPaths[0] ?? [];
+  return perRootPaths.every(
+    (paths) => JSON.stringify(paths) === JSON.stringify(first),
+  )
+    ? first
+    : null;
+}
+
+/**
+ * Build the one-invocation Codex permission profile used by reporting sessions.
+ * The project roots stay readable, known goat-flow local state plus Git-proven
+ * ignored build paths become writable, tracked files inside those paths are
+ * carved back to read, and secret paths retain the installed profile's denies.
+ */
+function buildCodexReportingProfile(
+  projectPath: string,
+  targetPath: string,
+): string {
+  const rootPaths = Array.from(
+    new Set([projectPath, targetPath].filter((path) => path.length > 0)),
+  );
+  const workspaceRoots = rootPaths.map((path) => [path, true] as const);
+  const ignoredWritableCandidates = REPORTING_IGNORED_PATH_CANDIDATES.filter(
+    (relativePath) =>
+      isSharedDirectory(rootPaths, relativePath) &&
+      rootPaths.every((rootPath) => isGitIgnoredPath(rootPath, relativePath)),
+  );
+  const candidateWritablePaths = [
+    ...REPORTING_LOCAL_STATE_PATHS.filter((relativePath) =>
+      isSharedDirectory(rootPaths, relativePath),
+    ),
+    ...ignoredWritableCandidates,
+  ];
+  const protectedPathsByCandidate = candidateWritablePaths.map(
+    (relativePath) => ({
+      relativePath,
+      protectedPaths: sharedProtectedPaths(rootPaths, relativePath),
+    }),
+  );
+  const writablePaths = protectedPathsByCandidate.flatMap((candidate) =>
+    candidate.protectedPaths === null ? [] : [candidate.relativePath],
+  );
+  const committedAnchors = Array.from(
+    new Set(
+      protectedPathsByCandidate.flatMap((candidate) =>
+        candidate.protectedPaths === null ? [] : candidate.protectedPaths,
+      ),
+    ),
+  );
+  const filesystemRules: Array<readonly [string, string]> = [
+    [".", "read"],
+    ...writablePaths.map((path) => [path, "write"] as const),
+    ...committedAnchors.map((path) => [path, "read"] as const),
+    ...REPORTING_SECRET_DENIES.map((path) => [path, "deny"] as const),
+  ];
+  const profile = [
+    `description=${tomlString("Reporting-only project access with local artifact writes.")}`,
+    `extends=${tomlString(":read-only")}`,
+    `workspace_roots=${tomlInlineTable(workspaceRoots)}`,
+    `filesystem={${tomlString(":workspace_roots")}=${tomlInlineTable(filesystemRules)},${tomlString(":tmpdir")}="write",${tomlString(":slash_tmp")}="write"}`,
+    "network={enabled=true}",
+  ].join(",");
+  return `permissions.${CODEX_REPORTING_PROFILE_NAME}={${profile}}`;
+}
+
 /** Build the runner command embedded in the shell wrapper. */
 function terminalRunnerCommand(
   runner: Runner,
   platform: NodeJS.Platform,
+  accessMode: TerminalAccessMode,
 ): string {
   if (runner !== "codex") {
     return platform === "win32" ? "& $env:GOAT_RUNNER" : '"$GOAT_RUNNER"';
   }
+  if (accessMode === "reporting") {
+    return platform === "win32"
+      ? `& $env:GOAT_RUNNER -c $env:GOAT_CODEX_REPORTING_PROFILE -c '${CODEX_REPORTING_DEFAULT_PERMISSION}' ${CODEX_REPORTING_APPROVAL_ARGS} --strict-config`
+      : `"$GOAT_RUNNER" -c "$GOAT_CODEX_REPORTING_PROFILE" -c '${CODEX_REPORTING_DEFAULT_PERMISSION}' ${CODEX_REPORTING_APPROVAL_ARGS} --strict-config`;
+  }
   return platform === "win32"
     ? `& $env:GOAT_RUNNER ${CODEX_DASHBOARD_ARGS}`
     : `"$GOAT_RUNNER" ${CODEX_DASHBOARD_ARGS}`;
+}
+
+/** Resolve access defaults and runner-specific environment for one PTY spawn. */
+function terminalSpawnContext(
+  runner: Runner,
+  cliPath: string,
+  environment: NodeJS.ProcessEnv,
+  options: TerminalSpawnOptions,
+): TerminalSpawnContext {
+  const accessMode = options.accessMode ?? "workspace";
+  const projectPath = options.projectPath ?? process.cwd();
+  const targetPath = options.targetPath ?? projectPath;
+  const env: NodeJS.ProcessEnv = {
+    ...environment,
+    GOAT_RUNNER: cliPath,
+  };
+  if (runner === "codex" && accessMode === "reporting") {
+    env.GOAT_CODEX_REPORTING_PROFILE = buildCodexReportingProfile(
+      projectPath,
+      targetPath,
+    );
+  }
+  return { accessMode, env };
 }
 
 /**
@@ -175,6 +448,7 @@ function terminalRunnerCommand(
  * @param prompt Optional launch prompt delivered through PTY input after startup.
  * @param environment Environment snapshot merged into the spawned process.
  * @param platform Platform selector used by tests and cross-platform launch planning.
+ * @param options Access mode plus validated controller/target roots for reporting profiles.
  * @returns Spawn details plus deferred initial input; callers own the actual PTY spawn.
  */
 export function buildTerminalSpawnSpec(
@@ -183,12 +457,15 @@ export function buildTerminalSpawnSpec(
   prompt: string,
   environment: NodeJS.ProcessEnv = process.env,
   platform = process.platform,
+  options: TerminalSpawnOptions = {},
 ): TerminalSpawnSpec {
   const hasPrompt = prompt.length > 0;
-  const env: NodeJS.ProcessEnv = {
-    ...environment,
-    GOAT_RUNNER: cliPath,
-  };
+  const { accessMode, env } = terminalSpawnContext(
+    runner,
+    cliPath,
+    environment,
+    options,
+  );
   const initialInput = hasPrompt ? formatInitialPromptInput(prompt) : null;
 
   if (platform === "win32") {
@@ -198,7 +475,7 @@ export function buildTerminalSpawnSpec(
         "-NoLogo",
         "-NoExit",
         "-Command",
-        `try { ${terminalRunnerCommand(runner, platform)} } finally { ${WINDOWS_PROMPT_ENV_CLEANUP} }`,
+        `try { ${terminalRunnerCommand(runner, platform, accessMode)} } finally { ${WINDOWS_PROMPT_ENV_CLEANUP} }`,
       ],
       env,
       initialInput,
@@ -207,7 +484,7 @@ export function buildTerminalSpawnSpec(
 
   const configuredShell = environment.SHELL;
   const shell = configuredShell?.length ? configuredShell : "/bin/bash";
-  const shellCmd = `${terminalRunnerCommand(runner, platform)}; ${POSIX_PROMPT_ENV_CLEANUP}; exec "$SHELL" -i`;
+  const shellCmd = `${terminalRunnerCommand(runner, platform, accessMode)}; ${POSIX_PROMPT_ENV_CLEANUP}; exec "$SHELL" -i`;
 
   return {
     shell,
@@ -338,7 +615,10 @@ class TerminalManager {
     prompt: string,
     projectPath: string,
     runner: Runner = "claude",
-    options: { targetPath?: string } = {},
+    options: {
+      targetPath?: string;
+      accessMode?: TerminalAccessMode;
+    } = {},
   ): Promise<CreateResponse> {
     const activeSessions = Array.from(this.sessions.values()).filter(
       (s) => s.status !== "terminated",
@@ -363,6 +643,7 @@ class TerminalManager {
       cwd: projectPath,
       targetPath: projectPath,
       runner,
+      accessMode: options.accessMode ?? "workspace",
       lastInputAt: Date.now(),
       pty: null,
       ws: null,
@@ -404,7 +685,10 @@ class TerminalManager {
     session: TerminalSession,
     prompt: string,
     projectPath: string,
-    options: { targetPath?: string },
+    options: {
+      targetPath?: string;
+      accessMode?: TerminalAccessMode;
+    },
   ): Promise<CreateResponse> {
     const { id, runner } = session;
     const cliPath = this.runnerPaths.get(runner);
@@ -422,7 +706,18 @@ class TerminalManager {
     );
     const nodePty = await this.loadNodePty();
 
-    const spawnSpec = buildTerminalSpawnSpec(runner, cliPath, prompt);
+    const spawnSpec = buildTerminalSpawnSpec(
+      runner,
+      cliPath,
+      prompt,
+      process.env,
+      process.platform,
+      {
+        accessMode: session.accessMode,
+        projectPath: validatedCwd,
+        targetPath: validatedTarget,
+      },
+    );
 
     console.log(
       `[terminal] Starting ${runner} session in ${validatedCwd} for target ${validatedTarget}`,
@@ -828,6 +1123,7 @@ class TerminalManager {
       cwd: session.cwd,
       targetPath: session.targetPath,
       runner: session.runner,
+      accessMode: session.accessMode,
       lastInputAt: session.lastInputAt,
     };
   }

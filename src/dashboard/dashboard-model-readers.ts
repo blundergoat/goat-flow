@@ -192,6 +192,8 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
   const projectPath = readString(rawSession.projectPath);
   const cwd = readString(rawSession.cwd);
   const targetPath = readString(rawSession.targetPath);
+  const accessMode: TerminalAccessMode =
+    rawSession.accessMode === "reporting" ? "reporting" : "workspace";
   if (
     !id ||
     !status ||
@@ -211,6 +213,7 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
     cwd: cwd || projectPath,
     targetPath: targetPath || projectPath,
     runner,
+    accessMode,
     lastInputAt: rawSession.lastInputAt,
     age: typeof rawSession.age === "number" ? rawSession.age : undefined,
     idleDuration:

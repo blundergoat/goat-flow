@@ -391,11 +391,13 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         presetId = null,
         cwdPath = null,
         targetPath = null,
+        accessMode = "workspace",
       }: {
         promptLabel?: string | null;
         presetId?: string | null;
         cwdPath?: string | null;
         targetPath?: string | null;
+        accessMode?: TerminalAccessMode;
       } = {},
     ) {
       await dashboardLaunchInTerminal(this, prompt, runner, {
@@ -403,6 +405,7 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         presetId,
         cwdPath,
         targetPath,
+        accessMode,
       });
     },
   };

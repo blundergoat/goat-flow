@@ -39,6 +39,7 @@ describe("decodeTerminalCreateBody", () => {
         projectPath: "/tmp/goat-flow",
         targetPath: "/tmp/a",
         runner: "codex",
+        accessMode: "reporting",
       }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
@@ -47,9 +48,10 @@ describe("decodeTerminalCreateBody", () => {
     assert.equal(value.projectPath, "/tmp/goat-flow");
     assert.equal(value.targetPath, "/tmp/a");
     assert.equal(value.runner, "codex");
+    assert.equal(value.accessMode, "reporting");
   });
 
-  it("defaults runner only when absent", () => {
+  it("defaults runner and access mode only when absent", () => {
     const defaultRunnerResult = decodeTerminalCreateBody(
       JSON.stringify({ prompt: "x" }),
       {
@@ -57,7 +59,9 @@ describe("decodeTerminalCreateBody", () => {
         defaultRunner: "claude",
       },
     );
-    assert.equal(assertDecodeOk(defaultRunnerResult).runner, "claude");
+    const defaults = assertDecodeOk(defaultRunnerResult);
+    assert.equal(defaults.runner, "claude");
+    assert.equal(defaults.accessMode, "workspace");
 
     const invalidRunnerResult = decodeTerminalCreateBody(
       JSON.stringify({ runner: "cursor" }),
@@ -106,6 +110,17 @@ describe("decodeTerminalCreateBody", () => {
       },
     );
     assert.equal(assertDecodeError(result).path, "body.targetPath");
+  });
+
+  it("rejects unknown terminal access modes", () => {
+    const result = decodeTerminalCreateBody(
+      JSON.stringify({ accessMode: "unrestricted" }),
+      {
+        validRunners: RUNNERS,
+        defaultRunner: "claude",
+      },
+    );
+    assert.equal(assertDecodeError(result).path, "body.accessMode");
   });
 });
 

@@ -92,6 +92,7 @@ Getting-started page for new users. Explains what goat-flow is, the audit/qualit
 - 480-minute idle timeout (8 hours) with auto-kill
 - Maximum 10 concurrent sessions
 - Session state: running / ended / error
+- Prompt presets with `mayWriteFiles: false`, unclassified preset launches, and investigator sessions request reporting access. Codex enforces that mode with a one-session native permission profile: project roots are readable, goat-flow local-state paths plus build paths Git proves ignored in every selected root are writable, tracked files inside those paths remain read-only, secret patterns remain denied, and approval escalation is disabled. Explicit write-enabled builder presets and ordinary direct sessions use workspace access. Other runners still rely on their available prompt and hook guardrails rather than this Codex-specific filesystem profile.
 
 ## API Endpoints
 
@@ -119,7 +120,7 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) plus dashboard project identity |
 | `/api/hooks` | GET | Registered hook state for the selected project (each hook's enabled/disabled state and wired agents) |
 | `/api/hooks/:hookId/toggle` | POST | Enable or disable one hook; updates `.goat-flow/config.yaml` and reconciles per-agent hook config files |
-| `/api/terminal/create` | POST | Start a terminal session |
+| `/api/terminal/create` | POST | Start a terminal session; accepts `accessMode: "workspace" | "reporting"` and defaults omitted values to `workspace` |
 | `/api/terminal/list` | GET | List active terminal sessions |
 | `/api/terminal/sessions` | GET | Session metadata |
 | `/api/terminal/:id` | DELETE | End a terminal session |

@@ -313,6 +313,8 @@ interface QualityHistoryLatest {
 // ---------------------------------------------------------------------------
 
 /** Server-side terminal session info, enriched by `/api/terminal/sessions`. */
+type TerminalAccessMode = "workspace" | "reporting";
+
 interface ServerSessionInfo {
   id: string;
   status: SessionStatus;
@@ -321,6 +323,7 @@ interface ServerSessionInfo {
   cwd: string;
   targetPath: string;
   runner: RunnerId;
+  accessMode: TerminalAccessMode;
   lastInputAt: number;
   age?: number | undefined;
   idleDuration?: number | undefined;
@@ -341,6 +344,7 @@ interface LocalSession
   projectPath: string;
   cwd: string;
   targetPath: string;
+  accessMode: TerminalAccessMode;
   startTime: number;
   lastInputTime: number;
   outputTail?: string;
@@ -372,6 +376,7 @@ interface TerminalRefs {
   retryPresetId?: string | null;
   retryCwdPath?: string | null;
   retryTargetPath?: string | null;
+  retryAccessMode?: TerminalAccessMode;
   loadingSlowTimer?: ReturnType<typeof setTimeout> | undefined;
   loadingRetryTimer?: ReturnType<typeof setTimeout> | undefined;
   launchPromptFallbackTimer?: ReturnType<typeof setTimeout> | undefined;
@@ -387,6 +392,7 @@ interface SavedSession {
   agent: RunnerId;
   cwd: string;
   targetPath: string;
+  accessMode: TerminalAccessMode;
 }
 
 // ---------------------------------------------------------------------------

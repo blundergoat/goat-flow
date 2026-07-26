@@ -6,7 +6,7 @@
  * user-facing payload shape.
  */
 import type { AgentId } from "../types.js";
-import type { ClientMessage, Runner } from "./types.js";
+import type { ClientMessage, Runner, TerminalAccessMode } from "./types.js";
 
 type DecodeResult<T> =
   { ok: true; value: T } | { ok: false; error: string; path: string };
@@ -17,6 +17,7 @@ interface TerminalCreateBody {
   projectPath: string;
   targetPath: string;
   runner: Runner;
+  accessMode: TerminalAccessMode;
 }
 
 /** Dashboard project-list state after omitted optional collections use their state-file fallbacks. */
@@ -167,6 +168,19 @@ function decodeOptionalStringField(
     : err(`body.${key}`, "must be a string");
 }
 
+/** Decode the optional filesystem policy requested for one terminal session. */
+function decodeTerminalAccessMode(
+  raw: Record<string, unknown>,
+): DecodeResult<TerminalAccessMode> {
+  if (!Object.hasOwn(raw, "accessMode")) {
+    return { ok: true, value: "workspace" };
+  }
+  if (raw.accessMode === "workspace" || raw.accessMode === "reporting") {
+    return { ok: true, value: raw.accessMode };
+  }
+  return err("body.accessMode", 'must be either "workspace" or "reporting"');
+}
+
 /**
  * Decode a request to open a dashboard terminal.
  * Use when the user clicks a terminal action so invalid runner names fail before any session starts.
@@ -218,6 +232,9 @@ export function decodeTerminalCreateBody(
     runner = raw.runner as AgentId;
   }
 
+  const accessMode = decodeTerminalAccessMode(raw);
+  if (!accessMode.ok) return accessMode;
+
   return {
     ok: true,
     value: {
@@ -225,6 +242,7 @@ export function decodeTerminalCreateBody(
       projectPath: projectPath.value,
       targetPath: targetPath.value,
       runner,
+      accessMode: accessMode.value,
     },
   };
 }

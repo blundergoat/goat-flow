@@ -74,6 +74,7 @@ type LaunchOptions = {
   presetId?: string | null;
   cwdPath?: string | null;
   targetPath?: string | null;
+  accessMode?: "workspace" | "reporting";
 };
 
 type LaunchContext = Record<"launching", boolean> & {
@@ -107,6 +108,7 @@ type LaunchContext = Record<"launching", boolean> & {
       retryPresetId?: string | null;
       retryCwdPath?: string | null;
       retryTargetPath?: string | null;
+      retryAccessMode?: "workspace" | "reporting";
       loadingSlowTimer?: ReturnType<typeof setTimeout>;
       loadingRetryTimer?: ReturnType<typeof setTimeout>;
       launchPromptFallbackTimer?: ReturnType<typeof setTimeout>;
@@ -194,6 +196,7 @@ type TestTerminalSession = Record<string, unknown> & {
   loadingShowRetry: boolean;
   age: string;
   presetId: string | null;
+  accessMode?: "workspace" | "reporting";
 };
 
 type TerminalSendHarness = {
@@ -216,6 +219,10 @@ type HelperContext = {
   TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS: number;
   TERMINAL_PASTE_SUBMIT_RETRY_CADENCE_MS: number;
   TERMINAL_PASTE_SUBMIT_MAX_RETRIES: number;
+  dashboardTerminalAccessMode(
+    preset: { mayWriteFiles?: boolean } | null,
+    userRole: string,
+  ): "workspace" | "reporting";
   /**
    * Sends text through an existing terminal WebSocket, including bracketed-paste
    * and delayed-submit behaviour.
@@ -444,6 +451,7 @@ globalThis.__helpers = {
   TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS,
   TERMINAL_PASTE_SUBMIT_RETRY_CADENCE_MS,
   TERMINAL_PASTE_SUBMIT_MAX_RETRIES,
+  dashboardTerminalAccessMode,
   dashboardSendToTerminalSession,
   dashboardLaunchInTerminal,
   dashboardConnectTerminal,
@@ -578,6 +586,7 @@ function makeTerminalSession(
     loadingShowRetry: false,
     age: "0s",
     presetId: null,
+    accessMode: "workspace",
     ...overrides,
   };
 }
