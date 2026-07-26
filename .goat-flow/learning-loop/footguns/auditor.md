@@ -1,18 +1,18 @@
 ---
 category: auditor
-last_reviewed: 2026-07-18
+last_reviewed: 2026-07-26
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
 
-**Status:** active | **Created:** 2026-04-05 | **Updated:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-04-05 | **Updated:** 2026-07-26 | **Evidence:** ACTUAL_MEASURED
 
 The selected-agent audit validates hook syntax, self-test behavior, registration, and a runtime-shaped blocked Bash payload through the registered hook path. It still does not prove that the external agent runtime itself delivered the hook payload for a real Bash tool invocation. A hook that passes every local check can still fail at the provider/runtime boundary if the agent ignores the configured hook event or changes its payload contract.
 
 **Residual scope** (after the selected-agent guardrail check started invoking the hook's `--self-test` and a runtime-shaped blocked payload):
 
 1. Hook registration cross-check (file exists ↔ registered in settings). The `deny-hook-registered` check in `harness/check-constraints.ts` covers this, and the selected-agent guardrail check now exercises the registered hook path with a runtime-shaped payload. Neither launches the external agent binary to prove provider-side delivery.
-2. A dedicated `goat-flow verify` command for full external-runtime hook smoke-test is not yet built.
+2. `goat-flow hooks verify --agent <id> --scenario deny-hook` shipped in 1.14.0 and closes only the checkout-local half: it drives the fixed deny scenarios through the managed hook and returns a per-scenario verdict at `evidenceLevel: managed-hook-classifier`. Its evidence budget explicitly forbids an external-agent delivery claim, so a smoke-test that launches the real agent binary and proves the provider delivered the hook event is still not built. Do not read this item as "no verify surface exists".
 3. Static fact extraction can drift from the deny hook when hook regexes are generalized. On 2026-04-27, `detectBashDenyCoversSecrets` still expected older `/.ssh/` and `/.aws/` regex text after the hook moved to relative/home-root normalization, causing a false harness failure until the detector and unit coverage were updated.
 
 **Evidence:**
@@ -21,6 +21,8 @@ The selected-agent audit validates hook syntax, self-test behavior, registration
 - `src/cli/audit/check-agent-deny-runtime.ts` (search: `checkHookRuntimeSmoke`) - sends a runtime-shaped structured Bash payload through the registered deny hook path and expects a deny result for `git push origin main`. This is local hook execution, not proof that the external agent binary delivered the hook event.
 - `src/cli/facts/agent/hooks.ts` (search: `detectBashDenyCoversSecrets`) - derives the harness secret-coverage fact from static markers in the hook file; it must stay aligned with `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`).
 - `test/unit/audit-command/hook-facts.test.ts` (search: `detects current deny hook secret coverage from generalized path matcher`) - regression coverage for the static detector against the canonical hook template.
+- `src/cli/hooks-command.ts` (search: `handleHookVerification`) - the 1.14.0 `hooks verify` entry point; requires `--agent` and the fixed `deny-hook` scenario group and exits 1 when any scenario lacks matching recorded proof.
+- `src/cli/hooks-runtime-evidence.ts` (search: `verifyManagedDenyHook`) - runs every fixed deny scenario against the managed script and returns the local-evidence report. Confirmed 2026-07-26: three scenarios (secret read, repository push, read-only control) all `pass`, all local.
 
 ---
 

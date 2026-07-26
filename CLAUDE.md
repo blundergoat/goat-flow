@@ -106,7 +106,7 @@ When asked to add, create, or update a goat-flow artifact, route it to the artif
 | Resource | Path |
 |----------|------|
 | Learning loop | `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/` |
-| Skill reference (meta) | `.goat-flow/skill-docs/` (skill-preamble.md + skill-conventions.md, composed into every skill) |
+| Skill reference (meta) | `.goat-flow/skill-docs/` (skill-preamble.md on every skill invocation; skill-conventions.md on full-depth) |
 | Skill playbooks (tools) | `.goat-flow/skill-docs/playbooks/` (README.md index; read BEFORE declaring a tool unavailable) |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Architecture | `.goat-flow/architecture.md` |

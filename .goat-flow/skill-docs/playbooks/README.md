@@ -5,7 +5,7 @@ goat-flow-reference-version: "1.14.0"
 
 This directory holds **standalone playbooks for tools and capabilities available to coding agents** in this project. Each playbook is self-contained - no skill composes them in. They are loaded on-demand by skills (or by you) when a tool is named.
 
-For shared meta-references composed into every skill (preamble, conventions), see the parent `skill-docs/` directory.
+For shared meta-references inherited by goat-* skills (preamble on every invocation, conventions on full-depth), see the parent `skill-docs/` directory.
 
 ## How agents should use this directory
 

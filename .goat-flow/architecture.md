@@ -18,7 +18,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | CLI auditor | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
 | CLI diagnostics | `src/cli/diagnostics/` | Redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
 | Managed setup | `src/cli/managed-setup-command.ts`, `src/cli/managed-setup-preview.ts`, `src/cli/managed-setup-state.ts` | Hash-only dry-run classification, install admission, and local recovery state for manifest-managed template files |
-| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
+| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML, views, and ~20 client TypeScript modules) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
 | Hook registration and proof | `src/cli/hooks-command.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | CLI/dashboard hook toggles plus explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
@@ -85,9 +85,18 @@ src/cli/
 
 src/dashboard/
   index.html          # Dashboard entry point
+  app.ts              # Client app entry; composes the Alpine fragment modules
+  styles.css          # Dashboard stylesheet
   preset-prompts.json  # Preset configurations
+  dashboard-app-*.ts  # Alpine app fragments: init, merge, state, data loading,
+                      #   project/terminal, prompts/audit, skill-quality
+  dashboard-terminal*.ts # xterm client plus connect, paste, and runtime helpers
+  dashboard-*.ts      # Feature modules: custom prompts (+actions), projects, prompts,
+                      #   readers, model readers, setup/quality
   views/              # Page views (about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace)
 ```
+
+Per-file descriptions for both `src/cli/server/` and `src/dashboard/` live in `.goat-flow/code-map.md`; this block names module families only.
 
 ## Key Constraints
 
