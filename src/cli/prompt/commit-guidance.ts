@@ -8,12 +8,15 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 /**
- * Canonical project-relative location for generated commit guidance.
+ * Preferred project-relative location for generated commit guidance.
  *
  * A docs path - not a bespoke .github file - because IDEs only auto-read .github/copilot-instructions.md;
- * the instruction file points here, so one doc serves humans and every agent. See ADR-031.
+ * the instruction file points here, so one doc serves humans and every agent. See ADR-043.
  */
-const GIT_COMMIT_INSTRUCTIONS_PATH = "docs/coding-standards/git-commit.md";
+const GIT_COMMIT_INSTRUCTIONS_PATH =
+  "docs/coding-standards/git-commit-message.md";
+const LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH =
+  "docs/coding-standards/git-commit.md";
 
 type CommitSubjectKind = "conventional" | "ticket-prefixed" | "free-form";
 
@@ -27,7 +30,7 @@ interface CommitConventionCounts {
   freeForm: number;
 }
 
-/** Observed commit-history style and metadata rendered into `docs/coding-standards/git-commit.md`. */
+/** Observed commit-history style and metadata rendered into `docs/coding-standards/git-commit-message.md`. */
 export interface CommitConventionDetection {
   status: CommitGuidanceStatus;
   total: number;
@@ -361,11 +364,12 @@ function renderGitCommitInstructions(
 }
 
 /**
- * Create the canonical commit-guidance doc from detected history, never clobbering existing rules.
+ * Create the preferred commit-guidance doc from detected history, never clobbering existing rules.
  *
- * Writes docs/coding-standards/git-commit.md (creating parent dirs) only when it is absent, so a
- * project owner's hand-maintained conventions are preserved across re-installs. No .github/
- * directory is required - the doc lives under docs/ regardless of which agent is installed.
+ * Writes docs/coding-standards/git-commit-message.md (creating parent dirs) only when neither it
+ * nor the former docs/coding-standards/git-commit.md path exists, so a project owner's
+ * hand-maintained conventions are preserved across re-installs. No .github/ directory is required
+ * - the doc lives under docs/ regardless of which agent is installed.
  *
  * @param targetRoot - Project root to write commit guidance into; resolved to an absolute path.
  * @returns A result describing whether the doc was written or skipped because one already exists, plus the detection used.
@@ -375,11 +379,14 @@ export function ensureGitCommitInstructions(
 ): CommitGuidanceWriteResult {
   const root = resolve(targetRoot);
   const outputPath = join(root, GIT_COMMIT_INSTRUCTIONS_PATH);
+  const legacyPath = join(root, LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH);
 
-  if (existsSync(outputPath)) {
+  if (existsSync(outputPath) || existsSync(legacyPath)) {
     return {
       status: "skipped-existing",
-      path: GIT_COMMIT_INSTRUCTIONS_PATH,
+      path: existsSync(outputPath)
+        ? GIT_COMMIT_INSTRUCTIONS_PATH
+        : LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH,
       detection: null,
     };
   }

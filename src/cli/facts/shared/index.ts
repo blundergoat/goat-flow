@@ -74,28 +74,35 @@ function extractDecisionsFacts(
 /**
  * Resolve the project-local commit guidance location.
  *
- * Canonical home is docs/coding-standards/git-commit.md: one file serves both humans and agents.
- * IDEs auto-read .github/copilot-instructions.md (which points here), not a bespoke .github commit
- * file, so the legacy .github locations are reported as misplaced and flagged for a move. The check
- * is repo-wide and intentionally does not depend on a .github/ directory existing.
+ * Preferred home is docs/coding-standards/git-commit-message.md: one file serves both humans and
+ * agents. The former docs/coding-standards/git-commit.md path remains accepted for existing
+ * projects, while fresh installs use the preferred path. IDEs auto-read
+ * .github/copilot-instructions.md (which points to either accepted guide), not a bespoke .github
+ * commit file, so only the legacy .github locations are reported as misplaced. The check is
+ * repo-wide and intentionally does not depend on a .github/ directory existing.
  *
- * @param fs - Read-only filesystem used to probe the canonical and legacy commit-doc locations.
- * @returns Commit-guidance facts: existence, resolved path, the required canonical path, and any misplaced legacy copies.
+ * @param fs - Read-only filesystem used to probe the preferred, compatible, and misplaced commit-doc locations.
+ * @returns Commit-guidance facts: existence, resolved path, the preferred remediation path, and any misplaced legacy copies.
  */
 function extractGitCommitInstructionFacts(
   fs: ReadonlyFS,
 ): SharedFacts["gitCommitInstructions"] {
-  const canonicalPath = "docs/coding-standards/git-commit.md";
+  const canonicalPath = "docs/coding-standards/git-commit-message.md";
+  const compatiblePath = "docs/coding-standards/git-commit.md";
   const legacyPaths = [
     ".github/git-commit-instructions.md",
     ".github/instructions/git-commit.md",
   ];
-  const canonicalExists = fs.exists(canonicalPath);
+  const resolvedPath = fs.exists(canonicalPath)
+    ? canonicalPath
+    : fs.exists(compatiblePath)
+      ? compatiblePath
+      : null;
   return {
-    exists: canonicalExists,
-    path: canonicalExists ? canonicalPath : null,
+    exists: resolvedPath !== null,
+    path: resolvedPath,
     requiredPath: canonicalPath,
-    misplacedPaths: canonicalExists
+    misplacedPaths: resolvedPath
       ? []
       : legacyPaths.filter((path) => fs.exists(path)),
   };

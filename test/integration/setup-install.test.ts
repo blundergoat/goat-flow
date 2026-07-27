@@ -280,8 +280,24 @@ describe("setup --apply installer", () => {
     assert.equal(readFileSync(cursorIgnorePath, "utf-8"), editorRules);
   });
 
+  it("CLI install preserves commit guidance at the former canonical path", () => {
+    const root = makeTempProject();
+    const guidanceDir = join(root, "docs", "coding-standards");
+    const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const legacyGuidance = "# Team Commit Rules\n\nKeep this project rule.\n";
+    mkdirSync(guidanceDir, { recursive: true });
+    writeFileSync(legacyGuidancePath, legacyGuidance);
+
+    const result = runCliInstaller(root, "--agent", "copilot");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(readFileSync(legacyGuidancePath, "utf-8"), legacyGuidance);
+    assert.equal(existsSync(join(guidanceDir, "git-commit-message.md")), false);
+    assert.doesNotMatch(result.stdout, /Git commit instructions:/);
+  });
+
   it(
-    "CLI install seeds missing GitHub commit instructions from target git history",
+    "CLI install seeds missing commit-message guidance from target git history",
     { skip: !gitAvailable },
     () => {
       const root = makeTempProject();
@@ -296,12 +312,16 @@ describe("setup --apply installer", () => {
       assert.equal(result.status, 0, result.stderr || result.stdout);
 
       const guidance = readFileSync(
-        join(root, "docs", "coding-standards", "git-commit.md"),
+        join(root, "docs", "coding-standards", "git-commit-message.md"),
         "utf-8",
       );
       assert.match(guidance, /generated from recent git history/);
       assert.match(guidance, /Use conventional commits/);
       assert.match(result.stdout, /Git commit instructions:/);
+      assert.equal(
+        existsSync(join(root, "docs", "coding-standards", "git-commit.md")),
+        false,
+      );
     },
   );
 });

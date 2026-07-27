@@ -236,7 +236,7 @@ docs/                            = user and maintainer documentation
 │   ├── code-review.md           = review expectations and finding standards
 │   ├── conventions.md           = general repo conventions and command expectations
 │   ├── frontend.md              = TypeScript/frontend conventions
-│   └── git-commit.md            = commit message conventions
+│   └── git-commit-message.md    = commit message conventions
 ├── assets/                      = documentation images
 └── site/                        = standalone landing pages and OG assets
 ```

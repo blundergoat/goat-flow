@@ -484,7 +484,7 @@ function appendContradictions(
     "- Any skill that references `workflow/` paths - those are framework-internal and don't exist in target projects",
   );
   lines.push(
-    '- Any stale references to removed concepts: root-level "playbooks/" (not `.goat-flow/skill-docs/playbooks/`), "coding-standards" as a generated setup pack (not `docs/coding-standards/git-commit.md`), "shapes", old skill names, removed legacy task-state surfaces, old execution loop steps (CLASSIFY, LOG as separate steps)',
+    '- Any stale references to removed concepts: root-level "playbooks/" (not `.goat-flow/skill-docs/playbooks/`), "coding-standards" as a generated setup pack (not `docs/coding-standards/git-commit-message.md`), "shapes", old skill names, removed legacy task-state surfaces, old execution loop steps (CLASSIFY, LOG as separate steps)',
   );
   lines.push(
     "- Does the instruction file execution loop match the skill-preamble's description?",

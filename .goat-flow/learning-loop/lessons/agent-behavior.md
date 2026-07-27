@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-07-19
+last_reviewed: 2026-07-27
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -101,7 +101,7 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Why it matters:** Commit messages are what a future maintainer reads in `git log`, `git bisect`, or a CHANGELOG pass. Subjects built from *enhance/improve/streamline/clarify* force readers to open the diff, and back-to-back synonym churn is the tell that the agent reworded instead of described.
 
-**Prevention:** `docs/coding-standards/git-commit.md` - the canonical commit guide, summarised in the auto-read instruction files under `## Commit Messages` - bans the weak-verb list, prescribes concrete verbs, requires a body for multi-axis or non-obvious subjects, and shows bad→good rewrites from the actual recent log. The gold-standard `4e0ec5d` body is the inline body template (search: "speed up home audit load on Windows" in `docs/coding-standards/git-commit.md`).
+**Prevention:** `docs/coding-standards/git-commit-message.md` - the preferred commit guide, summarised in the auto-read instruction files under `## Commit Messages` - bans the weak-verb list, prescribes concrete verbs, requires a body for multi-axis or non-obvious subjects, and shows bad→good rewrites from the actual recent log. The gold-standard `4e0ec5d` body is the inline body template (search: "speed up home audit load on Windows" in `docs/coding-standards/git-commit-message.md`).
 
 ## Lesson: Retrieval terms must name the concrete failure class
 

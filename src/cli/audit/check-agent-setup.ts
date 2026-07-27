@@ -139,15 +139,15 @@ function shouldCheckCopilotCommitInstructions(ctx: AuditContext): boolean {
 }
 
 /**
- * Check whether the Copilot instruction file bridges to the canonical commit guide.
+ * Check whether the Copilot instruction file bridges to an accepted commit guide.
  *
  * IDEs (VS Code, JetBrains) auto-read .github/copilot-instructions.md but not
- * docs/coding-standards/git-commit.md, so commit conventions only reach Copilot when the auto-read
- * instruction file references the canonical doc. Returns null - no failure - when the .github/ dir
- * is absent, when Copilot is not a configured agent in aggregate mode (a Claude/Codex project that
- * happens to ship GitHub config must not be forced to add it), when the Copilot instruction file
- * itself is missing (the broader instruction-file check owns that failure), or when the reference
- * is already present.
+ * an accepted docs commit guide, so commit conventions only reach Copilot when the auto-read
+ * instruction file references either the preferred git-commit-message.md path or the compatible
+ * git-commit.md path. Returns null - no failure - when the .github/ dir is absent, when Copilot is
+ * not a configured agent in aggregate mode (a Claude/Codex project that happens to ship GitHub
+ * config must not be forced to add it), when the Copilot instruction file itself is missing (the
+ * broader instruction-file check owns that failure), or when an accepted reference is present.
  *
  * @param ctx - audit context; absent Copilot setup means the user should not see this specialized finding
  * @returns audit failure when the bridge is missing, or `null` when Copilot does not need this check
@@ -162,16 +162,23 @@ function checkCopilotCommitInstructionsPresent(
     ".github/copilot-instructions.md";
   // The broader instruction check owns missing-file setup guidance.
   if (!ctx.fs.exists(copilotInstruction)) return null;
-  const commitGuide = "docs/coding-standards/git-commit.md";
-  // Copilot already sees the canonical commit guide through its auto-read file.
-  if ((ctx.fs.readFile(copilotInstruction) ?? "").includes(commitGuide)) {
+  const preferredCommitGuide = "docs/coding-standards/git-commit-message.md";
+  const acceptedCommitGuides = [
+    preferredCommitGuide,
+    "docs/coding-standards/git-commit.md",
+  ];
+  const instructionContent = ctx.fs.readFile(copilotInstruction) ?? "";
+  // Copilot already sees an accepted commit guide through its auto-read file.
+  if (
+    acceptedCommitGuides.some((guide) => instructionContent.includes(guide))
+  ) {
     return null;
   }
   return {
     check: "Agent instruction file",
-    message: `Missing: copilot (${copilotInstruction} must reference ${commitGuide})`,
+    message: `Missing: copilot (${copilotInstruction} must reference ${preferredCommitGuide})`,
     evidence: copilotInstruction,
-    howToFix: `Add a ## Commit Messages section to ${copilotInstruction} that references ${commitGuide}, then rerun \`goat-flow audit --agent copilot\`.`,
+    howToFix: `Add a ## Commit Messages section to ${copilotInstruction} that references ${preferredCommitGuide}, then rerun \`goat-flow audit --agent copilot\`.`,
   };
 }
 
@@ -246,7 +253,7 @@ function agentInstructionProvenance(
   const profile = agentId ? ctx.structure.agents[agentId] : undefined;
   // Specific instruction files make the audit finding actionable for one agent.
   if (profile?.instruction_file) paths.push(profile.instruction_file);
-  // Copilot commit guidance depends on both the auto-read file and canonical commit guide.
+  // Copilot commit guidance depends on both the auto-read file and preferred commit guide.
   if (
     agentId === "copilot" ||
     failure?.evidence === ".github/copilot-instructions.md"
@@ -254,7 +261,7 @@ function agentInstructionProvenance(
     paths.push(
       "workflow/setup/agents/copilot.md",
       ".github/copilot-instructions.md",
-      "docs/coding-standards/git-commit.md",
+      "docs/coding-standards/git-commit-message.md",
     );
   }
   return specProvenance(uniquePaths(paths));

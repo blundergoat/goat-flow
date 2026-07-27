@@ -1,6 +1,6 @@
 # ADR-031: Single canonical commit-conventions doc at docs/coding-standards/git-commit.md
 
-**Status:** Accepted
+**Status:** Superseded by ADR-043
 **Date:** 2026-05-29
 
 ## Decision

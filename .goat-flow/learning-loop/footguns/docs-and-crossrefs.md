@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-27
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -127,6 +127,10 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Cross-reference fragility across docs
 
 **Status:** active | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Stage a rename before registering its destination; search all tracked files, not only Markdown, for old paths.
+**Trigger phase:** VERIFY
+**Incident count:** 5
+**Latest occurrence:** 2026-07-27
 
 **Symptoms:** A renamed or moved file breaks links in multiple documents. Dense pointer maps mean one stale path can mislead setup, glossary, or architecture readers at multiple entry points.
 
@@ -137,12 +141,16 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 - `workflow/setup/01-system-overview.md` → `NEXT:` links and numbered-step references hard-link the setup flow across multiple files; renaming one step file breaks the flow.
 - `.goat-flow/architecture.md` → component/location tables point readers at concrete paths across `src/`, `workflow/`, and `.goat-flow/`; stale paths here become wrong architecture guidance, not cosmetic drift.
 
+**Recurrence update (2026-07-27):**
+- M01 registered the new path before M02 created it, so audit failed with `commit-guidance: evidence_path does not exist`. Enforcer: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`); pointer: `src/cli/audit/harness/check-verification.ts` (search: `const commitGuidance`). The update waited for the rename.
+- M02's docs inventory missed two paths in `scripts/profile-dashboard-audit.mjs`; a tracked sweep found its synthetic Copilot builder (search: `Synthetic. Commit rules`) before closeout.
+
 ~~**Evidence (historical - resolved):**~~
 - ~~`.goat-flow/glossary.md` → still pointed at removed `workflow/setup/09-customise-to-project.md` after the M13 Phase 3 setup-step renumber~~ (resolved: now points to `workflow/setup/05-customise-to-project.md`)
 - ~~historical evidence-lifecycle ADR entry → still pointed at removed `workflow/setup/09-customise-to-project.md` after the same renumber~~ (resolved before the ADR was later removed from the active set)
 - ~~`.goat-flow/learning-loop/decisions/ADR-011-sbao-mob-core-features.md` → still referenced removed `05-install-skills.md` after the setup flow moved the install step to `workflow/setup/03-install-skills.md`~~ (resolved: now points to `workflow/setup/03-install-skills.md`)
 
-**Prevention:** After any file rename or move, grep the entire repo for the old path. Use `grep -r "old-filename" --include="*.md"` before declaring done. This is DoD gate #6.
+**Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files. Stage the destination before changing existence-validated pointers. Repeat both sweeps after edits and classify old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. This is DoD gate #6.
 
 ---
 

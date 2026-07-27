@@ -344,7 +344,7 @@ export function makeSharedFacts(): ProjectFacts["shared"] {
     gitCommitInstructions: {
       exists: false,
       path: null,
-      requiredPath: "docs/coding-standards/git-commit.md",
+      requiredPath: "docs/coding-standards/git-commit-message.md",
       misplacedPaths: [],
     },
     localInstructionsLineCount: 0,

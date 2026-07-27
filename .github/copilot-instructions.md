@@ -30,14 +30,14 @@ Boundaries: instruction files (`.github/copilot-instructions.md`, `CLAUDE.md`, `
 - Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
 - No features, abstractions, or error handling beyond what was asked. Gold-plating is scope creep.
 - Ambiguous requirements: present interpretations, don't pick silently.
-- Commit format: see **## Commit Messages** below; full rules in `docs/coding-standards/git-commit.md`.
+- Commit format: see **## Commit Messages** below; full rules in `docs/coding-standards/git-commit-message.md`.
 - Use current Copilot CLI commands (`/agent`, `/review`, `/research`, `/tasks`) when appropriate; use `/fleet` only for explicit or genuinely independent parallel work.
 - Treat `.github/actions/**`, `.github/hooks/hooks.json`, `.goat-flow/hooks/deny-dangerous.sh`, `.goat-flow/hooks/deny-dangerous/**`, `.github/skills/**`, `.github/copilot-instructions.md`, and `.copilotignore` as security-sensitive runtime surfaces; verify after touching them.
 - `.github/agents/` is intentionally out of scope; CI/CD, hooks, prompts, or skills work should prefer `goat-security` or `goat-review`.
 
 ## Commit Messages
 
-Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs not weak ones (*enhance, improve, update*); one change per subject. On a `feat/<digits>` branch the subject starts `#<digits> ` (e.g. `#123 feat(audit): add drift cache`), from the branch name only; otherwise no prefix. Full rules + bad→good rewrites: `docs/coding-standards/git-commit.md`.
+Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs not weak ones (*enhance, improve, update*); one change per subject. On a `feat/<digits>` branch the subject starts `#<digits> ` (e.g. `#123 feat(audit): add drift cache`), from the branch name only; otherwise no prefix. Full rules + bad→good rewrites: `docs/coding-standards/git-commit-message.md`.
 
 ## Key Resources
 

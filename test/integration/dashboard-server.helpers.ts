@@ -580,7 +580,7 @@ skills:
   await writeProjectFile(root, ".goat-flow/plans/.gitignore", "*\n");
   await writeProjectFile(
     root,
-    "docs/coding-standards/git-commit.md",
+    "docs/coding-standards/git-commit-message.md",
     "# Git Commit Instructions\n",
   );
   await writeProjectFile(

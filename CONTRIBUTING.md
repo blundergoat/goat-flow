@@ -83,7 +83,7 @@ Stack detection lives in `src/cli/detect/project-stack.ts`. Add a new detection 
 - Conventional commit format: `type(scope): description` - e.g., `refactor(ci): enhance CI workflow`, `feat(dashboard): improve UX`
 - Multi-line body when spanning multiple areas (blank line after summary)
 - Before opening: `npm run typecheck`, `npm test`, and `shellcheck` on any changed `.sh` files must all pass
-- See `docs/coding-standards/git-commit.md` for full conventions
+- See `docs/coding-standards/git-commit-message.md` for full conventions
 
 ## Code Style
 

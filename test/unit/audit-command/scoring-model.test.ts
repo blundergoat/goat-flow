@@ -326,8 +326,8 @@ describe("Audit scoring model", () => {
           ...baseFacts.shared,
           gitCommitInstructions: {
             exists: true,
-            path: "docs/coding-standards/git-commit.md",
-            requiredPath: "docs/coding-standards/git-commit.md",
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
             misplacedPaths: [],
           },
         },
@@ -387,8 +387,8 @@ describe("Audit scoring model", () => {
           ...baseFacts.shared,
           gitCommitInstructions: {
             exists: true,
-            path: "docs/coding-standards/git-commit.md",
-            requiredPath: "docs/coding-standards/git-commit.md",
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
             misplacedPaths: [],
           },
         },
@@ -460,8 +460,8 @@ describe("Audit scoring model", () => {
           ...baseFacts.shared,
           gitCommitInstructions: {
             exists: true,
-            path: "docs/coding-standards/git-commit.md",
-            requiredPath: "docs/coding-standards/git-commit.md",
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
             misplacedPaths: [],
           },
         },
@@ -534,8 +534,8 @@ describe("Audit scoring model", () => {
           ...baseFacts.shared,
           gitCommitInstructions: {
             exists: true,
-            path: "docs/coding-standards/git-commit.md",
-            requiredPath: "docs/coding-standards/git-commit.md",
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
             misplacedPaths: [],
           },
         },

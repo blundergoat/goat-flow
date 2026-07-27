@@ -37,7 +37,7 @@ d) Hard Rules
 
 e) Commit Messages
    - Summarise the project's commit conventions: subject format, any branch/issue prefix rule, and the weak-verb ban.
-   - Point to the full reference at `docs/coding-standards/git-commit.md`; the detector seeds that doc from git history (Step 02).
+   - Point to the preferred full reference at `docs/coding-standards/git-commit-message.md`; the detector seeds that doc from git history when neither accepted path exists (Step 02). Preserve and reference an existing `docs/coding-standards/git-commit.md` rather than creating a duplicate.
 
 f) Key Resources
    - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`.

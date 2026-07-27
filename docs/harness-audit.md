@@ -124,7 +124,7 @@ Verification loops are consistently reported as the single highest-impact harnes
 **Verification checks (4):**
 
 - `hooks-registered` - hook registrations and hook files are in sync (no registered-but-missing, no exists-but-unregistered) for each agent
-- `commit-guidance` - commit guidance is present at the canonical `docs/coding-standards/git-commit.md`. Old GitHub commit-guidance locations are reported as misplaced with a prompt to move the content.
+- `commit-guidance` - commit guidance is present at preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md`. Old GitHub commit-guidance locations are reported as misplaced with a prompt to move the content.
 - `evidence-before-claims` - metric. Present agent instruction files carry the Hallucination red-flags clauses and the pointer to `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`). Missing coverage lowers the concern score but does not fail the harness scope in v1.7.0.
 - `post-turn-hook-integrity` - metric. For agents whose manifest declares a post-turn event, reports whether the registered post-turn hook is the universal safety guard or a custom hook with literal validation commands, and whether validation hooks exit 0 unconditionally or mask failures. Missing or masked hooks lower the concern score without failing the harness scope. Agents without a post-turn event are skipped as not applicable. Safety-only hooks carry a guardrail-specific caveat; the Verification concern separately states that the audit itself did not execute project validation.
 

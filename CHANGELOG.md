@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Commit guidance moves to a self-describing filename without forcing migration** - Fresh installs create `docs/coding-standards/git-commit-message.md`; existing projects can keep `docs/coding-standards/git-commit.md` without audit failures or duplicate seeding, and goat-flow selects the new path when both exist. See ADR-043.
 - **Dashboard terminals separate reporting from workspace access** - Non-writing and unclassified preset launches plus investigator sessions request `reporting`; write-enabled presets and ordinary direct sessions retain `workspace`, while the API defaults omitted modes to `workspace` and preserves the selected mode through listings, reconnects, and retries.
 - **Codex reporting terminals enforce tracked-file read-only access** - A per-session native profile keeps selected project roots and network access readable, permits goat-flow local artifacts plus real shared build paths Git proves ignored in every selected root, carves tracked anchors back to read-only, denies secret paths, and disables approval escalation; other runners continue to rely on reporting prompts and hook guardrails.
 - **QA output templates load only when needed** - `/goat-qa` keeps analysis and blocking gates in the hot-path skill, then loads its mirrored Standard and Audit response templates only when rendering the matching phase.

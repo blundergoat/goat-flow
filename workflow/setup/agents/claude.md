@@ -32,9 +32,11 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 ## Commit Messages
 
 Summarise the target project's commit conventions here - subject format, any branch/issue prefix
-rule, and the weak-verb ban - then point to the full reference at `docs/coding-standards/git-commit.md`.
-Keep it to a few lines: the detector seeds that doc from git history (Step 02) and the full rules
-live there, not inline.
+rule, and the weak-verb ban - then point to the preferred full reference at
+`docs/coding-standards/git-commit-message.md`. If an existing project instead has
+`docs/coding-standards/git-commit.md`, preserve and reference it rather than creating a duplicate.
+Keep it to a few lines: the detector seeds the preferred doc from git history (Step 02) and the
+full rules live there, not inline.
 
 ## Key Resources
 
