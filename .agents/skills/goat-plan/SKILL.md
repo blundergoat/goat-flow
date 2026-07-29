@@ -68,7 +68,7 @@ If ambiguous, ask. Never silently pick.
 
 ## Phase 1 - Milestone Breakdown
 
-Structure work into milestones using these archetypes. Adapt the count - small features might need 2, large ones 5+.
+Structure work into milestones using these archetypes - small features might need 2, large ones 5+.
 
 ### Milestone Archetypes
 
@@ -76,11 +76,11 @@ Use **Prove It Works** (riskiest assumption), **Make It Real** (end-to-end), **M
 
 **Spike-first rule:** If uncertain about a library, API, performance characteristic, or integration point - that uncertainty goes in Milestone 1 as a spike, not Milestone 3 as a risk.
 
-Do not drop a spike, intake, or kill criteria to satisfy milestone count, deadline pressure, or requests for less ceremony.
+Never drop a spike, intake, or kill criteria for milestone count, deadline, or less-ceremony pressure.
 
 ### For each milestone, produce:
 
-Objective, Tasks (risk-tagged checkboxes), Assumptions to validate, Exit criteria (binary pass/fail), Testing gate (static/contract + automated + manual + acceptance), Mid-implementation proof, Kill criteria, Depends on, Read first, Deferred (items cut, with pointers; state explicitly if none). Field details and examples: `references/milestone-examples.md`.
+Objective, Effort estimate (agent-time), Tasks (risk-tagged checkboxes), Assumptions to validate, Exit criteria (binary pass/fail), Testing gate (static/contract + automated + manual + acceptance), Mid-implementation proof, Kill criteria, Depends on, Read first, Deferred (items cut, with pointers; state explicitly if none). Field details and examples: `references/milestone-examples.md`.
 
 ### Risk-weighted task ordering
 
@@ -88,15 +88,17 @@ Tag and order tasks **[RISKY]** (unknowns/integrations/spikes), **[CORE]** (esse
 
 ### Testing gate format
 
-Every milestone testing gate includes a Static / Contract Check section (language-appropriate linters, type checkers, and static analysis that must pass before behavioural tests; detect from project structure) plus Automated, Manual, and Acceptance sections. Manual gates are checkbox lists, not prose. Each item: one action + one expected result.
+Static / Contract Check first (language-appropriate; detect from project structure; passes before behavioural tests), then Automated, Manual, Acceptance. Manual gates are checkbox lists, not prose: one action + one expected result per item.
 
 ### Quality rules
 
-Good tasks are concrete actions with a target or exit criterion, not vague wishes. Each fits one coding session; split if bigger.
+Good tasks are concrete actions with a target or exit criterion.
+
+**Effort estimates:** per task, derive from countable units (files read/edited, commands run), never human wall-clock intuition - uncorrected estimates run ~10x high. Plan-level target: ~70% product work, ~20% proof, ~10% everything else; rebalance proof-heavy plans before implementing.
 
 **Cold-start bar:** Every milestone must be executable by a fresh agent without prior context. Include files to read and verification commands.
 
-**Handoff-grade artifacts (Standard+):** record planned-at SHA/date; run `git diff --stat <sha> -- <paths>` and `git status --short -- <paths>` because uncommitted drift matters; include current-state evidence, in-scope paths, out-of-scope paths with reasons, expected commands, STOP conditions, and maintenance notes. See `references/milestone-examples.md`. Small File-Write stays compact.
+**Handoff-grade artifacts (Standard+):** record planned-at SHA/date; run `git diff --stat <sha> -- <paths>` and `git status --short -- <paths>` because uncommitted drift matters; include current-state evidence, in-scope paths, out-of-scope paths with reasons, expected commands, STOP conditions, and maintenance notes. Small File-Write stays compact.
 
 **Specificity calibration:** Pin file paths when cited by exit criteria or downstream milestones. Use concept names when location is an implementation detail.
 
@@ -104,7 +106,7 @@ Good tasks are concrete actions with a target or exit criterion, not vague wishe
 
 ### Assumption tracking
 
-Assumptions are beliefs, not tasks. Tick validated evidence. On invalidation, record it and stop dependent work; amend only when mode/approval permits. At a human gate, propose and wait. See `references/milestone-examples.md`.
+Assumptions are beliefs, not tasks. Tick validated evidence. On invalidation, record it and stop dependent work; amend only when mode/approval permits. At a human gate, propose and wait.
 
 For Standard+, answer "If this plan fails, the most likely cause is ..." in an existing task, assumption, or kill criterion.
 
@@ -151,7 +153,7 @@ Analysis signals triggered this mode.
 
 ### Mode 3: Small File-Write (Hotfix / Small Feature)
 
-The preamble's "skip goat-plan at Hotfix" governs dispatch; invoked goat-plan uses Mode 3. Low-risk, 1-2 milestones, no analysis signals. Like Mode 4 but concise milestone files (minimal ceremony, no padding); both write immediately via File Artifact Rules and skip the inline-first prompt. Write artifacts, then present paths + summary.
+The preamble's "skip goat-plan at Hotfix" governs dispatch; invoked goat-plan uses Mode 3. Low-risk, 1-2 milestones, no analysis signals. Like Mode 4 but concise milestone files; both write immediately via File Artifact Rules and skip the inline-first prompt. Write artifacts, then present paths + summary.
 
 ### Mode 4: File-Write (Standard+ or explicit file request)
 
@@ -173,9 +175,7 @@ For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.
 
 **Prompted README/ADR gate:** "Load-bearing decisions [X, Y, Z] - write ADRs + README now, or milestone files only?"
 
-**Reference verification:** After writing, grep every inline reference code and verify it resolves to a file on disk.
-
-For concrete Mode 0 and Mode 4 examples with expected paths and checkpoint output, see `references/milestone-examples.md`.
+**Reference verification:** After writing, grep every inline reference and verify it resolves on disk.
 
 **Post-plan return:** After Phase 2 finishes, `return-to-implement` hands ordinary ACT the existing build authorization; new Ask First boundaries still gate. Plan-only stops; Phase 3 gates milestones.
 
@@ -185,9 +185,9 @@ After each milestone, both gates must pass before the next begins. Apply the Pro
 
 **AI Verification Gate:** Verify every task is ticked, every exit criterion met with evidence from this session, and the testing gate passed with proof (not recollection). Surface any gap.
 
-**BLOCKING GATE (Human Verification):** Present changed files, exit evidence, and assumption outcomes. "M[N] evidence is ready; status remains unchanged. Approve completion and M[N+1], or adjust?"
+**BLOCKING GATE (Human Verification):** Present changed files, exit evidence, estimate vs. actual, and assumption outcomes. "M[N] evidence is ready; status remains unchanged. Approve completion and M[N+1], or adjust?"
 
-After approval: capture learnings, re-read the next milestone and update invalidated assumptions/tasks/exit criteria, set status: prior → `complete`, next → `in-progress`.
+After approval: capture learnings, re-read the next milestone and update invalidated assumptions/tasks/exit criteria, set status: prior → `complete`, next → `in-progress`. Record `Actual:` on the completed milestone; honor `Depends on`: activate unmet prerequisites before the numerically next milestone.
 
 If updates are needed mid-flight, follow the milestone retrospective protocol in `skill-conventions.md`; never change them silently.
 

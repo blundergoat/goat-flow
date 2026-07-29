@@ -168,9 +168,7 @@ last_reviewed: 2026-07-19
 
 **Recurrence 2026-05-16:** While moving setup instruction surfaces into manifest-backed agent capabilities, full `npm test` failed because a source-grep prompt test still asserted literal `CLAUDE.md, .claude/settings.json` strings in `dashboard-setup-quality.ts`. The product change was correct; the test had become a stale parallel authority. For manifest-backed refactors, update source-grep tests to assert the data boundary (`workflow/manifest.json` plus injected fields) instead of the old duplicated literals.
 
-**Recurrence 2026-05-27:** While hardening dashboard paste-submit timing in `src/dashboard/dashboard-terminal.ts`, the focused terminal suite passed but `npx prettier --check src/dashboard/dashboard-terminal.ts test/unit/dashboard-terminal-launch.test.ts` flagged `test/unit/dashboard-terminal-launch.test.ts` after long fake-timer assertions were added. Running Prettier on the touched TypeScript files fixed it before the final focused rerun. Prevention unchanged: run Prettier on changed dashboard classic-script tests before claiming verification is complete.
-
-**Recurrence 2026-05-31:** While renaming dashboard classic-script files, `npx prettier --check ... test/unit/dashboard-terminal-launch/helpers.ts` failed after the source-list edit. Running Prettier on the touched helper before rerunning focused tests fixed the formatter-owned diff. Prevention unchanged: format changed dashboard classic-script tests before claiming verification is complete.
+**Recurrences 2026-05-27 and 2026-05-31:** `npx prettier --check` flagged touched dashboard classic-script test files - `test/unit/dashboard-terminal-launch.test.ts` after long fake-timer assertions (paste-submit hardening in `src/dashboard/dashboard-terminal.ts`), then `test/unit/dashboard-terminal-launch/helpers.ts` after a rename's source-list edit. Running Prettier on the touched files before the focused rerun fixed both. Prevention unchanged: format changed dashboard classic-script tests before claiming verification complete.
 ---
 
 ## Lesson: Regressions caught too late - tests run at milestone granularity, not edit granularity
@@ -270,6 +268,8 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **Recurrence 2026-07-13:** M20's first manual JSON probe parsed the report, then failed because it assumed a root `groups` key instead of the implemented `surfaces` groups. Re-reading the locked fixture showed the report was correct; the probe was rewritten against `goat-flow.context-report.v1`. Evidence anchor: `test/unit/context-report.test.ts` (search: `renders parseable JSON without telemetry or provider state`).
 
 **Recurrence 2026-07-19:** A `setupPrompt` fixture landed in the preceding subtest, so RED failed with `setupPrompt is not defined` instead of the intended prompt-copy assertion. Moving the fixture into its consumer produced the real failure. Evidence: `test/contract/command-phrases.test.ts` (search: `keeps git-history correlations as candidates until semantic proof exists`).
+
+**Recurrence 2026-07-29:** Pins include section adjacency: inserting an `## Effort Estimates` section between the illustrative-scenario label and `## Assumption Tracking` in `goat-plan/references/milestone-examples.md` failed `test/contract/skill-hardening-contracts.test.ts` (search: `scenario label must immediately precede the assumption block`); moving the section above the label fixed it.
 
 **Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine.
 ---

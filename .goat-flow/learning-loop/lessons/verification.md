@@ -123,7 +123,9 @@ last_reviewed: 2026-07-19
 
 **Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; update them with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-contracts.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
 
-**Latest recurrence (2026-07-19):** A path-safe evidence diagnostic replaced raw OS errors, but the adjacent non-fatal assertion still accepted only the old error forms; the first focused GREEN run stopped at 117/118.
+**Recurrence (2026-07-19):** A path-safe evidence diagnostic replaced raw OS errors, but the adjacent non-fatal assertion still accepted only the old error forms; the first focused GREEN run stopped at 117/118.
+
+**Latest recurrence (2026-07-29):** A newly authored contract regex pinned capitalized `Honor \`Depends on\`` from memory after an edit earlier in the same session had folded it to lowercase `honor`; the first full run failed the new test. Grep current file text before encoding an assertion, even for text written earlier the same session.
 
 ---
 

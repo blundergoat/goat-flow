@@ -10,6 +10,8 @@ Small low-risk plans keep the compact field set in `SKILL.md`.
 ## Contents
 
 - Milestone field descriptions
+- Effort estimates
+- Deferred and backlog routing
 - Assumption tracking
 - Path-only intake example
 - Mode 4 file-write example
@@ -27,6 +29,7 @@ Use this shape for Standard+ work or any milestone handed to a different impleme
 **Status:** not-started
 **Planned at:** `<sha>`, YYYY-MM-DD
 **Depends on:** <milestone, decision, or none>
+**Effort estimate:** <agent-time from countable units; product/proof/other split near 70/20/10> | **Actual:** <filled at the Phase 3 gate>
 
 ## Objective
 
@@ -66,8 +69,8 @@ If either command shows movement, re-read the live anchors and amend the milesto
 - [ ] `<belief that must be proven>` - validation evidence required.
 
 ## Tasks
-- [ ] [RISKY] `<uncertainty-first action with target and proof>`
-- [ ] [CORE] `<implementation action with target and proof>`
+- [ ] [RISKY] `<uncertainty-first action with target and proof>` (est: `<n min category>`)
+- [ ] [CORE] `<implementation action with target and proof>` (est: `<n min category>`)
 
 ## Exit criteria
 
@@ -124,7 +127,8 @@ The template records evidence and verification ownership; it never delegates imp
 For each milestone, produce:
 
 - **Objective** - 1-2 sentences: what this milestone proves or delivers
-- **Tasks** - Checkboxes. Ordered by dependency, riskiest first. Each task is a concrete action, not a vague goal. Tag each task with a risk level: `[RISKY]` unknowns/integrations/unproven assumptions, `[CORE]` essential logic, `[SAFE]` straightforward work. Order: all [RISKY] first, then [CORE], then [SAFE].
+- **Effort estimate** - expected agent execution time, derived from countable units (files to read/edit, commands to run), with the product / proof / everything-else split stated so drift from the ~70/20/10 target is visible at planning time. Record **Actual** beside it at completion; the Phase 3 gate presents estimate vs. actual. See Effort Estimates below.
+- **Tasks** - Checkboxes. Ordered by dependency, riskiest first. Each task is a concrete action, not a vague goal. Tag each task with a risk level: `[RISKY]` unknowns/integrations/unproven assumptions, `[CORE]` essential logic, `[SAFE]` straightforward work. Order: all [RISKY] first, then [CORE], then [SAFE]. Append each task's agent-time estimate with category, e.g. `(est: 8 min product)`; the milestone's Effort estimate is the sum of task estimates plus testing-gate proof and admin overhead.
 - **Assumptions to validate** - What must be proven true during this milestone (not tasks - beliefs about the system)
 - **Exit criteria** - Testable, binary pass/fail. Not "performance is acceptable" - instead "p95 latency under 500ms"
 - **Testing gate** - What must be verified before starting the next milestone:
@@ -136,6 +140,25 @@ For each milestone, produce:
 - **Kill criteria** - What would make us stop at this milestone rather than continue
 - **Depends on** - Which milestone must complete first
 - **Read first** - Files the implementing agent should read before starting this milestone
+
+## Effort Estimates
+
+Agent self-estimates fail in two recurring ways: durations calibrated to human workflows (quoting 30 hours for work an agent finishes in 3, or 30 minutes for a 3-minute fix - roughly 10x high), and proof work crowding out product work until the plan spends more effort verifying than building.
+
+Estimate each milestone like this:
+
+- **Count units, then convert.** Files to read, files to edit, commands/tests to run. A focused edit-verify cycle is minutes of agent-time, not hours. Never quote a duration you cannot decompose into units, and weight the units - a [RISKY] integration cycle costs more than a [SAFE] doc edit.
+- **Separate agent-time from human-time.** Manual gates, reviews, and approvals run on human wall-clock; only those items get human-calibrated durations.
+- **State the mix.** Split every estimate into product work / proof / everything else. Spikes and implementation are product work; testing gates, mid-implementation proof, and gate evidence are proof; orientation reads, plan upkeep, and status admin are everything else.
+- **The target applies plan-level.** Roughly **70% product work, 20% proof, 10% everything else** across the plan. A Prove It Works milestone may legitimately run proof-heavy; balance it with build-heavy milestones instead of padding it.
+- **Rebalance instead of padding.** Proof far above 20% signals gate repetition - concentrate proof on [RISKY] tasks and stop re-verifying [SAFE] work. Proof near zero signals a missing testing gate.
+- **Derive totals from the breakdown.** Per-task `(est: ...)` entries plus the testing gate and admin overhead must sum to the milestone's Effort estimate line; a headline that cannot be summed from them is not an estimate.
+- **Calibrate at the gate.** When capturing learnings at each Phase 3 gate, fill the milestone's **Actual** slot and apply the estimate-vs-actual correction to the next milestone's estimate before starting it.
+- **Every write mode carries the line.** Small File-Write milestones keep the one-line Effort estimate with **Actual** even when the rest of the file stays compact.
+
+## Deferred and Backlog Routing
+
+Cut work follows one flow, not three independent lists. A milestone's **Deferred** field records the cut item with a destination pointer; plan-level `backlog.md` collects those items under priority tiers (Next / Later / Maybe); ISSUE.md's **Out of scope** names only the exclusions a reviewer would ask about. Add the `backlog.md` entry in the same edit that records the Deferred pointer - a deferred item present in one surface and missing from the others is drift. Other skills may add named sections to `backlog.md` (for example goat-review's cross-run rejection rationales); the priority tiers apply to deferred work items.
 
 > **Illustrative scenario - input/output shape only; never evidence.** The assumption block and worked examples below specify shapes for whatever project this skill is installed in. Paths, measurements, endpoints, and outcomes are placeholders, not real incidents - never cite them as evidence.
 
@@ -182,14 +205,15 @@ Expected `M01-prove-refresh-token-rotation.md` shape:
 ```markdown
 # Milestone 01: Prove refresh-token rotation
 Status: not-started
+Effort estimate: ~25 min agent-time (18 product / 5 proof / 2 other)
 
 ## Objective
 Prove the OAuth provider issues rotated refresh tokens and that the app can persist the new token without breaking existing sessions.
 
 ## Tasks
-- [ ] [RISKY] Verify the OAuth provider returns a replacement refresh token after refresh
-- [ ] [RISKY] Confirm the session store can atomically replace refresh-token metadata
-- [ ] [CORE] Add the minimal refresh-token persistence path
+- [ ] [RISKY] Verify the OAuth provider returns a replacement refresh token after refresh (est: 8 min product)
+- [ ] [RISKY] Confirm the session store can atomically replace refresh-token metadata (est: 6 min product)
+- [ ] [CORE] Add the minimal refresh-token persistence path (est: 4 min product)
 
 ## Testing Gate
 ### Static / Contract Check
@@ -243,6 +267,8 @@ Files changed this session:
 - `src/auth/refresh.ts` - added `rotateRefreshToken()` persistence path
 - `src/auth/session-store.ts` - atomic refresh-token replacement
 - `test/auth/refresh.test.ts` - rotation + stale-token-rejection coverage
+
+Effort: estimated ~25 min agent-time; actual ~35 min - the rotation spike needed one extra proof cycle.
 
 Exit criteria (evidence from this session):
 - [x] Provider issues a rotated refresh token - `npm test -- refresh.test.ts`: `rotates token on refresh` passing (12 passed, 0 failed)

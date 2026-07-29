@@ -653,6 +653,51 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  // Effort guidance exists to change agent behaviour; pin it so compaction cannot silently drop it.
+  it("keeps goat-plan effort estimation agent-calibrated and plan-level", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, /Effort estimate \(agent-time\)/, skillPath);
+      assert.match(
+        skillGuidance,
+        /never human wall-clock intuition/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Plan-level target: ~70% product work, ~20% proof, ~10% everything else/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Record `Actual:` on the completed milestone/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /honor `Depends on`: activate unmet prerequisites before the numerically next milestone/,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-plan",
+        "references/milestone-examples.md",
+      ),
+      (examplePath) => {
+        const milestoneExample = readProjectFile(examplePath);
+        assert.match(milestoneExample, /## Effort Estimates/, examplePath);
+        assert.match(milestoneExample, /\*\*Actual:\*\*/, examplePath);
+        assert.match(
+          milestoneExample,
+          /## Deferred and Backlog Routing/,
+          examplePath,
+        );
+      },
+    );
+  });
+
   // A user handing work to a fresh agent needs the same drift-safe plan in every runner.
   it("keeps goat-plan handoff artifacts drift-aware without burdening small plans", () => {
     // Every installed reference must expose the detailed template linked from its skill.
