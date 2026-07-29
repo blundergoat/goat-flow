@@ -188,6 +188,27 @@ function addMissingFieldWarning(
   if (fieldValue.length === 0) warnings.push(`missing ${label}`);
 }
 
+/** Return the first populated field while preserving an empty fallback. */
+function firstPopulated(primary: string, fallback: string): string {
+  return primary.length > 0 ? primary : fallback;
+}
+
+/** Attach optional effort fields without conditional-spread complexity in the parser. */
+function addEffortFields(
+  record: PlanExportRecord,
+  effort: PlanExportEffort | undefined,
+  taskEstimateTotals: PlanEffortSplit | undefined,
+  planAdminEstimate: TaskEstimateFields,
+  workEstimateTotals: PlanEffortSplit | undefined,
+): void {
+  if (effort) record.effort = effort;
+  if (taskEstimateTotals) record.taskEstimateTotals = taskEstimateTotals;
+  if (planAdminEstimate.estimateMinutes !== undefined) {
+    record.planAdminEstimate = planAdminEstimate;
+  }
+  if (workEstimateTotals) record.workEstimateTotals = workEstimateTotals;
+}
+
 /**
  * Parse one goat-plan milestone into the portable export contract.
  * Use for previews and writes; only the top-level title is mandatory.
@@ -215,9 +236,10 @@ export function parseMilestoneMarkdown(
   const dependencies = readMilestoneField(content, "Depends on");
   // Handoff-grade milestones carry the objective as a `## Objective` section
   // rather than a metadata line; both shapes are real goat-plan output.
-  const objective =
-    readMilestoneField(content, "Objective") ||
-    readMilestoneSection(sections, ["objective"]);
+  const objective = firstPopulated(
+    readMilestoneField(content, "Objective"),
+    readMilestoneSection(sections, ["objective"]),
+  );
   const scopeMarkdown = readMilestoneSection(sections, [
     "scope",
     "scope discipline",
@@ -274,10 +296,10 @@ export function parseMilestoneMarkdown(
   addMissingFieldWarning(warnings, verificationMarkdown, "verification gate");
   addMissingFieldWarning(warnings, exitCriteriaMarkdown, "exit criteria");
 
-  return {
+  const record: PlanExportRecord = {
     sourceFile,
     title,
-    status: status || "unknown",
+    status: firstPopulated(status, "unknown"),
     dependencies,
     objective,
     scopeMarkdown,
@@ -287,16 +309,18 @@ export function parseMilestoneMarkdown(
     testingGateItems,
     midProofMarkdown,
     midProofItems,
-    ...(effort && { effort }),
-    ...(taskEstimateTotals && { taskEstimateTotals }),
-    ...(planAdminEstimate.estimateMinutes !== undefined && {
-      planAdminEstimate,
-    }),
-    ...(workEstimateTotals && { workEstimateTotals }),
     verificationMarkdown,
     exitCriteriaMarkdown,
     warnings,
   };
+  addEffortFields(
+    record,
+    effort,
+    taskEstimateTotals,
+    planAdminEstimate,
+    workEstimateTotals,
+  );
+  return record;
 }
 
 /**
@@ -409,6 +433,28 @@ function markdownExportFilename(sourceFile: string): string {
   return sourceFile.replace(/[^A-Za-z0-9._-]+/gu, "-");
 }
 
+/** Render the optional effort metadata shared by legacy and current milestones. */
+function renderEffortMetadata(record: PlanExportRecord): string[] {
+  const lines: string[] = [];
+  if (record.effort) {
+    lines.push(renderEffortLine(record.effort));
+  }
+  if (record.effort?.actual) {
+    lines.push(renderActualLine(record.effort.actual));
+  }
+  if (record.planAdminEstimate?.estimateMinutes !== undefined) {
+    lines.push(
+      `**Plan/admin overhead:** ${record.planAdminEstimate.estimateMinutes} min other`,
+    );
+  }
+  return lines;
+}
+
+/** Substitute the export placeholder only when a source field is empty. */
+function providedOrMissing(value: string, missingText: string): string {
+  return value.length > 0 ? value : missingText;
+}
+
 /** Render one milestone as an issue-ready Markdown body without posting it remotely. */
 function renderPlanExportMarkdown(record: PlanExportRecord): string {
   const missingText = "_Not provided in the source milestone._";
@@ -416,40 +462,33 @@ function renderPlanExportMarkdown(record: PlanExportRecord): string {
     `# ${record.title}`,
     "",
     `**Status:** ${record.status}`,
-    `**Depends on:** ${record.dependencies || "none declared"}`,
-    // Estimated milestones carry their effort line into the issue body; legacy ones add nothing.
-    ...(record.effort ? [renderEffortLine(record.effort)] : []),
-    ...(record.effort?.actual ? [renderActualLine(record.effort.actual)] : []),
-    ...(record.planAdminEstimate?.estimateMinutes !== undefined
-      ? [
-          `**Plan/admin overhead:** ${record.planAdminEstimate.estimateMinutes} min other`,
-        ]
-      : []),
-    `**Objective:** ${record.objective || missingText}`,
+    `**Depends on:** ${providedOrMissing(record.dependencies, "none declared")}`,
+    ...renderEffortMetadata(record),
+    `**Objective:** ${providedOrMissing(record.objective, missingText)}`,
     "",
     "## Scope",
     "",
-    record.scopeMarkdown || missingText,
+    providedOrMissing(record.scopeMarkdown, missingText),
     "",
     "## Boundary Notes",
     "",
-    record.boundaryMarkdown || missingText,
+    providedOrMissing(record.boundaryMarkdown, missingText),
     "",
     "## Tasks",
     "",
-    record.taskMarkdown || missingText,
+    providedOrMissing(record.taskMarkdown, missingText),
     "",
     "## Verification Gate",
     "",
-    record.verificationMarkdown || missingText,
+    providedOrMissing(record.verificationMarkdown, missingText),
     "",
     "## Mid-implementation proof",
     "",
-    record.midProofMarkdown || missingText,
+    providedOrMissing(record.midProofMarkdown, missingText),
     "",
     "## Exit Criteria",
     "",
-    record.exitCriteriaMarkdown || missingText,
+    providedOrMissing(record.exitCriteriaMarkdown, missingText),
   ];
 
   // Partial milestones surface warnings so issue readers do not mistake missing gates for approval.

@@ -7,7 +7,7 @@
  */
 
 /** Effort category vocabulary from goat-plan's estimation notation. */
-export type PlanEffortCategory = "product" | "proof" | "other";
+type PlanEffortCategory = "product" | "proof" | "other";
 
 /** Minutes-per-category totals used by milestone effort lines and counted-work sums. */
 export interface PlanEffortSplit {
@@ -76,6 +76,50 @@ function normalizeEstimateCategory(
   return lowered === "product" || lowered === "proof" || lowered === "other"
     ? lowered
     : undefined;
+}
+
+/** Convert three optional regex captures into one complete effort split. */
+function readCapturedSplit(
+  product: string | undefined,
+  proof: string | undefined,
+  other: string | undefined,
+): PlanEffortSplit | undefined {
+  if (product === undefined) return undefined;
+  if (proof === undefined) return undefined;
+  if (other === undefined) return undefined;
+  return {
+    product: Number(product),
+    proof: Number(proof),
+    other: Number(other),
+  };
+}
+
+/** Parse a product/proof/other split from one effort-text value. */
+function readEffortSplit(value: string): PlanEffortSplit | undefined {
+  const match = value.match(EFFORT_SPLIT_PATTERN);
+  if (!match) return undefined;
+  return readCapturedSplit(match[1], match[2], match[3]);
+}
+
+/** Extract the legacy inline Actual tail from an effort line. */
+function readInlineActual(actualParts: string[]): string {
+  return actualParts
+    .join("|")
+    .replace(/^\s*\*{0,2}Actual:\*{0,2}\s*/iu, "")
+    .trim();
+}
+
+/** Prefer the standalone Actual field and warn when both supported shapes appear. */
+function selectActualText(
+  actualFieldValue: string,
+  inlineActual: string,
+  warnings: string[],
+): string {
+  if (actualFieldValue.length === 0) return inlineActual;
+  if (inlineActual.length > 0) {
+    warnings.push("multiple Actual values supplied");
+  }
+  return actualFieldValue;
 }
 
 /**
@@ -196,30 +240,18 @@ export function parseEffortLineValue(
   }
 
   // A headline without a split parses fine; `plans check` decides what its absence means.
-  const splitMatch = estimateText.match(EFFORT_SPLIT_PATTERN);
-  const split =
-    splitMatch?.[1] && splitMatch[2] && splitMatch[3]
-      ? {
-          product: Number(splitMatch[1]),
-          proof: Number(splitMatch[2]),
-          other: Number(splitMatch[3]),
-        }
-      : undefined;
-  const inlineActual = actualParts
-    .join("|")
-    .replace(/^\s*\*{0,2}Actual:\*{0,2}\s*/iu, "")
-    .trim();
-  if (actualFieldValue.length > 0 && inlineActual.length > 0) {
-    warnings.push("multiple Actual values supplied");
-  }
-  const actualText = actualFieldValue || inlineActual;
-  const actual = parseActualValue(actualText, warnings);
-
-  return {
+  const split = readEffortSplit(estimateText);
+  const inlineActual = readInlineActual(actualParts);
+  const actual = parseActualValue(
+    selectActualText(actualFieldValue, inlineActual, warnings),
+    warnings,
+  );
+  const effort: PlanExportEffort = {
     totalMinutes: Number(totalMatch[1]),
-    ...(split && { split }),
-    ...(actual && { actual }),
   };
+  if (split) effort.split = split;
+  if (actual) effort.actual = actual;
+  return effort;
 }
 
 /**
@@ -234,26 +266,21 @@ function parseActualValue(
   warnings: string[],
 ): PlanEffortActual | undefined {
   const normalized = value.trim();
-  if (normalized.length === 0 || normalized === "_") return undefined;
+  if (normalized.length === 0) return undefined;
+  if (normalized === "_") return undefined;
 
   const match = normalized.match(ACTUAL_PATTERN);
   if (!match?.[1]) {
     warnings.push("actual effort not parseable");
     return undefined;
   }
-  const split =
-    match[2] && match[3] && match[4]
-      ? {
-          product: Number(match[2]),
-          proof: Number(match[3]),
-          other: Number(match[4]),
-        }
-      : undefined;
-  return {
+  const split = readCapturedSplit(match[2], match[3], match[4]);
+  const actual: PlanEffortActual = {
     totalMinutes: Number(match[1]),
-    ...(split && { split }),
     reason: match[5]?.trim() ?? "",
   };
+  if (split) actual.split = split;
+  return actual;
 }
 
 /**

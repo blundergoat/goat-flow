@@ -41,6 +41,158 @@ function renderSplit(split: PlanEffortSplit): string {
   return `(${split.product} product / ${split.proof} proof / ${split.other} other)`;
 }
 
+/** Decide which parser warnings are fatal under the selected compatibility mode. */
+function isValidationWarning(warning: string, strict: boolean): boolean {
+  if (warning.includes("estimate not parseable")) return true;
+  if (!strict) return false;
+  return (
+    warning.includes("actual effort not parseable") ||
+    warning.includes("multiple Actual values")
+  );
+}
+
+/** Convert fatal parser warnings into source-labelled check errors. */
+function collectWarningErrors(
+  record: PlanExportRecord,
+  strict: boolean,
+): string[] {
+  return record.warnings
+    .filter((warning) => isValidationWarning(warning, strict))
+    .map((warning) => `${record.sourceFile}: ${warning}`);
+}
+
+/** Read one category total without spreading optional-record checks through arithmetic. */
+function categoryMinutes(
+  split: PlanEffortSplit | undefined,
+  category: keyof PlanEffortSplit,
+): number {
+  if (!split) return 0;
+  return split[category];
+}
+
+/** Compare declared split categories with either strict counted work or legacy task sums. */
+function collectCategoryErrors(
+  record: PlanExportRecord,
+  split: PlanEffortSplit,
+  strict: boolean,
+): string[] {
+  const errors: string[] = [];
+  for (const category of CATEGORIES) {
+    const taskMinutes = categoryMinutes(record.taskEstimateTotals, category);
+    const countedMinutes = categoryMinutes(
+      record.workEstimateTotals,
+      category,
+    );
+    if (strict) {
+      if (countedMinutes !== split[category]) {
+        errors.push(
+          `${record.sourceFile}: ${category} counted work (${countedMinutes} min) does not equal the split component (${split[category]} min)`,
+        );
+      }
+      continue;
+    }
+    if (taskMinutes > split[category]) {
+      errors.push(
+        `${record.sourceFile}: ${category} task estimates (${taskMinutes} min) exceed the split component (${split[category]} min)`,
+      );
+    }
+  }
+  return errors;
+}
+
+/** Check a declared headline split against its total and counted work. */
+function collectSplitErrors(
+  record: PlanExportRecord,
+  strict: boolean,
+): string[] {
+  const errors: string[] = [];
+  const effort = record.effort;
+  if (!effort) return errors;
+  const split = effort.split;
+  if (!split) {
+    if (strict) {
+      errors.push(
+        `${record.sourceFile}: strict mode requires a product/proof/other split`,
+      );
+    }
+    return errors;
+  }
+
+  const splitSum = split.product + split.proof + split.other;
+  if (splitSum !== effort.totalMinutes) {
+    errors.push(
+      `${record.sourceFile}: split ${renderSplit(split)} sums to ${splitSum} min but the headline says ${effort.totalMinutes} min`,
+    );
+  }
+  errors.push(...collectCategoryErrors(record, split, strict));
+  return errors;
+}
+
+/** Require estimates on every work item that participates in the selected mode. */
+function collectCoverageErrors(
+  record: PlanExportRecord,
+  strict: boolean,
+): string[] {
+  const errors: string[] = [];
+  const unestimatedTasks = record.tasks.filter(
+    (task) => task.estimateMinutes === undefined,
+  ).length;
+  if (unestimatedTasks > 0) {
+    errors.push(
+      `${record.sourceFile}: ${unestimatedTasks} task(s) missing an (est: ...) entry under a declared effort line`,
+    );
+  }
+  if (!strict) return errors;
+
+  const unestimatedTestingItems = record.testingGateItems.filter(
+    (item) => item.estimateMinutes === undefined,
+  ).length;
+  if (unestimatedTestingItems > 0) {
+    errors.push(
+      `${record.sourceFile}: ${unestimatedTestingItems} testing gate item(s) missing an (est: ...) entry`,
+    );
+  }
+
+  const unestimatedMidProofItems = record.midProofItems.filter(
+    (item) => item.estimateMinutes === undefined,
+  ).length;
+  if (unestimatedMidProofItems > 0) {
+    errors.push(
+      `${record.sourceFile}: ${unestimatedMidProofItems} mid-proof item(s) missing an (est: ...) entry`,
+    );
+  }
+  return errors;
+}
+
+/** Check machine-readable Actual requirements for strict, current-format plans. */
+function collectActualErrors(record: PlanExportRecord): string[] {
+  const errors: string[] = [];
+  const actual = record.effort?.actual;
+  if (!actual) {
+    if (record.status.trim().toLowerCase() === "complete") {
+      errors.push(
+        `${record.sourceFile}: complete milestone requires a structured Actual with total and product/proof/other split`,
+      );
+    }
+    return errors;
+  }
+  if (!actual.split) {
+    errors.push(
+      `${record.sourceFile}: structured Actual requires a product/proof/other split`,
+    );
+    return errors;
+  }
+
+  const actualSplitSum =
+    actual.split.product + actual.split.proof + actual.split.other;
+  if (actualSplitSum !== actual.totalMinutes) {
+    errors.push(
+      `${record.sourceFile}: Actual split ${renderSplit(actual.split)} sums to ${actualSplitSum} min but Actual says ${actual.totalMinutes} min`,
+    );
+  }
+  return errors;
+}
+
 /**
  * Collect arithmetic errors for one milestone.
  * Branches gate on what the author declared because each declaration creates
@@ -56,20 +208,10 @@ function collectMilestoneErrors(
   record: PlanExportRecord,
   strict: boolean,
 ): string[] {
-  // Drifted est notation (e.g. `(est: soon)`) is an error even before any sums run.
-  const errors = record.warnings
-    .filter(
-      (warning) =>
-        warning.includes("estimate not parseable") ||
-        (strict &&
-          (warning.includes("actual effort not parseable") ||
-            warning.includes("multiple Actual values"))),
-    )
-    .map((warning) => `${record.sourceFile}: ${warning}`);
-  const { effort, taskEstimateTotals, workEstimateTotals } = record;
+  const errors = collectWarningErrors(record, strict);
 
   // Default mode preserves legacy plans; strict authoring requires the current notation.
-  if (!effort) {
+  if (!record.effort) {
     if (strict) {
       errors.push(
         `${record.sourceFile}: strict mode requires an Effort estimate with a product/proof/other split`,
@@ -78,89 +220,10 @@ function collectMilestoneErrors(
     return errors;
   }
 
-  if (strict && !effort.split) {
-    errors.push(
-      `${record.sourceFile}: strict mode requires a product/proof/other split`,
-    );
-  }
-
-  // A declared split must reproduce its own headline and cover its task sums.
-  if (effort.split) {
-    const splitSum =
-      effort.split.product + effort.split.proof + effort.split.other;
-
-    // Components that cannot rebuild the headline are the unauditable aggregate this check exists for.
-    if (splitSum !== effort.totalMinutes) {
-      errors.push(
-        `${record.sourceFile}: split ${renderSplit(effort.split)} sums to ${splitSum} min but the headline says ${effort.totalMinutes} min`,
-      );
-    }
-
-    // Default mode retains the legacy one-way protection; strict mode requires exact derivation.
-    for (const category of CATEGORIES) {
-      const taskMinutes = taskEstimateTotals?.[category] ?? 0;
-      const countedMinutes = workEstimateTotals?.[category] ?? 0;
-      if (strict && countedMinutes !== effort.split[category]) {
-        errors.push(
-          `${record.sourceFile}: ${category} counted work (${countedMinutes} min) does not equal the split component (${effort.split[category]} min)`,
-        );
-      } else if (!strict && taskMinutes > effort.split[category]) {
-        errors.push(
-          `${record.sourceFile}: ${category} task estimates (${taskMinutes} min) exceed the split component (${effort.split[category]} min)`,
-        );
-      }
-    }
-  }
-
-  // Tasks left without est entries make the milestone total underivable.
-  const unestimatedTasks = record.tasks.filter(
-    (task) => task.estimateMinutes === undefined,
-  ).length;
-  if (record.tasks.length > 0 && unestimatedTasks > 0) {
-    errors.push(
-      `${record.sourceFile}: ${unestimatedTasks} task(s) missing an (est: ...) entry under a declared effort line`,
-    );
-  }
-
+  errors.push(...collectSplitErrors(record, strict));
+  errors.push(...collectCoverageErrors(record, strict));
   if (strict) {
-    const unestimatedTestingItems = record.testingGateItems.filter(
-      (item) => item.estimateMinutes === undefined,
-    ).length;
-    if (unestimatedTestingItems > 0) {
-      errors.push(
-        `${record.sourceFile}: ${unestimatedTestingItems} testing gate item(s) missing an (est: ...) entry`,
-      );
-    }
-
-    const unestimatedMidProofItems = record.midProofItems.filter(
-      (item) => item.estimateMinutes === undefined,
-    ).length;
-    if (unestimatedMidProofItems > 0) {
-      errors.push(
-        `${record.sourceFile}: ${unestimatedMidProofItems} mid-proof item(s) missing an (est: ...) entry`,
-      );
-    }
-
-    const actual = effort.actual;
-    if (record.status.trim().toLowerCase() === "complete" && !actual) {
-      errors.push(
-        `${record.sourceFile}: complete milestone requires a structured Actual with total and product/proof/other split`,
-      );
-    }
-    if (actual && !actual.split) {
-      errors.push(
-        `${record.sourceFile}: structured Actual requires a product/proof/other split`,
-      );
-    }
-    if (actual?.split) {
-      const actualSplitSum =
-        actual.split.product + actual.split.proof + actual.split.other;
-      if (actualSplitSum !== actual.totalMinutes) {
-        errors.push(
-          `${record.sourceFile}: Actual split ${renderSplit(actual.split)} sums to ${actualSplitSum} min but Actual says ${actual.totalMinutes} min`,
-        );
-      }
-    }
+    errors.push(...collectActualErrors(record));
   }
   return errors;
 }

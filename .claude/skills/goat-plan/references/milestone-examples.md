@@ -289,7 +289,7 @@ Assumptions:
 M01 remains `in-progress` pending approval. Approve the proposed M02 amendment and completion transition, or adjust?
 ```
 
-The agent stops here and waits. It does not amend M02, set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. The Testing Gate produced the evidence once; the AI gate audits it and the human gate receives it. Rerun only stale/failed evidence or when risk requires it. After approval, the agent re-reads and amends M02 before changing statuses, records the assumption evidence and structured Actual, sets M01 to `complete` and M02 to `in-progress`, then reruns `goat-flow plans check .goat-flow/plans/oauth-refresh --strict`. It may touch M02 code only after those plan updates.
+The agent stops here and waits. It does not amend M02, set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. The Testing Gate produced the evidence once; the AI gate audits it and the human gate receives it. Rerun only stale/failed evidence or when risk requires it. After the human approves, the agent re-reads and applies the M02 amendment before changing statuses, records the assumption evidence and structured Actual, sets M01 to `complete` and M02 to `in-progress`, then reruns `goat-flow plans check .goat-flow/plans/oauth-refresh --strict`. It may touch M02 code only after those plan updates.
 
 ## Worked Example - Kill-Criteria-Triggered Stop
 

@@ -629,7 +629,7 @@ describe("skill hardening contracts", () => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
-        /After approval: capture learnings, re-read the next milestone and update invalidated assumptions\/tasks\/exit criteria, set status/,
+        /After approval: capture learnings; re-read\/update the next milestone; set prior/,
         skillPath,
       );
     });
