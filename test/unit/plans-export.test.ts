@@ -199,6 +199,161 @@ describe("plans export", () => {
     assert.ok(!record.warnings.includes("missing objective"));
   });
 
+  // The worked-example notation from goat-plan's reference: task, testing-gate,
+  // mid-proof, and plan/admin estimates rebuild every category in the headline.
+  it("parses every counted work item from the worked-example shape", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M01: Estimated milestone",
+        "Status: not-started",
+        "Effort estimate: ~25 min agent-time (18 product / 5 proof / 2 other)",
+        "Plan/admin overhead: 2 min other",
+        "",
+        "## Tasks",
+        "",
+        "- [ ] [RISKY] Verify rotation (est: 8 min product)",
+        "- [ ] [RISKY] Confirm atomic replace (est: 6 min product)",
+        "- [ ] [CORE] Add persistence path (est: 4 min product)",
+        "",
+        "## Testing Gate",
+        "",
+        "### Static / Contract Check",
+        "",
+        "- [ ] `npm run typecheck` exits 0 (est: 2 min proof)",
+        "",
+        "### Manual",
+        "",
+        "- [ ] Refresh an expiring session; expected: token rotates (est: 2 min proof)",
+        "",
+        "## Mid-implementation proof",
+        "",
+        "- [ ] Run the focused refresh smoke check after persistence edits (est: 1 min proof)",
+        "",
+      ].join("\n"),
+      "M01-estimated.md",
+    );
+
+    assert.deepEqual(record.effort, {
+      totalMinutes: 25,
+      split: { product: 18, proof: 5, other: 2 },
+    });
+    assert.equal(record.tasks[0]?.estimateMinutes, 8);
+    assert.equal(record.tasks[0]?.estimateCategory, "product");
+    assert.equal(record.tasks[2]?.estimateMinutes, 4);
+    // Task ests must sum to the split's product component (18 = 8 + 6 + 4).
+    assert.deepEqual(record.taskEstimateTotals, {
+      product: 18,
+      proof: 0,
+      other: 0,
+    });
+    assert.equal(record.testingGateItems[0]?.estimateMinutes, 2);
+    assert.equal(record.testingGateItems[1]?.estimateMinutes, 2);
+    assert.equal(record.midProofItems[0]?.estimateMinutes, 1);
+    assert.deepEqual(record.planAdminEstimate, {
+      estimateMinutes: 2,
+      estimateCategory: "other",
+    });
+    assert.deepEqual(record.workEstimateTotals, {
+      product: 18,
+      proof: 5,
+      other: 2,
+    });
+    assert.ok(
+      !record.warnings.some((warning) => warning.includes("estimate")),
+      record.warnings.join("; "),
+    );
+  });
+
+  // Real milestone tasks wrap across indented continuation lines with the est
+  // entry at the block's end - discovered when `plans check` flagged its own plan.
+  it("parses est entries at the end of wrapped multi-line tasks", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M04: Wrapped tasks",
+        "Effort estimate: ~20 min agent-time (20 product / 0 proof / 0 other)",
+        "",
+        "## Tasks",
+        "",
+        "- [ ] [RISKY] Extend the parser to extract the effort line - total minutes,",
+        "      category split, optional Actual - accepting bold and bare label forms",
+        "      (est: 12 min product)",
+        "- [ ] [CORE] Wire the record fields through render and redaction",
+        "      (est: 8 min product)",
+        "",
+      ].join("\n"),
+      "M04-wrapped.md",
+    );
+
+    assert.equal(record.tasks.length, 2);
+    assert.equal(record.tasks[0]?.estimateMinutes, 12);
+    assert.equal(record.tasks[1]?.estimateMinutes, 8);
+    assert.deepEqual(record.taskEstimateTotals, {
+      product: 20,
+      proof: 0,
+      other: 0,
+    });
+    assert.ok(!record.warnings.some((warning) => warning.includes("estimate")));
+  });
+
+  // Estimate-less plans predate the notation and must stay entirely noise-free.
+  it("keeps legacy milestones free of effort fields and warnings", () => {
+    const record = parseMilestoneMarkdown(
+      completeMilestoneBody(),
+      "M42-portable-plan.md",
+    );
+
+    assert.ok(!("effort" in record));
+    assert.ok(!("taskEstimateTotals" in record));
+    assert.ok(record.tasks.every((task) => !("estimateMinutes" in task)));
+    assert.deepEqual(record.warnings, []);
+  });
+
+  // Drifted notation warns with fixed strings (no user text) and never throws.
+  it("flags malformed estimate notation as warnings without failing", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M03: Drifted notation",
+        "Effort estimate: about a day",
+        "",
+        "## Tasks",
+        "",
+        "- [ ] First thing (est: soon)",
+        "- [ ] Second thing (est: 5 min docs)",
+        "",
+      ].join("\n"),
+      "M03-drifted.md",
+    );
+
+    assert.ok(!("effort" in record));
+    assert.ok(record.warnings.includes("effort estimate not parseable"));
+    assert.ok(record.warnings.includes("task 1: estimate not parseable"));
+    assert.ok(record.warnings.includes("task 2: estimate not parseable"));
+    assert.ok(record.tasks.every((task) => !("estimateMinutes" in task)));
+  });
+
+  // Handoff-grade milestones carry machine-readable estimate and Actual fields.
+  it("parses a bold effort line with a separate structured Actual", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M02: Actual-carrying milestone",
+        "",
+        "**Status:** in-progress",
+        "**Effort estimate:** ~44 min agent-time (34 product / 7 proof / 3 other)",
+        "**Actual:** ~51 min agent-time (39 product / 9 proof / 3 other) - one extra proof cycle",
+        "",
+      ].join("\n"),
+      "M02-actual.md",
+    );
+
+    assert.equal(record.effort?.totalMinutes, 44);
+    assert.deepEqual(record.effort?.split, { product: 34, proof: 7, other: 3 });
+    assert.deepEqual(record.effort?.actual, {
+      totalMinutes: 51,
+      split: { product: 39, proof: 9, other: 3 },
+      reason: "one extra proof cycle",
+    });
+  });
+
   // A body without its milestone heading is malformed because an issue title cannot be inferred safely.
   it("rejects milestone markdown without a title", () => {
     assert.throws(

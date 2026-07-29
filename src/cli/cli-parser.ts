@@ -304,7 +304,7 @@ function parseHookScenarioArg(
 }
 
 /**
- * Parse the required `plans export <plan-path>` user journey.
+ * Parse the required `plans export|check <plan-path>` user journey.
  * Throws CLIError when the operation or plan-path arity is invalid.
  */
 function parsePlansPositionals(positionals: string[]): {
@@ -313,16 +313,16 @@ function parsePlansPositionals(positionals: string[]): {
 } {
   const [subcommand, planPath, ...extraPositionals] = positionals;
 
-  // Export is the only local plan operation currently exposed by the CLI.
-  if (subcommand !== "export") {
-    throw new CLIError('plans requires subcommand "export".', 2);
+  // Export and check are the only local plan operations exposed by the CLI.
+  if (subcommand !== "export" && subcommand !== "check") {
+    throw new CLIError('plans requires subcommand "export" or "check".', 2);
   }
 
   // A concrete plan directory is required and extra paths would make output ambiguous.
   if (!planPath || extraPositionals.length > 0) {
-    throw new CLIError("plans export requires exactly one <plan-path>.", 2);
+    throw new CLIError(`plans ${subcommand} requires one <plan-path>.`, 2);
   }
-  return { plansSubcommand: "export", projectPath: resolve(planPath) };
+  return { plansSubcommand: subcommand, projectPath: resolve(planPath) };
 }
 
 function parseHookTogglePositionals(
@@ -462,6 +462,20 @@ function validateHookFlags(
   }
 }
 
+/** Reject strict plan accounting anywhere except the read-only plans check route. */
+function validatePlansFlags(
+  command: Command,
+  values: ParsedArgValues,
+  plansSubcommand: PlansSubcommand | null,
+): void {
+  if (
+    parsedFlag(values, "strict") &&
+    (command !== "plans" || plansSubcommand !== "check")
+  ) {
+    throw new CLIError("--strict is only valid for plans check.", 2);
+  }
+}
+
 /** Returns true when the command resolves to a deterministic install/apply path. */
 function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
   return (
@@ -546,12 +560,14 @@ function validateFlagCombinations(
   qualitySubcommand: QualitySubcommand,
   skillSubcommand: SkillSubcommand | null,
   hookSubcommand: HookSubcommand | null,
+  plansSubcommand: PlansSubcommand | null,
 ): void {
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
   validateQualityFlags(command, values, qualitySubcommand);
   validateSkillFlags(command, values, qualitySubcommand, skillSubcommand);
   validateHookFlags(command, values, hookSubcommand);
+  validatePlansFlags(command, values, plansSubcommand);
 }
 
 /** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
@@ -622,6 +638,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       name: { type: "string" },
       skill: { type: "string" },
       scenario: { type: "string" },
+      strict: { type: "boolean", default: false },
       yes: { type: "boolean", short: "y", default: false },
       json: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -696,6 +713,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     qualityPositionals.qualitySubcommand,
     skillPositionals.skillSubcommand,
     hooksPositionals.hookSubcommand,
+    plansPositionals.plansSubcommand,
   );
 
   return {
@@ -738,6 +756,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       parsedString(parsedValues, "scenario"),
     ),
     plansSubcommand: plansPositionals.plansSubcommand,
+    plansStrict: parsedFlag(parsedValues, "strict"),
     diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,
     includeAll: parsedFlag(parsedValues, "all"),
     isDevMode: parsedFlag(parsedValues, "dev"),

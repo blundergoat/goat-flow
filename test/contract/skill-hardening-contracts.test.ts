@@ -670,12 +670,27 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         skillGuidance,
-        /Record `Actual:` on the completed milestone/,
+        /a flexible guide, not a quota/,
         skillPath,
       );
       assert.match(
         skillGuidance,
-        /honor `Depends on`: activate unmet prerequisites before the numerically next milestone/,
+        /goat-flow plans check \.goat-flow\/plans\/<active> --strict/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Record structured `Actual:`/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /honor `Depends on` before numeric order/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /rerun only stale\/failed checks or when risk requires it/,
         skillPath,
       );
     });
@@ -689,6 +704,21 @@ describe("skill hardening contracts", () => {
         const milestoneExample = readProjectFile(examplePath);
         assert.match(milestoneExample, /## Effort Estimates/, examplePath);
         assert.match(milestoneExample, /\*\*Actual:\*\*/, examplePath);
+        assert.match(
+          milestoneExample,
+          /Plan\/admin overhead: n min other/,
+          examplePath,
+        );
+        assert.match(
+          milestoneExample,
+          /must exactly reproduce each category and the headline/,
+          examplePath,
+        );
+        assert.match(
+          milestoneExample,
+          /diagnostic guide, never a quota or pass\/fail gate/,
+          examplePath,
+        );
         assert.match(
           milestoneExample,
           /## Deferred and Backlog Routing/,

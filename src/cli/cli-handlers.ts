@@ -45,7 +45,7 @@ import {
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
-import { handlePlansExportCommand } from "./plans-export.js";
+import { handlePlansCommand } from "./plans-check.js";
 const PACKAGE_VERSION = getPackageVersion();
 function formatCandidacyArtifact(
   recommendation: CandidacyResult["recommendedArtifact"],
@@ -657,7 +657,7 @@ const COMMAND_HANDLERS: Partial<
   diagnostics: handleDiagnosticsCommand,
   index: handleIndexCommand,
   redact: handleRedactCommand,
-  plans: handlePlansExportCommand,
+  plans: handlePlansCommand,
   status: handleStatusCommand,
   dashboard: runDashboardCommand,
   info: handleInfoCommand,

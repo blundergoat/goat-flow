@@ -48,6 +48,7 @@ Commands:
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
   redact            Scrub durable text from stdin before stdout or --output persistence
   plans export      Preview or write redacted local milestone bundles
+  plans check       Check milestone effort arithmetic; report rough 70/20/10 mix drift
   events tail       Read local gitignored evidence-envelope events
   skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
   skill doctor      Explain installed skill paths, invocation syntax, and static load blockers.
@@ -75,6 +76,7 @@ Flags:
   --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
   --red-log <file>  Skill new: failing RED receipt required before a skill write
   --scenario <name> Hooks verify: required bounded scenario group (deny-hook)
+  --strict          Plans check: require fully derived current-format estimates and completed Actuals
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
   --dry-run         Install/setup: preview managed template drift without changing the target
   --force           Install/setup --apply: overwrite managed seeds; plans export: regenerate output
@@ -123,6 +125,8 @@ Examples:
   goat-flow redact --output .goat-flow/logs/sessions/handoff.md
   goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
   goat-flow plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
+  goat-flow plans check .goat-flow/plans/1.14.0
+  goat-flow plans check .goat-flow/plans/1.14.0 --strict
   goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
   goat-flow skill new "<description>" --red-log <file>
                                       Scaffold a skill after failing RED evidence

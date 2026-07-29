@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Plan effort estimates become checkable** - goat-plan milestones carry machine-readable estimate/Actual splits plus counted Tasks, Testing Gate, mid-proof, and plan/admin work. `plans check <plan-path> --strict` rejects underived current plans and completed milestones without structured Actuals; default mode preserves legacy plans, while rough ~70/20/10 drift remains advisory and task-dependent.
+
 - **Commit guidance moves to a self-describing filename without forcing migration** - Fresh installs create `docs/coding-standards/git-commit-message.md`; existing projects can keep `docs/coding-standards/git-commit.md` without audit failures or duplicate seeding, and goat-flow selects the new path when both exist. See ADR-043.
 - **Dashboard terminals separate reporting from workspace access** - Non-writing and unclassified preset launches plus investigator sessions request `reporting`; write-enabled presets and ordinary direct sessions retain `workspace`, while the API defaults omitted modes to `workspace` and preserves the selected mode through listings, reconnects, and retries.
 - **Codex reporting terminals enforce tracked-file read-only access** - A per-session native profile keeps selected project roots and network access readable, permits goat-flow local artifacts plus real shared build paths Git proves ignored in every selected root, carves tracked anchors back to read-only, denies secret paths, and disables approval escalation; other runners continue to rely on reporting prompts and hook guardrails.

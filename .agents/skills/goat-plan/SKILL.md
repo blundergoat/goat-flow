@@ -80,7 +80,7 @@ Never drop a spike, intake, or kill criteria for milestone count, deadline, or l
 
 ### For each milestone, produce:
 
-Objective, Effort estimate (agent-time), Tasks (risk-tagged checkboxes), Assumptions to validate, Exit criteria (binary pass/fail), Testing gate (static/contract + automated + manual + acceptance), Mid-implementation proof, Kill criteria, Depends on, Read first, Deferred (items cut, with pointers; state explicitly if none). Field details and examples: `references/milestone-examples.md`.
+Objective, Effort estimate (agent-time), Actual placeholder, Plan/admin overhead, Tasks (risk-tagged checkboxes), Assumptions to validate, Exit criteria (binary pass/fail), Testing gate (static/contract + automated + manual + acceptance), Mid-implementation proof, Kill criteria, Depends on, Read first, Deferred (items cut, with pointers; state explicitly if none). Field details and examples: `references/milestone-examples.md`.
 
 ### Risk-weighted task ordering
 
@@ -94,7 +94,7 @@ Static / Contract Check first (language-appropriate; detect from project structu
 
 Good tasks are concrete actions with a target or exit criterion.
 
-**Effort estimates:** per task, derive from countable units (files read/edited, commands run), never human wall-clock intuition - uncorrected estimates run ~10x high. Plan-level target: ~70% product work, ~20% proof, ~10% everything else; rebalance proof-heavy plans before implementing.
+**Effort estimates:** Derive agent-time from counted task, testing-gate, mid-proof, and plan/admin items; never human wall-clock intuition. Plan-level target: ~70% product work, ~20% proof, ~10% everything else - a flexible guide, not a quota; consolidate duplicated proof, but keep risk-justified deviations.
 
 **Cold-start bar:** Every milestone must be executable by a fresh agent without prior context. Include files to read and verification commands.
 
@@ -175,7 +175,7 @@ For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.
 
 **Prompted README/ADR gate:** "Load-bearing decisions [X, Y, Z] - write ADRs + README now, or milestone files only?"
 
-**Reference verification:** After writing, grep every inline reference and verify it resolves on disk.
+**Validate:** Resolve inline references, then run `goat-flow plans check .goat-flow/plans/<active> --strict`; fix errors before the checkpoint.
 
 **Post-plan return:** After Phase 2 finishes, `return-to-implement` hands ordinary ACT the existing build authorization; new Ask First boundaries still gate. Plan-only stops; Phase 3 gates milestones.
 
@@ -183,11 +183,11 @@ For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.
 
 After each milestone, both gates must pass before the next begins. Apply the Proof Gate from `skill-preamble.md`.
 
-**AI Verification Gate:** Verify every task is ticked, every exit criterion met with evidence from this session, and the testing gate passed with proof (not recollection). Surface any gap.
+**AI Verification Gate:** Audit the Testing Gate's fresh evidence against every task and exit criterion; rerun only stale/failed checks or when risk requires it. Surface gaps.
 
-**BLOCKING GATE (Human Verification):** Present changed files, exit evidence, estimate vs. actual, and assumption outcomes. "M[N] evidence is ready; status remains unchanged. Approve completion and M[N+1], or adjust?"
+**BLOCKING GATE (Human Verification):** Present changed files, the same exit evidence, estimate vs. actual, and assumption outcomes. "M[N] evidence is ready; status remains unchanged. Approve completion and M[N+1], or adjust?"
 
-After approval: capture learnings, re-read the next milestone and update invalidated assumptions/tasks/exit criteria, set status: prior → `complete`, next → `in-progress`. Record `Actual:` on the completed milestone; honor `Depends on`: activate unmet prerequisites before the numerically next milestone.
+After approval: capture learnings; re-read/update the next milestone; set prior `complete`, next `in-progress`. Record structured `Actual:`, rerun `goat-flow plans check .goat-flow/plans/<active> --strict`, and honor `Depends on` before numeric order.
 
 If updates are needed mid-flight, follow the milestone retrospective protocol in `skill-conventions.md`; never change them silently.
 

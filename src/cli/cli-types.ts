@@ -30,7 +30,7 @@ export type Command =
   | "skill";
 
 /** Local plan operations; export previews or writes portable milestone bodies. */
-export type PlansSubcommand = "export";
+export type PlansSubcommand = "export" | "check";
 
 /** Read-only diagnostics views an operator can run without changing the selected project. */
 export type DiagnosticsSubcommand =
@@ -158,6 +158,7 @@ export interface ParsedCLI extends CLIOptions {
   hookId: string | null;
   hookScenario: HookScenario | null;
   plansSubcommand: PlansSubcommand | null;
+  plansStrict: boolean;
   diagnosticsSubcommand: DiagnosticsSubcommand | null;
   includeAll: boolean;
 }

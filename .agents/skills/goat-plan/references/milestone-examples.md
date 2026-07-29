@@ -29,7 +29,9 @@ Use this shape for Standard+ work or any milestone handed to a different impleme
 **Status:** not-started
 **Planned at:** `<sha>`, YYYY-MM-DD
 **Depends on:** <milestone, decision, or none>
-**Effort estimate:** <agent-time from countable units; product/proof/other split near 70/20/10> | **Actual:** <filled at the Phase 3 gate>
+**Effort estimate:** <agent-time from countable units; product/proof/other split>
+**Actual:** _
+**Plan/admin overhead:** <n min other>
 
 ## Objective
 
@@ -84,23 +86,23 @@ If either command shows movement, re-read the live anchors and amend the milesto
 
 ### Static / Contract Check
 
-- [ ] `<static command>` exits 0.
+- [ ] `<static command>` exits 0 (est: `<n min proof>`)
 
 ### Automated
 
-- [ ] `<focused test command>` exits 0.
+- [ ] `<focused test command>` exits 0 (est: `<n min proof>`)
 
 ### Manual
 
-- [ ] `<one action>`; expected: `<one observable result>`.
+- [ ] `<one agent action>`; expected: `<one observable result>` (est: `<n min proof>`)
 
 ### Acceptance
 
-- [ ] Developer self-check completed.
+- [ ] Developer self-check completed (est: `<n min proof>`)
 
 ## Mid-implementation proof
 
-Run `<bounded command or smoke check>` after `<named edit boundary>` and stop on failure.
+- [ ] Run `<bounded command or smoke check>` after `<named edit boundary>` and stop on failure (est: `<n min proof>`)
 
 ## STOP conditions
 - Stop when drift invalidates an anchor, work crosses the named scope, an assumption fails, or the same verification approach fails twice.
@@ -127,16 +129,16 @@ The template records evidence and verification ownership; it never delegates imp
 For each milestone, produce:
 
 - **Objective** - 1-2 sentences: what this milestone proves or delivers
-- **Effort estimate** - expected agent execution time, derived from countable units (files to read/edit, commands to run), with the product / proof / everything-else split stated so drift from the ~70/20/10 target is visible at planning time. Record **Actual** beside it at completion; the Phase 3 gate presents estimate vs. actual. See Effort Estimates below.
-- **Tasks** - Checkboxes. Ordered by dependency, riskiest first. Each task is a concrete action, not a vague goal. Tag each task with a risk level: `[RISKY]` unknowns/integrations/unproven assumptions, `[CORE]` essential logic, `[SAFE]` straightforward work. Order: all [RISKY] first, then [CORE], then [SAFE]. Append each task's agent-time estimate with category, e.g. `(est: 8 min product)`; the milestone's Effort estimate is the sum of task estimates plus testing-gate proof and admin overhead.
+- **Effort estimate** - expected agent execution time, derived from countable units (files to read/edit, commands to run), with the product / proof / everything-else split stated so drift from the rough ~70/20/10 guide is visible. Record machine-readable **Actual** at completion; the Phase 3 gate presents estimate vs. actual. See Effort Estimates below.
+- **Tasks** - Checkboxes. Ordered by dependency, riskiest first. Each task is a concrete action, not a vague goal. Tag each task with a risk level: `[RISKY]` unknowns/integrations/unproven assumptions, `[CORE]` essential logic, `[SAFE]` straightforward work. Order: all [RISKY] first, then [CORE], then [SAFE]. Append each task's agent-time estimate with category, e.g. `(est: 8 min product)`.
 - **Assumptions to validate** - What must be proven true during this milestone (not tasks - beliefs about the system)
 - **Exit criteria** - Testable, binary pass/fail. Not "performance is acceptable" - instead "p95 latency under 500ms"
-- **Testing gate** - What must be verified before starting the next milestone:
+- **Testing gate** - What must be verified before starting the next milestone. Append `(est: n min proof)` to each agent-executed checkbox:
   - Static / Contract Check: language-appropriate static analysis (linters, type checkers) that must pass before behavioural tests run
   - Automated: which test commands must pass
-  - Manual: what a human must check (checkbox list, one action + one expected result per item)
-  - Acceptance: who signs off (developer self-check, QA review, or stakeholder demo)
-- **Mid-implementation proof** - for milestones expected to touch 3+ files or run longer than 30-60 minutes, name one focused command, reproduction, or smoke check to run before switching modules or after a bounded edit batch
+  - Manual: which agent-run browser or smoke action must pass; human-only checks stay outside agent-time
+  - Acceptance: agent self-checks may be estimated; human sign-off belongs to the blocking gate
+- **Mid-implementation proof** - for milestones expected to touch 3+ files or run longer than 30-60 minutes, add one estimated checkbox naming a focused command, reproduction, or smoke check to run before switching modules or after a bounded edit batch
 - **Kill criteria** - What would make us stop at this milestone rather than continue
 - **Depends on** - Which milestone must complete first
 - **Read first** - Files the implementing agent should read before starting this milestone
@@ -148,13 +150,13 @@ Agent self-estimates fail in two recurring ways: durations calibrated to human w
 Estimate each milestone like this:
 
 - **Count units, then convert.** Files to read, files to edit, commands/tests to run. A focused edit-verify cycle is minutes of agent-time, not hours. Never quote a duration you cannot decompose into units, and weight the units - a [RISKY] integration cycle costs more than a [SAFE] doc edit.
-- **Separate agent-time from human-time.** Manual gates, reviews, and approvals run on human wall-clock; only those items get human-calibrated durations.
+- **Separate agent-time from human-time.** Exclude human reviews, approvals, and waiting from agent-time; never pad an agent estimate with human wall-clock.
 - **State the mix.** Split every estimate into product work / proof / everything else. Spikes and implementation are product work; testing gates, mid-implementation proof, and gate evidence are proof; orientation reads, plan upkeep, and status admin are everything else.
-- **The target applies plan-level.** Roughly **70% product work, 20% proof, 10% everything else** across the plan. A Prove It Works milestone may legitimately run proof-heavy; balance it with build-heavy milestones instead of padding it.
-- **Rebalance instead of padding.** Proof far above 20% signals gate repetition - concentrate proof on [RISKY] tasks and stop re-verifying [SAFE] work. Proof near zero signals a missing testing gate.
-- **Derive totals from the breakdown.** Per-task `(est: ...)` entries plus the testing gate and admin overhead must sum to the milestone's Effort estimate line; a headline that cannot be summed from them is not an estimate.
-- **Calibrate at the gate.** When capturing learnings at each Phase 3 gate, fill the milestone's **Actual** slot and apply the estimate-vs-actual correction to the next milestone's estimate before starting it.
-- **Every write mode carries the line.** Small File-Write milestones keep the one-line Effort estimate with **Actual** even when the rest of the file stays compact.
+- **The target applies plan-level.** Roughly **70% product work, 20% proof, 10% everything else** is a diagnostic guide, never a quota or pass/fail gate. A risky migration may legitimately run proof-heavy; a straightforward feature may not.
+- **Consolidate instead of padding.** High proof should trigger a search for repeated automated tests, manual checks, or evidence packaging - not forced ratio compliance. Keep risk-justified proof, reuse fresh evidence, and do not invent product work to improve the percentage.
+- **Derive totals from the breakdown.** Estimated Tasks, Testing Gate checks, Mid-implementation proof, and `Plan/admin overhead: n min other` must exactly reproduce each category and the headline. Run `goat-flow plans check .goat-flow/plans/<active> --strict` before implementation.
+- **Calibrate at the gate.** At each Phase 3 gate, replace `_` with `Actual: ~n min agent-time (n product / n proof / n other) - optional reason`, then apply the correction to the next milestone.
+- **Every write mode carries the fields.** Small File-Write milestones retain Effort estimate, Actual, and Plan/admin overhead even when otherwise compact.
 
 ## Deferred and Backlog Routing
 
@@ -206,6 +208,8 @@ Expected `M01-prove-refresh-token-rotation.md` shape:
 # Milestone 01: Prove refresh-token rotation
 Status: not-started
 Effort estimate: ~25 min agent-time (18 product / 5 proof / 2 other)
+Actual: _
+Plan/admin overhead: 2 min other
 
 ## Objective
 Prove the OAuth provider issues rotated refresh tokens and that the app can persist the new token without breaking existing sessions.
@@ -217,10 +221,13 @@ Prove the OAuth provider issues rotated refresh tokens and that the app can pers
 
 ## Testing Gate
 ### Static / Contract Check
-- [ ] `npm run typecheck` exits 0
+- [ ] `npm run typecheck` exits 0 (est: 2 min proof)
 
 ### Manual
-- [ ] Refresh an expiring session in a local browser; expected: the user remains signed in and the stored refresh token changes
+- [ ] Refresh an expiring session in a local browser; expected: the user remains signed in and the stored refresh token changes (est: 2 min proof)
+
+## Mid-implementation proof
+- [ ] Run the focused refresh smoke check after the persistence edit (est: 1 min proof)
 ```
 
 Expected checkpoint: `Milestone files + ISSUE.md written to .goat-flow/plans/oauth-refresh/. Ready to start implementation.`
@@ -268,7 +275,7 @@ Files changed this session:
 - `src/auth/session-store.ts` - atomic refresh-token replacement
 - `test/auth/refresh.test.ts` - rotation + stale-token-rejection coverage
 
-Effort: estimated ~25 min agent-time; actual ~35 min - the rotation spike needed one extra proof cycle.
+Effort: estimated ~25 min agent-time (18 product / 5 proof / 2 other); actual ~35 min agent-time (22 product / 10 proof / 3 other) - the rotation spike needed one extra proof cycle.
 
 Exit criteria (evidence from this session):
 - [x] Provider issues a rotated refresh token - `npm test -- refresh.test.ts`: `rotates token on refresh` passing (12 passed, 0 failed)
@@ -282,7 +289,7 @@ Assumptions:
 M01 remains `in-progress` pending approval. Approve the proposed M02 amendment and completion transition, or adjust?
 ```
 
-The agent stops here and waits. It does not amend M02, set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. After the human approves the proposed amendment, the agent re-reads M02, applies the M02 amendment before changing statuses, records the assumption evidence, then sets M01 to `complete` and M02 to `in-progress`. It may touch M02 code only after those plan updates.
+The agent stops here and waits. It does not amend M02, set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. The Testing Gate produced the evidence once; the AI gate audits it and the human gate receives it. Rerun only stale/failed evidence or when risk requires it. After approval, the agent re-reads and amends M02 before changing statuses, records the assumption evidence and structured Actual, sets M01 to `complete` and M02 to `in-progress`, then reruns `goat-flow plans check .goat-flow/plans/oauth-refresh --strict`. It may touch M02 code only after those plan updates.
 
 ## Worked Example - Kill-Criteria-Triggered Stop
 

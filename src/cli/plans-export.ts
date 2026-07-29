@@ -19,15 +19,26 @@ import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { scrubDurableText } from "./evidence/redaction.js";
+import {
+  parseEffortLineValue,
+  readPlanAdminEstimate,
+  readTaskEstimate,
+  renderActualLine,
+  renderEffortLine,
+  sumTaskEstimates,
+  type PlanEffortSplit,
+  type PlanExportEffort,
+  type TaskEstimateFields,
+} from "./plans-effort.js";
 
 /** One task checkbox preserved for JSON consumers and future body generators. */
-interface PlanExportTask {
+interface PlanExportTask extends TaskEstimateFields {
   isChecked: boolean;
   text: string;
 }
 
 /** Portable milestone fields shared by JSON and Markdown renderers. */
-interface PlanExportRecord {
+export interface PlanExportRecord {
   sourceFile: string;
   title: string;
   status: string;
@@ -37,6 +48,13 @@ interface PlanExportRecord {
   boundaryMarkdown: string;
   taskMarkdown: string;
   tasks: PlanExportTask[];
+  testingGateItems: PlanExportTask[];
+  midProofMarkdown: string;
+  midProofItems: PlanExportTask[];
+  effort?: PlanExportEffort;
+  taskEstimateTotals?: PlanEffortSplit;
+  planAdminEstimate?: TaskEstimateFields;
+  workEstimateTotals?: PlanEffortSplit;
   verificationMarkdown: string;
   exitCriteriaMarkdown: string;
   warnings: string[];
@@ -58,6 +76,20 @@ class PlansExportInputError extends Error {
     super(message);
     this.name = "PlansExportInputError";
   }
+}
+
+/**
+ * Identify plan-input failures so callers can convert them to friendly usage
+ * errors instead of stack traces.
+ *
+ * @param error - anything thrown while loading a plan; non-plan errors stay unrecognised
+ *   so they crash loudly instead of being reworded
+ * @returns true when the error is a user-fixable plan input problem
+ */
+export function isPlansExportInputError(
+  error: unknown,
+): error is PlansExportInputError {
+  return error instanceof PlansExportInputError;
 }
 
 /** Read a bold or plain single-line milestone field; missing content returns an empty value. */
@@ -102,14 +134,48 @@ function readMilestoneSection(
   return matchingSection?.body ?? "";
 }
 
-/** Convert Markdown task lines into stable checked/text records for JSON consumers. */
-function readMilestoneTasks(taskMarkdown: string): PlanExportTask[] {
-  return Array.from(
-    taskMarkdown.matchAll(/^\s*-\s+\[([ xX])\]\s+(.+)$/gmu),
-  ).map((taskMatch) => ({
-    isChecked: taskMatch[1]?.toLowerCase() === "x",
-    text: taskMatch[2]?.trim() ?? "",
-  }));
+/**
+ * Convert Markdown checkbox lines into stable checked/text records for JSON consumers.
+ * An item owns every line until the next checkbox or heading, because real tasks
+ * wrap across indented continuation lines with the `(est: ...)` entry at the
+ * block's end; single-line tasks keep their exact prior text.
+ *
+ * @param markdown - one estimate-bearing section body
+ * @param warnings - record warning sink for malformed est entries
+ * @param itemLabel - warning label for this section's items
+ * @returns checkbox items in source order with optional estimate fields
+ */
+function readChecklistItems(
+  markdown: string,
+  warnings: string[],
+  itemLabel: string,
+): PlanExportTask[] {
+  const taskStarts = Array.from(
+    markdown.matchAll(/^\s*-\s+\[([ xX])\]\s+/gmu),
+  );
+
+  // Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate.
+  return taskStarts.map((startMatch, taskIndex) => {
+    const bodyStart = startMatch.index + startMatch[0].length;
+    const nextCheckbox = taskStarts.at(taskIndex + 1)?.index ?? markdown.length;
+    const nextHeadingOffset = markdown
+      .slice(bodyStart)
+      .search(/^\s*#{1,6}\s+/mu);
+    const nextHeading =
+      nextHeadingOffset >= 0
+        ? bodyStart + nextHeadingOffset
+        : markdown.length;
+    const bodyEnd = Math.min(nextCheckbox, nextHeading);
+    const text = markdown
+      .slice(bodyStart, bodyEnd)
+      .replace(/\s+/gu, " ")
+      .trim();
+    return {
+      isChecked: startMatch[1]?.toLowerCase() === "x",
+      text,
+      ...readTaskEstimate(text, taskIndex, warnings, itemLabel),
+    };
+  });
 }
 
 /** Add one warning when a portable field is absent from a partial milestone. */
@@ -161,15 +227,44 @@ export function parseMilestoneMarkdown(
     "boundary notes",
   ]);
   const taskMarkdown = readMilestoneSection(sections, ["tasks"]);
-  const tasks = readMilestoneTasks(taskMarkdown);
   const verificationMarkdown = readMilestoneSection(sections, [
     "verification gate",
     "testing gate",
   ]);
+  const midProofMarkdown = readMilestoneSection(sections, [
+    "mid-implementation proof",
+  ]);
+  const warnings: string[] = [];
+  const tasks = readChecklistItems(taskMarkdown, warnings, "task");
+  const testingGateItems = readChecklistItems(
+    verificationMarkdown,
+    warnings,
+    "testing gate item",
+  );
+  const midProofItems = readChecklistItems(
+    midProofMarkdown,
+    warnings,
+    "mid-proof item",
+  );
+  const taskEstimateTotals = sumTaskEstimates(tasks);
+  const planAdminEstimate = readPlanAdminEstimate(
+    readMilestoneField(content, "Plan/admin overhead"),
+    warnings,
+  );
+  const workEstimateTotals = sumTaskEstimates([
+    ...tasks,
+    ...testingGateItems,
+    ...midProofItems,
+    planAdminEstimate,
+  ]);
   const exitCriteriaMarkdown = readMilestoneSection(sections, [
     "exit criteria",
   ]);
-  const warnings: string[] = [];
+  const effort = parseEffortLineValue(
+    readMilestoneField(content, "Effort estimate"),
+    warnings,
+    readMilestoneField(content, "Actual"),
+  );
   addMissingFieldWarning(warnings, status, "status");
   addMissingFieldWarning(warnings, dependencies, "dependencies");
   addMissingFieldWarning(warnings, objective, "objective");
@@ -189,6 +284,15 @@ export function parseMilestoneMarkdown(
     boundaryMarkdown,
     taskMarkdown,
     tasks,
+    testingGateItems,
+    midProofMarkdown,
+    midProofItems,
+    ...(effort && { effort }),
+    ...(taskEstimateTotals && { taskEstimateTotals }),
+    ...(planAdminEstimate.estimateMinutes !== undefined && {
+      planAdminEstimate,
+    }),
+    ...(workEstimateTotals && { workEstimateTotals }),
     verificationMarkdown,
     exitCriteriaMarkdown,
     warnings,
@@ -218,8 +322,12 @@ function listMilestoneFiles(planPath: string): string[] {
 /**
  * Load every milestone record from one selected plan directory.
  * Throws when the plan is empty or any milestone is unreadable or malformed.
+ *
+ * @param planPath - plan directory the user selected; one without M*.md files is a
+ *   usage error, never a silently empty report
+ * @returns one record per milestone file in numeric order; never empty
  */
-function loadPlanExportRecords(planPath: string): PlanExportRecord[] {
+export function loadPlanExportRecords(planPath: string): PlanExportRecord[] {
   const milestoneFiles = listMilestoneFiles(planPath);
 
   // An empty plan cannot produce a meaningful backlog or issue bundle.
@@ -246,8 +354,16 @@ function loadPlanExportRecords(planPath: string): PlanExportRecord[] {
   });
 }
 
-/** Scrub every user-authored string before it can reach stdout or a generated file. */
-function redactPlanExportRecord(record: PlanExportRecord): PlanExportRecord {
+/**
+ * Scrub every user-authored string before it can reach stdout or a generated file.
+ *
+ * @param record - parsed milestone whose text fields may hold tokens or secrets
+ * @returns the same record shape with readable text scrubbed; numeric effort fields
+ *   pass through unchanged
+ */
+export function redactPlanExportRecord(
+  record: PlanExportRecord,
+): PlanExportRecord {
   return {
     ...record,
     sourceFile: scrubDurableText(record.sourceFile),
@@ -262,8 +378,29 @@ function redactPlanExportRecord(record: PlanExportRecord): PlanExportRecord {
       ...task,
       text: scrubDurableText(task.text),
     })),
+    testingGateItems: record.testingGateItems.map((item) => ({
+      ...item,
+      text: scrubDurableText(item.text),
+    })),
+    midProofMarkdown: scrubDurableText(record.midProofMarkdown),
+    midProofItems: record.midProofItems.map((item) => ({
+      ...item,
+      text: scrubDurableText(item.text),
+    })),
     verificationMarkdown: scrubDurableText(record.verificationMarkdown),
     exitCriteriaMarkdown: scrubDurableText(record.exitCriteriaMarkdown),
+    // Actual reasons are user-authored; numeric effort fields need no scrub.
+    ...(record.effort && {
+      effort: {
+        ...record.effort,
+        ...(record.effort.actual && {
+          actual: {
+            ...record.effort.actual,
+            reason: scrubDurableText(record.effort.actual.reason),
+          },
+        }),
+      },
+    }),
   };
 }
 
@@ -280,6 +417,14 @@ function renderPlanExportMarkdown(record: PlanExportRecord): string {
     "",
     `**Status:** ${record.status}`,
     `**Depends on:** ${record.dependencies || "none declared"}`,
+    // Estimated milestones carry their effort line into the issue body; legacy ones add nothing.
+    ...(record.effort ? [renderEffortLine(record.effort)] : []),
+    ...(record.effort?.actual ? [renderActualLine(record.effort.actual)] : []),
+    ...(record.planAdminEstimate?.estimateMinutes !== undefined
+      ? [
+          `**Plan/admin overhead:** ${record.planAdminEstimate.estimateMinutes} min other`,
+        ]
+      : []),
     `**Objective:** ${record.objective || missingText}`,
     "",
     "## Scope",
@@ -297,6 +442,10 @@ function renderPlanExportMarkdown(record: PlanExportRecord): string {
     "## Verification Gate",
     "",
     record.verificationMarkdown || missingText,
+    "",
+    "## Mid-implementation proof",
+    "",
+    record.midProofMarkdown || missingText,
     "",
     "## Exit Criteria",
     "",
@@ -336,6 +485,7 @@ function assertOutputPathsAvailable(
  * Require every export destination to be a single-link regular file or absent before writing.
  * Runs even under force: replacement authorizes new content, never writing
  * through a symlink, hardlink, or directory that shadows a generated filename.
+ * Throws a usage-safe error naming the first unsafe destination so nothing is written.
  */
 function assertWritableDestinations(outputPaths: string[]): void {
   for (const outputPath of outputPaths) {
@@ -390,7 +540,10 @@ function assertRealDirectoryPathOrAbsent(
   }
 }
 
-/** Reject filename sanitization or redaction collisions before any export is written. */
+/**
+ * Reject filename sanitization or redaction collisions before any export is written.
+ * Throws when two milestones resolve to one destination, so no partial bundle lands.
+ */
 function assertUniqueOutputPaths(outputPaths: string[]): void {
   const uniqueOutputPaths = new Set(outputPaths);
   if (uniqueOutputPaths.size === outputPaths.length) return;

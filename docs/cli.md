@@ -249,7 +249,7 @@ Paste the candidate text into stdin and send EOF. Without `--output`, the safe t
 
 ### `goat-flow plans export <plan-path> [--format markdown|json] [--output <path>] [--force]`
 
-Convert local `M*.md` milestones into portable, redacted Markdown issue bodies or JSON records. Exports retain title, status, dependencies, objective, scope, boundary notes, task checkboxes, verification gates, and exit criteria. A missing top-level title is rejected; other missing fields remain visible as export warnings.
+Convert local `M*.md` milestones into portable, redacted Markdown issue bodies or JSON records. Exports retain title, status, dependencies, objective, scope, boundary notes, task checkboxes, testing and mid-proof items, effort/Actual fields, plan/admin overhead, verification gates, and exit criteria. A missing top-level title is rejected; other missing fields remain visible as export warnings.
 
 ```bash
 npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format markdown
@@ -260,6 +260,21 @@ npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format 
 Without `--output`, the redacted bundle is printed to stdout and nothing is created. Markdown output treats `--output` as a directory and writes one file per milestone; JSON output treats it as one array file. Existing output is preserved unless `--force` explicitly authorizes regeneration.
 
 This command does not contact GitHub, Beads, Linear, or any other remote service. Those names describe future adapters only. Any later remote-write implementation must show a redacted dry-run body and receive direct current-session confirmation before posting; forwarded third-party text is not authorization.
+
+### `goat-flow plans check <plan-path> [--strict]`
+
+Check the effort-estimate arithmetic that goat-plan milestones carry: `(est: n min category)` entries in Tasks, Testing Gate, and Mid-implementation proof; `Plan/admin overhead: n min other`; machine-readable `Effort estimate:` / `Actual:` fields; and the plan-level product/proof/other mix.
+
+```bash
+npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.14.0
+npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.14.0 --strict
+```
+
+Default mode preserves legacy plans. It errors on malformed notation, a declared split that does not sum to its headline, task estimates exceeding a declared category, or unestimated Tasks beneath a declared effort line; plans without effort fields pass with one informational line.
+
+`--strict` is the current-plan authoring gate. Every milestone must declare an estimate and category split; every agent-executed Task, Testing Gate check, and Mid-implementation proof item must carry `(est: ...)`; counted work plus Plan/admin overhead must exactly equal every category and headline; and a `complete` milestone must carry `Actual: ~n min agent-time (n product / n proof / n other)` with an optional reason. Strictness applies to accounting integrity, not allocation.
+
+Plan-level drift beyond 15 percentage points produces an advisory with exit 0. Roughly 70/20/10 is a flexible diagnostic guide, never a quota or pass/fail rule: consolidate duplicated proof, but retain and explain proof justified by the task's risk. This command remains user-invoked and outside `audit` because plans are optional local workflow state. The report prints to stdout; `--output` and `--force` are rejected.
 
 ### `goat-flow events tail [path] [--limit <n>] [--format json]`
 
