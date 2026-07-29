@@ -79,10 +79,7 @@ function collectCategoryErrors(
   const errors: string[] = [];
   for (const category of CATEGORIES) {
     const taskMinutes = categoryMinutes(record.taskEstimateTotals, category);
-    const countedMinutes = categoryMinutes(
-      record.workEstimateTotals,
-      category,
-    );
+    const countedMinutes = categoryMinutes(record.workEstimateTotals, category);
     if (strict) {
       if (countedMinutes !== split[category]) {
         errors.push(

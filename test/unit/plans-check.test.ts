@@ -260,7 +260,10 @@ describe("plans check", () => {
       const result = runPlansCheck(planPath, "--strict");
 
       assert.equal(result.status, 1);
-      assert.match(result.stdout, /strict mode requires a product\/proof\/other split/u);
+      assert.match(
+        result.stdout,
+        /strict mode requires a product\/proof\/other split/u,
+      );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -308,8 +311,14 @@ describe("plans check", () => {
       const result = runPlansCheck(planPath, "--strict");
 
       assert.equal(result.status, 1);
-      assert.match(result.stdout, /testing gate item\(s\) missing an \(est: \.\.\.\) entry/u);
-      assert.match(result.stdout, /mid-proof item\(s\) missing an \(est: \.\.\.\) entry/u);
+      assert.match(
+        result.stdout,
+        /testing gate item\(s\) missing an \(est: \.\.\.\) entry/u,
+      );
+      assert.match(
+        result.stdout,
+        /mid-proof item\(s\) missing an \(est: \.\.\.\) entry/u,
+      );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -334,7 +343,10 @@ describe("plans check", () => {
       const result = runPlansCheck(planPath, "--strict");
 
       assert.equal(result.status, 1);
-      assert.match(result.stdout, /complete milestone requires a structured Actual/u);
+      assert.match(
+        result.stdout,
+        /complete milestone requires a structured Actual/u,
+      );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -413,7 +425,10 @@ describe("plans check", () => {
       const defaultResult = runPlansCheck(planPath);
 
       assert.equal(strictResult.status, 1);
-      assert.match(strictResult.stdout, /strict mode requires an Effort estimate/u);
+      assert.match(
+        strictResult.stdout,
+        /strict mode requires an Effort estimate/u,
+      );
       assert.equal(defaultResult.status, 0, defaultResult.stderr);
       assert.match(defaultResult.stdout, /no effort estimates found/u);
     } finally {

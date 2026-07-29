@@ -117,9 +117,7 @@ describe("plans effort notation", () => {
     });
     assert.deepEqual(readPlanAdminEstimate("", warnings), {});
     assert.deepEqual(readPlanAdminEstimate("2 min proof", warnings), {});
-    assert.deepEqual(warnings, [
-      "plan/admin overhead estimate not parseable",
-    ]);
+    assert.deepEqual(warnings, ["plan/admin overhead estimate not parseable"]);
   });
 
   it("sums estimates by category and stays absent without any", () => {

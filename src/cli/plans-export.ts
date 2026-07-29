@@ -150,9 +150,7 @@ function readChecklistItems(
   warnings: string[],
   itemLabel: string,
 ): PlanExportTask[] {
-  const taskStarts = Array.from(
-    markdown.matchAll(/^\s*-\s+\[([ xX])\]\s+/gmu),
-  );
+  const taskStarts = Array.from(markdown.matchAll(/^\s*-\s+\[([ xX])\]\s+/gmu));
 
   // Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate.
   return taskStarts.map((startMatch, taskIndex) => {
@@ -162,9 +160,7 @@ function readChecklistItems(
       .slice(bodyStart)
       .search(/^\s*#{1,6}\s+/mu);
     const nextHeading =
-      nextHeadingOffset >= 0
-        ? bodyStart + nextHeadingOffset
-        : markdown.length;
+      nextHeadingOffset >= 0 ? bodyStart + nextHeadingOffset : markdown.length;
     const bodyEnd = Math.min(nextCheckbox, nextHeading);
     const text = markdown
       .slice(bodyStart, bodyEnd)

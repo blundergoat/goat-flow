@@ -668,21 +668,13 @@ describe("skill hardening contracts", () => {
         /Plan-level target: ~70% product work, ~20% proof, ~10% everything else/,
         skillPath,
       );
-      assert.match(
-        skillGuidance,
-        /a flexible guide, not a quota/,
-        skillPath,
-      );
+      assert.match(skillGuidance, /a flexible guide, not a quota/, skillPath);
       assert.match(
         skillGuidance,
         /goat-flow plans check \.goat-flow\/plans\/<active> --strict/,
         skillPath,
       );
-      assert.match(
-        skillGuidance,
-        /Record structured `Actual:`/,
-        skillPath,
-      );
+      assert.match(skillGuidance, /Record structured `Actual:`/, skillPath);
       assert.match(
         skillGuidance,
         /honor `Depends on` before numeric order/,
