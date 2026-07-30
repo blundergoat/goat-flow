@@ -96,13 +96,57 @@ function readMarkdownField(
 }
 
 /**
+ * Read one level-two Markdown section without consuming its peer sections.
+ *
+ * Returns `null` when the heading is absent so an intentionally empty canonical
+ * section remains distinct from a legacy milestone with no section structure.
+ */
+function readLevelTwoSection(
+  content: string,
+  expectedHeading: string,
+): string | null {
+  const lines = content.split(/\r?\n/u);
+  const headingIndex = lines.findIndex((line) => {
+    const heading = line.match(/^##\s+(.+)\s*$/u)?.[1]?.trim();
+    return heading?.toLowerCase() === expectedHeading.toLowerCase();
+  });
+  if (headingIndex < 0) return null;
+  const nextHeadingOffset = lines
+    .slice(headingIndex + 1)
+    .findIndex((line) => /^##\s+/u.test(line));
+  const bodyEnd =
+    nextHeadingOffset < 0 ? lines.length : headingIndex + 1 + nextHeadingOffset;
+  return lines
+    .slice(headingIndex + 1, bodyEnd)
+    .join("\n")
+    .trim();
+}
+
+/** Remove the local milestone identifier when a title supplies the objective. */
+function objectiveFromTitle(title: string): string {
+  return title.replace(/^(?:M\d+|Milestone\s+\d+)\s*:\s*/iu, "").trim();
+}
+
+/** Prefer explicit objective metadata, then section content, then the outcome title. */
+function readTaskObjective(content: string, title: string): string {
+  const objectiveField = readMarkdownField(
+    content,
+    /^\*\*Objective:\*\*\s*(.+)$/mu,
+    "",
+  );
+  if (objectiveField) return objectiveField;
+  return readLevelTwoSection(content, "Objective") || objectiveFromTitle(title);
+}
+
+/**
  * Count Markdown task checkboxes using the same shape goat-plan writes into milestones.
  */
 function readTaskProgress(content: string): {
   totalTasks: number;
   completedTasks: number;
 } {
-  const taskMatches = Array.from(content.matchAll(/^\s*-\s+\[( |x|X)\]/gmu));
+  const taskSource = readLevelTwoSection(content, "Tasks") ?? content;
+  const taskMatches = Array.from(taskSource.matchAll(/^\s*-\s+\[( |x|X)\]/gmu));
   return {
     totalTasks: taskMatches.length,
     completedTasks: taskMatches.filter(
@@ -119,12 +163,14 @@ function parseTaskMilestone(
   const content = readOptionalTextFile(path) ?? "";
   const modifiedAt = statOrNull(path)?.mtime.toISOString() ?? "";
   const progress = readTaskProgress(content);
+  const outcomeTitle = readMarkdownField(content, /^#\s+(.+)$/mu, "");
+  const title = outcomeTitle || filename;
   return {
     filename,
     path,
-    title: readMarkdownField(content, /^#\s+(.+)$/mu, filename),
+    title,
     status: readMarkdownField(content, /^\*\*Status:\*\*\s*(.+)$/mu, "unknown"),
-    objective: readMarkdownField(content, /^\*\*Objective:\*\*\s*(.+)$/mu, ""),
+    objective: readTaskObjective(content, outcomeTitle),
     totalTasks: progress.totalTasks,
     completedTasks: progress.completedTasks,
     modifiedAt,

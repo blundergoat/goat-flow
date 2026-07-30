@@ -161,35 +161,35 @@ For an explicit goal and scope continue without waiting at I1; pause only for am
 
 ## /goat-plan
 
-Milestone planner and manager. It breaks work into testing-gated milestones, routing through five modes based on scope and user signals: Path-Only Intake (bare task path, read-only orientation), Named-File Update (explicit plan-file edit verb), Read-Only Analysis (analysis signals detected), Small File-Write (Hotfix/Small Feature), or File-Write (clear Standard+ build objective). Files are written to `.goat-flow/plans/` in Small File-Write, File-Write, and explicit Named-File Update modes; Path-Only Intake and Read-Only Analysis never write.
+Milestone planner and manager. The delivery budget controls scope: it fits the smallest complete result, estimates coding-agent time separately from human waiting, and adds detail only when risk or handoff needs it.
 
 ```mermaid
 flowchart TD
-    S0["Step 0\nCheck existing milestones\nIdentify riskiest part\nKill criteria"] --> P1
+    S0["Step 0\nChoose one mode\nCheck plan state and risk"] --> P1
 
     subgraph Plan["Milestone Breakdown"]
-        P1["Phase 1: Break into milestones\nArchetypes: Prove It Works → Make It Real\n→ Make It Solid → Make It Shine"]
+        P1["Phase 1: Fit must-deliver scope to budget\nUse only helpful planning lenses"]
     end
 
-    P1 -->|"CHECKPOINT"| P2["Phase 2: Output per mode\n(inline, file-write, or read-only)"]
+    P1 --> P2["Phase 2: Emit the proportional plan\nor report read-only analysis"]
     P2 -->|"Plan/design only"| Planned["Stop after plan handoff"]
     P2 -->|"return-to-implement"| ACT["Ordinary ACT implementation"]
-    ACT --> P3["Phase 3: Between milestones\nAI verification gate\nHuman verification gate"]
+    ACT --> P3["Phase 3: Fresh proof\nHuman verification gate"]
     P3 -->|"BLOCKING GATE"| Next{"Next milestone?"}
     Next -->|Yes| P3
-    Next -->|No| P4["Phase 4: Plan Complete\nAI verification gate\nHuman verification gate"]
+    Next -->|No| P4["Phase 4: Final proof\nHuman completion gate"]
     P4 -->|"BLOCKING GATE"| Close["Complete"]
 ```
 
-**Milestone archetypes:** Prove It Works (spike the riskiest part first) → Make It Real (end-to-end working) → Make It Solid (edge cases, security) → Make It Shine (polish, optional). Write modes persist milestone files immediately after breakdown; `/goat-plan` does not auto-chain `/goat-critique`. For an authorized build/change route, `/goat-plan` hands the first milestone to ordinary ACT implementation and remains the owner of the between-milestone gates. Each milestone has kill criteria, assumption tracking, and a dual AI + human verification gate (BLOCKING) before the next begins. Read-Only Analysis mode is available at any complexity level via analysis signals ("break this down for me", "how would you approach").
+**Modes:** Path-Only Intake and Read-Only Analysis never write. Named-File Update changes only the named plan file. Small File-Write creates one compact file; Standard File-Write creates a one-screen `ISSUE.md` overview plus executable milestones. High-risk work adds only the assumptions, rollback, compatibility, security, or layered proof its named risks require.
 
-**Handoff-grade milestone artifacts:** Standard+ plans record a planned-at SHA/date, committed and uncommitted drift commands, semantic-anchor current state, explicit in/out scope, a verification baseline, expected command results, STOP conditions, and maintenance notes. Small low-risk plans stay compact.
+**Planning lenses:** Prove It Works, Make It Real, Make It Solid, and Make It Shine are optional planning lenses, not required phases. A spike exists only for a named uncertainty. Lenses merge or disappear when they do not reduce uncertainty, deliver independent value, or create a real decision gate.
 
-**Reconcile:** On an explicit reconcile request, `/goat-plan` checks local TODO/DONE/BLOCKED/IN PROGRESS state against current code and evidence, then asks whether stale in-progress work should resume or be abandoned. Plan state remains local workflow context, never a setup invariant or implementation command.
+**Artifacts and proof:** Small plans target one screen. Standard overviews put outcome, budget, must-deliver scope, exclusions, risk, proof, and next action first. Milestones keep tasks executable for a fresh agent, organise proof as claim → evidence, give each command one home, and omit empty sections.
 
-**Plan completion (Phase 4):** When all milestones are done, the agent runs an AI verification gate (every milestone complete, every task ticked, every exit criterion evidenced, every testing gate passed with current-session proof) then presents results at a blocking human verification gate. Plan artifacts must not include self-destruct instructions, and agents must not delete or archive plan files without human approval.
+**Execution and recovery:** Authorized build/change requests may return to ordinary ACT without another implementation-approval pause. Every milestone still stops on invalidated assumptions, kill criteria, changed scope, or conflicting evidence. Fresh proof records actual effort before the blocking human gate. Reconciliation remains read-only, and plan state remains local workflow context.
 
-**Key constraints:** MUST check for existing milestone files before creating new ones. MUST include testing gates on every milestone. MUST NOT continue building on an invalidated assumption. MUST NOT invoke or prompt for `/goat-critique` from `/goat-plan`. MUST pick exactly one mode in Step 0 and stay in it - cross-mode drift is the failure the mode-picker exists to prevent.
+**Completion:** Final closure requires current evidence and human approval. `/goat-plan` never infers approval, silently weakens requirements, auto-runs `/goat-critique`, or writes self-deletion instructions.
 
 ---
 

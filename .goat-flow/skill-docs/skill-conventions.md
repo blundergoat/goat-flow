@@ -122,22 +122,21 @@ When summarising tasks, findings, or recommendations for user review, use this f
 
 **Status vocabulary:** `not-started | in-progress | testing-gate | blocked | abandoned | human-verification-pending | complete`
 
-When a milestone completes, run the per-milestone AI verification gate then the human verification gate (BLOCKING - see goat-plan Phase 3). After human approval:
+Lifecycle:
 
-1. Record what was learned.
-2. Tick validated assumptions and flag invalidated ones.
-3. Re-read the next milestone and update it if assumptions, scope, or exit criteria changed.
-4. Update the completed milestone status to `complete`; next milestone to `in-progress`.
+1. Authorized work enters `in-progress`; completed implementation tasks enter `testing-gate`.
+2. Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items remain open and no later milestone activates.
+3. Human approval sets a non-final milestone `complete`, then the agent re-reads and starts an eligible dependency.
+4. Human-requested changes return it to `in-progress`; invalidation or a kill trigger sets `blocked` and preserves evidence.
+5. `abandoned` requires an explicit human decision; reopening makes prior proof stale.
 
-Do not write a session log for every completed milestone sequence. Session logs are optional continuity notes: write one when `/compact` fires without an active milestone file, or when the human explicitly asks for a session summary.
+At the gate, record learnings, resolve assumptions, and propose any amendment before applying it. A final pending milestone with complete predecessors enters the combined Phase 4 review.
+
+Session logs remain optional continuity notes: write one only when `/compact` fires without an active milestone or the human requests one.
 
 ### Plan Completion Protocol
 
-When all milestones reach `complete` or `human-verification-pending`, the plan enters Phase 4. See goat-plan SKILL.md. The agent must:
-
-1. Run the AI Verification Gate - confirm every task ticked, every exit criterion evidenced, every testing gate passed with proof from this session.
-2. Present the Human Verification Gate - **BLOCKING GATE**. List all files changed, all milestones and their status, and evidence for each exit criterion. Wait for explicit human approval.
-3. After human approval, plan files remain in `.goat-flow/plans/` until the human archives or removes them.
+See goat-plan Phase 4. Audit the final snapshot, present the **BLOCKING** human gate, and wait. Approval completes the final milestone; plan files remain until the human archives or removes them.
 
 Plan and milestone files are verification artifacts. Agents MUST NOT delete, archive, or include self-destruct instructions in them.
 

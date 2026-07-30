@@ -99,7 +99,86 @@ describe("dashboard /api/plans", () => {
       );
       assert.equal(malformedMilestone.title, "Milestone-malformed.md");
       assert.equal(malformedMilestone.status, "unknown");
+      assert.equal(malformedMilestone.objective, "");
       assert.equal(malformedMilestone.totalTasks, 1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reads section objectives and limits canonical progress to Tasks", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-canonical-plans-"));
+    try {
+      await writeProjectFile(root, ".goat-flow/plans/.active", "current\n");
+      await writeProjectFile(
+        root,
+        ".goat-flow/plans/current/M01-session-refresh.md",
+        [
+          "# M01: Users stay signed in after refresh",
+          "",
+          "**Status:** human-verification-pending",
+          "",
+          "## Objective",
+          "A refreshed session survives reload.",
+          "",
+          "## Assumptions",
+          "- [x] Session storage is atomic.",
+          "",
+          "## Tasks",
+          "- [x] Persist the replacement token.",
+          "- [ ] Reject the previous token.",
+          "",
+          "## Proof",
+          "- [x] Refreshed session survives reload.",
+          "- [ ] [human] Confirm the provider session.",
+          "",
+          "## Exit",
+          "- [ ] Claims are green.",
+          "",
+        ].join("\n"),
+      );
+      await writeProjectFile(
+        root,
+        ".goat-flow/plans/current/M02-dashboard-summary.md",
+        [
+          "# M02: Dashboard summaries remain readable",
+          "",
+          "**Status:** not-started",
+          "",
+          "## Tasks",
+          "- [ ] Align the summary.",
+          "",
+        ].join("\n"),
+      );
+
+      const { res, body } = await fetchJson(
+        `/api/plans?path=${encodeURIComponent(root)}`,
+      );
+      assert.equal(res.status, 200);
+      const data = expectRecord(body, "Plans response");
+      const milestones = data.milestones as Record<string, unknown>[];
+      const sectionObjective = milestoneByFilename(
+        milestones,
+        "M01-session-refresh.md",
+      );
+      assert.equal(
+        sectionObjective.objective,
+        "A refreshed session survives reload.",
+      );
+      assert.equal(sectionObjective.status, "human-verification-pending");
+      assert.equal(sectionObjective.totalTasks, 2);
+      assert.equal(sectionObjective.completedTasks, 1);
+
+      const titleFallback = milestoneByFilename(
+        milestones,
+        "M02-dashboard-summary.md",
+      );
+      assert.equal(
+        titleFallback.objective,
+        "Dashboard summaries remain readable",
+      );
+      assert.equal(titleFallback.totalTasks, 1);
+      assert.equal(titleFallback.completedTasks, 0);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
