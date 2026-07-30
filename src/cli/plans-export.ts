@@ -51,12 +51,14 @@ export interface PlanExportRecord {
   testingGateItems: PlanExportTask[];
   midProofMarkdown: string;
   midProofItems: PlanExportTask[];
+  exitCriteriaItems: PlanExportTask[];
   effort?: PlanExportEffort;
   taskEstimateTotals?: PlanEffortSplit;
   planAdminEstimate?: TaskEstimateFields;
   workEstimateTotals?: PlanEffortSplit;
   verificationMarkdown: string;
   exitCriteriaMarkdown: string;
+  stopMarkdown: string;
   warnings: string[];
 }
 
@@ -120,18 +122,39 @@ function readMilestoneSections(content: string): MarkdownSection[] {
   });
 }
 
-/** Find a section by user-facing heading aliases; absent sections return empty text. */
-function readMilestoneSection(
+/** Return every section matching one semantic alias group in source order. */
+function readMilestoneSectionMatches(
   sections: MarkdownSection[],
   headingAliases: readonly string[],
-): string {
-  const matchingSection = sections.find((section) =>
+): MarkdownSection[] {
+  return sections.filter((section) =>
     headingAliases.some(
       (alias) =>
         section.heading === alias || section.heading.startsWith(`${alias} `),
     ),
   );
-  return matchingSection?.body ?? "";
+}
+
+/** Join complementary section bodies without inventing headings or reordering evidence. */
+function joinSectionBodies(sections: readonly MarkdownSection[]): string {
+  return sections
+    .map((section) => section.body)
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+/** Remove a milestone identifier from an outcome title used as the objective fallback. */
+function objectiveFromTitle(title: string): string {
+  return title.replace(/^(?:M\d+|Milestone\s+\d+)\s*:\s*/iu, "").trim();
+}
+
+/** Record a deterministic alias conflict without copying user-authored text. */
+function addRepresentationConflict(
+  warnings: string[],
+  hasConflict: boolean,
+  label: string,
+): void {
+  if (hasConflict) warnings.push(`conflicting ${label} representations`);
 }
 
 /**
@@ -205,6 +228,144 @@ function addEffortFields(
   if (workEstimateTotals) record.workEstimateTotals = workEstimateTotals;
 }
 
+/** Read one semantic section and warn when the author supplied competing copies. */
+function readSingleSectionMarkdown(
+  sections: MarkdownSection[],
+  headingAliases: readonly string[],
+  warnings: string[],
+  conflictLabel: string,
+): string {
+  const matches = readMilestoneSectionMatches(sections, headingAliases);
+  addRepresentationConflict(warnings, matches.length > 1, conflictLabel);
+  return matches.at(0)?.body ?? "";
+}
+
+/** Resolve a compact metadata field or its expanded section representation. */
+function readFieldOrSectionMarkdown(
+  content: string,
+  fieldLabel: string,
+  sections: MarkdownSection[],
+  headingAliases: readonly string[],
+  warnings: string[],
+  conflictLabel: string,
+): string {
+  const field = readMilestoneField(content, fieldLabel);
+  const matches = readMilestoneSectionMatches(sections, headingAliases);
+  const section = matches.at(0)?.body ?? "";
+  addRepresentationConflict(
+    warnings,
+    matches.length > 1 ||
+      (field.length > 0 && section.length > 0 && field !== section),
+    conflictLabel,
+  );
+  return firstPopulated(field, section);
+}
+
+/** Resolve explicit or section-style objectives before falling back to the outcome title. */
+function readObjective(
+  content: string,
+  title: string,
+  sections: MarkdownSection[],
+  warnings: string[],
+): string {
+  const objectiveField = readMilestoneField(content, "Objective");
+  const objectiveSections = readMilestoneSectionMatches(sections, [
+    "objective",
+  ]);
+  const objectiveSection = objectiveSections.at(0)?.body ?? "";
+  addRepresentationConflict(
+    warnings,
+    objectiveSections.length > 1 ||
+      (objectiveField.length > 0 &&
+        objectiveSection.length > 0 &&
+        objectiveField !== objectiveSection),
+    "objective",
+  );
+  return firstPopulated(
+    objectiveField,
+    firstPopulated(objectiveSection, objectiveFromTitle(title)),
+  );
+}
+
+/** Prefer canonical Proof while accepting one legacy verification heading. */
+function readProofMarkdown(
+  sections: MarkdownSection[],
+  warnings: string[],
+): string {
+  const canonical = readMilestoneSectionMatches(sections, ["proof"]);
+  const legacy = readMilestoneSectionMatches(sections, [
+    "verification gate",
+    "testing gate",
+  ]);
+  addRepresentationConflict(
+    warnings,
+    canonical.length > 1 ||
+      legacy.length > 1 ||
+      (canonical.length > 0 && legacy.length > 0),
+    "proof",
+  );
+  const selected = canonical.length > 0 ? canonical : legacy;
+  return selected.at(0)?.body ?? "";
+}
+
+/** Detect multiple explicit or compact stop representations. */
+function hasStopRepresentationConflict(
+  canonical: MarkdownSection[],
+  legacyKill: MarkdownSection[],
+  legacyStop: MarkdownSection[],
+  explicit: string,
+  embedded: string,
+): boolean {
+  return (
+    canonical.length > 1 ||
+    (canonical.length > 0 &&
+      (legacyKill.length > 0 || legacyStop.length > 0)) ||
+    legacyKill.length > 1 ||
+    legacyStop.length > 1 ||
+    (explicit.length > 0 && embedded.length > 0)
+  );
+}
+
+/** Read a dedicated stop section or the compact Exit-block stop line. */
+function readStopMarkdown(
+  sections: MarkdownSection[],
+  exitMarkdown: string,
+  warnings: string[],
+): string {
+  const canonical = readMilestoneSectionMatches(sections, [
+    "stop / rescope",
+    "stop/rescope",
+    "stop / kill",
+    "stop/kill",
+  ]);
+  const legacyKill = readMilestoneSectionMatches(sections, ["kill criteria"]);
+  const legacyStop = readMilestoneSectionMatches(sections, ["stop conditions"]);
+  const legacySet = sections.filter(
+    (section) => legacyKill.includes(section) || legacyStop.includes(section),
+  );
+  const explicit =
+    canonical.length > 0
+      ? joinSectionBodies(canonical)
+      : joinSectionBodies(legacySet);
+  const embedded =
+    exitMarkdown
+      .match(/^\s*-\s+Stop\s*\/\s*rescope if\s+.+$/imu)
+      ?.at(0)
+      ?.trim() ?? "";
+  addRepresentationConflict(
+    warnings,
+    hasStopRepresentationConflict(
+      canonical,
+      legacyKill,
+      legacyStop,
+      explicit,
+      embedded,
+    ),
+    "stop",
+  );
+  return firstPopulated(explicit, embedded);
+}
+
 /**
  * Parse one goat-plan milestone into the portable export contract.
  * Use for previews and writes; only the top-level title is mandatory.
@@ -230,29 +391,46 @@ export function parseMilestoneMarkdown(
   const sections = readMilestoneSections(content);
   const status = readMilestoneField(content, "Status");
   const dependencies = readMilestoneField(content, "Depends on");
-  // Handoff-grade milestones carry the objective as a `## Objective` section
-  // rather than a metadata line; both shapes are real goat-plan output.
-  const objective = firstPopulated(
-    readMilestoneField(content, "Objective"),
-    readMilestoneSection(sections, ["objective"]),
-  );
-  const scopeMarkdown = readMilestoneSection(sections, [
-    "scope",
-    "scope discipline",
-  ]);
-  const boundaryMarkdown = readMilestoneSection(sections, [
-    "boundary gate",
-    "boundary notes",
-  ]);
-  const taskMarkdown = readMilestoneSection(sections, ["tasks"]);
-  const verificationMarkdown = readMilestoneSection(sections, [
-    "verification gate",
-    "testing gate",
-  ]);
-  const midProofMarkdown = readMilestoneSection(sections, [
-    "mid-implementation proof",
-  ]);
   const warnings: string[] = [];
+  const objective = readObjective(content, title, sections, warnings);
+  const scopeMarkdown = readFieldOrSectionMarkdown(
+    content,
+    "Scope",
+    sections,
+    ["scope", "scope discipline"],
+    warnings,
+    "scope",
+  );
+  const boundaryMarkdown = readSingleSectionMarkdown(
+    sections,
+    ["boundary gate", "boundary notes"],
+    warnings,
+    "boundary",
+  );
+  const taskMarkdown = readSingleSectionMarkdown(
+    sections,
+    ["tasks"],
+    warnings,
+    "task",
+  );
+  const verificationMarkdown = readProofMarkdown(sections, warnings);
+  const midProofMarkdown = readSingleSectionMarkdown(
+    sections,
+    ["mid-implementation proof"],
+    warnings,
+    "mid-proof",
+  );
+  const exitCriteriaMarkdown = readSingleSectionMarkdown(
+    sections,
+    ["exit criteria", "exit"],
+    warnings,
+    "exit criteria",
+  );
+  const stopMarkdown = readStopMarkdown(
+    sections,
+    exitCriteriaMarkdown,
+    warnings,
+  );
   const tasks = readChecklistItems(taskMarkdown, warnings, "task");
   const testingGateItems = readChecklistItems(
     verificationMarkdown,
@@ -263,6 +441,11 @@ export function parseMilestoneMarkdown(
     midProofMarkdown,
     warnings,
     "mid-proof item",
+  );
+  const exitCriteriaItems = readChecklistItems(
+    exitCriteriaMarkdown,
+    warnings,
+    "exit criteria item",
   );
   const taskEstimateTotals = sumTaskEstimates(tasks);
   const planAdminEstimate = readPlanAdminEstimate(
@@ -275,22 +458,17 @@ export function parseMilestoneMarkdown(
     ...midProofItems,
     planAdminEstimate,
   ]);
-  const exitCriteriaMarkdown = readMilestoneSection(sections, [
-    "exit criteria",
-  ]);
   const effort = parseEffortLineValue(
     readMilestoneField(content, "Effort estimate"),
     warnings,
     readMilestoneField(content, "Actual"),
   );
   addMissingFieldWarning(warnings, status, "status");
-  addMissingFieldWarning(warnings, dependencies, "dependencies");
-  addMissingFieldWarning(warnings, objective, "objective");
   addMissingFieldWarning(warnings, scopeMarkdown, "scope");
-  addMissingFieldWarning(warnings, boundaryMarkdown, "boundary notes");
   addMissingFieldWarning(warnings, tasks, "tasks");
-  addMissingFieldWarning(warnings, verificationMarkdown, "verification gate");
+  addMissingFieldWarning(warnings, testingGateItems, "proof");
   addMissingFieldWarning(warnings, exitCriteriaMarkdown, "exit criteria");
+  addMissingFieldWarning(warnings, stopMarkdown, "stop/rescope");
 
   const record: PlanExportRecord = {
     sourceFile,
@@ -305,8 +483,10 @@ export function parseMilestoneMarkdown(
     testingGateItems,
     midProofMarkdown,
     midProofItems,
+    exitCriteriaItems,
     verificationMarkdown,
     exitCriteriaMarkdown,
+    stopMarkdown,
     warnings,
   };
   addEffortFields(
@@ -407,8 +587,13 @@ export function redactPlanExportRecord(
       ...item,
       text: scrubDurableText(item.text),
     })),
+    exitCriteriaItems: record.exitCriteriaItems.map((item) => ({
+      ...item,
+      text: scrubDurableText(item.text),
+    })),
     verificationMarkdown: scrubDurableText(record.verificationMarkdown),
     exitCriteriaMarkdown: scrubDurableText(record.exitCriteriaMarkdown),
+    stopMarkdown: scrubDurableText(record.stopMarkdown),
     // Actual reasons are user-authored; numeric effort fields need no scrub.
     ...(record.effort && {
       effort: {
@@ -485,6 +670,10 @@ function renderPlanExportMarkdown(record: PlanExportRecord): string {
     "## Exit Criteria",
     "",
     providedOrMissing(record.exitCriteriaMarkdown, missingText),
+    "",
+    "## Stop / rescope",
+    "",
+    providedOrMissing(record.stopMarkdown, missingText),
   ];
 
   // Partial milestones surface warnings so issue readers do not mistake missing gates for approval.

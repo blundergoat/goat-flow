@@ -157,7 +157,6 @@ For diff reviews, map posture explicitly:
 Run a narrow specialist cross-check when any of these are true:
 - any Critical/High candidate
 - any finding in auth, crypto, secrets, CI/CD, or agent surfaces
-- `PROBABLE` findings outnumber `CONFIRMED`
 - strong evidence and strong uncertainty coexist in the same finding cluster (findings that share a root cause, file, or trust boundary)
 
 An admissible specialist is an independent tool or reviewer with a named failure class and structured return. Same-context self-review does not qualify. Apply `skill-conventions.md` → Orchestration Admission; this required phase is pre-admitted, but a delegated or external reviewer is eligible only when its invocation is already authorized by current-session user intent or local instructions.
@@ -178,7 +177,7 @@ Re-read `file + semantic anchor` for Critical/High. Does the code or config stil
 
 **Proof Gate:** Apply the Proof Gate from `skill-preamble.md` - every CONFIRMED finding must have a fresh `file + semantic anchor` re-read in this session, every finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`, and dependency-audit results must be from a tool run in this session, never paraphrased or fabricated.
 
-If `PROBABLE > CONFIRMED`, suggest `/goat-critique` cross-examination before closing. If the user declines, close with those clusters marked PROBABLE and list the evidence needed to promote or kill each one.
+Suggest `/goat-critique` only for a named disputed claim or cross-examination question, never a bare `PROBABLE > CONFIRMED` ratio. If declined, retain PROBABLE clusters and list evidence needed to promote or kill them.
 
 **Zero-findings defence:** If Phase 6 produces zero findings, state what was scanned, which surfaces were checked, and why nothing surfaced. Zero findings must be defended, not assumed.
 

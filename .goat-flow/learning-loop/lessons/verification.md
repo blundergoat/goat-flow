@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-07-19
+last_reviewed: 2026-07-31
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -346,10 +346,12 @@ last_reviewed: 2026-07-19
 
 **Status:** active | **Created:** 2026-07-17  
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient. | **Trigger phase:** VERIFY  
-**Incident count:** 1 | **Latest occurrence:** 2026-07-17
+**Incident count:** 2 | **Latest occurrence:** 2026-07-31
 
 **What happened:** The 1.15.0 milestone files looked structurally complete and passed a custom heading/count check, but the first `plans export` preview warned that all 11 records lacked portable objectives and boundary notes. The files used a level-two `Objective` section instead of the exporter's bold `Objective` field, omitted `Boundary Notes`, and initially placed CAO incident gates in peer sections that the exporter would not include in task bodies.
 
+**Recurrence (2026-07-31):** Goat-plan's compact reference introduced an inline Scope plus canonical `## Exit` containing `Stop/rescope if`, while the parser still accepted only a Scope section, legacy `## Exit criteria`, and a separate stop heading. The first full preflight also caught three parser complexity errors missed by the focused M02 suite. The correction added an end-to-end strict Small fixture, exporter coverage for compact Exit/stop, and split parser branches before rerunning repository gates.
+
 **Root cause:** I validated the authoring layout I had produced instead of the repository's consumer contract. A Markdown reader could infer the intended fields, while `parseMilestoneMarkdown` intentionally recognizes a narrower portable schema.
 
-**Fix and prevention:** Use `**Objective:**`, `## Scope`, `## Boundary Notes`, `## Tasks`, `## Testing Gate`, and `## Exit criteria` for portable milestones. Put task subgroups under level-three headings so they remain inside `Tasks`. Before handoff, run `node dist/cli/cli.js plans export <plan-path> --format json` and require every record to have zero warnings; when shell policy rejects a pipe into an interpreter, import `parseMilestoneMarkdown` directly in a read-only local verification script. Evidence anchors: `src/cli/plans-export.ts` (search: `addMissingFieldWarning`) and `src/cli/plans-export.ts` (search: `readMilestoneSection`).
+**Fix and prevention:** Treat the canonical example as an executable consumer fixture, not prose. Cover compact and expanded representations through `parseMilestoneMarkdown`, run `goat-flow plans check <plan-path> --strict`, and require exporter records to have zero warnings. Parser changes also run scoped ESLint before full preflight. Current portable anchors are outcome title, Status, compact or section Scope, Tasks, Proof, Exit/Exit criteria, and Stop/rescope. Evidence anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`), `src/cli/plans-export.ts` (search: `readStopMarkdown`), and `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).

@@ -22,6 +22,17 @@ function runPlansCheck(...args: string[]) {
   );
 }
 
+/** Require every failure to identify one milestone or the whole plan. */
+function assertSourceLabelledErrors(stdout: string): void {
+  const errorLines = stdout
+    .split("\n")
+    .filter((line) => line.startsWith("error: "));
+  assert.ok(errorLines.length > 0, stdout);
+  for (const line of errorLines) {
+    assert.match(line, /^error: (?:M.+\.md|plan):/u);
+  }
+}
+
 /**
  * Write one milestone fixture into a fresh plan directory under the temp root.
  *
@@ -36,10 +47,26 @@ function writeCheckFixture(temporaryRoot: string, body: string): string {
   return planPath;
 }
 
+/** Write several milestones when a validation case needs plan-level relationships. */
+function writeCheckPlan(
+  temporaryRoot: string,
+  files: Record<string, string>,
+): string {
+  const planPath = join(temporaryRoot, "plan");
+  mkdirSync(planPath, { recursive: true });
+  for (const [filename, body] of Object.entries(files)) {
+    writeFileSync(join(planPath, filename), body, "utf-8");
+  }
+  return planPath;
+}
+
 interface EstimatedMilestoneOptions {
+  title?: string;
   status?: string;
+  dependsOn?: string;
   actualLine?: string;
   planAdminOverhead?: string;
+  proofHeading?: string;
   testingGateLines?: string[];
   midProofLines?: string[];
 }
@@ -58,28 +85,122 @@ function estimatedMilestoneBody(
   options: EstimatedMilestoneOptions = {},
 ): string {
   return [
-    "# M01: Estimated milestone",
+    `# ${options.title ?? "M01: Estimated milestone"}`,
     `Status: ${options.status ?? "not-started"}`,
+    `Depends on: ${options.dependsOn ?? "none"}`,
     effortLine,
     ...(options.actualLine ? [options.actualLine] : []),
     ...(options.planAdminOverhead
       ? [`Plan/admin overhead: ${options.planAdminOverhead}`]
       : []),
     "",
+    "## Scope",
+    "",
+    "Deliver the estimated outcome.",
+    "",
     "## Tasks",
     "",
     ...taskLines,
     "",
     ...(options.testingGateLines
-      ? ["## Testing Gate", "", ...options.testingGateLines, ""]
+      ? [
+          `## ${options.proofHeading ?? "Testing Gate"}`,
+          "",
+          ...options.testingGateLines,
+          "",
+        ]
       : []),
     ...(options.midProofLines
       ? ["## Mid-implementation proof", "", ...options.midProofLines, ""]
       : []),
+    "## Exit criteria",
+    "",
+    "The estimated outcome is delivered.",
+    "",
+    "## Stop / rescope",
+    "",
+    "Stop if the declared scope changes.",
+    "",
   ].join("\n");
 }
 
+interface CanonicalMilestoneOptions {
+  title?: string;
+  status?: string;
+  dependsOn?: string;
+  includeDependencies?: boolean;
+  taskChecked?: boolean;
+  proofHeading?: "Proof" | "Testing Gate";
+  proofLines?: string[];
+  actual?: boolean;
+}
+
+/** Build the smallest canonical strict fixture while allowing lifecycle variants. */
+function canonicalMilestoneBody(
+  options: CanonicalMilestoneOptions = {},
+): string {
+  const taskMarker = options.taskChecked ? "x" : " ";
+  const proofLines = options.proofLines ?? [
+    "- [ ] Outcome is proven → focused check passes. [automated] (est: 1 min proof)",
+  ];
+  const totalMinutes = 1 + proofLines.length;
+  const body = estimatedMilestoneBody(
+    `Effort estimate: ~${totalMinutes} min agent-time (1 product / ${proofLines.length} proof / 0 other)`,
+    [
+      `- [${taskMarker}] Deliver the outcome; done when proof passes. (est: 1 min product)`,
+    ],
+    {
+      title: options.title,
+      status: options.status,
+      dependsOn: options.dependsOn,
+      actualLine: options.actual
+        ? `Actual: ~${totalMinutes} min agent-time (1 product / ${proofLines.length} proof / 0 other)`
+        : undefined,
+      planAdminOverhead: "0 min other",
+      proofHeading: options.proofHeading ?? "Testing Gate",
+      testingGateLines: proofLines,
+    },
+  );
+  return options.includeDependencies === false
+    ? body.replace(/^Depends on:.*\n/mu, "")
+    : body;
+}
+
 describe("plans check", () => {
+  it("accepts the compact Small rendering in strict mode", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      [
+        "# Deliver the compact outcome",
+        "**Status:** not-started",
+        "**Effort estimate:** ~3 min agent-time (1 product / 1 proof / 1 other)",
+        "**Plan/admin overhead:** 1 min other",
+        "**Scope:** deliver one bounded result",
+        "",
+        "## Tasks",
+        "- [ ] Deliver the result; done when C1 passes. (est: 1 min product)",
+        "",
+        "## Proof",
+        "- [ ] C1: result is delivered → focused check passes. [automated] (est: 1 min proof)",
+        "",
+        "## Exit",
+        "- C1 is green with fresh evidence.",
+        "- Stop/rescope if the bounded result requires adjacent work.",
+        "",
+      ].join("\n"),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+
+      assert.equal(result.status, 0, result.stdout);
+      assert.doesNotMatch(result.stdout, /error:/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   // The worked-example arithmetic (18 + 5 + 2 = 25) passes without advisories.
   it("reports a consistent plan and exits 0", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
@@ -242,6 +363,393 @@ describe("plans check", () => {
       assert.equal(result.status, 0, result.stderr);
       assert.doesNotMatch(result.stdout, /error:/u);
       assert.doesNotMatch(result.stdout, /advisory:/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode accepts canonical Small, Standard, and high-risk shapes", () => {
+    const temporaryRoots: string[] = [];
+    try {
+      const smallRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-small-"));
+      temporaryRoots.push(smallRoot);
+      const smallPath = writeCheckPlan(smallRoot, {
+        "M01-small.md": canonicalMilestoneBody({
+          includeDependencies: false,
+          proofHeading: "Proof",
+        }),
+      });
+
+      const standardRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-plan-standard-"),
+      );
+      temporaryRoots.push(standardRoot);
+      const standardPath = writeCheckPlan(standardRoot, {
+        "M01-foundation.md": canonicalMilestoneBody({
+          title: "M01: Foundation works",
+          status: "complete",
+          taskChecked: true,
+          proofHeading: "Proof",
+          proofLines: [
+            "- [x] Foundation is proven → focused check passes. [automated] (est: 1 min proof)",
+          ],
+          actual: true,
+        }),
+        "M02-integration.md": canonicalMilestoneBody({
+          title: "M02: Integration works",
+          dependsOn: "M01",
+          proofHeading: "Proof",
+          status: "complete",
+          taskChecked: true,
+          proofLines: [
+            "- [x] Integration is proven → focused check passes. [automated] (est: 1 min proof)",
+          ],
+          actual: true,
+        }),
+        "M04-outcome.md": canonicalMilestoneBody({
+          title: "M04: Outcome is available",
+          dependsOn: "M01, M02",
+          proofHeading: "Proof",
+        }),
+      });
+
+      const highRiskRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-plan-high-risk-"),
+      );
+      temporaryRoots.push(highRiskRoot);
+      const highRiskPath = writeCheckPlan(highRiskRoot, {
+        "M01-migrate-safely.md": [
+          canonicalMilestoneBody({
+            title: "M01: Existing data migrates safely",
+            proofHeading: "Proof",
+          }),
+          "## Boundary Notes",
+          "The migration remains reversible and requires explicit production approval.",
+          "",
+          "## Assumptions",
+          "- [ ] Existing rows satisfy the compatibility query.",
+          "",
+        ].join("\n"),
+      });
+
+      for (const planPath of [smallPath, standardPath, highRiskPath]) {
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.doesNotMatch(result.stdout, /error:/u);
+      }
+    } finally {
+      for (const root of temporaryRoots) {
+        rmSync(root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("strict mode rejects an absent deterministic core", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-core-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      [
+        "# M01: Missing core",
+        "",
+        "**Effort estimate:** ~0 min agent-time (0 product / 0 proof / 0 other)",
+        "**Plan/admin overhead:** 0 min other",
+        "",
+      ].join("\n"),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+
+      assert.equal(result.status, 1);
+      assertSourceLabelledErrors(result.stdout);
+      for (const field of [
+        "status",
+        "scope",
+        "tasks",
+        "proof",
+        "exit",
+        "stop",
+      ]) {
+        assert.match(result.stdout, new RegExp(`missing ${field}`, "u"));
+      }
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode rejects conflicting canonical and legacy aliases", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-aliases-"),
+    );
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      [
+        canonicalMilestoneBody({ proofHeading: "Proof" }),
+        "**Objective:** First outcome",
+        "",
+        "## Objective",
+        "Different outcome",
+        "",
+        "## Testing Gate",
+        "- [ ] Legacy duplicate proof. (est: 1 min proof)",
+        "",
+        "## Kill criteria",
+        "Legacy duplicate stop.",
+        "",
+        "## Scope Discipline",
+        "Duplicate scope.",
+        "",
+        "## Tasks",
+        "- [ ] Duplicate task. (est: 1 min product)",
+        "",
+        "## Exit Criteria",
+        "Duplicate exit.",
+        "",
+      ].join("\n"),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+
+      assert.equal(result.status, 1);
+      assertSourceLabelledErrors(result.stdout);
+      assert.match(result.stdout, /conflicting objective representations/u);
+      assert.match(result.stdout, /conflicting proof representations/u);
+      assert.match(result.stdout, /conflicting stop representations/u);
+      assert.match(result.stdout, /conflicting scope representations/u);
+      assert.match(result.stdout, /conflicting task representations/u);
+      assert.match(result.stdout, /conflicting exit criteria representations/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode rejects duplicate and mismatched milestone IDs", () => {
+    const duplicateRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-duplicate-id-"),
+    );
+    const mismatchRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-title-id-"),
+    );
+    try {
+      const duplicatePath = writeCheckPlan(duplicateRoot, {
+        "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
+        "M1-two.md": canonicalMilestoneBody({ title: "M1: Two" }),
+      });
+      const mismatchPath = writeCheckPlan(mismatchRoot, {
+        "M02-wrong.md": canonicalMilestoneBody({ title: "M03: Wrong ID" }),
+      });
+
+      const duplicate = runPlansCheck(duplicatePath, "--strict");
+      const mismatch = runPlansCheck(mismatchPath, "--strict");
+
+      assert.equal(duplicate.status, 1);
+      assertSourceLabelledErrors(duplicate.stdout);
+      assert.match(duplicate.stdout, /duplicate milestone ID/u);
+      assert.equal(mismatch.status, 1);
+      assertSourceLabelledErrors(mismatch.stdout);
+      assert.match(
+        mismatch.stdout,
+        /title ID M03 does not match filename ID M02/u,
+      );
+    } finally {
+      rmSync(duplicateRoot, { recursive: true, force: true });
+      rmSync(mismatchRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode rejects malformed, unresolved, self, cyclic, and state-invalid dependencies", () => {
+    const cases: Array<{
+      name: string;
+      files: Record<string, string>;
+      expected: RegExp;
+    }> = [
+      {
+        name: "malformed",
+        files: {
+          "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
+          "M02-two.md": canonicalMilestoneBody({
+            title: "M02: Two",
+            dependsOn: "M01 (soft)",
+          }),
+        },
+        expected:
+          /dependencies must be `none` or comma-separated local milestone IDs/u,
+      },
+      {
+        name: "unresolved",
+        files: {
+          "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
+          "M02-two.md": canonicalMilestoneBody({
+            title: "M02: Two",
+            dependsOn: "M09",
+          }),
+        },
+        expected: /dependency M09 does not resolve/u,
+      },
+      {
+        name: "self",
+        files: {
+          "M01-one.md": canonicalMilestoneBody({
+            title: "M01: One",
+            dependsOn: "M01",
+          }),
+        },
+        expected: /cannot depend on itself/u,
+      },
+      {
+        name: "cycle",
+        files: {
+          "M01-one.md": canonicalMilestoneBody({
+            title: "M01: One",
+            dependsOn: "M02",
+          }),
+          "M02-two.md": canonicalMilestoneBody({
+            title: "M02: Two",
+            dependsOn: "M01",
+          }),
+        },
+        expected: /dependency cycle/u,
+      },
+      {
+        name: "state",
+        files: {
+          "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
+          "M02-two.md": canonicalMilestoneBody({
+            title: "M02: Two",
+            status: "in-progress",
+            dependsOn: "M01",
+          }),
+        },
+        expected:
+          /active or complete milestone requires dependency M01 to be complete/u,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), `goat-flow-plan-dependency-${testCase.name}-`),
+      );
+      try {
+        const planPath = writeCheckPlan(temporaryRoot, testCase.files);
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assertSourceLabelledErrors(result.stdout);
+        assert.match(result.stdout, testCase.expected);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("strict mode enforces lifecycle checkbox and Actual snapshots", () => {
+    const cases: Array<{
+      name: string;
+      body: string;
+      expected: RegExp;
+    }> = [
+      {
+        name: "not-started-work",
+        body: canonicalMilestoneBody({ taskChecked: true }),
+        expected: /not-started milestone has checked implementation tasks/u,
+      },
+      {
+        name: "testing-open-task",
+        body: canonicalMilestoneBody({ status: "testing-gate" }),
+        expected: /testing-gate milestone has open implementation tasks/u,
+      },
+      {
+        name: "pending-open-proof",
+        body: canonicalMilestoneBody({
+          status: "human-verification-pending",
+          taskChecked: true,
+        }),
+        expected:
+          /human-verification-pending milestone requires structured Actual|executor proof item remains open/u,
+      },
+      {
+        name: "complete-open-human",
+        body: canonicalMilestoneBody({
+          status: "complete",
+          taskChecked: true,
+          proofLines: [
+            "- [x] Outcome is proven. [automated] (est: 1 min proof)",
+            "- [ ] [human] Approve completion. (est: 1 min proof)",
+          ],
+          actual: true,
+        }),
+        expected: /complete milestone has open proof items/u,
+      },
+      {
+        name: "invalid-status",
+        body: canonicalMilestoneBody({ status: "planned" }),
+        expected: /unsupported status `planned`/u,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), `goat-flow-plan-lifecycle-${testCase.name}-`),
+      );
+      try {
+        const planPath = writeCheckFixture(temporaryRoot, testCase.body);
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assertSourceLabelledErrors(result.stdout);
+        assert.match(result.stdout, testCase.expected);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("strict mode allows only human-owned proof to remain open at the pending gate", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-human-pending-"),
+    );
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      canonicalMilestoneBody({
+        status: "human-verification-pending",
+        taskChecked: true,
+        proofLines: [
+          "- [x] Outcome is proven. [automated] (est: 1 min proof)",
+          "- [ ] [human] Approve completion. (est: 1 min proof)",
+        ],
+        actual: true,
+      }),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.doesNotMatch(result.stdout, /error:/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode rejects more than one active milestone", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-multiple-active-"),
+    );
+    const planPath = writeCheckPlan(temporaryRoot, {
+      "M01-one.md": canonicalMilestoneBody({
+        title: "M01: One",
+        status: "in-progress",
+      }),
+      "M02-two.md": canonicalMilestoneBody({
+        title: "M02: Two",
+        status: "testing-gate",
+        dependsOn: "M01",
+      }),
+    });
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1);
+      assertSourceLabelledErrors(result.stdout);
+      assert.match(result.stdout, /multiple active milestones/u);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

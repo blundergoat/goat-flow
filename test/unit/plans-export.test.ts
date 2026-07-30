@@ -54,6 +54,10 @@ function completeMilestoneBody(secretValue = "safe objective"): string {
 ## Exit Criteria
 
 - Export keeps verification evidence.
+
+## STOP conditions
+
+- Stop if export loses required context.
 `;
 }
 
@@ -153,6 +157,7 @@ describe("plans export", () => {
     ]);
     assert.match(record.verificationMarkdown, /Run focused tests/u);
     assert.match(record.exitCriteriaMarkdown, /verification evidence/u);
+    assert.match(record.stopMarkdown, /loses required context/u);
     assert.deepEqual(record.warnings, []);
   });
 
@@ -164,11 +169,15 @@ describe("plans export", () => {
     );
 
     assert.equal(record.status, "unknown");
-    assert.equal(record.objective, "");
+    assert.equal(record.objective, "Partial plan");
     assert.deepEqual(record.tasks, []);
     assert.ok(record.warnings.includes("missing status"));
-    assert.ok(record.warnings.includes("missing verification gate"));
+    assert.ok(record.warnings.includes("missing proof"));
     assert.ok(record.warnings.includes("missing exit criteria"));
+    assert.ok(record.warnings.includes("missing stop/rescope"));
+    assert.ok(!record.warnings.includes("missing dependencies"));
+    assert.ok(!record.warnings.includes("missing objective"));
+    assert.ok(!record.warnings.includes("missing boundary notes"));
   });
 
   // Handoff-grade milestones use a `## Objective` section and bare `Status:` line.
@@ -197,6 +206,156 @@ describe("plans export", () => {
     );
     assert.ok(!record.warnings.includes("missing status"));
     assert.ok(!record.warnings.includes("missing objective"));
+  });
+
+  it("parses the canonical Proof and Stop shape without conditional-absence warnings", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M01: Users stay signed in",
+        "",
+        "**Status:** not-started",
+        "**Effort estimate:** ~10 min agent-time (7 product / 2 proof / 1 other)",
+        "**Plan/admin overhead:** 1 min other",
+        "",
+        "## Scope",
+        "Refresh existing sessions.",
+        "",
+        "## Tasks",
+        "- [ ] Persist the rotated token. (est: 7 min product)",
+        "",
+        "## Proof",
+        "- [ ] Session survives refresh → focused test passes. [automated] (est: 2 min proof)",
+        "",
+        "### Commands",
+        "| Purpose | Command |",
+        "|---|---|",
+        "| Focused | `npm test -- refresh` |",
+        "",
+        "## Exit criteria",
+        "The session remains valid after refresh.",
+        "",
+        "## Stop / rescope",
+        "Stop if the provider does not rotate tokens.",
+        "",
+      ].join("\n"),
+      "M01-users-stay-signed-in.md",
+    );
+
+    assert.equal(record.objective, "Users stay signed in");
+    assert.match(record.verificationMarkdown, /Session survives refresh/u);
+    assert.equal(record.testingGateItems.length, 1);
+    assert.doesNotMatch(record.testingGateItems[0]?.text ?? "", /Commands/u);
+    assert.match(record.stopMarkdown, /provider does not rotate/u);
+    assert.deepEqual(record.warnings, []);
+  });
+
+  it("parses compact Exit with an embedded stop condition", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# Fix the parser mismatch",
+        "",
+        "**Status:** not-started",
+        "**Scope:** accept the compact plan shape",
+        "",
+        "## Tasks",
+        "- [ ] Accept canonical Exit.",
+        "",
+        "## Proof",
+        "- [ ] Compact plan → strict parser accepts it. [contract]",
+        "",
+        "## Exit",
+        "- The compact plan parses without warnings.",
+        "- Stop/rescope if the parser needs a second stop representation.",
+        "",
+      ].join("\n"),
+      "M01-fix-parser-mismatch.md",
+    );
+
+    assert.equal(record.objective, "Fix the parser mismatch");
+    assert.match(record.exitCriteriaMarkdown, /parses without warnings/u);
+    assert.match(record.stopMarkdown, /Stop\/rescope if the parser needs/u);
+    assert.deepEqual(record.warnings, []);
+  });
+
+  it("preserves complementary legacy stop sections and flags competing canonical aliases", () => {
+    const legacy = parseMilestoneMarkdown(
+      [
+        "# M01: Legacy stops",
+        "",
+        "## Kill criteria",
+        "Kill when the provider contract fails.",
+        "",
+        "## STOP conditions",
+        "Stop before crossing the auth boundary.",
+        "",
+      ].join("\n"),
+      "M01-legacy-stops.md",
+    );
+    const conflicting = parseMilestoneMarkdown(
+      [
+        "# M02: Conflicting aliases",
+        "",
+        "**Objective:** First outcome",
+        "",
+        "## Objective",
+        "Different outcome",
+        "",
+        "## Proof",
+        "- [ ] Canonical proof",
+        "",
+        "## Testing Gate",
+        "- [ ] Legacy proof",
+        "",
+        "## Stop / rescope",
+        "Canonical stop.",
+        "",
+        "## Kill criteria",
+        "Legacy kill.",
+        "",
+        "## Scope",
+        "Canonical scope.",
+        "",
+        "## Scope Discipline",
+        "Legacy scope.",
+        "",
+        "## Tasks",
+        "- [ ] First task.",
+        "",
+        "## Tasks",
+        "- [ ] Duplicate task.",
+        "",
+        "## Exit criteria",
+        "First exit.",
+        "",
+        "## Exit Criteria",
+        "Duplicate exit.",
+        "",
+      ].join("\n"),
+      "M02-conflicting-aliases.md",
+    );
+
+    assert.match(legacy.stopMarkdown, /provider contract fails/u);
+    assert.match(legacy.stopMarkdown, /auth boundary/u);
+    assert.ok(
+      conflicting.warnings.includes("conflicting objective representations"),
+    );
+    assert.ok(
+      conflicting.warnings.includes("conflicting proof representations"),
+    );
+    assert.ok(
+      conflicting.warnings.includes("conflicting stop representations"),
+    );
+    assert.ok(
+      conflicting.warnings.includes("conflicting scope representations"),
+    );
+    assert.ok(
+      conflicting.warnings.includes("conflicting task representations"),
+    );
+    assert.ok(
+      conflicting.warnings.includes(
+        "conflicting exit criteria representations",
+      ),
+    );
   });
 
   // The worked-example notation from goat-plan's reference: task, testing-gate,

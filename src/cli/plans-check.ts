@@ -1,10 +1,8 @@
 /**
- * Effort-arithmetic checker behind `plans check` - the executable side of
- * goat-plan's estimation notation. Milestones that declare an effort line must
- * have consistent arithmetic (errors, exit 1); plan-level 70/20/10 mix drift is
- * advisory only; estimate-less legacy plans pass with one info line because
- * optional local workflow state is never scored. User-invoked only - never part
- * of `audit` or deterministic quality gates.
+ * Local contract checker behind `plans check`. Default mode preserves legacy
+ * effort arithmetic; strict mode additionally validates current-plan structure,
+ * local dependencies, and lifecycle snapshots. Plan-level 70/20/10 mix drift
+ * stays advisory. User-invoked only - never part of audit or quality gates.
  */
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
@@ -29,6 +27,34 @@ const MIX_TOLERANCE_POINTS = 15;
 /** Category iteration order for split arithmetic and rendering. */
 const CATEGORIES = ["product", "proof", "other"] as const;
 
+/** Canonical lifecycle vocabulary accepted by strict current-plan validation. */
+const VALID_STATUSES = new Set([
+  "not-started",
+  "in-progress",
+  "testing-gate",
+  "human-verification-pending",
+  "blocked",
+  "abandoned",
+  "complete",
+]);
+
+/** States that represent one currently active execution or review boundary. */
+const ACTIVE_STATUSES = new Set([
+  "in-progress",
+  "testing-gate",
+  "human-verification-pending",
+]);
+
+/** Missing canonical fields that strict mode can determine without semantic guesses. */
+const STRICT_STRUCTURAL_WARNINGS = new Set([
+  "missing status",
+  "missing scope",
+  "missing tasks",
+  "missing proof",
+  "missing exit criteria",
+  "missing stop/rescope",
+]);
+
 /**
  * Render `(18 product / 5 proof / 2 other)`-style split text for report lines.
  * Use wherever the report echoes a split back in the same notation the plan
@@ -47,7 +73,9 @@ function isValidationWarning(warning: string, strict: boolean): boolean {
   if (!strict) return false;
   return (
     warning.includes("actual effort not parseable") ||
-    warning.includes("multiple Actual values")
+    warning.includes("multiple Actual values") ||
+    STRICT_STRUCTURAL_WARNINGS.has(warning) ||
+    /^conflicting .+ representations$/u.test(warning)
   );
 }
 
@@ -165,10 +193,11 @@ function collectCoverageErrors(
 function collectActualErrors(record: PlanExportRecord): string[] {
   const errors: string[] = [];
   const actual = record.effort?.actual;
+  const status = record.status.trim().toLowerCase();
   if (!actual) {
-    if (record.status.trim().toLowerCase() === "complete") {
+    if (status === "complete" || status === "human-verification-pending") {
       errors.push(
-        `${record.sourceFile}: complete milestone requires a structured Actual with total and product/proof/other split`,
+        `${record.sourceFile}: ${status} milestone requires a structured Actual with total and product/proof/other split`,
       );
     }
     return errors;
@@ -190,8 +219,117 @@ function collectActualErrors(record: PlanExportRecord): string[] {
   return errors;
 }
 
+/** Count open checklist items without treating their text as approval evidence. */
+function countOpenItems(
+  items: PlanExportRecord["tasks"],
+  predicate: (item: PlanExportRecord["tasks"][number]) => boolean = () => true,
+): number {
+  return items.filter((item) => !item.isChecked && predicate(item)).length;
+}
+
+/** Human ownership is explicit metadata, never inferred from prose or checkbox state. */
+function isHumanOwnedItem(
+  item: PlanExportRecord["testingGateItems"][number],
+): boolean {
+  return /\[human\]/iu.test(item.text);
+}
+
+/** Validate the executor-owned snapshot before a human receives the milestone. */
+function collectHumanPendingErrors(
+  record: PlanExportRecord,
+  openTasks: number,
+): string[] {
+  const errors: string[] = [];
+  if (openTasks > 0) {
+    errors.push(
+      `${record.sourceFile}: human-verification-pending milestone has open implementation tasks`,
+    );
+  }
+  const openExecutorProof = countOpenItems(
+    record.testingGateItems,
+    (item) => !isHumanOwnedItem(item),
+  );
+  if (openExecutorProof > 0) {
+    errors.push(
+      `${record.sourceFile}: executor proof item remains open at human-verification-pending`,
+    );
+  }
+  if (countOpenItems(record.midProofItems) > 0) {
+    errors.push(
+      `${record.sourceFile}: executor mid-proof item remains open at human-verification-pending`,
+    );
+  }
+  if (countOpenItems(record.exitCriteriaItems) > 0) {
+    errors.push(
+      `${record.sourceFile}: human-verification-pending milestone has open exit criteria`,
+    );
+  }
+  return errors;
+}
+
+/** Validate the fully closed snapshot for a completed milestone. */
+function collectCompleteSnapshotErrors(
+  record: PlanExportRecord,
+  openTasks: number,
+): string[] {
+  const errors: string[] = [];
+  if (openTasks > 0) {
+    errors.push(
+      `${record.sourceFile}: complete milestone has open implementation tasks`,
+    );
+  }
+  if (countOpenItems(record.testingGateItems) > 0) {
+    errors.push(
+      `${record.sourceFile}: complete milestone has open proof items`,
+    );
+  }
+  if (countOpenItems(record.midProofItems) > 0) {
+    errors.push(
+      `${record.sourceFile}: complete milestone has open mid-proof items`,
+    );
+  }
+  if (countOpenItems(record.exitCriteriaItems) > 0) {
+    errors.push(
+      `${record.sourceFile}: complete milestone has open exit criteria`,
+    );
+  }
+  return errors;
+}
+
+/** Validate one milestone's current lifecycle snapshot without reconstructing history. */
+function collectLifecycleErrors(record: PlanExportRecord): string[] {
+  const status = record.status.trim().toLowerCase();
+  const errors: string[] = [];
+
+  // Missing status already has a dedicated structural diagnostic.
+  if (status === "unknown" || status.length === 0) return errors;
+  if (!VALID_STATUSES.has(status)) {
+    return [`${record.sourceFile}: unsupported status \`${status}\``];
+  }
+
+  const openTasks = countOpenItems(record.tasks);
+  const checkedTasks = record.tasks.length - openTasks;
+  if (status === "not-started" && checkedTasks > 0) {
+    errors.push(
+      `${record.sourceFile}: not-started milestone has checked implementation tasks`,
+    );
+  }
+  if (status === "testing-gate" && openTasks > 0) {
+    errors.push(
+      `${record.sourceFile}: testing-gate milestone has open implementation tasks`,
+    );
+  }
+  if (status === "human-verification-pending") {
+    errors.push(...collectHumanPendingErrors(record, openTasks));
+  }
+  if (status === "complete") {
+    errors.push(...collectCompleteSnapshotErrors(record, openTasks));
+  }
+  return errors;
+}
+
 /**
- * Collect arithmetic errors for one milestone.
+ * Collect deterministic structure, lifecycle, and arithmetic errors for one milestone.
  * Branches gate on what the author declared because each declaration creates
  * its own obligation: notation errors always apply, split-sum errors need a
  * declared split, task-coverage errors need declared tasks - which is why a
@@ -206,6 +344,9 @@ function collectMilestoneErrors(
   strict: boolean,
 ): string[] {
   const errors = collectWarningErrors(record, strict);
+  if (strict) {
+    errors.push(...collectLifecycleErrors(record));
+  }
 
   // Default mode preserves legacy plans; strict authoring requires the current notation.
   if (!record.effort) {
@@ -222,6 +363,208 @@ function collectMilestoneErrors(
   if (strict) {
     errors.push(...collectActualErrors(record));
   }
+  return errors;
+}
+
+/** Parsed filename identity used for local dependency validation. */
+interface MilestoneIdentity {
+  id: string;
+  numericId: string;
+  record: PlanExportRecord;
+  dependencies: string[];
+}
+
+/** Extract the exact local milestone ID and its zero-insensitive duplicate key. */
+function readMilestoneIdentity(
+  record: PlanExportRecord,
+): MilestoneIdentity | null {
+  const match = record.sourceFile.match(/^(M(\d+)).*\.md$/u);
+  if (!match?.[1] || !match[2]) return null;
+  return {
+    id: match[1],
+    numericId: match[2].replace(/^0+(?=\d)/u, ""),
+    record,
+    dependencies: [],
+  };
+}
+
+/** Parse strict dependency metadata while keeping narrative sequencing out of the graph. */
+function readDependencies(
+  identity: MilestoneIdentity,
+  requiresField: boolean,
+  errors: string[],
+): string[] {
+  const rawDependencies = identity.record.dependencies.trim();
+  if (rawDependencies.length === 0) {
+    if (requiresField) {
+      errors.push(
+        `${identity.record.sourceFile}: missing dependencies for a multi-milestone plan`,
+      );
+    }
+    return [];
+  }
+  if (rawDependencies === "none") return [];
+  if (!/^M\d+(?:\s*,\s*M\d+)*$/u.test(rawDependencies)) {
+    errors.push(
+      `${identity.record.sourceFile}: dependencies must be \`none\` or comma-separated local milestone IDs`,
+    );
+    return [];
+  }
+  return rawDependencies.split(",").map((dependency) => dependency.trim());
+}
+
+/** Find one cycle in a fully local dependency graph. */
+function findDependencyCycle(
+  identitiesById: ReadonlyMap<string, MilestoneIdentity>,
+): string[] | null {
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const path: string[] = [];
+
+  function visit(id: string): string[] | null {
+    if (visiting.has(id)) {
+      const cycleStart = path.indexOf(id);
+      return [...path.slice(cycleStart), id];
+    }
+    if (visited.has(id)) return null;
+    visiting.add(id);
+    path.push(id);
+    const identity = identitiesById.get(id);
+    for (const dependency of identity?.dependencies ?? []) {
+      if (!identitiesById.has(dependency)) continue;
+      const cycle = visit(dependency);
+      if (cycle) return cycle;
+    }
+    path.pop();
+    visiting.delete(id);
+    visited.add(id);
+    return null;
+  }
+
+  for (const id of identitiesById.keys()) {
+    const cycle = visit(id);
+    if (cycle) return cycle;
+  }
+  return null;
+}
+
+interface MilestoneIndexes {
+  byId: Map<string, MilestoneIdentity>;
+  byNumber: Map<string, MilestoneIdentity>;
+}
+
+/** Index local IDs while reporting duplicate numeric identities and title drift. */
+function indexMilestones(
+  identities: MilestoneIdentity[],
+  errors: string[],
+): MilestoneIndexes {
+  const identitiesById = new Map<string, MilestoneIdentity>();
+  const identitiesByNumber = new Map<string, MilestoneIdentity>();
+
+  for (const identity of identities) {
+    const duplicate = identitiesByNumber.get(identity.numericId);
+    if (duplicate) {
+      errors.push(
+        `${identity.record.sourceFile}: duplicate milestone ID ${identity.id} conflicts with ${duplicate.id}`,
+      );
+    } else {
+      identitiesByNumber.set(identity.numericId, identity);
+    }
+    identitiesById.set(identity.id, identity);
+
+    const titleId = identity.record.title.match(/^(M\d+)\b/u)?.[1];
+    if (titleId && titleId !== identity.id) {
+      errors.push(
+        `${identity.record.sourceFile}: title ID ${titleId} does not match filename ID ${identity.id}`,
+      );
+    }
+  }
+  return { byId: identitiesById, byNumber: identitiesByNumber };
+}
+
+/** Parse dependency fields and report unresolved or self-referential edges. */
+function collectDependencyReferenceErrors(
+  identities: MilestoneIdentity[],
+  identitiesById: ReadonlyMap<string, MilestoneIdentity>,
+  requiresDependencies: boolean,
+  errors: string[],
+): void {
+  for (const identity of identities) {
+    identity.dependencies = readDependencies(
+      identity,
+      requiresDependencies,
+      errors,
+    );
+    for (const dependency of identity.dependencies) {
+      if (dependency === identity.id) {
+        errors.push(
+          `${identity.record.sourceFile}: milestone cannot depend on itself`,
+        );
+      } else if (!identitiesById.has(dependency)) {
+        errors.push(
+          `${identity.record.sourceFile}: dependency ${dependency} does not resolve in this plan`,
+        );
+      }
+    }
+  }
+}
+
+/** Report active or complete milestones whose declared prerequisites remain open. */
+function collectDependencyStateErrors(
+  identities: MilestoneIdentity[],
+  identitiesById: ReadonlyMap<string, MilestoneIdentity>,
+): string[] {
+  const errors: string[] = [];
+  for (const identity of identities) {
+    const status = identity.record.status.trim().toLowerCase();
+    if (!ACTIVE_STATUSES.has(status) && status !== "complete") continue;
+    for (const dependency of identity.dependencies) {
+      const dependencyRecord = identitiesById.get(dependency)?.record;
+      if (
+        dependencyRecord &&
+        dependencyRecord.status.trim().toLowerCase() !== "complete"
+      ) {
+        errors.push(
+          `${identity.record.sourceFile}: active or complete milestone requires dependency ${dependency} to be complete`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+/** Enforce one active execution or verification boundary per plan. */
+function collectActiveStateErrors(identities: MilestoneIdentity[]): string[] {
+  const activeMilestones = identities.filter((identity) =>
+    ACTIVE_STATUSES.has(identity.record.status.trim().toLowerCase()),
+  );
+  if (activeMilestones.length > 1) {
+    return [
+      `plan: multiple active milestones: ${activeMilestones.map((identity) => identity.id).join(", ")}`,
+    ];
+  }
+  return [];
+}
+
+/** Validate exact local identities, dependencies, prerequisite state, and active-state uniqueness. */
+function collectPlanStructureErrors(records: PlanExportRecord[]): string[] {
+  const errors: string[] = [];
+  const identities = records
+    .map(readMilestoneIdentity)
+    .filter((identity): identity is MilestoneIdentity => identity !== null);
+  const indexes = indexMilestones(identities, errors);
+  collectDependencyReferenceErrors(
+    identities,
+    indexes.byId,
+    records.length > 1,
+    errors,
+  );
+  const cycle = findDependencyCycle(indexes.byId);
+  if (cycle) {
+    errors.push(`plan: dependency cycle detected: ${cycle.join(" -> ")}`);
+  }
+  errors.push(...collectDependencyStateErrors(identities, indexes.byId));
+  errors.push(...collectActiveStateErrors(identities));
   return errors;
 }
 
@@ -334,9 +677,9 @@ function assertCheckUsage(options: ParsedCLI): void {
 }
 
 /**
- * Check one plan directory's effort arithmetic and report to stdout.
- * Exit code 1 signals arithmetic errors; mix drift and legacy absence never
- * fail. Records are redacted before rendering, matching the export preview.
+ * Check one plan directory and report to stdout.
+ * Exit code 1 signals deterministic contract or arithmetic errors; mix drift
+ * and default-mode legacy absence never fail. Records are redacted before use.
  *
  * @param options - parsed plan path plus global flags
  * @returns nothing; the report goes to stdout and the exit code carries the verdict
@@ -362,6 +705,9 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
   const errors = records.flatMap((record) =>
     collectMilestoneErrors(record, options.plansStrict),
   );
+  if (options.plansStrict) {
+    errors.push(...collectPlanStructureErrors(records));
+  }
 
   // Milestones with estimates become report rows; legacy ones contribute nothing.
   const milestoneLines = records
@@ -376,7 +722,7 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
     );
   }
 
-  // Arithmetic errors end the report and flip the exit code so scripts can gate on it.
+  // Deterministic errors end the report and flip the exit code so scripts can gate on it.
   if (errors.length > 0) {
     reportLines.push(...errors.map((line) => `error: ${line}`));
     process.exitCode = 1;

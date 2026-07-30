@@ -5,6 +5,20 @@ goat-flow-reference-version: "1.14.0"
 
 Read this reference only when rendering the final response. Select the template matching the mode and gate reached; do not combine templates from different phases.
 
+### Regression Guard mode
+
+```markdown
+## Regression Guards
+| Invariant | Current Coverage | Recommended Guard | Owner | Proof Class |
+
+## Verification Integrity
+- Prior fix evidence: [file, command output, or human-approved record]
+- Code and tests read: [list]
+- Coverage claim basis: [OBSERVED | INFERRED | UNVERIFIED]
+- Proof classes: <N> RUNTIME / <M> CONTRACT-GREP / <K> STATIC / <L> NOT-REPRODUCED
+- Evidence limit: [unavailable source, runtime, or tool context]
+```
+
 ### Standard mode - Phase 2 output (diff-driven, present at BLOCKING GATE)
 
 ```markdown
@@ -48,8 +62,6 @@ Read this reference only when rendering the final response. Select the template 
 - Testing by: [who executes]
 - Doer-verifier separation: [FULL / PARTIAL / NONE]
 
-## Regression Guards  <!-- post-verification only; cite prior fix-verification source -->
-| Invariant | Current Coverage | Recommended Guard | Owner | Proof Class |
 ## Flow Diagram  <!-- only on request -->
 ```
 

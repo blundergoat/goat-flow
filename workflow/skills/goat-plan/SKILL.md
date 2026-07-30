@@ -23,7 +23,7 @@ Use when work needs milestone tracking: milestones, replans, rescope, or resume-
 |--------|---------|
 | "Show milestones first, files later" | File-Write creates milestone artifacts immediately. Read-Only Analysis is for inline plans. |
 | "Vague tasks are fine - implementer will figure it out" | Tasks without file paths, replacement text, and verification commands aren't executable by a cold-start agent. Four recurrences of untickable checkboxes traced to vague tasks. |
-| "Testing gate is obvious - skip it" | Agent skipped the AI testing gate after the first milestone and offered to continue. The gate caught what the agent missed. |
+| "Proof is obvious - skip it" | Agent skipped the AI proof gate after the first milestone. The gate caught what it missed. |
 | "Bare task path means start implementing" | Path-only context is data, not delegation. Bare task paths must not update .active, milestone status, checkboxes, or code. |
 
 ## Step 0 - Intake
@@ -68,11 +68,11 @@ If ambiguous, ask. Never silently pick.
 
 ## Phase 1 - Milestone Breakdown
 
-Structure work into milestones using these archetypes - small features might need 2, large ones 5+.
+Split only for uncertainty reduction, independent value, or a real decision gate.
 
 ### Milestone Archetypes
 
-Use **Prove It Works** (riskiest assumption), **Make It Real** (end-to-end), **Make It Solid** (edges/security/UX), then optional **Make It Shine** (polish/docs).
+Treat **Prove It Works**, **Make It Real**, **Make It Solid**, and **Make It Shine** as optional lenses, not required stages. Merge lenses sharing one outcome and proof boundary; omit any lens that adds neither risk reduction nor value.
 
 **Spike-first rule:** If uncertain about a library, API, performance characteristic, or integration point - that uncertainty goes in Milestone 1 as a spike, not Milestone 3 as a risk.
 
@@ -80,21 +80,21 @@ Never drop a spike, intake, or kill criteria for milestone count, deadline, or l
 
 ### For each milestone, produce:
 
-Objective, Effort estimate (agent-time), Actual placeholder, Plan/admin overhead, Tasks (risk-tagged checkboxes), Assumptions to validate, Exit criteria (binary pass/fail), Testing gate (static/contract + automated + manual + acceptance), Mid-implementation proof, Kill criteria, Depends on, Read first, Deferred (items cut, with pointers; state explicitly if none). Field details and examples: `references/milestone-examples.md`.
+Always include an outcome, Status, Effort estimate (agent-time), scope, executable Tasks, binary Exit, claim-based Proof, and Stop/rescope condition. Add Actual, dependencies, read-first/drift context, assumptions, Mid-implementation proof, boundaries, rollback, deferred work, or maintenance only when triggered. Field details and Small/Standard/high-risk examples: `references/milestone-examples.md`.
 
 ### Risk-weighted task ordering
 
 Tag and order tasks **[RISKY]** (unknowns/integrations/spikes), **[CORE]** (essential logic), then **[SAFE]** (straightforward docs/polish). If uncertainty exists without a [RISKY] task, revise the milestone.
 
-### Testing gate format
+### Proof format
 
-Static / Contract Check first (language-appropriate; detect from project structure; passes before behavioural tests), then Automated, Manual, Acceptance. Manual gates are checkbox lists, not prose: one action + one expected result per item.
+Each item states the claim and evidence with a proof-class tag. Omit inapplicable classes; manual proof is conditional, static analysis is not behavioural proof, and high-risk work keeps distinct compatibility, rollback, and security evidence. Put each literal command in one command source.
 
 ### Quality rules
 
 Good tasks are concrete actions with a target or exit criterion.
 
-**Effort estimates:** Derive agent-time from counted task, testing-gate, mid-proof, and plan/admin items; never human wall-clock intuition. Plan-level target: ~70% product work, ~20% proof, ~10% everything else - a flexible guide, not a quota; consolidate duplicated proof, but keep risk-justified deviations.
+**Effort estimates:** Derive agent-time from counted task, proof, mid-proof, and plan/admin items; never human wall-clock intuition. Plan-level target: ~70% product work, ~20% proof, ~10% everything else - a flexible guide, not a quota; consolidate duplicated proof, but keep risk-justified deviations.
 
 **Cold-start bar:** Every milestone must be executable by a fresh agent without prior context. Include files to read and verification commands.
 
@@ -165,9 +165,9 @@ For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.
 
 **Filename format:** start with `M` plus a zero-padded number so dashboard and task tooling discover and order it; use a readable slug, e.g. `M01-prove-api-integration.md`.
 
-**File format:** use the Phase 1 milestone field set plus title and Status, ending with Testing Gate (static/contract + automated + manual + acceptance) and Mid-implementation proof.
+**Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty and `N/A` sections. Use the Phase 1 core, claim-based Proof, and one command source.
 
-**ISSUE.md:** Write `ISSUE.md` in the task directory. Format: `references/issue-format.md`. Three sections: **Why** (benefits), **What** (requirements, future tense), **How** (developer checklist). Keep stakeholder-readable - no file-level detail. Add "Out of scope" for exclusions.
+**ISSUE.md:** Standard+ writes `references/issue-format.md`; Small only for a requested GitHub brief, multiple milestones, or shared requirements/budget.
 
 **Backlog file:** If deferred items exist, write `backlog.md` with priority tiers (Next / Later / Maybe).
 
@@ -183,7 +183,7 @@ For a fresh plan, create a slugged task directory and update `.goat-flow/plans/.
 
 After each milestone, both gates must pass before the next begins. Apply the Proof Gate from `skill-preamble.md`.
 
-**AI Verification Gate:** Audit the Testing Gate's fresh evidence against every task and exit criterion; rerun only stale/failed checks or when risk requires it. Surface gaps.
+**AI Verification Gate:** Audit fresh Proof evidence against every task and exit criterion; rerun only stale/failed checks or when risk requires it. Surface gaps.
 
 **BLOCKING GATE (Human Verification):** Present changed files, the same exit evidence, estimate vs. actual, and assumption outcomes. "M[N] evidence is ready; status remains unchanged. Approve completion and M[N+1], or adjust?"
 
@@ -204,14 +204,14 @@ Before presenting completion, verify:
 1. Every milestone status shows `complete` or `human-verification-pending`
 2. Every task checkbox ticked `[x]` across all milestone files
 3. Every exit criterion met with evidence cited in this session
-4. Every testing gate passed with proof (not recollection)
+4. Every Proof claim has fresh evidence (not recollection)
 5. Every assumption validated or explicitly invalidated with plan updates
 6. Learning loop checked: footguns/lessons/patterns updated if warranted
 7. ISSUE.md reviewed and revised - What section updated to past tense (requirements met), How checkboxes ticked
 
 If any item fails, surface it - do not silently close with incomplete gates.
 
-**Consolidated UNVERIFIED checklist:** Aggregate UNVERIFIED items from testing gates across milestones into a single walkthrough list.
+**Consolidated UNVERIFIED checklist:** Aggregate UNVERIFIED milestone Proof items into one walkthrough list.
 
 **Architecture staleness check:** If `.goat-flow/architecture.md` predates the plan's implementation, prompt: "Architecture may be stale - update now or defer?"
 
@@ -237,7 +237,7 @@ Plan is NOT complete until the human explicitly approves.
 - MUST treat bare task paths as read-only context, not implementation permission
 - MUST NOT update `.active`, status, checkboxes, or code from path-only intake
 - MUST default to Mode 1 only on explicit plan-file edit verb
-- MUST include a testing gate on every milestone and mid-implementation proof for long milestones (run before switching modules or after a bounded edit batch)
+- MUST include claim-based Proof on every milestone and mid-implementation proof for long milestones (run before switching modules or after a bounded edit batch)
 - MUST re-read and update the next milestone after completing each one
 - MUST check kill criteria between milestones - triggered = BLOCKING GATE
 - MUST tick assumption checkboxes with evidence when validated or invalidated

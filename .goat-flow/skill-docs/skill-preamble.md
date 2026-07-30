@@ -18,7 +18,7 @@ An active goat-* skill's Step 0 replaces READ and selects mode/depth. SCOPE stil
 
 ## Durable Local Text Redaction
 
-Before durable local text, require `goat-flow --version` to match this reference's `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Send the in-memory draft through stdin to `goat-flow redact --output <destination>`. Only redacted output reaches disk; never stage raw text. Otherwise keep the text non-durable.
+Before durable local text, require `goat-flow --version` to match this reference's `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. In the framework checkout, `node --import tsx src/cli/cli.ts` also qualifies only when `package.json` names `@blundergoat/goat-flow`, the source entry exists, and its version matches. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or the equivalent selected source command. Only redacted output reaches disk; never stage raw text. If neither CLI qualifies, do not write and report `persist-skipped: redactor-unavailable` in the skill's integrity output.
 
 ## Severity Scale
 

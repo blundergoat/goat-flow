@@ -9,6 +9,9 @@ Small low-risk plans keep the compact field set in `SKILL.md`.
 
 ## Contents
 
+- Compact Small rendering
+- Standard milestone rendering
+- High-risk additions
 - Milestone field descriptions
 - Effort estimates
 - Deferred and backlog routing
@@ -19,6 +22,30 @@ Small low-risk plans keep the compact field set in `SKILL.md`.
 - Phase 3 human verification gate example
 - Kill-criteria-triggered stop example
 
+## Compact Small rendering
+
+Use one file and omit every untriggered section.
+
+```markdown
+# <Outcome>
+
+**Status:** not-started
+**Effort estimate:** <agent-time and product/proof/other split>
+**Scope:** <included result>; not included: <one tempting exclusion>
+
+## Tasks
+- [ ] [CORE] <action and done condition> (est: <n min product>)
+
+## Proof
+- [ ] <claim> → <evidence and the unique command, if needed> [automated] (est: <n min proof>)
+
+## Exit
+- <binary completion condition>
+- Stop/rescope if <failed premise or boundary>.
+```
+
+Add assumptions, dependencies, drift context, or manual proof only when material.
+
 ## Handoff-grade milestone template
 
 Use this shape for Standard+ work or any milestone handed to a different implementer. Capture the baseline before writing tasks; a failing baseline becomes an explicit prerequisite instead of hidden plan context.
@@ -28,99 +55,68 @@ Use this shape for Standard+ work or any milestone handed to a different impleme
 
 **Status:** not-started
 **Planned at:** `<sha>`, YYYY-MM-DD
-**Depends on:** <milestone, decision, or none>
+**Depends on:** <local milestone IDs or none>
 **Effort estimate:** <agent-time from countable units; product/proof/other split>
 **Actual:** _
-**Plan/admin overhead:** <n min other>
 
 ## Objective
 
 <Binary outcome this milestone proves or delivers.>
 
-## Read first
+## Context
 
-- `<file>` (search: `<semantic anchor>`) - why the implementer must read it.
-
-## Drift check before implementation
-
-`git diff --stat <sha> -- <in-scope paths>`
-`git status --short -- <in-scope paths>`
-
-If either command shows movement, re-read the live anchors and amend the milestone before implementation. The status command is required because uncommitted drift matters.
-
-## Current-state evidence
-
-- `<file>` (search: `<semantic anchor>`) - current behavior the task changes.
-
-## Verification baseline
-
-| Command | Expected result |
-|---|---|
-| `<read-only command>` | `<literal success condition, or known failure recorded as a prerequisite>` |
+- Read first: `<file>` (search: `<semantic anchor>`) - non-obvious convention or reference implementation.
+- Drift: `git diff --stat <sha> -- <paths>` and `git status --short -- <paths>`; amend before work if anchors moved.
 
 ## Scope
 
-### In scope
-- `<path>` - why this file belongs to the user-visible outcome.
-
-### Out of scope
-- `<tempting path>` - why touching it would expand the approved outcome.
-
-## Assumptions to validate
-
-- [ ] `<belief that must be proven>` - validation evidence required.
+- In: `<local result and paths>`.
+- Out: `<tempting, ambiguous, or costly adjacent work>`.
 
 ## Tasks
-- [ ] [RISKY] `<uncertainty-first action with target and proof>` (est: `<n min category>`)
-- [ ] [CORE] `<implementation action with target and proof>` (est: `<n min category>`)
+- [ ] [RISKY] <uncertainty-first action and done condition> (est: <n min product>)
+- [ ] [CORE] <implementation action and done condition> (est: <n min product>)
 
-## Exit criteria
+## Commands
 
-- [ ] `<binary observable condition>`
+| Purpose | Command | Expected result |
+|---|---|---|
+| `<focused proof>` | `<literal command>` | `<observable pass condition>` |
 
-## Kill criteria
+## Proof
 
-- Stop if `<measured condition that invalidates the milestone>`.
+- [ ] C1: <claim> → <evidence from Commands § focused proof> [automated] (est: <n min proof>)
+- [ ] C2: <observable behaviour> → <action and expected result> [manual] (est: <n min proof>)
 
-## Testing Gate
+## Exit
 
-### Static / Contract Check
+- C1-C2 are green with fresh evidence.
 
-- [ ] `<static command>` exits 0 (est: `<n min proof>`)
+## Stop / rescope
 
-### Automated
-
-- [ ] `<focused test command>` exits 0 (est: `<n min proof>`)
-
-### Manual
-
-- [ ] `<one agent action>`; expected: `<one observable result>` (est: `<n min proof>`)
-
-### Acceptance
-
-- [ ] Developer self-check completed (est: `<n min proof>`)
-
-## Mid-implementation proof
-
-- [ ] Run `<bounded command or smoke check>` after `<named edit boundary>` and stop on failure (est: `<n min proof>`)
-
-## STOP conditions
-- Stop when drift invalidates an anchor, work crosses the named scope, an assumption fails, or the same verification approach fails twice.
-
-## Command table
-
-| Command | Expected result |
-|---|---|
-| `<focused check>` | `<observable pass condition>` |
-
-## Deferred
-
-- `<item with destination pointer, or explicitly none>`
-
-## Maintenance notes
-- Re-check `<anchor>` when `<known dependency>` changes.
-- Preserve `<user-facing behavior or compatibility boundary>`.
+- Stop if <measured premise fails, scope changes, or evidence conflicts>.
 ```
+
+Add a mid-implementation proof only before switching modules or after a bounded edit batch. Add material assumptions immediately before Tasks and name dependent work.
+
+## High-risk additions
+
+High-risk work uses the Standard shape plus only the sections required by its failure modes:
+
+- **Boundary Notes:** authorization, irreversible actions, and recovery ownership.
+- **Current-state evidence:** observed facts that determine the design.
+- **Assumptions:** unresolved premises, dependent work, and required evidence.
+- **Verification baseline:** pre-change results referenced by command purpose.
+- **Layered Proof:** distinct compatibility, rollback, security, migration, and behavioural claims.
+- **Maintenance notes:** non-obvious post-delivery traps only.
+
+### Verification baseline
+
+Reference a command purpose from the single Commands table and record its observed pre-change result; never repeat the literal command.
+
+### Maintenance notes
+
+Include only a real trap a future maintainer cannot infer.
 
 The template records evidence and verification ownership; it never delegates implementation, commit, or push work.
 
@@ -133,11 +129,7 @@ For each milestone, produce:
 - **Tasks** - Checkboxes. Ordered by dependency, riskiest first. Each task is a concrete action, not a vague goal. Tag each task with a risk level: `[RISKY]` unknowns/integrations/unproven assumptions, `[CORE]` essential logic, `[SAFE]` straightforward work. Order: all [RISKY] first, then [CORE], then [SAFE]. Append each task's agent-time estimate with category, e.g. `(est: 8 min product)`.
 - **Assumptions to validate** - What must be proven true during this milestone (not tasks - beliefs about the system)
 - **Exit criteria** - Testable, binary pass/fail. Not "performance is acceptable" - instead "p95 latency under 500ms"
-- **Testing gate** - What must be verified before starting the next milestone. Append `(est: n min proof)` to each agent-executed checkbox:
-  - Static / Contract Check: language-appropriate static analysis (linters, type checkers) that must pass before behavioural tests run
-  - Automated: which test commands must pass
-  - Manual: which agent-run browser or smoke action must pass; human-only checks stay outside agent-time
-  - Acceptance: agent self-checks may be estimated; human sign-off belongs to the blocking gate
+- **Proof** - Claim → evidence items tagged by proof class. Use only relevant classes; static evidence cannot prove behaviour, and human sign-off belongs to the blocking gate.
 - **Mid-implementation proof** - for milestones expected to touch 3+ files or run longer than 30-60 minutes, add one estimated checkbox naming a focused command, reproduction, or smoke check to run before switching modules or after a bounded edit batch
 - **Kill criteria** - What would make us stop at this milestone rather than continue
 - **Depends on** - Which milestone must complete first
@@ -151,10 +143,10 @@ Estimate each milestone like this:
 
 - **Count units, then convert.** Files to read, files to edit, commands/tests to run. A focused edit-verify cycle is minutes of agent-time, not hours. Never quote a duration you cannot decompose into units, and weight the units - a [RISKY] integration cycle costs more than a [SAFE] doc edit.
 - **Separate agent-time from human-time.** Exclude human reviews, approvals, and waiting from agent-time; never pad an agent estimate with human wall-clock.
-- **State the mix.** Split every estimate into product work / proof / everything else. Spikes and implementation are product work; testing gates, mid-implementation proof, and gate evidence are proof; orientation reads, plan upkeep, and status admin are everything else.
+- **State the mix.** Split every estimate into product work / proof / everything else. Spikes and implementation are product work; proof checks, mid-implementation proof, and gate evidence are proof; orientation reads, plan upkeep, and status admin are everything else.
 - **The target applies plan-level.** Roughly **70% product work, 20% proof, 10% everything else** is a diagnostic guide, never a quota or pass/fail gate. A risky migration may legitimately run proof-heavy; a straightforward feature may not.
 - **Consolidate instead of padding.** High proof should trigger a search for repeated automated tests, manual checks, or evidence packaging - not forced ratio compliance. Keep risk-justified proof, reuse fresh evidence, and do not invent product work to improve the percentage.
-- **Derive totals from the breakdown.** Estimated Tasks, Testing Gate checks, Mid-implementation proof, and `Plan/admin overhead: n min other` must exactly reproduce each category and the headline. Run `goat-flow plans check .goat-flow/plans/<active> --strict` before implementation.
+- **Derive totals from the breakdown.** Estimated Tasks, Proof checks, Mid-implementation proof, and `Plan/admin overhead: n min other` must exactly reproduce each category and the headline. Run `goat-flow plans check .goat-flow/plans/<active> --strict` before implementation.
 - **Calibrate at the gate.** At each Phase 3 gate, replace `_` with `Actual: ~n min agent-time (n product / n proof / n other) - optional reason`, then apply the correction to the next milestone.
 - **Every write mode carries the fields.** Small File-Write milestones retain Effort estimate, Actual, and Plan/admin overhead even when otherwise compact.
 
@@ -219,15 +211,18 @@ Prove the OAuth provider issues rotated refresh tokens and that the app can pers
 - [ ] [RISKY] Confirm the session store can atomically replace refresh-token metadata (est: 6 min product)
 - [ ] [CORE] Add the minimal refresh-token persistence path (est: 4 min product)
 
-## Testing Gate
-### Static / Contract Check
-- [ ] `npm run typecheck` exits 0 (est: 2 min proof)
+## Commands
+| Purpose | Command | Expected result |
+|---|---|---|
+| Types | `npm run typecheck` | exit 0 |
 
-### Manual
-- [ ] Refresh an expiring session in a local browser; expected: the user remains signed in and the stored refresh token changes (est: 2 min proof)
+## Proof
+- [ ] Provider contract → replacement token observed after refresh [runtime] (est: 2 min proof)
+- [ ] Browser session → user remains signed in and stored token changes [manual] (est: 2 min proof)
+- [ ] Type safety → Commands § Types exits 0 [static] (est: 1 min proof)
 
 ## Mid-implementation proof
-- [ ] Run the focused refresh smoke check after the persistence edit (est: 1 min proof)
+- [ ] Run the provider-contract check after the persistence edit (est: 1 min proof)
 ```
 
 Expected checkpoint: `Milestone files + ISSUE.md written to .goat-flow/plans/oauth-refresh/. Ready to start implementation.`
@@ -245,22 +240,16 @@ Expected checkpoint: `Milestone files + ISSUE.md written to .goat-flow/plans/oau
 - [ ] [SAFE] Add login button to header
 - [ ] [SAFE] Update README with auth flow
 
-### Testing Gate
+### Commands
+| Purpose | Command | Expected result |
+|---|---|---|
+| Auth regression | `npm test -- --testPathPattern=auth` | exit 0 |
+| Static checks | `npm run typecheck && npx eslint --max-warnings 0 src/auth/` | exit 0 |
 
-#### Static / Contract Check (must pass before behavioural tests run)
-- [ ] `npm run typecheck` exits 0
-- [ ] `npx eslint --max-warnings 0 src/auth/` exits 0
-
-#### Automated
-- [ ] `npm test -- --testPathPattern=auth` exits 0
-
-#### Manual
-- [ ] Login flow tested in staging with real OAuth provider
-- [ ] Session persists across page reload
-- [ ] Expired session redirects to login
-
-#### Acceptance
-- Developer self-check
+### Proof
+- [ ] Login, logout, and expiry behaviours → Commands § Auth regression [automated]
+- [ ] Auth files remain type- and lint-clean → Commands § Static checks [static]
+- [ ] Real-provider session persists across reload and expiry redirects to login [manual]
 ```
 
 ## Worked Example - Phase 3 Human Verification Gate
@@ -289,7 +278,7 @@ Assumptions:
 M01 remains `in-progress` pending approval. Approve the proposed M02 amendment and completion transition, or adjust?
 ```
 
-The agent stops here and waits. It does not amend M02, set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. The Testing Gate produced the evidence once; the AI gate audits it and the human gate receives it. Rerun only stale/failed evidence or when risk requires it. After the human approves, the agent re-reads and applies the M02 amendment before changing statuses, records the assumption evidence and structured Actual, sets M01 to `complete` and M02 to `in-progress`, then reruns `goat-flow plans check .goat-flow/plans/oauth-refresh --strict`. It may touch M02 code only after those plan updates.
+The agent stops here and waits. It does not amend M02, set M02 to `in-progress`, tick M02 tasks, or touch code until the human approves. Proof produced the evidence once; the AI gate audits it and the human gate receives it. Rerun only stale/failed evidence or when risk requires it. After the human approves, the agent re-reads and applies the M02 amendment before changing statuses, records the assumption evidence and structured Actual, sets M01 to `complete` and M02 to `in-progress`, then reruns `goat-flow plans check .goat-flow/plans/oauth-refresh --strict`. It may touch M02 code only after those plan updates.
 
 ## Worked Example - Kill-Criteria-Triggered Stop
 

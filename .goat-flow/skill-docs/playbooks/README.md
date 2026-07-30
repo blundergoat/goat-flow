@@ -9,7 +9,7 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 
 ## How agents should use this directory
 
-1. When the user asks to use a capability ("drive a browser", "screenshot pages", "test a skill"), check this index for a matching playbook.
+1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, or code comments), check this index for a matching playbook.
 2. Open the playbook. If it has an **Availability Check** section, run the exact `command -v <tool>` or equivalent it specifies before falling back.
 3. Only after the availability check fails AND the playbook's fallback path also fails, declare the capability unavailable.
 

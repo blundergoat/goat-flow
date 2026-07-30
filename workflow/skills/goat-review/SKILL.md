@@ -166,7 +166,7 @@ If none detected, emit "No drift detected against M[NN]" so the reader knows the
 
 Offer Pass 3 when ANY of: (1) user opts in at Step 0, (2) Review Integrity would be `coverage-degraded` or `high-inference`, (3) any `[MUST:needs-decision]` finding exists, (4) any INTENT-MISMATCH finding exists.
 
-**Approval gate:** A trigger is not approval. Run only local installation and auth status checks first. Disclose the runtime and model, authentication state, findings-only payload, maximum of one refuter inference call, known cost or rate-limit impact (or `unknown`), and the local-only fallback. Wait for explicit current-session approval after that disclosure; generic instructions such as “keep going,” urgency, or a request for a definitive answer do not count. If approval is declined or unanswered, skip Pass 3, complete the local review, and record `Refuter pass: skipped`. Preserve only degradation flags already earned by Passes 1–2; do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined.
+**Approval gate:** A trigger is not approval. Run local installation/auth checks. Disclose the runtime and model, authentication state, findings-only payload, maximum of one refuter inference call, known cost or rate-limit impact (or `unknown`), why a second model rather than more reading, and the local-only fallback. Require explicit current-session approval; “keep going” and urgency do not count. If approval is declined or unanswered, skip Pass 3, complete the local review, and record `Refuter pass: skipped`. Preserve Passes 1–2 degradation flags only; do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined.
 
 **Method (after approval):** Use an authenticated external refuter runtime, not the host model. Default host map: Claude -> `codex exec`; Codex/Copilot/Antigravity -> `claude -p` unless a verified stronger opposite runtime is documented. Pass FINDINGS LIST, not the diff. Template: `references/refuter-spec.md`.
 
@@ -210,7 +210,7 @@ Always emit it; minimum: "confident - no degradation flags".
 - Route Spec Drift by direction
 - MUST NOT edit files unless user says "implement"; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.
-- **Ship Verdict rules (diff/PR or explicit release/merge question):** unresolved MUST -> NO. SHOULD-only -> YES WITH CONDITIONS. MAY-only -> YES. INTENT-MISMATCH -> NO until author confirms intent. Review Integrity `coverage-degraded`, `high-inference`, or `partial` -> downgrade verdict one step.
+- **Ship Verdict rules (diff/PR or explicit release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. Downgrade ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` moves one rung.
 - **Zero-findings HALT:** If Pass 2 produces zero findings, state what was checked and why no issues surfaced. Zero findings must be defended.
 - Universal constraints from skill-preamble.md apply.
 

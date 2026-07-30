@@ -151,7 +151,7 @@ Then the full critique:
 
 **Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion. Every synthesised finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`.
 
-**Phase 5.5 - Meta-audit.** Spawn a lightweight meta-agent (budget: 2 tool calls, no context beyond the draft Phase 5 output). Audit the critique for internal consistency against the 10-point rubric in `references/rubric-examples.md`. If issues found, insert an `## Auto-Detected Issues` block before presenting. Verdict block updated with `Meta-score: N/100`.
+**Phase 5.5 - Meta-audit.** Spawn a lightweight meta-agent (2 tool calls) with only the draft Phase 5 output and this inlined rubric (no project context): evidence-traceability, severity-calibration, scope-coverage, contradictions, duplication, unsupported-certainty, missing-objections, actionability, decision-clarity, internal-consistency. Insert any `## Auto-Detected Issues` before presentation; add `Meta-score: N/100` to the verdict.
 
 **BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." After plan critique, suggest `/goat-plan`.
 

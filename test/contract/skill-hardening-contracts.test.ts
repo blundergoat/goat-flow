@@ -839,6 +839,23 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("records routing depth and direct-execution learnings in the Route Snapshot", () => {
+    assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
+      const routingFlow = readMarkdownSection(skillPath, "How It Works");
+      assert.match(routingFlow, /Depth: <routing depth>/u, skillPath);
+      assert.match(
+        routingFlow,
+        /Relevant prior learnings: <matches \| none \| retrieval miss>/u,
+        skillPath,
+      );
+      assert.match(
+        routingFlow,
+        /Direct-execution routes include the retrieval result/u,
+        skillPath,
+      );
+    });
+  });
+
   it("documents distinct dispatcher endpoints for inferred skills and direct execution", () => {
     const skillsDocumentation = readProjectFile("docs/skills.md");
     const dispatcherDocumentation = readMarkdownSection(
@@ -1515,6 +1532,22 @@ describe("skill hardening contracts", () => {
         reviewExamples,
         /PR #56|checkSharedFileSets|src\/cli\/audit\/check-artifact-integrity\.ts/,
         examplePath,
+      );
+    });
+  });
+
+  it("defines one goat-review verdict degradation ladder", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+      assert.match(
+        constraints,
+        /YES -> YES WITH CONDITIONS -> PARTIAL -> NO/u,
+        skillPath,
+      );
+      assert.match(
+        constraints,
+        /PENDING REFUTER\/HUMAN is a pending state, not a ladder rung/u,
+        skillPath,
       );
     });
   });

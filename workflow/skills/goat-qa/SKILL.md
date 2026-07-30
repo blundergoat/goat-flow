@@ -12,9 +12,7 @@ On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## When to Use
 
-goat-qa is a **testing gap analyser**: it maps changed code or a codebase area to coverage and outputs prioritized must/should/skip guidance. It does not write tests or run full test commands.
-
-**Invoke for:** changed-code testing focus, plan-to-code coverage checks, pre-release manual gaps, or a QA risk/handoff artifact.
+goat-qa maps changed code or a codebase area to coverage and prioritized must/should/skip guidance. It neither writes nor runs tests.
 
 ## Boundary Commands
 
@@ -53,13 +51,16 @@ Standard maps Blocking to Must test, High-value to Should test, and Defer to Saf
 
 **Mode detection - scope wins over vocabulary:**
 
+- Explicit request to preserve a verified fix, prevent regression, or add regression guards → Regression Guard mode
 - Explicit diff, PR, branch, changed-file, or recent-change scope → Standard mode (quick depth), even when the request also says "audit", "coverage", or "gaps"
 - Explicit codebase area, directory, module, or risk-class coverage audit with no recent-change scope → Audit mode (full depth)
 - Bare "audit", "coverage", or "gaps" with no change or area scope → ask whether the user means recent-change Standard or no-diff area Audit
 
-**Depth mapping:** Standard reads changed files; Audit reads a no-diff area. Scope semantics outrank dispatcher depth; on conflict, state it and follow scope.
+**Depth mapping:** Regression Guard reads cited evidence plus code/tests; Standard reads changes; Audit reads a no-diff area. Scope semantics outrank dispatcher depth.
 
 **Gather:** scope, existing test plan (if any), audience. Check instruction Essential Commands or `package.json` for test/lint commands.
+
+**Standard Scope-Size Gate:** Count changed files before deep analysis. If too large, rank a load-bearing/interface slice; proceed after confirmation.
 
 **Footgun check:** Run the preamble's target-area learning-loop retrieval. Emit matches or an explicit miss; never broad-load a bucket.
 
@@ -188,14 +189,7 @@ Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MED
 
 ## Regression Guard Mode
 
-Use after a fix was already verified and the user asks how to keep it from regressing.
-
-1. Cite the prior fix-verification source.
-2. Define 1-2 human-readable invariants.
-3. Compare each invariant to existing tests/manual coverage.
-4. Output only the Regression Guards table and Verification Integrity.
-
-This mode does NOT verify the fix itself.
+After a verified fix, cite its source; define 1-2 human-readable invariants; compare existing tests/manual coverage; emit the standalone template plus Verification Integrity. Do NOT verify the fix.
 
 ## Constraints
 
