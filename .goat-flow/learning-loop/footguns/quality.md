@@ -1,6 +1,6 @@
 ---
 category: quality
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-31
 ---
 
 ## Footgun: Quality reviews disappear when the agent skips the final JSON write
@@ -9,16 +9,17 @@ last_reviewed: 2026-07-17
 
 **Symptoms:** A quality review ran end-to-end, but `goat-flow quality history` reports no saved runs and `goat-flow quality diff` has nothing to compare. No file appears under `.goat-flow/logs/quality/`.
 
-**Why it happens:** `goat-flow quality . --agent <id>` composes a prompt that instructs the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json`. The write is the agent's responsibility, not the CLI's. If the agent emits the JSON inline as a fenced code block, or forgets the save step, or writes to a different path, nothing persists. The target directory is gitignored, so there is no git-side hint that the save was skipped.
+**Why it happens:** `goat-flow quality . --agent <id>` composes a prompt that instructs the agent to send its final JSON report through the bounded `quality save` command. The CLI owns redaction, validation, filename selection, and the write, but the agent must still invoke it. If the agent emits JSON inline, skips the command, or cannot obtain permission, nothing persists. The target directory is gitignored, so there is no git-side hint that the save was skipped.
 
 **Evidence:**
-- `src/cli/prompt/compose-quality-common.ts` (search: `Write it as a file to`) - the prompt ends with an explicit instruction to write the file rather than emit a fenced JSON block (contract centralised here in 1.13.0).
+- `src/cli/prompt/compose-quality-common.ts` (search: `Persist through the bounded saver`) - the prompt requires the bounded saver and forbids a raw fallback.
+- `src/cli/quality/quality-command.ts` (search: `handleQualitySaveSubcommand`) - the CLI owns redaction, strict validation, and the project-local write.
 - `src/cli/prompt/compose-quality-common.ts` (search: `Wrote quality report to`) - the prompt requires a single-line confirmation that references the saved filename.
 - `src/cli/quality/history-render.ts` (search: `No saved quality history`) - `history` and `diff` only read files that were actually written to disk.
 
 **Prevention:**
 1. After any `/quality` run, verify the save landed: `ls .goat-flow/logs/quality/*.json | tail -3`. If the latest mtime is older than the review you just ran, the agent skipped the write.
-2. If the agent replied with a fenced JSON block instead of writing a file, ask it to save the block to the expected path using its filesystem tool before closing the session.
+2. If the agent reports `persist-skipped` or emits JSON inline, rerun through the exact `quality save` command. Do not write the raw report with a filesystem tool.
 3. Only after the file exists on disk is `quality history` / `quality diff` meaningful - both silently return empty when nothing is saved, so a missing save looks identical to "no prior runs."
 
 See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side effects on the CLI side`) for the durable boundary rule that came out of this incident.
@@ -134,7 +135,7 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 
 **Why it happens:** During pre-release work, `node --import tsx src/cli/cli.ts` can generate v1.14.0 instructions while the first `goat-flow` on `PATH` is still the globally installed v1.13.0 package. The old parser treated the unknown `redact` token as an audit target, so `goat-flow redact --output <quality-file>` wrote audit JSON to the quality-report path.
 
-**Evidence:** `src/cli/prompt/compose-quality-common.ts` (search: `Select a compatible redactor`) now requires the installed binary to report the current package version and permits the source fallback only when `package.json` identifies the framework checkout. The 2026-07-17 reproduction resolved `goat-flow` to v1.13.0, printed `Written to /tmp/goat-redact-benign.json`, and exited 1; the source command exited 0 and its redacted quality report passed `quality validate`.
+**Evidence:** `src/cli/prompt/compose-quality-common.ts` (search: `Select a compatible saver`) now requires the installed binary to report the current package version and permits the source fallback only from the framework checkout. The 2026-07-17 reproduction resolved `goat-flow` to v1.13.0, printed `Written to /tmp/goat-redact-benign.json`, and exited 1; the source command exited 0 and its redacted quality report passed `quality validate`.
 
 **Recurrence 2026-07-17:** Current consumer guidance still used `npx goat-flow`, although the unscoped registry package is deprecated and a clean-directory probe resolved a stale global v1.13.0 binary instead of source v1.14.0. Current command surfaces now name `@blundergoat/goat-flow`; `test/contract/command-phrases.test.ts` (search: `does not let unscoped npx resolve the deprecated goat-flow package`) guards the package identity. Skill hardening receipt: `.goat-flow/logs/sessions/2026-07-17-goat-tdd.md` (local, gitignored).
 

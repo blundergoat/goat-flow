@@ -1,19 +1,18 @@
 ---
 category: cli
-last_reviewed: 2026-05-25
+last_reviewed: 2026-07-31
 ---
 
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
 
 **Status:** active | **Created:** 2026-05-11 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Windows users see `C:\Users\thatm\...` style backslash paths in setup prompts, audit `evidence` fields, quality `QUALITY_DIR` Bash snippets, skill scaffold output, glob results, and the `getCliCommand()` re-run hint. When an agent reads the prompt and runs `mkdir -p "C:\Users\..."` inside a Bash subshell, the backslashes act as escape characters and the command fails. Tests written with POSIX-shape assertions also fail (string-equality on `.endsWith(".claude/skills/...")` etc.). A full-suite run on 2026-05-11 had 25 failures all rooted here.
+**Symptoms:** Windows users see `C:\Users\developer\...` style backslash paths in setup prompts, audit `evidence` fields, skill scaffold output, glob results, and the `getCliCommand()` re-run hint. When an agent reads the prompt and runs a host-native path inside a Bash subshell, the backslashes can act as escape characters and the command fails. Tests written with POSIX-shape assertions also fail (string-equality on `.endsWith(".claude/skills/...")` etc.). A full-suite run on 2026-05-11 had 25 failures all rooted here.
 
 **Why it happens:** `path.join`, `path.resolve`, and `path.relative` from `node:path` use OS-native separators on Windows. Every place a path is composed for *user-visible* output (prompts, audit findings, JSON payloads, dashboard strings) inherits that shape. The same path is fine for `node:fs` operations (which accept either separator), so the bug is invisible until output is rendered.
 
 **Evidence:**
 - `src/cli/install-invocation.ts` (search: `toBashPath`) - forward-slashes installer argv on win32.
-- `src/cli/prompt/compose-quality-common.ts` (search: `toShellProjectPath`) - posix.join + forward-slash for `QUALITY_DIR` Bash snippets (moved here from `compose-quality-agent-report.ts` when the report contract was centralised in 1.13.0).
 - `src/cli/prompt/compose-setup.ts` (search: `displayTemplatePath`) - forward-slashes packaged-template references; fixes 6 `composeSetup routing` tests.
 - `src/cli/paths.ts` (search: `getCliCommand`) - forward-slashes the `node dist/cli/cli.js` re-run hint.
 - `src/cli/audit/check-agent-deny-runtime.ts` (search: `evidencePath`) - forward-slashes 3 audit-evidence emission sites.
