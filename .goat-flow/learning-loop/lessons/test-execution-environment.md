@@ -282,3 +282,20 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 **Recurrence 2026-06-14:** While searching for this lesson, I put the literal Markdown title `` `npx vitest` is not this repo's runner `` inside a double-quoted `rg` pattern. Bash treated the backticked text as command substitution and launched `npx vitest`, reproducing the same wrong-runner failure mode from a read-only search.
 
 **Prevention:** Use `node scripts/run-tests.mjs fast` (or `npm test`) for suite runs and `node --import tsx --test <specific-file.test.ts>` for focused files. Do not use `npx vitest` here. Read `No test suite found` originating from a `_temp/stryker-tmp/sandbox-*` path as a wrong-runner signal, not a product failure. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), `.gitignore` (search: `_temp`).
+
+---
+
+## Lesson: Nested Claude permission probes inherit the host session's profile without full env isolation
+
+**Status:** active | **Created:** 2026-07-31
+**Decision changed:** Before reading any nested `claude -p` permission result as ground truth, prove the child ran with a clean local profile and include a positive-control row that an existing rule provably allows.
+**Trigger phase:** VERIFY
+
+**What happened:** The approved M06 probe of the trailing `:*` heredoc matcher (`Bash(node --import tsx src/cli/cli.ts quality save '<PROJECT_ROOT>' <<'JSON':*)`) launched `claude -p --setting-sources= --settings <overlay-json> --permission-mode dontAsk` from inside an interactive Claude Code session after unsetting only `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT`. Both probe rows returned the generic dontAsk denial. The stream-json init event proved the run was contaminated: the child reported the host session's cloud tool roster (`Workflow`, `CronCreate`, `RemoteTrigger`, `DesignSync`), claude.ai-only slash commands, the host session's memory path, `"model":"claude-opus-5[1m]"`, and `"apiKeySource":"none"` - none of which a stock local `claude -p --setting-sources=` run reports. Environment inspection showed the surviving variables `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_BRIDGE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_EXECPATH`, and `CLAUDE_PID` as the plausible attachment vector. The denial therefore proves nothing about the matcher, and reading it as "trailing form disqualified" would have wrongly activated M06's kill criterion.
+
+**Root cause:** I treated unsetting two well-known variables as environment isolation and designed the probe without a positive control. A probe whose every row can be denied by an unrelated layer cannot distinguish "rule did not match" from "overlay never consulted"; a child harness CLI silently joining the parent session's profile swaps out the permission stack under test.
+
+**Prevention:**
+1. Launch nested permission probes with a scrubbed environment (`env -i HOME="$HOME" PATH="$PATH" TERM=xterm SHELL=/bin/bash`), then verify the child's init event shows a stock local profile (no cloud-session tools, no host memory path) before trusting any allow/deny outcome.
+2. Always include a positive-control row an existing rule provably allows (for the reporting overlay: `node --import tsx src/cli/cli.ts --version`). If the control row is denied, the probe is void - report a harness fault, not a matcher verdict.
+3. The real launch environment is a dashboard server spawn, not an interactive session; mirror the flag set in `src/cli/server/terminal.ts` (search: `CLAUDE_REPORTING_ARGS`) when reproducing it.
