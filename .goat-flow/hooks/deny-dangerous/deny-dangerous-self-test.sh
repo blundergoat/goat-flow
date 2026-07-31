@@ -989,7 +989,7 @@ run_full() {
   # not interpreter languages - the same reason `python - <<X` is masked, and the
   # price of not false-positiving on >50-line SQL migrations / sed-awk scripts.
   # These bodies stay ALLOWED BY DESIGN. Do NOT "fix" to block without revisiting
-  # the decision (see footgun deny-dangerous.md, search: `accepted scope limit`). ---
+  # the decision (see `workflow/hooks/deny-dangerous.sh`, search: `accepted scope limit`). ---
   expect_allow shell "python3 <<'PY'"$'\n'"import os"$'\n'"os.system('rm -rf /')"$'\n'"PY" "ACCEPTED scope: python3 shell escape in body is not inspected"
   expect_allow shell "psql <<'SQL'"$'\n'"\\! rm -rf /"$'\n'"SQL" "ACCEPTED scope: psql shell-escape in body is not inspected"
   expect_allow shell "sed e <<'X'"$'\n'"rm -rf /"$'\n'"X" "ACCEPTED scope: sed 'e' shell-escape in body is not inspected"

@@ -69,8 +69,13 @@ const METADATA_LABEL =
 /** ADR record filenames; non-ADR files in the decisions dir are a stats finding, not index rows. */
 const ADR_FILE = /^ADR-\d{3}-.+\.md$/;
 
-/** Limit rationale: 200 chars keeps index rows scannable in prompt context while preserving detail. */
-const HOOK_MAX_CHARS = 200;
+/**
+ * Limit rationale: the hook only has to answer "is this row worth opening?", and every agent reads
+ * a whole INDEX before starting work, so the cap is a direct retrieval tax. At 200 the lessons index
+ * reached 84KB - larger than any bucket it indexes, and over twice the 40,000-byte bucket gate.
+ * 100 keeps the routing sentence intact while roughly halving that cost.
+ */
+const HOOK_MAX_CHARS = 100;
 
 /**
  * The patterns bucket has no config.yaml key (unlike footguns/lessons/decisions), so the path is

@@ -114,6 +114,23 @@ Adopt the UNSET sentinel merge for every config layer. A second sentence to drop
 Two-way door.
 `;
 
+/**
+ * One run-on hook with no sentence break, used to pin the truncation cap. Every agent reads a whole
+ * INDEX before working, so an uncapped hook is a direct retrieval tax - this fixture fails loudly if
+ * the cap is ever raised back without a deliberate decision.
+ */
+const LONG_HOOK_BUCKET = `---
+category: long-hook
+last_reviewed: 2026-06-01
+---
+
+## Lesson: Run-on hook gets truncated
+
+**Status:** active | **Created:** 2026-05-01
+
+**What happened:** ${"alpha bravo ".repeat(30)}omega
+`;
+
 /** Write a throw-away filesystem repo containing all four learning-loop buckets and return its root. */
 function makeFixtureRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "goatflow-llindex-"));
@@ -126,6 +143,7 @@ function makeFixtureRepo(): string {
     "## Footgun: <template>\n",
   );
   writeFileSync(join(root, LESSONS_DIR, "agent-behavior.md"), LESSON_BUCKET);
+  writeFileSync(join(root, LESSONS_DIR, "long-hook.md"), LONG_HOOK_BUCKET);
   writeFileSync(join(root, PATTERNS_DIR, "architecture.md"), PATTERN_BUCKET);
   writeFileSync(
     join(root, DECISIONS_DIR, "ADR-001-adopt-sentinel.md"),
@@ -168,10 +186,32 @@ describe("parseBucket", () => {
   });
 
   it("parses lesson entries with hooks from What happened", () => {
-    const entries = parseBucket(fs, LESSONS_DIR, "lessons");
+    // Scoped to its own fixture file so adding a bucket to LESSONS_DIR cannot
+    // break an assertion that is really about one file's parse result.
+    const entries = parseBucket(fs, LESSONS_DIR, "lessons").filter(
+      (entry) => entry.sourceFile === "agent-behavior.md",
+    );
     assert.equal(entries.length, 3);
     assert.equal(entries[0]?.title, "Agents must read before writing");
     assert.equal(entries[0]?.hook, "The agent edited a file it never read.");
+  });
+
+  it("truncates a run-on hook at a word boundary within the retrieval cap", () => {
+    const entry = parseBucket(fs, LESSONS_DIR, "lessons").find(
+      (candidate) => candidate.sourceFile === "long-hook.md",
+    );
+    assert.ok(entry, "expected the long-hook bucket to produce an entry");
+    // The cap is a retrieval-cost budget, not a formatting preference: assert the
+    // bound rather than an exact string so wording changes don't churn the test.
+    assert.ok(
+      entry.hook.length <= 100,
+      `hook exceeded the cap at ${entry.hook.length} chars`,
+    );
+    assert.ok(entry.hook.endsWith("…"), "truncated hook must signal the cut");
+    assert.ok(
+      !entry.hook.includes("alpha bra…"),
+      "truncation must fall on a word boundary, not mid-word",
+    );
   });
 
   it("keeps the full heading as the anchor for quote-first titles", () => {

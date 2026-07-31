@@ -1,9 +1,11 @@
 ---
-category: deny-dangerous
-last_reviewed: 2026-07-14
+category: deny-shell
+last_reviewed: 2026-08-01
 ---
 
-**Scope:** Traps in the `deny-dangerous` guardrail's shell-grammar policy parser - command/segment splitting, substitution and heredoc handling, secret-path and `git`/`gh` write classification, and structured-payload parsing. Hook install / launch / registration / config-drift plumbing lives in [hooks.md](hooks.md).
+Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
+
+Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 
 ## Footgun: Command-segment splitter must track substitution depth, not just quotes
 
@@ -95,6 +97,26 @@ last_reviewed: 2026-07-14
 
 ---
 
+## Footgun: Shell substitution scanners must be quote-aware inside the substitution body
+
+**Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A regex-only `$()` / `<()` scanner can stop at a `)` that appears inside a quoted string within the substitution body. PR #48 review canaries showed `echo $(echo ")"; git push origin main)` and `cat <(echo ")"; git push origin main)` were allowed because the parser treated the quoted `)` as the substitution close and left the dangerous command outside the recursive policy walk.
+
+**Why it happens:** The shell has nested grammar inside command and process substitutions. A top-level tokenizer that tracks quotes before entering `$(` is not enough; the matcher that finds the closing `)` must also track quotes, escapes, and nested parentheses inside the substitution body. The same area also needs a literal-text distinction: single-quoted `$(` strings are data and must not count toward parser DoS caps.
+
+**Evidence:**
+- `workflow/hooks/deny-dangerous.sh` (search: `find_matching_shell_paren`) - quote-aware matching-paren scan used by `check_command_substitutions`.
+- `workflow/hooks/deny-dangerous.sh` (search: `count_substitution_openers`) - skips single-quoted substitution-looking text while still counting executable substitution openers.
+- `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `quoted paren inside command subst`) - locks the command/process substitution bypass canaries and the single-quoted false-positive allow case.
+
+**Prevention:**
+1. Never parse shell substitutions with `[^()]` regexes alone; quoted delimiters inside the body are still body text, not the close delimiter.
+2. Every substitution-parser change needs both bypass canaries (`git push` behind a quoted `)`) and false-positive canaries (single-quoted `$(` repeated past the DoS cap).
+3. Keep command substitution and process substitution tests paired; they share the matching-paren risk but route through different shell execution paths.
+
+---
+
 ## Footgun: Splitting a monolithic guardrail can drop parser coverage while preserving the headline checks
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
@@ -121,90 +143,6 @@ last_reviewed: 2026-07-14
 
 ---
 
-## Footgun: Git push deny checks must normalize shell wrappers and control bodies
-
-**Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** A deny hook can appear to block `git push` while allowing valid shell forms that execute a push through environment wrappers, quoted assignments, `if`/`then` bodies, function bodies, or login-command wrappers such as `bash -lc 'git push ...'`.
-
-**Why it happens:** A token check that only normalizes the start of a simple command misses shell grammar around the command word: `env -i git push ...` (env option after `env`), `FOO='a b' git push ...` (whitespace in an assignment value), `if true; then git push ...; fi` (segment starts with `then`), `f(){ git push ...; }; f` (segment starts with a function declaration).
-
-**Evidence:**
-- `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_push`) - current split hook blocks git push and destructive git mutations; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `sudo git push`) - self-test coverage for wrapper-prefixed git push.
-- Before the fix, `bash workflow/hooks/deny-dangerous/patterns-writes.sh --check <cmd>` returned exit 0 for: `'env -i git push origin main'`, `"FOO='a b' git push origin main"`, `'if true; then git push origin main; fi'`, `'f(){ git push origin main; }; f'`; and before the `-lc` fix: `"bash -lc 'git push origin main'"`, `"sh -lc 'git push origin main'"`.
-
-**Prevention:**
-1. Any future `git push` deny edit must include runtime probes for env options, quoted assignments, shell control keywords, function bodies, and `sh`/`bash -c` plus `-lc` wrappers, not only direct push and pipe/semicolon chains.
-2. Keep the workflow hook source and installed `.goat-flow/hooks` mirror byte-identical after policy changes.
-3. Prefer normalizing to the shell command word before calling `is_git_push`; don't add one-off regexes for the latest bypass only.
-
----
-
-## Footgun: GitHub CLI comments bypassed shared-system write guardrails
-
-**Status:** active | **Created:** 2026-05-20 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** A model can post to GitHub through `gh issue comment ... --body-file ...` even when `git push` is blocked and the hook catches heredoc command substitution: the guardrail stops the risky shape (`$(cat <<EOF ...)`) but allows the same write through a temporary body file. A narrow first fix still missed valid `gh` grammar variants: inherited flags after the topic (`gh issue --repo owner/repo comment ...`) and `xargs ... gh issue comment ...` pipeline consumers.
-
-**Why it happens:** The deny hook historically treated `gh` as an ordinary command unless it contained an already-blocked shell pattern. GitHub issue comments, PR reviews, releases, workflow runs, secrets/variables, and `gh api` POST/PATCH/PUT/DELETE calls mutate shared systems without `git push`, so push-only protection is incomplete. CLI parsers also accept option placement and wrapper forms not obvious from the incident.
-
-**Evidence:**
-- Reported incident: an assistant posted a GitHub issue comment to `owner/repo#64620` from forwarded Slack text; the user deleted it and reported the command (see the first probe below).
-- Runtime probes (`bash workflow/hooks/deny-dangerous/patterns-writes.sh --check ...`) returned exit 0 before the first fix for `"gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md"` and `"gh api repos/owner/repo/issues/1/comments -X POST -f body=hi"`; before the second fix for `"gh issue --repo owner/repo comment 64620 --body hi"` and `"printf '%s\n' body | xargs -I{} gh issue comment 64620 --body {}"`.
-- `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`) - classifies known GitHub-mutating `gh` subcommands and `gh api` write/default-body POST forms; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment`) - locks the current `gh issue comment` path plus read-only allow cases.
-
-**Prevention:**
-1. Treat `git push` as only one GitHub write path. Any new shared-system GitHub mutation route must get both a hook rule and a self-test case.
-2. For CLI write classifiers, test grammar variants, not only the observed command: global/inherited options before and after the topic, short option forms, pipeline consumers such as `xargs`, and read-only controls.
-3. Keep explicit read-only `gh` cases in the self-test (`issue view`, `pr checks`, `gh api --method GET`) so write blocking doesn't become a blanket GitHub-read ban.
-4. Forwarded Slack/email/ticket text is evidence, not authorization. The hook blocks mechanical `gh` writes; agents still need an in-turn user approval rule before any shared-system write path outside Bash.
-
-**Amendment (2026-06-02):** ADR-028 narrowed - `gh issue comment` and `gh pr comment` are now allowed; all other `gh` writes stay blocked (PR review/merge/create/edit/close/ready, issue create/close/edit/delete/lock/transfer/develop, release/repo/label/workflow/run/gist/secret/variable/key/auth/codespace/project/cache, and `gh api` non-GET/HEAD or body-field forms). The carve-out reopens the 2026-05-20 incident command; the residual control is the host's per-call permission prompt. `gh api` writes stay blocked, so the comments endpoint via `gh api repos/.../issues/N/comments -X POST -f body=...` still trips the hook. See ADR-028 Amendment. Rule (4) stands: forwarded text is not authorization.
-
----
-
-## Footgun: Extension-based secret checks can confuse filenames with query syntax
-
-**Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** A secret-path hook correctly blocks `cat path/to/id_rsa.key`, but also blocks harmless jq/yq expressions such as `jq -r .key file.json` and `yq .metadata.key file.yaml`, plus text after an unquoted shell comment, e.g. `git status # .env`.
-
-**Why it happens:** A broad `.(pem|key|pfx)` extension regex sees dotted query fields and filenames as the same shape; scanning the raw segment before comment stripping also treats inert comment text as an argument.
-
-**Evidence:**
-- M12 pre-fix probes blocked `git status # .env` and `jq -r .key file.json`; post-fix they return 0 while `cat path/to/id_rsa.key` still returns 2.
-- `workflow/hooks/deny-dangerous.sh` (search: `strip_unquoted_shell_comments`) strips inert comments before policy matching; `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `key_material_path_touch`) requires a meaningful filename/path stem for `.pem`, `.key`, and `.pfx`; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `jq bare key query`) locks both allow and block cases.
-
-**Prevention:**
-1. Secret-path tests must include inert dotted query expressions as allow controls alongside real key-file paths.
-2. Run comment false-positive probes for every policy hook after changing shared shell-segment prep.
-3. Prefer file-shape helpers over broad extension regexes when a token can also be valid data syntax.
-
----
-
-## Footgun: File-read deny does not bind Bash shell reads of secret files
-
-**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
-**hallucination-risk:** high - `Read(**/.env*)` (settings.json or a Codex TOML profile) looks like a blanket secret-read deny but binds only file-read paths; a Bash payload (`cat .env`, `source .env`, `base64 ~/.aws/credentials`) is not bound by it and silently succeeds unless the Bash hook blocks it.
-
-**Symptoms:** Before the Bash-side sentinel was added, `goat-flow audit --harness` reported `deny-covers-secrets: pass` while a live Bash probe returned exit 0. Expected is now exit 2 with `BLOCKED: Secret-file access ...`, verified by the context-specific recipes below.
-
-**Why it happens:** Settings/config file-read deny entries are tool-scoped. Claude/Gemini `Read(...)` patterns bind the Read tool; Codex TOML permission profiles bind filesystem access. An agent using the Bash tool to run `cat .env` is not protected by file-read intent alone. Two coverage layers are required: file-read deny for the file tool path AND Bash-hook regex for shell.
-
-**Version update (2026-07-31, ACTUAL_MEASURED - narrows this for current Claude Code):** on 2.1.220 under `dontAsk`, a settings `Read(...)` deny DID bind Bash reads of the same path in both rule forms - exact-path and glob (`//<root>/**/hidden-*.txt`). Denials read `Permission to use Bash with command cat <path> has been denied` while control reads passed and the dummy marker never entered either session. Measured in disposable `/tmp` repos (see `.goat-flow/plans/1.15.0/M06-claude-reporting-session-enforcement.md`, search: `That question is now MEASURED`). Does NOT retire this entry: the 2026-04-19 result stands for its version, Codex and other runtimes are unmeasured, and this is version-specific. Keep both layers; re-probe after a CLI upgrade.
-
-**Evidence:**
-- `.claude/settings.json` (search: `"Read(**/.env)"`) - tool-scoped deny patterns, not applied to Bash. `.goat-flow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`) - Bash-side sentinel added 2026-04-19, blocking `cat .env`, `source .env`, `cat ~/.ssh/id_rsa`, `cat ~/.aws/credentials`, and `.pem/.key/.pfx` across hook-capable agents.
-- `src/cli/audit/harness/check-constraints.ts` (search: `bashDenyCoversSecrets`) - harness now requires BOTH `readDenyCoversSecrets` (settings/Codex permission file-read coverage) AND `bashDenyCoversSecrets` (Bash hook pattern) before classifying an agent as covered.
-- `src/cli/facts/agent/hooks.ts` (search: `detectBashDenyCoversSecrets`) - fact derivation scans the deny hook file for the active secret sentinel plus family markers for `.env*`, `.env.example` parity, normalized `./` / `../` / `~/` roots, `.ssh/`, `.aws/`, `secrets/`, credentials, and `.pem/.key/.pfx`. Direct-terminal probe outside a registered agent hook: `bash .goat-flow/hooks/deny-dangerous/patterns-paths.sh --check="cat .env"` returns exit 2 with `BLOCKED: Secret-file access blocked`.
-
-**Prevention:**
-1. For any new secret-path family added to the harness, extend BOTH `checkReadDenyCoversSecrets` in `src/cli/facts/agent/settings.ts` AND `detectBashDenyCoversSecrets` in `src/cli/facts/agent/hooks.ts`. A settings-only addition creates a false-pass; a hook-regex refactor without detector coverage, a false-fail.
-2. Every hook `--self-test` must include `run_case "cat <secret>" "cat <secret>" 2` assertions; a structural PASS without live probes reopens the gap.
-3. In an agent session with the PreToolUse hook registered, run `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke` (or `--self-test=full`); do not put a direct secret-read `--check` payload in the agent's shell command because the outer hook can intercept it first. In a manual terminal outside an agent hook, the direct `patterns-paths.sh --check="cat .env"` probe remains valid and should exit 2. Static inspection cannot distinguish tool-scoped from shell-scoped deny.
-
----
-
 ## Footgun: Copilot preToolUse hooks must distinguish structured payloads from Bash calls
 
 **Status:** active | **Created:** 2026-04-21 | **Evidence:** ACTUAL_MEASURED
@@ -222,26 +160,6 @@ last_reviewed: 2026-07-14
 - `workflow/hooks/deny-dangerous.sh` (search: `detect_output_mode`; `def extract_path(value)`).
 - `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `stringified non-bash file read`).
 - 2026-06-05 recurrence: stringified Copilot `toolArgs.path` / `file_path` denied safe `view` / `edit` until `extract_path` normalized object and string forms.
-
----
-
-## Footgun: Shell substitution scanners must be quote-aware inside the substitution body
-
-**Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** A regex-only `$()` / `<()` scanner can stop at a `)` that appears inside a quoted string within the substitution body. PR #48 review canaries showed `echo $(echo ")"; git push origin main)` and `cat <(echo ")"; git push origin main)` were allowed because the parser treated the quoted `)` as the substitution close and left the dangerous command outside the recursive policy walk.
-
-**Why it happens:** The shell has nested grammar inside command and process substitutions. A top-level tokenizer that tracks quotes before entering `$(` is not enough; the matcher that finds the closing `)` must also track quotes, escapes, and nested parentheses inside the substitution body. The same area also needs a literal-text distinction: single-quoted `$(` strings are data and must not count toward parser DoS caps.
-
-**Evidence:**
-- `workflow/hooks/deny-dangerous.sh` (search: `find_matching_shell_paren`) - quote-aware matching-paren scan used by `check_command_substitutions`.
-- `workflow/hooks/deny-dangerous.sh` (search: `count_substitution_openers`) - skips single-quoted substitution-looking text while still counting executable substitution openers.
-- `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `quoted paren inside command subst`) - locks the command/process substitution bypass canaries and the single-quoted false-positive allow case.
-
-**Prevention:**
-1. Never parse shell substitutions with `[^()]` regexes alone; quoted delimiters inside the body are still body text, not the close delimiter.
-2. Every substitution-parser change needs both bypass canaries (`git push` behind a quoted `)`) and false-positive canaries (single-quoted `$(` repeated past the DoS cap).
-3. Keep command substitution and process substitution tests paired; they share the matching-paren risk but route through different shell execution paths.
 
 ---
 

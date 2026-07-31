@@ -3,7 +3,7 @@ category: hooks
 last_reviewed: 2026-07-26
 ---
 
-**Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-dangerous.md](deny-dangerous.md).
+**Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-shell.md](deny-shell.md) (command grammar), [deny-secrets.md](deny-secrets.md) (secret-path reads), and [deny-writes.md](deny-writes.md) (external writes).
 
 **Last independent review:** 2026-07-26 - Codex reporting-profile path admission was runtime-probed for allowed local writes, blocked tracked writes, and absent-path startup failures. Other active entries were not reclassified by that check.
 
