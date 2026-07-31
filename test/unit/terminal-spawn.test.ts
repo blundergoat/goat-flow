@@ -136,20 +136,11 @@ describe("buildTerminalSpawnSpec", () => {
     assert.deepStrictEqual(settings.permissions.additionalDirectories, []);
     assert.ok(settings.permissions.allow.includes("Read"));
     assert.ok(settings.permissions.allow.includes("Bash(goat-flow --version)"));
-    assert.ok(
-      settings.permissions.allow.includes(
-        "Bash(node --import tsx src/cli/cli.ts --version)",
-      ),
-    );
-    assert.ok(
-      settings.permissions.allow.includes(
-        `Bash(goat-flow quality save '${process.cwd()}')`,
-      ),
-    );
-    assert.ok(
-      settings.permissions.allow.includes(
-        `Bash(node --import tsx src/cli/cli.ts quality save '${process.cwd()}')`,
-      ),
+    // ADR-044: persistence is dashboard-owned, so NO saver or source-CLI Bash
+    // rules remain - `Bash(goat-flow --version)` is the only Bash allow.
+    assert.deepStrictEqual(
+      settings.permissions.allow.filter((rule) => rule.startsWith("Bash")),
+      ["Bash(goat-flow --version)"],
     );
     assert.equal(
       settings.permissions.allow.some(
@@ -157,7 +148,7 @@ describe("buildTerminalSpawnSpec", () => {
           rule === "Bash" ||
           rule === "Bash(*)" ||
           /Bash\((?:node|goat-flow) \*\)/u.test(rule) ||
-          /quality save \*\)/u.test(rule),
+          /quality save/u.test(rule),
       ),
       false,
     );
@@ -169,6 +160,13 @@ describe("buildTerminalSpawnSpec", () => {
     assert.ok(
       settings.permissions.deny.some((rule) =>
         /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/README\.md\)/.test(rule),
+      ),
+    );
+    // Finalized reports are server-written; the single-level `*.json` deny
+    // must protect them while leaving the staging/ subdirectory writable.
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/\*\.json\)/.test(rule),
       ),
     );
     assert.ok(

@@ -232,7 +232,7 @@ function qualitySaveTimestamp(date: Date = new Date()): string {
 function qualitySaveDirectoryStats(
   path: string,
   displayPath: string,
-  deps: QualityCommandDeps,
+  deps: Pick<QualityCommandDeps, "CLIError">,
 ) {
   try {
     return lstatSync(path);
@@ -248,7 +248,7 @@ function qualitySaveDirectoryStats(
 /** Create the fixed report directory one real project-local component at a time. */
 function ensureQualitySaveDirectory(
   projectRoot: string,
-  deps: QualityCommandDeps,
+  deps: Pick<QualityCommandDeps, "CLIError">,
 ): string {
   const components = [
     { path: join(projectRoot, ".goat-flow"), display: ".goat-flow" },
@@ -286,7 +286,7 @@ function writeQualityReport(
   qualityDirectory: string,
   agent: AgentId,
   serializedReport: string,
-  deps: QualityCommandDeps,
+  deps: Pick<QualityCommandDeps, "CLIError">,
 ): string {
   const timestamp = qualitySaveTimestamp();
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -323,48 +323,47 @@ function writeQualityReport(
   );
 }
 
-/** Redact, strictly validate, and persist one current report supplied through stdin. */
-async function handleQualitySaveSubcommand(
-  options: ParsedCLI,
-  deps: QualityCommandDeps,
-): Promise<void> {
-  let projectRoot: string;
+/** Resolve the selected project to a real directory, or reject with the save contract's message. */
+function resolveSelectedProjectRoot(
+  projectPath: string,
+  deps: Pick<QualityCommandDeps, "CLIError">,
+): string {
   try {
-    if (!statSync(options.projectPath).isDirectory()) throw new Error();
-    projectRoot = realpathSync(options.projectPath);
+    if (!statSync(projectPath).isDirectory()) throw new Error();
+    return realpathSync(projectPath);
   } catch {
     throw new deps.CLIError(
       "quality save: selected project must be an existing directory.",
       2,
     );
   }
+}
 
-  const input = readFileSync(0, "utf8");
-  if (input.trim().length === 0) {
-    throw new deps.CLIError(
-      "quality save: expected one JSON report on stdin.",
-      2,
-    );
-  }
-  const scrubbed = scrubDurableText(input);
-  let raw: unknown;
-  try {
-    raw = JSON.parse(scrubbed);
-  } catch (error) {
-    throw new deps.CLIError(
-      `quality save: invalid JSON on stdin: ${error instanceof Error ? error.message : String(error)}`,
-      2,
-    );
-  }
-  const { parseQualityReport } = await import("./schema.js");
-  const parsed = parseQualityReport(raw, { requireCurrentFields: true });
-  if (!parsed.ok) {
-    throw new deps.CLIError(`quality save: schema error: ${parsed.error}`, 2);
-  }
-
+/**
+ * Reject a report that belongs to another project or another goat-flow version.
+ *
+ * Ownership is checked against the realpath of both sides so a symlinked or
+ * relative `project_path` cannot smuggle a report into a different project's
+ * history; version equality keeps saved reports comparable across `quality
+ * history` and `quality diff`.
+ *
+ * @param report - the report's own project path and version fields
+ * @param projectRoot - realpath of the selected project the caller named
+ * @param deps - CLIError constructor used for every rejection
+ */
+function assertReportOwnership(
+  report: {
+    projectPath: string;
+    goatFlowVersion: string;
+    /** Optional on older parsed reports; a missing value fails the match below. */
+    rubricVersion: string | undefined;
+  },
+  projectRoot: string,
+  deps: Pick<QualityCommandDeps, "CLIError">,
+): void {
   let reportRoot: string;
   try {
-    reportRoot = realpathSync(resolve(parsed.report.project_path));
+    reportRoot = realpathSync(resolve(report.projectPath));
   } catch {
     throw new deps.CLIError(
       "quality save: report.project_path must name the selected project.",
@@ -377,24 +376,99 @@ async function handleQualitySaveSubcommand(
       2,
     );
   }
-
   const version = getPackageVersion();
-  if (
-    parsed.report.goat_flow_version !== version ||
-    parsed.report.rubric_version !== version
-  ) {
+  if (report.goatFlowVersion !== version || report.rubricVersion !== version) {
     throw new deps.CLIError(
       `quality save: report version must match goat-flow v${version}.`,
       2,
     );
   }
+}
+
+/** One in-memory report persist request shared by the CLI subcommand and the dashboard capture. */
+export interface PersistQualityReportOptions {
+  /** Selected project directory the report must belong to; realpath-resolved here. */
+  projectPath: string;
+  /** Raw report text exactly as received from the caller's channel. */
+  rawText: string;
+  /** Channel name used in error messages: "stdin" for the CLI subcommand, "draft" for capture. */
+  sourceLabel?: string;
+}
+
+/**
+ * Redact, strictly validate, and persist one current quality report held in memory.
+ *
+ * THE single bounded write path for quality reports: every error is thrown as
+ * `deps.CLIError` with the exact `quality save:` message contract the CLI has
+ * always emitted, so the stdin subcommand and the dashboard draft capture
+ * reject identically. Raw text is scrubbed before parsing and never touches
+ * disk here; only the validated, reserialized report is written.
+ *
+ * @param input - project path, raw report text, and the channel label for error messages
+ * @param deps - CLIError constructor used for every rejection
+ * @returns absolute path of the persisted report file
+ */
+export async function persistQualityReportText(
+  input: PersistQualityReportOptions,
+  deps: Pick<QualityCommandDeps, "CLIError">,
+): Promise<string> {
+  const sourceLabel = input.sourceLabel ?? "stdin";
+  const projectRoot = resolveSelectedProjectRoot(input.projectPath, deps);
+
+  if (input.rawText.trim().length === 0) {
+    throw new deps.CLIError(
+      `quality save: expected one JSON report on ${sourceLabel}.`,
+      2,
+    );
+  }
+  const scrubbed = scrubDurableText(input.rawText);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(scrubbed);
+  } catch (error) {
+    throw new deps.CLIError(
+      `quality save: invalid JSON on ${sourceLabel}: ${error instanceof Error ? error.message : String(error)}`,
+      2,
+    );
+  }
+  const { parseQualityReport } = await import("./schema.js");
+  const parsed = parseQualityReport(raw, { requireCurrentFields: true });
+  if (!parsed.ok) {
+    throw new deps.CLIError(`quality save: schema error: ${parsed.error}`, 2);
+  }
+
+  assertReportOwnership(
+    {
+      projectPath: parsed.report.project_path,
+      goatFlowVersion: parsed.report.goat_flow_version,
+      rubricVersion: parsed.report.rubric_version,
+    },
+    projectRoot,
+    deps,
+  );
 
   const qualityDirectory = ensureQualitySaveDirectory(projectRoot, deps);
   const serializedReport = `${JSON.stringify(parsed.report, null, 2)}\n`;
-  const reportPath = writeQualityReport(
+  return writeQualityReport(
     qualityDirectory,
     parsed.report.agent,
     serializedReport,
+    deps,
+  );
+}
+
+/** Redact, strictly validate, and persist one current report supplied through stdin. */
+async function handleQualitySaveSubcommand(
+  options: ParsedCLI,
+  deps: QualityCommandDeps,
+): Promise<void> {
+  // Pre-check the project directory before touching stdin so interactive
+  // misuse with a bad path still fails fast instead of blocking on a TTY read.
+  resolveSelectedProjectRoot(options.projectPath, deps);
+
+  const input = readFileSync(0, "utf8");
+  const reportPath = await persistQualityReportText(
+    { projectPath: options.projectPath, rawText: input },
     deps,
   );
   deps.writeOutput(options, `OK ${reportPath}`);

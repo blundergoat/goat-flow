@@ -1,6 +1,6 @@
 # ADR-044: Dashboard-owned persistence for enforced Claude reporting sessions
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-07-31
 **Ticket/Context:** `.goat-flow/plans/1.15.0/M06-claude-reporting-session-enforcement.md` (kill-criterion gate)
 

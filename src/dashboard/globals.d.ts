@@ -280,6 +280,8 @@ interface QualityResult {
   auditCacheStatus: "hit" | "miss" | "bypass";
   auditSummary: string;
   prompt: string;
+  /** Staged-draft persistence variant used when launching a Claude reporting session (ADR-044). */
+  launchPrompt: string;
 }
 
 /** One row in the quality-history trend table from `/api/quality/history`. */

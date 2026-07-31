@@ -195,6 +195,7 @@ export function composeFocusedQuality(
     qualityMode,
     priorReport,
     runDate,
+    persistence: input.persistence,
   });
 
   return {

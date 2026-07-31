@@ -3,8 +3,8 @@
  * It validates runner and project inputs, spawns CLI sessions, and brokers WebSocket traffic.
  */
 import { randomUUID } from "node:crypto";
-import { lstatSync, realpathSync } from "node:fs";
-import { extname, join, resolve } from "node:path";
+import { lstatSync } from "node:fs";
+import { extname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { WebSocket } from "ws";
 import type {
@@ -19,6 +19,11 @@ import type {
 import { decodeClientMessage } from "./decoders.js";
 import { getAgentProfiles } from "../agents/registry.js";
 import { validateProjectPath } from "./local-paths.js";
+import {
+  ensureQualityDraftStagingDirectory,
+  startQualityDraftCapture,
+  type QualityDraftCapture,
+} from "./quality-draft-capture.js";
 
 /** Shape of the optional node-pty module without making startup resolve the native package. */
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- because node-pty may be absent until a user opens a terminal
@@ -52,7 +57,6 @@ const CLAUDE_REPORTING_ARGS =
   '--setting-sources= --settings "$GOAT_CLAUDE_REPORTING_SETTINGS" --permission-mode dontAsk';
 const WINDOWS_CLAUDE_REPORTING_ARGS =
   "--setting-sources= --settings $env:GOAT_CLAUDE_REPORTING_SETTINGS --permission-mode dontAsk";
-const GOAT_FLOW_PACKAGE_ROOT = resolve(import.meta.dirname, "../../..");
 const REPORTING_LOCAL_STATE_PATHS = [
   ".goat-flow/logs",
   ".goat-flow/scratchpad",
@@ -147,6 +151,8 @@ interface TerminalSession {
   detachBuffer: string[];
   /** Total character count in detachBuffer (for limit enforcement). */
   detachBufferSize: number;
+  /** Staged-draft persistence pollers for enforced Claude reporting sessions (ADR-044). */
+  qualityCaptures: QualityDraftCapture[];
 }
 
 /** Shell, arguments, environment, and deferred input needed to launch a runner in a durable PTY. */
@@ -376,23 +382,6 @@ function claudePermissionPath(filePath: string): string {
   return `//${escaped}`;
 }
 
-/** Quote one fixed path exactly as generated quality-save prompts render it. */
-function claudeBashPathArgument(filePath: string): string {
-  return `'${filePath.replaceAll("'", "'\\''")}'`;
-}
-
-/** Confirm source-mode saver rules would execute this package's trusted CLI, not target code. */
-function hasTrustedSourceQualitySaver(projectPath: string): boolean {
-  try {
-    return (
-      realpathSync(projectPath) === realpathSync(GOAT_FLOW_PACKAGE_ROOT) &&
-      lstatSync(join(GOAT_FLOW_PACKAGE_ROOT, "src", "cli", "cli.ts")).isFile()
-    );
-  } catch {
-    return false;
-  }
-}
-
 /** List real local/report directories that one Claude reporting root may write. */
 function claudeWritablePaths(rootPath: string): string[] {
   return REPORTING_LOCAL_STATE_PATHS.filter((relativePath) =>
@@ -420,26 +409,11 @@ function buildClaudeReportingSettings(
       relativePath,
     })),
   );
-  const installedSaverRules = rootPaths.map(
-    (rootPath) =>
-      `Bash(goat-flow quality save ${claudeBashPathArgument(rootPath)})`,
-  );
-  const sourceSaverRules = hasTrustedSourceQualitySaver(projectPath)
-    ? [
-        "Bash(node --import tsx src/cli/cli.ts --version)",
-        ...rootPaths.map(
-          (rootPath) =>
-            `Bash(node --import tsx src/cli/cli.ts quality save ${claudeBashPathArgument(rootPath)})`,
-        ),
-      ]
-    : [];
   const allow = [
     "Read",
     "Glob",
     "Grep",
     "Bash(goat-flow --version)",
-    ...installedSaverRules,
-    ...sourceSaverRules,
     ...writablePathsByRoot.map(
       ({ rootPath, relativePath }) =>
         `Edit(${claudePermissionPath(join(rootPath, relativePath))}/**)`,
@@ -452,6 +426,13 @@ function buildClaudeReportingSettings(
           `Edit(${claudePermissionPath(join(rootPath, protectedPath))})`,
       ),
   );
+  // Finalized reports are server-written (ADR-044); the agent may read them but
+  // never edit them. `*.json` stays one level deep so the staging/ subdirectory
+  // remains writable for drafts.
+  const finalizedReportDenies = rootPaths.map(
+    (rootPath) =>
+      `Edit(${claudePermissionPath(join(rootPath, ".goat-flow/logs/quality"))}/*.json)`,
+  );
   const projectSecretDenies = rootPaths.flatMap((rootPath) =>
     REPORTING_SECRET_DENIES.flatMap((pattern) => {
       const absolutePattern = `${claudePermissionPath(rootPath)}/${pattern}`;
@@ -463,6 +444,7 @@ function buildClaudeReportingSettings(
   );
   const deny = [
     ...protectedWriteDenies,
+    ...finalizedReportDenies,
     ...projectSecretDenies,
     ...homeSecretDenies,
   ];
@@ -799,6 +781,7 @@ class TerminalManager {
       idleTimer: null,
       detachBuffer: [],
       detachBufferSize: 0,
+      qualityCaptures: [],
     };
     this.sessions.set(id, session);
 
@@ -853,6 +836,18 @@ class TerminalManager {
     const validatedTarget = validateProjectPath(
       options.targetPath || validatedCwd,
     );
+    // Enforced Claude reporting sessions persist reports server-side (ADR-044).
+    // Staging must exist BEFORE the permission overlay is built below so a
+    // fresh target still receives its `.goat-flow/logs` write allow. Failure
+    // here fails the launch closed: a reporting session must never start
+    // without a working persistence path.
+    const reportingCaptureRoots =
+      runner === "claude" && session.accessMode === "reporting"
+        ? Array.from(new Set([validatedCwd, validatedTarget]))
+        : [];
+    for (const captureRoot of reportingCaptureRoots) {
+      ensureQualityDraftStagingDirectory(captureRoot);
+    }
     const nodePty = await this.loadNodePty();
 
     const spawnSpec = buildTerminalSpawnSpec(
@@ -902,6 +897,11 @@ class TerminalManager {
     session.targetPath = validatedTarget;
     session.pty = pty;
     session.lastInputAt = Date.now();
+    for (const captureRoot of reportingCaptureRoots) {
+      session.qualityCaptures.push(
+        startQualityDraftCapture({ projectRoot: captureRoot }),
+      );
+    }
 
     let hasInitialInputSent = false;
     let initialInputTimer: ReturnType<typeof setTimeout> | null = null;
@@ -965,6 +965,7 @@ class TerminalManager {
 
     pty.onExit(({ exitCode, signal }) => {
       session.status = "terminated";
+      this.disposeQualityCaptures(session);
       if (initialInputTimer) {
         clearTimeout(initialInputTimer);
         initialInputTimer = null;
@@ -1002,6 +1003,7 @@ class TerminalManager {
    */
   private releaseReservedSession(session: TerminalSession): void {
     this.clearIdleTimer(session);
+    this.disposeQualityCaptures(session);
     // A PTY exists only if spawn succeeded but a later step failed; kill it.
     if (session.pty) {
       try {
@@ -1182,6 +1184,7 @@ class TerminalManager {
   /** Tear down a terminal session; swallows kill/close races because either side may already be gone. */
   private killSession(session: TerminalSession): void {
     this.clearIdleTimer(session);
+    this.disposeQualityCaptures(session);
     // Mark the session dead even if its PTY hasn't spawned yet - a "starting"
     // reservation cancelled mid-launch has no PTY to kill, but flagging it
     // terminated lets the in-flight startReservedSession see the cancellation
@@ -1252,6 +1255,18 @@ class TerminalManager {
       }
       this.killSession(session);
     }, timeoutMs);
+  }
+
+  /** Dispose a session's staged-draft captures; safe when none were started. */
+  private disposeQualityCaptures(session: TerminalSession): void {
+    for (const capture of session.qualityCaptures) {
+      try {
+        capture.dispose();
+      } catch {
+        /* capture teardown must never break session teardown */
+      }
+    }
+    session.qualityCaptures = [];
   }
 
   /** Clear the idle-timeout timer for a session. */

@@ -219,18 +219,27 @@ function handleQualityRequest(
       params.agent,
       params.qualityMode,
     );
-    const result = composeQuality({
+    const composeInput = {
       agent: params.agent,
       projectPath,
       auditReport,
       auditUnavailableReason:
         audit.report === null && params.shouldUseFastCache
-          ? "fast-cache-only"
+          ? ("fast-cache-only" as const)
           : undefined,
       priorReport,
       qualityMode: params.qualityMode,
       selectedProjectPath,
       sharedFacts,
+    };
+    const result = composeQuality(composeInput);
+    // Enforced Claude reporting launches cannot run the Bash saver (ADR-044),
+    // and the runner is chosen client-side after this response, so both
+    // persistence variants ship: `prompt` for copy/manual runs, `launchPrompt`
+    // for staged-draft dashboard sessions.
+    const launchResult = composeQuality({
+      ...composeInput,
+      persistence: "staged-draft",
     });
     ctx.recordDashboardEvent(projectPath, "quality.prompt", {
       agent: params.agent,
@@ -240,6 +249,7 @@ function handleQualityRequest(
     });
     ctx.jsonResponse(res, 200, {
       ...result,
+      launchPrompt: launchResult.prompt,
       auditCacheStatus: audit.cacheStatus,
     });
   } catch (err) {

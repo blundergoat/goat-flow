@@ -42,7 +42,7 @@ The enforcement matrix is deliberately conservative. It reports local facts such
 
 ### `goat-flow quality [path] --agent <id> [--mode <mode>]`
 
-Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. `--mode` selects the assessment contract: `agent-setup` (default), `process`, `harness`, or `skills`. The prompt keeps the completed report in memory and sends it to an exact-version `quality save` command. That bounded command redacts and validates the report before creating a gitignored file under `.goat-flow/logs/quality/`. Prose findings come back in the agent's reply; the JSON does not.
+Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. `--mode` selects the assessment contract: `agent-setup` (default), `process`, `harness`, or `skills`. The prompt keeps the completed report in memory and sends it to an exact-version `quality save` command. That bounded command redacts and validates the report before creating a gitignored file under `.goat-flow/logs/quality/`. Prose findings come back in the agent's reply; the JSON does not. Dashboard-launched enforced Claude reporting sessions use a different persistence contract (ADR-044): the session writes one staged draft with its file tool and the dashboard server runs the same redact-validate-persist core, so those prompts contain no saver command.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality . --agent claude         # Quality prompt for Claude

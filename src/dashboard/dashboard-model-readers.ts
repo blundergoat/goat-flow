@@ -240,13 +240,18 @@ function readQualityResult(rawResult: unknown): QualityResult {
     throw new Error("Quality response returned an invalid payload");
   }
 
+  const prompt = readString(payload.prompt);
+  const launchPrompt = readString(payload.launchPrompt);
   return {
     command: "quality",
     agent,
     auditStatus: auditStatus ?? "unavailable",
     auditCacheStatus: auditCacheStatus as QualityResult["auditCacheStatus"],
     auditSummary: readString(payload.auditSummary),
-    prompt: readString(payload.prompt),
+    prompt,
+    // Older servers omit launchPrompt; falling back to the saver prompt keeps
+    // launches working with the previous single-variant contract.
+    launchPrompt: launchPrompt || prompt,
   };
 }
 

@@ -36,7 +36,18 @@ export interface QualityInput {
   selectedProjectPath?: string;
   runDate?: string;
   sharedFacts?: SharedFacts | null;
+  /** Report persistence contract; defaults to the bounded stdin saver. */
+  persistence?: QualityPersistenceVariant | undefined;
 }
+
+/**
+ * How the generated prompt tells the agent to persist its report.
+ * `bounded-saver` = the agent pipes the report into `quality save` itself
+ * (manual and Codex runs). `staged-draft` = the agent writes one draft file
+ * and the dashboard server persists it (enforced Claude reporting sessions,
+ * per ADR-044, where no Bash rule can authorize the heredoc saver).
+ */
+type QualityPersistenceVariant = "bounded-saver" | "staged-draft";
 
 /**
  * Why an audit summary could not be embedded in a quality prompt: the audit run
@@ -433,6 +444,8 @@ export interface ReportContractInput {
   qualityMode: QualityMode;
   priorReport: QualityHistoryEntry | null;
   runDate: string;
+  /** Persistence contract rendered at the end of the block; defaults to `bounded-saver`. */
+  persistence?: QualityPersistenceVariant | undefined;
 }
 
 /**
@@ -633,9 +646,17 @@ export function appendQualityReportContract(
   );
   pushFull(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
-    "- QUOTE the persistence delimiter (`<<'JSON'`, not `<<JSON`). Unquoted delimiters make the shell interpret `$`, backticks, and escapes inside the report.",
   );
+  if (input.persistence !== "staged-draft") {
+    pushFull(
+      "- QUOTE the persistence delimiter (`<<'JSON'`, not `<<JSON`). Unquoted delimiters make the shell interpret `$`, backticks, and escapes inside the report.",
+    );
+  }
   lines.push("");
+  if (input.persistence === "staged-draft") {
+    appendStagedDraftPersistence(lines, input);
+    return;
+  }
   lines.push(
     "**Persist through the bounded saver.** `quality save` redacts and validates stdin in memory before choosing the report filename. It owns the destination under the selected project's `.goat-flow/logs/quality/`; never stage the raw draft or pass `--output`.",
   );
@@ -675,6 +696,58 @@ export function appendQualityReportContract(
   lines.push("");
   lines.push(
     "**End of response:** After `OK`, confirm with one line using that exact path: `Wrote quality report to <absolute-report-path>`. Do not include the JSON inline.",
+  );
+}
+
+/**
+ * Render the staged-draft persistence contract for enforced dashboard sessions.
+ *
+ * Replaces the bounded-saver block when `persistence` is `staged-draft`: the
+ * agent writes exactly one draft file with its file tool and the dashboard
+ * server redacts, validates, and persists it (ADR-044). No Bash command
+ * appears anywhere in this block because the Claude reporting overlay cannot
+ * authorize the heredoc saver; the receipt file closes the honesty loop so
+ * the agent never claims persistence it cannot observe.
+ *
+ * @param lines - prompt line buffer; appended to in place
+ * @param input - run facts naming the owner project and assessed agent
+ */
+function appendStagedDraftPersistence(
+  lines: string[],
+  input: ReportContractInput,
+): void {
+  const ownerRoot = input.projectPath.replace(/[\\/]+$/u, "");
+  const stagingDir = `${ownerRoot}/.goat-flow/logs/quality/staging`;
+  lines.push(
+    "**Persist through the dashboard.** This session's launcher owns report persistence. Do not run any Bash saver command; write nothing except the single staged draft described here.",
+  );
+  lines.push("");
+  lines.push(
+    "Choose `<nonce>`: 6-12 random lowercase hex characters. Minify the completed report object to one JSON line and, using your file tool, write it to exactly:",
+  );
+  lines.push("");
+  lines.push("```");
+  lines.push(`${stagingDir}/goat-quality-draft-${input.agent}-<nonce>.json`);
+  lines.push("```");
+  lines.push("");
+  lines.push(
+    "Write one draft only, and no other file in that directory. The dashboard redacts, validates, and persists it within a few seconds, deletes the draft, and writes a receipt beside it:",
+  );
+  lines.push("");
+  lines.push("```");
+  lines.push(`${stagingDir}/goat-quality-result-${input.agent}-<nonce>.json`);
+  lines.push("```");
+  lines.push("");
+  lines.push(
+    'Read the receipt with your file tool, retrying briefly until it exists. `"ok": true` means persisted; use its `reportPath`. `"ok": false` means rejected - fix the report per its `error` and write ONE corrected draft under a NEW nonce.',
+  );
+  lines.push("");
+  lines.push(
+    "If no receipt appears after several read attempts over roughly 30 seconds, state `persist-skipped: capture-unavailable`. Never fall back to Bash, another destination, or an inline JSON reply.",
+  );
+  lines.push("");
+  lines.push(
+    "**End of response:** After an `ok` receipt, confirm with one line using its exact report path: `Wrote quality report to <absolute-report-path>`. Do not include the JSON inline.",
   );
 }
 

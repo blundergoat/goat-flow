@@ -417,6 +417,56 @@ describe("quality report contract: CLI surfaces", () => {
   });
 });
 
+describe("quality report contract: staged-draft persistence variant", () => {
+  it("replaces the bounded saver with the dashboard draft contract (ADR-044)", () => {
+    for (const qualityMode of ["skills", "harness", "agent-setup"] as const) {
+      const prompt = composeQuality({
+        ...makeInput(qualityMode),
+        persistence: "staged-draft",
+      }).prompt;
+      const surface = `staged ${qualityMode}`;
+      assert.ok(
+        prompt.includes("**Persist through the dashboard.**"),
+        `${surface}: missing dashboard persistence section`,
+      );
+      assert.ok(
+        prompt.includes(
+          "/tmp/example-project/.goat-flow/logs/quality/staging/goat-quality-draft-claude-<nonce>.json",
+        ),
+        `${surface}: missing staged draft path`,
+      );
+      assert.ok(
+        prompt.includes(
+          "/tmp/example-project/.goat-flow/logs/quality/staging/goat-quality-result-claude-<nonce>.json",
+        ),
+        `${surface}: missing receipt path`,
+      );
+      assert.ok(
+        prompt.includes("persist-skipped: capture-unavailable"),
+        `${surface}: missing capture-unavailable sentinel`,
+      );
+      // No Bash persistence may survive in the staged variant: an enforced
+      // session cannot run the saver, so its mention would be a false path.
+      assert.equal(
+        prompt.includes("quality save"),
+        false,
+        `${surface}: staged variant still mentions the Bash saver`,
+      );
+      assert.equal(
+        prompt.includes("<<'JSON'"),
+        false,
+        `${surface}: staged variant still contains a heredoc`,
+      );
+    }
+  });
+
+  it("keeps the bounded saver as the default persistence contract", () => {
+    const prompt = composeQuality(makeInput("skills")).prompt;
+    assert.ok(prompt.includes("**Persist through the bounded saver.**"));
+    assert.equal(prompt.includes("**Persist through the dashboard.**"), false);
+  });
+});
+
 describe("quality report contract: dashboard mirror", () => {
   const dashboardSource = readFileSync(
     fileURLToPath(

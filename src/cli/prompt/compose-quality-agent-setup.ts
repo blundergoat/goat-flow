@@ -564,6 +564,7 @@ export function composeAgentSetupQuality(
     qualityMode,
     priorReport: ctx.priorReport,
     runDate: ctx.runDate,
+    persistence: ctx.input.persistence,
   });
   appendClosing(lines);
 
