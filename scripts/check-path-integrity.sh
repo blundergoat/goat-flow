@@ -146,8 +146,10 @@ done
 # at files which no longer exist. Scoped to `.md` extensions only - `.ts`/`.sh`
 # in coding-standards prose are usually conceptual identifiers, not literal
 # paths, so they would false-positive. Resolves relative to the doc's dir
-# first, then repo root, then by basename anywhere under the repo (catches
-# refs like `skill-preamble.md` that live under `.goat-flow/skill-docs/`).
+# first, then repo root, then by basename anywhere under the repo except
+# gitignored local state (catches refs like `skill-preamble.md` that live under
+# `.goat-flow/skill-docs/` without letting a developer's local-only copy of a
+# renamed file mask drift that a clean CI checkout would report).
 # Skips fenced code blocks.
 docs_dir="${root}/docs"
 if [[ -d "$docs_dir" ]]; then
@@ -160,15 +162,30 @@ if [[ -d "$docs_dir" ]]; then
             [[ "$ref" == *'<'* || "$ref" == *'>'* ]] && continue
             [[ "$ref" == *'{'* || "$ref" == *'}'* ]] && continue
             [[ "$ref" == http* ]] && continue
+            # Names docs must be able to state even though the file is absent
+            # here by design. `ISSUE.md` is the /goat-plan artifact written under
+            # the gitignored `.goat-flow/plans/<name>/` - the same local-state
+            # exemption section 2 applies. `docs/coding-standards/git-commit.md`
+            # is the compatibility commit-guide path goat-flow still accepts in
+            # existing consumer projects but no longer ships itself (ADR-043).
+            case "$ref" in
+                ISSUE.md | docs/coding-standards/git-commit.md) continue ;;
+            esac
             # Resolve relative to doc dir, then repo root.
             if [[ -e "${docdir}/${ref}" ]]; then continue; fi
             if [[ -e "${root}/${ref}" ]]; then continue; fi
             # Fall back to basename lookup anywhere in the repo (excludes
             # node_modules/.git for speed). A file with this basename existing
             # anywhere means the ref is a conceptual cross-ref, not drift.
+            # Gitignored local state is pruned too: agent worktrees, scratchpad
+            # archives, plans, and logs hold stale copies of renamed files that
+            # exist only on a developer's machine, so counting them made this
+            # check pass locally and fail on a clean CI checkout.
             base=$(basename "$ref")
             if find "$root" \
-                \( -path '*/node_modules' -o -path '*/.git' -o -path '*/dist' \) -prune -o \
+                \( -path '*/node_modules' -o -path '*/.git' -o -path '*/dist' \
+                -o -path '*/.claude/worktrees' -o -path '*/.goat-flow/plans' \
+                -o -path '*/.goat-flow/scratchpad' -o -path '*/.goat-flow/logs' \) -prune -o \
                 -type f -name "$base" -print 2>/dev/null | grep -q .; then
                 continue
             fi
