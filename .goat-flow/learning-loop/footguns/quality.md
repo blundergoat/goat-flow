@@ -141,6 +141,26 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 
 **Prevention:** In the framework checkout, use `node --import tsx src/cli/cli.ts <command>` before build or `npm run goat-flow:cli -- <command>` only after a fresh build, and verify `--version` matches `package.json`; do not use bare `goat-flow` during pre-release work. Consumer examples must name the scoped `@blundergoat/goat-flow` package. When a generated prompt calls a command added in the current release, verify the exact version before any output write and gate source fallbacks on both the expected package name and source entry path.
 
+## Footgun: `quality diff` reports a finding "resolved" when the next report merely omits it
+
+**Status:** active | **Created:** 2026-07-31 | **Evidence:** ACTUAL_MEASURED
+**hallucination-risk:** high
+
+**Symptoms:** `goat-flow quality diff <from>:<to>` shows a non-zero `resolved` count and the reviewer records those issues as fixed - but the cited files still contain the exact reported defect. Measured 2026-07-31: diffing `2026-07-31-1013-claude-647b9` to `2026-07-31-2123-claude-b5fb8` reported `resolved: 2`, one being `content_quality:goat-flow-logs-sessions-2026-04-18-skill-quality-tests-md:14`. Reading that file showed `## Pressure test results (7/7)` still present at line 14, unchanged. Nothing was fixed; the newer assessment simply did not raise it.
+
+**Why it happens:** `computeQualityDiff` in `src/cli/quality/history.ts` (search: `Resolved findings existed before and are absent from the newer report`) derives the bucket purely by finding-id set difference. It cannot distinguish "the defect was repaired" from "this run looked elsewhere, sampled differently, scored more leniently, or ran under a degraded prompt". The signal corrupts in both directions because ids embed a line number: an unfixed defect drops out of the diff when the next run omits it, and a semantically identical defect at a shifted line returns as `new` rather than `persisted`. Assessments are LM-generated and non-exhaustive, so omission is normal rather than exceptional - which makes false resolution the common case, not an edge case.
+
+**Evidence:**
+- `src/cli/quality/history.ts` (search: `Resolved findings existed before and are absent from the newer report`) - set-difference derivation with no artifact re-check.
+- 2026-07-31 measurement above: `resolved: 2` while a grep for the 7/7 aggregate in `.goat-flow/logs/sessions/2026-04-18-skill-quality-tests.md` still returns line 14.
+- Same run pair: the other resolved id `skill_flaw:workflow-skills-goat-qa-skill-md:50` names content still present in `workflow/skills/goat-qa/SKILL.md` and previously root-rejected as a false positive, so the bucket also absorbs findings that were never valid.
+- The reverse direction was recorded independently in `.goat-flow/plans/1.15.0/M09-behavioural-evidence-refresh-and-verification.md`: two new line-based ids for semantically unchanged findings.
+
+**Prevention:**
+1. Never close a remediation milestone on a `resolved` count. Re-read each cited file and anchor and show the defect is gone; treat the bucket as "absent from the newer report" and use it as a prompt to verify, not as evidence.
+2. When an exit criterion says "diff shows findings resolved", satisfy it with per-finding artifact checks and record those instead of the diff summary.
+3. A degraded prompt silently inflates this: a report generated without prior-report context carries `prior_report_id: null`, so nothing can be tagged `persisted` and every prior finding reads as resolved. Check `audit_status` and `prior_report_id` on both reports before trusting a diff - see `.goat-flow/learning-loop/lessons/test-execution-environment.md` (search: `Reproducing a server route means reusing its inputs`).
+
 ## Resolved Entries
 
 ---

@@ -301,3 +301,20 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 3. The real launch environment is a dashboard server spawn, not an interactive session; mirror the flag set in `src/cli/server/terminal.ts` (search: `CLAUDE_REPORTING_ARGS`) when reproducing it.
 
 **Outcome (2026-07-31):** With the control proven (`goat-flow v1.14.0` executed under dontAsk), the heredoc row's denial became a valid measurement: the trailing `:*` prefix form does not match multi-line quoted-heredoc Bash commands on Claude Code 2.1.220.
+
+---
+
+## Lesson: Reproducing a server route means reusing its inputs, not just its composer
+
+**Status:** active | **Created:** 2026-07-31
+**Decision changed:** When driving an end-to-end run that stands in for an HTTP route, build the payload from the route's own input helpers; if any are stubbed, name which conclusions the run can and cannot support BEFORE spending the run.
+**Trigger phase:** ACT
+
+**What happened:** The M06 end-to-end runs called the real `composeQuality` with `auditReport: null` and `priorReport: null`, while `/api/quality` passes `runAudit(...)`, `findLatestQualityReport(...)`, and `extractSharedFacts(...)`. Both approved cross-harness runs were spent before this surfaced. The persisted reports carried `audit_status: "unavailable"` and `prior_report_id: null`, so the agent was never asked to mark findings `persisted`; `quality diff` then reported `persisted: 0` with `resolved: 2` and `resolved: 5`, numbers that look like remediation success but are pure artifacts of missing prior linkage. The skills score drop (`setupDelta -10`, `systemDelta -15`) was equally uninterpretable. M06's persistence conclusion survived only because the staged-draft prompt section does not read audit or prior context - that was luck of layout, not design.
+
+**Root cause:** I treated "calls the real composer" as equivalent to "reproduces the route". Passing `null` for optional context compiled, ran, and produced a plausible prompt, so nothing failed loudly - the degradation was visible only in two fields of the output report. Optional-but-populated inputs are the easiest fidelity gap to miss because the stub is a valid value.
+
+**Prevention:**
+1. Before a costly reproduction run, diff your call site against the real caller argument by argument (here: `src/cli/server/dashboard-quality-routes.ts`, search: `composeQuality`). Every argument the real caller populates and yours stubs is a fidelity gap to declare or close.
+2. Assert route-fidelity in the run's own output check: a report with `audit_status: "unavailable"` or `prior_report_id: null` when history exists means the prompt was degraded, and any diff computed from it is not resolution evidence.
+3. Scope the conclusion to the layer actually exercised. A stubbed input invalidates conclusions that read it and leaves untouched those that do not - state which is which rather than reporting one verdict for the whole run.
