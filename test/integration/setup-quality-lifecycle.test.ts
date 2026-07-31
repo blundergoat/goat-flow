@@ -449,12 +449,16 @@ describe("consumer setup to quality-report lifecycle", () => {
           qualityPayload.prompt,
           expectedScopeContextByMode[qualityMode],
         );
-        assert.match(
-          qualityPayload.prompt,
-          new RegExp(
-            `QUALITY_DIR='${qualityDirectory.replaceAll("\\", "/")}'`,
-            "u",
+        // The saver command must name the consumer's own project so the report
+        // lands in that project's .goat-flow/logs/quality/. Replaces the
+        // QUALITY_DIR shell-variable assertion that dc67f967 made dead when
+        // persistence moved behind `quality save`; plain includes() keeps the
+        // check safe for Windows paths that a RegExp would read as escapes.
+        assert.ok(
+          qualityPayload.prompt.includes(
+            `goat-flow quality save '${consumerTargetPath}' <<'JSON'`,
           ),
+          `${qualityMode}: prompt does not persist to the consumer project`,
         );
         assert.match(
           qualityPayload.prompt,
