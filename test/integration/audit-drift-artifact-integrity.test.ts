@@ -565,4 +565,62 @@ describe("checkDrift: artifact integrity", () => {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }
   });
+
+  it("accepts the ADR-043 commit-guidance compatibility path", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "Existing projects may keep `docs/coding-standards/git-commit.md`.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "path-ref-unresolved" &&
+            finding.message.includes("git-commit.md"),
+        ),
+        false,
+        `compatibility path produced an unresolved-path finding: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("reports an arbitrary missing documentation path", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "Missing guidance lives at `docs/coding-standards/nonexistent.md`.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "path-ref-unresolved" &&
+            finding.message.includes("docs/coding-standards/nonexistent.md"),
+        ),
+        true,
+        `expected unresolved-path finding, got ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
 });

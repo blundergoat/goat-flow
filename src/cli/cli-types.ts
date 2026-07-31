@@ -67,12 +67,13 @@ export type HookScenario = "deny-hook";
 
 /**
  * The mutually exclusive modes of the `quality` command. `prompt` (the default when no subcommand
- * positional is given) emits an assessment prompt; `history`/`diff` read prior runs; `validate`
- * schema-checks a written report; `candidacy` scores a skill/playbook idea. The parser maps the
- * first positional to one of these, and dispatch routes on the chosen member.
+ * positional is given) emits an assessment prompt; `history`/`diff` read prior runs; `save`
+ * redacts, validates, and persists an in-memory report; `validate` schema-checks a written report;
+ * `candidacy` scores a skill/playbook idea. The parser maps the first positional to one of these,
+ * and dispatch routes on the chosen member.
  */
 export type QualitySubcommand =
-  "prompt" | "history" | "diff" | "validate" | "candidacy";
+  "prompt" | "history" | "diff" | "save" | "validate" | "candidacy";
 
 /**
  * One resolved input to `quality candidacy`, distinguishing the two ways a caller can supply it.

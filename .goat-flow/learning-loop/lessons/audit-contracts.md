@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-07-18
+last_reviewed: 2026-07-31
 ---
 
 ## Lesson: Artifact scanners need explicit mirror maps and command grammar controls
@@ -12,6 +12,10 @@ last_reviewed: 2026-07-18
 **Root cause:** I validated common path and token shapes without pressure-testing the repository's exceptional source/install mapping or a producer-language prose control. The implementation had the authoritative mirror table and CLI registry available but used a naming convention and a broad word-boundary regex instead.
 
 **Recurrence 2026-07-29:** `plans check` dogfooded on its own live plan failed both milestones with "task(s) missing an (est: ...) entry" although every task carried one: synthetic fixtures used single-line tasks while real milestone tasks wrap across indented continuation lines with the est entry at block end. `readChecklistItems` was reworked so each checkbox owns every line up to the next checkbox or heading, with wrapped-task and nested-gate regression fixtures. Evidence anchors: `src/cli/plans-export.ts` (search: `Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate`), `test/unit/plans-export.test.ts` (search: `parses est entries at the end of wrapped multi-line tasks` and `parses every counted work item from the worked-example shape`).
+
+**Latest recurrence 2026-07-31:** Human-approval and mid-run evidence continuations were appended after already-final `(est: ...)` suffixes. Strict dogfood then reported each item as unestimated because `readChecklistItems` correctly owned the continuation while `readTaskEstimate` no longer saw an estimate at the block end. The bounded correction moved approval onto its estimate-bearing line and put evidence before a final Accounting continuation. Decision changed: after adding lifecycle or evidence notes beneath estimated checkboxes, keep the estimate last and rerun strict immediately. Evidence anchors: `src/cli/plans-export.ts` (search: `An item owns every line until the next checkbox or heading`) and `src/cli/plans-effort.ts` (search: `Parse one task line's trailing est entry`).
+
+**Gate-tag recurrence 2026-07-31:** M05 added a plain unchecked human-review item at `human-verification-pending`; strict validation correctly treated it as executor proof. Human-owned open proof must carry `[human]`. Evidence: `src/cli/plans-check.ts` (search: `isHumanOwnedItem`).
 
 **Prevention:** Artifact reference resolution must consult the exact installed-to-canonical mirror map before applying path conventions. Removed-command checks must distinguish executable code-span/shell grammar from product prose, with paired positive and negative fixtures. Run the live combined audit after focused tests because real documentation supplies exceptions synthetic fixtures miss. Evidence anchors: `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), `src/cli/audit/check-factual-claims.ts` (search: `REMOVED_COMMAND_CHECKS`), and `test/integration/audit-drift-artifact-integrity.test.ts` (search: `resolves installed shared-document paths`).
 
@@ -40,6 +44,8 @@ last_reviewed: 2026-07-18
 **Root cause:** I treated an additive report field as universally present at every renderer call site. Tests had multiple report construction paths, and only the obvious unit helper was updated before the full suite.
 
 **Prevention:** When adding fields to `AuditReport` or other shared CLI/dashboard payloads, grep for direct renderer/reader fixture construction and either update every fixture or make consumers default missing additive fields. Evidence anchors: `src/cli/audit/render.ts` (search: `Array.isArray(report.enforcement)`), `test/contract/command-phrases.test.ts` (search: `renderAuditText does not mention scan`).
+
+**Recurrence update (2026-07-31):** M07's first JSON proof queried pass findings on a per-check result, but `toCheckResult` exposes status/details there and aggregates pass findings under the owning concern. Inspect the output mapper before scripting field-level proof. Evidence: `src/cli/audit/audit.ts` (search: `function toCheckResult`).
 
 ---
 

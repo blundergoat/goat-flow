@@ -83,6 +83,9 @@ describe("doc-paths-resolve harness check", () => {
     );
 
     assert.equal(result.status, "pass");
-    assert.match(result.findings.join("\n"), /All 1 doc file paths resolve/);
+    assert.match(
+      result.findings.join("\n"),
+      /All 1 referenced paths resolve across router tables, architecture\.md, and core docs/,
+    );
   });
 });

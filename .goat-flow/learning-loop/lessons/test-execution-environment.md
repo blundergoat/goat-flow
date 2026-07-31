@@ -1,6 +1,6 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-31
 ---
 
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
@@ -86,6 +86,10 @@ last_reviewed: 2026-07-17
 **Prevention:** For terminal automation, unit tests must cover lost/late paste state, but the Definition of Done still requires live browser evidence against the runner that originally failed. Do not close on fake timers alone when xterm, WebSocket, or agent composer behavior is involved.
 
 **Recurrence 2026-05-28:** A fake-timer fix added `TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS = 1500` and the built bundle contained it, but live WebSocket probing still showed bracketed paste followed by xterm DA response `\x1b[?1;2c` and then no Enter. The missing test variable was xterm's own protocol replies through `term.onData`: they were forwarded like keystrokes and cleared the pending fallback timer. Future terminal-submit tests must model the actual browser input stream, not just helper timers. Evidence anchors: `src/dashboard/dashboard-terminal.ts` (search: `dashboardTerminalDataLooksProtocolResponse`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `keeps Claude no-marker fallback armed across xterm protocol replies`).
+
+**Recurrence 2026-07-31:** A live Claude file-tool probe proved that `.goat-flow/logs/quality/` was writable, but the real generated quality prompt still failed because its redaction-and-validation Bash block was denied under `dontAsk`. The surrogate tested directory permission, not the complete persistence contract. The replacement moves persistence behind `quality save`, and the focused contract now exercises its exact heredoc command through the deny hook. Evidence anchors: `src/cli/quality/quality-command.ts` (search: `handleQualitySaveSubcommand`), `test/unit/quality-report-contract.test.ts` (search: `sends a realistic 60-field report block through the actual deny hook`).
+
+**Prevention update:** When a prompt-generated workflow crosses tool and permission boundaries, reproduce the exact generated command through the real runner. A file-tool write, parser unit, or permission-rule probe proves only its own layer.
 
 ---
 

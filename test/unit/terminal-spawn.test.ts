@@ -100,6 +100,124 @@ describe("buildTerminalSpawnSpec", () => {
     assert.equal(spec.env.GOAT_PROMPT, undefined);
   });
 
+  it("launches Claude reporting sessions with a restrictive settings overlay", () => {
+    const spec = buildTerminalSpawnSpec(
+      "claude",
+      "/usr/local/bin/claude",
+      "",
+      { SHELL: "/bin/bash" },
+      "linux",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+
+    const shellCommand = spec.args.join("\n");
+    const rawSettings = spec.env.GOAT_CLAUDE_REPORTING_SETTINGS ?? "";
+    assert.match(shellCommand, /--setting-sources=/);
+    assert.match(shellCommand, /--settings "\$GOAT_CLAUDE_REPORTING_SETTINGS"/);
+    assert.match(shellCommand, /--permission-mode dontAsk/);
+    assert.doesNotMatch(shellCommand, /\|\|/);
+    assert.ok(rawSettings.length > 0);
+
+    const settings = JSON.parse(rawSettings) as {
+      permissions: {
+        defaultMode: string;
+        disableBypassPermissionsMode: string;
+        additionalDirectories: string[];
+        allow: string[];
+        deny: string[];
+      };
+    };
+    assert.equal(settings.permissions.defaultMode, "dontAsk");
+    assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
+    assert.deepStrictEqual(settings.permissions.additionalDirectories, []);
+    assert.ok(settings.permissions.allow.includes("Read"));
+    assert.ok(settings.permissions.allow.includes("Bash(goat-flow --version)"));
+    assert.ok(
+      settings.permissions.allow.includes(
+        "Bash(node --import tsx src/cli/cli.ts --version)",
+      ),
+    );
+    assert.ok(
+      settings.permissions.allow.includes(
+        `Bash(goat-flow quality save '${process.cwd()}')`,
+      ),
+    );
+    assert.ok(
+      settings.permissions.allow.includes(
+        `Bash(node --import tsx src/cli/cli.ts quality save '${process.cwd()}')`,
+      ),
+    );
+    assert.equal(
+      settings.permissions.allow.some(
+        (rule) =>
+          rule === "Bash" ||
+          rule === "Bash(*)" ||
+          /Bash\((?:node|goat-flow) \*\)/u.test(rule) ||
+          /quality save \*\)/u.test(rule),
+      ),
+      false,
+    );
+    assert.ok(
+      settings.permissions.allow.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/\*\*\)/.test(rule),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/README\.md\)/.test(rule),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Read\(\/\/.*\/\*\*\/\.env\)/.test(rule),
+      ),
+    );
+    assert.ok(settings.permissions.deny.includes("Read(~/.ssh/**)"));
+
+    const windowsSpec = buildTerminalSpawnSpec(
+      "claude",
+      "C:\\Users\\dev\\AppData\\Roaming\\npm\\claude.cmd",
+      "",
+      {},
+      "win32",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+    const windowsCommand = windowsSpec.args.join("\n");
+    assert.match(windowsCommand, /--setting-sources=/);
+    assert.match(
+      windowsCommand,
+      /--settings \$env:GOAT_CLAUDE_REPORTING_SETTINGS/,
+    );
+    assert.match(windowsCommand, /--permission-mode dontAsk/);
+    assert.match(
+      windowsCommand,
+      /Remove-Item Env:GOAT_CLAUDE_REPORTING_SETTINGS/,
+    );
+  });
+
+  it("keeps ordinary Claude terminals free of reporting restrictions", () => {
+    const spec = buildTerminalSpawnSpec(
+      "claude",
+      "/usr/local/bin/claude",
+      "",
+      { SHELL: "/bin/bash" },
+      "linux",
+    );
+
+    const shellCommand = spec.args.join("\n");
+    assert.doesNotMatch(shellCommand, /--setting-sources/);
+    assert.doesNotMatch(shellCommand, /--permission-mode dontAsk/);
+    assert.equal(spec.env.GOAT_CLAUDE_REPORTING_SETTINGS, undefined);
+  });
+
   it("launches Codex reporting sessions with a restricted permission profile", () => {
     const spec = buildTerminalSpawnSpec(
       "codex",

@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-31
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -76,12 +76,14 @@ last_reviewed: 2026-07-17
 
 ## Lesson: Activate prerequisites before the numerically next milestone
 
-**Created:** 2026-07-13
+**Status:** active | **Created:** 2026-07-13
+**Incident count:** 2
+**Latest occurrence:** 2026-07-31
 
-**What happened:** After M05 approval, M06 was marked in progress before its dependency header was read. M06 required M08 to land first, so both statuses had to be corrected before implementation.
+**What happened:** After M05 approval, M06 was marked in progress before its dependency header was read. A later parent-plan run also started final evidence while four semantic prerequisites remained unfinished, then initially amended `Depends on` with explanatory prose that strict validation rejected.
 
-**Root cause:** Numeric ordering was treated as execution ordering without checking the next milestone's live dependency contract.
+**Root cause:** Execution order was inferred from milestone position or incomplete prose instead of a complete, parseable dependency contract.
 
-**Evidence:** The 1.14.0 M06 durable-handoff-receipt milestone (local gitignored plan file - no durable anchor exists) declared "Depends on: M08 completed"; M06 was returned to pending and M08 activated first. This is a behavioral lesson; milestone files are local session state and must not be cited as durable anchors.
+**Evidence:** Both incidents occurred in local gitignored milestone files, so no durable repository anchor exists. In each case, dependency validation exposed the ordering defect before dependent implementation continued.
 
-**Prevention:** Before changing milestone statuses, read `Depends on` in the candidate and every unmet prerequisite. Activate the prerequisite, not the next number.
+**Prevention:** Before changing milestone status, read every declared prerequisite and run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs); put rationale in narrative fields.

@@ -9,7 +9,7 @@
  * behind `inferQualityScope`.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { join } from "node:path";
 import type { AgentId, SharedFacts } from "../types.js";
 import type { AuditConcernKey, AuditReport } from "../audit/types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
@@ -24,26 +24,6 @@ import {
   renderLearningLoopContext,
   selectLearningLoopContext,
 } from "./learning-loop-context.js";
-
-/**
- * Build the forward-slash project sub-path that goes inside a Bash snippet in
- * the prompt. On Windows `path.resolve` returns backslashes and (worse) drive-
- * prefixes POSIX-shape inputs; `path.posix.join` keeps the input shape and
- * forces forward-slash separators for the appended segment. Backslashes are
- * normalised first so UNC roots (`\\server\share`) survive as `//server/share`;
- * the leading slash that `posix.join` collapses on UNC inputs is then restored
- * so quality writes still target the network share, not a local absolute path.
- *
- * @param projectPath - absolute project root; may be a Windows path or a UNC root (`\\server\share`)
- * @param sub - POSIX-shaped sub-path to append, e.g. `.goat-flow/logs/quality`
- * @returns forward-slash path safe to embed in a generated Bash snippet, with the UNC root preserved
- */
-function toShellProjectPath(projectPath: string, sub: string): string {
-  const normalized = projectPath.replace(/\\/g, "/");
-  const isUnc = normalized.startsWith("//");
-  const joined = posix.join(normalized, sub);
-  return isUnc && !joined.startsWith("//") ? "/" + joined : joined;
-}
 
 /** Inputs needed to compose an agent quality-review prompt for one project. */
 export interface QualityInput {
@@ -255,6 +235,7 @@ export function renderDegradedNote(reason: AuditUnavailableReason): string {
       "",
       "> **Note:** The dashboard requested a fast quality prompt and no cached audit report was available.",
       "> This does not mean the audit failed. Run the Re-audit action or `goat-flow audit . --harness --agent <id>` for live audit status.",
+      '> The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.',
       "> Continue the assessment, but do not infer setup failure from this cache miss.",
       "",
     ].join("\n");
@@ -522,32 +503,18 @@ export function appendQualityReportContract(
   // Full detail spells out WHY the file must exist on disk - a report that
   // lives only in the agent's reply is invisible to history/diff.
   pushFull(
-    "**CRITICAL:** After writing the file, verify it was saved by running `ls -la .goat-flow/logs/quality/` and confirming the file appears with non-zero size. If missing, retry the write. A quality report that exists only in conversation history is invisible to `goat-flow quality history` and `goat-flow quality diff`.",
+    "**CRITICAL:** Use the bounded saver below. It prints `OK <absolute-report-path>` only after redaction, strict validation, and an exclusive file write. A report that exists only in conversation history is invisible to `goat-flow quality history` and `goat-flow quality diff`.",
     "",
   );
   lines.push("**Filename format:** `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`");
   lines.push("");
   pushFull(
-    "Where:",
-    "- `YYYY-MM-DD-HHMM` is the current local date and 24-hour time (e.g. `2026-04-19-1430`)",
-    `- \`<agent>\` is the literal string \`${input.agent}\``,
-    "- `<rand5>` is 5 lowercase alphanumeric characters (a-z, 0-9) that you generate fresh to avoid collisions with other parallel runs",
-    "",
-    "**Derive the date/time/random parts via your shell** (so the filename reflects when the report was actually written, not when this prompt was generated). On Linux/macOS:",
+    `The saver derives the timestamp and random suffix at write time and uses the report's \`agent\` field (\`${input.agent}\`).`,
     "",
   );
-  lines.push("```bash");
-  lines.push('STAMP="$(date +"%Y-%m-%d-%H%M")"      # e.g. 2026-04-19-1430');
-  lines.push("RAND=\"$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 5)\"");
   lines.push(
-    `QUALITY_DIR=${shellSingleQuote(toShellProjectPath(input.projectPath, ".goat-flow/logs/quality"))}`,
+    "**Assessment rule:** Harness scores describe deterministic check coverage; reconcile declared `limits` and accepted ADRs before proposing new gates or score changes.",
   );
-  lines.push(`FILE="\${QUALITY_DIR}/\${STAMP}-${input.agent}-\${RAND}.json"`);
-  lines.push('mkdir -p "$QUALITY_DIR"');
-  lines.push(
-    "# Keep the completed JSON in memory; the redaction gate below writes $FILE.",
-  );
-  lines.push("```");
   lines.push("");
   lines.push("**JSON body shape:**");
   lines.push("");
@@ -606,6 +573,9 @@ export function appendQualityReportContract(
   lines.push(
     `- Allowed \`severity\` values: ${backtickList(QUALITY_FINDING_SEVERITIES)}.`,
   );
+  lines.push(
+    "- Set `audit_status` from this run's live grounding audit outcome (`pass` or `fail`); use `unavailable` only when no live audit completed this run.",
+  );
   pushVariant(
     "- `evidence_quality` is REQUIRED on every finding. Allowed values: `OBSERVED` (verified in code/output), `INFERRED` (state what's missing). Omitting this field causes the report to be rejected.",
     "- `evidence_quality` is REQUIRED on every finding. Allowed values: `OBSERVED` or `INFERRED`.",
@@ -663,107 +633,48 @@ export function appendQualityReportContract(
   );
   pushFull(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
-    "- When streaming the report through the redaction heredoc below, QUOTE the delimiter (`<<'NODE'`, not `<<NODE`). Unquoted delimiters make the shell interpret `` `backticks` `` as command substitution, which silently eats your inline code references.",
+    "- QUOTE the persistence delimiter (`<<'JSON'`, not `<<JSON`). Unquoted delimiters make the shell interpret `$`, backticks, and escapes inside the report.",
   );
   lines.push("");
   lines.push(
-    "**Redact before writing.** Build the complete JSON in memory, then replace the placeholder below and stream it through the readable scrubber. Only the redacted JSON may reach `$FILE`; never stage the raw draft in a file.",
+    "**Persist through the bounded saver.** `quality save` redacts and validates stdin in memory before choosing the report filename. It owns the destination under the selected project's `.goat-flow/logs/quality/`; never stage the raw draft or pass `--output`.",
   );
   lines.push("");
   lines.push(
-    `**Select a compatible redactor.** The installed CLI must report \`goat-flow v${getPackageVersion()}\`. A stale CLI can interpret \`redact\` as an audit target and write the wrong JSON. The source fallback below is allowed only in the goat-flow framework checkout.`,
+    `**Select a compatible saver.** Run \`goat-flow --version\`; it must print \`goat-flow v${getPackageVersion()}\`. If that matching CLI lacks \`quality save\`, use the source fallback only from the goat-flow framework checkout after \`node --import tsx src/cli/cli.ts --version\` prints the same version.`,
+  );
+  lines.push(
+    "Minify the completed report object to one JSON line between the quoted delimiters. Multi-line heredoc bodies can be mistaken for chained shell commands by safety hooks.",
   );
   lines.push("");
   lines.push("```bash");
   lines.push(
-    "node --input-type=module - \"$FILE\" <<'NODE'",
-    'import { spawnSync } from "node:child_process";',
-    'import { existsSync, readFileSync } from "node:fs";',
-    "",
-    "const outputPath = process.argv[2];",
-    `const expectedVersion = "goat-flow v${getPackageVersion()}";`,
-    "const report = <insert the complete report object here>;",
-    "",
-    "function probeCompatibleCli(command, args) {",
-    '  const result = spawnSync(command, [...args, "--version"], {',
-    '    encoding: "utf8",',
-    "  });",
-    "  if (result.error || result.status !== 0) return null;",
-    "  if (result.stdout.trim() !== expectedVersion) return null;",
-    "  return { command, args };",
-    "}",
-    "",
-    'let selectedCli = probeCompatibleCli("goat-flow", []);',
-    'if (!selectedCli && existsSync("package.json")) {',
-    "  let packageJson = null;",
-    "  try {",
-    '    packageJson = JSON.parse(readFileSync("package.json", "utf8"));',
-    "  } catch {",
-    "    packageJson = null;",
-    "  }",
-    '  if (packageJson && packageJson.name === "@blundergoat/goat-flow" && existsSync("src/cli/cli.ts")) {',
-    "    selectedCli = probeCompatibleCli(process.execPath, [",
-    '      "--import",',
-    '      "tsx",',
-    '      "src/cli/cli.ts",',
-    "    ]);",
-    "  }",
-    "}",
-    "",
-    "if (!selectedCli) {",
-    `  console.error("Compatible goat-flow v${getPackageVersion()} redactor unavailable; raw report not written");`,
-    "  process.exit(1);",
-    "}",
-    "",
-    "function runOrExit(command, args, { input } = {}) {",
-    "  const result = spawnSync(command, args, {",
-    "    input,",
-    '    stdio: input === undefined ? "inherit" : ["pipe", "inherit", "inherit"],',
-    "  });",
-    "  if (result.error) {",
-    "    console.error(result.error.message);",
-    "    process.exit(1);",
-    "  }",
-    "  if (result.signal) {",
-    "    console.error(`Subprocess terminated by ${result.signal}`);",
-    "    process.kill(process.pid, result.signal);",
-    "  }",
-    "  if (result.status !== 0) process.exit(result.status ?? 1);",
-    "}",
-    "",
-    'const reportJson = JSON.stringify(report, null, 2) + "\\n";',
-    "runOrExit(",
-    "  selectedCli.command,",
-    '  [...selectedCli.args, "redact", "--output", outputPath],',
-    "  { input: reportJson },",
-    ");",
-    "runOrExit(selectedCli.command, [",
-    "  ...selectedCli.args,",
-    '  "quality", "validate", outputPath,',
-    "]);",
-    'runOrExit("ls", ["-la", outputPath]);',
-    "NODE",
+    `goat-flow quality save ${shellSingleQuote(input.projectPath)} <<'JSON'`,
+    "<insert the complete report object as one JSON line here>",
+    "JSON",
+  );
+  lines.push("```");
+  lines.push("");
+  lines.push("Framework source fallback:");
+  lines.push("");
+  lines.push("```bash");
+  lines.push(
+    `node --import tsx src/cli/cli.ts quality save ${shellSingleQuote(input.projectPath)} <<'JSON'`,
+    "<insert the complete report object as one JSON line here>",
+    "JSON",
   );
   lines.push("```");
   lines.push("");
   lines.push(
-    "If the compatibility block exits non-zero, keep the report non-durable and state the exact reason; do not write an unredacted fallback.",
+    "If both compatible saver paths are unavailable, keep the report non-durable and state `persist-skipped: redactor-unavailable`; never write an unredacted fallback.",
   );
   lines.push("");
   lines.push(
-    "**Validate before confirming.** The block above uses the same compatible CLI for redaction and validation, stops on either failure, and lists the resulting file only after validation passes.",
+    "If save exits non-zero, fix the reported JSON or ownership error and retry through the same command. Do not claim persistence until it prints `OK <absolute-report-path>`.",
   );
   lines.push("");
   lines.push(
-    "If validate exits non-zero, read the reported error, fix the JSON, and re-write the file. Do NOT emit the confirmation below until validate passes.",
-  );
-  lines.push("");
-  lines.push(
-    "If command execution is unavailable, do not claim validation passed. Confirm instead with: `Wrote unvalidated quality report to .goat-flow/logs/quality/<your-filename>.json; validation unavailable: <exact reason>`.",
-  );
-  lines.push("");
-  lines.push(
-    "**End of response:** After validate passes, confirm in prose with a single line: `Wrote quality report to .goat-flow/logs/quality/<your-filename>.json`. Do not include the JSON inline in your reply.",
+    "**End of response:** After `OK`, confirm with one line using that exact path: `Wrote quality report to <absolute-report-path>`. Do not include the JSON inline.",
   );
 }
 

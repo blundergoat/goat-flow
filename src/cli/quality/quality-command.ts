@@ -1,17 +1,29 @@
 /**
  * Dispatch layer for the `goat-flow quality` command and its subcommands (history, diff,
- * candidacy, validate, and the default prompt builder). Each subcommand is a focused async
+ * candidacy, save, validate, and the default prompt builder). Each subcommand is a focused async
  * handler; the public entry point only routes by `options.qualitySubcommand`.
  *
  * Heavy modules (history, candidacy, audit, prompt composition) are dynamically imported inside
  * each handler so the CLI startup path stays lean and only loads what a given invocation needs.
  * All filesystem and process behaviour is injected through QualityCommandDeps so the handlers
- * stay testable; this module performs no I/O of its own beyond reading files the user pointed at.
+ * stay testable. The save handler is the one bounded write path: it chooses the report filename
+ * beneath the selected project after redaction and strict validation.
  */
-import { basename } from "node:path";
+import { randomBytes } from "node:crypto";
+import {
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, join, resolve } from "node:path";
 import type { AgentId } from "../types.js";
 import type { CandidacyResult } from "./candidacy.js";
 import type { ParsedCLI } from "../cli-types.js";
+import { scrubDurableText } from "../evidence/redaction.js";
+import { getPackageVersion } from "../paths.js";
 
 type CLIErrorConstructor = new (message: string, exitCode: number) => Error;
 
@@ -206,6 +218,188 @@ async function handleQualityValidateSubcommand(
   deps.writeOutput(options, `OK ${path}`);
 }
 
+/** Format the local timestamp used by collision-resistant quality report filenames. */
+function qualitySaveTimestamp(date: Date = new Date()): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}-${hour}${minute}`;
+}
+
+/** Inspect one prospective report directory without following a redirecting final component. */
+function qualitySaveDirectoryStats(
+  path: string,
+  displayPath: string,
+  deps: QualityCommandDeps,
+) {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new deps.CLIError(
+      `quality save: cannot inspect ${displayPath} before writing.`,
+      2,
+    );
+  }
+}
+
+/** Create the fixed report directory one real project-local component at a time. */
+function ensureQualitySaveDirectory(
+  projectRoot: string,
+  deps: QualityCommandDeps,
+): string {
+  const components = [
+    { path: join(projectRoot, ".goat-flow"), display: ".goat-flow" },
+    {
+      path: join(projectRoot, ".goat-flow", "logs"),
+      display: ".goat-flow/logs",
+    },
+    {
+      path: join(projectRoot, ".goat-flow", "logs", "quality"),
+      display: ".goat-flow/logs/quality",
+    },
+  ];
+  for (const component of components) {
+    const stats = qualitySaveDirectoryStats(
+      component.path,
+      component.display,
+      deps,
+    );
+    if (stats !== null && !stats.isDirectory()) {
+      throw new deps.CLIError(
+        `quality save: ${component.display} must be a real project-local directory.`,
+        2,
+      );
+    }
+    if (stats === null) mkdirSync(component.path);
+  }
+  return (
+    components.at(-1)?.path ??
+    join(projectRoot, ".goat-flow", "logs", "quality")
+  );
+}
+
+/** Write one validated report with exclusive-create semantics and return its path. */
+function writeQualityReport(
+  qualityDirectory: string,
+  agent: AgentId,
+  serializedReport: string,
+  deps: QualityCommandDeps,
+): string {
+  const timestamp = qualitySaveTimestamp();
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const suffix = randomBytes(4).toString("hex").slice(0, 5);
+    const reportPath = join(
+      qualityDirectory,
+      `${timestamp}-${agent}-${suffix}.json`,
+    );
+    try {
+      writeFileSync(reportPath, serializedReport, {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 0o600,
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+      throw new deps.CLIError(
+        "quality save: could not persist the validated report.",
+        2,
+      );
+    }
+    const stats = lstatSync(reportPath);
+    if (!stats.isFile() || stats.nlink !== 1) {
+      throw new deps.CLIError(
+        "quality save: persisted report is not a single-link regular file.",
+        2,
+      );
+    }
+    return reportPath;
+  }
+  throw new deps.CLIError(
+    "quality save: could not allocate a unique report filename.",
+    2,
+  );
+}
+
+/** Redact, strictly validate, and persist one current report supplied through stdin. */
+async function handleQualitySaveSubcommand(
+  options: ParsedCLI,
+  deps: QualityCommandDeps,
+): Promise<void> {
+  let projectRoot: string;
+  try {
+    if (!statSync(options.projectPath).isDirectory()) throw new Error();
+    projectRoot = realpathSync(options.projectPath);
+  } catch {
+    throw new deps.CLIError(
+      "quality save: selected project must be an existing directory.",
+      2,
+    );
+  }
+
+  const input = readFileSync(0, "utf8");
+  if (input.trim().length === 0) {
+    throw new deps.CLIError(
+      "quality save: expected one JSON report on stdin.",
+      2,
+    );
+  }
+  const scrubbed = scrubDurableText(input);
+  let raw: unknown;
+  try {
+    raw = JSON.parse(scrubbed);
+  } catch (error) {
+    throw new deps.CLIError(
+      `quality save: invalid JSON on stdin: ${error instanceof Error ? error.message : String(error)}`,
+      2,
+    );
+  }
+  const { parseQualityReport } = await import("./schema.js");
+  const parsed = parseQualityReport(raw, { requireCurrentFields: true });
+  if (!parsed.ok) {
+    throw new deps.CLIError(`quality save: schema error: ${parsed.error}`, 2);
+  }
+
+  let reportRoot: string;
+  try {
+    reportRoot = realpathSync(resolve(parsed.report.project_path));
+  } catch {
+    throw new deps.CLIError(
+      "quality save: report.project_path must name the selected project.",
+      2,
+    );
+  }
+  if (reportRoot !== projectRoot) {
+    throw new deps.CLIError(
+      "quality save: report.project_path does not match the selected project.",
+      2,
+    );
+  }
+
+  const version = getPackageVersion();
+  if (
+    parsed.report.goat_flow_version !== version ||
+    parsed.report.rubric_version !== version
+  ) {
+    throw new deps.CLIError(
+      `quality save: report version must match goat-flow v${version}.`,
+      2,
+    );
+  }
+
+  const qualityDirectory = ensureQualitySaveDirectory(projectRoot, deps);
+  const serializedReport = `${JSON.stringify(parsed.report, null, 2)}\n`;
+  const reportPath = writeQualityReport(
+    qualityDirectory,
+    parsed.report.agent,
+    serializedReport,
+    deps,
+  );
+  deps.writeOutput(options, `OK ${reportPath}`);
+}
+
 async function handleQualityPromptSubcommand(
   options: ParsedCLI,
   deps: QualityCommandDeps,
@@ -281,6 +475,10 @@ export async function handleQualityCommand(
   }
   if (options.qualitySubcommand === "validate") {
     await handleQualityValidateSubcommand(options, deps);
+    return;
+  }
+  if (options.qualitySubcommand === "save") {
+    await handleQualitySaveSubcommand(options, deps);
     return;
   }
   await handleQualityPromptSubcommand(options, deps);

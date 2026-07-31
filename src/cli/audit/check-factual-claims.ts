@@ -454,7 +454,7 @@ function scanPathReferences(
       const candidate = match[1] ?? "";
       if (!looksLikeRepoPath(candidate)) continue;
       const cleaned = candidate.replace(/[)\].,;:]+$/, ""); // trim trailing punctuation
-      if (INTENTIONAL_LOCAL_STATE_PATHS.has(cleaned)) continue;
+      if (isIntentionalMissingPath(cleaned)) continue;
       if (ctx.fs.exists(cleaned)) continue;
       findings.push({
         severity: "info",
@@ -469,6 +469,18 @@ function scanPathReferences(
 }
 
 const INTENTIONAL_LOCAL_STATE_PATHS = new Set([".goat-flow/project-id"]);
+
+/** ADR-043 compatibility alias; remove this entry only when support for the former commit-guide path retires. */
+const INTENTIONAL_COMPAT_PATHS = new Set([
+  "docs/coding-standards/git-commit.md",
+]);
+
+function isIntentionalMissingPath(path: string): boolean {
+  return (
+    INTENTIONAL_LOCAL_STATE_PATHS.has(path) ||
+    INTENTIONAL_COMPAT_PATHS.has(path)
+  );
+}
 
 /** Lifetime/retention/limit phrases that should name the enforcing constant.
  *  When a doc claims "retained for 90 days" without anchoring the value to a

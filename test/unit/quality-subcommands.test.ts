@@ -3,7 +3,15 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { classifyProjectState } from "../../src/cli/classify-state.js";
@@ -23,8 +31,69 @@ import {
   VALID_FORMATS,
 } from "../../src/cli/cli-types.js";
 import type { ParsedCLI } from "../../src/cli/cli-types.js";
+import { getPackageVersion } from "../../src/cli/paths.js";
 
 const CLI_USAGE_EXIT_CODE = 2;
+const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
+
+/** Build one current report accepted by the strict quality schema. */
+function currentQualityReport(projectPath: string) {
+  const version = getPackageVersion();
+  return {
+    report_kind: "goat-flow-quality-report",
+    goat_flow_version: version,
+    agent: "claude",
+    project_path: projectPath,
+    run_date: "2026-07-31",
+    audit_status: "pass",
+    scope: "framework-self",
+    rubric_version: version,
+    quality_mode: "skills",
+    prior_report_id: null,
+    scores: {
+      setup: {
+        total: 0,
+        accuracy: 0,
+        relevance: 0,
+        completeness: 0,
+        friction: 0,
+      },
+      system: {
+        total: 0,
+        usefulness: 0,
+        signal_to_noise: 0,
+        adaptability: 0,
+        learnability: 0,
+      },
+    },
+    findings: [
+      {
+        type: "setup_quality",
+        severity: "MINOR",
+        file: null,
+        line: null,
+        summary: "Persistence fixture",
+        detail: "Token fixture ghp_abcdefghijklmnopqrstuvwxyz",
+        evidence_quality: "OBSERVED",
+        evidence_method: "static-analysis",
+        delta_tag: null,
+      },
+    ],
+  };
+}
+
+/** Run the public source CLI saver with one in-memory report body. */
+function runQualitySave(projectPath: string, report: unknown) {
+  return spawnSync(
+    process.execPath,
+    ["--import", "tsx", "src/cli/cli.ts", "quality", "save", projectPath],
+    {
+      cwd: REPOSITORY_ROOT,
+      encoding: "utf8",
+      input: `${JSON.stringify(report, null, 2)}\n`,
+    },
+  );
+}
 
 /**
  * Capture stdout emitted by the shared CLI output writer.
@@ -123,11 +192,110 @@ describe("quality subcommand parsing", () => {
     assert.equal(parsed.qualityMode, "skills");
   });
 
+  it("parses bounded quality-save ownership and rejects ambiguous paths", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
+    try {
+      const parsed = parseCLIArgs(["quality", "save", projectRoot]);
+      assert.equal(parsed.qualitySubcommand, "save");
+      assert.equal(parsed.projectPath, projectRoot);
+      assert.throws(
+        () => parseCLIArgs(["quality", "save"]),
+        /quality save requires exactly one positional project path/i,
+      );
+      assert.throws(
+        () => parseCLIArgs(["quality", "save", projectRoot, "extra"]),
+        /quality save requires exactly one positional project path/i,
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   it("rejects --all on non-quality commands", () => {
     assert.throws(
       () => parseCLIArgs(["audit", ".", "--all"]),
       /only valid for the quality command/i,
     );
+  });
+});
+
+describe("quality save", () => {
+  it("redacts, validates, and exclusively writes under the selected project", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
+    try {
+      const result = runQualitySave(
+        projectRoot,
+        currentQualityReport(projectRoot),
+      );
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.match(
+        result.stdout.trim(),
+        /^OK .+\.goat-flow\/logs\/quality\/.+\.json$/u,
+      );
+
+      const qualityDir = join(projectRoot, ".goat-flow", "logs", "quality");
+      const files = readdirSync(qualityDir);
+      assert.equal(files.length, 1);
+      assert.match(
+        files[0] ?? "",
+        /^\d{4}-\d{2}-\d{2}-\d{4}-claude-[a-z0-9]{5}\.json$/u,
+      );
+      const reportPath = join(qualityDir, files[0] ?? "");
+      const stats = lstatSync(reportPath);
+      assert.equal(stats.isFile(), true);
+      assert.equal(stats.nlink, 1);
+      const saved = readFileSync(reportPath, "utf8");
+      assert.doesNotMatch(saved, /ghp_abcdefghijklmnopqrstuvwxyz/u);
+      assert.match(saved, /\[REDACTED:token\]/u);
+      assert.equal(JSON.parse(saved).project_path, projectRoot);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("writes nothing for malformed or wrong-owner reports", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
+    const otherRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-owner-"));
+    try {
+      const malformed = runQualitySave(projectRoot, { invalid: true });
+      assert.equal(malformed.status, CLI_USAGE_EXIT_CODE);
+      assert.match(malformed.stderr, /quality save: schema error/i);
+
+      const wrongOwner = runQualitySave(
+        projectRoot,
+        currentQualityReport(otherRoot),
+      );
+      assert.equal(wrongOwner.status, CLI_USAGE_EXIT_CODE);
+      assert.match(wrongOwner.stderr, /project_path.+selected project/i);
+      assert.equal(
+        readdirSync(projectRoot).includes(".goat-flow"),
+        false,
+        "validation failures must happen before directory creation",
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(otherRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a redirected quality-report directory", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
+    const redirectRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-quality-redirect-"),
+    );
+    try {
+      symlinkSync(redirectRoot, join(projectRoot, ".goat-flow"));
+      const result = runQualitySave(
+        projectRoot,
+        currentQualityReport(projectRoot),
+      );
+      assert.equal(result.status, CLI_USAGE_EXIT_CODE);
+      assert.match(result.stderr, /must be a real project-local directory/i);
+      assert.deepStrictEqual(readdirSync(redirectRoot), []);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(redirectRoot, { recursive: true, force: true });
+    }
   });
 });
 

@@ -7,9 +7,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { composeQuality } from "../../src/cli/prompt/compose-quality.js";
 import type { QualityInput } from "../../src/cli/prompt/compose-quality-common.js";
@@ -46,91 +45,28 @@ const PROJECT_VALIDATION_LIMIT =
   "This audit inspected verification guidance and hook configuration; it did not execute project build, test, lint, typecheck, or format commands.";
 const RECOVERY_RESUMABILITY_LIMIT =
   "Recovery storage is available, but this audit did not validate the current objective, completed work, last verification, next action, or end-to-end resumability.";
+const RED_FLAGS_METRIC_LIMIT =
+  "Instruction-file evidence-before-claims red-flags coverage is metric-only; gaps lower the Verification score but do not fail audit status.";
+const AUDIT_STATUS_PRECEDENCE_RULE =
+  "Set `audit_status` from this run's live grounding audit outcome (`pass` or `fail`); use `unavailable` only when no live audit completed this run.";
+const HARNESS_SCORE_INTERPRETATION =
+  "Harness scores describe deterministic check coverage; reconcile declared `limits` and accepted ADRs before proposing new gates or score changes.";
+const FAST_CACHE_AUDIT_PLACEHOLDER =
+  'The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.';
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 
 /** Extract the executable report-write block from a composed prompt. */
 function extractReportWriteBlock(prompt: string): string {
-  const selectionIndex = prompt.indexOf("**Select a compatible redactor.**");
-  assert.notEqual(selectionIndex, -1, "missing compatible-redactor section");
+  const selectionIndex = prompt.indexOf(
+    "**Persist through the bounded saver.**",
+  );
+  assert.notEqual(selectionIndex, -1, "missing bounded-saver section");
   const fenceStart = prompt.indexOf("```bash\n", selectionIndex);
   assert.notEqual(fenceStart, -1, "missing report-write fence");
   const blockStart = fenceStart + "```bash\n".length;
   const blockEnd = prompt.indexOf("\n```", blockStart);
   assert.notEqual(blockEnd, -1, "unterminated report-write fence");
   return prompt.slice(blockStart, blockEnd);
-}
-
-/** Execute the generated wrapper against a deterministic fake global CLI. */
-function runReportWriteBlock({
-  version = "goat-flow v1.14.0",
-  redactStatus = 0,
-  validateStatus = 0,
-}: {
-  version?: string;
-  redactStatus?: number;
-  validateStatus?: number;
-} = {}) {
-  const tempRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-wrapper-"));
-  const outputPath = join(tempRoot, "quality-report.json");
-  const listMarker = join(tempRoot, "ls-called");
-  const cliPath = join(tempRoot, "goat-flow");
-  const listPath = join(tempRoot, "ls");
-  writeFileSync(
-    cliPath,
-    `#!/usr/bin/env node
-const { readFileSync, writeFileSync } = require("node:fs");
-const args = process.argv.slice(2);
-if (args[0] === "--version") {
-  process.stdout.write(process.env.FAKE_GOAT_VERSION + "\\n");
-  process.exit(0);
-}
-if (args[0] === "redact") {
-  if (Number(process.env.FAKE_REDACT_STATUS) !== 0) process.exit(Number(process.env.FAKE_REDACT_STATUS));
-  const outputIndex = args.indexOf("--output");
-  writeFileSync(args[outputIndex + 1], readFileSync(0, "utf8"));
-  process.exit(0);
-}
-if (args[0] === "quality" && args[1] === "validate") {
-  JSON.parse(readFileSync(args[2], "utf8"));
-  process.exit(Number(process.env.FAKE_VALIDATE_STATUS));
-}
-process.exit(64);
-`,
-    { mode: 0o755 },
-  );
-  writeFileSync(
-    listPath,
-    `#!/usr/bin/env node
-require("node:fs").writeFileSync(process.env.FAKE_LS_MARKER, "called\\n");
-`,
-    { mode: 0o755 },
-  );
-
-  const prompt = composeQuality(makeInput("agent-setup")).prompt;
-  const report = { report_kind: "quality", detail: "wrapper contract" };
-  const writeBlock = extractReportWriteBlock(prompt).replace(
-    "<insert the complete report object here>",
-    JSON.stringify(report),
-  );
-  const result = spawnSync("bash", ["-c", writeBlock], {
-    cwd: tempRoot,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: `${tempRoot}:${dirname(process.execPath)}:/usr/bin:/bin`,
-      FILE: outputPath,
-      FAKE_GOAT_VERSION: version,
-      FAKE_REDACT_STATUS: String(redactStatus),
-      FAKE_VALIDATE_STATUS: String(validateStatus),
-      FAKE_LS_MARKER: listMarker,
-    },
-  });
-  return {
-    result,
-    outputPath,
-    listMarker,
-    report,
-  };
 }
 
 /** Build the prompt input a user gets before any audit evidence is available. */
@@ -185,7 +121,10 @@ function makeLimitedAuditReport(): NonNullable<QualityInput["auditReport"]> {
     concerns: {
       context: auditConcern(),
       constraints: auditConcern(),
-      verification: auditConcern([PROJECT_VALIDATION_LIMIT]),
+      verification: auditConcern([
+        PROJECT_VALIDATION_LIMIT,
+        RED_FLAGS_METRIC_LIMIT,
+      ]),
       recovery: auditConcern([RECOVERY_RESUMABILITY_LIMIT]),
       feedback_loop: auditConcern(),
     },
@@ -217,14 +156,14 @@ function assertCarriesContract(surface: string, text: string): void {
   ]) {
     assert.ok(text.includes(value), `${surface}: missing enum value ${value}`);
   }
-  // The validation command and existence proof close the loop.
+  // One bounded saver owns redaction, validation, destination choice, and existence proof.
   assert.ok(
-    text.includes("quality validate") || text.includes('"quality", "validate"'),
-    `${surface}: missing validate command`,
+    text.includes("quality save"),
+    `${surface}: missing bounded quality saver`,
   );
   assert.ok(
-    text.includes("ls -la") || text.includes('"ls", ["-la"'),
-    `${surface}: missing file existence proof`,
+    text.includes("OK "),
+    `${surface}: missing successful-save receipt`,
   );
 }
 
@@ -244,6 +183,19 @@ describe("quality report contract: CLI surfaces", () => {
     assertCarriesContract("focused/process", payload.prompt);
   });
 
+  it("defines live audit precedence and narrow harness-score interpretation in every mode", () => {
+    for (const qualityMode of [
+      "agent-setup",
+      "process",
+      "harness",
+      "skills",
+    ] as const) {
+      const prompt = composeQuality(makeInput(qualityMode)).prompt;
+      assert.ok(prompt.includes(AUDIT_STATUS_PRECEDENCE_RULE), qualityMode);
+      assert.ok(prompt.includes(HARNESS_SCORE_INTERPRETATION), qualityMode);
+    }
+  });
+
   it("redacts the completed JSON before any quality report reaches disk", () => {
     for (const qualityMode of [
       "agent-setup",
@@ -253,98 +205,49 @@ describe("quality report contract: CLI surfaces", () => {
     ] as const) {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
       const writeBlock = extractReportWriteBlock(prompt);
-      const compatibilityIndex = writeBlock.indexOf("--version");
-      const packageIdentityIndex = writeBlock.indexOf(
-        'packageJson.name === "@blundergoat/goat-flow"',
-      );
-      const sourceFallbackIndex = writeBlock.indexOf("src/cli/cli.ts");
-      const stringifyIndex = writeBlock.indexOf(
-        'JSON.stringify(report, null, 2) + "\\n"',
-      );
-      const redactIndex = writeBlock.indexOf('"redact", "--output"');
-      const validateIndex = writeBlock.indexOf(
-        '"quality", "validate", outputPath',
-      );
-      const listIndex = writeBlock.indexOf('runOrExit("ls", ["-la"');
-
-      assert.notEqual(
-        compatibilityIndex,
-        -1,
-        `${qualityMode}: missing redactor compatibility check`,
-      );
-      assert.match(writeBlock, /goat-flow v1\.14\.0/, qualityMode);
-      assert.ok(
-        packageIdentityIndex > compatibilityIndex &&
-          sourceFallbackIndex > packageIdentityIndex,
-        `${qualityMode}: source fallback must remain package-identity gated`,
+      assert.match(
+        writeBlock,
+        /^goat-flow quality save '\/tmp\/example-project' <<'JSON'$/mu,
+        `${qualityMode}: missing exact bounded-saver heredoc`,
       );
       assert.match(
         writeBlock,
-        /^node --input-type=module - "\$FILE" <<'NODE'$/mu,
-        `${qualityMode}: missing literal hook-recognizable Node heredoc`,
-      );
-      assert.doesNotMatch(
-        writeBlock,
-        /\$\{GOAT_FLOW_CLI\[@\]\}/u,
-        `${qualityMode}: dynamic shell-array heredoc remains`,
-      );
-      assert.notEqual(
-        stringifyIndex,
-        -1,
-        `${qualityMode}: missing in-memory JSON`,
-      );
-      assert.notEqual(redactIndex, -1, `${qualityMode}: missing redact gate`);
-      assert.ok(
-        stringifyIndex > sourceFallbackIndex &&
-          redactIndex > stringifyIndex &&
-          validateIndex > redactIndex &&
-          listIndex > validateIndex,
-        `${qualityMode}: redaction, validation, and listing order is unsafe`,
-      );
-      assert.match(writeBlock, /input: reportJson/u, qualityMode);
-      assert.match(
-        writeBlock,
-        /process\.exit\(result\.status \?\? 1\)/u,
-        qualityMode,
+        /<insert the complete report object as one JSON line here>/u,
+        `${qualityMode}: missing in-memory report placeholder`,
       );
       assert.match(
         prompt,
-        /Only the redacted JSON may reach `\$FILE`; never stage the raw draft in a file/,
+        /redacts and validates stdin in memory before choosing the report filename/u,
         `${qualityMode}: missing raw-draft prohibition`,
       );
       assert.doesNotMatch(
         writeBlock,
-        /writeFile|>\s*"?\$FILE/u,
-        `${qualityMode}: raw JSON can reach disk before redaction`,
+        /--output|\$FILE|node --input-type=module -/u,
+        `${qualityMode}: caller-controlled output or generic Node wrapper remains`,
       );
-      assert.doesNotMatch(
+      assert.match(
         prompt,
-        /then write the JSON below to \$FILE/,
-        `${qualityMode}: prompt still teaches a direct raw write`,
-      );
-      assert.doesNotMatch(
-        prompt,
-        /^goat-flow (?:redact|quality validate)\b/m,
-        `${qualityMode}: stale global CLI remains unconditional`,
+        /node --import tsx src\/cli\/cli\.ts quality save '\/tmp\/example-project'/u,
+        `${qualityMode}: missing framework source fallback`,
       );
     }
   });
 
-  it("sends a realistic 60-line report block through the actual deny hook", () => {
+  it("sends a realistic 60-field report block through the actual deny hook", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
     const writeBlock = extractReportWriteBlock(prompt);
-    const reportObject = [
-      "{",
-      ...Array.from(
-        { length: 60 },
-        (_, index) => `  "field_${index}": "value_${index}",`,
+    const reportObject = JSON.stringify(
+      Object.fromEntries(
+        Array.from({ length: 60 }, (_, index) => [
+          `field_${index}`,
+          `value_${index}`,
+        ]),
       ),
-      '  "final_field": "final_value"',
-      "}",
-    ].join("\n");
-    const realisticBlock = writeBlock
-      .replace("<insert the complete JSON body here>", reportObject)
-      .replace("<insert the complete report object here>", reportObject);
+    );
+    const realisticBlock = writeBlock.replace(
+      "<insert the complete report object as one JSON line here>",
+      reportObject,
+    );
     const hookResult = spawnSync(
       "bash",
       [".goat-flow/hooks/deny-dangerous.sh", "--check", realisticBlock],
@@ -357,35 +260,13 @@ describe("quality report contract: CLI surfaces", () => {
     assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
   });
 
-  it("executes redaction, validation, and listing in order with accurate failures", () => {
-    const success = runReportWriteBlock();
-    assert.equal(
-      success.result.status,
-      0,
-      success.result.stderr || success.result.stdout,
-    );
-    assert.deepEqual(
-      JSON.parse(readFileSync(success.outputPath, "utf8")),
-      success.report,
-    );
-    assert.equal(existsSync(success.listMarker), true);
-
-    const wrongVersion = runReportWriteBlock({
-      version: "goat-flow v1.13.0",
-    });
-    assert.equal(wrongVersion.result.status, 1);
-    assert.equal(existsSync(wrongVersion.outputPath), false);
-    assert.equal(existsSync(wrongVersion.listMarker), false);
-
-    const redactFailure = runReportWriteBlock({ redactStatus: 7 });
-    assert.equal(redactFailure.result.status, 7);
-    assert.equal(existsSync(redactFailure.outputPath), false);
-    assert.equal(existsSync(redactFailure.listMarker), false);
-
-    const validateFailure = runReportWriteBlock({ validateStatus: 9 });
-    assert.equal(validateFailure.result.status, 9);
-    assert.equal(existsSync(validateFailure.outputPath), true);
-    assert.equal(existsSync(validateFailure.listMarker), false);
+  it("keeps compatibility selection outside the report body and names failure honestly", () => {
+    const prompt = composeQuality(makeInput("agent-setup")).prompt;
+    const writeBlock = extractReportWriteBlock(prompt);
+    assert.match(prompt, /goat-flow --version/u);
+    assert.match(prompt, /node --import tsx src\/cli\/cli\.ts --version/u);
+    assert.match(prompt, /persist-skipped: redactor-unavailable/u);
+    assert.doesNotMatch(writeBlock, /--version|quality validate|ls -la/u);
   });
 
   it("embeds live Verification and Recovery limits in every quality mode prompt and summary", () => {
@@ -412,12 +293,20 @@ describe("quality report contract: CLI surfaces", () => {
         `${qualityMode}: prompt omitted Recovery limit`,
       );
       assert.ok(
+        payload.prompt.includes(RED_FLAGS_METRIC_LIMIT),
+        `${qualityMode}: prompt omitted red-flags metric limit`,
+      );
+      assert.ok(
         payload.auditSummary.includes(PROJECT_VALIDATION_LIMIT),
         `${qualityMode}: auditSummary omitted Verification limit`,
       );
       assert.ok(
         payload.auditSummary.includes(RECOVERY_RESUMABILITY_LIMIT),
         `${qualityMode}: auditSummary omitted Recovery limit`,
+      );
+      assert.ok(
+        payload.auditSummary.includes(RED_FLAGS_METRIC_LIMIT),
+        `${qualityMode}: auditSummary omitted red-flags metric limit`,
       );
     }
   });
@@ -439,6 +328,10 @@ describe("quality report contract: CLI surfaces", () => {
       assert.match(
         payload.prompt,
         /Audit data not loaded \(fast cache-only mode/u,
+      );
+      assert.ok(
+        payload.prompt.includes(FAST_CACHE_AUDIT_PLACEHOLDER),
+        `${qualityMode}: missing fast-cache audit placeholder precedence`,
       );
       assert.equal(payload.prompt.includes(PROJECT_VALIDATION_LIMIT), false);
       assert.equal(payload.prompt.includes(RECOVERY_RESUMABILITY_LIMIT), false);

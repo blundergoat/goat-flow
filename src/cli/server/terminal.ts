@@ -3,8 +3,8 @@
  * It validates runner and project inputs, spawns CLI sessions, and brokers WebSocket traffic.
  */
 import { randomUUID } from "node:crypto";
-import { lstatSync } from "node:fs";
-import { extname, join } from "node:path";
+import { lstatSync, realpathSync } from "node:fs";
+import { extname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { WebSocket } from "ws";
 import type {
@@ -41,13 +41,18 @@ const WINDOWS_RUNNER_EXTENSION_PRIORITY = [
 ] as const;
 const WINDOWS_TERMINAL_SHELL = "powershell.exe";
 const POSIX_PROMPT_ENV_CLEANUP =
-  "unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE";
+  "unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS";
 const WINDOWS_PROMPT_ENV_CLEANUP =
-  "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CODEX_REPORTING_PROFILE -ErrorAction SilentlyContinue";
+  "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CODEX_REPORTING_PROFILE -ErrorAction SilentlyContinue; Remove-Item Env:GOAT_CLAUDE_REPORTING_SETTINGS -ErrorAction SilentlyContinue";
 const CODEX_DASHBOARD_ARGS = "--sandbox danger-full-access";
 const CODEX_REPORTING_PROFILE_NAME = "goat_flow_reporting";
 const CODEX_REPORTING_DEFAULT_PERMISSION = `default_permissions="${CODEX_REPORTING_PROFILE_NAME}"`;
 const CODEX_REPORTING_APPROVAL_ARGS = "--ask-for-approval never";
+const CLAUDE_REPORTING_ARGS =
+  '--setting-sources= --settings "$GOAT_CLAUDE_REPORTING_SETTINGS" --permission-mode dontAsk';
+const WINDOWS_CLAUDE_REPORTING_ARGS =
+  "--setting-sources= --settings $env:GOAT_CLAUDE_REPORTING_SETTINGS --permission-mode dontAsk";
+const GOAT_FLOW_PACKAGE_ROOT = resolve(import.meta.dirname, "../../..");
 const REPORTING_LOCAL_STATE_PATHS = [
   ".goat-flow/logs",
   ".goat-flow/scratchpad",
@@ -99,6 +104,21 @@ const REPORTING_SECRET_DENIES = [
   "**/*.pem",
   "**/*.key",
   "**/*.pfx",
+] as const;
+const CLAUDE_REPORTING_HOME_SECRET_DENIES = [
+  "~/.env",
+  "~/.env.*",
+  "~/.ssh/**",
+  "~/.aws/**",
+  "~/.docker/**",
+  "~/.gnupg/**",
+  "~/.kube/**",
+  "~/.npmrc",
+  "~/.pypirc",
+  "~/credentials*",
+  "~/**/*.pem",
+  "~/**/*.key",
+  "~/**/*.pfx",
 ] as const;
 const INITIAL_PROMPT_AFTER_OUTPUT_DELAY_MS = 150;
 const INITIAL_PROMPT_FALLBACK_DELAY_MS = 5000;
@@ -341,6 +361,124 @@ function sharedProtectedPaths(
     : null;
 }
 
+/** Escape one absolute path for Claude Code's gitignore-style permission rules. */
+function claudePermissionPath(filePath: string): string {
+  let normalized = filePath.replaceAll("\\", "/");
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    normalized = `/${normalized[0]?.toLowerCase()}${normalized.slice(2)}`;
+  }
+  const metaCharacters = new Set(["\\", "*", "?", "[", "]", "!", "#"]);
+  const escaped = Array.from(normalized.replace(/^\/+/, ""))
+    .map((character) =>
+      metaCharacters.has(character) ? `\\${character}` : character,
+    )
+    .join("");
+  return `//${escaped}`;
+}
+
+/** Quote one fixed path exactly as generated quality-save prompts render it. */
+function claudeBashPathArgument(filePath: string): string {
+  return `'${filePath.replaceAll("'", "'\\''")}'`;
+}
+
+/** Confirm source-mode saver rules would execute this package's trusted CLI, not target code. */
+function hasTrustedSourceQualitySaver(projectPath: string): boolean {
+  try {
+    return (
+      realpathSync(projectPath) === realpathSync(GOAT_FLOW_PACKAGE_ROOT) &&
+      lstatSync(join(GOAT_FLOW_PACKAGE_ROOT, "src", "cli", "cli.ts")).isFile()
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** List real local/report directories that one Claude reporting root may write. */
+function claudeWritablePaths(rootPath: string): string[] {
+  return REPORTING_LOCAL_STATE_PATHS.filter((relativePath) =>
+    isSharedDirectory([rootPath], relativePath),
+  ).sort();
+}
+
+/**
+ * Build a one-invocation Claude permission overlay for reporting sessions.
+ * Inherited user/project settings are disabled by the launch command, so
+ * dontAsk permits reads plus these explicit report paths and denies everything
+ * else that would require approval. Tracked anchors inside writable roots keep
+ * an explicit deny because deny rules take precedence over the directory allow.
+ */
+function buildClaudeReportingSettings(
+  projectPath: string,
+  targetPath: string,
+): string {
+  const rootPaths = Array.from(
+    new Set([projectPath, targetPath].filter((path) => path.length > 0)),
+  );
+  const writablePathsByRoot = rootPaths.flatMap((rootPath) =>
+    claudeWritablePaths(rootPath).map((relativePath) => ({
+      rootPath,
+      relativePath,
+    })),
+  );
+  const installedSaverRules = rootPaths.map(
+    (rootPath) =>
+      `Bash(goat-flow quality save ${claudeBashPathArgument(rootPath)})`,
+  );
+  const sourceSaverRules = hasTrustedSourceQualitySaver(projectPath)
+    ? [
+        "Bash(node --import tsx src/cli/cli.ts --version)",
+        ...rootPaths.map(
+          (rootPath) =>
+            `Bash(node --import tsx src/cli/cli.ts quality save ${claudeBashPathArgument(rootPath)})`,
+        ),
+      ]
+    : [];
+  const allow = [
+    "Read",
+    "Glob",
+    "Grep",
+    "Bash(goat-flow --version)",
+    ...installedSaverRules,
+    ...sourceSaverRules,
+    ...writablePathsByRoot.map(
+      ({ rootPath, relativePath }) =>
+        `Edit(${claudePermissionPath(join(rootPath, relativePath))}/**)`,
+    ),
+  ];
+  const protectedWriteDenies = writablePathsByRoot.flatMap(
+    ({ rootPath, relativePath }) =>
+      protectedPathsForCandidate(rootPath, relativePath).map(
+        (protectedPath) =>
+          `Edit(${claudePermissionPath(join(rootPath, protectedPath))})`,
+      ),
+  );
+  const projectSecretDenies = rootPaths.flatMap((rootPath) =>
+    REPORTING_SECRET_DENIES.flatMap((pattern) => {
+      const absolutePattern = `${claudePermissionPath(rootPath)}/${pattern}`;
+      return [`Read(${absolutePattern})`, `Edit(${absolutePattern})`];
+    }),
+  );
+  const homeSecretDenies = CLAUDE_REPORTING_HOME_SECRET_DENIES.flatMap(
+    (pattern) => [`Read(${pattern})`, `Edit(${pattern})`],
+  );
+  const deny = [
+    ...protectedWriteDenies,
+    ...projectSecretDenies,
+    ...homeSecretDenies,
+  ];
+  return JSON.stringify({
+    permissions: {
+      defaultMode: "dontAsk",
+      disableBypassPermissionsMode: "disable",
+      additionalDirectories: rootPaths.filter(
+        (rootPath) => rootPath !== projectPath,
+      ),
+      allow: Array.from(new Set(allow)),
+      deny: Array.from(new Set(deny)),
+    },
+  });
+}
+
 /**
  * Build the one-invocation Codex permission profile used by reporting sessions.
  * The project roots stay readable, known goat-flow local state plus Git-proven
@@ -404,6 +542,11 @@ function terminalRunnerCommand(
   platform: NodeJS.Platform,
   accessMode: TerminalAccessMode,
 ): string {
+  if (runner === "claude" && accessMode === "reporting") {
+    return platform === "win32"
+      ? `& $env:GOAT_RUNNER ${WINDOWS_CLAUDE_REPORTING_ARGS}`
+      : `"$GOAT_RUNNER" ${CLAUDE_REPORTING_ARGS}`;
+  }
   if (runner !== "codex") {
     return platform === "win32" ? "& $env:GOAT_RUNNER" : '"$GOAT_RUNNER"';
   }
@@ -433,6 +576,12 @@ function terminalSpawnContext(
   };
   if (runner === "codex" && accessMode === "reporting") {
     env.GOAT_CODEX_REPORTING_PROFILE = buildCodexReportingProfile(
+      projectPath,
+      targetPath,
+    );
+  }
+  if (runner === "claude" && accessMode === "reporting") {
+    env.GOAT_CLAUDE_REPORTING_SETTINGS = buildClaudeReportingSettings(
       projectPath,
       targetPath,
     );

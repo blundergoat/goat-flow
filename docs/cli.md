@@ -42,7 +42,7 @@ The enforcement matrix is deliberately conservative. It reports local facts such
 
 ### `goat-flow quality [path] --agent <id> [--mode <mode>]`
 
-Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. `--mode` selects the assessment contract: `agent-setup` (default), `process`, `harness`, or `skills`. The prompt keeps the completed report object in process memory, selects an exact-version compatible CLI, streams the JSON through `redact` into `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` (gitignored), then validates it before listing the file. Prose findings come back in the agent's reply; the JSON does not.
+Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. `--mode` selects the assessment contract: `agent-setup` (default), `process`, `harness`, or `skills`. The prompt keeps the completed report in memory and sends it to an exact-version `quality save` command. That bounded command redacts and validates the report before creating a gitignored file under `.goat-flow/logs/quality/`. Prose findings come back in the agent's reply; the JSON does not.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality . --agent claude         # Quality prompt for Claude
@@ -50,7 +50,7 @@ npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness
 npx @blundergoat/goat-flow@latest quality . --agent codex          # Quality prompt for Codex
 ```
 
-The agent derives the date/time from its shell and generates a 5-character lowercase-alphanumeric random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
+The saver derives the date/time and a random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
 
 The CLI command composes the prompt with fresh audit context. The dashboard
 Quality page may use cached audit enrichment for passive page loads, but its
@@ -144,6 +144,16 @@ Validate a saved quality report JSON file against the report schema. Checks that
 
 ```bash
 npx @blundergoat/goat-flow@latest quality validate .goat-flow/logs/quality/2026-04-01-0900-claude-aaaaa.json
+```
+
+### `goat-flow quality save <project>`
+
+Persist one current quality report supplied as JSON on stdin. The command redacts and strictly validates the report in memory, verifies its project and goat-flow versions, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. It rejects caller-selected output paths and redirected report directories.
+
+```bash
+npx @blundergoat/goat-flow@latest quality save . <<'JSON'
+{"report_kind":"goat-flow-quality-report","goat_flow_version":"<current-version>","agent":"claude","project_path":"<absolute-project-path>","run_date":"YYYY-MM-DD","audit_status":"pass","scope":"framework-self","rubric_version":"<current-version>","quality_mode":"skills","prior_report_id":null,"scores":{"setup":{"total":0,"accuracy":0,"relevance":0,"completeness":0,"friction":0},"system":{"total":0,"usefulness":0,"signal_to_noise":0,"adaptability":0,"learnability":0}},"findings":[]}
+JSON
 ```
 
 ### `goat-flow manifest [--check] [--format json]`

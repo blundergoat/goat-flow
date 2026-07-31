@@ -506,7 +506,12 @@ const docPathsResolve: HarnessCheck = {
       );
     }
     if (resolvedCount === totalPaths) {
-      return pass([`All ${totalPaths} doc file paths resolve`], details);
+      return pass(
+        [
+          `All ${totalPaths} referenced paths resolve across router tables, architecture.md, and core docs`,
+        ],
+        details,
+      );
     }
     return fail(
       findings,

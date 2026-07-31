@@ -226,6 +226,22 @@ function parseQualityPositionals(
     };
   }
 
+  if (first === "save") {
+    if (second === undefined || rest.length > 0) {
+      throw new CLIError(
+        "quality save requires exactly one positional project path.",
+        2,
+      );
+    }
+    return {
+      qualitySubcommand: "save",
+      projectPath: resolve(second),
+      qualityDiffPair: null,
+      qualityValidatePath: null,
+      candidacyInput: null,
+    };
+  }
+
   return {
     qualitySubcommand: "prompt",
     projectPath: resolve(first ?? "."),
@@ -548,6 +564,16 @@ function validateQualityFlags(
   ) {
     throw new CLIError(
       "--mode is only valid for quality prompt, quality history, and quality diff.",
+      2,
+    );
+  }
+  if (
+    command === "quality" &&
+    qualitySubcommand === "save" &&
+    parsedString(values, "output") !== undefined
+  ) {
+    throw new CLIError(
+      "--output is not valid for quality save; the command owns its report destination.",
       2,
     );
   }

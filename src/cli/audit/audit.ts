@@ -217,6 +217,8 @@ function emptyConcern(): AuditConcern {
 
 const PROJECT_VALIDATION_EXECUTION_LIMIT =
   "This audit inspected verification guidance and hook configuration; it did not execute project build, test, lint, typecheck, or format commands.";
+const RED_FLAGS_METRIC_LIMIT =
+  "Instruction-file evidence-before-claims red-flags coverage is metric-only; gaps lower the Verification score but do not fail audit status.";
 const RECOVERY_RESUMABILITY_LIMIT =
   "Recovery storage is available, but this audit did not validate the current objective, completed work, last verification, next action, or end-to-end resumability.";
 
@@ -235,6 +237,7 @@ function addStructuralAssuranceLimits(
     concerns.verification,
     PROJECT_VALIDATION_EXECUTION_LIMIT,
   );
+  addUniqueConcernLimit(concerns.verification, RED_FLAGS_METRIC_LIMIT);
 
   // Passing recovery checks prove storage exists, not that a user can resume the latest work.
   if (concerns.recovery.status === "pass") {

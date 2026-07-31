@@ -34,7 +34,7 @@ Usage:
 Commands:
   menu              Interactive command picker (default when run with no args)
   audit             Deterministic pass/fail: GOAT Flow Setup + Agent Setup (add --harness for AI Harness Completeness)
-  quality           Agent-driven quality prompt plus history/diff surfaces
+  quality           Agent-driven quality prompt plus save/history/diff surfaces
   setup             Generate setup prompt (adapts to project state)
   install           Deterministically copy/update goat-flow system files
   status            Show project state (bare/partial/v0.9/outdated/current)
@@ -104,6 +104,7 @@ Examples:
   goat-flow quality history --agent claude
   goat-flow quality history --agent codex --mode skills
   goat-flow quality diff --agent claude --mode agent-setup
+  goat-flow quality save .             Redact, validate, and persist one report from stdin
   goat-flow quality validate <path>    Schema-check a freshly written report (exit 2 on any error)
   goat-flow manifest                   Print the resolved manifest
   goat-flow manifest --check           Verify the manifest is consistent with code

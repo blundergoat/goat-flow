@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-07-19
+last_reviewed: 2026-07-31
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -146,6 +146,8 @@ last_reviewed: 2026-07-19
 **Recurrence update (2026-07-12):** M29's testing gate again listed ignored unit/integration test files in a targeted `npx eslint --max-warnings 0` command. ESLint reported three ignored-file warnings and exited 1 even though the changed source had no lint error. The gate was corrected to lint only the three changed `src/cli/audit/` files; TypeScript, Prettier, and focused Node tests remain the supported verification for the ignored test files. Evidence anchor: `eslint.config.mjs` (search: `"test/**"`) - test files are intentionally outside this repo's ESLint scope.
 
 **Recurrence update (2026-07-13):** M20 hit Prettier on three files, ESLint on tests outside its project, and Knip on four internal type exports. Correction used formatting, scoped source lint/tests, and private types. Evidence: `test/unit/context-report.test.ts` (search: `static context report`).
+
+**Recurrence update (2026-07-31):** M05/M06 caught four scope mismatches: ESLint complexity, a Node directory target, a probe without `PATH`, and stale smoke expectations after terminal env cleanup. Fixes extracted a helper, targeted `*.test.ts` (91/91), reused `process.env`, and aligned the smoke contract (20/20). Evidence: `src/cli/audit/check-factual-claims.ts` and `test/smoke/dashboard-endpoints.test.ts` (search: `GOAT_CLAUDE_REPORTING_SETTINGS`).
 
 **Prevention:** Use the repo's supported scopes for final gates (`npx eslint src/cli src/dashboard`, `npm run format:check`, `npx knip --no-progress`). Run full `npm test` alone or capture it to a log before starting parallel expensive checks. When Knip reports configuration hints after a dependency starts being used for real, remove the temporary ignore entry instead of carrying it forward. For performance sanity tests that run in the default fast suite and preflight coverage suite, keep fixtures representative and prefer same-process relative budgets over fixed local-run ceilings. Evidence anchors: `package.json` (search: `test:fast`), `knip.json` (search: `ignoreDependencies`). (The dashboard-markdown performance sanity test that first illustrated the same-process relative-budget fix was removed in 1.13.0 with the markdown viewer.)
 
