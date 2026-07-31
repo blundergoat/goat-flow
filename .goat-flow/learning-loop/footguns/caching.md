@@ -1,6 +1,6 @@
 ---
 category: caching
-last_reviewed: 2026-05-25
+last_reviewed: 2026-08-01
 ---
 
 ## Footgun: TTL'd cache invalidation MUST travel with every writer, not just the writer the bug surfaced from
@@ -16,8 +16,8 @@ last_reviewed: 2026-05-25
 - PR #9431 (merged shortly after, same project): `deleteErrorResults()` had the SAME bug class. The fix had to discover affected eval IDs via `selectDistinct` before deletion, then loop `clearCountCache(evalId)` after the batched delete. Sharing / metrics observed stale totals after retry cleanup.
 - Together: the same cache-invalidation bug shipped TWICE in the same product because the first fix only patched the writer the team observed (insert). Delete was a different file and never got the import. Strong evidence that "fix the one I saw" isn't enough for cache invalidation.
 
-**Goat-flow applicability — HIGH:** Goat-flow has at least three caches with explicit invalidation surfaces, each currently safe only because their writer set is small:
-- `src/cli/facts/fs.ts` (search: `contentCache`, `existsCache`, `listDirCache`, `globCache`) — four module-level `Map`s. Today they're seeded inside the facts collection pass and never mutated externally, but any future "refresh on file watcher event" or "invalidate on write through audit" would need to know about all four.
+**Goat-flow applicability — MEDIUM:** Goat-flow has three caches, and only one of them carries the shape this footgun describes. The rating was HIGH until a 2026-08-01 re-read of the cited code showed the `fs.ts` caches are per-adapter closure state, not the module-level singletons the entry originally claimed; check the scope before assuming a cache needs cross-writer invalidation:
+- `src/cli/facts/fs.ts` (search: `contentCache`, `existsCache`, `directoryReadCache`, `globCache`) — four `Map`s, each closure-scoped inside its own factory (`createCachedReadFile`, `createExistsChecker`, and the directory/glob readers), so one adapter's caches live and die with that adapter rather than persisting module-wide. That narrows the blast radius today: a facts pass cannot serve another pass stale data. The exposure returns the moment an adapter outlives a single pass — a "refresh on file watcher event" or "invalidate on write through audit" feature would need to reach all four.
 - `src/cli/manifest/manifest.ts` (search: `resetManifestCache`) — already exports an invalidator, which means callers are EXPECTED to call it. Every place that mutates the underlying manifest JSON (CLI commands, install script, repair routines) MUST grep-confirm it calls `resetManifestCache()`.
 - `src/cli/server/dashboard-assets.ts` (search: `dashboardAssetCache`) — module-level `Map`. Dev-mode source watchers must invalidate; production never mutates.
 

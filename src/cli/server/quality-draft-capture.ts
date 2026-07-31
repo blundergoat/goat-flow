@@ -13,10 +13,14 @@
  *
  * Polling (not fs.watch) is deliberate: watch events are unreliable on WSL2
  * and network filesystems, and a poller with an mtime-stability threshold also
- * solves the partial-write race for free. Every capture is tied to one
- * terminal session and MUST be disposed when that session ends (see the
- * cleanup-layering footgun); `dispose()` clears the timer and sweeps leftover
- * drafts so no unredacted draft outlives its session.
+ * solves the partial-write race for free.
+ *
+ * Ownership is per project root, not per session: the staging directory is
+ * shared by every session on a root, so one reference-counted poller owns it
+ * and each session holds a handle. Every session MUST dispose its handle when
+ * it ends (see the cleanup-layering footgun); the last release clears the timer
+ * and sweeps leftover drafts, so no unredacted draft outlives the last session
+ * that could still be writing one.
  */
 import {
   lstatSync,
@@ -26,7 +30,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { persistQualityReportText } from "../quality/quality-command.js";
 import { recordEvidenceEvent } from "../evidence/envelope.js";
 import { scrubDurableText } from "../evidence/redaction.js";
@@ -53,7 +57,7 @@ class QualityCaptureError extends Error {
   }
 }
 
-/** Options for one session-scoped staging capture. */
+/** Options for acquiring a capture on one project root's staging directory. */
 export interface QualityDraftCaptureOptions {
   /** Report owner project root whose staging directory is watched. */
   projectRoot: string;
@@ -63,15 +67,37 @@ export interface QualityDraftCaptureOptions {
   stableMs?: number;
 }
 
-/** Live capture handle owned by exactly one terminal session. */
+/** Live capture handle held by exactly one terminal session. */
 export interface QualityDraftCapture {
   /** Absolute staging directory this capture watches. */
   stagingDir: string;
-  /** Stop polling and sweep leftover drafts; safe to call more than once. */
+  /**
+   * Release this session's hold; safe to call more than once. The poller keeps
+   * running - and leftover drafts survive - until every holder on the root has
+   * released, so one session ending cannot delete another's pending draft.
+   */
   dispose(): void;
   /** Process eligible drafts immediately; exposed for tests and shutdown flushes. */
   processNow(): Promise<void>;
 }
+
+/** The one poller per project root that every holder on that root shares. */
+interface RootCapture {
+  stagingDir: string;
+  processNow(): Promise<void>;
+  shutdown(): void;
+}
+
+/**
+ * Live pollers keyed by resolved project root.
+ *
+ * Module-level because the staging directory is contended per root across all
+ * dashboard sessions in this server process, not per session.
+ */
+const rootCaptures = new Map<
+  string,
+  { capture: RootCapture; holders: number }
+>();
 
 /**
  * Create the staging directory for one reporting root, component by component.
@@ -140,7 +166,7 @@ function removeDraft(stagingDir: string, draftName: string): void {
 }
 
 /**
- * Start watching one project root's staging directory for report drafts.
+ * Build the single poller that owns one project root's staging directory.
  *
  * Each eligible draft is processed exactly once per appearance: redact ->
  * validate -> persist through {@link persistQualityReportText}, delete the
@@ -148,12 +174,14 @@ function removeDraft(stagingDir: string, draftName: string): void {
  * `quality.rejected` evidence event. Failures never stop the poller - one
  * malformed draft must not block a later corrected draft.
  *
+ * Never call this directly from a session: the staging directory is shared by
+ * every session on the root, so ownership goes through
+ * {@link startQualityDraftCapture}, which reference-counts one poller per root.
+ *
  * @param options - owner root plus optional timing overrides
- * @returns capture handle; the owning terminal session must dispose it
+ * @returns the shared poller; `shutdown` stops it and sweeps leftover drafts
  */
-export function startQualityDraftCapture(
-  options: QualityDraftCaptureOptions,
-): QualityDraftCapture {
+function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
   const stagingDir = ensureQualityDraftStagingDirectory(options.projectRoot);
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
   const stableMs = options.stableMs ?? DEFAULT_STABLE_MS;
@@ -278,11 +306,60 @@ export function startQualityDraftCapture(
   return {
     stagingDir,
     processNow,
-    dispose(): void {
+    shutdown(): void {
       if (state.disposed) return;
       state.disposed = true;
       clearInterval(timer);
       sweepDrafts();
+    },
+  };
+}
+
+/**
+ * Acquire a capture for one project root, starting the poller on first use.
+ *
+ * The staging directory is a property of the project root, not of a session:
+ * two dashboard sessions on the same project resolve to the same directory. One
+ * poller per root is therefore the only safe arrangement - independent pollers
+ * would each sweep the shared directory on teardown (destroying a sibling
+ * session's pending draft) and could both persist the same draft, because a
+ * draft is deleted only after its `await` completes. Holders are counted, and
+ * the last release stops the timer and sweeps, so ADR-044's close-time sweep
+ * still runs once no session on the root can be writing a draft.
+ *
+ * Timing overrides come from whichever holder starts the poller; later holders
+ * on the same root share that cadence.
+ *
+ * @param options - owner root plus optional timing overrides
+ * @returns capture handle; the owning terminal session must dispose it exactly once
+ */
+export function startQualityDraftCapture(
+  options: QualityDraftCaptureOptions,
+): QualityDraftCapture {
+  const key = resolve(options.projectRoot);
+  let entry = rootCaptures.get(key);
+  if (entry === undefined) {
+    entry = { capture: createRootCapture(options), holders: 0 };
+    rootCaptures.set(key, entry);
+  } else {
+    // A later holder must still see its staging directory exist even if an
+    // earlier holder's tree was removed between acquisitions.
+    ensureQualityDraftStagingDirectory(options.projectRoot);
+  }
+  const held = entry;
+  held.holders += 1;
+  let released = false;
+  return {
+    stagingDir: held.capture.stagingDir,
+    processNow: () => held.capture.processNow(),
+    dispose(): void {
+      // Idempotent per handle: a double dispose must not release a sibling's hold.
+      if (released) return;
+      released = true;
+      held.holders -= 1;
+      if (held.holders > 0) return;
+      rootCaptures.delete(key);
+      held.capture.shutdown();
     },
   };
 }

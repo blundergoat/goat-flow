@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-07-31
+last_reviewed: 2026-08-01
 ---
 
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
@@ -24,7 +24,7 @@ last_reviewed: 2026-07-31
 1. Treat every emission of a `path.*` result into a string as a candidate for `.replace(/\\/g, "/")`. The boundaries that need this: prompt text, audit findings, JSON output, dashboard URLs/labels, log messages, shell snippets the user or agent will execute.
 2. `fs` operations can stay native (Node accepts both). The rule is about *display*, not *use*.
 3. For path *composition* (joining a host-native projectPath with a POSIX sub-path), prefer `path.posix.join(projectPath, sub).replace(/\\/g, "/")` to avoid `path.resolve`'s drive-letter prepending on Windows.
-4. Test stubs that pattern-match on path strings must normalize incoming paths the same way (`test/unit/audit-command.test.ts` `stubFS` is the canonical example).
+4. Test stubs that pattern-match on path strings must normalize incoming paths the same way (`test/unit/audit-command/helpers.ts` (search: `export function stubFS`) is the canonical example).
 5. CI lacks a Windows job, so this class of bug ships silently. Until that's added, any path-emission change must be probed on a Windows host before release.
 
 ---

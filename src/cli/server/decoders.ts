@@ -18,6 +18,7 @@ interface TerminalCreateBody {
   targetPath: string;
   runner: Runner;
   accessMode: TerminalAccessMode;
+  captureQualityDrafts: boolean;
 }
 
 /** Dashboard project-list state after omitted optional collections use their state-file fallbacks. */
@@ -182,6 +183,55 @@ function decodeTerminalAccessMode(
 }
 
 /**
+ * Resolve the runner for a terminal launch, defaulting only when the field is absent.
+ *
+ * An unknown runner would create a terminal the dashboard cannot label or launch,
+ * so it stays an error rather than silently falling back to the default.
+ */
+function decodeTerminalRunner(
+  raw: Record<string, unknown>,
+  options: { validRunners: ReadonlySet<string>; defaultRunner: AgentId },
+): DecodeResult<AgentId> {
+  // Missing runner means use the dashboard's active/default runner.
+  if (!Object.hasOwn(raw, "runner")) {
+    return { ok: true, value: options.defaultRunner };
+  }
+  // Runner ids must be strings so they can be matched against configured agents.
+  if (typeof raw.runner !== "string") {
+    return err("body.runner", "must be a string");
+  }
+  if (!options.validRunners.has(raw.runner)) {
+    return err(
+      "body.runner",
+      `unknown runner: ${raw.runner}. Valid: ${Array.from(options.validRunners).join(", ")}`,
+    );
+  }
+  return { ok: true, value: raw.runner as AgentId };
+}
+
+/**
+ * Decode whether this launch should start staged quality-draft capture.
+ *
+ * Only the dashboard's quality flow sends `true`, because only its prompt tells
+ * the agent to write a draft (ADR-044). Access mode cannot stand in for this:
+ * every preset without write permission - and every custom prompt, which
+ * resolves to no preset at all - is a reporting session, so deriving capture
+ * from access mode would create a staging tree in each selected target.
+ */
+function decodeTerminalCaptureQualityDrafts(
+  raw: Record<string, unknown>,
+): DecodeResult<boolean> {
+  // Absent means an ordinary launch; capture is opt-in.
+  if (!Object.hasOwn(raw, "captureQualityDrafts")) {
+    return { ok: true, value: false };
+  }
+  if (typeof raw.captureQualityDrafts === "boolean") {
+    return { ok: true, value: raw.captureQualityDrafts };
+  }
+  return err("body.captureQualityDrafts", "must be a boolean");
+}
+
+/**
  * Decode a request to open a dashboard terminal.
  * Use when the user clicks a terminal action so invalid runner names fail before any session starts.
  *
@@ -214,26 +264,14 @@ export function decodeTerminalCreateBody(
   // Invalid target path types would open the runner in the wrong place.
   if (!targetPath.ok) return targetPath;
 
-  // Invalid runner names stay errors; the default only applies when the field is absent.
-  let runner: AgentId = options.defaultRunner;
-  // Missing runner means use the dashboard's active/default runner.
-  if (Object.hasOwn(raw, "runner")) {
-    // Runner ids must be strings so they can be matched against configured agents.
-    if (typeof raw.runner !== "string") {
-      return err("body.runner", "must be a string");
-    }
-    // Unknown runners would create a terminal the dashboard cannot label or launch.
-    if (!options.validRunners.has(raw.runner)) {
-      return err(
-        "body.runner",
-        `unknown runner: ${raw.runner}. Valid: ${Array.from(options.validRunners).join(", ")}`,
-      );
-    }
-    runner = raw.runner as AgentId;
-  }
+  const runner = decodeTerminalRunner(raw, options);
+  if (!runner.ok) return runner;
 
   const accessMode = decodeTerminalAccessMode(raw);
   if (!accessMode.ok) return accessMode;
+
+  const captureQualityDrafts = decodeTerminalCaptureQualityDrafts(raw);
+  if (!captureQualityDrafts.ok) return captureQualityDrafts;
 
   return {
     ok: true,
@@ -241,8 +279,9 @@ export function decodeTerminalCreateBody(
       prompt: prompt.value,
       projectPath: projectPath.value,
       targetPath: targetPath.value,
-      runner,
+      runner: runner.value,
       accessMode: accessMode.value,
+      captureQualityDrafts: captureQualityDrafts.value,
     },
   };
 }

@@ -442,6 +442,7 @@ async function dashboardLaunchPreset(
     presetId?: string | null;
     cwdPath?: string | null;
     targetPath?: string | null;
+    captureQualityDrafts?: boolean;
   } = {},
 ): Promise<void> {
   // A launch is already in progress, so ignore duplicate button clicks.
@@ -482,6 +483,7 @@ async function dashboardLaunchPreset(
     cwdPath: options.cwdPath ?? null,
     targetPath: options.targetPath ?? ctx.projectPath,
     accessMode,
+    captureQualityDrafts: options.captureQualityDrafts === true,
   });
 }
 
@@ -662,12 +664,14 @@ async function dashboardLaunchInTerminal(
     cwdPath = null,
     targetPath = null,
     accessMode = "workspace",
+    captureQualityDrafts = false,
   }: {
     promptLabel?: string | null;
     presetId?: string | null;
     cwdPath?: string | null;
     targetPath?: string | null;
     accessMode?: TerminalAccessMode;
+    captureQualityDrafts?: boolean;
   } = {},
 ): Promise<void> {
   if (
@@ -702,6 +706,7 @@ async function dashboardLaunchInTerminal(
         targetPath: selectedTargetPath,
         runner,
         accessMode,
+        captureQualityDrafts,
       }),
     });
     const payload = readRecord(await res.json(), "Terminal create response");
@@ -742,6 +747,9 @@ async function dashboardLaunchInTerminal(
       retryCwdPath: controllingCwd,
       retryTargetPath: selectedTargetPath,
       retryAccessMode: accessMode,
+      // Retry must reopen with capture too, or the retried report has nowhere
+      // to persist and the agent waits on a receipt that never arrives.
+      retryCaptureQualityDrafts: captureQualityDrafts,
     };
     dashboardArmTerminalLoadingTimers(ctx, session.id, session);
     ctx.activeSessionId = session.id;

@@ -1219,7 +1219,6 @@ describe("skill hardening contracts", () => {
     assertForEachTarget(INSTALLED_SKILL_ROOTS, (skillRoot) => {
       const skillPath = `${skillRoot}/goat-qa/SKILL.md`;
       const referencePath = `${skillRoot}/goat-qa/references/output-templates.md`;
-      const skillGuidance = readProjectFile(skillPath);
       const outputTemplates = readProjectFile(referencePath);
 
       assert.match(

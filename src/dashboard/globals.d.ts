@@ -379,6 +379,7 @@ interface TerminalRefs {
   retryCwdPath?: string | null;
   retryTargetPath?: string | null;
   retryAccessMode?: TerminalAccessMode;
+  retryCaptureQualityDrafts?: boolean;
   loadingSlowTimer?: ReturnType<typeof setTimeout> | undefined;
   loadingRetryTimer?: ReturnType<typeof setTimeout> | undefined;
   launchPromptFallbackTimer?: ReturnType<typeof setTimeout> | undefined;

@@ -116,6 +116,9 @@ describe("dashboard terminal launch flow", () => {
         targetPath: "/tmp/selected-target",
         runner: "claude",
         accessMode: "reporting",
+        // Reporting access alone must never request staged-draft capture, or
+        // every read-only launch would build a staging tree in the target.
+        captureQualityDrafts: false,
       },
     ]);
     assert.equal(ctx.sessions[0]?.cwd, "/tmp/controlling-goat-flow");

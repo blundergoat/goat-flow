@@ -192,8 +192,14 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
   const projectPath = readString(rawSession.projectPath);
   const cwd = readString(rawSession.cwd);
   const targetPath = readString(rawSession.targetPath);
+  // Absent means a session projection that predates access modes, so it keeps
+  // the workspace default. An unrecognised value is a server bug, not a
+  // permission grant: fall back to the restricted mode rather than carry a
+  // write-enabled session into the retry and reconnect payloads.
   const accessMode: TerminalAccessMode =
-    rawSession.accessMode === "reporting" ? "reporting" : "workspace";
+    rawSession.accessMode === undefined || rawSession.accessMode === "workspace"
+      ? "workspace"
+      : "reporting";
   if (
     !id ||
     !status ||

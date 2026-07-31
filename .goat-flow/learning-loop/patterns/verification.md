@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-05-27
+last_reviewed: 2026-08-01
 ---
 
 ## Pattern: Cross-runner quality-report triage by convergence
@@ -121,7 +121,7 @@ else:
 
 ## Pattern: Non-gating audit gaps belong in explicit limits
 **Context:** A deterministic audit check passes by design, but review evidence shows a reader could over-interpret the PASS as complete assurance.
-**Approach:** Preserve the existing status gate when the missing evidence is optional, project-specific, or intentionally advisory. Add a first-class `limits`/warning field and carry it through renderers, dashboard readers, and quality prompts. Prove the fix with one machine-readable assertion and one human-facing assertion. Evidence anchors: `src/cli/audit/audit.ts` (search: `addNonGatingEvidenceLimits`), `test/unit/audit-command.test.ts` (search: `Constraint score covers verified deny patterns only`), `test/unit/quality-command.test.ts` (search: `verification: PASS (75%; metrics=2; limits:`).
+**Approach:** Preserve the existing status gate when the missing evidence is optional, project-specific, or intentionally advisory. Add a first-class `limits`/warning field and carry it through renderers, dashboard readers, and quality prompts. Prove the fix with one machine-readable assertion and one human-facing assertion. Evidence anchors: `src/cli/audit/audit.ts` (search: `addNonGatingEvidenceLimits`), `test/unit/audit-command/scoring-model.test.ts` (search: `keeps unrelated concern scores, statuses, and limits unchanged`) for the machine-readable assertion, and the same file (search: `keeps evidence limits adjacent to passing concerns in terminal and Markdown output`) for the human-facing one.
 
 ---
 

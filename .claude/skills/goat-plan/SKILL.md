@@ -155,7 +155,7 @@ For a fresh plan, create a slugged directory, update `.goat-flow/plans/.active` 
 
 **Backlog:** When deferred items exist, write `backlog.md` with Next, Later, and Maybe tiers.
 
-**CHECKPOINT:** "Milestone files + ISSUE.md written to `.goat-flow/plans/<active>/`. Ready to start implementation."
+**CHECKPOINT:** "Wrote [files created] to `.goat-flow/plans/<active>/`. Ready to start implementation."
 
 **Validate:** Resolve inline references, then run `goat-flow plans check .goat-flow/plans/<active> --strict`; fix errors before the checkpoint.
 

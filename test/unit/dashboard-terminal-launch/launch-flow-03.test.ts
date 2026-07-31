@@ -365,9 +365,26 @@ describe("dashboard terminal launch flow", () => {
           cwdPath: "/tmp/example",
           targetPath: "/tmp/target",
           accessMode: "reporting",
+          captureQualityDrafts: false,
         },
       },
     ]);
+  });
+
+  it("carries staged-draft capture through a retried launch", async () => {
+    const { ctx, helpers, launchCalls } = makePreOutputRetryHarness();
+    const refs = ctx._terminalRefs["session-error"];
+    if (refs) refs.retryCaptureQualityDrafts = true;
+
+    await helpers.dashboardRetryTerminalSession(ctx, "session-error");
+
+    // Dropping the flag here would reopen the session without a staging
+    // directory, leaving the agent waiting on a receipt that never arrives.
+    assert.equal(
+      (launchCalls[0]?.options as { captureQualityDrafts?: boolean })
+        ?.captureQualityDrafts,
+      true,
+    );
   });
 
   it("treats terminal WebSocket close as detach until an exit message arrives", () => {

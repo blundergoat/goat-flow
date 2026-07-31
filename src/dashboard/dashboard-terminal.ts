@@ -93,6 +93,7 @@ interface DashboardTerminalContext extends Record<
       cwdPath?: string | null;
       targetPath?: string | null;
       accessMode?: TerminalAccessMode;
+      captureQualityDrafts?: boolean;
     },
   ): Promise<void>;
   /** Load xterm assets once before a browser terminal attaches. */

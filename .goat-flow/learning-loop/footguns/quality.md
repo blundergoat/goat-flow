@@ -1,6 +1,6 @@
 ---
 category: quality
-last_reviewed: 2026-07-31
+last_reviewed: 2026-08-01
 ---
 
 ## Footgun: Quality reviews disappear when the agent skips the final JSON write
@@ -160,6 +160,20 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 1. Never close a remediation milestone on a `resolved` count. Re-read each cited file and anchor and show the defect is gone; treat the bucket as "absent from the newer report" and use it as a prompt to verify, not as evidence.
 2. When an exit criterion says "diff shows findings resolved", satisfy it with per-finding artifact checks and record those instead of the diff summary.
 3. A degraded prompt silently inflates this: a report generated without prior-report context carries `prior_report_id: null`, so nothing can be tagged `persisted` and every prior finding reads as resolved. Check `audit_status` and `prior_report_id` on both reports before trusting a diff - see `.goat-flow/learning-loop/lessons/test-execution-environment.md` (search: `Reproducing a server route means reusing its inputs`).
+
+## Footgun: A permission mode reused as a feature trigger fires on every session that shares the mode
+
+**Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A feature's setup work runs for sessions that will never use the feature. Here, opening any read-only Claude terminal created `.goat-flow/logs/quality/staging/` in both the controlling workspace and the selected target - materialising a `.goat-flow/` tree inside targets that never installed goat-flow, with no `.gitignore` seeded. Because the setup call fails closed, an unrelated `.goat-flow` component of the wrong type in a target could also block a read-only session from opening at all.
+
+**Why it happens:** `src/cli/server/terminal.ts` gated staged-draft capture (ADR-044) on `runner === "claude" && accessMode === "reporting"`, reading "reporting" as "this is a quality report run". It is not: `dashboardTerminalAccessMode` in `src/dashboard/dashboard-terminal-paste.ts` returns `reporting` for every preset without `mayWriteFiles`, for every investigator-role session, and for every custom prompt - which resolves to no preset at all. The real trigger lives one request earlier, where `/api/quality` composes the `persistence: "staged-draft"` prompt, and nothing carried that fact to the launch.
+
+**Evidence:** Raised as P1 by Codex review on PR #57 and confirmed by reading the resolver: `preset?.mayWriteFiles === true` is `undefined` for a custom prompt, so the ternary yields `reporting`. Fixed by adding an explicit `captureQualityDrafts` field to the terminal-create contract (`src/cli/server/decoders.ts`, search: `decodeTerminalCaptureQualityDrafts`), set only by the quality launch and carried through retry as `retryCaptureQualityDrafts`.
+
+**Prevention:** A permission mode answers "what may this session do", not "what is this session for". Before deriving a side effect from one, list every launch that lands in the same mode; if that list is wider than the feature, carry an explicit opt-in field instead. Make the field default to the inert value so an omission skips the side effect rather than performing it, and check the retry/reconnect path in the same change - a flag that opens the feature but is dropped on relaunch fails silently.
+
+---
 
 ## Resolved Entries
 

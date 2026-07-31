@@ -347,6 +347,7 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         presetId?: string | null;
         cwdPath?: string | null;
         targetPath?: string | null;
+        captureQualityDrafts?: boolean;
       },
     ) {
       await dashboardLaunchPreset(this, prompt, runner, label, options);
@@ -392,12 +393,14 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         cwdPath = null,
         targetPath = null,
         accessMode = "workspace",
+        captureQualityDrafts = false,
       }: {
         promptLabel?: string | null;
         presetId?: string | null;
         cwdPath?: string | null;
         targetPath?: string | null;
         accessMode?: TerminalAccessMode;
+        captureQualityDrafts?: boolean;
       } = {},
     ) {
       await dashboardLaunchInTerminal(this, prompt, runner, {
@@ -406,6 +409,7 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         cwdPath,
         targetPath,
         accessMode,
+        captureQualityDrafts,
       });
     },
   };

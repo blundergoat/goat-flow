@@ -1,6 +1,6 @@
 ---
 category: architecture
-last_reviewed: 2026-05-27
+last_reviewed: 2026-08-01
 ---
 
 ## Pattern: UNSET sentinel + recursive merge for layered CLI overlays
@@ -91,5 +91,5 @@ def prompt(*args, **kwargs):
 **Context:** Any state machine that classifies streaming PTY / WebSocket / SSE output to track "is the producer blocked on user input." The producer is a third-party TUI (coding agent, language REPL, build tool) whose chunk boundaries, redraw patterns, and decorative glyphs are not under your control. Symptom of the antipattern: badge flickers, never appears, or stays stuck because output chunks the classifier doesn't recognize keep flipping the state.
 **Approach:** Set waiting state from output, but clear it only from input-side or lifecycle signals. Output can prove "the runner is asking"; it cannot prove "the user answered" because spinner/redraw/status chunks are unbounded across runner versions. User keystrokes, dashboard sends, session exit, and explicit termination are the authoritative clear signals.
 
-Evidence: `src/dashboard/dashboard-terminal.ts` (search: `Round-6 design: the awaitingInput badge is NEVER cleared by output`) and `test/unit/dashboard-terminal-launch.test.ts` (search: `badge persists across arbitrary output volume`) pin the trade-off. The detailed five-round incident remains in `.goat-flow/learning-loop/footguns/dashboard.md` (search: `Awaiting-input state needs asymmetric trust`).
+Evidence: `src/dashboard/dashboard-terminal-connect.ts` (search: `Round-6 design: the awaitingInput badge is NEVER cleared by output`) and `test/unit/dashboard-terminal-launch/launch-flow-05.test.ts` (search: `badge persists across arbitrary output volume`) pin the trade-off. The detailed five-round incident remains in `.goat-flow/learning-loop/footguns/dashboard.md` (search: `Awaiting-input state needs asymmetric trust`).
 **When the trade-off is unacceptable:** if your UI runs unattended for hours and out-of-band answers are common, you need an explicit "session inactivity" timeout to clear stale awaiting state. Don't try to recover symmetric output classification.

@@ -1,6 +1,6 @@
 ---
 category: cleanup-layering
-last_reviewed: 2026-05-25
+last_reviewed: 2026-08-01
 ---
 
 ## Footgun: Resource cleanup at one layer leaves the consumer loop running at the next layer
@@ -26,3 +26,17 @@ last_reviewed: 2026-05-25
 2. **Test the timeout path explicitly.** Resource-timeout behaviour is the kind of thing nobody writes a test for unless prompted. Every resource ceiling needs a test that exercises the consumer's behaviour when the ceiling fires.
 3. **Document both ceilings together.** When introducing or tuning a resource TTL (`container_timeout`, `session_idle_timeout`, scheduled-run TTL), the matching consumer-loop ceiling must be named in the same commit. A grep for the resource TTL config field must surface the consumer ceiling.
 4. **Codify in an ADR** (see [ADR-029-two-ceiling-runaway-protection.md](../decisions/ADR-029-two-ceiling-runaway-protection.md)) — this principle is durable and will be tempted away by future "simplify by removing the inner ceiling" refactors.
+
+---
+
+## Footgun: Session-scoped cleanup over a project-scoped resource deletes a sibling's live state
+
+**Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Two concurrent sessions on one project silently lose work. One session ends normally and the other's in-flight file vanishes before it is processed - no error, no receipt, and the waiting agent polls for a result that never arrives. The same cause produces a second symptom: one input yields two outputs, because both sessions processed the file before either deleted it.
+
+**Why it happens:** The handle is per session, but the resource it cleans is per project. `startQualityDraftCapture` (ADR-044) gave every dashboard reporting session its own poller, while `ensureQualityDraftStagingDirectory` derives the watched directory from the project root - so N sessions on one project shared one directory with N owners. `dispose()` then swept *every* draft in that directory, and each poller's `busy` flag guarded only its own loop, leaving the whole `await persistQualityReportText` window open for a double persist. The milestone wrote "watch the staging path per reporting session", which reads like ownership but was unimplementable: the agent chooses the draft nonce, so nothing in the filename binds a draft to a session.
+
+**Evidence:** Reproduced 2026-08-01 by running the new cases against the pre-fix module: `test/unit/quality-draft-capture.test.ts` (search: `keeps a sibling session's draft`) failed, and (search: `persists a draft once when two sessions hold the same root`) produced two persisted reports from one draft. Both were raised as P1/P2 by Codex review on PR #57. Fixed by reference-counting one poller per resolved project root in `src/cli/server/quality-draft-capture.ts` (search: `rootCaptures`) so only the last release sweeps.
+
+**Prevention:** Before giving a session, request, or connection its own cleanup handle, name the resource that handle deletes. When the resource key is coarser than the handle's scope (project vs session, directory vs file, table vs row), either bind ownership into the resource itself (an owner id in the filename or row) or reference-count one owner per resource key. A `dispose()` that deletes by *pattern* rather than by *ownership* is the tell, and a doc claiming per-session ownership is not evidence that the code can tell sessions apart.

@@ -518,6 +518,33 @@ function buildCodexReportingProfile(
   return `permissions.${CODEX_REPORTING_PROFILE_NAME}={${profile}}`;
 }
 
+/**
+ * Roots whose staging directory this launch owns for the session's lifetime.
+ *
+ * Empty unless the launch explicitly asked for capture: reporting access alone
+ * is not the signal. Every preset without write permission - and every custom
+ * prompt, which matches no preset - opens as reporting, so keying off access
+ * mode would create a `.goat-flow` staging tree inside any selected target and
+ * let an unrelated `.goat-flow` component block a read-only launch (ADR-044).
+ *
+ * @param runner - launching runner; only Claude uses dashboard-owned persistence
+ * @param accessMode - session access mode; capture belongs to enforced reporting runs
+ * @param captureRequested - whether the launch asked for staged-draft capture
+ * @param roots - candidate report-owner roots, deduped because cwd may equal target
+ * @returns roots to stage and watch, or an empty list when capture does not apply
+ */
+function stagedQualityCaptureRoots(
+  runner: Runner,
+  accessMode: TerminalAccessMode,
+  captureRequested: boolean,
+  roots: string[],
+): string[] {
+  if (runner !== "claude" || accessMode !== "reporting" || !captureRequested) {
+    return [];
+  }
+  return Array.from(new Set(roots));
+}
+
 /** Build the runner command embedded in the shell wrapper. */
 function terminalRunnerCommand(
   runner: Runner,
@@ -749,6 +776,7 @@ class TerminalManager {
     options: {
       targetPath?: string;
       accessMode?: TerminalAccessMode;
+      captureQualityDrafts?: boolean;
     } = {},
   ): Promise<CreateResponse> {
     const activeSessions = Array.from(this.sessions.values()).filter(
@@ -820,6 +848,7 @@ class TerminalManager {
     options: {
       targetPath?: string;
       accessMode?: TerminalAccessMode;
+      captureQualityDrafts?: boolean;
     },
   ): Promise<CreateResponse> {
     const { id, runner } = session;
@@ -836,15 +865,16 @@ class TerminalManager {
     const validatedTarget = validateProjectPath(
       options.targetPath || validatedCwd,
     );
-    // Enforced Claude reporting sessions persist reports server-side (ADR-044).
     // Staging must exist BEFORE the permission overlay is built below so a
     // fresh target still receives its `.goat-flow/logs` write allow. Failure
-    // here fails the launch closed: a reporting session must never start
+    // here fails the launch closed: a staged-draft session must never start
     // without a working persistence path.
-    const reportingCaptureRoots =
-      runner === "claude" && session.accessMode === "reporting"
-        ? Array.from(new Set([validatedCwd, validatedTarget]))
-        : [];
+    const reportingCaptureRoots = stagedQualityCaptureRoots(
+      runner,
+      session.accessMode,
+      options.captureQualityDrafts === true,
+      [validatedCwd, validatedTarget],
+    );
     for (const captureRoot of reportingCaptureRoots) {
       ensureQualityDraftStagingDirectory(captureRoot);
     }

@@ -282,4 +282,47 @@ describe("quality draft capture", () => {
       "goat-quality-result-claude-iii999.json",
     ]);
   });
+
+  it("keeps a sibling session's draft when one holder disposes", async () => {
+    const root = makeRoot();
+    const first = makeCapture(root);
+    const second = makeCapture(root);
+    const draftPath = join(
+      second.stagingDir,
+      "goat-quality-draft-claude-kkk111.json",
+    );
+    writeFileSync(draftPath, validReport(root));
+
+    // The staging directory belongs to the root, so one session ending must not
+    // sweep a draft another session is still waiting to have persisted.
+    first.dispose();
+
+    assert.equal(existsSync(draftPath), true);
+    await second.processNow();
+    assert.equal(existsSync(draftPath), false);
+    assert.equal(readReceipt(second.stagingDir, "kkk111").ok, true);
+  });
+
+  it("persists a draft once when two sessions hold the same root", async () => {
+    const root = makeRoot();
+    const first = makeCapture(root);
+    const second = makeCapture(root);
+    writeFileSync(
+      join(first.stagingDir, "goat-quality-draft-claude-lll222.json"),
+      validReport(root),
+    );
+
+    // Independent pollers would both read the draft before either deleted it -
+    // a draft is removed only after its persist await resolves.
+    await Promise.all([first.processNow(), second.processNow()]);
+
+    const persisted = readdirSync(
+      join(root, ".goat-flow", "logs", "quality"),
+    ).filter((entry) => entry.endsWith(".json"));
+    assert.equal(
+      persisted.length,
+      1,
+      `one draft must yield one report, got ${persisted.join(", ")}`,
+    );
+  });
 });

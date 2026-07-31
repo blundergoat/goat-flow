@@ -189,7 +189,7 @@ Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MED
 
 ## Regression Guard Mode
 
-After a verified fix, cite its source; define 1-2 human-readable invariants; compare existing tests/manual coverage; emit the standalone template plus Verification Integrity. Do NOT verify the fix.
+After a verified fix, cite its source; define 1-2 human-readable invariants; compare existing tests/manual coverage; emit the standalone template plus Verification Integrity. Do NOT verify the fix. This mode replaces the phase flow; skip Phases 1-3.
 
 ## Constraints
 

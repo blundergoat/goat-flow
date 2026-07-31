@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-07-31
+last_reviewed: 2026-08-01
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -135,7 +135,9 @@ last_reviewed: 2026-07-31
 
 **Why stronger rules haven't worked:** Each recurrence added a stronger prevention rule. M1: "tick immediately." M29: "FIRST action must be editing the milestone file." M32: "before doing anything else." All failed because documentation-level enforcement does not work for this pattern - the forcing function competes with whatever the agent wants to do next, and loses.
 
-**Status:** Unresolved. Needs mechanical enforcement (hook or gate), not more rules.
+**Mechanical enforcement was tried and withdrawn (do not re-propose it blind).** ADR-038 (search: `Plan Checkbox Guard`) shipped `plan-checkbox-guard.sh` as a Claude-only Stop hook in v1.12.0 - exactly the "hook or gate" this lesson asks for. ADR-039 (search: `Remove Plan Checkbox Guard`) removed it one day later in v1.12.1: the reminder cost default Stop surface, dashboard hook list, installer/config schema, manifest, and audit fixtures, while non-Claude Stop delivery stayed unverified and stale registrations could keep invoking a deleted script. ADR-039 also explicitly rejected swapping in a replacement reminder immediately, because that "risks rebuilding the same plan-state heuristics under a new name" - a replacement needs its own plan.
+
+**Status:** Unresolved, and deliberately so. The gap is real but the obvious fix has already been paid for once and reverted. Any new proposal must start from ADR-039's rejection list and show what it does differently - not restate "needs a hook."
 
 ---
 

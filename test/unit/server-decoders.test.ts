@@ -122,6 +122,27 @@ describe("decodeTerminalCreateBody", () => {
     );
     assert.equal(assertDecodeError(result).path, "body.accessMode");
   });
+
+  it("treats staged-draft capture as opt-in and typed", () => {
+    // Absent means an ordinary launch: no staging tree in the selected target.
+    const absent = decodeTerminalCreateBody(
+      JSON.stringify({ accessMode: "reporting" }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(assertDecodeOk(absent).captureQualityDrafts, false);
+
+    const requested = decodeTerminalCreateBody(
+      JSON.stringify({ accessMode: "reporting", captureQualityDrafts: true }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(assertDecodeOk(requested).captureQualityDrafts, true);
+
+    const invalid = decodeTerminalCreateBody(
+      JSON.stringify({ captureQualityDrafts: "yes" }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(assertDecodeError(invalid).path, "body.captureQualityDrafts");
+  });
 });
 
 describe("decodeProjectsListBody", () => {
