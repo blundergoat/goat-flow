@@ -63,7 +63,7 @@ Router Table row:
 
 | Resource | Path |
 |----------|------|
-| Tool playbooks (README index for CLI/MCP availability checks; examples: browser-use, page-capture) | `.goat-flow/skill-docs/playbooks/` - read BEFORE declaring a tool unavailable |
+| Tool playbooks (README index; tools e.g. browser-use, page-capture; disciplines e.g. changelog, release notes, prose style) | `.goat-flow/skill-docs/playbooks/` - read when a request names one, and BEFORE declaring a tool unavailable |
 | Skill-authoring methodology | `.goat-flow/skill-docs/skill-quality-testing/` - load the README, then the topical authoring guide |
 
 ## Optional: project infrastructure

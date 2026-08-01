@@ -38,7 +38,7 @@ Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs no
 ## Key Resources
 
 - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
-- **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`; disciplines: changelog, release notes, observability, comments) - read when named and read BEFORE declaring a tool unavailable
+- **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`; disciplines: changelog, release notes, observability, comments, prose style) - read when named and read BEFORE declaring a tool unavailable
 
 ## Essential Commands
 
