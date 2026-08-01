@@ -8,10 +8,13 @@ Reference for `/goat-review` Pass 3. The SKILL.md body contains the triggers, sy
 ## Refuter Prompt Template
 
 ```
-You are a code review refuter. Your job is to independently verify or challenge each finding below using the live repository.
+You are a code review refuter. Independently challenge each finding against the declared review authority; never substitute the current checkout.
+
+REVIEW AUTHORITY (metadata only):
+<authority>
 
 For each R-ID finding:
-1. Re-read the cited file + semantic anchor in the current repo
+1. Re-read the cited file + semantic anchor from the declared review authority; if inaccessible, mark UNRESOLVED
 2. Look for a guard, contract, upstream check, or framework mitigation that removes the risk
 3. Mark each finding:
    - REFUTER-CONFIRMED: the risk is real and the finding holds
@@ -57,14 +60,14 @@ Output to: `.goat-flow/logs/review/goat-review-refuter.<random>.json`
 
 The host reviewer applies these rules to the refuter output:
 
-- Empty, broad, or unresolvable refutation evidence cannot remove a finding; it may demote severity one rung and is recorded.
-- Before accepting any MUST refutation, re-read the cited guard. Failure keeps the MUST unresolved and adds `refuter-citation-unverified`; only verified evidence can change Ship Verdict.
+- Refuter output is advisory. Empty, broad, uncited, or unresolvable evidence has no effect on the final finding.
+- Before any refuter result changes severity, action, disposition, or Ship Verdict, the host re-derives the evidence from the declared authority and records the relevant Pass 2 proof. Failure preserves the finding and adds `refuter-citation-unverified`.
 - Preserve the original R-ID through synthesis.
 
 | Refuter Verdict | Host Action |
 |-----------------|-------------|
-| REFUTER-CONFIRMED | Add `[CONFIRMED-CROSS-MODEL]` tag to finding |
-| REFUTER-REFUTED | After the evidence bar, move to `## Refuted by Refuter`; preserve reasoning; do not silently drop |
+| REFUTER-CONFIRMED | After host reproduction, add `[CONFIRMED-CROSS-MODEL]` |
+| REFUTER-REFUTED | After the host reproduces the removing guard, move to `## Refuted by Refuter`; preserve reasoning |
 | REFUTER-UNRESOLVED | Keep original severity; add `cross-model-unresolved` to Review Integrity |
 | LEAD | Run normal Pass 2 verification before promoting to finding; must satisfy Proof Capsule rules |
 

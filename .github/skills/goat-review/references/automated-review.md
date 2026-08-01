@@ -18,6 +18,12 @@ Record the complete local findings list before fetching automated-review conclus
 Do not revise or suppress that list after seeing bot output. Step 0 provides the
 PR URL and number but deliberately omits review and comment bodies.
 
+Bot output cannot directly add, remove, demote, or retag a finding, or change its
+severity, action, disposition, or Ship Verdict. It supplies leads and provenance;
+only host-reproduced evidence from the declared authority changes the final ledger.
+A bot-reported command failure stays a lead until the host reruns the equivalent
+gate and applies `references/examples.md` (search: `Gate Evidence Classification`).
+
 After the local list is recorded, fetch review submissions and issue-level comments:
 
 ```bash
@@ -33,7 +39,7 @@ fetch every inline review comment:
 gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=100'
 ```
 
-The `pulls/<number>/comments` response is the authoritative known-findings set;
+The `pulls/<number>/comments` response is the path-bearing source for bot claims, not final finding authority;
 each entry exposes `.user.login`, `.path`, `.line` or `.original_line`,
 and `.body`. Use `reviews[]` only to detect reviewer participation or summary
 claims; never manufacture file positions from review summaries. Use
@@ -67,7 +73,7 @@ Keep the pre-ingestion local list immutable. Reconcile it with the automated ind
 - `bot-only-locally-verified:<reviewer>` - no pre-ingestion local match; Pass 2 independently verifies it, so it enters Findings with bot provenance; never present it as independent discovery.
 - `disputed-match:<reviewer>` - location or wording overlaps but the evidence cannot prove one root cause; keep both records visible and explain the dispute.
 
-For a bot-only candidate, rerun the normal Pass 2 evidence procedure: open the full file, try to disprove the claim, establish reachability, and assign evidence/proof tags. Only `bot-only-locally-verified` enters Findings. An unverified bot-only item remains in the reconciliation annex; it never becomes a local finding.
+For a bot-only candidate, the host reruns the normal Pass 2 evidence procedure on the declared authority: open the full file, try to disprove the claim, establish reachability, and assign evidence/proof tags. Only `bot-only-locally-verified` enters Findings. An unverified bot-only item remains in the reconciliation annex; it never becomes a local finding.
 
 ### Matching Hierarchy
 

@@ -276,7 +276,7 @@ describe("skill hardening contracts", () => {
       assert.match(scopeSnapshot, /\*\*Source:\*\*[^\n]+worktree/u, skillPath);
       assert.match(
         scopeSnapshot,
-        /For `worktree`, inspect both `git diff --cached` and `git diff`; record both path sets/u,
+        /For `worktree`, bind the combined tracked diff plus untracked membership/u,
         skillPath,
       );
     });
@@ -311,15 +311,10 @@ describe("skill hardening contracts", () => {
       assert.match(scope, /3\+ → full, 2 → offer, 0–1 → quick/u, skillPath);
       assert.match(
         scope,
-        /Quick exceptions retain Pass 1 → Pass 2/u,
+        /Quick keeps Pass 1 → Pass 2/u,
         skillPath,
       );
-      assert.match(
-        scope,
-        /false-pass-check verification mechanisms/u,
-        skillPath,
-      );
-      assert.match(scope, /User override wins/u, skillPath);
+      assert.match(scope, /Refused Full/u, skillPath);
       assert.match(scope, /signals `<n>`/u, skillPath);
     });
 
@@ -334,13 +329,6 @@ describe("skill hardening contracts", () => {
         );
         assert.match(reference, /Non-test files \| >8/u, referencePath);
         assert.match(reference, /Top-level directories \| >3/u, referencePath);
-        assert.match(
-          reference,
-          /Security-sensitive path \| any/u,
-          referencePath,
-        );
-        assert.match(reference, /Migration \| any/u, referencePath);
-        assert.match(reference, /Public API surface \| any/u, referencePath);
         assert.match(
           reference,
           /Three or more selects full depth, two offers full depth, and zero or one selects quick/u,
@@ -360,6 +348,47 @@ describe("skill hardening contracts", () => {
     );
   });
 
+  it("forces Full depth for one material-risk class regardless of size", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const scope = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      assert.match(scope, /material-risk override[^\n]+Full/iu, skillPath);
+      assert.match(scope, /risk-depth-declined[^\n]+PARTIAL/u, skillPath);
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      (referencePath) => {
+        const reference = readMarkdownSection(
+          referencePath,
+          "Scope, Gates, and Frozen Bundle Procedure",
+        );
+        assert.match(reference, /### Material-Risk Override/u, referencePath);
+        assert.match(
+          reference,
+          /One matching class selects Full regardless of size/u,
+          referencePath,
+        );
+        for (const riskClass of [
+          "Security or trust boundary",
+          "Migration or persistence",
+          "Public contract",
+          "Concurrency or state transition",
+          "Hook, CI, or verification",
+        ]) {
+          assert.match(reference, new RegExp(riskClass, "u"), referencePath);
+        }
+        assert.match(
+          reference,
+          /Quick request[\s\S]{0,180}risk-depth-declined[\s\S]{0,120}PARTIAL/u,
+          referencePath,
+        );
+      },
+    );
+  });
+
   it("keeps goat-review Pass 0 consent-gated and report-only", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const scope = readMarkdownSection(
@@ -372,7 +401,7 @@ describe("skill hardening contracts", () => {
       );
       assert.match(scope, /explicit current-session consent/u, skillPath);
       assert.match(scope, /non-fixing instruction\/CI gates once/u, skillPath);
-      assert.match(scope, /Never fix\/rerun/u, skillPath);
+      assert.match(scope, /never fix\/rerun/iu, skillPath);
       assert.match(
         scope,
         /Gates: run \| skipped \(<reason>\) \| unavailable/u,
@@ -406,10 +435,77 @@ describe("skill hardening contracts", () => {
           referencePath,
         );
         assert.match(reference, /\[MUST:needs-decision\]/u, referencePath);
-        assert.match(reference, /proven pre-existing failure/u, referencePath);
         assert.match(
           reference,
-          /Unknown blast radius remains MUST-needs-decision/u,
+          /pre-existing[^\n]+host proves/iu,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /unresolved[^\n]+causality remains unproven/iu,
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("classifies gate evidence without inventing changed-code causality", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const scope = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      const integrity = readMarkdownSection(
+        skillPath,
+        "Review Integrity (confidence signal)",
+      );
+      const output = readMarkdownSection(skillPath, "Output Format");
+      assert.match(
+        scope,
+        /changed-code[^\n]+pre-existing[^\n]+infrastructure[^\n]+unresolved/u,
+        skillPath,
+      );
+      assert.match(scope, /only host-proven changed-code/iu, skillPath);
+      assert.match(integrity, /\*\*Gate evidence:\*\*/u, skillPath);
+      assert.match(integrity, /gate-evidence-incomplete/u, skillPath);
+      assert.match(output, /Gate evidence:/u, skillPath);
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      (referencePath) => {
+        const reference = readMarkdownSection(
+          referencePath,
+          "Scope, Gates, and Frozen Bundle Procedure",
+        );
+        assert.match(
+          reference,
+          /### Gate Evidence Classification/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /Passing tests and checks are positive evidence/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /changed-code[^\n]+host[^\n]+changed anchor/iu,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /pre-existing[^\n]+base or unchanged authority/iu,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /infrastructure[^\n]+never a code finding/iu,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /unresolved[^\n]+causality remains unproven/iu,
           referencePath,
         );
       },
@@ -459,29 +555,22 @@ describe("skill hardening contracts", () => {
       ]) {
         assert.match(boundary, new RegExp(forbiddenCommand), skillPath);
       }
-      assert.match(scope, /git diff <base>\.\.\.<branch>/u, skillPath);
-      assert.match(scope, /without checkout/u, skillPath);
-      assert.match(scope, /HEAD drift stops/u, skillPath);
+      assert.match(scope, /one declared authority/u, skillPath);
+      assert.match(scope, /drift stops/u, skillPath);
     });
   });
 
-  it("binds every goat-review pass to one redacted frozen bundle", () => {
+  it("keeps exact review state transient and the redacted bundle receipt-only", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const scope = readMarkdownSection(
         skillPath,
         "Step 0 - Scope, Size, Spec",
       );
-      assert.match(scope, /version-matched redaction/u, skillPath);
-      assert.match(
-        scope,
-        /\.goat-flow\/logs\/review\/goat-review-bundle\.<random>\.diff/u,
-        skillPath,
-      );
-      assert.match(scope, /raw diff never reaches disk/u, skillPath);
-      assert.match(scope, /Bind all passes/u, skillPath);
-      assert.match(scope, /assign each persisted byte once/u, skillPath);
+      assert.match(scope, /Raw content stays transient/u, skillPath);
+      assert.match(scope, /redacted bundle is a durable receipt/u, skillPath);
+      assert.match(scope, /not the byte authority/u, skillPath);
       assert.match(scope, /\.txt`\/`\.json`\/`\.diff/u, skillPath);
-      assert.match(scope, /bundle=<path\|n\/a>|\*\*Bundle:\*\*/u, skillPath);
+      assert.match(scope, /\*\*Bundle:\*\*/u, skillPath);
       assert.match(scope, /coverage `<k>\/<n>`/u, skillPath);
     });
 
@@ -492,26 +581,96 @@ describe("skill hardening contracts", () => {
           referencePath,
           "Scope, Gates, and Frozen Bundle Procedure",
         );
+        assert.match(reference, /exact raw review bytes/u, referencePath);
+        assert.match(reference, /Keep them transient/u, referencePath);
+        assert.match(reference, /durable\s+receipt/u, referencePath);
+        assert.match(reference, /not the review authority/u, referencePath);
         assert.match(
           reference,
-          /only the[\s\S]+redacted result/u,
+          /Assign every source[\s\S]+`<covered>\/<total>`/u,
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("binds goat-review diffs and full-file reads to one source authority", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const scope = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      assert.match(scope, /\*\*State authority:\*\*/u, skillPath);
+      assert.match(
+        scope,
+        /diff and Pass 2 files.+one declared authority/u,
+        skillPath,
+      );
+      assert.match(
+        scope,
+        /redacted bundle is a durable receipt, not the byte authority/u,
+        skillPath,
+      );
+      assert.match(
+        scope,
+        /persist-skipped: redactor-unavailable/u,
+        skillPath,
+      );
+      assert.match(scope, /\*\*Authority:\*\*/u, skillPath);
+      assert.match(scope, /\*\*State drift:\*\*/u, skillPath);
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      (referencePath) => {
+        const reference = readMarkdownSection(
+          referencePath,
+          "Scope, Gates, and Frozen Bundle Procedure",
+        );
+        assert.match(reference, /### State Authority Matrix/u, referencePath);
+        assert.match(
+          reference,
+          /`git diff <base-oid>\.\.\.<head-oid>`/u,
           referencePath,
         );
         assert.match(
+          reference,
+          /`git show <head-oid>:<path>`/u,
+          referencePath,
+        );
+        assert.match(reference, /`git write-tree`/u, referencePath);
+        assert.match(
+          reference,
+          /`git show <index-tree-oid>:<path>`/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /hash-before → read → hash-after/u,
+          referencePath,
+        );
+        assert.match(reference, /untracked membership/u, referencePath);
+        assert.match(
+          reference,
+          /revision-qualified `git grep`/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /redacted bundle is a durable\s+receipt, not the review authority/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /persist-skipped: redactor-unavailable/u,
+          referencePath,
+        );
+        assert.doesNotMatch(
           reference,
           /Passes 1–3 use this persisted artifact/u,
           referencePath,
         );
-        assert.match(
-          reference,
-          /every persisted bundle byte to exactly one chunk/u,
-          referencePath,
-        );
-        assert.match(
-          reference,
-          /per-chunk coverage as `<covered>\/<total>`/u,
-          referencePath,
-        );
+        assert.doesNotMatch(reference, /git hash-object -w/u, referencePath);
       },
     );
   });
@@ -837,7 +996,7 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         areaAudit,
-        /Open the implementation, relevant tests, and callers\/consumers/u,
+        /Open implementation, tests, and consumers/u,
         skillPath,
       );
       assert.match(
@@ -994,7 +1153,7 @@ describe("skill hardening contracts", () => {
       assert.match(reference, /required for REFUTER-REFUTED/u, referencePath);
       assert.match(
         reference,
-        /Before accepting any MUST refutation/u,
+        /Before any refuter result changes/u,
         referencePath,
       );
       assert.match(reference, /refuter-citation-unverified/u, referencePath);
@@ -1013,16 +1172,93 @@ describe("skill hardening contracts", () => {
       const constraints = readMarkdownSection(skillPath, "Constraints");
       assert.match(
         passThree,
-        /Uncited refutation[^\n]+never removes/u,
+        /Refuter output is advisory/u,
         skillPath,
       );
-      assert.match(passThree, /host citation re-read/u, skillPath);
+      assert.match(passThree, /host-reproduced evidence/u, skillPath);
       assert.match(
         constraints,
-        /REFUTER-REFUTED MUST clears only after host citation verification/u,
+        /Refuter output changes Ship Verdict only after host reproduction/u,
         skillPath,
       );
     });
+  });
+
+  it("keeps final finding authority with the host reviewer", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const diffReview = readMarkdownSection(
+        skillPath,
+        "Diff Review (Quick) - Two-Pass Discipline",
+      );
+      assert.match(diffReview, /\*\*Finding authority:\*\*/u, skillPath);
+      assert.match(
+        diffReview,
+        /bot\/subagent\/refuter output is advisory/u,
+        skillPath,
+      );
+      assert.match(
+        diffReview,
+        /add\/remove\/demote findings[^\n]+severity\/action\/disposition\/Ship Verdict/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-review",
+        "references/automated-review.md",
+      ),
+      (referencePath) => {
+        const reference = readProjectFile(referencePath);
+        assert.match(
+          reference,
+          /Bot output cannot directly add, remove, demote, or retag/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /severity, action, disposition, or Ship Verdict/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /bot-reported command failure[^\n]+host reruns/iu,
+          referencePath,
+        );
+      },
+    );
+
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-review", "references/refuter-spec.md"),
+      (referencePath) => {
+        const reference = readProjectFile(referencePath);
+        assert.match(
+          reference,
+          /Empty, broad, uncited, or unresolvable[^\n]+has no effect/u,
+          referencePath,
+        );
+        assert.doesNotMatch(
+          reference,
+          /may demote severity one rung/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /host re-derives the evidence from the declared authority/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /REVIEW AUTHORITY \(metadata only\)/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /never substitute the current checkout/u,
+          referencePath,
+        );
+      },
+    );
   });
 
   it("requires host re-derivation for absence-based findings", () => {
@@ -3250,7 +3486,7 @@ describe("skill hardening contracts", () => {
       const overlapGuidance = readProjectFile(referencePath);
       assert.match(
         overlapGuidance,
-        /pulls\/<number>\/comments[^\n]+authoritative known-findings set/,
+        /pulls\/<number>\/comments[^\n]+path-bearing source for bot claims[^\n]+not final finding authority/,
         referencePath,
       );
       assert.match(

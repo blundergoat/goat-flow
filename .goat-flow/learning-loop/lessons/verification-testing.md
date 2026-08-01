@@ -99,7 +99,7 @@ last_reviewed: 2026-08-01
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 17
+**Incident count:** 19
 
 **Latest occurrence:** 2026-08-01
 
@@ -119,7 +119,7 @@ last_reviewed: 2026-08-01
 - **2026-07-18 review independence:** Goat-review hit 2527, then compacted to 2488. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
 - **2026-07-19 review scope:** Worktree/area wording pushed goat-review to 2512; compaction restored 2498. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `defines two evidence-producing area audit passes`; `functional skills stay within the 2500-word cap across all mirrors`).
 - **2026-07-19 QA rows:** Goat-qa measured 2506→2499 at the functional-skill cap.
-- **2026-08-01 M01-M03:** Goat-review reached 2500, then 2762; M03's reasoning layer later reached 2629. Immediate measurement and compaction restored the M02 body to 2490 and the M03 body to 2362. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- **2026-08-01 review hardening:** Goat-review crossed its cap five times (2500–2762 words); focused contracts forced compaction before mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
 
 **Root cause:** Treated capped prose as tiny.
 
