@@ -99,11 +99,11 @@ last_reviewed: 2026-08-02
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 20
+**Incident count:** 21
 
-**Latest occurrence:** 2026-08-01
+**Latest occurrence:** 2026-08-02
 
-**What happened:** Twenty edits or learning captures crossed caps:
+**What happened:** Twenty-one edits or learning captures crossed caps:
 
 - **2026-05-19/22:** TDD packs hit 3022/3008 words, the preamble exceeded 1500, and QA exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
 - **2026-06-14:** Dispatcher guidance hit 653/555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
@@ -115,6 +115,7 @@ last_reviewed: 2026-08-02
 - **2026-07-17–19:** QA, plan, review, and preamble edits repeatedly reached 2506–2531/1514 words; focused contracts restored every surface below its cap. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`; `always-loaded shared references stay within the 1500-word cap`).
 - **2026-08-01 review hardening:** Goat-review crossed its cap five times (2500–2762 words); focused contracts forced compaction before mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
 - **2026-08-01 M03:** A new lesson pushed `verification-testing.md` to 40KB; narrower routing and recurrence consolidation restored the bucket below 39KB. Evidence: `src/cli/stats/stats.ts` (search: `rule: "bucket-size"`).
+- **2026-08-02 PR #57:** Duplicated dispatcher snapshots hit 579/555 words; the focused contract forced a conditional field. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap across all mirrors`).
 
 **Root cause:** Treated capped prose as tiny.
 

@@ -32,7 +32,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
    - Routed skills own learning-loop retrieval; do not pre-read their learning-loop indexes in the dispatcher
    - Direct execution only: run the shared preamble's INDEX-first retrieval before emitting the Route Snapshot
    - If the boundary scan or direct-execution retrieval fails, note `gather-degraded` and route anyway
-   - Direct-execution routes include the retrieval result; routed-skill Snapshots omit it
+   - Only direct-execution snapshots include the retrieval result
 3. **ROUTE (inferred skill or direct-execution only)** - dispatch using the map. Emit a Route Snapshot:
 
 ```
@@ -40,7 +40,7 @@ Intent: <classified user intent>
 Route: </goat-* skill or direct path>
 Depth: <routing depth>
 Rationale: <verified routing rule and boundary state>
-Relevant prior learnings: <matches | none | retrieval miss>
+Relevant prior learnings: <direct route: matches | none | retrieval miss; routed skill: omit>
 ```
 
 ## Route Map

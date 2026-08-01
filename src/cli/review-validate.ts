@@ -3,6 +3,7 @@
  * The validator reads only the supplied report, semantic-anchor files under the
  * reviewed project, and claimed local refutation ledgers; it never persists reports.
  */
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   lstatSync,
@@ -14,6 +15,7 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { CLIError } from "./cli-error.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { writeOutput } from "./cli-output.js";
+import { maskNonRenderedMarkdown } from "./rendered-markdown.js";
 
 /** One actionable validation issue, optionally tied to a report line. */
 interface ReviewValidationViolation {
@@ -44,19 +46,57 @@ interface MarkdownSection {
 
 /** Refutation claim extracted while validating the integrity surface. */
 interface IntegrityResult {
+  anchorAuthority: ReviewAnchorAuthority;
+  evidenceCounts: EvidenceCountClaim | null;
   refutationsLogged: number;
   isRefutationPersistenceSkipped: boolean;
   refutationsLine: number | null;
   refutationLedger: string | null;
   refutationLedgerLine: number | null;
   isAreaAudit: boolean;
+  verdictCounts: VerdictCountClaim | null;
 }
 
 /** Parsed finding definition used for stable-ID and conditional-section checks. */
 interface FindingDefinition {
+  evidence: "INFERRED" | "OBSERVED" | null;
   id: string;
   line: number;
   section: (typeof FINDING_SECTIONS)[number];
+}
+
+/** Source whose bytes semantic anchors must be resolved against. */
+type ReviewAnchorAuthority =
+  | { kind: "git-object"; oid: string }
+  | { kind: "worktree" }
+  | { kind: "invalid" };
+
+/** Parsed Evidence totals and their report location. */
+interface EvidenceCountClaim {
+  inferred: number;
+  line: number;
+  observed: number;
+}
+
+/** Parsed four-way Pass 2 disposition totals and their report location. */
+interface VerdictCountClaim {
+  adjusted: number;
+  confirmed: number;
+  line: number;
+  refuted: number;
+  unresolved: number;
+}
+
+/** Canonical authority-bearing fields extracted from Scope snapshot. */
+interface ParsedScopeSnapshot {
+  authority: string;
+  bundle: string;
+  drift: string;
+  head: string;
+  isAreaAudit: boolean;
+  signals: string;
+  source: string;
+  uncommitted: string;
 }
 
 type ReviewCheckId = "V1" | "V2" | "V3" | "V4" | "V5" | "V6" | "V7" | "V8";
@@ -117,7 +157,7 @@ const FINDING_CANDIDATE = /^\s*-\s+\S/u;
 const FINDING_PREFIX =
   /^\s*-\s+(R-\d{3})\s+\[(MUST|SHOULD|MAY):(patch|needs-decision|intent-mismatch|needs-signal|pre-existing)\](?:\s+\[(?:(?:overlap-confirmed|bot-only-locally-verified|disputed-match):[^\]\s]+|local-only|CONFIRMED-CROSS-MODEL)\])*\s+\*\*[^*\n]+\*\*/u;
 const EVIDENCE_TAG =
-  /(?:^|\|\s*)Evidence:\s*(?:OBSERVED|INFERRED)(?=\s*(?:\||$))/u;
+  /(?:^|\|\s*)Evidence:\s*(OBSERVED|INFERRED)(?=\s*(?:\||$))/u;
 const PROOF_TAG =
   /(?:^|\|\s*)Proof:\s*(?:RUNTIME|CONTRACT-GREP|STATIC|NOT-REPRODUCED)(?=\s*(?:\||$))/u;
 const HARM_TAG = /(?:^|\|\s*)Harm:\s*[^|\s][^|]*(?=\s*(?:\||$))/u;
@@ -127,6 +167,11 @@ const SPEC_DRIFT_LINE =
   /^\s*-\s+\[(?:advisory|ready-to-tick)\]\s+\*\*[^*\n]+\*\*\s+-\s+\S/u;
 const REFUTATION_LEDGER_PATH =
   /^\.goat-flow\/logs\/review\/goat-review-refutations\.[^\/\s]+\.txt$/u;
+const REVIEW_BUNDLE_PATH =
+  /^\.goat-flow\/logs\/review\/goat-review-bundle\.[^\/\s]+\.diff$/u;
+const IMMUTABLE_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
+const SCOPE_SNAPSHOT =
+  /^source=(worktree|staged|unstaged|PR(?:\s+#[^,\s]+)?|branch diff|area|explicit path list),\s*base=([^,]+),\s*head=([^,]+),\s*authority=([^,]+),\s*drift=([^,]+),\s*uncommitted=(yes|no|n\/a),\s*signals=(\d+),\s*bundle=([^,]+),\s*chunking=(\S.*)$/iu;
 
 const REQUIRED_INTEGRITY_FIELDS: ReadonlyArray<
   readonly [label: string, valuePattern: RegExp]
@@ -190,33 +235,6 @@ const KNOWN_DEGRADATION_FLAGS = new Set([
   "refuter-citation-unverified",
 ]);
 
-/** Hide fenced examples while preserving one output string per source line. */
-function maskFencedLines(lines: string[]): string[] {
-  let fenceCharacter = "";
-  let fenceLength = 0;
-  return lines.map((line) => {
-    let shouldMask = fenceCharacter.length > 0;
-    if (!shouldMask) {
-      const opening = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
-      if (opening) {
-        fenceCharacter = opening[0] ?? "";
-        fenceLength = opening.length;
-        shouldMask = true;
-      }
-    } else {
-      const closingPattern = new RegExp(
-        `^ {0,3}${fenceCharacter}{${fenceLength},}\\s*$`,
-        "u",
-      );
-      if (closingPattern.test(line)) {
-        fenceCharacter = "";
-        fenceLength = 0;
-      }
-    }
-    return shouldMask ? " ".repeat(line.length) : line;
-  });
-}
-
 /** Return every matching H2 section without consuming nested H3 headings. */
 function readSections(lines: string[], heading: string): MarkdownSection[] {
   const sections: MarkdownSection[] = [];
@@ -276,25 +294,56 @@ function isWithinProject(projectRoot: string, candidatePath: string): boolean {
   );
 }
 
-/** Resolve one literal semantic anchor without reading outside the reviewed project. */
-function validateAnchor(
+/** Resolve an anchor from one immutable Git commit or tree. */
+function validateGitObjectAnchor(
   projectRoot: string,
+  candidatePath: string,
+  authority: Extract<ReviewAnchorAuthority, { kind: "git-object" }>,
   filePath: string,
   searchText: string,
   line: number,
   violations: ReviewValidationViolation[],
 ): void {
-  const candidatePath = resolve(projectRoot, filePath);
-  if (!isWithinProject(projectRoot, candidatePath)) {
+  const repositoryPath = relative(projectRoot, candidatePath)
+    .split(sep)
+    .join("/");
+  try {
+    const content = execFileSync(
+      "git",
+      ["-C", projectRoot, "show", `${authority.oid}:${repositoryPath}`],
+      {
+        encoding: "utf-8",
+        maxBuffer: 16 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    if (!content.includes(searchText)) {
+      addViolation(
+        violations,
+        "anchor-unresolved",
+        line,
+        `search text not found in ${filePath} at declared head ${authority.oid}: ${searchText}`,
+      );
+    }
+  } catch {
     addViolation(
       violations,
-      "anchor-outside-project",
+      "anchor-unresolved",
       line,
-      `anchor path escapes the reviewed project: ${filePath}`,
+      `cannot read anchor ${filePath} from declared head ${authority.oid}`,
     );
-    return;
   }
+}
 
+/** Resolve an anchor from the declared live worktree without following escapes. */
+function validateWorktreeAnchor(
+  projectRoot: string,
+  candidatePath: string,
+  filePath: string,
+  searchText: string,
+  line: number,
+  violations: ReviewValidationViolation[],
+): void {
   if (!existsSync(candidatePath)) {
     addViolation(
       violations,
@@ -338,6 +387,52 @@ function validateAnchor(
   }
 }
 
+/** Resolve one literal semantic anchor without reading outside the reviewed project. */
+function validateAnchor(
+  projectRoot: string,
+  authority: ReviewAnchorAuthority,
+  filePath: string,
+  searchText: string,
+  line: number,
+  violations: ReviewValidationViolation[],
+): void {
+  const lexicalProjectRoot = resolve(projectRoot);
+  const candidatePath = resolve(lexicalProjectRoot, filePath);
+  if (!isWithinProject(lexicalProjectRoot, candidatePath)) {
+    addViolation(
+      violations,
+      "anchor-outside-project",
+      line,
+      `anchor path escapes the reviewed project: ${filePath}`,
+    );
+    return;
+  }
+
+  // The scope violation already explains why no byte authority is available.
+  if (authority.kind === "invalid") return;
+
+  if (authority.kind === "git-object") {
+    validateGitObjectAnchor(
+      lexicalProjectRoot,
+      candidatePath,
+      authority,
+      filePath,
+      searchText,
+      line,
+      violations,
+    );
+    return;
+  }
+  validateWorktreeAnchor(
+    lexicalProjectRoot,
+    candidatePath,
+    filePath,
+    searchText,
+    line,
+    violations,
+  );
+}
+
 /** Validate Evidence, Proof, and severity-dependent Harm fields. */
 function validateFindingFields(
   text: string,
@@ -376,6 +471,7 @@ function validateFindingFields(
 function validateFindingAnchors(
   locatedLine: LocatedLine,
   projectRoot: string,
+  authority: ReviewAnchorAuthority,
   violations: ReviewValidationViolation[],
 ): void {
   const anchors = [...locatedLine.text.matchAll(ANCHOR)];
@@ -394,6 +490,7 @@ function validateFindingAnchors(
     if (filePath === undefined || searchText === undefined) continue;
     validateAnchor(
       projectRoot,
+      authority,
       filePath,
       searchText,
       locatedLine.line,
@@ -402,12 +499,21 @@ function validateFindingAnchors(
   }
 }
 
+/** Read the bounded evidence tag already checked by finding-field validation. */
+function readFindingEvidence(text: string): FindingDefinition["evidence"] {
+  const evidence = text.match(EVIDENCE_TAG)?.[1];
+  if (evidence === "OBSERVED") return evidence;
+  if (evidence === "INFERRED") return evidence;
+  return null;
+}
+
 /** Validate one finding definition after its containing section identifies it as review output. */
 function validateFindingLine(
   locatedLine: LocatedLine,
   section: (typeof FINDING_SECTIONS)[number],
   isAreaAudit: boolean,
   projectRoot: string,
+  authority: ReviewAnchorAuthority,
   violations: ReviewValidationViolation[],
 ): FindingDefinition | null {
   if (!FINDING_CANDIDATE.test(locatedLine.text)) return null;
@@ -437,8 +543,9 @@ function validateFindingLine(
     locatedLine.line,
     violations,
   );
-  validateFindingAnchors(locatedLine, projectRoot, violations);
+  validateFindingAnchors(locatedLine, projectRoot, authority, violations);
   return {
+    evidence: readFindingEvidence(locatedLine.text),
     id: prefixMatch[1] ?? "",
     line: locatedLine.line,
     section,
@@ -558,13 +665,19 @@ function readRefutationCount(
 function readRefutationClaim(
   fields: IntegrityFieldMap,
   violations: ReviewValidationViolation[],
-): IntegrityResult {
+): Pick<
+  IntegrityResult,
+  | "refutationsLogged"
+  | "isRefutationPersistenceSkipped"
+  | "refutationsLine"
+  | "refutationLedger"
+  | "refutationLedgerLine"
+> {
   const ledger = fields.get("Refutation ledger");
   return {
     ...readRefutationCount(fields.get("Refutations logged"), violations),
     refutationLedger: ledger?.value ?? null,
     refutationLedgerLine: ledger?.line ?? null,
-    isAreaAudit: false,
   };
 }
 
@@ -588,10 +701,264 @@ function validateDegradationFlags(
   }
 }
 
-/** Read the review mode from the mandatory Scope snapshot field. */
-function readAreaAuditMode(fields: IntegrityFieldMap): boolean {
-  const scope = fields.get("Scope snapshot")?.value ?? "";
-  return /(?:^|,\s*)source=area(?:,|$)/u.test(scope);
+/** Convert one integrity count while rejecting precision-losing integers. */
+function readSafeIntegrityCount(
+  value: string,
+  label: string,
+  line: number,
+  violations: ReviewValidationViolation[],
+): number | null {
+  const count = Number(value);
+  if (Number.isSafeInteger(count)) return count;
+  addViolation(
+    violations,
+    "integrity-format",
+    line,
+    `${label} must be a safe non-negative integer`,
+  );
+  return null;
+}
+
+/** Parse the visible finding-evidence totals for later reconciliation. */
+function readEvidenceCounts(
+  fields: IntegrityFieldMap,
+  violations: ReviewValidationViolation[],
+): EvidenceCountClaim | null {
+  const field = fields.get("Evidence");
+  const match = field?.value.match(/^(\d+) OBSERVED\s*\/\s*(\d+) INFERRED$/u);
+  if (!field || !match?.[1] || !match[2]) return null;
+  const observed = readSafeIntegrityCount(
+    match[1],
+    "Evidence OBSERVED count",
+    field.line,
+    violations,
+  );
+  const inferred = readSafeIntegrityCount(
+    match[2],
+    "Evidence INFERRED count",
+    field.line,
+    violations,
+  );
+  if (observed === null || inferred === null) return null;
+  return { inferred, line: field.line, observed };
+}
+
+/** Parse confirmed/adjusted/refuted/unresolved totals for reconciliation. */
+function hasFourSafeCounts(
+  counts: Array<number | null>,
+): counts is [number, number, number, number] {
+  return counts.length === 4 && counts.every((count) => count !== null);
+}
+
+/** Parse confirmed/adjusted/refuted/unresolved totals for reconciliation. */
+function readVerdictCounts(
+  fields: IntegrityFieldMap,
+  violations: ReviewValidationViolation[],
+): VerdictCountClaim | null {
+  const field = fields.get("Verdicts");
+  if (!field) return null;
+  const match = field.value.match(/^(\d+)\/(\d+)\/(\d+)\/(\d+)$/u);
+  if (!match) return null;
+  const [
+    ,
+    confirmedText = "",
+    adjustedText = "",
+    refutedText = "",
+    unresolvedText = "",
+  ] = match;
+  const confirmed = readSafeIntegrityCount(
+    confirmedText,
+    "Verdicts confirmed count",
+    field.line,
+    violations,
+  );
+  const adjusted = readSafeIntegrityCount(
+    adjustedText,
+    "Verdicts adjusted count",
+    field.line,
+    violations,
+  );
+  const refuted = readSafeIntegrityCount(
+    refutedText,
+    "Verdicts refuted count",
+    field.line,
+    violations,
+  );
+  const unresolved = readSafeIntegrityCount(
+    unresolvedText,
+    "Verdicts unresolved count",
+    field.line,
+    violations,
+  );
+  const counts = [confirmed, adjusted, refuted, unresolved];
+  if (!hasFourSafeCounts(counts)) return null;
+  const [confirmedCount, adjustedCount, refutedCount, unresolvedCount] = counts;
+  return {
+    adjusted: adjustedCount,
+    confirmed: confirmedCount,
+    line: field.line,
+    refuted: refutedCount,
+    unresolved: unresolvedCount,
+  };
+}
+
+/** Parse the canonical scope fields after the required-field check runs. */
+function parseScopeSnapshot(
+  field: IntegrityField,
+  violations: ReviewValidationViolation[],
+): ParsedScopeSnapshot | null {
+  const match = field.value.match(SCOPE_SNAPSHOT);
+  if (!match) {
+    addViolation(
+      violations,
+      "integrity-format",
+      field.line,
+      "Scope snapshot must declare source, base, head, authority, drift, uncommitted, signals, bundle, and chunking in canonical order",
+    );
+    return null;
+  }
+  const [
+    ,
+    sourceText = "",
+    ,
+    head = "",
+    authority = "",
+    drift = "",
+    uncommitted = "",
+    signals = "",
+    bundle = "",
+  ] = match;
+  const source = sourceText.trim().toLowerCase();
+  return {
+    authority: authority.trim(),
+    bundle: bundle.trim(),
+    drift: drift.trim(),
+    head: head.trim(),
+    isAreaAudit: source === "area",
+    signals,
+    source,
+    uncommitted: uncommitted.trim(),
+  };
+}
+
+/** Validate authority-independent scope state and bundle metadata. */
+function validateScopeState(
+  scope: ParsedScopeSnapshot,
+  line: number,
+  violations: ReviewValidationViolation[],
+): boolean {
+  const hasSafeSignals =
+    readSafeIntegrityCount(
+      scope.signals,
+      "Scope snapshot signals",
+      line,
+      violations,
+    ) !== null;
+  const hasVerifiedDrift = scope.drift === "verified";
+  if (!hasVerifiedDrift) {
+    addViolation(
+      violations,
+      "integrity-format",
+      line,
+      "Scope snapshot drift must be verified before review proof can pass",
+    );
+  }
+  if (
+    scope.bundle !== "persist-skipped: redactor-unavailable" &&
+    !REVIEW_BUNDLE_PATH.test(scope.bundle)
+  ) {
+    addViolation(
+      violations,
+      "integrity-format",
+      line,
+      "Scope snapshot bundle must name one review bundle receipt or the documented persist-skipped marker",
+    );
+  }
+  return hasSafeSignals && hasVerifiedDrift;
+}
+
+/** Return whether the scope's Pass 2 files live in one Git object. */
+function scopeUsesGitObject(source: string): boolean {
+  return (
+    source === "staged" || source === "branch diff" || source.startsWith("pr")
+  );
+}
+
+/** Return whether uncommitted metadata contradicts a Git-object source. */
+function hasGitUncommittedConflict(scope: ParsedScopeSnapshot): boolean {
+  if (scope.source === "staged") return scope.uncommitted !== "yes";
+  if (scope.source === "branch diff") return scope.uncommitted !== "no";
+  if (scope.source.startsWith("pr")) return scope.uncommitted !== "no";
+  return false;
+}
+
+/** Resolve a committed or staged scope into its immutable anchor authority. */
+function readGitScopeAuthority(
+  scope: ParsedScopeSnapshot,
+  line: number,
+  hasValidState: boolean,
+  violations: ReviewValidationViolation[],
+): ReviewAnchorAuthority {
+  let isValidAuthority = hasValidState;
+  if (!IMMUTABLE_OBJECT_ID.test(scope.head) || scope.authority === "n/a") {
+    addViolation(
+      violations,
+      "integrity-format",
+      line,
+      "committed and staged review scopes require a full immutable head or tree OID and a non-n/a authority",
+    );
+    isValidAuthority = false;
+  }
+  if (hasGitUncommittedConflict(scope)) {
+    addViolation(
+      violations,
+      "integrity-format",
+      line,
+      "Scope snapshot uncommitted state contradicts its declared source",
+    );
+  }
+  return isValidAuthority
+    ? { kind: "git-object", oid: scope.head }
+    : { kind: "invalid" };
+}
+
+/** Resolve a live source while validating its uncommitted marker. */
+function readWorktreeScopeAuthority(
+  scope: ParsedScopeSnapshot,
+  line: number,
+  hasValidState: boolean,
+  violations: ReviewValidationViolation[],
+): ReviewAnchorAuthority {
+  const requiresUncommitted = ["worktree", "unstaged"].includes(scope.source);
+  if (requiresUncommitted && scope.uncommitted !== "yes") {
+    addViolation(
+      violations,
+      "integrity-format",
+      line,
+      "Scope snapshot uncommitted state contradicts its declared source",
+    );
+  }
+  return hasValidState ? { kind: "worktree" } : { kind: "invalid" };
+}
+
+/** Bind semantic-anchor reads to the canonical scope snapshot authority. */
+function readScopeAuthority(
+  fields: IntegrityFieldMap,
+  violations: ReviewValidationViolation[],
+): { anchorAuthority: ReviewAnchorAuthority; isAreaAudit: boolean } {
+  const field = fields.get("Scope snapshot");
+  if (!field) {
+    return { anchorAuthority: { kind: "invalid" }, isAreaAudit: false };
+  }
+  const scope = parseScopeSnapshot(field, violations);
+  if (!scope) {
+    return { anchorAuthority: { kind: "invalid" }, isAreaAudit: false };
+  }
+  const hasValidState = validateScopeState(scope, field.line, violations);
+  const anchorAuthority = scopeUsesGitObject(scope.source)
+    ? readGitScopeAuthority(scope, field.line, hasValidState, violations)
+    : readWorktreeScopeAuthority(scope, field.line, hasValidState, violations);
+  return { anchorAuthority, isAreaAudit: scope.isAreaAudit };
 }
 
 /** Validate the full Review Integrity field set and return its ledger claim. */
@@ -615,9 +982,12 @@ function validateFullIntegrity(
     violations,
   );
   validateDegradationFlags(fields, warnings);
+  const scope = readScopeAuthority(fields, violations);
   return {
+    ...scope,
+    evidenceCounts: readEvidenceCounts(fields, violations),
     ...readRefutationClaim(fields, violations),
-    isAreaAudit: readAreaAuditMode(fields),
+    verdictCounts: readVerdictCounts(fields, violations),
   };
 }
 
@@ -655,12 +1025,15 @@ function validateIntegrity(
       );
     }
     return {
+      anchorAuthority: { kind: "invalid" },
+      evidenceCounts: null,
       refutationsLogged: 0,
       isRefutationPersistenceSkipped: false,
       refutationsLine: null,
       refutationLedger: null,
       refutationLedgerLine: null,
       isAreaAudit: false,
+      verdictCounts: null,
     };
   }
   addViolation(
@@ -672,12 +1045,15 @@ function validateIntegrity(
       : "report is missing Review Integrity",
   );
   return {
+    anchorAuthority: { kind: "invalid" },
+    evidenceCounts: null,
     refutationsLogged: 0,
     isRefutationPersistenceSkipped: false,
     refutationsLine: null,
     refutationLedger: null,
     refutationLedgerLine: null,
     isAreaAudit: false,
+    verdictCounts: null,
   };
 }
 
@@ -835,6 +1211,7 @@ function validateFindingSections(
   lines: string[],
   isAreaAudit: boolean,
   projectRoot: string,
+  authority: ReviewAnchorAuthority,
   violations: ReviewValidationViolation[],
 ): FindingDefinition[] {
   const definitions: FindingDefinition[] = [];
@@ -856,6 +1233,7 @@ function validateFindingSections(
         heading,
         isAreaAudit,
         projectRoot,
+        authority,
         violations,
       );
       if (definition) definitions.push(definition);
@@ -892,10 +1270,63 @@ function validateUniqueFindingIds(
   }
 }
 
+/** Reconcile integrity totals with visible findings and the refutation ledger claim. */
+function validateIntegrityCounts(
+  integrity: IntegrityResult,
+  definitions: FindingDefinition[],
+  violations: ReviewValidationViolation[],
+): void {
+  if (integrity.evidenceCounts) {
+    const observed = definitions.filter(
+      (definition) => definition.evidence === "OBSERVED",
+    ).length;
+    const inferred = definitions.filter(
+      (definition) => definition.evidence === "INFERRED",
+    ).length;
+    if (
+      observed !== integrity.evidenceCounts.observed ||
+      inferred !== integrity.evidenceCounts.inferred
+    ) {
+      addViolation(
+        violations,
+        "integrity-format",
+        integrity.evidenceCounts.line,
+        `Evidence claims ${integrity.evidenceCounts.observed} OBSERVED / ${integrity.evidenceCounts.inferred} INFERRED but visible findings contain ${observed} OBSERVED / ${inferred} INFERRED`,
+      );
+    }
+  }
+
+  if (!integrity.verdictCounts) return;
+  const visibleVerdicts =
+    integrity.verdictCounts.confirmed +
+    integrity.verdictCounts.adjusted +
+    integrity.verdictCounts.unresolved;
+  if (
+    !Number.isSafeInteger(visibleVerdicts) ||
+    visibleVerdicts !== definitions.length
+  ) {
+    addViolation(
+      violations,
+      "integrity-format",
+      integrity.verdictCounts.line,
+      `Verdicts claim ${visibleVerdicts} confirmed, adjusted, or unresolved results but ${definitions.length} visible findings are defined`,
+    );
+  }
+  if (integrity.verdictCounts.refuted !== integrity.refutationsLogged) {
+    addViolation(
+      violations,
+      "integrity-format",
+      integrity.verdictCounts.line,
+      `Verdicts claim ${integrity.verdictCounts.refuted} refuted results but Refutations logged claims ${integrity.refutationsLogged}`,
+    );
+  }
+}
+
 /** Resolve every literal semantic anchor cited in one reference-only section. */
 function validateSectionAnchors(
   section: MarkdownSection | null,
   projectRoot: string,
+  authority: ReviewAnchorAuthority,
   violations: ReviewValidationViolation[],
 ): void {
   for (const locatedLine of section?.lines ?? []) {
@@ -905,6 +1336,7 @@ function validateSectionAnchors(
       if (filePath === undefined || searchText === undefined) continue;
       validateAnchor(
         projectRoot,
+        authority,
         filePath,
         searchText,
         locatedLine.line,
@@ -1066,7 +1498,7 @@ export function validateReviewReport(
   markdown: string,
   projectRoot: string,
 ): ReviewValidationResult {
-  const lines = maskFencedLines(markdown.split(/\r?\n/u));
+  const lines = maskNonRenderedMarkdown(markdown).split(/\r?\n/u);
   const violations: ReviewValidationViolation[] = [];
   const warnings: ReviewValidationViolation[] = [];
   const integrity = validateIntegrity(
@@ -1079,11 +1511,18 @@ export function validateReviewReport(
     lines,
     integrity.isAreaAudit,
     projectRoot,
+    integrity.anchorAuthority,
     violations,
   );
   validateUniqueFindingIds(definitions, violations);
+  validateIntegrityCounts(integrity, definitions, violations);
   const topFive = readSection(lines, "Top 5 Risks (cross-tier)");
-  validateSectionAnchors(topFive, projectRoot, violations);
+  validateSectionAnchors(
+    topFive,
+    projectRoot,
+    integrity.anchorAuthority,
+    violations,
+  );
   validateTopFiveReferences(topFive, definitions, violations);
   validateRefuterReferences(lines, definitions, violations);
   validateSpecDrift(lines, violations);

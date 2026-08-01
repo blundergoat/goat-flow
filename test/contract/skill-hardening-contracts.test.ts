@@ -2173,12 +2173,12 @@ describe("skill hardening contracts", () => {
       assert.match(routingFlow, /Depth: <routing depth>/u, skillPath);
       assert.match(
         routingFlow,
-        /Relevant prior learnings: <matches \| none \| retrieval miss>/u,
+        /Relevant prior learnings: <direct route: matches \| none \| retrieval miss; routed skill: omit>/u,
         skillPath,
       );
       assert.match(
         routingFlow,
-        /Direct-execution routes include the retrieval result/u,
+        /Only direct-execution snapshots include the retrieval result/u,
         skillPath,
       );
     });

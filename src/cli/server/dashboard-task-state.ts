@@ -10,6 +10,7 @@
  */
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { maskNonRenderedMarkdown } from "../rendered-markdown.js";
 import { resolveLocalStatePath } from "./local-paths.js";
 
 /**
@@ -160,7 +161,7 @@ function parseTaskMilestone(
   filename: string,
 ): DashboardTaskMilestoneSummary {
   const path = join(planPath, filename);
-  const content = readOptionalTextFile(path) ?? "";
+  const content = maskNonRenderedMarkdown(readOptionalTextFile(path) ?? "");
   const modifiedAt = statOrNull(path)?.mtime.toISOString() ?? "";
   const progress = readTaskProgress(content);
   const outcomeTitle = readMarkdownField(content, /^#\s+(.+)$/mu, "");

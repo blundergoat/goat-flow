@@ -23,6 +23,7 @@ import { join, resolve } from "node:path";
 
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { parseMilestoneMarkdown } from "../../src/cli/plans-export.js";
+import { maskNonRenderedMarkdown } from "../../src/cli/rendered-markdown.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
@@ -128,6 +129,32 @@ function hardlinkOrSkip(
 }
 
 describe("plans export", () => {
+  it("masks comments and fences without changing source offsets", () => {
+    const content = [
+      "<!--",
+      "```markdown",
+      "## Hidden comment fence",
+      "-->",
+      "## Live after comment",
+      "```markdown",
+      "<!-- Hidden fence comment",
+      "```",
+      "## Live after fence",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    assert.equal(masked.length, content.length);
+    assert.deepEqual(
+      Array.from(masked.matchAll(/\n/gu), (match) => match.index),
+      Array.from(content.matchAll(/\n/gu), (match) => match.index),
+    );
+    for (const visible of ["## Live after comment", "## Live after fence"]) {
+      assert.equal(masked.indexOf(visible), content.indexOf(visible));
+    }
+    assert.doesNotMatch(masked, /Hidden/u);
+  });
+
   for (const [flag, field] of [
     ["--help", "showHelp"],
     ["--version", "showVersion"],
@@ -536,6 +563,36 @@ describe("plans export", () => {
     assert.deepEqual(
       record.testingGateItems.map((item) => item.text),
       ["Live proof (est: 1 min proof)"],
+    );
+    assert.ok(!record.warnings.includes("multiple Status values supplied"));
+  });
+
+  it("ignores metadata, headings, and checklists inside HTML comments", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M01: Live milestone",
+        "<!--",
+        "Status: complete",
+        "## Tasks",
+        "- [x] Hidden example (est: 999 min product)",
+        "-->",
+        "Status: not-started",
+        "Effort estimate: ~2 min agent-time (1 product / 1 proof / 0 other)",
+        "",
+        "## Tasks",
+        "- [ ] Live task (est: 1 min product)",
+        "",
+        "## Proof",
+        "- [ ] Live proof (est: 1 min proof)",
+        "",
+      ].join("\n"),
+      "M01-live.md",
+    );
+
+    assert.equal(record.status, "not-started");
+    assert.deepEqual(
+      record.tasks.map((task) => task.text),
+      ["Live task (est: 1 min product)"],
     );
     assert.ok(!record.warnings.includes("multiple Status values supplied"));
   });

@@ -742,6 +742,11 @@ describe("plans check", () => {
       expected: /not-started milestone has checked proof items/u,
     },
     {
+      name: "not-started-actual",
+      body: canonicalMilestoneBody({ includeActual: true }),
+      expected: /not-started milestone must not include Actual/u,
+    },
+    {
       name: "testing-open-task",
       body: canonicalMilestoneBody({ status: "testing-gate" }),
       expected: /testing-gate milestone has open implementation tasks/u,

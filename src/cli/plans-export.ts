@@ -19,6 +19,7 @@ import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { scrubDurableText } from "./evidence/redaction.js";
+import { maskNonRenderedMarkdown } from "./rendered-markdown.js";
 import {
   parseEffortLineValue,
   readPlanAdminEstimate,
@@ -68,59 +69,6 @@ interface MarkdownSection {
   body: string;
 }
 
-/** Mutable delimiter state shared while masking one Markdown document. */
-interface MarkdownFenceState {
-  character: string;
-  length: number;
-}
-
-/** Update fence state for one line and report whether that line is fenced. */
-function shouldMaskFenceLine(line: string, state: MarkdownFenceState): boolean {
-  if (state.character.length > 0) {
-    const closingPattern = new RegExp(
-      `^ {0,3}${state.character}{${state.length},}\\s*$`,
-      "u",
-    );
-    if (closingPattern.test(line)) {
-      state.character = "";
-      state.length = 0;
-    }
-    return true;
-  }
-
-  const opening = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
-  if (!opening) return false;
-  state.character = opening[0] ?? "";
-  state.length = opening.length;
-  return true;
-}
-
-/** Mask one newline-preserving segment using the document's current fence state. */
-function maskMarkdownSegment(
-  segment: string,
-  state: MarkdownFenceState,
-): string {
-  if (segment.length === 0) return "";
-  const hasNewline = segment.endsWith("\n");
-  const line = hasNewline ? segment.slice(0, -1) : segment;
-  const rendered = shouldMaskFenceLine(line, state)
-    ? line.replace(/[^\r]/gu, " ")
-    : line;
-  return hasNewline ? `${rendered}\n` : rendered;
-}
-
-/**
- * Replace fenced Markdown with spaces while preserving offsets and newlines.
- * Structural parsers can then use match indexes against the original source
- * without treating examples or quoted fixtures as live milestone metadata.
- */
-function maskFencedMarkdown(content: string): string {
-  const state: MarkdownFenceState = { character: "", length: 0 };
-  return (content.match(/[^\n]*(?:\n|$)/gu) ?? [])
-    .map((segment) => maskMarkdownSegment(segment, state))
-    .join("");
-}
-
 /**
  * Invalid plan input that users can fix without a stack trace.
  * Use for missing plan directories, unreadable milestones, or absent titles.
@@ -155,7 +103,7 @@ function readMilestoneField(
 ): string {
   const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const matches = Array.from(
-    maskFencedMarkdown(content).matchAll(
+    maskNonRenderedMarkdown(content).matchAll(
       new RegExp(
         `^(?:\\*\\*${escapedLabel}:\\*\\*|${escapedLabel}:)\\s*(.+)$`,
         "gimu",
@@ -172,7 +120,7 @@ function readMilestoneField(
 /** Split level-two sections while preserving nested headings and user-authored Markdown. */
 function readMilestoneSections(content: string): MarkdownSection[] {
   const headingMatches = Array.from(
-    maskFencedMarkdown(content).matchAll(/^##\s+(.+)$/gmu),
+    maskNonRenderedMarkdown(content).matchAll(/^##\s+(.+)$/gmu),
   );
 
   // Each heading owns text until the next peer heading, matching goat-plan's milestone layout.
@@ -237,7 +185,7 @@ function readChecklistItems(
   warnings: string[],
   itemLabel: string,
 ): PlanExportTask[] {
-  const maskedMarkdown = maskFencedMarkdown(markdown);
+  const maskedMarkdown = maskNonRenderedMarkdown(markdown);
   const taskStarts = Array.from(
     maskedMarkdown.matchAll(/^\s*-\s+\[([ xX])\]\s+/gmu),
   );
@@ -415,7 +363,7 @@ function readStopMarkdown(
       ? joinSectionBodies(canonical)
       : joinSectionBodies(legacySet);
   const embedded =
-    maskFencedMarkdown(exitMarkdown)
+    maskNonRenderedMarkdown(exitMarkdown)
       .match(/^\s*-\s+Stop\s*\/\s*rescope if\s+.+$/imu)
       ?.at(0)
       ?.trim() ?? "";
@@ -447,7 +395,7 @@ export function parseMilestoneMarkdown(
   sourceFile: string,
 ): PlanExportRecord {
   const title =
-    maskFencedMarkdown(content)
+    maskNonRenderedMarkdown(content)
       .match(/^#\s+(.+)$/mu)?.[1]
       ?.trim() ?? "";
 

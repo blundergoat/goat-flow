@@ -40,6 +40,45 @@ function createReviewedProject(testContext: TestContext): string {
   return projectRoot;
 }
 
+/** Create one immutable review authority whose file differs from the live checkout. */
+function createVersionedReviewedProject(testContext: TestContext): {
+  head: string;
+  projectRoot: string;
+} {
+  const projectRoot = createReviewedProject(testContext);
+  const runGit = (args: string[], input?: string): string => {
+    const result = spawnSync("git", ["-C", projectRoot, ...args], {
+      encoding: "utf-8",
+      input,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_EMAIL: "review-validator@example.invalid",
+        GIT_AUTHOR_NAME: "Review Validator",
+        GIT_COMMITTER_EMAIL: "review-validator@example.invalid",
+        GIT_COMMITTER_NAME: "Review Validator",
+      },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+
+  runGit(["init", "--quiet"]);
+  writeFileSync(
+    join(projectRoot, "src", "example.ts"),
+    "export const committedAnchor = 'committed';\n",
+    "utf-8",
+  );
+  runGit(["add", "src/example.ts"]);
+  const tree = runGit(["write-tree"]);
+  const head = runGit(["commit-tree", tree], "review fixture\n");
+  writeFileSync(
+    join(projectRoot, "src", "example.ts"),
+    "export const workingTreeOnly = 'live';\n",
+    "utf-8",
+  );
+  return { head, projectRoot };
+}
+
 /** Render one full report using every validator-owned finding and integrity field. */
 function validReview(
   anchorPath = "src/example.ts",
@@ -47,15 +86,18 @@ function validReview(
   refutationsLogged: number | string = 0,
   refutationLedger = "n/a",
 ): string {
+  const refutedVerdicts = Number(
+    String(refutationsLogged).match(/^\d+/u)?.[0] ?? "0",
+  );
   return `## TL;DR
 
 One configuration defect survived review.
 
 ## Review Integrity
-- Scope snapshot: source=worktree, base=HEAD, head=worktree, uncommitted=yes, signals=1, bundle=n/a, chunking=none
+- Scope snapshot: source=worktree, base=HEAD, head=worktree, authority=live worktree snapshot, drift=verified, uncommitted=yes, signals=1, bundle=.goat-flow/logs/review/goat-review-bundle.fixture.diff, chunking=none
 - Files opened in Pass 2: 1/1 (diff paths: ${anchorPath})
 - Evidence: 4 OBSERVED / 0 INFERRED
-- Verdicts: 4/0/0/0
+- Verdicts: 4/0/${refutedVerdicts}/0
 - Refutations logged: ${refutationsLogged}
 - Refutation ledger: ${refutationLedger}
 - Review validator: validated
@@ -95,10 +137,10 @@ function withSixSurfacedFindings(report: string): string {
 - R-006 [MAY:needs-signal] [local-only] **Trace configuration defaults** \`src/example.ts\` (search: \`loadConfig\`) - Default selection lacks an operator signal. | Footgun: none | Evidence: OBSERVED | Proof: CONTRACT-GREP
 
 `;
-  return report.replace(
-    "## Systemic Patterns",
-    `${additions}## Systemic Patterns`,
-  );
+  return report
+    .replace("- Evidence: 4 OBSERVED", "- Evidence: 6 OBSERVED")
+    .replace(/- Verdicts: 4\/0\/(\d+)\/0/u, "- Verdicts: 6/0/$1/0")
+    .replace("## Systemic Patterns", `${additions}## Systemic Patterns`);
 }
 
 /** Insert one Top 5 section immediately before the verdict. */
@@ -219,6 +261,61 @@ What I Didn't Examine: none.
     assert.equal(hasViolation(result, "anchor-unresolved"), true);
   });
 
+  it("resolves semantic anchors from the declared immutable authority", (testContext) => {
+    const { head, projectRoot } = createVersionedReviewedProject(testContext);
+    const scope = `- Scope snapshot: source=PR #57, base=${head}, head=${head}, authority=immutable Git objects, drift=verified, uncommitted=no, signals=1, bundle=.goat-flow/logs/review/goat-review-bundle.fixture.diff, chunking=none`;
+    const committedReport = validReview(
+      "src/example.ts",
+      "committedAnchor",
+    ).replace(/^- Scope snapshot:.*$/mu, scope);
+    const liveOnlyReport = validReview(
+      "src/example.ts",
+      "workingTreeOnly",
+    ).replace(/^- Scope snapshot:.*$/mu, scope);
+
+    assert.deepEqual(
+      validateReviewReport(committedReport, projectRoot).violations,
+      [],
+    );
+    assert.equal(
+      hasViolation(
+        validateReviewReport(liveOnlyReport, projectRoot),
+        "anchor-unresolved",
+      ),
+      true,
+    );
+  });
+
+  it("rejects incomplete scope snapshots and contradictory totals", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const incompleteScope = validReview().replace(
+      /^- Scope snapshot:.*$/mu,
+      "- Scope snapshot: reviewed the current change",
+    );
+    const wrongEvidenceTotal = validReview().replace(
+      "- Evidence: 4 OBSERVED / 0 INFERRED",
+      "- Evidence: 3 OBSERVED / 0 INFERRED",
+    );
+    const wrongVerdictTotal = validReview().replace(
+      "- Verdicts: 4/0/0/0",
+      "- Verdicts: 3/0/0/0",
+    );
+
+    for (const report of [
+      incompleteScope,
+      wrongEvidenceTotal,
+      wrongVerdictTotal,
+    ]) {
+      assert.equal(
+        hasViolation(
+          validateReviewReport(report, projectRoot),
+          "integrity-format",
+        ),
+        true,
+      );
+    }
+  });
+
   it("rejects missing Evidence and Proof tags", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const missingEvidence = validReview().replace(
@@ -323,6 +420,23 @@ What I Didn't Examine: none.
         "integrity-format",
       ),
       true,
+    );
+  });
+
+  it("ignores findings hidden inside multiline HTML comments", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const commentedExample = validReview().replace(
+      "### MUST / SHOULD / MAY",
+      `<!--
+- R-999 [MUST:patch] **Hidden example** \`missing.ts\` (search: \`missing\`) - This is not rendered. | Harm: none | Evidence: OBSERVED | Proof: STATIC
+-->
+
+### MUST / SHOULD / MAY`,
+    );
+
+    assert.deepEqual(
+      validateReviewReport(commentedExample, projectRoot).violations,
+      [],
     );
   });
 
@@ -510,13 +624,16 @@ What I Didn't Examine: none.
 
   it("preserves moved refuter IDs while rejecting undefined secondary references", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const refuted = validReview().replace(
-      "## Spec Drift",
-      `## Refuted by Refuter
+    const refuted = validReview()
+      .replace("- Evidence: 4 OBSERVED", "- Evidence: 5 OBSERVED")
+      .replace("- Verdicts: 4/0/0/0", "- Verdicts: 5/0/0/0")
+      .replace(
+        "## Spec Drift",
+        `## Refuted by Refuter
 - R-005 [MAY:patch] [CONFIRMED-CROSS-MODEL] **Retire a disproved concern** \`src/example.ts\` (search: \`loadConfig\`) - The host reproduced the removing guard. | Evidence: OBSERVED | Proof: RUNTIME
 
 ## Spec Drift`,
-    );
+      );
     assert.deepEqual(validateReviewReport(refuted, projectRoot).violations, []);
 
     const unresolvedReference = refuted.replace(

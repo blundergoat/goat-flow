@@ -202,6 +202,11 @@ function collectActualErrors(record: PlanExportRecord): string[] {
     }
     return errors;
   }
+  if (status === "not-started") {
+    errors.push(
+      `${record.sourceFile}: not-started milestone must not include Actual before work begins`,
+    );
+  }
   if (!actual.split) {
     errors.push(
       `${record.sourceFile}: structured Actual requires a product/proof/other split`,
