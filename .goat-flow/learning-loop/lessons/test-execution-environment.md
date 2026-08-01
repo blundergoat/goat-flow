@@ -1,6 +1,6 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-02
 ---
 
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
@@ -47,15 +47,17 @@ last_reviewed: 2026-08-01
 
 ## Lesson: Test runners need CI-runtime reproduction when local Node is newer
 
-**Status:** active | **Created:** 2026-06-07 | **Incident count:** 2 | **Latest occurrence:** 2026-08-01
+**Status:** active | **Created:** 2026-06-07 | **Incident count:** 3 | **Latest occurrence:** 2026-08-02
 
 **What happened:** PR #48 local verification ran on Node 22 and passed the programmatic `node:test` runner path. GitHub Actions ran Node 20.20.2 and failed every `.ts` test with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts"` because the programmatic runner's `execArgv: ["--import", "tsx"]` path did not behave like the CLI preload path on the supported minimum Node version.
 
 **Recurrence 2026-08-01:** PR #57 passed the staged-quality capture suite on local Node 22 but failed seven or eight cases per Node 20 CI run. The test override used `stableMs: 0`, yet the runtime still compared `Date.now() - stats.mtimeMs < 0`; CI filesystem timestamps could therefore leave a just-written draft unprocessed when its mtime appeared slightly ahead of the process clock. A deterministic future-mtime fixture reproduced the skipped draft. The correction makes zero explicitly disable the stability gate and keeps that future-mtime case in the focused suite.
 
+**Recurrence 2026-08-02:** An alternate-Node probe passed Gruff's POSIX wrapper to Node as JavaScript, causing a false `SyntaxError`. Putting Node 20 on `PATH` and executing the wrapper normally proved `gruff-ts 0.4.0` ran.
+
 **Root cause:** The package advertised `node >=20.11.0`, but the implementations were verified only on a newer local runtime. A green local test did not prove the CI-supported runtime and filesystem-time behavior matched.
 
-**Prevention:** When changing test infrastructure, reproduce the package's minimum supported Node path or the exact CI runner before treating local test output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. Timing overrides must define zero explicitly and include a future-timestamp fixture instead of assuming the filesystem clock never leads `Date.now()`. Evidence anchors: `scripts/run-tests.mjs` (search: `--import`) and `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`).
+**Prevention:** When changing test infrastructure, reproduce the package's minimum supported Node path or the exact CI runner before treating local test output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. For shell-wrapped binaries, put the alternate Node on `PATH`; do not pass the wrapper to Node. Timing overrides must define zero explicitly and include a future-timestamp fixture instead of assuming the filesystem clock never leads `Date.now()`. Evidence anchors: `scripts/run-tests.mjs` (search: `--import`) and `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`).
 
 ---
 
