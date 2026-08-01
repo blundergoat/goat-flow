@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-07-31
+last_reviewed: 2026-08-01
 ---
 
 ## Lesson: Artifact scanners need explicit mirror maps and command grammar controls
@@ -16,6 +16,8 @@ last_reviewed: 2026-07-31
 **Latest recurrence 2026-07-31:** Human-approval and mid-run evidence continuations were appended after already-final `(est: ...)` suffixes. Strict dogfood then reported each item as unestimated because `readChecklistItems` correctly owned the continuation while `readTaskEstimate` no longer saw an estimate at the block end. The bounded correction moved approval onto its estimate-bearing line and put evidence before a final Accounting continuation. Decision changed: after adding lifecycle or evidence notes beneath estimated checkboxes, keep the estimate last and rerun strict immediately. Evidence anchors: `src/cli/plans-export.ts` (search: `An item owns every line until the next checkbox or heading`) and `src/cli/plans-effort.ts` (search: `Parse one task line's trailing est entry`).
 
 **Gate-tag recurrence 2026-07-31:** M05 added a plain unchecked human-review item at `human-verification-pending`; strict validation correctly treated it as executor proof. Human-owned open proof must carry `[human]`. Evidence: `src/cli/plans-check.ts` (search: `isHumanOwnedItem`).
+
+**Lifecycle-baseline recurrence 2026-08-01:** M12 required its pre-implementation strict error list to remain byte-identical while the same milestone also had to move from `not-started` to an active status. `plans check --strict` correctly added M12 to the existing `multiple active milestones` line, so every product proof passed while the planned equality could not. Decision changed: when a baseline contains lifecycle state, compare invariant errors plus the named transition instead of requiring byte-identical output; after the final status transition, rerun the check and require the temporary delta to disappear. Evidence: `src/cli/plans-check.ts` (search: `collectActiveStateErrors`) builds the error from every milestone in `ACTIVE_STATUSES`, so changing a milestone into or out of that set necessarily changes the line.
 
 **Prevention:** Artifact reference resolution must consult the exact installed-to-canonical mirror map before applying path conventions. Removed-command checks must distinguish executable code-span/shell grammar from product prose, with paired positive and negative fixtures. Run the live combined audit after focused tests because real documentation supplies exceptions synthetic fixtures miss. Evidence anchors: `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), `src/cli/audit/check-factual-claims.ts` (search: `REMOVED_COMMAND_CHECKS`), and `test/integration/audit-drift-artifact-integrity.test.ts` (search: `resolves installed shared-document paths`).
 

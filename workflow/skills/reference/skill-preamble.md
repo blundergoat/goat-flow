@@ -30,6 +30,7 @@ Order findings by severity, not by file or discovery order.
 
 - NEVER suppress linter warnings or bypass types (e.g., casts) without a same-line `-- rationale` naming the load-bearing reason
 - Read surrounding files; keep updates surgical, idiomatic, and convention-aligned
+- Human-read skill output - reports, `ISSUE.md`, decision records, and release or changelog text - follows `.goat-flow/skill-docs/playbooks/writing-style.md`
 
 ## Evidence Standard
 

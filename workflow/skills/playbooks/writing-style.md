@@ -23,6 +23,8 @@ The goal is readability. It is never disguising who wrote something.
 
 Apply this before editing anything. Running the rules on an exempt surface is worse than not running them at all, because the exemptions below are load-bearing.
 
+Project-documented style in instruction files, style guides, and enforced linters outranks this playbook's taste; the Integrity rules below outrank every style source.
+
 | Surface | Rules apply? |
 |---|---|
 | Release notes, changelog prose, review and report narrative | Yes |
@@ -115,6 +117,20 @@ Cheap enough to run on a finished draft. Each one takes under a minute.
 2. **So-what ladder.** Chase each claim with "so what?" until the answer is something only this project could say. Stop when you hit it, or delete the claim.
 3. **Read it aloud.** Sentences that cannot be spoken in one breath, and sentences that all land the same way, both surface here and nowhere else.
 4. **Feelings check.** Is the sentence telling the reader how to feel about a fact? State the fact instead and let them feel what they feel.
+
+## Worked Example
+
+**Illustrative example (not evidence of a real release).**
+
+Before:
+
+> Version 2.3.1 marks an important milestone in our ongoing journey toward a more seamless experience, introducing meaningful improvements that help users work more efficiently. We also enhanced export reliability, ensuring teams can confidently complete their workflows.
+
+After:
+
+> Version 2.3.1 retries an export once when the storage service times out. A failed retry leaves the draft in place and names the file that was not written.
+
+The revision removes the announcement, significance claim, and manufactured reassurance. It replaces them with the behaviour and the consequence a reader needs when deciding whether to upgrade.
 
 ## Antipatterns
 
