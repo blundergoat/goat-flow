@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-02
 ---
 
 ## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
@@ -167,13 +167,15 @@ last_reviewed: 2026-08-01
 
 ## Lesson: Fixture-heavy tests need a higher setup-bloat threshold
 
-**Status:** active | **Created:** 2026-05-30
+**Status:** resolved | **Created:** 2026-05-30 | **Resolved:** 2026-08-02
 
 **What happened:** During the M00 gruff cleanup, `test-quality.setup-bloat` reported 158 advisory findings at the default 12-line threshold. The top offenders were not opaque unit tests; they were harness, dashboard, quality-history, and terminal tests that build temp projects, fake servers, injected browser globals, or serialized audit payloads before the assertion.
 
 **Root cause:** The default threshold is tuned for small unit tests. goat-flow has many contract tests where visible fixture construction is part of the evidence. Extracting all of that setup into generic helpers would hide the behavioural contract the test is meant to preserve.
 
-**Prevention:** Keep `test-quality.setup-bloat.threshold` at `30` in `.gruff-ts.yaml` unless a future fixture helper makes those setup blocks clearer without hiding the SUT call or assertion. Still fix tests above that threshold case-by-case: extract reusable temp-project builders, keep assertions visible, and do not add empty `arrange()` wrappers only to satisfy the analyzer. Evidence anchors: `.gruff-ts.yaml` (search: `test-quality.setup-bloat`).
+**Resolution:** Gruff 0.4.0 no longer exposes `test-quality.setup-bloat`; `gruff-ts list-rules test-quality.setup-bloat` reports an unknown rule. Do not recreate its stale config block merely to preserve historical evidence.
+
+**Prevention:** Keep fixture construction visible when it explains the behavioural contract. If a current rule reports excessive setup, assess each test against that rule's live options; extract reusable builders only when they clarify the SUT call and assertion.
 
 ---
 

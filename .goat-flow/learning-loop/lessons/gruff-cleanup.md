@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-07-17
+last_reviewed: 2026-08-02
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -47,11 +47,13 @@ last_reviewed: 2026-07-17
 
 **Status:** active | **Created:** 2026-06-09
 
-**What happened:** After running `gruff-ts init --force` as a probe, I left the generated default `.gruff-ts.yaml` in place while continuing hook work. Preflight later failed `Learning-loop schema` because the generated config removed project-specific tuning anchors such as `repo-standard short names`, `dashboard state and CLI option DTOs`, and `test-quality.setup-bloat`.
+**What happened:** After running `gruff-ts init --force` as a probe, I left the generated default `.gruff-ts.yaml` in place while continuing hook work. Preflight later failed `Learning-loop schema` because the generated config removed project-specific tuning anchors such as `repo-standard short names` and `dashboard state and CLI option DTOs`.
+
+**Recurrence 2026-08-02:** Regenerating the config after the 0.4.0 upgrade removed the same project allowlists. Six stale anchors then failed both `stats --check` and the support bundle's harness audit. The retired `test-quality.setup-bloat` block was not restored; its historical lesson was resolved instead.
 
 **Root cause:** I treated `init --force` as a harmless command run instead of a policy rewrite. In goat-flow, `.gruff-ts.yaml` carries durable tuning plus semantic anchors referenced by lessons, so a generated-default reset can break verification even when the hook implementation is correct.
 
-**Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, restore the project-specific tuning anchors before broad verification. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`), `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`), `.gruff-ts.yaml` (search: `test-quality.setup-bloat`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
+**Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, merge current generated defaults with the still-supported project tuning before broad verification; do not revive rules removed by the installed version. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`), `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
 
 ## Lesson: Verify a gruff path-ignore by directory scan, not by naming the file
 
