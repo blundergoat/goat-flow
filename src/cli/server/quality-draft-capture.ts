@@ -12,8 +12,9 @@
  * the outcome.
  *
  * Polling (not fs.watch) is deliberate: watch events are unreliable on WSL2
- * and network filesystems, and a poller with an mtime-stability threshold also
- * solves the partial-write race for free.
+ * and network filesystems. The poller requires repeated size/mtime observations
+ * and retains parse failures until the last writer exits, so a paused writer is
+ * never mistaken for a completed invalid draft.
  *
  * Ownership is per project root, not per session: the staging directory is
  * shared by every session on a root, so one reference-counted poller owns it
@@ -33,7 +34,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import { persistQualityReportText } from "../quality/quality-command.js";
+import {
+  isQualityPersistencePathIgnored,
+  persistQualityReportText,
+} from "../quality/quality-command.js";
 import { recordEvidenceEvent } from "../evidence/envelope.js";
 import type { EvidencePayload } from "../evidence/envelope.js";
 import { redactEvidenceText, scrubDurableText } from "../evidence/redaction.js";
@@ -43,6 +47,8 @@ const DRAFT_NAME_PATTERN = /^goat-quality-draft-[A-Za-z0-9_-]{1,64}\.json$/u;
 /** Prefixes used to derive the receipt filename from a draft filename. */
 const DRAFT_NAME_PREFIX = "goat-quality-draft-";
 const RESULT_NAME_PREFIX = "goat-quality-result-";
+/** Exact local directory whose descendants may briefly contain raw quality text. */
+const STAGING_RELATIVE_PATH = ".goat-flow/logs/quality/staging/";
 /** Reject drafts larger than this; a valid report is far smaller. */
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 /** Default poll cadence and required mtime quiet period before processing. */
@@ -92,7 +98,7 @@ interface RootCapture {
   stagingDir: string;
   /** Process every currently eligible draft while preserving single-poller ordering. */
   processNow(): Promise<void>;
-  /** Stop polling and remove drafts that cannot outlive their final session holder. */
+  /** Stop polling, finalize regular drafts, and remove unsafe leftovers. */
   shutdown(): void;
 }
 
@@ -107,6 +113,63 @@ const rootCaptures = new Map<
   { capture: RootCapture; holders: number }
 >();
 
+/** One prospective staging component and its non-following filesystem observation. */
+interface InspectedDraftDirectory {
+  componentPath: string;
+  stats: NonNullable<ReturnType<typeof lstatSync>> | null;
+}
+
+/** Inspect every staging component without creating or following a final symlink. */
+function inspectQualityDraftDirectories(
+  componentPaths: readonly string[],
+): InspectedDraftDirectory[] {
+  return componentPaths.map((componentPath) => {
+    try {
+      return { componentPath, stats: lstatSync(componentPath) };
+    } catch {
+      return { componentPath, stats: null };
+    }
+  });
+}
+
+/** Reject any existing staging component that is not a real directory. */
+function assertQualityDraftDirectories(
+  components: readonly InspectedDraftDirectory[],
+): void {
+  for (const component of components) {
+    if (component.stats !== null && !component.stats.isDirectory()) {
+      throw new Error(
+        `quality capture: ${component.componentPath} must be a real project-local directory.`,
+      );
+    }
+  }
+}
+
+/** Create missing staging components and enforce the private leaf mode. */
+function createQualityDraftDirectories(
+  components: readonly InspectedDraftDirectory[],
+  stagingPath: string,
+): void {
+  for (const component of components) {
+    if (component.stats === null) {
+      mkdirSync(component.componentPath, {
+        mode: component.componentPath === stagingPath ? 0o700 : undefined,
+      });
+    }
+    if (
+      process.platform !== "win32" &&
+      component.componentPath === stagingPath
+    ) {
+      chmodSync(component.componentPath, 0o700);
+      if ((lstatSync(component.componentPath).mode & 0o077) !== 0) {
+        throw new Error(
+          "quality capture: staging directory must be private (0700).",
+        );
+      }
+    }
+  }
+}
+
 /**
  * Create the staging directory for one reporting root, component by component.
  *
@@ -115,6 +178,8 @@ const rootCaptures = new Map<
  * leaf is created `0700` so the redaction window named in ADR-044 is not
  * widened by group/world reads. Call BEFORE building the Claude permission
  * overlay so the `.goat-flow/logs` write allow exists for fresh targets.
+ * Existing components are inspected first; Git must then prove the exact
+ * staging directory ignored before any missing component is created.
  *
  * @param projectRoot - report owner project root
  * @returns absolute staging directory path
@@ -128,32 +193,17 @@ export function ensureQualityDraftStagingDirectory(
     join(projectRoot, ".goat-flow", "logs", "quality"),
     join(projectRoot, ".goat-flow", "logs", "quality", "staging"),
   ];
-  for (const componentPath of components) {
-    let stats;
-    try {
-      stats = lstatSync(componentPath);
-    } catch {
-      stats = null;
-    }
-    if (stats !== null && !stats.isDirectory()) {
-      throw new Error(
-        `quality capture: ${componentPath} must be a real project-local directory.`,
-      );
-    }
-    if (stats === null) {
-      mkdirSync(componentPath, {
-        mode: componentPath.endsWith("staging") ? 0o700 : undefined,
-      });
-    }
-    if (process.platform !== "win32" && componentPath === components.at(-1)) {
-      chmodSync(componentPath, 0o700);
-      if ((lstatSync(componentPath).mode & 0o077) !== 0) {
-        throw new Error(
-          "quality capture: staging directory must be private (0700).",
-        );
-      }
-    }
+  const inspectedComponents = inspectQualityDraftDirectories(components);
+  assertQualityDraftDirectories(inspectedComponents);
+  if (!isQualityPersistencePathIgnored(projectRoot, STAGING_RELATIVE_PATH)) {
+    throw new Error(
+      `quality capture: ${STAGING_RELATIVE_PATH} must be gitignored before capture starts.`,
+    );
   }
+  createQualityDraftDirectories(
+    inspectedComponents,
+    components[components.length - 1] as string,
+  );
   return components[components.length - 1] as string;
 }
 
@@ -268,16 +318,22 @@ interface RootCaptureContext {
   stableMs: number;
 }
 
-/** Mutable poller state that remains observable across asynchronous draft persistence. */
+/** Mutable poller state shared by direct calls, timer polls, and finalization. */
 interface RootCaptureState {
   isDisposed: boolean;
   isBusy: boolean;
+  observations: Map<string, DraftObservation>;
 }
 
-/** Eligible draft metadata captured once before receipt reservation. */
-interface StableDraft {
-  path: string;
+/** Size and mtime pair used to prove one candidate stayed unchanged across polls. */
+interface DraftObservation {
+  mtimeMs: number;
   size: number;
+}
+
+/** Eligible draft metadata captured before receipt reservation and content reads. */
+interface StableDraft extends DraftObservation {
+  path: string;
 }
 
 /** Record one bounded capture event; recorder failures use a silent fallback so persistence survives. */
@@ -303,7 +359,9 @@ function recordCaptureEvent(
 /** Read one stable regular draft; missing, unreadable, or still-changing paths use a null fallback. */
 function readStableDraft(
   context: RootCaptureContext,
+  state: RootCaptureState,
   draftName: string,
+  finalizing: boolean,
 ): StableDraft | null {
   const path = join(context.stagingDir, draftName);
   let stats;
@@ -311,15 +369,54 @@ function readStableDraft(
     stats = lstatSync(path);
   } catch {
     // A missing or unreadable candidate is retried only if a later poll can see it safely.
+    state.observations.delete(draftName);
     return null;
   }
   // Symlinks and non-files never enter the report persistence pipeline.
-  if (!stats.isFile()) return null;
-  // A draft still inside its quiet window may be partially written, so leave it for the next poll.
-  if (context.stableMs > 0 && Date.now() - stats.mtimeMs < context.stableMs) {
+  if (!stats.isFile()) {
+    state.observations.delete(draftName);
     return null;
   }
-  return { path, size: stats.size };
+  const observation = { mtimeMs: stats.mtimeMs, size: stats.size };
+  if (!finalizing && context.stableMs > 0) {
+    const previous = state.observations.get(draftName);
+    state.observations.set(draftName, observation);
+    // A draft still inside its quiet window may be partially written, so leave it for the next poll.
+    if (Date.now() - observation.mtimeMs < context.stableMs) return null;
+    if (
+      previous === undefined ||
+      previous.mtimeMs !== observation.mtimeMs ||
+      previous.size !== observation.size
+    ) {
+      return null;
+    }
+  }
+  return { path, ...observation };
+}
+
+/** Confirm a draft did not change between its eligibility stat and completed read. */
+function draftStillMatches(
+  state: RootCaptureState,
+  draftName: string,
+  draft: StableDraft,
+): boolean {
+  try {
+    const stats = lstatSync(draft.path);
+    const matches =
+      stats.isFile() &&
+      stats.size === draft.size &&
+      stats.mtimeMs === draft.mtimeMs;
+    if (!matches) {
+      state.observations.set(draftName, {
+        mtimeMs: stats.mtimeMs,
+        size: stats.size,
+      });
+    }
+    return matches;
+  } catch {
+    state.observations.delete(draftName);
+    return false;
+  }
 }
 
 /**
@@ -461,18 +558,22 @@ function recordRejectedDraft(
  * Validate and persist one stable draft with a bounded fallback for every expected failure.
  * The ordered stages stay explicit because receipt reservation must precede durable persistence.
  */
-async function processCaptureDraft(
+function processCaptureDraft(
   context: RootCaptureContext,
+  state: RootCaptureState,
   draftName: string,
-): Promise<void> {
-  const draft = readStableDraft(context, draftName);
+  finalizing: boolean,
+): void {
+  const draft = readStableDraft(context, state, draftName, finalizing);
   // Ineligible drafts remain untouched for a later safe poll or final sweep.
   if (draft === null) return;
   // A receipt collision has already deleted and rejected this draft.
   if (!reserveCaptureReceipt(context, draftName)) return;
   // Oversized input is rejected before its unredacted contents are loaded into memory.
   if (draft.size > MAX_DRAFT_BYTES) {
+    if (!finalizing) return;
     rejectOversizedDraft(context, draftName);
+    state.observations.delete(draftName);
     return;
   }
 
@@ -483,9 +584,10 @@ async function processCaptureDraft(
     // A disappearing or unreadable draft cannot be persisted and may be retried if it reappears.
     return;
   }
+  if (!draftStillMatches(state, draftName, draft)) return;
 
   try {
-    const reportPath = await persistQualityReportText(
+    const reportPath = persistQualityReportText(
       {
         projectPath: context.projectRoot,
         rawText,
@@ -494,8 +596,13 @@ async function processCaptureDraft(
       { CLIError: QualityCaptureError },
     );
     recordPersistedDraft(context, draftName, reportPath);
+    state.observations.delete(draftName);
   } catch (error) {
+    // Parse/schema/ownership failures can be a paused writer's partial bytes.
+    // Keep them private and retry while any producing session remains alive.
+    if (!finalizing) return;
     recordRejectedDraft(context, draftName, rawText, error);
+    state.observations.delete(draftName);
   }
 }
 
@@ -503,10 +610,11 @@ async function processCaptureDraft(
  * Process one staging-directory snapshot with an empty fallback when the directory read fails.
  * Busy and disposed state prevents overlapping or post-shutdown persistence.
  */
-async function processCaptureSnapshot(
+function processCaptureSnapshot(
   context: RootCaptureContext,
   state: RootCaptureState,
-): Promise<void> {
+  finalizing = false,
+): void {
   // A shared root has exactly one active sweep, and shutdown prevents any new persistence.
   if (state.isBusy || state.isDisposed) return;
   state.isBusy = true;
@@ -518,22 +626,23 @@ async function processCaptureSnapshot(
       // The next poll retries a temporarily unavailable staging directory.
       return;
     }
+    const visibleDrafts = new Set(
+      entries.filter((entry) => DRAFT_NAME_PATTERN.test(entry)),
+    );
+    for (const observedName of state.observations.keys()) {
+      if (!visibleDrafts.has(observedName)) {
+        state.observations.delete(observedName);
+      }
+    }
     // Each visible contract-shaped draft gets one ordered persistence attempt.
     for (const entry of entries) {
       // Unrelated files in staging are user-owned and remain untouched.
       if (!DRAFT_NAME_PATTERN.test(entry)) continue;
-      await processCaptureDraft(context, entry);
-      // Session shutdown during persistence stops the sweep before another draft starts.
-      if (captureIsDisposed(state)) return;
+      processCaptureDraft(context, state, entry, finalizing);
     }
   } finally {
     state.isBusy = false;
   }
-}
-
-/** Read disposal through a call boundary because shutdown can mutate state while persistence awaits. */
-function captureIsDisposed(state: RootCaptureState): boolean {
-  return state.isDisposed;
 }
 
 /** Remove every contract-shaped draft with a no-op fallback when the directory read fails. */
@@ -552,7 +661,7 @@ function sweepCaptureDrafts(stagingDir: string): void {
 }
 
 /**
- * Build the single poller with a next-poll fallback when asynchronous processing rejects.
+ * Build the single poller with a next-poll fallback when processing rejects.
  * One root-owned state object is intentional because independent pollers could persist or delete the same draft.
  *
  * @param options - owner root plus optional timing overrides
@@ -564,11 +673,23 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
     stagingDir: ensureQualityDraftStagingDirectory(options.projectRoot),
     stableMs: options.stableMs ?? DEFAULT_STABLE_MS,
   };
-  const state: RootCaptureState = { isDisposed: false, isBusy: false };
+  const state: RootCaptureState = {
+    isDisposed: false,
+    isBusy: false,
+    observations: new Map(),
+  };
 
   /** Process eligible drafts immediately through the root-owned single-poller state. */
-  const processNow = (): Promise<void> =>
-    processCaptureSnapshot(context, state);
+  const processNow = (): Promise<void> => {
+    try {
+      processCaptureSnapshot(context, state);
+      return Promise.resolve();
+    } catch (error) {
+      return Promise.reject(
+        error instanceof Error ? error : new Error(String(error)),
+      );
+    }
+  };
 
   const timer = setInterval(() => {
     void processNow().catch(() => {
@@ -580,13 +701,20 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
   return {
     stagingDir: context.stagingDir,
     processNow,
-    /** Stop this root poller once and discard drafts that no session can still finish. */
+    /** Stop this root poller once and resolve drafts after their final writer has exited. */
     shutdown(): void {
-      // Repeated session teardown must not sweep or clear the shared timer twice.
+      // Repeated session teardown must not finalize, sweep, or clear the shared timer twice.
       if (state.isDisposed) return;
-      state.isDisposed = true;
       clearInterval(timer);
-      sweepCaptureDrafts(context.stagingDir);
+      try {
+        // No session holder remains, so every regular draft can now be read once
+        // without a quiet-window delay and either persisted or rejected durably.
+        processCaptureSnapshot(context, state, true);
+      } finally {
+        state.isDisposed = true;
+        state.observations.clear();
+        sweepCaptureDrafts(context.stagingDir);
+      }
     },
   };
 }
@@ -599,7 +727,7 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
  * poller per root is therefore the only safe arrangement - independent pollers
  * would each sweep the shared directory on teardown (destroying a sibling
  * session's pending draft) and could both persist the same draft, because a
- * draft is deleted only after its `await` completes. Holders are counted, and
+ * draft remains visible until persistence and its receipt complete. Holders are counted, and
  * the last release stops the timer and sweeps, so ADR-044's close-time sweep
  * still runs once no session on the root can be writing a draft.
  *

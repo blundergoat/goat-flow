@@ -3,20 +3,24 @@
  * capture (ADR-044): draft acceptance, every rejection class, receipt
  * contents, filename filtering, dispose-time sweep, and handle hygiene.
  *
- * All processing is driven through `processNow()` with `stableMs: 0` so the
- * suite is deterministic and never waits on the poller interval; the interval
- * itself is unref'd and cleared by dispose, which the leak-sensitive terminal
- * test lesson requires this suite to prove.
+ * Most processing is driven through `processNow()` with `stableMs: 0`; one
+ * paused-writer regression uses repeated old size/mtime observations without
+ * wall-clock waits. The interval itself is unref'd and cleared by dispose,
+ * which the leak-sensitive terminal test lesson requires this suite to prove.
  */
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import {
+  closeSync,
   chmodSync,
   existsSync,
+  futimesSync,
   linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   realpathSync,
@@ -24,6 +28,7 @@ import {
   symlinkSync,
   utimesSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,6 +42,12 @@ import type { QualityDraftCapture } from "../../src/cli/server/quality-draft-cap
 const PACKAGE_VERSION = (
   JSON.parse(readFileSync("package.json", "utf8")) as { version: string }
 ).version;
+const QUALITY_IGNORE_RULES = [
+  ".goat-flow/logs/quality/*.json",
+  ".goat-flow/logs/quality/staging/",
+  ".goat-flow/logs/events/*.jsonl",
+  "",
+].join("\n");
 
 /** Build one schema-valid minimal report owned by the given project root. */
 function validReport(projectRoot: string): string {
@@ -89,9 +100,13 @@ describe("quality draft capture", () => {
   const captures: QualityDraftCapture[] = [];
 
   /** Create and track one temporary project root for capture cleanup after the suite. */
-  function makeRoot(): string {
+  function makeRoot(ignoreRules: string | null = QUALITY_IGNORE_RULES): string {
     const root = mkdtempSync(join(tmpdir(), "goat-quality-capture-"));
     roots.push(root);
+    execFileSync("git", ["-C", root, "init", "--quiet"]);
+    if (ignoreRules !== null) {
+      writeFileSync(join(root, ".gitignore"), ignoreRules);
+    }
     return root;
   }
 
@@ -122,6 +137,16 @@ describe("quality draft capture", () => {
     assert.equal(mode, 0o700);
     // Idempotent: a second ensure returns the same directory without throwing.
     assert.equal(ensureQualityDraftStagingDirectory(root), stagingDir);
+  });
+
+  it("fails before creating staging when its exact path is not ignored", () => {
+    const root = makeRoot(null);
+
+    assert.throws(
+      () => ensureQualityDraftStagingDirectory(root),
+      /staging\/.*must be gitignored before capture starts/u,
+    );
+    assert.equal(existsSync(join(root, ".goat-flow")), false);
   });
 
   it("tightens an existing permissive staging directory to 0700", (testContext) => {
@@ -177,11 +202,13 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
+    assert.equal(existsSync(draftPath), true);
+    capture.dispose();
     assert.equal(existsSync(draftPath), false);
     assert.equal(readReceipt(capture.stagingDir, "future-mtime").ok, false);
   });
 
-  it("rejects invalid JSON with a draft-labelled error and deletes the draft", async () => {
+  it("retains invalid JSON live, then rejects it after writer shutdown", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
     const sensitiveValue = ["fixture", "-sensitive", "-value"].join("");
@@ -194,6 +221,14 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
+    assert.equal(existsSync(draftPath), true);
+    assert.equal(
+      existsSync(
+        join(capture.stagingDir, "goat-quality-result-claude-bbb222.json"),
+      ),
+      false,
+    );
+    capture.dispose();
     assert.equal(existsSync(draftPath), false);
     const receipt = readReceipt(capture.stagingDir, "bbb222");
     assert.equal(receipt.ok, false);
@@ -285,6 +320,13 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
+    assert.equal(
+      existsSync(
+        join(capture.stagingDir, "goat-quality-draft-claude-ccc333.json"),
+      ),
+      true,
+    );
+    capture.dispose();
     const receipt = readReceipt(capture.stagingDir, "ccc333");
     assert.equal(receipt.ok, false);
     assert.equal(
@@ -311,6 +353,7 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
+    capture.dispose();
     const receipt = readReceipt(capture.stagingDir, "ddd444");
     assert.equal(receipt.ok, false);
     assert.equal(
@@ -330,6 +373,8 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
+    assert.equal(existsSync(draftPath), true);
+    capture.dispose();
     assert.equal(existsSync(draftPath), false);
     const receipt = readReceipt(capture.stagingDir, "eee555");
     assert.equal(receipt.ok, false);
@@ -367,26 +412,87 @@ describe("quality draft capture", () => {
     );
   });
 
-  it("processes a corrected second draft after a rejection", async () => {
+  it("processes an invalid draft after the live writer corrects it", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
-    writeFileSync(
-      join(capture.stagingDir, "goat-quality-draft-claude-ggg777.json"),
-      "{}",
+    const draftPath = join(
+      capture.stagingDir,
+      "goat-quality-draft-claude-ggg777.json",
     );
+    writeFileSync(draftPath, "{}");
     await capture.processNow();
-    assert.equal(readReceipt(capture.stagingDir, "ggg777").ok, false);
+    assert.equal(existsSync(draftPath), true);
 
-    writeFileSync(
-      join(capture.stagingDir, "goat-quality-draft-claude-hhh888.json"),
-      validReport(root),
-    );
+    writeFileSync(draftPath, validReport(root));
     await capture.processNow();
-    const receipt = readReceipt(capture.stagingDir, "hhh888");
+    const receipt = readReceipt(capture.stagingDir, "ggg777");
     assert.equal(receipt.ok, true);
   });
 
-  it("sweeps unprocessed drafts on dispose and keeps receipts", async () => {
+  it("preserves a paused open writer until its completed report persists", async () => {
+    const root = makeRoot();
+    const capture = startQualityDraftCapture({
+      projectRoot: root,
+      intervalMs: 60_000,
+      stableMs: 500,
+    });
+    captures.push(capture);
+    const draftPath = join(
+      capture.stagingDir,
+      "goat-quality-draft-claude-paused111.json",
+    );
+    const raw = validReport(root);
+    const split = Math.floor(raw.length / 2);
+    const descriptor = openSync(draftPath, "w", 0o600);
+    writeSync(descriptor, raw.slice(0, split));
+    const old = new Date(Date.now() - 2_000);
+    futimesSync(descriptor, old, old);
+
+    await capture.processNow();
+    await capture.processNow();
+
+    assert.equal(existsSync(draftPath), true);
+    assert.equal(
+      existsSync(
+        join(capture.stagingDir, "goat-quality-result-claude-paused111.json"),
+      ),
+      false,
+    );
+
+    writeSync(descriptor, raw.slice(split));
+    futimesSync(descriptor, old, old);
+    closeSync(descriptor);
+    await capture.processNow();
+    await capture.processNow();
+
+    assert.equal(existsSync(draftPath), false);
+    assert.equal(readReceipt(capture.stagingDir, "paused111").ok, true);
+  });
+
+  it("rejects a finalized report when its exact filename is not ignored", async () => {
+    const root = makeRoot(".goat-flow/logs/quality/staging/\n");
+    const capture = makeCapture(root);
+    const draftPath = join(
+      capture.stagingDir,
+      "goat-quality-draft-claude-final-ignore.json",
+    );
+    writeFileSync(draftPath, validReport(root));
+
+    await capture.processNow();
+
+    assert.equal(existsSync(draftPath), true);
+    capture.dispose();
+    assert.equal(existsSync(draftPath), false);
+    assert.equal(readReceipt(capture.stagingDir, "final-ignore").ok, false);
+    assert.deepStrictEqual(
+      readdirSync(join(root, ".goat-flow", "logs", "quality")).filter((name) =>
+        /^\d.*\.json$/u.test(name),
+      ),
+      [],
+    );
+  });
+
+  it("finalizes every remaining draft on dispose and keeps receipts", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
     writeFileSync(
@@ -407,7 +513,10 @@ describe("quality draft capture", () => {
     const remaining = readdirSync(capture.stagingDir).sort();
     assert.deepStrictEqual(remaining, [
       "goat-quality-result-claude-iii999.json",
+      "goat-quality-result-claude-jjj000.json",
     ]);
+    assert.equal(readReceipt(capture.stagingDir, "iii999").ok, false);
+    assert.equal(readReceipt(capture.stagingDir, "jjj000").ok, true);
   });
 
   it("keeps a sibling session's draft when one holder disposes", async () => {
@@ -464,6 +573,8 @@ describe("quality draft capture", () => {
     const realRoot = join(parent, "real");
     const aliasRoot = join(parent, "alias");
     mkdirSync(realRoot);
+    execFileSync("git", ["-C", realRoot, "init", "--quiet"]);
+    writeFileSync(join(realRoot, ".gitignore"), QUALITY_IGNORE_RULES);
     symlinkSync(realRoot, aliasRoot, "dir");
     const first = makeCapture(realRoot);
     const second = makeCapture(aliasRoot);

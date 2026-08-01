@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-02
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -310,6 +310,8 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **Root cause:** I tested new must-block probes before accounting for must-allow placeholders that were accidentally protected by the old false negative.
 
 **Prevention:** For credential-scanner changes, run a matrix that includes must-block misses and must-allow placeholder assignments after each parser edit. Parse/normalize the assignment key first, classify it second, and expect a broader key match to require explicit placeholder allowlist proof. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_env_assignment`), `test/integration/post-turn-safety-hook.test.ts` (search: `blocks exported credential assignments`), and `test/integration/post-turn-safety-hook.test.ts` (search: `allows safe placeholders in env examples`).
+
+**Recurrence 2026-08-02:** The PR #57 scanner-parity fix first lost the raw assignment key because a placeholder helper overwrote Bash's global `BASH_REMATCH`, then broader forced-fallback fixtures exposed Docker space-form and multi-assignment drift, dotted config-reference drift, npm secondary-assignment drift, and quoted-password mismatches. The complete native-versus-fallback finding-set comparison caught these after the initial named examples agreed. Capture regex matches before calling helpers, and compare normalized findings across the full existing block-and-allow corpus rather than treating a few equal exit codes as parity. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_literal_credential_assignment`), and `test/integration/post-turn-safety-hook.test.ts` (search: `hookFindingSignatures`).
 ---
 
 ## Lesson: Scanner scope gates need parser-shape fixtures for each claimed file family

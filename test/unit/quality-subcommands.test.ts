@@ -3,7 +3,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   lstatSync,
   mkdtempSync,
@@ -11,6 +11,7 @@ import {
   readdirSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -105,6 +106,14 @@ function runQualitySave(projectPath: string, report: unknown) {
     projectPath,
     `${JSON.stringify(report, null, 2)}\n`,
   );
+}
+
+/** Create a Git project whose exact quality report filename family is ignored. */
+function makeIgnoredQualityRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
+  execFileSync("git", ["-C", root, "init", "--quiet"]);
+  writeFileSync(join(root, ".gitignore"), ".goat-flow/logs/quality/*.json\n");
+  return root;
 }
 
 /**
@@ -233,7 +242,7 @@ describe("quality subcommand parsing", () => {
 
 describe("quality save", () => {
   it("redacts, validates, and exclusively writes under the selected project", () => {
-    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
+    const projectRoot = makeIgnoredQualityRoot();
     try {
       const sensitiveValue = ["fixture", "-credential", "-value"].join("");
       const nestedDetail = [
@@ -269,6 +278,22 @@ describe("quality save", () => {
       assert.match(saved, /\[REDACTED:env-value\]/u);
       assert.match(saved, /\[REDACTED:field\]/u);
       assert.equal(JSON.parse(saved).project_path, projectRoot);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed before creating directories when reports are not ignored", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
+    try {
+      const result = runQualitySave(
+        projectRoot,
+        currentQualityReport(projectRoot),
+      );
+
+      assert.equal(result.status, CLI_USAGE_EXIT_CODE);
+      assert.match(result.stderr, /must be gitignored before writing/i);
+      assert.equal(readdirSync(projectRoot).includes(".goat-flow"), false);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
@@ -316,7 +341,7 @@ describe("quality save", () => {
   });
 
   it("refuses a redirected quality-report directory", () => {
-    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
+    const projectRoot = makeIgnoredQualityRoot();
     const redirectRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-quality-redirect-"),
     );

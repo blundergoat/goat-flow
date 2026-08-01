@@ -4,7 +4,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
-import { extname, join } from "node:path";
+import { homedir } from "node:os";
+import { extname, isAbsolute, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { WebSocket } from "ws";
 import type {
@@ -18,7 +19,7 @@ import type {
 } from "./types.js";
 import { decodeClientMessage } from "./decoders.js";
 import { getAgentProfiles } from "../agents/registry.js";
-import { validateProjectPath } from "./local-paths.js";
+import { isPathWithin, validateProjectPath } from "./local-paths.js";
 import {
   ensureQualityDraftStagingDirectory,
   startQualityDraftCapture,
@@ -112,6 +113,7 @@ const REPORTING_SECRET_DENIES = [
 const CLAUDE_REPORTING_HOME_SECRET_DENIES = [
   "~/.env",
   "~/.env.*",
+  "~/.claude/.credentials.json",
   "~/.ssh/**",
   "~/.aws/**",
   "~/.docker/**",
@@ -314,8 +316,15 @@ function isSharedDirectory(
 ): boolean {
   return rootPaths.every((rootPath) => {
     try {
-      const stat = lstatSync(join(rootPath, relativePath));
-      return stat.isDirectory() && !stat.isSymbolicLink();
+      const candidatePath = join(rootPath, relativePath);
+      const stat = lstatSync(candidatePath);
+      const realRootPath = realpathSync(rootPath);
+      const realCandidatePath = realpathSync(candidatePath);
+      return (
+        stat.isDirectory() &&
+        !stat.isSymbolicLink() &&
+        isPathWithin(realRootPath, realCandidatePath)
+      );
     } catch {
       return false;
     }
@@ -382,6 +391,47 @@ function claudePermissionPath(filePath: string): string {
   return `//${escaped}`;
 }
 
+/** Resolve the active Claude config directory without reading its contents. */
+function configuredClaudeCredentialPaths(
+  projectPath: string,
+  environment: NodeJS.ProcessEnv,
+): string[] {
+  const configuredDirectory = environment.CLAUDE_CONFIG_DIR?.trim();
+  if (!configuredDirectory) return [];
+
+  let expandedDirectory = configuredDirectory;
+  if (expandedDirectory === "~") {
+    expandedDirectory = homedir();
+  } else if (
+    expandedDirectory.startsWith("~/") ||
+    expandedDirectory.startsWith("~\\")
+  ) {
+    expandedDirectory = join(homedir(), expandedDirectory.slice(2));
+  }
+  const absoluteDirectory = isAbsolute(expandedDirectory)
+    ? expandedDirectory
+    : resolve(projectPath, expandedDirectory);
+  const directoryPaths = [absoluteDirectory];
+  try {
+    directoryPaths.push(realpathSync(absoluteDirectory));
+  } catch {
+    // A configured directory may be created by Claude after launch.
+  }
+
+  return Array.from(
+    new Set(
+      directoryPaths.flatMap((directoryPath) => {
+        const credentialPath = join(directoryPath, ".credentials.json");
+        try {
+          return [credentialPath, realpathSync(credentialPath)];
+        } catch {
+          return [credentialPath];
+        }
+      }),
+    ),
+  );
+}
+
 /** Return the sorted permission-overlay contract containing only shared local/report directories. */
 function claudeWritablePaths(rootPath: string): string[] {
   return REPORTING_LOCAL_STATE_PATHS.filter((relativePath) =>
@@ -399,6 +449,7 @@ function claudeWritablePaths(rootPath: string): string[] {
 function buildClaudeReportingSettings(
   projectPath: string,
   targetPath: string,
+  environment: NodeJS.ProcessEnv,
 ): string {
   const rootPaths = Array.from(
     new Set([projectPath, targetPath].filter((path) => path.length > 0)),
@@ -410,10 +461,9 @@ function buildClaudeReportingSettings(
     })),
   );
   const allow = [
-    "Read",
-    "Glob",
-    "Grep",
-    "Bash(goat-flow --version)",
+    ...rootPaths.map(
+      (rootPath) => `Read(${claudePermissionPath(rootPath)}/**)`,
+    ),
     ...writablePathsByRoot.map(
       ({ rootPath, relativePath }) =>
         `Edit(${claudePermissionPath(join(rootPath, relativePath))}/**)`,
@@ -442,11 +492,19 @@ function buildClaudeReportingSettings(
   const homeSecretDenies = CLAUDE_REPORTING_HOME_SECRET_DENIES.flatMap(
     (pattern) => [`Read(${pattern})`, `Edit(${pattern})`],
   );
+  const configuredCredentialDenies = configuredClaudeCredentialPaths(
+    projectPath,
+    environment,
+  ).flatMap((credentialPath) => {
+    const permissionPath = claudePermissionPath(credentialPath);
+    return [`Read(${permissionPath})`, `Edit(${permissionPath})`];
+  });
   const deny = [
     ...protectedWriteDenies,
     ...finalizedReportDenies,
     ...projectSecretDenies,
     ...homeSecretDenies,
+    ...configuredCredentialDenies,
   ];
   return JSON.stringify({
     permissions: {
@@ -601,6 +659,7 @@ function terminalSpawnContext(
     env.GOAT_CLAUDE_REPORTING_SETTINGS = buildClaudeReportingSettings(
       projectPath,
       targetPath,
+      environment,
     );
   }
   return { accessMode, env };

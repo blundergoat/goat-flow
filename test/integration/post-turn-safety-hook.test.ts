@@ -20,11 +20,16 @@ import { describe, it } from "node:test";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const HOOK_PATH = resolve(PROJECT_ROOT, "workflow/hooks/post-turn-safety.sh");
+const FORCE_BASH3_ENV_KEY = "GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK";
 const TEST_AWS_ACCESS_KEY = `AKIA${"1234567890ABCDEF"}`;
 const TEST_GITHUB_TOKEN = `ghp_${"abcdefghijklmnopqrsttestuvwxyzABCD"}`;
+const TEST_FINE_GRAINED_GITHUB_TOKEN = `github_pat_${"a".repeat(20)}`;
+const TEST_SHORT_GITHUB_TOKEN = `ghp_${"b".repeat(20)}`;
 const TEST_NPM_TOKEN = `npm_${"123456789012345678901234567890123456"}`;
+const TEST_SHORT_NPM_TOKEN = `npm_${"c".repeat(20)}`;
 const TEST_SLACK_TOKEN = `xoxb-${"1234567890-1234567890-abcdef"}`;
 const TEST_API_TOKEN = `sk-${"12345678901234567890123456789012"}`;
+const TEST_UNDERSCORE_API_TOKEN = `sk-${"d".repeat(16)}_${"e".repeat(16)}`;
 const TEST_CLIENT_SECRET = ["7Hk9Lm2Qr8Tv5Wx1Zb4Nc6", "Df"].join("");
 const TEST_INI_PASSWORD = ["S3cr3tP4ssw0rd", "X"].join("");
 const TEST_PRIVATE_KEY_HEADER = ["-----BEGIN", "OPENSSH PRIVATE KEY-----"].join(
@@ -119,14 +124,59 @@ function runHook(
   });
 }
 
+/** Normalize scanner-specific prose to the common finding-family/path decision. */
+function hookFindingSignatures(stderr: string): string[] {
+  return stderr
+    .split("\n")
+    .flatMap((line) => {
+      const nativePrefix = "post-turn-safety: blocked ";
+      const compatibilityPrefix = "post-turn-safety: ";
+      const compatibilitySuffix = " (Bash 3 compatibility scan).";
+      if (line.startsWith(nativePrefix)) {
+        return [line.slice(nativePrefix.length)];
+      }
+      if (
+        line.startsWith(compatibilityPrefix) &&
+        line.endsWith(compatibilitySuffix)
+      ) {
+        return [
+          line.slice(compatibilityPrefix.length, -compatibilitySuffix.length),
+        ];
+      }
+      return [];
+    })
+    .sort();
+}
+
 /** Execute the real hook and prove the fixture reaches the allowed exit path. */
 function assertHookAllows(root: string, env?: Record<string, string>): void {
-  const result = runHook(root, env);
+  const explicitlySelectedScanner = env?.[FORCE_BASH3_ENV_KEY] !== undefined;
+  const result = runHook(
+    root,
+    explicitlySelectedScanner
+      ? env
+      : { ...(env ?? {}), [FORCE_BASH3_ENV_KEY]: "0" },
+  );
   assert.equal(
     result.status,
     0,
     `hook should allow fixture\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
   );
+  if (!explicitlySelectedScanner) {
+    const compatibilityResult = runHook(root, {
+      ...(env ?? {}),
+      [FORCE_BASH3_ENV_KEY]: "1",
+    });
+    assert.equal(
+      compatibilityResult.status,
+      result.status,
+      `scanner decisions differ\nnative stderr:\n${result.stderr}\nfallback stderr:\n${compatibilityResult.stderr}`,
+    );
+    assert.deepStrictEqual(
+      hookFindingSignatures(compatibilityResult.stderr),
+      hookFindingSignatures(result.stderr),
+    );
+  }
 }
 
 function assertHookBlocks(
@@ -134,7 +184,13 @@ function assertHookBlocks(
   expectedPattern: RegExp,
   env?: Record<string, string>,
 ): ReturnType<typeof spawnSync> {
-  const result = runHook(root, env);
+  const explicitlySelectedScanner = env?.[FORCE_BASH3_ENV_KEY] !== undefined;
+  const result = runHook(
+    root,
+    explicitlySelectedScanner
+      ? env
+      : { ...(env ?? {}), [FORCE_BASH3_ENV_KEY]: "0" },
+  );
   assert.equal(
     result.status,
     2,
@@ -142,6 +198,23 @@ function assertHookBlocks(
   );
   assert.match(result.stderr, expectedPattern);
   assert.doesNotMatch(result.stderr, /validation/u);
+  if (!explicitlySelectedScanner) {
+    const compatibilityResult = runHook(root, {
+      ...(env ?? {}),
+      [FORCE_BASH3_ENV_KEY]: "1",
+    });
+    assert.equal(
+      compatibilityResult.status,
+      result.status,
+      `scanner decisions differ\nnative stderr:\n${result.stderr}\nfallback stderr:\n${compatibilityResult.stderr}`,
+    );
+    assert.deepStrictEqual(
+      hookFindingSignatures(compatibilityResult.stderr),
+      hookFindingSignatures(result.stderr),
+    );
+    assert.match(compatibilityResult.stderr, expectedPattern);
+    assert.doesNotMatch(compatibilityResult.stderr, /validation/u);
+  }
   return result;
 }
 
@@ -617,7 +690,7 @@ describe("post-turn-safety hook", () => {
   it("detects new hazards added to files that were already dirty", () => {
     withTempRepo((root) => {
       writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
-      const firstPass = runHook(root);
+      const firstPass = runHook(root, { [FORCE_BASH3_ENV_KEY]: "0" });
       assert.equal(firstPass.status, 0, firstPass.stderr);
       writeFile(
         root,
@@ -815,6 +888,104 @@ describe("post-turn-safety hook", () => {
       GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "1",
     };
 
+    function assertScannerParity(
+      root: string,
+      expectedStatus: 0 | 2,
+      expectedPattern?: RegExp,
+    ): void {
+      const nativeResult = runHook(root, {
+        GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "0",
+      });
+      const compatibilityResult = runHook(root, compatibilityEnv);
+      const diagnostics = [
+        `native status=${nativeResult.status}`,
+        `native stderr:\n${nativeResult.stderr}`,
+        `fallback status=${compatibilityResult.status}`,
+        `fallback stderr:\n${compatibilityResult.stderr}`,
+      ].join("\n");
+
+      assert.equal(nativeResult.status, expectedStatus, diagnostics);
+      assert.equal(
+        compatibilityResult.status,
+        nativeResult.status,
+        diagnostics,
+      );
+      if (expectedPattern) {
+        assert.match(nativeResult.stderr, expectedPattern, diagnostics);
+        assert.match(compatibilityResult.stderr, expectedPattern, diagnostics);
+      }
+    }
+
+    it("blocks fine-grained GitHub tokens on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "tokens.env",
+          `GITHUB_TOKEN=${TEST_FINE_GRAINED_GITHUB_TOKEN}\n`,
+        );
+
+        assertScannerParity(root, 2, /GitHub token/u);
+      });
+    });
+
+    it("combines staged and unstaged conflict-marker state on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "conflict.txt", "safe\n");
+        commitAll(root, "add conflict fixture");
+        writeFile(root, "conflict.txt", "<<<<<<< HEAD\nleft\n=======\n");
+        runGit(root, ["add", "conflict.txt"]);
+        writeFile(
+          root,
+          "conflict.txt",
+          "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> branch\n",
+        );
+
+        assertScannerParity(root, 2, /merge conflict marker/u);
+      });
+    });
+
+    it("allows source assignments on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "app.py", `API_TOKEN = "${TEST_CLIENT_SECRET}"\n`);
+
+        assertScannerParity(root, 0);
+      });
+    });
+
+    it("uses the optimized token thresholds on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "tokens.txt",
+          [
+            TEST_SHORT_GITHUB_TOKEN,
+            TEST_SHORT_NPM_TOKEN,
+            TEST_UNDERSCORE_API_TOKEN,
+            "",
+          ].join("\n"),
+        );
+
+        assertScannerParity(root, 0);
+      });
+    });
+
+    it("allows Slack placeholders and standard suppression markers on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "tokens.env",
+          [
+            `SLACK_BOT_TOKEN=${TEST_DOCUMENTED_SLACK_PLACEHOLDER}`,
+            `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY} # gitleaks:allow`,
+            `AWS_SECRET_ACCESS_KEY=${TEST_AWS_ACCESS_KEY} # pragma: allowlist secret`,
+            "",
+          ].join("\n"),
+        );
+
+        assertScannerParity(root, 0);
+      });
+    });
+
     it("allows safe placeholders", () => {
       withTempRepo((root) => {
         writeFile(root, ".env.example", "API_KEY=your_api_key_here\n");
@@ -880,13 +1051,20 @@ describe("post-turn-safety hook", () => {
         // partial scan would look identical to a clean pass.
         const result = runHook(root, {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "0",
+          [FORCE_BASH3_ENV_KEY]: "0",
+        });
+        const compatibilityResult = runHook(root, {
+          GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "0",
+          [FORCE_BASH3_ENV_KEY]: "1",
         });
 
         assert.notEqual(result.status, 0);
+        assert.equal(compatibilityResult.status, result.status);
         assert.match(
           result.stderr,
           /post-turn-safety: scan incomplete, \d+ file\(s\) unscanned/u,
         );
+        assert.match(compatibilityResult.stderr, /scan incomplete/u);
       });
     });
 
@@ -894,12 +1072,9 @@ describe("post-turn-safety hook", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
 
-        const result = runHook(root, {
+        assertHookAllows(root, {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "600",
         });
-
-        assert.equal(result.status, 0, result.stderr);
-        assert.doesNotMatch(result.stderr, /scan incomplete/u);
       });
     });
   });

@@ -3,7 +3,13 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
@@ -134,13 +140,23 @@ describe("buildTerminalSpawnSpec", () => {
     assert.equal(settings.permissions.defaultMode, "dontAsk");
     assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
     assert.deepStrictEqual(settings.permissions.additionalDirectories, []);
-    assert.ok(settings.permissions.allow.includes("Read"));
-    assert.ok(settings.permissions.allow.includes("Bash(goat-flow --version)"));
+    assert.equal(settings.permissions.allow.includes("Read"), false);
+    assert.equal(settings.permissions.allow.includes("Glob"), false);
+    assert.equal(settings.permissions.allow.includes("Grep"), false);
+    assert.equal(
+      settings.permissions.allow.filter((rule) => rule.startsWith("Read("))
+        .length,
+      1,
+    );
+    assert.match(
+      settings.permissions.allow.find((rule) => rule.startsWith("Read(")) ?? "",
+      /^Read\(\/\/.+\/\*\*\)$/u,
+    );
     // ADR-044: persistence is dashboard-owned, so NO saver or source-CLI Bash
-    // rules remain - `Bash(goat-flow --version)` is the only Bash allow.
+    // rules remain.
     assert.deepStrictEqual(
       settings.permissions.allow.filter((rule) => rule.startsWith("Bash")),
-      ["Bash(goat-flow --version)"],
+      [],
     );
     assert.equal(
       settings.permissions.allow.some(
@@ -175,6 +191,9 @@ describe("buildTerminalSpawnSpec", () => {
       ),
     );
     assert.ok(settings.permissions.deny.includes("Read(~/.ssh/**)"));
+    assert.ok(
+      settings.permissions.deny.includes("Read(~/.claude/.credentials.json)"),
+    );
 
     const windowsSpec = buildTerminalSpawnSpec(
       "claude",
@@ -199,6 +218,47 @@ describe("buildTerminalSpawnSpec", () => {
       windowsCommand,
       /Remove-Item Env:GOAT_CLAUDE_REPORTING_SETTINGS/,
     );
+  });
+
+  it("denies credentials under the active Claude config directory", () => {
+    const tempRoot = mkdtempSync(
+      join(tmpdir(), "goat-terminal-claude-config-"),
+    );
+    const configDirectory = join(tempRoot, "claude-config");
+    try {
+      mkdirSync(configDirectory);
+      const spec = buildTerminalSpawnSpec(
+        "claude",
+        "/usr/local/bin/claude",
+        "",
+        {
+          SHELL: "/bin/bash",
+          CLAUDE_CONFIG_DIR: configDirectory,
+        },
+        "linux",
+        {
+          accessMode: "reporting",
+          projectPath: process.cwd(),
+          targetPath: process.cwd(),
+        },
+      );
+
+      const settings = JSON.parse(
+        spec.env.GOAT_CLAUDE_REPORTING_SETTINGS ?? "",
+      ) as { permissions: { deny: string[] } };
+      assert.ok(
+        settings.permissions.deny.some((rule) =>
+          /^Read\(\/\/.*\/claude-config\/\.credentials\.json\)$/u.test(rule),
+        ),
+      );
+      assert.ok(
+        settings.permissions.deny.some((rule) =>
+          /^Edit\(\/\/.*\/claude-config\/\.credentials\.json\)$/u.test(rule),
+        ),
+      );
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("keeps ordinary Claude terminals free of reporting restrictions", () => {
@@ -324,6 +384,63 @@ describe("buildTerminalSpawnSpec", () => {
       rmSync(tempRoot, { recursive: true, force: true });
     }
   });
+
+  it(
+    "omits write roots whose parent symlink escapes the project",
+    { skip: process.platform === "win32" },
+    () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-symlink-"));
+      const projectPath = join(tempRoot, "project");
+      const outsidePath = join(tempRoot, "outside");
+      try {
+        mkdirSync(projectPath);
+        mkdirSync(join(outsidePath, "logs"), { recursive: true });
+        symlinkSync(outsidePath, join(projectPath, ".goat-flow"), "dir");
+
+        const claudeSpec = buildTerminalSpawnSpec(
+          "claude",
+          "/usr/local/bin/claude",
+          "",
+          { SHELL: "/bin/bash" },
+          "linux",
+          {
+            accessMode: "reporting",
+            projectPath,
+            targetPath: projectPath,
+          },
+        );
+        const claudeSettings = JSON.parse(
+          claudeSpec.env.GOAT_CLAUDE_REPORTING_SETTINGS ?? "",
+        ) as { permissions: { allow: string[] } };
+        assert.equal(
+          claudeSettings.permissions.allow.some(
+            (rule) =>
+              rule.startsWith("Edit(") && rule.includes(".goat-flow/logs"),
+          ),
+          false,
+        );
+
+        const codexSpec = buildTerminalSpawnSpec(
+          "codex",
+          "/usr/local/bin/codex",
+          "",
+          { SHELL: "/bin/bash" },
+          "linux",
+          {
+            accessMode: "reporting",
+            projectPath,
+            targetPath: projectPath,
+          },
+        );
+        assert.doesNotMatch(
+          codexSpec.env.GOAT_CODEX_REPORTING_PROFILE ?? "",
+          /"\.goat-flow\/logs"="write"/u,
+        );
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("keeps ordinary Codex terminals on the write-enabled dashboard profile", () => {
     const spec = buildTerminalSpawnSpec(

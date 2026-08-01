@@ -48,6 +48,60 @@ fallback_max_seconds="${GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS:-60}"
 fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
 
+# Detector shapes are shared by the Bash 3 compatibility and optimized paths.
+# Keep thresholds and placeholder/allowlist decisions in this Bash-3-safe block
+# so either execution path cannot silently define a different security policy.
+AWS_TOKEN_RE='(AKIA|ASIA)[A-Z0-9]{16}'
+GITHUB_LEGACY_TOKEN_RE='gh[pousr]_[A-Za-z0-9_]{30,}'
+GITHUB_FINE_GRAINED_TOKEN_RE='github_pat_[A-Za-z0-9_]{20,}'
+NPM_TOKEN_RE='npm_[A-Za-z0-9]{36,}'
+SLACK_TOKEN_RE='xox[baprs]-[A-Za-z0-9-]{20,}'
+API_TOKEN_RE='sk-[A-Za-z0-9]{32,}'
+PRIVATE_KEY_RE='-----BEGIN[[:space:]](RSA[[:space:]]|DSA[[:space:]]|EC[[:space:]]|OPENSSH[[:space:]])?PRIVATE[[:space:]]KEY-----'
+PLACEHOLDER_ALL_X_RE='^(gh[pousr]_|github_pat_|npm_|sk-)?x+$'
+PLACEHOLDER_MARKER_RE='(^|[_-])(example|placeholder|changeme|change-me|change_me|dummy|fake|sample|test|redacted|xxxx|your-token|your_token|your-key|your_key|your-api-key|your_api_key|not-a-secret)([_-]|$)'
+
+is_line_allowlisted() {
+  case "$1" in
+    *goat-flow-allow-secret* | *gitleaks:allow* | *'pragma: allowlist secret'*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+has_credential_entropy() {
+  local value="$1"
+  case "$value" in
+    gh[pousr]_* | github_pat_* | npm_* | sk-* | xox[baprs]-* | AKIA* | ASIA*)
+      return 0
+      ;;
+  esac
+  [[ "$value" =~ [0-9] ]] || return 1
+  if [[ "$value" =~ [[:lower:]] ]] && [[ "$value" =~ [[:upper:]] ]]; then
+    return 0
+  fi
+  if [[ "$value" =~ [._+/=~-] ]]; then
+    return 0
+  fi
+  if [ "${#value}" -ge 20 ] && [[ "$value" =~ ^[a-f0-9]+$ ]]; then
+    return 0
+  fi
+  return 1
+}
+
+is_reference_or_interpolation() {
+  local value="$1"
+  case "$value" in
+    *%env\(* | *%ENV\(*) return 0 ;;
+    *\$\{* | *\$\(*) return 0 ;;
+    *\{\{* | *\}\}* | *\{%* | *%\}*) return 0 ;;
+    *\<%* | *%\>*) return 0 ;;
+  esac
+  [[ "$value" =~ ^%[^%[:space:]]+%$ ]] && return 0
+  return 1
+}
+
 fallback_budget_check() {
   if [ "$SECONDS" -ge "$fallback_max_seconds" ]; then
     fallback_bail=1
@@ -77,49 +131,143 @@ fallback_is_placeholder() {
   local value
   value=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
   case "$value" in
-    "" | akiaiosfodnn7example | asiaiosfodnn7example | *example* | *placeholder* | *changeme* | *change-me* | *change_me* | *dummy* | *fake* | *sample* | *redacted* | *your-token* | *your_token* | *your-key* | *your_key* | *your-api-key* | *your_api_key* | not-a-secret | not_a_secret)
+    "" | akiaiosfodnn7example | asiaiosfodnn7example)
       return 0
       ;;
-    gh?_x* | github_pat_x* | npm_x* | sk-x*) return 0 ;;
+  esac
+  [[ "$value" =~ $PLACEHOLDER_ALL_X_RE ]] && return 0
+  [[ "$value" =~ $PLACEHOLDER_MARKER_RE ]]
+}
+
+fallback_is_env_assignment_file() {
+  local basename
+  local lower_path
+  lower_path=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  basename="${lower_path##*/}"
+  case "$basename" in
+    .env* | *.env | *.env.* | dockerfile | dockerfile.* | *.dockerfile | *.sh | *.bash | *.zsh | *.ksh | *.yaml | *.yml | *.ini | *.toml | *.properties | *.conf | *.cfg)
+      return 0
+      ;;
   esac
   return 1
+}
+
+fallback_is_dockerfile_path() {
+  local basename
+  local lower_path
+  lower_path=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  basename="${lower_path##*/}"
+  case "$basename" in
+    dockerfile | dockerfile.* | *.dockerfile)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+fallback_scan_literal_assignment() {
+  local path="$1"
+  local raw_key="$2"
+  local raw_value="$3"
+  local dotted_reference_re='^(app|application|cfg|conf|config|configs|configuration|constant|constants|context|credentials|credential|creds|ctx|default|defaults|env|environ|environment|os|process|self|setting|settings|this)(\.[a-z_][a-z0-9_]*)+$'
+  local key
+  local lower_value
+  local quoted=0
+  local value
+
+  key=$(printf '%s' "$raw_key" |
+    sed -E 's/([[:lower:][:digit:]])([[:upper:]])/\1_\2/g; s/([[:upper:]])([[:upper:]][[:lower:]])/\1_\2/g' |
+    tr '[:upper:]-' '[:lower:]_')
+  case "$key" in
+    tokens | *tokens | tokenizer | tokeniser | tokenize | *tokenizer* | *tokeniser* | *tokenize* | *_count | *_index | *_id | *_name | *_type | *_header | *_url | *_path | *_list | *_re | *_pattern | *_field | *not_secret | *not_a_secret | *non_secret | *no_secret | *not_token | *not_a_token | *non_token | *no_token | *not_password | *not_a_password | *non_password | *no_password | *not_api_key | *not_an_api_key | *non_api_key | *no_api_key | *not_private_key | *not_a_private_key | *non_private_key | *no_private_key)
+      return 0
+      ;;
+    token | secret | secrets | password | passwords | api_key | apikey | private_key | access_token | auth_token | refresh_token | bearer_token | client_secret | client_secrets | secret_key | secret_keys | *_api_key | *_apikey | *_private_key | *_access_token | *_auth_token | *_refresh_token | *_bearer_token | *_client_secret | *_client_secrets | *_secret_key | *_secret_keys | *_password | *_passwords | *_token | *_secret | *_secrets)
+      ;;
+    *) return 0 ;;
+  esac
+
+  value=$(printf '%s' "$raw_value" |
+    sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  case "$value" in
+    \"*\") value="${value#\"}"; value="${value%\"}"; quoted=1 ;;
+    \'*\') value="${value#\'}"; value="${value%\'}"; quoted=1 ;;
+  esac
+  [ "${#value}" -ge 12 ] || return 0
+  case "$value" in *[[:space:]]* | *'goat-flow-allow-secret'*) return 0 ;; esac
+  is_reference_or_interpolation "$value" && return 0
+  if [ "$quoted" -eq 0 ]; then
+    lower_value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
+    [[ "$lower_value" =~ $dotted_reference_re ]] && return 0
+    [[ "$value" =~ ^[a-z_][a-z0-9_]*$ ]] && return 0
+    [[ "$value" =~ ^[A-Za-z0-9._+/=~-]{12,}$ ]] || return 0
+    has_credential_entropy "$value" || return 0
+  fi
+  fallback_is_placeholder "$value" && return 0
+  fallback_report "$path" "credential assignment ($raw_key)"
 }
 
 fallback_scan_assignment() {
   local path="$1"
   local line="$2"
   local assignment_re='^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=][[:space:]]*(.+)$'
-  local key
-  local value
 
   case "$line" in
     [Ee][Nn][Vv]\ * | [Aa][Rr][Gg]\ *) line="${line#* }" ;;
   esac
   [[ "$line" =~ $assignment_re ]] || return 0
-  key=$(printf '%s' "${BASH_REMATCH[2]}" |
-    sed -E 's/([[:lower:][:digit:]])([[:upper:]])/\1_\2/g; s/([[:upper:]])([[:upper:]][[:lower:]])/\1_\2/g' |
-    tr '[:upper:]-' '[:lower:]_')
-  case "$key" in
-    tokens | *tokens | tokenizer | tokeniser | tokenize | *_count | *_index | *_id | *_name | *_type | *_header | *_url | *_path | *_list | *_pattern | *_field | *not_secret | *not_a_secret | *non_secret | *no_secret | *not_token | *not_a_token | *non_token | *no_token | *not_password | *not_a_password | *non_password | *no_password | *not_api_key | *not_an_api_key | *non_api_key | *no_api_key)
-      return 0
-      ;;
-    token | secret | secrets | password | passwords | api_key | apikey | private_key | access_token | auth_token | refresh_token | bearer_token | client_secret | secret_key | *_api_key | *_apikey | *_private_key | *_access_token | *_auth_token | *_refresh_token | *_bearer_token | *_client_secret | *_secret_key | *_password | *_token | *_secret)
-      ;;
-    *) return 0 ;;
-  esac
+  fallback_scan_literal_assignment "$path" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+}
 
-  value=$(printf '%s' "${BASH_REMATCH[3]}" |
+fallback_scan_dockerfile_assignment() {
+  local path="$1"
+  local line="$2"
+  local instruction
+  local payload
+  local first_word
+  local key
+  local raw_value
+  local word
+  local -a words=()
+  local docker_instruction_re='^[[:space:]]*([aA][rR][gG]|[eE][nN][vV])[[:space:]]+(.*)$'
+  local docker_key_value_re='^([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*=[[:space:]]*(.*)$'
+  local docker_key_space_re='^([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]+(.+)$'
+  local docker_key_only_re='^([A-Za-z_][A-Za-z0-9_-]*)$'
+  local docker_env_word_re='^([A-Za-z_][A-Za-z0-9_-]*)=(.*)$'
+
+  [[ "$line" =~ $docker_instruction_re ]] || return 0
+  instruction=$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
+  payload=$(printf '%s' "${BASH_REMATCH[2]}" |
     sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-  case "$value" in
-    \"*\") value="${value#\"}"; value="${value%\"}" ;;
-    \'*\') value="${value#\'}"; value="${value%\'}" ;;
-  esac
-  [ "${#value}" -ge 12 ] || return 0
-  case "$value" in
-    *[[:space:]]* | \$* | '%env('* | '%'*'%' | '{{'* | '<%'* | *'goat-flow-allow-secret'*) return 0 ;;
-  esac
-  fallback_is_placeholder "$value" && return 0
-  fallback_report "$path" "credential assignment (${BASH_REMATCH[2]})"
+  [ -n "$payload" ] || return 0
+
+  if [ "$instruction" = "env" ]; then
+    first_word="${payload%%[[:space:]]*}"
+    if [[ "$first_word" =~ $docker_env_word_re ]]; then
+      read -r -a words <<<"$payload"
+      for word in ${words[@]+"${words[@]}"}; do
+        if [[ "$word" =~ $docker_env_word_re ]]; then
+          fallback_scan_literal_assignment "$path" "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}"
+        fi
+      done
+      return 0
+    fi
+  fi
+
+  if [[ "$payload" =~ $docker_key_value_re ]]; then
+    key="${BASH_REMATCH[1]}"
+    raw_value="${BASH_REMATCH[2]}"
+  elif [[ "$payload" =~ $docker_key_space_re ]]; then
+    key="${BASH_REMATCH[1]}"
+    raw_value="${BASH_REMATCH[2]}"
+  elif [[ "$payload" =~ $docker_key_only_re ]]; then
+    key="${BASH_REMATCH[1]}"
+    raw_value=""
+  else
+    return 0
+  fi
+
+  fallback_scan_literal_assignment "$path" "$key" "$raw_value"
 }
 
 fallback_reset_conflict() {
@@ -133,11 +281,10 @@ fallback_scan_line() {
   local path="$1"
   local line="$2"
   local token
+  local api_token_reported=0
 
   fallback_budget_check || return 1
-  case "$line" in
-    *goat-flow-allow-secret*) return 0 ;;
-  esac
+  is_line_allowlisted "$line" && return 0
 
   fallback_reset_conflict "$path"
   case "$line" in
@@ -155,29 +302,42 @@ fallback_scan_line() {
       ;;
   esac
 
-  if [[ "$line" =~ (AKIA|ASIA)[0-9A-Z]{16} ]]; then
+  if [[ "$line" =~ $AWS_TOKEN_RE ]]; then
     token="${BASH_REMATCH[0]}"
     fallback_is_placeholder "$token" || fallback_report "$path" "AWS access key"
   fi
-  if [[ "$line" =~ gh[pousr]_[A-Za-z0-9]{20,} ]]; then
+  if [[ "$line" =~ $GITHUB_LEGACY_TOKEN_RE ]]; then
+    token="${BASH_REMATCH[0]}"
+    fallback_is_placeholder "$token" || fallback_report "$path" "GitHub token"
+  elif [[ "$line" =~ $GITHUB_FINE_GRAINED_TOKEN_RE ]]; then
     token="${BASH_REMATCH[0]}"
     fallback_is_placeholder "$token" || fallback_report "$path" "GitHub token"
   fi
-  if [[ "$line" =~ npm_[A-Za-z0-9]{20,} ]]; then
+  if [[ "$line" =~ $NPM_TOKEN_RE ]]; then
     token="${BASH_REMATCH[0]}"
     fallback_is_placeholder "$token" || fallback_report "$path" "npm token"
   fi
-  if [[ "$line" =~ xox[baprs]-[A-Za-z0-9-]{20,} ]]; then
-    fallback_report "$path" "Slack token"
-  fi
-  if [[ "$line" =~ sk-[A-Za-z0-9_-]{20,} ]]; then
+  if [[ "$line" =~ $SLACK_TOKEN_RE ]]; then
     token="${BASH_REMATCH[0]}"
+    fallback_is_placeholder "$token" || fallback_report "$path" "Slack token"
+  fi
+  if [[ "$line" =~ (OPENAI|ANTHROPIC|API_KEY|TOKEN).*($API_TOKEN_RE) ]]; then
+    token="${BASH_REMATCH[2]}"
+    fallback_is_placeholder "$token" || fallback_report "$path" "API token"
+    api_token_reported=1
+  fi
+  if [ "$api_token_reported" -eq 0 ] && [[ "$line" =~ (^|[^A-Za-z0-9_])($API_TOKEN_RE)([^A-Za-z0-9_]|$) ]]; then
+    token="${BASH_REMATCH[2]}"
     fallback_is_placeholder "$token" || fallback_report "$path" "API token"
   fi
-  if [[ "$line" =~ -----BEGIN[[:space:]]+([A-Z0-9]+[[:space:]]+)*PRIVATE[[:space:]]+KEY----- ]]; then
+  if [[ "$line" =~ $PRIVATE_KEY_RE ]]; then
     fallback_report "$path" "private key block"
   fi
-  fallback_scan_assignment "$path" "$line"
+  if fallback_is_dockerfile_path "$path"; then
+    fallback_scan_dockerfile_assignment "$path" "$line"
+  elif fallback_is_env_assignment_file "$path"; then
+    fallback_scan_assignment "$path" "$line"
+  fi
 }
 
 fallback_scan_diff() {
@@ -235,10 +395,14 @@ fallback_main() {
     return 1
   fi
 
-  fallback_scan_diff "$root"
   if git -C "$root" rev-parse --verify HEAD >/dev/null 2>&1; then
+    fallback_scan_diff "$root" HEAD
     fallback_scan_diff "$root" --cached
   else
+    while IFS= read -r -d '' path; do
+      fallback_budget_check || break
+      fallback_scan_file "$root" "$path"
+    done < <(git -C "$root" ls-files -z 2>/dev/null)
     fallback_scan_diff "$root" --cached --root
   fi
 
@@ -320,8 +484,6 @@ strip_space() {
 }
 
 is_placeholder_token() {
-  local all_x_re
-  local marker_re
   local value
   value="${1,,}"
   case "$value" in
@@ -329,10 +491,8 @@ is_placeholder_token() {
       return 0
       ;;
   esac
-  all_x_re='^(gh[pousr]_|github_pat_|npm_|sk-)?x+$'
-  [[ "$value" =~ $all_x_re ]] && return 0
-  marker_re='(^|[_-])(example|placeholder|changeme|change-me|change_me|dummy|fake|sample|test|redacted|xxxx|your-token|your_token|your-key|your_key|your-api-key|your_api_key|not-a-secret)([_-]|$)'
-  [[ "$value" =~ $marker_re ]]
+  [[ "$value" =~ $PLACEHOLDER_ALL_X_RE ]] && return 0
+  [[ "$value" =~ $PLACEHOLDER_MARKER_RE ]]
 }
 
 is_excluded_credential_key() {
@@ -464,38 +624,6 @@ scan_dockerfile_assignment() {
   fi
 
   scan_literal_credential_assignment "$path" "$key" "$raw_value"
-}
-
-has_credential_entropy() {
-  local value="$1"
-  case "$value" in
-    gh[pousr]_* | github_pat_* | npm_* | sk-* | xox[baprs]-* | AKIA* | ASIA*)
-      return 0
-      ;;
-  esac
-  [[ "$value" =~ [0-9] ]] || return 1
-  if [[ "$value" =~ [[:lower:]] ]] && [[ "$value" =~ [[:upper:]] ]]; then
-    return 0
-  fi
-  if [[ "$value" =~ [._+/=~-] ]]; then
-    return 0
-  fi
-  if [ "${#value}" -ge 20 ] && [[ "$value" =~ ^[a-f0-9]+$ ]]; then
-    return 0
-  fi
-  return 1
-}
-
-is_reference_or_interpolation() {
-  local value="$1"
-  case "$value" in
-    *%env\(* | *%ENV\(*) return 0 ;;
-    *\$\{* | *\$\(*) return 0 ;;
-    *\{\{* | *\}\}* | *\{%* | *%\}*) return 0 ;;
-    *\<%* | *%\>*) return 0 ;;
-  esac
-  [[ "$value" =~ ^%[^%[:space:]]+%$ ]] && return 0
-  return 1
 }
 
 # Extracts a literal secret-looking value from an assignment right-hand side.
@@ -673,15 +801,6 @@ report_token_if_real() {
   report_finding "$path" "$family"
 }
 
-is_line_allowlisted() {
-  case "$1" in
-    *goat-flow-allow-secret* | *gitleaks:allow* | *'pragma: allowlist secret'*)
-      return 0
-      ;;
-  esac
-  return 1
-}
-
 reset_merge_conflict_scan() {
   merge_conflict_scan_path="$1"
   merge_conflict_scan_state=0
@@ -723,27 +842,27 @@ scan_line() {
 
   scan_merge_conflict_marker "$path" "$line"
 
-  if [[ "$line" =~ -----BEGIN[[:space:]](RSA[[:space:]]|DSA[[:space:]]|EC[[:space:]]|OPENSSH[[:space:]])?PRIVATE[[:space:]]KEY----- ]]; then
+  if [[ "$line" =~ $PRIVATE_KEY_RE ]]; then
     report_finding "$path" "private key block"
   fi
 
-  if [[ "$line" =~ (AKIA|ASIA)[A-Z0-9]{16} ]]; then
+  if [[ "$line" =~ $AWS_TOKEN_RE ]]; then
     report_token_if_real "$path" "AWS access key" "${BASH_REMATCH[0]}"
   fi
-  if [[ "$line" =~ gh[pousr]_[A-Za-z0-9_]{30,} || "$line" =~ github_pat_[A-Za-z0-9_]{20,} ]]; then
+  if [[ "$line" =~ $GITHUB_LEGACY_TOKEN_RE || "$line" =~ $GITHUB_FINE_GRAINED_TOKEN_RE ]]; then
     report_token_if_real "$path" "GitHub token" "${BASH_REMATCH[0]}"
   fi
-  if [[ "$line" =~ npm_[A-Za-z0-9]{36,} ]]; then
+  if [[ "$line" =~ $NPM_TOKEN_RE ]]; then
     report_token_if_real "$path" "npm token" "${BASH_REMATCH[0]}"
   fi
-  if [[ "$line" =~ xox[baprs]-[A-Za-z0-9-]{20,} ]]; then
+  if [[ "$line" =~ $SLACK_TOKEN_RE ]]; then
     report_token_if_real "$path" "Slack token" "${BASH_REMATCH[0]}"
   fi
-  if [[ "$line" =~ (OPENAI|ANTHROPIC|API_KEY|TOKEN).*(sk-[A-Za-z0-9]{32,}) ]]; then
+  if [[ "$line" =~ (OPENAI|ANTHROPIC|API_KEY|TOKEN).*($API_TOKEN_RE) ]]; then
     report_token_if_real "$path" "API token" "${BASH_REMATCH[2]}"
     api_token_reported=1
   fi
-  if [ "$api_token_reported" -eq 0 ] && [[ "$line" =~ (^|[^A-Za-z0-9_])(sk-[A-Za-z0-9]{32,})([^A-Za-z0-9_]|$) ]]; then
+  if [ "$api_token_reported" -eq 0 ] && [[ "$line" =~ (^|[^A-Za-z0-9_])($API_TOKEN_RE)([^A-Za-z0-9_]|$) ]]; then
     report_token_if_real "$path" "API token" "${BASH_REMATCH[2]}"
   fi
 
@@ -789,7 +908,7 @@ scan_line() {
 #                         also require an is_credential_key key on the line.
 #                         Allowlist markers and placeholder values only ever
 #                         suppress findings, so they need no pre-filter clause.
-TOKEN_BODY_RE='-----BEGIN|(AKIA|ASIA)[A-Z0-9]{16}|gh[pousr]_[A-Za-z0-9_]{30,}|github_pat_[A-Za-z0-9_]{20,}|npm_[A-Za-z0-9]{36,}|xox[baprs]-[A-Za-z0-9-]{20,}|sk-[A-Za-z0-9]{32,}'
+TOKEN_BODY_RE="-----BEGIN|${AWS_TOKEN_RE}|${GITHUB_LEGACY_TOKEN_RE}|${GITHUB_FINE_GRAINED_TOKEN_RE}|${NPM_TOKEN_RE}|${SLACK_TOKEN_RE}|${API_TOKEN_RE}"
 STEM_BODY_RE='token|secret|password|api[-_]?key|private[-_]?key'
 DIFF_GLOBAL_RE="^diff --git |^\\+\\+\\+ |^\\+<<<<<<< |^\\+={7}\$|^\\+>>>>>>> |^\\+.*(${TOKEN_BODY_RE})"
 DIFF_STEM_RE="^\\+.*(${STEM_BODY_RE})"
