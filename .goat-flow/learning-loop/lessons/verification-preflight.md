@@ -305,4 +305,6 @@ last_reviewed: 2026-08-01
 
 **Recurrence update (2026-06-10):** The same failure recurred while proving the M06b lifecycle sentence across docs: a double-quoted `rg` fixed-string pattern containing `` `goat-flow index` `` and `` `goat-flow stats --check` `` triggered command substitution, ran the CLI commands, and produced a mangled regex error instead of useful grep evidence. The corrected proof used `rg -n -F 'Re-run `goat-flow index` ...' ...` with single quotes around the whole fixed-string pattern.
 
+**Recurrence update (2026-08-01):** M06 learning retrieval again placed backticked lesson titles inside a double-quoted `rg` expression. The PreToolUse hook blocked the command before Bash could substitute anything, so no search evidence was produced and no repository write occurred. The corrected retrieval searched plain semantic tokens inside single quotes, then opened the matched source entries directly.
+
 ---

@@ -213,3 +213,5 @@ last_reviewed: 2026-08-01
 **Fix:** The replacement uses an explicitly labelled illustrative security-depth scenario and holds file scope plus mirror duties constant; only test-first ordering differs. The shipped scenario defines input/output shape, never incident evidence; live runs must substitute current target-project facts. Evidence anchors: `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Illustrative four-pressure scenario`) and `test/contract/skill-hardening-contracts.test.ts` (search: `isolated from repository-history policy`).
 
 **Prevention:** Before using an A/B/C pressure fixture, compare every option with always-loaded instructions and accepted ADRs. Keep all non-target obligations equal so only the rule under test explains the result.
+
+**Current-run record:** `.goat-flow/logs/sessions/2026-08-01-goat-review-tdd.md` preserves the M06 pressure and seeded-corpus receipts for this checkout. It is gitignored session evidence, not a durable repository anchor.

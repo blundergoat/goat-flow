@@ -16,7 +16,7 @@ import type { ParsedCLI } from "./cli-types.js";
 import { writeOutput } from "./cli-output.js";
 
 /** One actionable validation failure, optionally tied to a report line. */
-export interface ReviewValidationViolation {
+interface ReviewValidationViolation {
   code: string;
   line: number | null;
   message: string;

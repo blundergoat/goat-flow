@@ -211,15 +211,21 @@ flowchart TD
 
     subgraph Review["Quick Review"]
         R1["Pass 1: Blind Suspicion\nDiff only\nCapture raw suspicions"]
-        R1 -->|"CHECKPOINT"| R2["Pass 2: Grounded Verification\nOpen full files\nConfirm / Refute / Unresolve"]
-        R2 --> R3["Present Findings\nMUST / SHOULD / MAY Fix"]
+        R1 -->|"CHECKPOINT"| R2["Pass 2: Grounded Verification\nOpen full files\nConfirm / Adjust / Refute / Unresolve"]
+        R2 --> AR["Post-local reconciliation\nAutomated review after both passes"]
+        AR --> R3["Present Findings\nR-NNN [SEVERITY:ACTION]\nReview Integrity"]
     end
 
     R3 -->|"BLOCKING GATE"| DoD["DoD Gate Check"]
-    DoD -->|"CHECKPOINT"| Close["Closing"]
+    DoD --> V["Version-matched CLI\nreview validate when available"]
+    V -->|"CHECKPOINT"| Close["Closing"]
 ```
 
-Pass 1 never surfaces findings. Pass 2 is the source of truth: it opens full files, attempts to disprove every suspicion, and removes refuted items before presentation. MUST NOT flag pre-existing issues as part of this change.
+Pass 1 never surfaces findings. Pass 2 is the source of truth: it opens full files and classifies each suspicion as confirmed, adjusted, refuted, or unresolved; refuted items stay in the local ledger rather than Findings. Automated-review conclusions stay unread until both local passes finish, then locally verified bot-only findings may enter the same evidence pipeline. MUST NOT flag pre-existing issues as part of this change.
+
+Findings use `R-NNN [SEVERITY:ACTION]`, semantic anchors, Evidence/Proof, and `Harm:` for MUST/SHOULD; every result includes Review Integrity. With a version-matched CLI, pipe the draft through `goat-flow review validate`; validator unavailability does not block reporting.
+
+Pass 3 is optional and requires explicit informed approval. An uncited or unresolvable refuter claim cannot remove a finding; a MUST remains blocking until the host verifies its cited guard, and only a verified citation can change Ship Verdict.
 
 **Audit mode:** For codebase areas (not a diff). Scan using severity ordering, run negative verification, group 3+ related findings as systemic patterns. MUST NOT propose fixes in audit mode - findings only.
 

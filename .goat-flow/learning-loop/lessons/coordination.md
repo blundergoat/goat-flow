@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-07-31
+last_reviewed: 2026-08-01
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -87,3 +87,19 @@ last_reviewed: 2026-07-31
 **Evidence:** Both incidents occurred in local gitignored milestone files, so no durable repository anchor exists. In each case, dependency validation exposed the ordering defect before dependent implementation continued.
 
 **Prevention:** Before changing milestone status, read every declared prerequisite and run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs); put rationale in narrative fields.
+
+---
+
+## Lesson: Final human gates belong in Proof, not implementation Tasks
+
+**Status:** active | **Created:** 2026-08-01
+**Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked and place the sole open human approval under Proof.
+**Trigger phase:** VERIFY
+
+**What happened:** M06 had finished its implementation and automated proof, but I added the final human approval checkbox under Tasks while changing the status to `human-verification-pending`. Strict plan validation rejected the snapshot as having an open implementation task.
+
+**Root cause:** I treated `[human]` as a global ownership marker. The plan checker counts every unchecked item parsed from Tasks as implementation work; it exempts human-owned items only when evaluating the proof collection.
+
+**Fix:** Move the unchanged human gate to Proof and rerun strict plan validation.
+
+**Prevention:** Before a pending transition, confirm Tasks has no unchecked boxes and Proof has no open executor-owned boxes. Evidence anchor: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`).

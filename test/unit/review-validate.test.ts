@@ -27,7 +27,9 @@ function createReviewedProject(testContext: TestContext): string {
     "export function loadConfig(): string { return 'configured'; }\n",
     "utf-8",
   );
-  testContext.after(() => rmSync(projectRoot, { recursive: true, force: true }));
+  testContext.after(() =>
+    rmSync(projectRoot, { recursive: true, force: true }),
+  );
   return projectRoot;
 }
 
@@ -87,7 +89,10 @@ function hasViolation(
 describe("review output validation", () => {
   it("accepts a complete report and the compact clean-review surface", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    assert.deepEqual(validateReviewReport(validReview(), projectRoot).violations, []);
+    assert.deepEqual(
+      validateReviewReport(validReview(), projectRoot).violations,
+      [],
+    );
 
     const compact = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
@@ -115,11 +120,17 @@ What I Didn't Examine: none.
     );
     const missingProof = validReview().replace(" | Proof: STATIC", "");
     assert.equal(
-      hasViolation(validateReviewReport(missingEvidence, projectRoot), "finding-evidence"),
+      hasViolation(
+        validateReviewReport(missingEvidence, projectRoot),
+        "finding-evidence",
+      ),
       true,
     );
     assert.equal(
-      hasViolation(validateReviewReport(missingProof, projectRoot), "finding-proof"),
+      hasViolation(
+        validateReviewReport(missingProof, projectRoot),
+        "finding-proof",
+      ),
       true,
     );
   });
@@ -147,27 +158,42 @@ What I Didn't Examine: none.
       "[overlap:reviewer]",
     );
     assert.equal(
-      hasViolation(validateReviewReport(missingId, projectRoot), "finding-grammar"),
+      hasViolation(
+        validateReviewReport(missingId, projectRoot),
+        "finding-grammar",
+      ),
       true,
     );
     assert.equal(
-      hasViolation(validateReviewReport(retiredOverlap, projectRoot), "finding-grammar"),
+      hasViolation(
+        validateReviewReport(retiredOverlap, projectRoot),
+        "finding-grammar",
+      ),
       true,
     );
   });
 
   it("rejects an unparseable Review Integrity block", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = validReview().replace("- Verdicts: 4/0/0/0", "- Verdicts: two");
+    const report = validReview().replace(
+      "- Verdicts: 4/0/0/0",
+      "- Verdicts: two",
+    );
     assert.equal(
-      hasViolation(validateReviewReport(report, projectRoot), "integrity-format"),
+      hasViolation(
+        validateReviewReport(report, projectRoot),
+        "integrity-format",
+      ),
       true,
     );
   });
 
   it("requires a local refutation ledger when the report claims one", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const result = validateReviewReport(validReview(undefined, undefined, 1), projectRoot);
+    const result = validateReviewReport(
+      validReview(undefined, undefined, 1),
+      projectRoot,
+    );
     assert.equal(hasViolation(result, "refutation-ledger"), true);
   });
 
@@ -181,7 +207,8 @@ What I Didn't Examine: none.
       "utf-8",
     );
     assert.deepEqual(
-      validateReviewReport(validReview(undefined, undefined, 1), projectRoot).violations,
+      validateReviewReport(validReview(undefined, undefined, 1), projectRoot)
+        .violations,
       [],
     );
   });
@@ -216,7 +243,10 @@ describe("review validate CLI", () => {
   });
 
   it("rejects missing, unknown, and extra review positionals", () => {
-    assert.throws(() => parseCLIArgs(["review"]), /requires subcommand "validate"/iu);
+    assert.throws(
+      () => parseCLIArgs(["review"]),
+      /requires subcommand "validate"/iu,
+    );
     assert.throws(
       () => parseCLIArgs(["review", "check"]),
       /requires subcommand "validate"/iu,
@@ -247,10 +277,10 @@ describe("review validate CLI", () => {
   });
 
   it("exits one and reports each stdin violation", () => {
-    const report = validReview("src/cli/cli.ts", "missingReviewValidatorAnchor").replace(
-      " | Harm: requests use an invalid configuration.",
-      "",
-    );
+    const report = validReview(
+      "src/cli/cli.ts",
+      "missingReviewValidatorAnchor",
+    ).replace(" | Harm: requests use an invalid configuration.", "");
     const invalid = spawnSync(
       process.execPath,
       ["--import", "tsx", CLI_PATH, "review", "validate"],

@@ -1,6 +1,6 @@
 ---
 category: redaction
-last_reviewed: 2026-07-13
+last_reviewed: 2026-08-01
 ---
 
 ## Lesson: Ordered redaction rules must preserve earlier placeholders
@@ -22,6 +22,8 @@ last_reviewed: 2026-07-13
 **Evidence:** `.goat-flow/logs/sessions/README.md` (search: `Run the scrubber first`) - the corrected flow starts the command, accepts pasted stdin, and writes only the scrubbed result; `src/cli/redact-command.ts` (search: `readFileSync(0`) confirms stdin is read before the shared output sink.
 
 **Prevention:** A pre-write redaction example must accept interactive stdin or another non-persistent source. Never demonstrate it by redirecting from a raw draft file.
+
+**Recurrence (2026-08-01):** A required redactor command combined its destination check with a large Markdown heredoc, so the deny hook counted table separators as shell segments and blocked it before execution. Checking the absent destination separately, then streaming the same content to a sole `goat-flow redact --output <path>` process, preserved both pre-write redaction and the shell guard.
 
 ## Lesson: Durable exports must redact metadata as well as body fields
 
