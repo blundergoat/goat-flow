@@ -68,7 +68,7 @@ export interface QualityDraftCaptureOptions {
   projectRoot: string;
   /** Poll cadence override; tests use short intervals. */
   intervalMs?: number;
-  /** Required mtime quiet period before a draft is read; guards partial writes. */
+  /** Required mtime quiet period before a draft is read; zero disables the gate. */
   stableMs?: number;
 }
 
@@ -311,7 +311,7 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
       return;
     }
     if (!stats.isFile()) return;
-    if (Date.now() - stats.mtimeMs < stableMs) return;
+    if (stableMs > 0 && Date.now() - stats.mtimeMs < stableMs) return;
     try {
       assertCaptureReceiptAvailable(stagingDir, draftName);
     } catch {

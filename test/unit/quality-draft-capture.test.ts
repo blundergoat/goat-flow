@@ -22,6 +22,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -159,6 +160,23 @@ describe("quality draft capture", () => {
       receipt.reportPath ?? "",
       /\.goat-flow\/logs\/quality\/\d{4}-\d{2}-\d{2}-\d{4}-claude-[0-9a-f]{5}\.json$/u,
     );
+  });
+
+  it("disables the mtime gate when the stability window is zero", async () => {
+    const root = makeRoot();
+    const capture = makeCapture(root);
+    const draftPath = join(
+      capture.stagingDir,
+      "goat-quality-draft-claude-future-mtime.json",
+    );
+    writeFileSync(draftPath, "{}");
+    const future = new Date(Date.now() + 60_000);
+    utimesSync(draftPath, future, future);
+
+    await capture.processNow();
+
+    assert.equal(existsSync(draftPath), false);
+    assert.equal(readReceipt(capture.stagingDir, "future-mtime").ok, false);
   });
 
   it("rejects invalid JSON with a draft-labelled error and deletes the draft", async () => {

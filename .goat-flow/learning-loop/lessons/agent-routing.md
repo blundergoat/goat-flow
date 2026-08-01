@@ -1,6 +1,6 @@
 ---
 category: agent-routing
-last_reviewed: 2026-05-02
+last_reviewed: 2026-08-01
 ---
 
 ## Lesson: Bare task paths are context, not implementation approval
