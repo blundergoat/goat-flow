@@ -170,6 +170,7 @@ interface TerminalSpawnOptions {
   targetPath?: string;
 }
 
+/** Validated access mode and environment passed from launch policy into PTY creation. */
 interface TerminalSpawnContext {
   accessMode: TerminalAccessMode;
   env: NodeJS.ProcessEnv;
@@ -260,16 +261,15 @@ function tomlString(value: string): string {
 function tomlInlineTable(
   entries: ReadonlyArray<readonly [string, string | boolean]>,
 ): string {
-  return `{${entries
-    .map(([key, value]) => {
-      const encodedValue =
-        typeof value === "string" ? tomlString(value) : value;
-      return `${tomlString(key)}=${encodedValue}`;
-    })
-    .join(",")}}`;
+  const encodedEntries = entries.map(([key, value]) => {
+    const encodedValue = typeof value === "string" ? tomlString(value) : value;
+    const encodedKey = tomlString(key);
+    return `${encodedKey}=${encodedValue}`;
+  });
+  return `{${encodedEntries.join(",")}}`;
 }
 
-/** Return true only when Git proves a local/build path is ignored in one root. */
+/** Run Git to prove a local/build path is ignored; command errors recover to false and grant no writes. */
 function isGitIgnoredPath(projectPath: string, relativePath: string): boolean {
   try {
     execFileSync(
@@ -382,7 +382,7 @@ function claudePermissionPath(filePath: string): string {
   return `//${escaped}`;
 }
 
-/** List real local/report directories that one Claude reporting root may write. */
+/** Return the sorted permission-overlay contract containing only shared local/report directories. */
 function claudeWritablePaths(rootPath: string): string[] {
   return REPORTING_LOCAL_STATE_PATHS.filter((relativePath) =>
     isSharedDirectory([rootPath], relativePath),
@@ -850,7 +850,7 @@ class TerminalManager {
    * @param options - optional explicit target path for the launched agent
    * @returns the create response describing the now-active session
    */
-  // eslint-disable-next-line complexity -- launch validation keeps report-owner checks ahead of staging, permission construction, and spawn.
+  // eslint-disable-next-line complexity -- Intentional because owner validation must precede staging, permissions, and spawn.
   private async startReservedSession(
     session: TerminalSession,
     prompt: string,
@@ -1318,13 +1318,14 @@ class TerminalManager {
     }, timeoutMs);
   }
 
-  /** Dispose a session's staged-draft captures; safe when none were started. */
+  /** Swallows one staged-draft teardown error so every sibling capture still releases. */
   private disposeQualityCaptures(session: TerminalSession): void {
     for (const capture of session.qualityCaptures) {
       try {
         capture.dispose();
       } catch {
-        /* capture teardown must never break session teardown */
+        // One capture failure cannot block sibling release or terminal teardown.
+        continue;
       }
     }
     session.qualityCaptures = [];

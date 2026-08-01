@@ -170,6 +170,7 @@ async function dashboardUpdateSessionCountImpl(
     }
   } catch {
     // Session refresh is best-effort; keep the visible terminal state if the endpoint fails.
+    return;
   }
 }
 

@@ -275,7 +275,7 @@ function readCachedJson(
 
 /** One cached directory read shared by readiness checks and child listings. */
 interface DirectoryReadResult {
-  readable: boolean;
+  isReadable: boolean;
   entries: string[];
 }
 
@@ -304,12 +304,12 @@ function createDirectoryReader(
       const entries = readdirSync(resolved, { withFileTypes: true }).map(
         (entry) => entry.name,
       );
-      const readableDirectory = { readable: true, entries };
+      const readableDirectory = { isReadable: true, entries };
       directoryReadCache.set(resolved, readableDirectory);
       return readableDirectory;
     } catch {
       // For example, a restored file named `sessions` cannot provide the log directory the user expects.
-      const unreadableDirectory = { readable: false, entries: [] };
+      const unreadableDirectory = { isReadable: false, entries: [] };
       directoryReadCache.set(resolved, unreadableDirectory);
       return unreadableDirectory;
     }
@@ -318,7 +318,7 @@ function createDirectoryReader(
   return {
     /** Tell setup and Recovery whether the user can actually store and list work at this path. */
     isReadableDirectory(path: string): boolean {
-      return readDirectory(path).readable;
+      return readDirectory(path).isReadable;
     },
 
     /** Return directory entries, preserving the historical empty-list fallback for other audit consumers. */

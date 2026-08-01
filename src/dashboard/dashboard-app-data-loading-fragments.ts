@@ -497,7 +497,7 @@ function dashboardAgentPlanHookLoadersFragment(
      * Use when the Task Plan panel opens or the user switches plans.
      *
      * @param planName - optional plan to load; absent means use the currently selected plan
-     * @returns nothing; errors show in the plan panel and stale responses are ignored
+     * @returns nothing; endpoint errors recover into the plan banner and stale responses are ignored
      */
     async loadTasks(planName?: string) {
       this.tasksLoading = true;
@@ -548,7 +548,7 @@ function dashboardAgentPlanHookLoadersFragment(
      * Use when the user pins a plan as the dashboard's current task context.
      *
      * @param planName - plan to activate; empty means no save is attempted
-     * @returns nothing; endpoint errors stay visible in the plan panel
+     * @returns nothing; endpoint errors recover into the plan banner and leave the prior selection intact
      */
     async setActiveTaskPlan(planName: string) {
       // Empty names or an active save should not start another plan activation.
@@ -637,7 +637,7 @@ function dashboardAgentPlanHookLoadersFragment(
      * Load hook state for the selected project.
      * Use when the Hooks panel opens or the project changes.
      *
-     * @returns nothing; errors show in the Hooks banner and stale responses are ignored
+     * @returns nothing; endpoint errors recover into the Hooks banner and stale responses are ignored
      */
     async loadHooks() {
       this.hooksLoading = true;

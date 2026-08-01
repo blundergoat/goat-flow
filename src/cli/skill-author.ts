@@ -339,7 +339,7 @@ function isOutsideLogRoot(logRoot: string, absolutePath: string): boolean {
 
 /** Return only the first RED iteration so later GREEN evidence cannot satisfy the gate. */
 function redIterationSection(content: string): string | null {
-  const heading = /^## Iteration \d+ \(RED\)\s*$/mu.exec(content);
+  const heading = content.match(/^## Iteration \d+ \(RED\)\s*$/mu);
   if (heading?.index === undefined) return null;
   const remaining = content.slice(heading.index + heading[0].length);
   const nextHeading = remaining.search(/^## /mu);
@@ -409,10 +409,9 @@ function documentedPressureCount(section: string): number {
 function hasExplicitFailureOutcome(section: string): boolean {
   const behaviour = redField(section, "Agent behaviour");
   if (!isConcreteRedValue(behaviour)) return false;
-  const classification =
-    /^(?:(?:the\s+)?agent\s+)?(?:fail(?:ed|ure)?|skip(?:ped)?|partial(?:ly)?|bypass(?:ed)?|rationali[sz](?:ed|ation)?|chose\s+[bc]\b|non[- ]compliant\b|wrong\b)/iu.exec(
-      behaviour,
-    );
+  const classification = behaviour.match(
+    /^(?:(?:the\s+)?agent\s+)?(?:fail(?:ed|ure)?|skip(?:ped)?|partial(?:ly)?|bypass(?:ed)?|rationali[sz](?:ed|ation)?|chose\s+[bc]\b|non[- ]compliant\b|wrong\b)/iu,
+  );
   if (classification === null) return false;
   const remainder = behaviour.slice(classification[0].length).trim();
   return (
@@ -966,7 +965,7 @@ function scoreFreshSkill(
   };
 }
 
-/** Read one path entry without following a final symlink; a missing entry is safe to create later. */
+/** Read one path without following its final symlink; missing entries recover to null and other errors throw. */
 function lstatIfPresent(path: string): Stats | null {
   try {
     return lstatSync(path);

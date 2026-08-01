@@ -247,6 +247,7 @@ export function sumTaskEstimates(
  * @param fieldValue - raw text after the `Effort estimate:` label; empty means the
  *   milestone predates estimation and stays silent
  * @param warnings - record warning sink receiving fixed-string parse warnings
+ * @param actualFieldValue - optional structured Actual text; empty means no completed-work comparison is available
  * @returns parsed effort fields; undefined means the line is absent or unusable
  */
 export function parseEffortLineValue(

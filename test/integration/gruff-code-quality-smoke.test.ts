@@ -48,14 +48,14 @@ const GRUFF_HOOK_COPIES = [
 
 after(cleanupHookTestDirs);
 
-/** Return true when a candidate jq binary exists and can be executed. */
+/** Spawns a candidate jq binary's version command to prove it is executable. */
 function isExecutableFile(path: string): boolean {
   if (!existsSync(path)) return false;
   const result = spawnSync(path, ["--version"], { encoding: "utf-8" });
   return result.status === 0;
 }
 
-/** Locate the optional jq 1.6 binary used by the compatibility regression leg. */
+/** Locate optional jq 1.6; an invalid configured override throws instead of silently skipping proof. */
 function resolveJq16Binary(): { path: string | null; skipReason: string } {
   const fromEnv = process.env.GOAT_FLOW_JQ16_BIN;
   if (fromEnv !== undefined && fromEnv.trim() !== "") {

@@ -116,7 +116,10 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Read the current package release date from CHANGELOG.md for live-header validation. */
+/**
+ * Read the current package release date for live-header validation.
+ * Package read or parse failures are recorded and recover to null; CHANGELOG read failures propagate.
+ */
 function readReleaseMetadata(failures) {
   let version;
   try {

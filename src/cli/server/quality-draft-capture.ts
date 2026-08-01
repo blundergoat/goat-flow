@@ -34,10 +34,8 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { persistQualityReportText } from "../quality/quality-command.js";
-import {
-  recordEvidenceEvent,
-  type EvidencePayload,
-} from "../evidence/envelope.js";
+import { recordEvidenceEvent } from "../evidence/envelope.js";
+import type { EvidencePayload } from "../evidence/envelope.js";
 import { redactEvidenceText, scrubDurableText } from "../evidence/redaction.js";
 
 /** Draft filenames the poller will process; anything else in staging is ignored. */
@@ -62,7 +60,10 @@ class QualityCaptureError extends Error {
   }
 }
 
-/** Options for acquiring a capture on one project root's staging directory. */
+/**
+ * Public acquisition contract for one project-owned quality staging directory.
+ * The resolved project root is the sharing key, so every holder uses the same owner boundary.
+ */
 export interface QualityDraftCaptureOptions {
   /** Report owner project root whose staging directory is watched. */
   projectRoot: string;
@@ -89,7 +90,9 @@ export interface QualityDraftCapture {
 /** The one poller per project root that every holder on that root shares. */
 interface RootCapture {
   stagingDir: string;
+  /** Process every currently eligible draft while preserving single-poller ordering. */
   processNow(): Promise<void>;
+  /** Stop polling and remove drafts that cannot outlive their final session holder. */
   shutdown(): void;
 }
 
@@ -249,7 +252,7 @@ function captureRejectionDiagnostic(error: unknown): string {
   return "quality capture: draft could not be persisted.";
 }
 
-/** Delete one draft; missing files are fine because dispose and process can race. */
+/** Delete one draft, swallowing unlink errors as the safe fallback when dispose and processing race. */
 function removeDraft(stagingDir: string, draftName: string): void {
   try {
     unlinkSync(join(stagingDir, draftName));
@@ -274,6 +277,10 @@ function removeDraft(stagingDir: string, draftName: string): void {
  *
  * @param options - owner root plus optional timing overrides
  * @returns the shared poller; `shutdown` stops it and sweeps leftover drafts
+ *
+ * The ordered branches remain together because each draft must reach exactly one
+ * persist-or-reject outcome before deletion. Expected per-draft failures recover
+ * to receipts and evidence events, so one malformed draft never stops the poller.
  */
 function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
   const stagingDir = ensureQualityDraftStagingDirectory(options.projectRoot);
@@ -297,11 +304,17 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
         payload,
       });
     } catch {
-      /* evidence recording must never break persistence */
+      // Evidence is optional, so recorder failure cannot reject an otherwise valid report.
+      return;
     }
   }
 
-  // eslint-disable-next-line complexity -- the fail-closed draft sequence keeps receipt, persistence, evidence, and cleanup ordering explicit.
+  /**
+   * Validate and persist one stable draft, recovering expected failures into a rejection receipt.
+   * The sequence stays explicit so persistence, evidence, receipt, and deletion cannot reorder.
+   * Swallows expected input and filesystem failures into bounded rejection evidence for this draft.
+   */
+  // eslint-disable-next-line complexity -- Intentional because each failure uses a bounded fallback before ordered cleanup.
   async function processDraft(draftName: string): Promise<void> {
     const draftPath = join(stagingDir, draftName);
     let stats;
@@ -407,6 +420,10 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
   // static analysis of a plain flag cannot see.
   const isDisposed = (): boolean => state.disposed;
 
+  /**
+   * Process one staging-directory snapshot with an empty fallback when the directory read fails.
+   * Directory-read failures recover to an empty-sweep fallback so the next poll can retry.
+   */
   async function processNow(): Promise<void> {
     if (state.busy || isDisposed()) return;
     state.busy = true;
@@ -436,6 +453,10 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
   // A server shutdown must not be held open by an idle poller.
   timer.unref();
 
+  /**
+   * Remove every contract-shaped draft with a no-op fallback when the directory read fails.
+   * Directory-read failures recover to a no-op fallback because teardown cannot safely enumerate drafts.
+   */
   function sweepDrafts(): void {
     let entries: string[];
     try {
@@ -451,6 +472,7 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
   return {
     stagingDir,
     processNow,
+    /** Stop this root poller once and discard drafts that no session can still finish. */
     shutdown(): void {
       if (state.disposed) return;
       state.disposed = true;
@@ -494,14 +516,15 @@ export function startQualityDraftCapture(
   }
   const held = entry;
   held.holders += 1;
-  let released = false;
+  let hasReleased = false;
   return {
     stagingDir: held.capture.stagingDir,
     processNow: () => held.capture.processNow(),
+    /** Release this handle once; the last holder shuts down the root-owned poller. */
     dispose(): void {
       // Idempotent per handle: a double dispose must not release a sibling's hold.
-      if (released) return;
-      released = true;
+      if (hasReleased) return;
+      hasReleased = true;
       held.holders -= 1;
       if (held.holders > 0) return;
       rootCaptures.delete(key);

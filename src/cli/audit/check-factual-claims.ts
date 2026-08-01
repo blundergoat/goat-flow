@@ -475,6 +475,7 @@ const INTENTIONAL_COMPAT_PATHS = new Set([
   "docs/coding-standards/git-commit.md",
 ]);
 
+/** Recognize local-state and compatibility paths that are valid even when absent from this checkout. */
 function isIntentionalMissingPath(path: string): boolean {
   return (
     INTENTIONAL_LOCAL_STATE_PATHS.has(path) ||

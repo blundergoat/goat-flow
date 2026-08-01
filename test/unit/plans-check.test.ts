@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
 
-/** Spawn the real CLI so parser, dispatch, and report rendering stay integrated. */
+/** Spawns the real CLI so parser, dispatch, and report rendering stay integrated. */
 function runPlansCheck(...args: string[]) {
   return spawnSync(
     process.execPath,
@@ -34,7 +34,7 @@ function assertSourceLabelledErrors(stdout: string): void {
 }
 
 /**
- * Write one milestone fixture into a fresh plan directory under the temp root.
+ * Writes one milestone fixture into a fresh plan directory under the temp root.
  *
  * @param temporaryRoot - per-test temp directory the caller removes afterwards
  * @param body - milestone Markdown
@@ -60,6 +60,7 @@ function writeCheckPlan(
   return planPath;
 }
 
+/** Optional fields varied by estimate-accounting milestone fixtures. */
 interface EstimatedMilestoneOptions {
   title?: string;
   status?: string;
@@ -124,22 +125,23 @@ function estimatedMilestoneBody(
   ].join("\n");
 }
 
+/** Lifecycle fields varied by the smallest canonical strict-plan fixture. */
 interface CanonicalMilestoneOptions {
   title?: string;
   status?: string;
   dependsOn?: string;
   includeDependencies?: boolean;
-  taskChecked?: boolean;
+  isTaskChecked?: boolean;
   proofHeading?: "Proof" | "Testing Gate";
   proofLines?: string[];
-  actual?: boolean;
+  includeActual?: boolean;
 }
 
 /** Build the smallest canonical strict fixture while allowing lifecycle variants. */
 function canonicalMilestoneBody(
   options: CanonicalMilestoneOptions = {},
 ): string {
-  const taskMarker = options.taskChecked ? "x" : " ";
+  const taskMarker = options.isTaskChecked ? "x" : " ";
   const proofLines = options.proofLines ?? [
     "- [ ] Outcome is proven → focused check passes. [automated] (est: 1 min proof)",
   ];
@@ -153,7 +155,7 @@ function canonicalMilestoneBody(
       title: options.title,
       status: options.status,
       dependsOn: options.dependsOn,
-      actualLine: options.actual
+      actualLine: options.includeActual
         ? `Actual: ~${totalMinutes} min agent-time (1 product / ${proofLines.length} proof / 0 other)`
         : undefined,
       planAdminOverhead: "0 min other",
@@ -388,23 +390,23 @@ describe("plans check", () => {
         "M01-foundation.md": canonicalMilestoneBody({
           title: "M01: Foundation works",
           status: "complete",
-          taskChecked: true,
+          isTaskChecked: true,
           proofHeading: "Proof",
           proofLines: [
             "- [x] Foundation is proven → focused check passes. [automated] (est: 1 min proof)",
           ],
-          actual: true,
+          includeActual: true,
         }),
         "M02-integration.md": canonicalMilestoneBody({
           title: "M02: Integration works",
           dependsOn: "M01",
           proofHeading: "Proof",
           status: "complete",
-          taskChecked: true,
+          isTaskChecked: true,
           proofLines: [
             "- [x] Integration is proven → focused check passes. [automated] (est: 1 min proof)",
           ],
-          actual: true,
+          includeActual: true,
         }),
         "M04-outcome.md": canonicalMilestoneBody({
           title: "M04: Outcome is available",
@@ -727,7 +729,7 @@ describe("plans check", () => {
     }> = [
       {
         name: "not-started-work",
-        body: canonicalMilestoneBody({ taskChecked: true }),
+        body: canonicalMilestoneBody({ isTaskChecked: true }),
         expected: /not-started milestone has checked implementation tasks/u,
       },
       {
@@ -748,7 +750,7 @@ describe("plans check", () => {
         name: "pending-open-proof",
         body: canonicalMilestoneBody({
           status: "human-verification-pending",
-          taskChecked: true,
+          isTaskChecked: true,
         }),
         expected:
           /human-verification-pending milestone requires structured Actual|executor proof item remains open/u,
@@ -757,12 +759,12 @@ describe("plans check", () => {
         name: "complete-open-human",
         body: canonicalMilestoneBody({
           status: "complete",
-          taskChecked: true,
+          isTaskChecked: true,
           proofLines: [
             "- [x] Outcome is proven. [automated] (est: 1 min proof)",
             "- [ ] [human] Approve completion. (est: 1 min proof)",
           ],
-          actual: true,
+          includeActual: true,
         }),
         expected: /complete milestone has open proof items/u,
       },
@@ -824,9 +826,9 @@ describe("plans check", () => {
     );
     const body = canonicalMilestoneBody({
       status: "complete",
-      taskChecked: true,
+      isTaskChecked: true,
       proofLines: ["- [x] Outcome is proven. [automated] (est: 1 min proof)"],
-      actual: true,
+      includeActual: true,
     }).replace(
       /Actual: ~2 min agent-time \(1 product \/ 1 proof \/ 0 other\)/u,
       [
@@ -853,12 +855,12 @@ describe("plans check", () => {
       temporaryRoot,
       canonicalMilestoneBody({
         status: "human-verification-pending",
-        taskChecked: true,
+        isTaskChecked: true,
         proofLines: [
           "- [x] Outcome is proven. [automated] (est: 1 min proof)",
           "- [ ] [human] Approve completion. (est: 1 min proof)",
         ],
-        actual: true,
+        includeActual: true,
       }),
     );
 

@@ -113,7 +113,7 @@ function eventsLogDir(projectRoot: string): string {
   return join(projectRoot, EVENTS_LOG_RELATIVE_DIR);
 }
 
-/** Inspect one target-controlled evidence path without following a symlink. */
+/** Inspect one target-controlled path without following symlinks; missing entries recover to null. */
 function evidencePathStats(path: string, displayPath: string): Stats | null {
   try {
     return lstatSync(path);
@@ -125,7 +125,13 @@ function evidencePathStats(path: string, displayPath: string): Stats | null {
   }
 }
 
-/** Create the event-log path one real directory at a time, rejecting redirection. */
+/**
+ * Writes the event-log directory chain one real component at a time while rejecting redirection.
+ *
+ * @param projectRoot - selected project that owns the durable event log; empty paths cannot form a safe root
+ * @returns the verified event-log directory; never empty after successful creation
+ * @throws Error when a component is unreadable, redirected, or not a real directory
+ */
 function ensureSafeEventsLogDirectory(projectRoot: string): string {
   const directories = [
     { path: join(projectRoot, ".goat-flow"), displayPath: ".goat-flow" },

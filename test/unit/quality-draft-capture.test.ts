@@ -31,8 +31,8 @@ import { join } from "node:path";
 import {
   ensureQualityDraftStagingDirectory,
   startQualityDraftCapture,
-  type QualityDraftCapture,
 } from "../../src/cli/server/quality-draft-capture.js";
+import type { QualityDraftCapture } from "../../src/cli/server/quality-draft-capture.js";
 
 const PACKAGE_VERSION = (
   JSON.parse(readFileSync("package.json", "utf8")) as { version: string }
@@ -88,13 +88,15 @@ describe("quality draft capture", () => {
   const roots: string[] = [];
   const captures: QualityDraftCapture[] = [];
 
-  function makeRoot(): string {
+/** Create and track one temporary project root for capture cleanup after the suite. */
+function makeRoot(): string {
     const root = mkdtempSync(join(tmpdir(), "goat-quality-capture-"));
     roots.push(root);
     return root;
   }
 
-  function makeCapture(root: string): QualityDraftCapture {
+/** Start and track one capture with deterministic polling disabled for direct test control. */
+function makeCapture(root: string): QualityDraftCapture {
     const capture = startQualityDraftCapture({
       projectRoot: root,
       intervalMs: 60_000,
@@ -122,9 +124,9 @@ describe("quality draft capture", () => {
     assert.equal(ensureQualityDraftStagingDirectory(root), stagingDir);
   });
 
-  it("tightens an existing permissive staging directory to 0700", (t) => {
+  it("tightens an existing permissive staging directory to 0700", (testContext) => {
     if (process.platform === "win32") {
-      t.skip("POSIX mode bits are not enforceable on Windows");
+      testContext.skip("POSIX mode bits are not enforceable on Windows");
       return;
     }
     const root = makeRoot();
@@ -209,9 +211,9 @@ describe("quality draft capture", () => {
     assert.match(eventText, /"raw_json":\{"kind":"redacted"/u);
   });
 
-  it("refuses pre-existing symlink and multiply linked receipt destinations", async (t) => {
+  it("refuses pre-existing symlink and multiply linked receipt destinations", async (testContext) => {
     if (process.platform === "win32") {
-      t.skip("Link fixtures require POSIX link semantics");
+      testContext.skip("Link fixtures require POSIX link semantics");
       return;
     }
     const root = makeRoot();
@@ -451,9 +453,9 @@ describe("quality draft capture", () => {
     );
   });
 
-  it("shares one capture across real-path and symlink aliases", async (t) => {
+  it("shares one capture across real-path and symlink aliases", async (testContext) => {
     if (process.platform === "win32") {
-      t.skip("Directory symlink fixtures require Windows Developer Mode");
+      testContext.skip("Directory symlink fixtures require Windows Developer Mode");
       return;
     }
     const parent = makeRoot();

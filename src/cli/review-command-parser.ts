@@ -7,6 +7,7 @@ import { resolve } from "node:path";
 import { CLIError } from "./cli-error.js";
 import type { Command, ReviewSubcommand } from "./cli-types.js";
 
+/** Parsed review namespace fields merged into the shared CLI request contract. */
 export interface ReviewCLIFields {
   reviewSubcommand: ReviewSubcommand | null;
   reviewValidatePath: string | null;

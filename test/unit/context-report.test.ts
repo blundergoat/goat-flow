@@ -22,7 +22,7 @@ import { makeSharedFacts, stubAgentFacts } from "../fixtures/projects/index.js";
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
 
-/** Spawn the real read-only command so parser, facts, dispatch, and stdout stay integrated. */
+/** Spawns the real read-only command so parser, facts, dispatch, and stdout stay integrated. */
 function runContextCommand(...args: string[]) {
   return spawnSync(
     process.execPath,

@@ -49,7 +49,7 @@ const ACTIONABLE_VAGUE_CONTEXT_PATTERN =
 function findVagueLanguageAdvisories(content: string): string[] {
   const proseLines = stripYamlFrontmatter(content).split("\n");
   const advisoryNotes: string[] = [];
-  let readingCodeFence = false;
+  let isReadingCodeFence = false;
 
   // Each prose line maps to the guidance a skill author sees in the quality panel.
   for (
@@ -62,12 +62,12 @@ function findVagueLanguageAdvisories(content: string): string[] {
 
     // Code fences show literal examples, so their wording must not create authoring advice.
     if (/^\s*```/.test(currentProseLine)) {
-      readingCodeFence = !readingCodeFence;
+      isReadingCodeFence = !isReadingCodeFence;
       continue;
     }
 
     // Literal sample content is not an instruction the user must make actionable.
-    if (readingCodeFence) {
+    if (isReadingCodeFence) {
       continue;
     }
 

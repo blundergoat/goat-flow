@@ -251,6 +251,11 @@ function rejectedProbeExecution(): HookProbeExecution {
 /**
  * Execute one inert classifier operand through Bash without a shell interpolation layer.
  * Exported so containment tests can prove redirected script paths never run.
+ *
+ * @param projectPath - selected project checkout; empty or unresolved paths return a rejected probe result
+ * @param scriptPath - managed hook path inside the checkout; missing or escaped paths are never executed
+ * @param scenario - fixed classifier operand and expected outcome; absent input is not a valid probe
+ * @returns bounded command evidence; a rejected result means containment or process startup failed safely
  */
 export function executeManagedHookProbe(
   projectPath: string,

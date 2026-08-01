@@ -216,6 +216,7 @@ function makeSpawnedPty(): {
     emitData(data: string): void {
       dataHandler(data);
     },
+    /** Emit one synthetic PTY exit so endpoint tests can observe terminal teardown. */
     emitExit(): void {
       exitHandler({ exitCode: 0 });
     },
@@ -642,13 +643,13 @@ describe("terminal session concurrency cap", () => {
     const internals = managerInternals(manager);
     internals.runnerPaths.set("claude", "/usr/local/bin/claude");
     // Track whether the PTY spawned after the delete gets torn down.
-    let spawnedKilled = false;
+    let wasSpawnedPtyKilled = false;
     internals.nodePtyModule = {
       spawn: () => {
         const spawned = makeSpawnedPty();
         const originalKill = spawned.pty.kill;
         spawned.pty.kill = () => {
-          spawnedKilled = true;
+          wasSpawnedPtyKilled = true;
           originalKill();
         };
         return spawned.pty;
@@ -668,6 +669,6 @@ describe("terminal session concurrency cap", () => {
     // deleted session as an untracked runner.
     await assert.rejects(createPromise, /cancelled during startup/);
     assert.equal(manager.list().length, 0);
-    assert.equal(spawnedKilled, true);
+    assert.equal(wasSpawnedPtyKilled, true);
   });
 });

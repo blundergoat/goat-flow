@@ -219,6 +219,7 @@ describe("commit-guidance harness check", () => {
   it("prefers the new docs path when both accepted guides exist", () => {
     const preferredPath = "docs/coding-standards/git-commit-message.md";
     const compatiblePath = "docs/coding-standards/git-commit.md";
+    /** Read the detected commit-guide facts for one controlled set of existing paths. */
     const factsFor = (paths: string[]) =>
       extractSharedFacts(
         stubFS({

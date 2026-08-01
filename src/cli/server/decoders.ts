@@ -78,7 +78,7 @@ function err(
 }
 
 /**
- * Parse a JSON request body without throwing through the route handler.
+ * Parse a JSON request body. Swallows parse errors into the shared decoder failure shape.
  * Use at every dashboard ingress so malformed user/browser payloads become field errors.
  *
  * @param body - raw request body; empty or invalid text means there is no usable payload to process
@@ -240,7 +240,7 @@ function decodeTerminalCaptureQualityDrafts(
  * @param options - allowed runners plus fallback; empty runner set means every explicit runner is rejected
  * @returns terminal-create payload, or an error the route can show without starting a session
  */
-// eslint-disable-next-line complexity -- flat launch-boundary checks preserve one precise error path per rejected field relationship.
+// eslint-disable-next-line complexity -- Intentional because flat launch checks preserve one error path per rejected relationship.
 export function decodeTerminalCreateBody(
   body: string,
   options: { validRunners: ReadonlySet<string>; defaultRunner: AgentId },

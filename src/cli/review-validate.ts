@@ -445,6 +445,7 @@ function validateFindingLine(
   };
 }
 
+/** One authoritative Review Integrity value and its report location. */
 interface IntegrityField {
   value: string;
   line: number;
@@ -1108,26 +1109,36 @@ export function renderReviewValidationResult(
     return "review validate: PASS";
   }
   const warningLabel = `${result.warnings.length} ${result.warnings.length === 1 ? "warning" : "warnings"}`;
+  const warningSuffix = result.warnings.length > 0 ? `, ${warningLabel}` : "";
   const lines =
     result.status === "pass"
       ? [`review validate: PASS (${warningLabel})`]
       : [
-          `review validate: FAIL (${result.violations.length} violations${result.warnings.length > 0 ? `, ${warningLabel}` : ""})`,
+          `review validate: FAIL (${result.violations.length} violations${warningSuffix})`,
         ];
   for (const violation of result.violations) {
+    const location = violation.line === null ? "report" : `line ${violation.line}`;
     lines.push(
-      `${violation.line === null ? "report" : `line ${violation.line}`} [${violation.checkId}/${violation.code}] ERROR ${violation.message}`,
+      `${location} [${violation.checkId}/${violation.code}] ERROR ${violation.message}`,
     );
   }
   for (const warning of result.warnings) {
+    const location = warning.line === null ? "report" : `line ${warning.line}`;
     lines.push(
-      `${warning.line === null ? "report" : `line ${warning.line}`} [${warning.checkId}/${warning.code}] WARN ${warning.message}`,
+      `${location} [${warning.checkId}/${warning.code}] WARN ${warning.message}`,
     );
   }
   return lines.join("\n");
 }
 
-/** Read stdin or one saved report, validate it against cwd, and emit all issues. */
+/**
+ * Read stdin or one saved report, validate it against the selected project, and emit every issue.
+ * Usage and read errors throw CLIError; structural report failures set the process exit code after rendering.
+ *
+ * @param options - parsed review request; a missing validate subcommand or unreadable path is a usage error
+ * @returns nothing; validation output is written through the shared CLI sink
+ * @throws CLIError when command usage is invalid or the report cannot be read
+ */
 export function handleReviewCommand(options: ParsedCLI): void {
   if (options.reviewSubcommand !== "validate") {
     throw new CLIError('review requires subcommand "validate".', 2);

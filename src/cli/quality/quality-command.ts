@@ -175,9 +175,10 @@ async function handleQualityCandidacySubcommand(
     lines.push("");
     lines.push("Next steps:");
     for (const step of result.nextSteps) {
-      lines.push(
-        `  - ${step.action}${step.template ? ` (template: ${step.template})` : ""}`,
-      );
+      const templateSuffix = step.template
+        ? ` (template: ${step.template})`
+        : "";
+      lines.push(`  - ${step.action}${templateSuffix}`);
     }
   }
   deps.writeOutput(options, lines.join("\n"));
@@ -385,7 +386,10 @@ function assertReportOwnership(
   }
 }
 
-/** One in-memory report persist request shared by the CLI subcommand and the dashboard capture. */
+/**
+ * Public persistence contract shared by the CLI subcommand and dashboard capture.
+ * Raw text remains in memory until this boundary validates, redacts, and writes the owned report.
+ */
 export interface PersistQualityReportOptions {
   /** Selected project directory the report must belong to; realpath-resolved here. */
   projectPath: string;
@@ -520,7 +524,8 @@ async function handleQualityPromptSubcommand(
       harness: true,
     });
   } catch {
-    // Quality prompts still render with degraded audit context.
+    // Audit infrastructure failure degrades prompt evidence, so tell the user without inventing a code finding.
+    console.error("quality: audit unavailable; continuing with degraded context.");
   }
 
   const qualityMode = options.qualityMode ?? "agent-setup";

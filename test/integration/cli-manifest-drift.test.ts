@@ -63,7 +63,7 @@ describe("CLI diagnostics under manifest drift", () => {
   });
 
   /**
-   * Spawn the drifted copy's CLI with the given args.
+   * Spawns the drifted copy's CLI with the given args.
    *
    * @param args - CLI arguments, e.g. `["--help"]`
    * @returns spawnSync result with utf8 stdout/stderr

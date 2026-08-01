@@ -5,7 +5,8 @@
  * Fixtures cover complete, partial, and malformed goat-plan milestones.
  */
 import { spawnSync } from "node:child_process";
-import { describe, it, type TestContext } from "node:test";
+import { describe, it } from "node:test";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,

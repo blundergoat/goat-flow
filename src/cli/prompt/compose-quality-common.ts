@@ -25,7 +25,10 @@ import {
   selectLearningLoopContext,
 } from "./learning-loop-context.js";
 
-/** Inputs needed to compose an agent quality-review prompt for one project. */
+/**
+ * Public input contract for composing one project quality-review prompt.
+ * Optional evidence stays absent rather than being synthesized, so every surface renders the same facts.
+ */
 export interface QualityInput {
   agent: AgentId;
   projectPath: string;
@@ -162,7 +165,7 @@ function appendConcernSummary(lines: string[], report: AuditReport): void {
   }
 }
 
-/** Append template-drift findings when the audit collected drift evidence. */
+/** Append template-drift findings in their deterministic audit order when evidence exists. */
 function appendDriftSummary(lines: string[], report: AuditReport): void {
   if (!report.drift) return;
   lines.push("");
@@ -174,7 +177,7 @@ function appendDriftSummary(lines: string[], report: AuditReport): void {
   }
 }
 
-/** Append content-lint findings when the audit collected content evidence. */
+/** Append content-lint findings without changing the audit report's stable path and rule identity. */
 function appendContentSummary(lines: string[], report: AuditReport): void {
   if (!report.content) return;
   lines.push("");
@@ -182,8 +185,9 @@ function appendContentSummary(lines: string[], report: AuditReport): void {
     `- **Content Claims**: ${report.content.status === "pass" ? "PASS" : "FAIL"} (${report.content.filesScanned} files scanned)`,
   );
   for (const finding of report.content.findings) {
+    const lineSuffix = finding.line ? `:${finding.line}` : "";
     lines.push(
-      `  - ${finding.path}${finding.line ? `:${finding.line}` : ""} [${finding.rule}]: ${finding.message}`,
+      `  - ${finding.path}${lineSuffix} [${finding.rule}]: ${finding.message}`,
     );
   }
 }
@@ -483,7 +487,7 @@ function backtickList(values: readonly (string | number)[]): string {
  * @param input - run facts embedded into the contract (agent, paths, prior report, mode)
  * @param opts - per-surface presentation switches (detail level, separator, sample type)
  */
-// eslint-disable-next-line complexity -- persistence variants keep mutually exclusive saver contracts in one ordered renderer.
+// eslint-disable-next-line complexity -- Intentional because mutually exclusive saver contracts require one ordered renderer.
 export function appendQualityReportContract(
   lines: string[],
   input: ReportContractInput,

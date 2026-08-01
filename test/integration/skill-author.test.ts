@@ -51,7 +51,7 @@ function symlinkOrSkip(
   }
 }
 
-/** Write the minimum real RED receipt accepted before a fixture skill can be scaffolded. */
+/** Writes the minimum real RED receipt accepted before a fixture skill can be scaffolded. */
 function writeRedLog(projectRoot: string, name: string): string {
   const logDirectory = join(projectRoot, ".goat-flow", "logs", "sessions");
   mkdirSync(logDirectory, { recursive: true });

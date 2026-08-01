@@ -449,6 +449,7 @@ function findDependencyCycle(
   const visiting = new Set<string>();
   const path: string[] = [];
 
+  /** Walk one dependency chain and return its first cycle, if one is reachable. */
   function visit(id: string): string[] | null {
     if (visiting.has(id)) {
       const cycleStart = path.indexOf(id);
@@ -476,6 +477,7 @@ function findDependencyCycle(
   return null;
 }
 
+/** Canonical lookup tables used to reconcile milestone IDs and numeric aliases. */
 interface MilestoneIndexes {
   byId: Map<string, MilestoneIdentity>;
   byNumber: Map<string, MilestoneIdentity>;
@@ -648,8 +650,12 @@ function renderMilestoneLine(record: PlanExportRecord): string | null {
     ? ` ${renderSplit(record.effort.split)}`
     : "";
   const actual = record.effort.actual;
+  const actualSplitText = actual?.split
+    ? ` ${renderSplit(actual.split)}`
+    : "";
+  const actualReasonText = actual?.reason ? ` - ${actual.reason}` : "";
   const actualText = actual
-    ? ` | actual: ~${actual.totalMinutes} min${actual.split ? ` ${renderSplit(actual.split)}` : ""}${actual.reason ? ` - ${actual.reason}` : ""}`
+    ? ` | actual: ~${actual.totalMinutes} min${actualSplitText}${actualReasonText}`
     : "";
   return `${record.sourceFile}: ~${record.effort.totalMinutes} min${splitText}${actualText}`;
 }

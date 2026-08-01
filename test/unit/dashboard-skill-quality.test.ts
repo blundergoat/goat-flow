@@ -16,15 +16,21 @@ const SKILL_QUALITY_FRAGMENT_PATH = resolve(
   "dashboard-app-skill-quality-fragments.ts",
 );
 
+/** Browser-local skill-quality helpers exposed to this VM contract fixture. */
 interface SkillQualityHelpers {
+  /** Render the banner that exposes composition limits beside a skill score. */
   dashboardSkillSummaryBanner(
     ctx: { skillReportPct(report: Record<string, unknown>): number },
     report: Record<string, unknown>,
   ): { title: string; desc: string; severity: string };
+  /** Return the report-list helper used to count skills with visible warnings. */
   dashboardSkillQualityReportFragment(): {
+    /** Count dashboard reports whose evidence limits require user attention. */
     skillsWithWarningsCount(this: Record<string, unknown>): number;
   };
+  /** Return the evaluator helper used to temper clean verdicts with evidence limits. */
   dashboardSkillEvaluatorResultFragment(): {
+    /** Derive the evaluator verdict shown for one skill-quality report. */
     skillEvaluatorVerdict(report: Record<string, unknown>): {
       title: string;
       desc: string;

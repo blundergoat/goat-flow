@@ -317,6 +317,7 @@ interface QualityHistoryLatest {
 /** Server-side terminal session info, enriched by `/api/terminal/sessions`. */
 type TerminalAccessMode = "workspace" | "reporting";
 
+/** Terminal session row returned by the server before browser-local state is merged. */
 interface ServerSessionInfo {
   id: string;
   status: SessionStatus;

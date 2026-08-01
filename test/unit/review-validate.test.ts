@@ -12,7 +12,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, it, type TestContext } from "node:test";
+import { describe, it } from "node:test";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
@@ -24,7 +25,7 @@ import {
 const FRAMEWORK_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(FRAMEWORK_ROOT, "src", "cli", "cli.ts");
 
-/** Create a disposable reviewed project whose source anchor can be resolved literally. */
+/** Writes a disposable reviewed project whose source anchor can be resolved literally. */
 function createReviewedProject(testContext: TestContext): string {
   const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-review-validate-"));
   mkdirSync(join(projectRoot, "src"), { recursive: true });
@@ -113,6 +114,7 @@ function withTopFiveRisk(
   return report.replace("## Ship Verdict", `${topFive}## Ship Verdict`);
 }
 
+/** Stable validator issue fields asserted by warning and violation fixtures. */
 interface ValidationIssueShape {
   checkId?: string;
   code: string;

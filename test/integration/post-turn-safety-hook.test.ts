@@ -36,7 +36,21 @@ const TEST_RSA_PRIVATE_KEY_HEADER = ["-----BEGIN", "RSA PRIVATE KEY-----"].join(
 const TEST_RSA_PRIVATE_KEY_FOOTER = ["-----END", "RSA PRIVATE KEY-----"].join(
   " ",
 );
+const TEST_RSA_PRIVATE_KEY_BODY = [
+  "MIIEpAIBAAKCAQEA",
+  "1234567890abcdef",
+].join("");
+const TEST_JWT_TOKEN = [
+  "eyJhbGciOiJIUzI1NiJ9",
+  "eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+  ["SflKxwRJSMeK", "KF2QT4fwpMeJ", "f36POk6yJV_adQssw5c"].join(""),
+].join(".");
+const TEST_DOCUMENTED_AWS_PLACEHOLDER = `AKIA${"IOSFODNN7EXAMPLE"}`;
+const TEST_DOCUMENTED_SLACK_PLACEHOLDER = `xoxb-${
+  "test-1234567890-1234567890"
+}`;
 
+/** Writes and removes one committed temporary repository around a safety-hook scenario. */
 function withTempRepo(fn: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-safety-"));
   try {
@@ -49,6 +63,7 @@ function withTempRepo(fn: (root: string) => void): void {
   }
 }
 
+/** Writes and removes one unborn temporary repository around a first-commit scenario. */
 function withUnbornTempRepo(fn: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-safety-"));
   try {
@@ -59,12 +74,14 @@ function withUnbornTempRepo(fn: (root: string) => void): void {
   }
 }
 
+/** Writes one fixture file and its required parent directories. */
 function writeFile(root: string, path: string, content: string | Buffer): void {
   const target = join(root, path);
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, content);
 }
 
+/** Spawns one Git fixture command and fails the active test with captured output on error. */
 function runGit(root: string, args: string[]): string {
   const result = spawnSync("git", args, {
     cwd: root,
@@ -79,6 +96,7 @@ function runGit(root: string, args: string[]): string {
   return result.stdout.trim();
 }
 
+/** Commit the complete fixture state so later edits are visible as changed repository content. */
 function commitAll(root: string, message: string): void {
   runGit(root, ["add", "."]);
   runGit(root, [
@@ -104,6 +122,7 @@ function runHook(
   });
 }
 
+/** Execute the real hook and prove the fixture reaches the allowed exit path. */
 function assertHookAllows(root: string, env?: Record<string, string>): void {
   const result = runHook(root, env);
   assert.equal(
@@ -180,7 +199,7 @@ describe("post-turn-safety hook", () => {
         path: "private.pem",
         content: [
           TEST_RSA_PRIVATE_KEY_HEADER,
-          "MIIEpAIBAAKCAQEA1234567890abcdef",
+          TEST_RSA_PRIVATE_KEY_BODY,
           TEST_RSA_PRIVATE_KEY_FOOTER,
           "",
         ].join("\n"),
@@ -444,7 +463,7 @@ describe("post-turn-safety hook", () => {
           'CLIENT_SECRETS="Zx9AbCdEf123456"',
           'DB_PASSWORDS="dbPasswordValue123"',
           "auth_token = 8f3c1a9b7e2d4f60aa11",
-          "bearer_token = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+          `bearer_token = ${TEST_JWT_TOKEN}`,
           "",
         ].join("\n"),
       );
@@ -588,8 +607,8 @@ describe("post-turn-safety hook", () => {
         root,
         "docs.md",
         [
-          "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
-          "SLACK_BOT_TOKEN=xoxb-test-1234567890-1234567890",
+          `AWS_ACCESS_KEY_ID=${TEST_DOCUMENTED_AWS_PLACEHOLDER}`,
+          `SLACK_BOT_TOKEN=${TEST_DOCUMENTED_SLACK_PLACEHOLDER}`,
           "",
         ].join("\n"),
       );

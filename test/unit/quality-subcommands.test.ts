@@ -35,11 +35,12 @@ import { getPackageVersion } from "../../src/cli/paths.js";
 
 const CLI_USAGE_EXIT_CODE = 2;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
+const QUALITY_REPORT_TOKEN_FIXTURE = `ghp_${"abcdefghijklmnopqrstuvwxyz"}`;
 
 /** Build one current report accepted by the strict quality schema. */
 function currentQualityReport(
   projectPath: string,
-  detail = "Token fixture ghp_abcdefghijklmnopqrstuvwxyz",
+  detail = `Token fixture ${QUALITY_REPORT_TOKEN_FIXTURE}`,
 ) {
   const version = getPackageVersion();
   return {
@@ -85,7 +86,7 @@ function currentQualityReport(
   };
 }
 
-/** Run the public source CLI saver with one raw stdin body. */
+/** Spawns the public source CLI saver with one raw stdin body. */
 function runQualitySaveText(projectPath: string, input: string) {
   return spawnSync(
     process.execPath,
