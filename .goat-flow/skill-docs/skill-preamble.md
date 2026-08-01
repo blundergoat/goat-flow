@@ -37,6 +37,7 @@ Order findings by severity, not by file or discovery order.
 - Live findings and durable learning-loop artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function name, or unique string); line numbers are navigation hints only.
 - For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible tasks, check `.goat-flow/skill-docs/playbooks/browser-use.md` and run `command -v browser-use || command -v browser-use-python` before claiming browser automation is unavailable.
 - MUST NOT fabricate paths, symbols, or content; re-read every cited file and anchor before presenting findings.
+- Findings whose load-bearing claim is an absence MUST be re-derived by the host: read the region or search the exact symbol expecting zero lines; subagent negatives and broad-pattern hits are not evidence.
 - Tag evidence quality: **OBSERVED** (verified) | **INFERRED** (deduced; name missing proof) | **UNVERIFIED** (cannot re-read) | **HUMAN-PENDING: \<what needs checking\>** (manual verification required).
 - When citing a cross-reference code from another skill's output (e.g. S-03, Q2, A.F3), include the source file path on first use
 - Verify symbols, CLI flags, and config keys against repo search, `--help`, or live config.

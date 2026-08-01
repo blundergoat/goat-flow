@@ -87,9 +87,9 @@ Write raw suspicions with `file + semantic anchor` drawn from the diff. Do NOT v
 Now read full files. For each Pass-1 suspicion:
 
 - **Try to DISPROVE it** by re-reading the anchor and looking for guards, upstream checks, framework mitigation, or contracts that remove the risk.
-- **Blast Radius Rule:** for contract changes (signature, payload, exported type, event shape, error channel, status code), MUST run external call-site search before resolving. Prefer `rg -n '<symbol>' -t ts -t js -t py -t php -t go -t rust`; else use host search or `grep -rniE '<symbol>'` and record fallback. Verify at least one consumer. If skipped, stays UNRESOLVED with `coverage-degraded`.
-- Mark each suspicion: **CONFIRMED** / **REFUTED** / **UNRESOLVED**.
-- **Refutation Ledger:** write REFUTED suspicions to `.goat-flow/logs/review/goat-review-refutations.<random>.txt` with original suspicion, refuting evidence, and one-sentence rationale. Do not surface refuted items in final output.
+- Verdicts: **CONFIRMED** needs positive reachability (caller/input/trigger); failed disproof → **UNRESOLVED**. **ADJUSTED** means real but narrower, with severity restated; **REFUTED** needs a removing guard/contract. Hedges ("confirmed with caveat", "matches prior behaviour", "sloppy but not exploitable") are forbidden.
+- **Blast Radius Rule:** for contract changes, search symbol-aware (LSP/MCP) → AST (`ast-grep`) → text (`rg`/`grep`) without ceremony. Text-only adds `callsite-completeness-grep-only`. Audit dynamic dispatch, reflection, DI, string-keyed routes/config, generated code, and external consumers. Verify one consumer; skipped stays UNRESOLVED with `coverage-degraded`.
+- **Refutation Ledger:** write REFUTED suspicions to `.goat-flow/logs/review/goat-review-refutations.<random>.txt` with R-ID, suspicion, evidence, and rationale. Keep them out of final output.
 - Add findings that only became visible with file context (integration breakage, call-site contract mismatch, regression in a sibling file).
 - Re-verify every `file + semantic anchor` reference exists before writing the final output.
 
@@ -107,11 +107,11 @@ Full Excuse/Reality table: `references/examples.md`. Key entries:
 
 ### Severity + Action Tagging
 
-Every surfaced finding gets severity and action tags. Severity: `MUST` blocks approval, `SHOULD` fixes before merge unless disputed, `MAY` is optional. Action: `patch`, `needs-decision`, `pre-existing`, `intent-mismatch`, or `needs-signal`.
+Assign stable `R-001…` IDs in report order; preserve them through Top 5 Risks and refuter synthesis. Severity: `MUST` blocks, `SHOULD` fixes before merge unless disputed, `MAY` is optional. Actions: `patch`, `needs-decision`, `intent-mismatch`, or `needs-signal`; `pre-existing` is area-audit-only.
 
-Finding line prefix: `[SEVERITY:ACTION]`. Example: `[MUST:needs-decision]`.
+Use prefix `R-NNN [SEVERITY:ACTION]`; MUST/SHOULD lines add `Harm:`.
 
-**Proof Capsule:** every finding includes a proof class per `skill-preamble.md` Proof Classification: `RUNTIME` | `CONTRACT-GREP` | `STATIC` | `NOT-REPRODUCED`. MUST/correctness-SHOULD should prefer RUNTIME or CONTRACT-GREP. NOT-REPRODUCED adds `not-reproduced-findings` to Review Integrity.
+**Proof Capsule:** every finding includes `RUNTIME` | `CONTRACT-GREP` | `STATIC` | `NOT-REPRODUCED`. Evidence tags measure certainty, proof classes method, verdicts disposition; `UNVERIFIED` ≠ `NOT-REPRODUCED`. MUST/correctness-SHOULD prefer RUNTIME or CONTRACT-GREP. NOT-REPRODUCED adds `not-reproduced-findings`.
 
 ### Systemic Patterns
 
@@ -142,7 +142,7 @@ For each cluster, inventory responsibilities, interfaces, trust/state boundaries
 
 ### Area Pass 2 - Implementation and Consumer Verification
 
-Open the implementation, relevant tests, and callers/consumers. Disprove suspicions using guards and call-site evidence; apply the Blast Radius Rule. Mark each suspicion `CONFIRMED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger.
+Open the implementation, relevant tests, and callers/consumers. Disprove suspicions using guards and call-site evidence; apply the Blast Radius Rule. Mark each suspicion `CONFIRMED`, `ADJUSTED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger. Area findings may use `[SEVERITY:pre-existing]`.
 
 Without a release/merge question, emit `N/A - AREA AUDIT ONLY`.
 
@@ -164,29 +164,28 @@ If none detected, emit "No drift detected against M[NN]" so the reader knows the
 
 ## Pass 3 - Cross-Model Refuter (explicit approval only)
 
-Offer Pass 3 when ANY of: (1) user opts in at Step 0, (2) Review Integrity would be `coverage-degraded` or `high-inference`, (3) any `[MUST:needs-decision]` finding exists, (4) any INTENT-MISMATCH finding exists.
+Offer Pass 3 when the user opts in, Review Integrity is `coverage-degraded`/`high-inference`, or a MUST-needs-decision/INTENT-MISMATCH exists.
 
-**Approval gate:** A trigger is not approval. Run local installation/auth checks. Disclose the runtime and model, authentication state, findings-only payload, maximum of one refuter inference call, known cost or rate-limit impact (or `unknown`), why a second model rather than more reading, and the local-only fallback. Require explicit current-session approval; “keep going” and urgency do not count. If approval is declined or unanswered, skip Pass 3, complete the local review, and record `Refuter pass: skipped`. Preserve Passes 1–2 degradation flags only; do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined.
+**Approval gate:** A trigger is not approval. Before explicit current-session approval, disclose the runtime and model, authentication state, findings-only payload, one refuter inference call, cost or rate-limit impact, why a second model rather than more reading, and local-only fallback. “Keep going” and urgency do not count. If declined or unanswered, complete the local review, record `Refuter pass: skipped`, and do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined.
 
-**Method (after approval):** Use an authenticated external refuter runtime, not the host model. Default host map: Claude -> `codex exec`; Codex/Copilot/Antigravity -> `claude -p` unless a verified stronger opposite runtime is documented. Pass FINDINGS LIST, not the diff. Template: `references/refuter-spec.md`.
+**Method:** After approval, follow `references/refuter-spec.md` with an authenticated non-host runtime; pass the R-ID FINDINGS LIST, not the diff.
 
-**Synthesis:** REFUTER-CONFIRMED findings get `[CONFIRMED-CROSS-MODEL]` upgrade. REFUTER-REFUTED move to `## Refuted by Refuter` with reasoning preserved verbatim. REFUTER-UNRESOLVED keep original severity; add `cross-model-unresolved` to Review Integrity. Refuter leads do not become findings unless host verifies via Pass 2 rules.
+**Synthesis:** Follow the reference evidence bar. Uncited refutation demotes at most one rung, never removes. A MUST clears Ship Verdict only after host citation re-read; failure retains it unresolved and flags `refuter-citation-unverified`. Unsourced external behaviour stays REFUTER-UNRESOLVED. REFUTER-CONFIRMED gets `[CONFIRMED-CROSS-MODEL]`; verified REFUTER-REFUTED moves to `## Refuted by Refuter`; unresolved keeps severity and flags `cross-model-unresolved`. Leads require Pass 2.
 
-**Constraints:** Only the local availability and auth checks from `references/refuter-spec.md` may run before approval; version-only commands do not count. If no authenticated refuter exists for the current host, skip Pass 3 and emit `cross-model-refuter-failed`. REFUTER-REFUTED stays advisory.
+**Constraints:** Before approval, only reference-listed availability/auth checks may run; versions do not prove auth. No authenticated refuter means skip and `cross-model-refuter-failed`.
 
 ## Review Integrity (confidence signal)
 
-Confidence signal for review coverage.
-
 - **Files opened in Pass 2:** count / total; diff mode also lists paths.
 - **Evidence tags:** N OBSERVED / M INFERRED.
+- **Verdicts:** `<c>/<a>/<r>/<u>` (confirmed/adjusted/refuted/unresolved).
 - **Size:** diff lines or area files/clusters, plus chunking. PR mode: base, source, short SHA.
 - **Scope snapshot:** source, base, head, uncommitted, chunking.
 - **Refutations logged:** `<N>`
 - **Spec drift:** `checked M[NN]` | `skipped` | `unavailable`. Optional skip is not degradation.
 - **PR-mode extension:** record `Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new`; use `no-automated-review-present` when absent and `n/a` outside PR mode.
 - **Pass-3 extension:** when Pass 3 runs, is triggered, or is skipped after a trigger, add `Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<id|n/a>`.
-- **Degradation flags:** `chunked-partial`, `large-diff-unchunked`, `large-area-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`.
+- **Degradation flags:** `chunked-partial`, `large-diff-unchunked`, `large-area-unchunked`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `callsite-completeness-grep-only`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`, `refuter-citation-unverified`.
 - **Conclusion:** `confident` | `coverage-degraded` | `high-inference` | `partial`.
 
 Always emit it; minimum: "confident - no degradation flags".
@@ -210,7 +209,7 @@ Always emit it; minimum: "confident - no degradation flags".
 - Route Spec Drift by direction
 - MUST NOT edit files unless user says "implement"; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.
-- **Ship Verdict rules (diff/PR or explicit release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. Downgrade ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` moves one rung.
+- **Ship Verdict rules (diff/PR or explicit release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. A REFUTER-REFUTED MUST clears only after host citation verification. Downgrade ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` moves one rung.
 - **Zero-findings HALT:** If Pass 2 produces zero findings, state what was checked and why no issues surfaced. Zero findings must be defended.
 - Universal constraints from skill-preamble.md apply.
 
@@ -223,21 +222,22 @@ Always emit it; minimum: "confident - no degradation flags".
 - Scope snapshot: source=<source>, base=<base>, head=<head>, uncommitted=<yes|no|n/a>, chunking=<state>
 - Files opened in Pass 2: <k>/<n>  (diff paths: <list or "n/a">)
 - Evidence: <N> OBSERVED / <M> INFERRED
+- Verdicts: <c>/<a>/<r>/<u>
 - Refutations logged: <N>
 - Size: <files> files, <changed lines | clusters>  (chunked: <group or "no">)
 - Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new | no-automated-review-present | n/a
 - Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<id|n/a>
 - Spec drift: <checked M[NN] | skipped | unavailable>
-- Degradation flags: <list or "none">
+- Degradation flags: <list or "none"; grep-only coverage => callsite-completeness-grep-only>
 - Conclusion: <confident | coverage-degraded | high-inference | partial>
 
 ## Findings
 
 ### MUST / SHOULD / MAY
-- [SEVERITY:ACTION] **[title]** `file + semantic anchor` - [desc] | Footgun: [entry or none] | Evidence: OBSERVED/INFERRED | Proof: RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED
+- R-001 [SEVERITY:ACTION] **[title]** `file + semantic anchor` - [desc] | Harm: [concrete consequence for MUST/SHOULD] | Footgun: [entry or none] | Evidence: OBSERVED/INFERRED | Proof: RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED
 
 ## Systemic Patterns  <!-- only when 3+ findings share one root cause -->
-- [SEVERITY:ACTION] **[pattern title]** - affected anchors: `<file + semantic anchor>`, `<file + semantic anchor>`; repeated failure: <one sentence>; harm: <one sentence>
+- R-001 [SEVERITY:ACTION] **[pattern title]** - affected anchors: `<file + semantic anchor>`, `<file + semantic anchor>`; repeated failure: <one sentence>; harm: <one sentence>
 
 ## Spec Drift   <!-- only when opt-in triggered -->
 <!-- advisory-only entries (exit-criteria drift, ready-to-tick); assumption invalidation goes under ## Findings as [MUST:needs-decision] -->
@@ -252,7 +252,7 @@ Always emit it; minimum: "confident - no degradation flags".
 
 ## Top 5 Risks (cross-tier)
 <!-- Five findings most likely to cause harm if unresolved, ranked regardless of tier. If <5 total, list all. If zero: "No surfaced risks." -->
-1. [SEVERITY:ACTION] **[title]** `file + semantic anchor` - one-sentence why
+1. R-001 [SEVERITY:ACTION] **[title]** `file + semantic anchor` - one-sentence why
 
 ## Ship Verdict
 Decision: **YES** | **YES WITH CONDITIONS** | **NO** | **PARTIAL** | **PENDING REFUTER/HUMAN** | **N/A - AREA AUDIT ONLY**

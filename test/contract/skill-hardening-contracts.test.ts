@@ -333,10 +333,118 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         areaAudit,
-        /Mark each suspicion `CONFIRMED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger/u,
+        /Mark each suspicion `CONFIRMED`, `ADJUSTED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger/u,
         skillPath,
       );
     });
+  });
+
+  it("requires positive evidence for goat-review verdicts", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const diffReview = readMarkdownSection(
+        skillPath,
+        "Diff Review (Quick) - Two-Pass Discipline",
+      );
+      const integrity = readMarkdownSection(
+        skillPath,
+        "Review Integrity (confidence signal)",
+      );
+
+      assert.match(diffReview, /CONFIRMED[^\n]+positive reachability/u, skillPath);
+      assert.match(diffReview, /failed disproof[^\n]+UNRESOLVED/u, skillPath);
+      assert.match(diffReview, /ADJUSTED[^\n]+real but narrower/u, skillPath);
+      assert.match(diffReview, /confirmed with caveat/u, skillPath);
+      assert.match(diffReview, /matches prior behaviour/u, skillPath);
+      assert.match(diffReview, /sloppy but not exploitable/u, skillPath);
+      assert.match(
+        integrity,
+        /Verdicts:[^\n]+confirmed\/adjusted\/refuted\/unresolved/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("gives goat-review findings stable IDs, harm, and distinct evidence axes", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const diffReview = readMarkdownSection(
+        skillPath,
+        "Diff Review (Quick) - Two-Pass Discipline",
+      );
+      const output = readMarkdownSection(skillPath, "Output Format");
+
+      assert.match(diffReview, /stable `R-001…` IDs/u, skillPath);
+      assert.match(diffReview, /Refutation Ledger:[^\n]+with R-ID/u, skillPath);
+      assert.match(diffReview, /`pre-existing` is area-audit-only/u, skillPath);
+      assert.match(diffReview, /Evidence tags measure certainty/u, skillPath);
+      assert.match(diffReview, /proof classes method/u, skillPath);
+      assert.match(diffReview, /verdicts disposition/u, skillPath);
+      assert.match(diffReview, /`UNVERIFIED` ≠ `NOT-REPRODUCED`/u, skillPath);
+      assert.match(output, /R-001 \[SEVERITY:ACTION\]/u, skillPath);
+      assert.match(output, /Harm: \[concrete consequence/u, skillPath);
+      assert.match(output, /R-001 \[SEVERITY:ACTION\][^\n]+affected anchors/u, skillPath);
+    });
+  });
+
+  it("tiers goat-review consumer searches and discloses text-only coverage", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const diffReview = readMarkdownSection(
+        skillPath,
+        "Diff Review (Quick) - Two-Pass Discipline",
+      );
+      const integrity = readMarkdownSection(
+        skillPath,
+        "Review Integrity (confidence signal)",
+      );
+      const output = readMarkdownSection(skillPath, "Output Format");
+
+      assert.match(
+        diffReview,
+        /symbol-aware \(LSP\/MCP\) → AST \(`ast-grep`\) → text \(`rg`\/`grep`\)/u,
+        skillPath,
+      );
+      assert.match(diffReview, /dynamic dispatch[^\n]+external consumers/u, skillPath);
+      assert.match(integrity, /callsite-completeness-grep-only/u, skillPath);
+      assert.match(output, /grep-only coverage[^\n]+callsite-completeness-grep-only/u, skillPath);
+    });
+  });
+
+  it("requires evidence before goat-review refutations affect Ship Verdict", () => {
+    const referencePaths = installedSkillReferencePaths(
+      "goat-review",
+      "references/refuter-spec.md",
+    );
+
+    assertForEachTarget(referencePaths, (referencePath) => {
+      const reference = readProjectFile(referencePath);
+      assert.match(reference, /"finding_id": "R-001"/u, referencePath);
+      assert.match(reference, /required for REFUTER-REFUTED/u, referencePath);
+      assert.match(reference, /Before accepting any MUST refutation/u, referencePath);
+      assert.match(reference, /refuter-citation-unverified/u, referencePath);
+      assert.match(reference, /external library\/framework behaviour/u, referencePath);
+    });
+
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const passThree = readMarkdownSection(
+        skillPath,
+        "Pass 3 - Cross-Model Refuter (explicit approval only)",
+      );
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+      assert.match(passThree, /Uncited refutation[^\n]+never removes/u, skillPath);
+      assert.match(passThree, /host citation re-read/u, skillPath);
+      assert.match(constraints, /REFUTER-REFUTED MUST clears only after host citation verification/u, skillPath);
+    });
+  });
+
+  it("requires host re-derivation for absence-based findings", () => {
+    for (const preamblePath of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const preamble = readMarkdownSection(preamblePath, "Evidence Standard");
+      assert.match(preamble, /load-bearing claim is an absence/u, preamblePath);
+      assert.match(preamble, /search the exact symbol expecting zero lines/u, preamblePath);
+      assert.match(preamble, /subagent negatives and broad-pattern hits are not evidence/u, preamblePath);
+    }
   });
 
   it("records the current ceremony contract in ADR-006", () => {

@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-01
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -99,11 +99,11 @@ last_reviewed: 2026-07-19
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 14
+**Incident count:** 15
 
-**Latest occurrence:** 2026-07-19
+**Latest occurrence:** 2026-08-01
 
-**What happened:** Fourteen edits crossed ADR-023 or bucket caps:
+**What happened:** Fifteen edits crossed caps:
 
 - **2026-05-19/22:** TDD packs hit 3022/3008 words, the preamble exceeded 1500, and QA exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
 - **2026-06-14:** Dispatcher guidance hit 653/555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
@@ -119,6 +119,9 @@ last_reviewed: 2026-07-19
 - **2026-07-18 review independence:** Goat-review hit 2527, then compacted to 2488. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
 - **2026-07-19 review scope:** Worktree/area wording pushed goat-review to 2512; compaction restored 2498. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `defines two evidence-producing area audit passes`; `functional skills stay within the 2500-word cap across all mirrors`).
 - **2026-07-19 QA rows:** Goat-qa hit 2506, then 2499. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- **2026-08-01 verdict hardening:** Goat-review rose 2493→2500; the cap failed; compaction
+  restored 2490. Evidence: `test/contract/skill-hardening-contracts.test.ts`
+  (search: `functional skills stay within the 2500-word cap across all mirrors`).
 
 **Root cause:** Treated capped prose as tiny.
 
