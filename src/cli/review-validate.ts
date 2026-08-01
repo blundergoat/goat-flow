@@ -15,8 +15,9 @@ import { CLIError } from "./cli-error.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { writeOutput } from "./cli-output.js";
 
-/** One actionable validation failure, optionally tied to a report line. */
+/** One actionable validation issue, optionally tied to a report line. */
 interface ReviewValidationViolation {
+  checkId: ReviewCheckId;
   code: string;
   line: number | null;
   message: string;
@@ -26,6 +27,7 @@ interface ReviewValidationViolation {
 export interface ReviewValidationResult {
   status: "pass" | "fail";
   violations: ReviewValidationViolation[];
+  warnings: ReviewValidationViolation[];
 }
 
 /** One report line with its one-based source location. */
@@ -43,8 +45,47 @@ interface MarkdownSection {
 /** Refutation claim extracted while validating the integrity surface. */
 interface IntegrityResult {
   refutationsLogged: number;
+  isRefutationPersistenceSkipped: boolean;
   refutationsLine: number | null;
+  isAreaAudit: boolean;
 }
+
+/** Parsed finding definition used for stable-ID and conditional-section checks. */
+interface FindingDefinition {
+  id: string;
+  line: number;
+  section: (typeof FINDING_SECTIONS)[number];
+}
+
+type ReviewCheckId = "V1" | "V2" | "V3" | "V4" | "V5" | "V6" | "V7" | "V8";
+
+/**
+ * V1-V8 are the public validator check IDs. Detail codes keep each result actionable.
+ * Grammar anchors: SKILL.md (search: `Use prefix \`R-NNN [SEVERITY:ACTION]\``),
+ * SKILL.md (search: `## Review Integrity (confidence signal)`), and
+ * SKILL.md (search: `Render optional sections only with content`).
+ */
+const CHECK_ID_BY_CODE = {
+  "anchor-outside-project": "V1",
+  "anchor-unresolved": "V1",
+  "anchor-format": "V1",
+  "finding-grammar": "V2",
+  "finding-action-scope": "V2",
+  "spec-drift-grammar": "V2",
+  "finding-harm": "V3",
+  "finding-evidence": "V4",
+  "finding-proof": "V4",
+  "integrity-format": "V5",
+  "degradation-flag-unknown": "V5",
+  "finding-id-duplicate": "V6",
+  "finding-reference-unresolved": "V6",
+  "top-five-unexpected": "V7",
+  "top-five-missing": "V7",
+  "optional-section-empty": "V7",
+  "refutation-ledger": "V8",
+} as const satisfies Record<string, ReviewCheckId>;
+
+type ReviewIssueCode = keyof typeof CHECK_ID_BY_CODE;
 
 const FINDING_SECTIONS = [
   "Findings",
@@ -52,7 +93,22 @@ const FINDING_SECTIONS = [
   "Refuted by Refuter",
 ] as const;
 
-const FINDING_CANDIDATE = /^\s*-\s+(?:R-|\[(?:MUST|SHOULD|MAY):)/u;
+const SURFACED_FINDING_SECTIONS = new Set<string>([
+  "Findings",
+  "Systemic Patterns",
+]);
+
+const OPTIONAL_SECTIONS = [
+  "Systemic Patterns",
+  "Spec Drift",
+  "Pre-existing Nearby",
+  "Pre-existing Issues",
+  "Breaking Changes",
+  "Refuted by Refuter",
+  "What's Good",
+] as const;
+
+const FINDING_CANDIDATE = /^\s*-\s+\S/u;
 const FINDING_PREFIX =
   /^\s*-\s+(R-\d{3})\s+\[(MUST|SHOULD|MAY):(patch|needs-decision|intent-mismatch|needs-signal|pre-existing)\](?:\s+\[(?:(?:overlap-confirmed|bot-only-locally-verified|disputed-match):[^\]\s]+|local-only|CONFIRMED-CROSS-MODEL)\])*\s+\*\*[^*\n]+\*\*/u;
 const EVIDENCE_TAG =
@@ -72,8 +128,13 @@ const REQUIRED_INTEGRITY_FIELDS: ReadonlyArray<
   ["Files opened in Pass 2", /^\d+\/\d+\b/u],
   ["Evidence", /^\d+ OBSERVED\s*\/\s*\d+ INFERRED$/u],
   ["Verdicts", /^\d+\/\d+\/\d+\/\d+$/u],
-  ["Refutations logged", /^\d+$/u],
+  ["Refutations logged", /^\d+(?:\s+\(persist-skipped\))?$/u],
+  ["Review validator", /^(?:validated|validator-unavailable)$/u],
   ["Gates", /^(?:run|unavailable|skipped \(.+\))$/u],
+  [
+    "Gate evidence",
+    /^pass=\d+,\s*changed-code=\d+,\s*pre-existing=\d+,\s*infrastructure=\d+,\s*unresolved=\d+$/u,
+  ],
   ["Size", /\S/u],
   ["Spec drift", /^(?:checked M\d+|skipped|unavailable)$/u],
   ["Degradation flags", /\S/u],
@@ -85,7 +146,34 @@ const AUTOMATED_REVIEW_VALUE =
 const REFUTER_VALUE =
   /^(?:yes|no|skipped);\s*confirmed=\d+,\s*refuted=\d+,\s*unresolved=\d+,\s*leads-verified=\d+,\s*model=\S.+$/u;
 const COMPACT_INTEGRITY =
-  /^\s*Review Integrity:\s*(?:confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*\S.+$/u;
+  /^\s*Review Integrity:\s*(?:confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*\S.+;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+
+const KNOWN_DEGRADATION_FLAGS = new Set([
+  "none",
+  "persist-skipped: redactor-unavailable",
+  "chunked-partial",
+  "large-diff-unchunked",
+  "large-area-unchunked",
+  "gates-not-run",
+  "gate-evidence-incomplete",
+  "risk-depth-declined",
+  "high-inference-ratio",
+  "files-not-opened",
+  "unfamiliar-area",
+  "missing-types",
+  "footguns-unread",
+  "not-reproduced-findings",
+  "coverage-degraded",
+  "callsite-completeness-grep-only",
+  "base-detection-failed",
+  "base-fetch-skipped",
+  "base-fetch-failed",
+  "intent-unstated",
+  "automated-review-uningested",
+  "cross-model-refuter-failed",
+  "cross-model-unresolved",
+  "refuter-citation-unverified",
+]);
 
 /** Return one H2 section without consuming nested H3 headings. */
 function readSection(lines: string[], heading: string): MarkdownSection | null {
@@ -118,11 +206,21 @@ function readSection(lines: string[], heading: string): MarkdownSection | null {
 /** Record one violation while preserving report order for readable CLI output. */
 function addViolation(
   violations: ReviewValidationViolation[],
-  code: string,
+  code: ReviewIssueCode,
   line: number | null,
   message: string,
 ): void {
-  violations.push({ code, line, message });
+  violations.push({ checkId: CHECK_ID_BY_CODE[code], code, line, message });
+}
+
+/** Record one advisory issue without changing the validator's failure status. */
+function addWarning(
+  warnings: ReviewValidationViolation[],
+  code: ReviewIssueCode,
+  line: number | null,
+  message: string,
+): void {
+  warnings.push({ checkId: CHECK_ID_BY_CODE[code], code, line, message });
 }
 
 /** Return whether a resolved path remains under the reviewed project's real path. */
@@ -264,10 +362,12 @@ function validateFindingAnchors(
 /** Validate one finding definition after its containing section identifies it as review output. */
 function validateFindingLine(
   locatedLine: LocatedLine,
+  section: (typeof FINDING_SECTIONS)[number],
+  isAreaAudit: boolean,
   projectRoot: string,
   violations: ReviewValidationViolation[],
-): void {
-  if (!FINDING_CANDIDATE.test(locatedLine.text)) return;
+): FindingDefinition | null {
+  if (!FINDING_CANDIDATE.test(locatedLine.text)) return null;
   const prefixMatch = locatedLine.text.match(FINDING_PREFIX);
   if (!prefixMatch) {
     addViolation(
@@ -276,7 +376,16 @@ function validateFindingLine(
       locatedLine.line,
       "finding must use R-NNN, a supported severity/action, optional current provenance/refuter tags, and a bold title",
     );
-    return;
+    return null;
+  }
+
+  if (prefixMatch[3] === "pre-existing" && !isAreaAudit) {
+    addViolation(
+      violations,
+      "finding-action-scope",
+      locatedLine.line,
+      "the pre-existing action is permitted only when Scope snapshot declares source=area",
+    );
   }
 
   validateFindingFields(
@@ -286,6 +395,11 @@ function validateFindingLine(
     violations,
   );
   validateFindingAnchors(locatedLine, projectRoot, violations);
+  return {
+    id: prefixMatch[1] ?? "",
+    line: locatedLine.line,
+    section,
+  };
 }
 
 type IntegrityFieldMap = Map<string, { value: string; line: number }>;
@@ -344,19 +458,56 @@ function validateOptionalIntegrityField(
 /** Convert a valid integer refutation field into the ledger claim. */
 function readRefutationClaim(fields: IntegrityFieldMap): IntegrityResult {
   const refutations = fields.get("Refutations logged");
-  if (!refutations || !/^\d+$/u.test(refutations.value)) {
-    return { refutationsLogged: 0, refutationsLine: refutations?.line ?? null };
+  const match = refutations?.value.match(
+    /^(\d+)(?:\s+\((persist-skipped)\))?$/u,
+  );
+  if (!refutations || !match?.[1]) {
+    return {
+      refutationsLogged: 0,
+      isRefutationPersistenceSkipped: false,
+      refutationsLine: refutations?.line ?? null,
+      isAreaAudit: false,
+    };
   }
   return {
-    refutationsLogged: Number.parseInt(refutations.value, 10),
+    refutationsLogged: Number.parseInt(match[1], 10),
+    isRefutationPersistenceSkipped: match[2] === "persist-skipped",
     refutationsLine: refutations.line,
+    isAreaAudit: false,
   };
+}
+
+/** Warn once per degradation flag that is not documented by goat-review. */
+function validateDegradationFlags(
+  fields: IntegrityFieldMap,
+  warnings: ReviewValidationViolation[],
+): void {
+  const field = fields.get("Degradation flags");
+  if (!field) return;
+  const flags = field.value.split(",").map((flag) => flag.trim());
+  for (const flag of flags) {
+    const configuredBase = /^configured-base-unresolved=\S+$/u.test(flag);
+    if (KNOWN_DEGRADATION_FLAGS.has(flag) || configuredBase) continue;
+    addWarning(
+      warnings,
+      "degradation-flag-unknown",
+      field.line,
+      `unknown degradation flag: ${flag || "<empty>"}`,
+    );
+  }
+}
+
+/** Read the review mode from the mandatory Scope snapshot field. */
+function readAreaAuditMode(fields: IntegrityFieldMap): boolean {
+  const scope = fields.get("Scope snapshot")?.value ?? "";
+  return /(?:^|,\s*)source=area(?:,|$)/u.test(scope);
 }
 
 /** Validate the full Review Integrity field set and return its ledger claim. */
 function validateFullIntegrity(
   section: MarkdownSection,
   violations: ReviewValidationViolation[],
+  warnings: ReviewValidationViolation[],
 ): IntegrityResult {
   const fields = collectIntegrityFields(section);
   validateRequiredIntegrityFields(fields, section, violations);
@@ -372,22 +523,34 @@ function validateFullIntegrity(
     REFUTER_VALUE,
     violations,
   );
-  return readRefutationClaim(fields);
+  validateDegradationFlags(fields, warnings);
+  return {
+    ...readRefutationClaim(fields),
+    isAreaAudit: readAreaAuditMode(fields),
+  };
 }
 
 /** Validate either the full integrity block or M04's compact clean-review line. */
 function validateIntegrity(
   lines: string[],
   violations: ReviewValidationViolation[],
+  warnings: ReviewValidationViolation[],
 ): IntegrityResult {
   const fullSection = readSection(lines, "Review Integrity");
-  if (fullSection) return validateFullIntegrity(fullSection, violations);
+  if (fullSection) {
+    return validateFullIntegrity(fullSection, violations, warnings);
+  }
 
   const compactIndex = lines.findIndex((line) =>
     /^\s*Review Integrity:/u.test(line),
   );
   if (compactIndex >= 0 && COMPACT_INTEGRITY.test(lines[compactIndex] ?? "")) {
-    return { refutationsLogged: 0, refutationsLine: null };
+    return {
+      refutationsLogged: 0,
+      isRefutationPersistenceSkipped: false,
+      refutationsLine: null,
+      isAreaAudit: false,
+    };
   }
   addViolation(
     violations,
@@ -397,7 +560,12 @@ function validateIntegrity(
       ? "compact Review Integrity line is malformed"
       : "report is missing Review Integrity",
   );
-  return { refutationsLogged: 0, refutationsLine: null };
+  return {
+    refutationsLogged: 0,
+    isRefutationPersistenceSkipped: false,
+    refutationsLine: null,
+    isAreaAudit: false,
+  };
 }
 
 /** Check the claimed local refutation ledger without interpreting its free-form body. */
@@ -406,7 +574,12 @@ function validateRefutationLedger(
   integrity: IntegrityResult,
   violations: ReviewValidationViolation[],
 ): void {
-  if (integrity.refutationsLogged <= 0) return;
+  if (
+    integrity.refutationsLogged <= 0 ||
+    integrity.isRefutationPersistenceSkipped
+  ) {
+    return;
+  }
   const ledgerRoot = join(projectRoot, ".goat-flow", "logs", "review");
   let hasLedger = false;
   if (existsSync(ledgerRoot)) {
@@ -434,16 +607,192 @@ function validateRefutationLedger(
 /** Validate finding definitions in every output section that owns R-IDs. */
 function validateFindingSections(
   lines: string[],
+  isAreaAudit: boolean,
   projectRoot: string,
   violations: ReviewValidationViolation[],
-): void {
+): FindingDefinition[] {
+  const definitions: FindingDefinition[] = [];
   for (const heading of FINDING_SECTIONS) {
     const section = readSection(lines, heading);
     const locatedLines = section?.lines ?? [];
     for (const locatedLine of locatedLines) {
-      validateFindingLine(locatedLine, projectRoot, violations);
+      const definition = validateFindingLine(
+        locatedLine,
+        heading,
+        isAreaAudit,
+        projectRoot,
+        violations,
+      );
+      if (definition) definitions.push(definition);
     }
   }
+  return definitions;
+}
+
+/** Fail every repeated finding definition at its later source line. */
+function validateUniqueFindingIds(
+  definitions: FindingDefinition[],
+  violations: ReviewValidationViolation[],
+): void {
+  const firstLines = new Map<string, number>();
+  for (const definition of definitions) {
+    const firstLine = firstLines.get(definition.id);
+    if (firstLine === undefined) {
+      firstLines.set(definition.id, definition.line);
+      continue;
+    }
+    addViolation(
+      violations,
+      "finding-id-duplicate",
+      definition.line,
+      `${definition.id} duplicates its definition at line ${firstLine}`,
+    );
+  }
+}
+
+/** Resolve every literal semantic anchor cited in one reference-only section. */
+function validateSectionAnchors(
+  section: MarkdownSection | null,
+  projectRoot: string,
+  violations: ReviewValidationViolation[],
+): void {
+  for (const locatedLine of section?.lines ?? []) {
+    for (const anchor of locatedLine.text.matchAll(ANCHOR)) {
+      const filePath = anchor[1];
+      const searchText = anchor[2] ?? anchor[3];
+      if (filePath === undefined || searchText === undefined) continue;
+      validateAnchor(
+        projectRoot,
+        filePath,
+        searchText,
+        locatedLine.line,
+        violations,
+      );
+    }
+  }
+}
+
+/** Fail Top 5 references that do not name one surfaced finding definition. */
+function validateTopFiveReferences(
+  section: MarkdownSection | null,
+  definitions: FindingDefinition[],
+  violations: ReviewValidationViolation[],
+): void {
+  const surfacedIds = new Set(
+    definitions
+      .filter((definition) => SURFACED_FINDING_SECTIONS.has(definition.section))
+      .map((definition) => definition.id),
+  );
+  for (const locatedLine of section?.lines ?? []) {
+    for (const match of locatedLine.text.matchAll(/\bR-\d{3}\b/gu)) {
+      const findingId = match[0];
+      if (surfacedIds.has(findingId)) continue;
+      addViolation(
+        violations,
+        "finding-reference-unresolved",
+        locatedLine.line,
+        `Top 5 Risks references undefined surfaced finding ${findingId}`,
+      );
+    }
+  }
+}
+
+/** Fail secondary R-ID references in refuter output when no definition exists. */
+function validateRefuterReferences(
+  lines: string[],
+  definitions: FindingDefinition[],
+  violations: ReviewValidationViolation[],
+): void {
+  const section = readSection(lines, "Refuted by Refuter");
+  const definitionIds = new Set(definitions.map((definition) => definition.id));
+  for (const locatedLine of section?.lines ?? []) {
+    const ownId = locatedLine.text.match(FINDING_PREFIX)?.[1];
+    for (const match of locatedLine.text.matchAll(/\bR-\d{3}\b/gu)) {
+      const findingId = match[0];
+      if (findingId === ownId || definitionIds.has(findingId)) continue;
+      addViolation(
+        violations,
+        "finding-reference-unresolved",
+        locatedLine.line,
+        `Refuted by Refuter references undefined finding ${findingId}`,
+      );
+    }
+  }
+}
+
+/** Return whether an optional section contains prose beyond headings/comments. */
+function hasSectionContent(section: MarkdownSection): boolean {
+  return section.lines.some(({ text }) => {
+    const trimmed = text.trim();
+    return (
+      trimmed.length > 0 &&
+      !/^###\s+/u.test(trimmed) &&
+      !/^<!--.*-->$/u.test(trimmed)
+    );
+  });
+}
+
+/** Warn for optional sections that carry no report content. */
+function warnEmptyOptionalSections(
+  lines: string[],
+  warnings: ReviewValidationViolation[],
+): void {
+  for (const heading of OPTIONAL_SECTIONS) {
+    const section = readSection(lines, heading);
+    if (!section || hasSectionContent(section)) continue;
+    addWarning(
+      warnings,
+      "optional-section-empty",
+      section.headingLine,
+      `${heading} is optional and must be omitted when empty`,
+    );
+  }
+}
+
+/** Warn when Top 5 presence contradicts the surfaced-finding threshold. */
+function warnTopFiveShape(
+  lines: string[],
+  surfacedCount: number,
+  warnings: ReviewValidationViolation[],
+): void {
+  const topFive = readSection(lines, "Top 5 Risks (cross-tier)");
+  if (topFive && !hasSectionContent(topFive)) {
+    addWarning(
+      warnings,
+      "optional-section-empty",
+      topFive.headingLine,
+      "Top 5 Risks is present but empty",
+    );
+  }
+  if (topFive && surfacedCount <= 5) {
+    addWarning(
+      warnings,
+      "top-five-unexpected",
+      topFive.headingLine,
+      `Top 5 Risks is present with only ${surfacedCount} surfaced findings`,
+    );
+  }
+  if (!topFive && surfacedCount > 5) {
+    addWarning(
+      warnings,
+      "top-five-missing",
+      readSection(lines, "Findings")?.headingLine ?? null,
+      `Top 5 Risks is missing for ${surfacedCount} surfaced findings`,
+    );
+  }
+}
+
+/** Warn when optional sections or the Top 5 threshold contradict the skill. */
+function validateConditionalSections(
+  lines: string[],
+  definitions: FindingDefinition[],
+  warnings: ReviewValidationViolation[],
+): void {
+  warnEmptyOptionalSections(lines, warnings);
+  const surfacedCount = definitions.filter((definition) =>
+    SURFACED_FINDING_SECTIONS.has(definition.section),
+  ).length;
+  warnTopFiveShape(lines, surfacedCount, warnings);
 }
 
 /** Validate advisory-only Spec Drift bullets separately from findings. */
@@ -469,7 +818,7 @@ function validateSpecDrift(
  *
  * @param markdown - drafted human-readable review report
  * @param projectRoot - reviewed project whose anchors and ledgers must resolve
- * @returns deterministic status plus every report violation
+ * @returns deterministic status plus structural violations and advisory warnings
  */
 export function validateReviewReport(
   markdown: string,
@@ -477,35 +826,62 @@ export function validateReviewReport(
 ): ReviewValidationResult {
   const lines = markdown.split(/\r?\n/u);
   const violations: ReviewValidationViolation[] = [];
-  const integrity = validateIntegrity(lines, violations);
-  validateFindingSections(lines, projectRoot, violations);
+  const warnings: ReviewValidationViolation[] = [];
+  const integrity = validateIntegrity(lines, violations, warnings);
+  const definitions = validateFindingSections(
+    lines,
+    integrity.isAreaAudit,
+    projectRoot,
+    violations,
+  );
+  validateUniqueFindingIds(definitions, violations);
+  const topFive = readSection(lines, "Top 5 Risks (cross-tier)");
+  validateSectionAnchors(topFive, projectRoot, violations);
+  validateTopFiveReferences(topFive, definitions, violations);
+  validateRefuterReferences(lines, definitions, violations);
   validateSpecDrift(lines, violations);
+  validateConditionalSections(lines, definitions, warnings);
   validateRefutationLedger(projectRoot, integrity, violations);
-  return { status: violations.length === 0 ? "pass" : "fail", violations };
+  return {
+    status: violations.length === 0 ? "pass" : "fail",
+    violations,
+    warnings,
+  };
 }
 
 /**
  * Render a deterministic human-readable validation result for shell pipelines.
  *
  * @param result - pure validation result
- * @returns one PASS line or a FAIL header followed by every violation
+ * @returns a PASS/FAIL header followed by each structural violation and warning
  */
 export function renderReviewValidationResult(
   result: ReviewValidationResult,
 ): string {
-  if (result.status === "pass") return "review validate: PASS";
-  const lines = [
-    `review validate: FAIL (${result.violations.length} violations)`,
-  ];
+  if (result.status === "pass" && result.warnings.length === 0) {
+    return "review validate: PASS";
+  }
+  const warningLabel = `${result.warnings.length} ${result.warnings.length === 1 ? "warning" : "warnings"}`;
+  const lines =
+    result.status === "pass"
+      ? [`review validate: PASS (${warningLabel})`]
+      : [
+          `review validate: FAIL (${result.violations.length} violations${result.warnings.length > 0 ? `, ${warningLabel}` : ""})`,
+        ];
   for (const violation of result.violations) {
     lines.push(
-      `${violation.line === null ? "report" : `line ${violation.line}`} [${violation.code}] ${violation.message}`,
+      `${violation.line === null ? "report" : `line ${violation.line}`} [${violation.checkId}/${violation.code}] ERROR ${violation.message}`,
+    );
+  }
+  for (const warning of result.warnings) {
+    lines.push(
+      `${warning.line === null ? "report" : `line ${warning.line}`} [${warning.checkId}/${warning.code}] WARN ${warning.message}`,
     );
   }
   return lines.join("\n");
 }
 
-/** Read stdin or one saved report, validate it against cwd, and emit all violations. */
+/** Read stdin or one saved report, validate it against cwd, and emit all issues. */
 export function handleReviewCommand(options: ParsedCLI): void {
   if (options.reviewSubcommand !== "validate") {
     throw new CLIError('review requires subcommand "validate".', 2);

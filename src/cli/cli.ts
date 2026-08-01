@@ -47,7 +47,7 @@ Commands:
   diagnostics threat-model  Show static agent/tool posture without executing target hooks
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
   redact            Scrub durable text from stdin before stdout or --output persistence
-  review validate [report-file]  Validate goat-review Markdown; anchors and ledgers resolve from cwd
+  review validate [report-file]  Validate goat-review Markdown; structural failures exit 1, advisory warnings stay at exit 0
   plans export      Preview or write redacted local milestone bundles
   plans check       Check milestone effort arithmetic; report rough 70/20/10 mix drift
   events tail       Read local gitignored evidence-envelope events

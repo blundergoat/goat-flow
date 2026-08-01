@@ -99,11 +99,11 @@ last_reviewed: 2026-08-01
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 19
+**Incident count:** 20
 
 **Latest occurrence:** 2026-08-01
 
-**What happened:** Seventeen edits crossed caps:
+**What happened:** Twenty edits or learning captures crossed caps:
 
 - **2026-05-19/22:** TDD packs hit 3022/3008 words, the preamble exceeded 1500, and QA exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
 - **2026-06-14:** Dispatcher guidance hit 653/555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
@@ -112,14 +112,9 @@ last_reviewed: 2026-08-01
 - **2026-07-12 M15:** Plan hit 2533. Evidence: `workflow/skills/goat-plan/SKILL.md` (search: `Handoff-grade artifacts`).
 - **2026-07-13 M13:** Shared references hit 1560/1601, then compacted to 1484/1490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
 - **2026-07-16 PR #56:** Goat/plan/preamble/TDD measured 597/2689/1540/3021; compaction also repaired stale assertions. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap`; `requires pre-write redaction for durable local text`).
-- **2026-07-17 QA Audit:** A post-gate template pushed QA to 2531; compaction restored 2476. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-qa Audit priorities coherent through the post-gate plan`).
-- **2026-07-17 quality follow-up:** Goat-plan hit 2517, then compacted to 2490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-07-17 inline-review ingestion:** Goat-review hit 2511, then compacted below 2500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `ingests path-bearing automated findings from inline PR comments`).
-- **2026-07-17 quality remediation:** The preamble hit 1514, then compacted below 1500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
-- **2026-07-18 review independence:** Goat-review hit 2527, then compacted to 2488. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
-- **2026-07-19 review scope:** Worktree/area wording pushed goat-review to 2512; compaction restored 2498. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `defines two evidence-producing area audit passes`; `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-07-19 QA rows:** Goat-qa measured 2506→2499 at the functional-skill cap.
+- **2026-07-17–19:** QA, plan, review, and preamble edits repeatedly reached 2506–2531/1514 words; focused contracts restored every surface below its cap. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`; `always-loaded shared references stay within the 1500-word cap`).
 - **2026-08-01 review hardening:** Goat-review crossed its cap five times (2500–2762 words); focused contracts forced compaction before mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- **2026-08-01 M03:** A new lesson pushed `verification-testing.md` to 40KB; narrower routing and recurrence consolidation restored the bucket below 39KB. Evidence: `src/cli/stats/stats.ts` (search: `rule: "bucket-size"`).
 
 **Root cause:** Treated capped prose as tiny.
 
@@ -131,22 +126,22 @@ last_reviewed: 2026-08-01
 
 **Status:** active | **Created:** 2026-07-12
 
-**Decision changed:** After prose/parser renames, run `stats --check` and preserve or update durable anchors.
+**Decision changed:** Preserve or update indexed and contract anchors during compaction; run focused contracts and `stats --check`.
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 6
+**Incident count:** 7
 
 **Latest occurrence:** 2026-08-01
 
-**What happened:** Six compactions broke durable or contract-pinned references:
+**What happened:** Seven compactions removed durable or contract-pinned anchors:
 
-- **2026-07-12–19:** M15, preamble, dispatcher, and QA compactions removed anchors; stats/contracts restored them. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`), `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
-- **2026-08-01 M02:** Compaction replaced the pinned “both local passes finish” wording, and a new assertion split one Markdown code span; focused contracts corrected both. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
+- **2026-07-12–19:** Four compactions removed anchors; stats/contracts restored them. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`).
+- **2026-08-01:** M02/M03 changed pinned wording, split one code span, and removed “with R-ID”; contracts restored all. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `gives goat-review findings stable IDs, harm, and distinct evidence axes`).
 
-**Root cause:** Treated prose as self-contained despite durable cross-file anchors.
+**Root cause:** Compacted prose had durable external anchors.
 
-**Prevention:** Search indexes and contract tests before compaction; run focused contracts and `stats --check`; repair stale anchors in the same change.
+**Prevention:** Search indexes/contracts before compaction; run focused contracts and `stats --check`; repair anchors together.
 
 ---
 

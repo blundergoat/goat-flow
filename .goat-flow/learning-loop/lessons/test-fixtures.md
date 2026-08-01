@@ -45,13 +45,14 @@ last_reviewed: 2026-08-01
 ## Lesson: Workflow parser refactors need both fixture coverage and typecheck
 
 **Status:** active | **Created:** 2026-04-03
-**Incident count:** 2
+**Incident count:** 3
 **Latest occurrence:** 2026-08-01
 
 **What happened:** While tightening CI-validation checks, the first pass on the workflow `run:` parser read the wrong regex capture group and then used a router heuristic that only matched commands containing the word `router`. The focused regression suite and `tsc` both failed before the broader test run finished.
 **Root cause:** Changed parsing and heuristics together without first validating the extracted command shape. The new regression covered the shell pattern, but the implementation still assumed the old capture layout and overfit to existing workflow wording.
 **Recurrence 2026-08-01:** Before implementing the goat-review output validator, the producer survey found that the systemic template and shipped examples disagreed on R-IDs, `Harm:`, Evidence/Proof, and the retired overlap tag. Independent Verify RED then found that the nominally valid fixture contradicted its Top 5 threshold, provenance totals, refuter state, and Spec Drift status; correcting it changed the verdict count and exposed a stale negative-fixture mutation. After behavioral tests and typecheck went green, whole-file ESLint and gruff still caught shared-parser complexity and file-length headroom, so review positional parsing moved to a bounded helper and validator checks split in place. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-review finding examples on the validator-ready grammar`), `test/unit/review-validate.test.ts` (search: `Verdicts: 4/0/0/0`), `src/cli/review-command-parser.ts` (search: `buildReviewCLIFields`).
-**Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's internal relationships, and lock one grammar with focused fixtures; at the first behavioral GREEN, check whole-file complexity and headroom before adding more branches.
+**Recurrence 2026-08-01 (state-authority M04):** The seeded V2 fixture used a broad first-occurrence replacement for `R-001`, so it changed the earlier integrity prose instead of the finding definition. The first combined lint then measured `validateConditionalSections` at complexity 12. A literal finding-prefix mutation and two narrow section-shape helpers restored the intended proof. The plan-wide anchor sweep next treated an unlabeled `path`/`literal` output placeholder as a live repository citation; changing it to `<target-project>/path` restored the explicit placeholder boundary and produced `live misses=0`. Evidence anchors: `test/unit/review-validate.test.ts` (search: `maps the seeded structural corpus to V1-V6 and V8`), `src/cli/review-validate.ts` (search: `warnTopFiveShape`), `test/contract/skill-hardening-contracts.test.ts` (search: `placeholder anchors exempted`).
+**Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's relationships, and lock one grammar with focused fixtures. Negative mutations target a unique semantic substring; shipped path examples label placeholders explicitly. At first behavioral GREEN, check whole-file complexity and headroom before adding branches.
 **Fix:** For parser refactors, verify in this order: (1) print/exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity/size analysis, then (5) run the full test suite. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
 
 ---
@@ -215,3 +216,19 @@ last_reviewed: 2026-08-01
 **Prevention:** Before using an A/B/C pressure fixture, compare every option with always-loaded instructions and accepted ADRs. Keep all non-target obligations equal so only the rule under test explains the result.
 
 **Current-run record:** `.goat-flow/logs/sessions/2026-08-01-goat-review-tdd.md` preserves the M06 pressure and seeded-corpus receipts for this checkout. It is gitignored session evidence, not a durable repository anchor.
+
+---
+
+## Lesson: Node test filters must precede explicit test paths
+
+**Status:** active | **Created:** 2026-08-01
+
+**Decision changed:** Put Node test-runner filters before explicit test paths and verify the reported test count proves isolation.
+
+**Trigger phase:** VERIFY
+
+**What happened:** The M03 anchor command placed `--test-name-pattern` after the TypeScript test path. The Node/tsx runner executed all 110 contracts instead of the one anchor contract, so expected interim mirror failures obscured the intended proof. Moving the filter before the path produced exactly one passing test and the zero-miss diagnostic.
+
+**Evidence:** `test/contract/skill-hardening-contracts.test.ts` (search: `goat-review internal anchors resolve to named current targets`) - this is the intended isolated contract; its diagnostic reports checked, exempted, and missed anchors.
+
+**Prevention:** Use `node --import tsx --test --test-name-pattern="<pattern>" <test-path>` and require both the named subtest and expected `# tests` count before treating the run as focused proof.

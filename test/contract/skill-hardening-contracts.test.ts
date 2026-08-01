@@ -309,11 +309,7 @@ describe("skill hardening contracts", () => {
       );
       assert.match(scope, /search: `Depth Signals`/u, skillPath);
       assert.match(scope, /3\+ → full, 2 → offer, 0–1 → quick/u, skillPath);
-      assert.match(
-        scope,
-        /Quick keeps Pass 1 → Pass 2/u,
-        skillPath,
-      );
+      assert.match(scope, /Quick keeps Pass 1 → Pass 2/u, skillPath);
       assert.match(scope, /Refused Full/u, skillPath);
       assert.match(scope, /signals `<n>`/u, skillPath);
     });
@@ -611,11 +607,7 @@ describe("skill hardening contracts", () => {
         /redacted bundle is a durable receipt, not the byte authority/u,
         skillPath,
       );
-      assert.match(
-        scope,
-        /persist-skipped: redactor-unavailable/u,
-        skillPath,
-      );
+      assert.match(scope, /persist-skipped: redactor-unavailable/u, skillPath);
       assert.match(scope, /\*\*Authority:\*\*/u, skillPath);
       assert.match(scope, /\*\*State drift:\*\*/u, skillPath);
     });
@@ -633,11 +625,7 @@ describe("skill hardening contracts", () => {
           /`git diff <base-oid>\.\.\.<head-oid>`/u,
           referencePath,
         );
-        assert.match(
-          reference,
-          /`git show <head-oid>:<path>`/u,
-          referencePath,
-        );
+        assert.match(reference, /`git show <head-oid>:<path>`/u, referencePath);
         assert.match(reference, /`git write-tree`/u, referencePath);
         assert.match(
           reference,
@@ -796,7 +784,21 @@ describe("skill hardening contracts", () => {
         skillPath,
       );
       assert.match(skill, /MUST or correctness-SHOULD/u, skillPath);
-      assert.match(skill, /inline[^\n]+no new calls/u, skillPath);
+      assert.match(
+        skill,
+        /Re-frame only Pass 0 result lines and Pass 2 reads already gathered/u,
+        skillPath,
+      );
+      assert.match(
+        skill,
+        /no new tool, file, command, or model calls/u,
+        skillPath,
+      );
+      assert.match(
+        skill,
+        /passing test[^\n]+literal Pass 0 result[^\n]+this session/iu,
+        skillPath,
+      );
       assert.match(skill, /subagent[^\n]+Orchestration Admission/u, skillPath);
     });
   });
@@ -1089,9 +1091,180 @@ describe("skill hardening contracts", () => {
     );
   });
 
+  it("goat-review internal anchors resolve to named current targets", (testContext) => {
+    const reviewRoot = "workflow/skills/goat-review";
+    const bundlePaths = [
+      `${reviewRoot}/SKILL.md`,
+      `${reviewRoot}/references/automated-review.md`,
+      `${reviewRoot}/references/examples.md`,
+      `${reviewRoot}/references/refuter-spec.md`,
+      `${reviewRoot}/references/review-traps.md`,
+    ];
+    const namedAnchorPattern = /`([^`\n]+)`\s*\(search:\s*`([^`]+)`\)/gu;
+    let anchorsChecked = 0;
+    let placeholderAnchors = 0;
+
+    for (const sourcePath of bundlePaths) {
+      const source = readProjectFile(sourcePath);
+      for (const anchorMatch of source.matchAll(namedAnchorPattern)) {
+        const citedPath = anchorMatch[1];
+        const anchor = anchorMatch[2];
+        if (citedPath.includes("<target-project>")) {
+          placeholderAnchors += 1;
+          continue;
+        }
+
+        const targetPath =
+          citedPath === "SKILL.md"
+            ? `${reviewRoot}/SKILL.md`
+            : citedPath.startsWith("references/")
+              ? `${reviewRoot}/${citedPath}`
+              : citedPath;
+        assert.match(
+          readProjectFile(targetPath),
+          new RegExp(anchor.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"),
+          `${sourcePath}: ${citedPath} missing search anchor ${anchor}`,
+        );
+        anchorsChecked += 1;
+      }
+    }
+
+    const examples = readProjectFile(`${reviewRoot}/references/examples.md`);
+    assert.doesNotMatch(examples, /Automated-reviewer overlap/u);
+    assert.match(examples, /Search for `Automated-review provenance`/u);
+    assert.match(
+      examples,
+      /`references\/automated-review\.md` \(search: `Automated-review provenance`\)/u,
+    );
+    assert.match(examples, /search: `Group 3\+ findings with one root`/u);
+    assert.ok(anchorsChecked > 0, "the live anchor sweep checked no anchors");
+    testContext.diagnostic(
+      `anchors checked=${anchorsChecked}; placeholder anchors exempted=${placeholderAnchors}; live misses=0`,
+    );
+  });
+
+  it("routes goat-review durable artifacts through host-owned redaction", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const diffReview = readMarkdownSection(
+        skillPath,
+        "Diff Review (Quick) - Two-Pass Discipline",
+      );
+      assert.match(
+        diffReview,
+        /Refutation Ledger:[^\n]+draft[^\n]+in memory[^\n]+host[^\n]+`goat-flow redact --output/iu,
+        skillPath,
+      );
+      assert.match(
+        diffReview,
+        /redactor is unavailable[^\n]+do not persist[^\n]+`Refutations logged: <N> \(persist-skipped\)`/iu,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-review", "references/refuter-spec.md"),
+      (referencePath) => {
+        const reference = readProjectFile(referencePath);
+        assert.match(
+          reference,
+          /refuter runtime[^\n]+never writes directly/iu,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /host[^\n]+in memory[^\n]+`goat-flow redact --output/iu,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /redactor is unavailable[^\n]+do not persist/iu,
+          referencePath,
+        );
+        assert.doesNotMatch(reference, /^Output to:/mu, referencePath);
+      },
+    );
+  });
+
+  it("aligns goat-review persistence and validator status across output surfaces", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const scope = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      const integrity = readMarkdownSection(
+        skillPath,
+        "Review Integrity (confidence signal)",
+      );
+      const output = readMarkdownSection(skillPath, "Output Format");
+
+      assert.match(
+        scope,
+        /Bundle:[^\n]+persist-skipped: redactor-unavailable/u,
+        skillPath,
+      );
+      assert.match(
+        integrity,
+        /Review validator:[^\n]+validated[^\n]+validator-unavailable/u,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /Review validator:[^\n]+validated[^\n]+validator-unavailable/u,
+        skillPath,
+      );
+      assert.match(
+        integrity,
+        /Refutations logged:[^\n]+persist-skipped/u,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /Refutations logged:[^\n]+persist-skipped/u,
+        skillPath,
+      );
+      assert.match(
+        integrity,
+        /Degradation flags:[^\n]+persist-skipped: redactor-unavailable/u,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /Degradation flags:[^\n]+persist-skipped: redactor-unavailable/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      (referencePath) => {
+        const examples = readMarkdownSection(
+          referencePath,
+          "Conditional Output and Provenance Shapes",
+        );
+        assert.match(
+          examples,
+          /Review Integrity:[^\n]+validator=(?:validated|validator-unavailable)/u,
+          referencePath,
+        );
+      },
+    );
+
+    const publicGuidance = readMarkdownSection(
+      "docs/skills.md",
+      "/goat-review",
+    );
+    assert.match(publicGuidance, /host-owned pre-write redaction/iu);
+    assert.match(
+      publicGuidance,
+      /Pass 2\.5[^\n]+no new tool, file, command, or model calls/u,
+    );
+    assert.match(publicGuidance, /Review validator:[^\n]+validated/iu);
+  });
+
   it("wires optional review validation into the goat-review proof gate", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const skill = readProjectFile(skillPath);
+      const output = readMarkdownSection(skillPath, "Output Format");
       assert.match(
         skill,
         /version-matched CLI[^\n]+goat-flow review validate/iu,
@@ -1105,6 +1278,11 @@ describe("skill hardening contracts", () => {
       assert.match(
         skill,
         /validator-unavailable[^\n]+does not block/iu,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /Machine-valid anchors use `<target-project>\/path` \(search: `literal`\)[^\n]+Findings[^\n]+Systemic Patterns[^\n]+Top 5 Risks/u,
         skillPath,
       );
     });
@@ -1170,11 +1348,7 @@ describe("skill hardening contracts", () => {
         "Pass 3 - Cross-Model Refuter (explicit approval only)",
       );
       const constraints = readMarkdownSection(skillPath, "Constraints");
-      assert.match(
-        passThree,
-        /Refuter output is advisory/u,
-        skillPath,
-      );
+      assert.match(passThree, /Refuter output is advisory/u, skillPath);
       assert.match(passThree, /host-reproduced evidence/u, skillPath);
       assert.match(
         constraints,

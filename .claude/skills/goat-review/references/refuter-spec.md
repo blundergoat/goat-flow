@@ -54,7 +54,7 @@ Output as structured JSON matching the schema below.
 }
 ```
 
-Output to: `.goat-flow/logs/review/goat-review-refuter.<random>.json`
+The refuter runtime returns JSON to the host and never writes directly. The host keeps it in memory and persists only through `goat-flow redact --output .goat-flow/logs/review/goat-review-refuter.<random>.json`; only redacted output reaches disk. If the redactor is unavailable, do not persist; retain the count through `Refutations logged: <N> (persist-skipped)` in the main output.
 
 ## Synthesis Rules
 

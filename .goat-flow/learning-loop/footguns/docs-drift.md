@@ -11,7 +11,7 @@ last_reviewed: 2026-08-01
 
 **Why it happens:** The audit validates structure (files exist, paths resolve, versions match). Partial content automation exists - `src/cli/audit/check-factual-claims.ts` catches count-claim drift across PROSE_TARGETS plus `docs/*.md`, and `src/cli/audit/check-content-quality.ts` lints vague terms and generic instructions on a fixed QUALITY_TARGETS list (instruction files, skill-reference, public docs, ADRs, workflow/setup templates). Coverage is incomplete: footgun/lesson content is only schema-enforced via `stats --check` (status field and `(search:...)` anchors), not fact-checked. Cold-path surfaces outside these target lists still drift manually as code changes.
 
-**Evidence (4 rounds, 33 findings, all resolved - kept as pattern evidence, not an open defect list):**
+**Evidence (5 rounds, 37 findings, all resolved - kept as pattern evidence, not an open defect list):**
 
 | Round | Date | Findings | Surfaced by | Representative drift |
 |---|---|---|---|---|
@@ -19,6 +19,7 @@ last_reviewed: 2026-08-01
 | 2 | 2026-04-16 | 8 | 4-critique cross-review | wrong check counts (claimed 8/18, actual 16/16); `.js` paths surviving the dashboard TypeScript migration |
 | 3 | 2026-04-24 | 3 | 3 independent Copilot quality reports | `docs/skills.md` describing a `/goat-plan` default that contradicted the shipped skill; hot-path listing omitting `.github/copilot-instructions.md` |
 | 4 | 2026-05-11 | 15 | full documentation audit during the v1.6.0 wave | four instruction files carrying materially different Never tiers; header dates stamped from the wrong release; ADR status vocabulary violations |
+| 5 | 2026-08-01 | 4 | external review re-verified against the live goat-review bundle | three anchors retained a retired automated-review label; one systemic-pattern anchor named wording that never existed |
 
 Three findings from Round 4 (2026-05-11) drove Prevention 5-7 below and are the ones worth remembering in detail:
 
@@ -37,3 +38,4 @@ Three findings from Round 4 (2026-05-11) drove Prevention 5-7 below and are the 
 6. **Block competitor / third-party skill names in goat-flow-owned committed surfaces** - maintain a small denylist (`Valyu`, `MySQL skill`, `prime corpus`, `frontend-design skill`, `writing-skills`, plus any future external skill references discovered) and grep `*.md` / `*.ts` outside `node_modules`, `.claude/worktrees`, `.goat-flow/scratchpad`, `.goat-flow/plans`, `.goat-flow/logs`. Generic patterns must be stated provider-neutrally (`<VENDOR>_API_KEY`, `a domain skill`, `a vendor-SDK skill`).
 7. **Do not format illustrative basenames as path-like code spans** unless they resolve from the repo root. If a filename is an example rather than an actual path, write it in prose or include a valid parent directory.
 8. ~~**Instruction-header dates drift every release because `bump-version.sh` updates the version but not the date.**~~ (resolved 2026-08-01: `scripts/bump-version.sh` (search: `RELEASE_DATE`) now reads the release date from the CHANGELOG's `## v<version> - <date>` heading and `update_instruction_header` (search: `update_instruction_header`) seds both the version and the `({DATE})` field. Verified 2026-08-01: all three headers read `v1.14.0 (2026-07-19)` against CHANGELOG `## v1.14.0 - 2026-07-19`. Do NOT hand-edit these dates - the script owns them, and a manual edit will be overwritten on the next bump.)
+9. Resolve every live `(search: ...)` citation against its named target in contract tests; exempt only explicitly labelled target-project placeholders.

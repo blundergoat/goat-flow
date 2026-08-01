@@ -127,7 +127,7 @@ authority, do not run it against the checkout; disclose `callsite-completeness-g
 Scope: reviewed `<source>` at `<base>...<head>`; `<n>` files and `<m>` changed lines.
 Ship Verdict: **YES** — no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; named guards or tests disproved every suspicion.
-Review Integrity: confident; `<k>/<n>` files opened; no degradation flags.
+Review Integrity: confident; `<k>/<n>` files opened; no degradation flags; validator=validated | validator-unavailable.
 What I Didn't Examine: `<one-line unexamined surface or "none">`.
 ```
 
@@ -162,7 +162,7 @@ Emit these under `## Direction / Opportunity Audit`, without MUST/SHOULD/MAY tag
 
 Route rejected material by lifespan:
 
-- **Per-run refutations:** keep Pass-2 evidence in random-suffixed `.goat-flow/logs/review/` ledgers.
+- **Per-run refutations:** draft Pass-2 evidence in memory; the host persists it only through the shared redactor, or preserves the count as persist-skipped.
 - **Local cross-run rejections:** record the rationale in the active plan's `backlog.md` or a named plan-local rejection section.
 - **Durable policy decisions:** use an ADR or learning-loop entry only when the decision changes future work beyond the current plan.
 
@@ -177,16 +177,16 @@ Use this shape when Pass 1 raises a plausible template or output-format suspicio
 
 **Pass 2 actions:**
 1. Open `SKILL.md` and re-read `Review Integrity`.
-2. Search for `Automated-reviewer overlap`.
+2. Search for `Automated-review provenance`.
 3. Search for `Refuter pass`.
-4. Open `references/automated-review.md` (search: `Automated-reviewer overlap`) and `references/refuter-spec.md` (search: `Review Integrity Extension`) to compare the reference contract with the main output template.
+4. Open `references/automated-review.md` (search: `Automated-review provenance`) and `references/refuter-spec.md` (search: `Review Integrity Extension`) to compare the reference contract with the main output template.
 
 **Expected outcome:**
 - Mark the suspicion `REFUTED` when `SKILL.md` contains both output-template lines.
 - Do not surface a final finding.
 - Write a refutation ledger entry:
   - Original suspicion: `SKILL.md` may omit automated-review and refuter integrity lines.
-  - Refuting evidence: `SKILL.md` (search: `Automated-reviewer overlap`); `SKILL.md` (search: `Refuter pass`).
+  - Refuting evidence: `SKILL.md` (search: `Automated-review provenance`); `SKILL.md` (search: `Refuter pass`).
   - Rationale: the main template now exposes both conditional integrity extensions, so the references are reachable during normal review output.
 
 **Zero-finding final note:** "Checked Review Integrity against both optional references; no issue surfaced because the output template includes the required conditional lines."
@@ -213,7 +213,7 @@ Use concrete harm and proof class. These examples use sibling skill anchors only
 
 ```markdown
 ## Systemic Patterns
-- R-001 [SHOULD:patch] **Group repeated output-contract drift under one parent** - affected anchors: `SKILL.md` (search: `MUST group 3+ related findings as systemic patterns`), `SKILL.md` (search: `## Systemic Patterns`); repeated failure: three related findings share one output-contract root cause | Harm: reviewers scatter one root cause across separate bullets, making the required fix easy to under-scope. | Evidence: OBSERVED | Proof: STATIC
+- R-001 [SHOULD:patch] **Group repeated output-contract drift under one parent** - affected anchors: `SKILL.md` (search: `Group 3+ findings with one root`), `SKILL.md` (search: `## Systemic Patterns`); repeated failure: three related findings share one output-contract root cause | Harm: reviewers scatter one root cause across separate bullets, making the required fix easy to under-scope. | Evidence: OBSERVED | Proof: STATIC
 ```
 
 **PR automated-review overlap:**
