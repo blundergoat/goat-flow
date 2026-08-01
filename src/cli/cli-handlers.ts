@@ -47,6 +47,7 @@ import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
 import { handlePlansCommand } from "./plans-check.js";
+import type { runSkillNew } from "./skill-author.js";
 const PACKAGE_VERSION = getPackageVersion();
 function formatCandidacyArtifact(
   recommendation: CandidacyResult["recommendedArtifact"],
@@ -676,6 +677,38 @@ async function handleSkillCommand(options: ParsedCLI): Promise<void> {
   await handleSkillNewCommand(options);
 }
 
+type SkillNewCommandResult = Awaited<ReturnType<typeof runSkillNew>>;
+/** Build the authoring request from parsed CLI fields while omitting absent optional values. */
+function skillNewRequest(options: ParsedCLI) {
+  return {
+    agent: options.agent,
+    description: options.skillDescription ?? undefined,
+    draftPath: options.skillDraftPath ?? undefined,
+    redLogPath: options.skillRedLogPath ?? undefined,
+    shouldUseInteractivePrompt: options.skillInteractive,
+    name: options.skillName ?? undefined,
+    shouldSkipConfirm: options.skillSkipConfirm,
+    projectRoot: options.projectPath,
+  };
+}
+/** Render one authoring result in the caller's selected JSON or human-readable contract. */
+function renderSkillNewResult(
+  result: SkillNewCommandResult,
+  asJson: boolean,
+): string {
+  if (!asJson) return result.output.join("\n");
+  return JSON.stringify(
+    {
+      candidacy: result.candidacy,
+      proposedPath: result.proposedPath,
+      written: result.written,
+      postScaffoldScore: result.postScaffoldScore ?? null,
+      nextSteps: result.nextSteps,
+    },
+    null,
+    2,
+  );
+}
 /** Run skill authoring; throws `CLIError` for usage/input failures and preserves JSON/text output. */
 async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
   // Any remaining mode must be the existing skill-new authoring contract.
@@ -688,40 +721,14 @@ async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
   const { runSkillNew, SkillNewInputError } = await import("./skill-author.js");
   let result: Awaited<ReturnType<typeof runSkillNew>>;
   try {
-    result = await runSkillNew({
-      agent: options.agent,
-      description: options.skillDescription ?? undefined,
-      draftPath: options.skillDraftPath ?? undefined,
-      redLogPath: options.skillRedLogPath ?? undefined,
-      shouldUseInteractivePrompt: options.skillInteractive,
-      name: options.skillName ?? undefined,
-      shouldSkipConfirm: options.skillSkipConfirm,
-      projectRoot: options.projectPath,
-    });
+    result = await runSkillNew(skillNewRequest(options));
   } catch (err) {
     if (err instanceof SkillNewInputError) {
       throw new CLIError(err.message, 2);
     }
     throw err;
   }
-  if (options.format === "json") {
-    writeOutput(
-      options,
-      JSON.stringify(
-        {
-          candidacy: result.candidacy,
-          proposedPath: result.proposedPath,
-          written: result.written,
-          postScaffoldScore: result.postScaffoldScore ?? null,
-          nextSteps: result.nextSteps,
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-  writeOutput(options, result.output.join("\n"));
+  writeOutput(options, renderSkillNewResult(result, options.format === "json"));
 }
 
 /** Dispatch one parsed CLI command to its handler. */

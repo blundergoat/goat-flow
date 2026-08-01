@@ -650,9 +650,7 @@ function renderMilestoneLine(record: PlanExportRecord): string | null {
     ? ` ${renderSplit(record.effort.split)}`
     : "";
   const actual = record.effort.actual;
-  const actualSplitText = actual?.split
-    ? ` ${renderSplit(actual.split)}`
-    : "";
+  const actualSplitText = actual?.split ? ` ${renderSplit(actual.split)}` : "";
   const actualReasonText = actual?.reason ? ` - ${actual.reason}` : "";
   const actualText = actual
     ? ` | actual: ~${actual.totalMinutes} min${actualSplitText}${actualReasonText}`

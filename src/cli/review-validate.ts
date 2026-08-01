@@ -1117,7 +1117,8 @@ export function renderReviewValidationResult(
           `review validate: FAIL (${result.violations.length} violations${warningSuffix})`,
         ];
   for (const violation of result.violations) {
-    const location = violation.line === null ? "report" : `line ${violation.line}`;
+    const location =
+      violation.line === null ? "report" : `line ${violation.line}`;
     lines.push(
       `${location} [${violation.checkId}/${violation.code}] ERROR ${violation.message}`,
     );

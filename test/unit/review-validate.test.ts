@@ -605,60 +605,61 @@ What I Didn't Examine: none.
     assert.equal(emptyOptional.status, "pass");
   });
 
-  it("maps the seeded structural corpus to V1-V6 and V8", (testContext) => {
-    const projectRoot = createReviewedProject(testContext);
-    const fixtures: Array<{
-      checkId: string;
-      code: string;
-      report: string;
-    }> = [
-      {
-        checkId: "V1",
-        code: "anchor-unresolved",
-        report: validReview("src/example.ts", "missingSymbol"),
-      },
-      {
-        checkId: "V2",
-        code: "finding-grammar",
-        report: validReview().replace(
-          "- R-001 [SHOULD:patch]",
-          "- R-01 [SHOULD:patch]",
-        ),
-      },
-      {
-        checkId: "V3",
-        code: "finding-harm",
-        report: validReview().replace(
-          " | Harm: requests use an invalid configuration.",
-          "",
-        ),
-      },
-      {
-        checkId: "V4",
-        code: "finding-evidence",
-        report: validReview().replace(" | Evidence: OBSERVED", ""),
-      },
-      {
-        checkId: "V5",
-        code: "integrity-format",
-        report: validReview().replace("- Review validator: validated\n", ""),
-      },
-      {
-        checkId: "V6",
-        code: "finding-id-duplicate",
-        report: validReview().replace(
-          "- R-003 [MAY:patch]",
-          "- R-002 [MAY:patch]",
-        ),
-      },
-      {
-        checkId: "V8",
-        code: "refutation-ledger",
-        report: validReview(undefined, undefined, 1),
-      },
-    ];
+  const structuralValidationCases: Array<{
+    checkId: string;
+    code: string;
+    report: string;
+  }> = [
+    {
+      checkId: "V1",
+      code: "anchor-unresolved",
+      report: validReview("src/example.ts", "missingSymbol"),
+    },
+    {
+      checkId: "V2",
+      code: "finding-grammar",
+      report: validReview().replace(
+        "- R-001 [SHOULD:patch]",
+        "- R-01 [SHOULD:patch]",
+      ),
+    },
+    {
+      checkId: "V3",
+      code: "finding-harm",
+      report: validReview().replace(
+        " | Harm: requests use an invalid configuration.",
+        "",
+      ),
+    },
+    {
+      checkId: "V4",
+      code: "finding-evidence",
+      report: validReview().replace(" | Evidence: OBSERVED", ""),
+    },
+    {
+      checkId: "V5",
+      code: "integrity-format",
+      report: validReview().replace("- Review validator: validated\n", ""),
+    },
+    {
+      checkId: "V6",
+      code: "finding-id-duplicate",
+      report: validReview().replace(
+        "- R-003 [MAY:patch]",
+        "- R-002 [MAY:patch]",
+      ),
+    },
+    {
+      checkId: "V8",
+      code: "refutation-ledger",
+      report: validReview(undefined, undefined, 1),
+    },
+  ];
 
-    for (const fixture of fixtures) {
+  // Separate names make a validator-class regression visible directly in TAP output.
+  for (const fixture of structuralValidationCases) {
+    it(`maps the seeded structural corpus to ${fixture.checkId}/${fixture.code}`, (testContext) => {
+      const projectRoot = createReviewedProject(testContext);
       const result = validateReviewReport(fixture.report, projectRoot);
       assert.equal(
         hasCheck(
@@ -669,8 +670,8 @@ What I Didn't Examine: none.
         true,
         `${fixture.checkId} should emit ${fixture.code}`,
       );
-    }
-  });
+    });
+  }
 
   it("renders every violation with its class and line when available", (testContext) => {
     const projectRoot = createReviewedProject(testContext);

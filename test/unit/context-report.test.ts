@@ -20,6 +20,7 @@ import {
 import { makeSharedFacts, stubAgentFacts } from "../fixtures/projects/index.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
+const EXPECTED_OVER_BUDGET_SURFACE_COUNT = 4;
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
 
 /** Spawns the real read-only command so parser, facts, dispatch, and stdout stay integrated. */
@@ -85,6 +86,7 @@ function contextFacts(
 describe("static context report", () => {
   // A user sees every normative pressure source together, ordered by measured budget ratio.
   it("reports oversized instruction, skill, reference, and learning-loop surfaces", () => {
+    const expectedDispatcherWords = 556;
     const oversizedInstruction = Array.from(
       { length: 151 },
       (_, index) => `instruction ${index}`,
@@ -133,8 +135,11 @@ describe("static context report", () => {
     });
 
     assert.equal(report.measurement.telemetryRequired, false);
-    assert.equal(report.summary.overBudgetSurfaces, 4);
-    assert.equal(report.surfaces.skills[0]?.words, 556);
+    assert.equal(
+      report.summary.overBudgetSurfaces,
+      EXPECTED_OVER_BUDGET_SURFACE_COUNT,
+    );
+    assert.equal(report.surfaces.skills[0]?.words, expectedDispatcherWords);
     assert.deepEqual(
       report.topPressure.map((surface) => surface.path),
       [

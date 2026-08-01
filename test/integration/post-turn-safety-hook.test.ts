@@ -36,19 +36,16 @@ const TEST_RSA_PRIVATE_KEY_HEADER = ["-----BEGIN", "RSA PRIVATE KEY-----"].join(
 const TEST_RSA_PRIVATE_KEY_FOOTER = ["-----END", "RSA PRIVATE KEY-----"].join(
   " ",
 );
-const TEST_RSA_PRIVATE_KEY_BODY = [
-  "MIIEpAIBAAKCAQEA",
-  "1234567890abcdef",
-].join("");
+const TEST_RSA_PRIVATE_KEY_BODY = ["MIIEpAIBAAKCAQEA", "1234567890abcdef"].join(
+  "",
+);
 const TEST_JWT_TOKEN = [
   "eyJhbGciOiJIUzI1NiJ9",
   "eyJzdWIiOiIxMjM0NTY3ODkwIn0",
   ["SflKxwRJSMeK", "KF2QT4fwpMeJ", "f36POk6yJV_adQssw5c"].join(""),
 ].join(".");
 const TEST_DOCUMENTED_AWS_PLACEHOLDER = `AKIA${"IOSFODNN7EXAMPLE"}`;
-const TEST_DOCUMENTED_SLACK_PLACEHOLDER = `xoxb-${
-  "test-1234567890-1234567890"
-}`;
+const TEST_DOCUMENTED_SLACK_PLACEHOLDER = `xoxb-${"test-1234567890-1234567890"}`;
 
 /** Writes and removes one committed temporary repository around a safety-hook scenario. */
 function withTempRepo(fn: (root: string) => void): void {

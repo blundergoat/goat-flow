@@ -309,6 +309,17 @@ function dashboardUtilityActionsFragment(): DashboardAppFragment {
   };
 }
 
+/** Optional workspace and reporting fields forwarded by dashboard terminal launch actions. */
+interface DashboardTerminalLaunchOptions {
+  promptLabel?: string | null;
+  presetId?: string | null;
+  cwdPath?: string | null;
+  targetPath?: string | null;
+  accessMode?: TerminalAccessMode;
+  captureQualityDrafts?: boolean;
+  qualityDraftProjectPath?: string | null;
+}
+
 /**
  * Build terminal launch and reconnect method shims.
  *
@@ -343,14 +354,7 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
       prompt: string,
       runner?: RunnerId,
       label?: string,
-      options?: {
-        presetId?: string | null;
-        cwdPath?: string | null;
-        targetPath?: string | null;
-        accessMode?: TerminalAccessMode;
-        captureQualityDrafts?: boolean;
-        qualityDraftProjectPath?: string | null;
-      },
+      options?: DashboardTerminalLaunchOptions,
     ) {
       await dashboardLaunchPreset(this, prompt, runner, label, options);
     },
@@ -397,15 +401,7 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         accessMode = "workspace",
         captureQualityDrafts = false,
         qualityDraftProjectPath = null,
-      }: {
-        promptLabel?: string | null;
-        presetId?: string | null;
-        cwdPath?: string | null;
-        targetPath?: string | null;
-        accessMode?: TerminalAccessMode;
-        captureQualityDrafts?: boolean;
-        qualityDraftProjectPath?: string | null;
-      } = {},
+      }: DashboardTerminalLaunchOptions = {},
     ) {
       await dashboardLaunchInTerminal(this, prompt, runner, {
         promptLabel,

@@ -261,223 +261,332 @@ function removeDraft(stagingDir: string, draftName: string): void {
   }
 }
 
+/** Shared paths and timing used while one root poller processes drafts. */
+interface RootCaptureContext {
+  projectRoot: string;
+  stagingDir: string;
+  stableMs: number;
+}
+
+/** Mutable poller state that remains observable across asynchronous draft persistence. */
+interface RootCaptureState {
+  isDisposed: boolean;
+  isBusy: boolean;
+}
+
+/** Eligible draft metadata captured once before receipt reservation. */
+interface StableDraft {
+  path: string;
+  size: number;
+}
+
+/** Record one bounded capture event; recorder failures use a silent fallback so persistence survives. */
+function recordCaptureEvent(
+  context: RootCaptureContext,
+  eventType: "quality.persisted" | "quality.rejected",
+  payload: EvidencePayload,
+): void {
+  try {
+    recordEvidenceEvent({
+      producer: "quality-draft-capture",
+      actor: "server",
+      eventType,
+      projectRoot: context.projectRoot,
+      payload,
+    });
+  } catch {
+    // Persistence already succeeded or failed independently, so evidence loss cannot change its outcome.
+    return;
+  }
+}
+
+/** Read one stable regular draft; missing, unreadable, or still-changing paths use a null fallback. */
+function readStableDraft(
+  context: RootCaptureContext,
+  draftName: string,
+): StableDraft | null {
+  const path = join(context.stagingDir, draftName);
+  let stats;
+  try {
+    stats = lstatSync(path);
+  } catch {
+    // A missing or unreadable candidate is retried only if a later poll can see it safely.
+    return null;
+  }
+  // Symlinks and non-files never enter the report persistence pipeline.
+  if (!stats.isFile()) return null;
+  // A draft still inside its quiet window may be partially written, so leave it for the next poll.
+  if (context.stableMs > 0 && Date.now() - stats.mtimeMs < context.stableMs) {
+    return null;
+  }
+  return { path, size: stats.size };
+}
+
 /**
- * Build the single poller that owns one project root's staging directory.
+ * Reserve a draft receipt destination before persistence.
+ * A collision removes the draft and records the bounded rejection instead of overwriting local state.
+ */
+function reserveCaptureReceipt(
+  context: RootCaptureContext,
+  draftName: string,
+): boolean {
+  try {
+    assertCaptureReceiptAvailable(context.stagingDir, draftName);
+    return true;
+  } catch {
+    // A pre-existing receipt is user-owned state, so reject the draft without overwriting it.
+    removeDraft(context.stagingDir, draftName);
+    const receiptAvailable = replacePreexistingReceiptWithRejection(
+      context.stagingDir,
+      draftName,
+    );
+    recordCaptureEvent(context, "quality.rejected", {
+      draft: draftName,
+      error: "quality capture: receipt destination already existed.",
+      receipt: receiptAvailable ? "replaced" : "unavailable",
+    });
+    return false;
+  }
+}
+
+/**
+ * Writes one receipt and records a bounded fallback event if the destination becomes unavailable.
  *
- * Each eligible draft is processed exactly once per appearance: strict
- * validation -> redaction -> revalidation -> persist through
- * {@link persistQualityReportText}, delete the draft, write a receipt, and
- * record a `quality.persisted` or
- * `quality.rejected` evidence event. Failures never stop the poller - one
- * malformed draft must not block a later corrected draft.
- *
- * Never call this directly from a session: the staging directory is shared by
- * every session on the root, so ownership goes through
- * {@link startQualityDraftCapture}, which reference-counts one poller per root.
+ * @param context - project-owned capture paths; missing paths make receipt writing fail closed
+ * @param draftName - source draft identity; empty names cannot satisfy the draft contract
+ * @param receipt - redacted success or rejection receipt; absent fields are omitted from disk
+ * @param eventType - evidence classification used only when the receipt write fails
+ * @param fallbackPayload - bounded evidence retained when no receipt can be written
+ * @returns true after a durable receipt; false after the fallback event
+ */
+function writeReceiptOrRecordFallback(
+  context: RootCaptureContext,
+  draftName: string,
+  receipt: { ok: true; reportPath: string } | { ok: false; error: string },
+  eventType: "quality.persisted" | "quality.rejected",
+  fallbackPayload: EvidencePayload,
+): boolean {
+  try {
+    writeCaptureReceipt(context.stagingDir, draftName, receipt);
+    return true;
+  } catch {
+    // The event keeps a bounded outcome when the user cannot receive a durable receipt.
+    recordCaptureEvent(context, eventType, fallbackPayload);
+    return false;
+  }
+}
+
+/** Reject one oversized draft after deleting its unredacted staging copy. */
+function rejectOversizedDraft(
+  context: RootCaptureContext,
+  draftName: string,
+): void {
+  removeDraft(context.stagingDir, draftName);
+  const message = `quality capture: draft exceeds the ${MAX_DRAFT_BYTES} byte limit.`;
+  const receiptWritten = writeReceiptOrRecordFallback(
+    context,
+    draftName,
+    { ok: false, error: message },
+    "quality.rejected",
+    {
+      draft: draftName,
+      error: "quality capture: receipt unavailable.",
+    },
+  );
+  // Receipt failure was already captured as evidence, so no second rejection event is needed.
+  if (!receiptWritten) return;
+  recordCaptureEvent(context, "quality.rejected", {
+    draft: draftName,
+    error: message,
+  });
+}
+
+/** Record successful persistence after deleting the source draft and writing its receipt. */
+function recordPersistedDraft(
+  context: RootCaptureContext,
+  draftName: string,
+  reportPath: string,
+): void {
+  removeDraft(context.stagingDir, draftName);
+  const receiptWritten = writeReceiptOrRecordFallback(
+    context,
+    draftName,
+    { ok: true, reportPath },
+    "quality.persisted",
+    {
+      draft: draftName,
+      report_path: reportPath,
+      receipt: "unavailable",
+    },
+  );
+  // Receipt failure already carries the persisted report path in evidence.
+  if (!receiptWritten) return;
+  recordCaptureEvent(context, "quality.persisted", {
+    draft: draftName,
+    report_path: reportPath,
+  });
+}
+
+/** Record a persistence rejection after deleting and redacting the source draft. */
+function recordRejectedDraft(
+  context: RootCaptureContext,
+  draftName: string,
+  rawText: string,
+  error: unknown,
+): void {
+  removeDraft(context.stagingDir, draftName);
+  const message = captureRejectionDiagnostic(error);
+  const redactedDraft = redactEvidenceText("quality draft", rawText);
+  const receiptWritten = writeReceiptOrRecordFallback(
+    context,
+    draftName,
+    { ok: false, error: message },
+    "quality.rejected",
+    {
+      draft: draftName,
+      error: "quality capture: receipt unavailable.",
+      raw_json: redactedDraft,
+    },
+  );
+  // Receipt failure already carries the redacted rejection in evidence.
+  if (!receiptWritten) return;
+  recordCaptureEvent(context, "quality.rejected", {
+    draft: draftName,
+    error: message,
+    raw_json: redactedDraft,
+  });
+}
+
+/**
+ * Validate and persist one stable draft with a bounded fallback for every expected failure.
+ * The ordered stages stay explicit because receipt reservation must precede durable persistence.
+ */
+async function processCaptureDraft(
+  context: RootCaptureContext,
+  draftName: string,
+): Promise<void> {
+  const draft = readStableDraft(context, draftName);
+  // Ineligible drafts remain untouched for a later safe poll or final sweep.
+  if (draft === null) return;
+  // A receipt collision has already deleted and rejected this draft.
+  if (!reserveCaptureReceipt(context, draftName)) return;
+  // Oversized input is rejected before its unredacted contents are loaded into memory.
+  if (draft.size > MAX_DRAFT_BYTES) {
+    rejectOversizedDraft(context, draftName);
+    return;
+  }
+
+  let rawText: string;
+  try {
+    rawText = readFileSync(draft.path, "utf8");
+  } catch {
+    // A disappearing or unreadable draft cannot be persisted and may be retried if it reappears.
+    return;
+  }
+
+  try {
+    const reportPath = await persistQualityReportText(
+      {
+        projectPath: context.projectRoot,
+        rawText,
+        sourceLabel: "draft",
+      },
+      { CLIError: QualityCaptureError },
+    );
+    recordPersistedDraft(context, draftName, reportPath);
+  } catch (error) {
+    recordRejectedDraft(context, draftName, rawText, error);
+  }
+}
+
+/**
+ * Process one staging-directory snapshot with an empty fallback when the directory read fails.
+ * Busy and disposed state prevents overlapping or post-shutdown persistence.
+ */
+async function processCaptureSnapshot(
+  context: RootCaptureContext,
+  state: RootCaptureState,
+): Promise<void> {
+  // A shared root has exactly one active sweep, and shutdown prevents any new persistence.
+  if (state.isBusy || state.isDisposed) return;
+  state.isBusy = true;
+  try {
+    let entries: string[];
+    try {
+      entries = readdirSync(context.stagingDir);
+    } catch {
+      // The next poll retries a temporarily unavailable staging directory.
+      return;
+    }
+    // Each visible contract-shaped draft gets one ordered persistence attempt.
+    for (const entry of entries) {
+      // Unrelated files in staging are user-owned and remain untouched.
+      if (!DRAFT_NAME_PATTERN.test(entry)) continue;
+      await processCaptureDraft(context, entry);
+      // Session shutdown during persistence stops the sweep before another draft starts.
+      if (captureIsDisposed(state)) return;
+    }
+  } finally {
+    state.isBusy = false;
+  }
+}
+
+/** Read disposal through a call boundary because shutdown can mutate state while persistence awaits. */
+function captureIsDisposed(state: RootCaptureState): boolean {
+  return state.isDisposed;
+}
+
+/** Remove every contract-shaped draft with a no-op fallback when the directory read fails. */
+function sweepCaptureDrafts(stagingDir: string): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(stagingDir);
+  } catch {
+    // An unavailable directory has no safely enumerable drafts to delete.
+    return;
+  }
+  // Only unredacted draft names are swept; durable receipts survive teardown.
+  for (const entry of entries) {
+    if (DRAFT_NAME_PATTERN.test(entry)) removeDraft(stagingDir, entry);
+  }
+}
+
+/**
+ * Build the single poller with a next-poll fallback when asynchronous processing rejects.
+ * One root-owned state object is intentional because independent pollers could persist or delete the same draft.
  *
  * @param options - owner root plus optional timing overrides
- * @returns the shared poller; `shutdown` stops it and sweeps leftover drafts
- *
- * The ordered branches remain together because each draft must reach exactly one
- * persist-or-reject outcome before deletion. Expected per-draft failures recover
- * to receipts and evidence events, so one malformed draft never stops the poller.
+ * @returns the shared poller; shutdown stops it and sweeps leftover drafts
  */
 function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
-  const stagingDir = ensureQualityDraftStagingDirectory(options.projectRoot);
-  const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
-  const stableMs = options.stableMs ?? DEFAULT_STABLE_MS;
-  // Held on an object so the flags stay observable across awaits; plain
-  // closure booleans get narrowed to their initial value by control-flow
-  // analysis and the mid-loop dispose check reads as dead code.
-  const state = { disposed: false, busy: false };
+  const context: RootCaptureContext = {
+    projectRoot: options.projectRoot,
+    stagingDir: ensureQualityDraftStagingDirectory(options.projectRoot),
+    stableMs: options.stableMs ?? DEFAULT_STABLE_MS,
+  };
+  const state: RootCaptureState = { isDisposed: false, isBusy: false };
 
-  function recordCaptureEvent(
-    eventType: "quality.persisted" | "quality.rejected",
-    payload: EvidencePayload,
-  ): void {
-    try {
-      recordEvidenceEvent({
-        producer: "quality-draft-capture",
-        actor: "server",
-        eventType,
-        projectRoot: options.projectRoot,
-        payload,
-      });
-    } catch {
-      // Evidence is optional, so recorder failure cannot reject an otherwise valid report.
-      return;
-    }
-  }
-
-  /**
-   * Validate and persist one stable draft, recovering expected failures into a rejection receipt.
-   * The sequence stays explicit so persistence, evidence, receipt, and deletion cannot reorder.
-   * Swallows expected input and filesystem failures into bounded rejection evidence for this draft.
-   */
-  // eslint-disable-next-line complexity -- Intentional because each failure uses a bounded fallback before ordered cleanup.
-  async function processDraft(draftName: string): Promise<void> {
-    const draftPath = join(stagingDir, draftName);
-    let stats;
-    try {
-      stats = lstatSync(draftPath);
-    } catch {
-      return;
-    }
-    if (!stats.isFile()) return;
-    if (stableMs > 0 && Date.now() - stats.mtimeMs < stableMs) return;
-    try {
-      assertCaptureReceiptAvailable(stagingDir, draftName);
-    } catch {
-      removeDraft(stagingDir, draftName);
-      const receiptAvailable = replacePreexistingReceiptWithRejection(
-        stagingDir,
-        draftName,
-      );
-      recordCaptureEvent("quality.rejected", {
-        draft: draftName,
-        error: "quality capture: receipt destination already existed.",
-        receipt: receiptAvailable ? "replaced" : "unavailable",
-      });
-      return;
-    }
-    if (stats.size > MAX_DRAFT_BYTES) {
-      removeDraft(stagingDir, draftName);
-      const message = `quality capture: draft exceeds the ${MAX_DRAFT_BYTES} byte limit.`;
-      try {
-        writeCaptureReceipt(stagingDir, draftName, {
-          ok: false,
-          error: message,
-        });
-      } catch {
-        recordCaptureEvent("quality.rejected", {
-          draft: draftName,
-          error: "quality capture: receipt unavailable.",
-        });
-        return;
-      }
-      recordCaptureEvent("quality.rejected", {
-        draft: draftName,
-        error: message,
-      });
-      return;
-    }
-    let rawText: string;
-    try {
-      rawText = readFileSync(draftPath, "utf8");
-    } catch {
-      return;
-    }
-    try {
-      const reportPath = await persistQualityReportText(
-        {
-          projectPath: options.projectRoot,
-          rawText,
-          sourceLabel: "draft",
-        },
-        { CLIError: QualityCaptureError },
-      );
-      removeDraft(stagingDir, draftName);
-      try {
-        writeCaptureReceipt(stagingDir, draftName, { ok: true, reportPath });
-      } catch {
-        recordCaptureEvent("quality.persisted", {
-          draft: draftName,
-          report_path: reportPath,
-          receipt: "unavailable",
-        });
-        return;
-      }
-      recordCaptureEvent("quality.persisted", {
-        draft: draftName,
-        report_path: reportPath,
-      });
-    } catch (error) {
-      removeDraft(stagingDir, draftName);
-      const message = captureRejectionDiagnostic(error);
-      try {
-        writeCaptureReceipt(stagingDir, draftName, {
-          ok: false,
-          error: message,
-        });
-      } catch {
-        recordCaptureEvent("quality.rejected", {
-          draft: draftName,
-          error: "quality capture: receipt unavailable.",
-          raw_json: redactEvidenceText("quality draft", rawText),
-        });
-        return;
-      }
-      recordCaptureEvent("quality.rejected", {
-        draft: draftName,
-        error: message,
-        raw_json: redactEvidenceText("quality draft", rawText),
-      });
-    }
-  }
-
-  // Read through a function so the mid-loop check survives control-flow
-  // narrowing: dispose() can flip this while an await is in flight, which
-  // static analysis of a plain flag cannot see.
-  const isDisposed = (): boolean => state.disposed;
-
-  /**
-   * Process one staging-directory snapshot with an empty fallback when the directory read fails.
-   * Directory-read failures recover to an empty-sweep fallback so the next poll can retry.
-   */
-  async function processNow(): Promise<void> {
-    if (state.busy || isDisposed()) return;
-    state.busy = true;
-    try {
-      let entries: string[];
-      try {
-        entries = readdirSync(stagingDir);
-      } catch {
-        return;
-      }
-      for (const entry of entries) {
-        if (!DRAFT_NAME_PATTERN.test(entry)) continue;
-        await processDraft(entry);
-        // Stop immediately if the owning session ended mid-sweep.
-        if (isDisposed()) return;
-      }
-    } finally {
-      state.busy = false;
-    }
-  }
+  /** Process eligible drafts immediately through the root-owned single-poller state. */
+  const processNow = (): Promise<void> =>
+    processCaptureSnapshot(context, state);
 
   const timer = setInterval(() => {
     void processNow().catch(() => {
-      /* one failed sweep must not become an unhandled server rejection */
+      // A failed sweep uses the next poll as its retry instead of becoming an unhandled rejection.
     });
-  }, intervalMs);
-  // A server shutdown must not be held open by an idle poller.
+  }, options.intervalMs ?? DEFAULT_INTERVAL_MS);
   timer.unref();
 
-  /**
-   * Remove every contract-shaped draft with a no-op fallback when the directory read fails.
-   * Directory-read failures recover to a no-op fallback because teardown cannot safely enumerate drafts.
-   */
-  function sweepDrafts(): void {
-    let entries: string[];
-    try {
-      entries = readdirSync(stagingDir);
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (DRAFT_NAME_PATTERN.test(entry)) removeDraft(stagingDir, entry);
-    }
-  }
-
   return {
-    stagingDir,
+    stagingDir: context.stagingDir,
     processNow,
     /** Stop this root poller once and discard drafts that no session can still finish. */
     shutdown(): void {
-      if (state.disposed) return;
-      state.disposed = true;
+      // Repeated session teardown must not sweep or clear the shared timer twice.
+      if (state.isDisposed) return;
+      state.isDisposed = true;
       clearInterval(timer);
-      sweepDrafts();
+      sweepCaptureDrafts(context.stagingDir);
     },
   };
 }

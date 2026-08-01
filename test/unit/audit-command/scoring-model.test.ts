@@ -27,6 +27,9 @@ import {
 } from "./helpers.js";
 import type { AgentFacts } from "../../src.js";
 
+const FULL_CONCERN_SCORE = 100;
+const MASKED_VALIDATION_SCORE = 75;
+
 describe("Audit scoring model", () => {
   it("acknowledge silences exactly the listed id, not other advisories", () => {
     // Craft a scenario where two advisory checks fail and acknowledge only one.
@@ -422,7 +425,7 @@ describe("Audit scoring model", () => {
       ["structural", "structural", "structural", "structural"],
     );
     assert.equal(concerns.verification.status, "pass");
-    assert.equal(concerns.verification.score, 100);
+    assert.equal(concerns.verification.score, FULL_CONCERN_SCORE);
     assert.equal(concerns.verification.metrics, 1);
     assert.ok(
       concerns.verification.limits.includes(
@@ -479,7 +482,7 @@ describe("Audit scoring model", () => {
 
     assert.equal(metric.status, "pass");
     assert.equal(concerns.verification.status, "pass");
-    assert.equal(concerns.verification.score, 100);
+    assert.equal(concerns.verification.score, FULL_CONCERN_SCORE);
     assert.ok(
       concerns.verification.findings.some((finding) =>
         finding.includes("post-turn safety guard installed"),
@@ -555,7 +558,7 @@ describe("Audit scoring model", () => {
     assert.equal(metric.displayStatus, "warn");
     assert.equal(metric.impact, "score-only");
     assert.equal(concerns.verification.status, "pass");
-    assert.equal(concerns.verification.score, 75);
+    assert.equal(concerns.verification.score, MASKED_VALIDATION_SCORE);
     assert.ok(
       concerns.verification.limits.some((limit) =>
         limit.includes("always exits 0"),
@@ -579,7 +582,7 @@ describe("Audit scoring model", () => {
     );
 
     assert.equal(concerns.recovery.status, "pass");
-    assert.equal(concerns.recovery.score, 100);
+    assert.equal(concerns.recovery.score, FULL_CONCERN_SCORE);
     assert.deepEqual(
       recoveryChecks.map((check) => check.evidenceKind),
       ["structural", "structural"],

@@ -362,6 +362,10 @@ describe("plans export", () => {
   // The worked-example notation from goat-plan's reference: task, testing-gate,
   // mid-proof, and plan/admin estimates rebuild every category in the headline.
   it("parses every counted work item from the worked-example shape", () => {
+    const firstRiskyTaskMinutes = 8;
+    const validationTaskMinutes = 4;
+    const testingGateItemMinutes = 2;
+    const midProofItemMinutes = 1;
     const record = parseMilestoneMarkdown(
       [
         "# M01: Estimated milestone",
@@ -397,18 +401,24 @@ describe("plans export", () => {
       totalMinutes: 25,
       split: { product: 18, proof: 5, other: 2 },
     });
-    assert.equal(record.tasks[0]?.estimateMinutes, 8);
+    assert.equal(record.tasks[0]?.estimateMinutes, firstRiskyTaskMinutes);
     assert.equal(record.tasks[0]?.estimateCategory, "product");
-    assert.equal(record.tasks[2]?.estimateMinutes, 4);
+    assert.equal(record.tasks[2]?.estimateMinutes, validationTaskMinutes);
     // Task ests must sum to the split's product component (18 = 8 + 6 + 4).
     assert.deepEqual(record.taskEstimateTotals, {
       product: 18,
       proof: 0,
       other: 0,
     });
-    assert.equal(record.testingGateItems[0]?.estimateMinutes, 2);
-    assert.equal(record.testingGateItems[1]?.estimateMinutes, 2);
-    assert.equal(record.midProofItems[0]?.estimateMinutes, 1);
+    assert.equal(
+      record.testingGateItems[0]?.estimateMinutes,
+      testingGateItemMinutes,
+    );
+    assert.equal(
+      record.testingGateItems[1]?.estimateMinutes,
+      testingGateItemMinutes,
+    );
+    assert.equal(record.midProofItems[0]?.estimateMinutes, midProofItemMinutes);
     assert.deepEqual(record.planAdminEstimate, {
       estimateMinutes: 2,
       estimateCategory: "other",
@@ -427,6 +437,9 @@ describe("plans export", () => {
   // Real milestone tasks wrap across indented continuation lines with the est
   // entry at the block's end - discovered when `plans check` flagged its own plan.
   it("parses est entries at the end of wrapped multi-line tasks", () => {
+    const expectedTaskCount = 2;
+    const wrappedParserTaskMinutes = 12;
+    const wrappedWiringTaskMinutes = 8;
     const record = parseMilestoneMarkdown(
       [
         "# M04: Wrapped tasks",
@@ -444,9 +457,9 @@ describe("plans export", () => {
       "M04-wrapped.md",
     );
 
-    assert.equal(record.tasks.length, 2);
-    assert.equal(record.tasks[0]?.estimateMinutes, 12);
-    assert.equal(record.tasks[1]?.estimateMinutes, 8);
+    assert.equal(record.tasks.length, expectedTaskCount);
+    assert.equal(record.tasks[0]?.estimateMinutes, wrappedParserTaskMinutes);
+    assert.equal(record.tasks[1]?.estimateMinutes, wrappedWiringTaskMinutes);
     assert.deepEqual(record.taskEstimateTotals, {
       product: 20,
       proof: 0,
@@ -529,6 +542,7 @@ describe("plans export", () => {
 
   // Handoff-grade milestones carry machine-readable estimate and Actual fields.
   it("parses a bold effort line with a separate structured Actual", () => {
+    const plannedTotalMinutes = 44;
     const record = parseMilestoneMarkdown(
       [
         "# M02: Actual-carrying milestone",
@@ -541,7 +555,7 @@ describe("plans export", () => {
       "M02-actual.md",
     );
 
-    assert.equal(record.effort?.totalMinutes, 44);
+    assert.equal(record.effort?.totalMinutes, plannedTotalMinutes);
     assert.deepEqual(record.effort?.split, { product: 34, proof: 7, other: 3 });
     assert.deepEqual(record.effort?.actual, {
       totalMinutes: 51,

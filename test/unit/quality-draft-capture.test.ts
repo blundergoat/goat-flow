@@ -88,15 +88,15 @@ describe("quality draft capture", () => {
   const roots: string[] = [];
   const captures: QualityDraftCapture[] = [];
 
-/** Create and track one temporary project root for capture cleanup after the suite. */
-function makeRoot(): string {
+  /** Create and track one temporary project root for capture cleanup after the suite. */
+  function makeRoot(): string {
     const root = mkdtempSync(join(tmpdir(), "goat-quality-capture-"));
     roots.push(root);
     return root;
   }
 
-/** Start and track one capture with deterministic polling disabled for direct test control. */
-function makeCapture(root: string): QualityDraftCapture {
+  /** Start and track one capture with deterministic polling disabled for direct test control. */
+  function makeCapture(root: string): QualityDraftCapture {
     const capture = startQualityDraftCapture({
       projectRoot: root,
       intervalMs: 60_000,
@@ -455,7 +455,9 @@ function makeCapture(root: string): QualityDraftCapture {
 
   it("shares one capture across real-path and symlink aliases", async (testContext) => {
     if (process.platform === "win32") {
-      testContext.skip("Directory symlink fixtures require Windows Developer Mode");
+      testContext.skip(
+        "Directory symlink fixtures require Windows Developer Mode",
+      );
       return;
     }
     const parent = makeRoot();

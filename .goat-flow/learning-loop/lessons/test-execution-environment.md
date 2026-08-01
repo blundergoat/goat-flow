@@ -191,19 +191,17 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 ---
 
-## Lesson: Focused TypeScript tests in this repo need the `tsx` loader
+## Lesson: Focused TypeScript tests need verified paths and the `tsx` loader
 
-**Status:** active | **Created:** 2026-04-29
+**Status:** active | **Created:** 2026-04-29 | **Incident count:** 2 | **Latest occurrence:** 2026-08-01
 
-**What happened:** The first focused verification run used `node --test test/smoke/dashboard-endpoints.test.ts` and failed with `ERR_MODULE_NOT_FOUND` while resolving the source module at `src/cli/server/terminal.ts`. The code change was not the problem; the test file imports source modules using `.js` specifiers that are resolved correctly when the repo's TypeScript loader is active.
+**What happened:** `node --test test/smoke/dashboard-endpoints.test.ts` failed resolving source `.js` specifiers because the focused command omitted this repo's `tsx` loader.
 
-**Root cause:** I ran the focused suite outside the repo's declared test invocation path. `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`) makes `tsx` part of the contract for source-mode tests, so plain `node --test` is a verification mistake here, not reliable failure evidence.
+**Root cause:** I guessed a focused invocation instead of resolving the path and runner contract first.
 
-**Fix:** Re-run focused TypeScript tests with `node --import tsx --test <file>` before treating missing-module output as a real regression.
+**Recurrence 2026-08-01:** I derived nonexistent `test/unit/preflight-command-runner.test.mjs` from the source name. `rg --files | rg 'preflight|command-runner'` found `test/integration/preflight-progress.test.ts`; the corrected command passed all nine cases.
 
-**Prevention:**
-1. When a focused repo test imports `src/**/*.js` from the source tree, check `package.json` for the required loader before running it directly.
-2. Treat a plain-Node `ERR_MODULE_NOT_FOUND` on source `.js` specifiers as a likely invocation-path problem until the `tsx`-loaded run fails too.
+**Prevention:** Resolve focused paths with `rg --files`, then use `node --import tsx --test <specific-file.test.ts>` as declared by `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`). A missing target or plain-Node source-resolution error is invocation failure until that resolved command also fails.
 
 ---
 

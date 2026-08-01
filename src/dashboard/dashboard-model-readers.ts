@@ -177,11 +177,21 @@ function readProjectEntry(rawProject: unknown): ProjectEntry | null {
   return entry;
 }
 
+/** Decode access mode compatibly: absent legacy values stay workspace, unknown values restrict writes. */
+function readTerminalAccessMode(value: unknown): TerminalAccessMode {
+  return value === undefined || value === "workspace"
+    ? "workspace"
+    : "reporting";
+}
+
+/** Read an optional numeric session metric; non-numeric legacy values stay absent. */
+function readOptionalSessionMetric(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
 /**
- * Read one backend terminal-session record.
- *
- * This stays explicit because old session payloads may omit cwd/targetPath, and
- * the dashboard must default them to projectPath without marking the session bad.
+ * Read one backend terminal-session record, rejecting incomplete required identity fields.
+ * Old payloads may omit cwd/targetPath, so those fields preserve the project-path compatibility fallback.
  */
 function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
   if (!isRecord(rawSession)) return null;
@@ -196,10 +206,7 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
   // the workspace default. An unrecognised value is a server bug, not a
   // permission grant: fall back to the restricted mode rather than carry a
   // write-enabled session into the retry and reconnect payloads.
-  const accessMode: TerminalAccessMode =
-    rawSession.accessMode === undefined || rawSession.accessMode === "workspace"
-      ? "workspace"
-      : "reporting";
+  const accessMode = readTerminalAccessMode(rawSession.accessMode);
   if (
     !id ||
     !status ||
@@ -221,11 +228,8 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
     runner,
     accessMode,
     lastInputAt: rawSession.lastInputAt,
-    age: typeof rawSession.age === "number" ? rawSession.age : undefined,
-    idleDuration:
-      typeof rawSession.idleDuration === "number"
-        ? rawSession.idleDuration
-        : undefined,
+    age: readOptionalSessionMetric(rawSession.age),
+    idleDuration: readOptionalSessionMetric(rawSession.idleDuration),
     projectName: readString(rawSession.projectName) || undefined,
   };
 }

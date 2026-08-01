@@ -299,6 +299,7 @@ const agentInstruction: BuildCheck = {
 /**
  * Check canonical skill files and declared references for every selected agent.
  * Use so users see which skill mirrors need reinstalling before an agent follows stale workflows.
+ * The nested walk is required because an agent can load any declared reference independently.
  *
  * @param ctx - audit context; empty agent list produces no missing skill findings here
  * @returns audit failure listing missing skill files, or `null` when mirrors match the manifest
@@ -404,6 +405,7 @@ function checkUnexpectedSkillReferences(
 /**
  * Check installed skill versions against the current goat-flow version.
  * Use so users know when agent skill mirrors need reinstalling after an upgrade.
+ * Missing and mismatched versions stay separate because they require different evidence messages.
  *
  * @param ctx - audit context; empty version maps produce no mismatch findings here
  * @returns audit failure for missing/mismatched versions, or `null` when mirrors are current
@@ -450,6 +452,7 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
 /**
  * Check stale skill directories left behind by renamed or removed skills.
  * Use so users remove old routing surfaces that an agent could still discover.
+ * Final folder names are compared because each agent owns a different skill-root path.
  *
  * @param ctx - audit context; empty installed dirs produce no stale skill findings
  * @returns audit failure listing deprecated skill dirs, or `null` when no stale names remain

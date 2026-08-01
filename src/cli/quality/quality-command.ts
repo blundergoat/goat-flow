@@ -525,7 +525,9 @@ async function handleQualityPromptSubcommand(
     });
   } catch {
     // Audit infrastructure failure degrades prompt evidence, so tell the user without inventing a code finding.
-    console.error("quality: audit unavailable; continuing with degraded context.");
+    console.error(
+      "quality: audit unavailable; continuing with degraded context.",
+    );
   }
 
   const qualityMode = options.qualityMode ?? "agent-setup";

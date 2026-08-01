@@ -637,75 +637,76 @@ describe("plans check", () => {
     }
   });
 
-  it("strict mode rejects malformed, unresolved, self, cyclic, and state-invalid dependencies", () => {
-    const cases: Array<{
-      name: string;
-      files: Record<string, string>;
-      expected: RegExp;
-    }> = [
-      {
-        name: "malformed",
-        files: {
-          "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
-          "M02-two.md": canonicalMilestoneBody({
-            title: "M02: Two",
-            dependsOn: "M01 (soft)",
-          }),
-        },
-        expected:
-          /dependencies must be `none` or comma-separated local milestone IDs/u,
+  const dependencyFailureCases: Array<{
+    name: string;
+    files: Record<string, string>;
+    expected: RegExp;
+  }> = [
+    {
+      name: "malformed",
+      files: {
+        "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
+        "M02-two.md": canonicalMilestoneBody({
+          title: "M02: Two",
+          dependsOn: "M01 (soft)",
+        }),
       },
-      {
-        name: "unresolved",
-        files: {
-          "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
-          "M02-two.md": canonicalMilestoneBody({
-            title: "M02: Two",
-            dependsOn: "M09",
-          }),
-        },
-        expected: /dependency M09 does not resolve/u,
+      expected:
+        /dependencies must be `none` or comma-separated local milestone IDs/u,
+    },
+    {
+      name: "unresolved",
+      files: {
+        "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
+        "M02-two.md": canonicalMilestoneBody({
+          title: "M02: Two",
+          dependsOn: "M09",
+        }),
       },
-      {
-        name: "self",
-        files: {
-          "M01-one.md": canonicalMilestoneBody({
-            title: "M01: One",
-            dependsOn: "M01",
-          }),
-        },
-        expected: /cannot depend on itself/u,
+      expected: /dependency M09 does not resolve/u,
+    },
+    {
+      name: "self",
+      files: {
+        "M01-one.md": canonicalMilestoneBody({
+          title: "M01: One",
+          dependsOn: "M01",
+        }),
       },
-      {
-        name: "cycle",
-        files: {
-          "M01-one.md": canonicalMilestoneBody({
-            title: "M01: One",
-            dependsOn: "M02",
-          }),
-          "M02-two.md": canonicalMilestoneBody({
-            title: "M02: Two",
-            dependsOn: "M01",
-          }),
-        },
-        expected: /dependency cycle/u,
+      expected: /cannot depend on itself/u,
+    },
+    {
+      name: "cycle",
+      files: {
+        "M01-one.md": canonicalMilestoneBody({
+          title: "M01: One",
+          dependsOn: "M02",
+        }),
+        "M02-two.md": canonicalMilestoneBody({
+          title: "M02: Two",
+          dependsOn: "M01",
+        }),
       },
-      {
-        name: "state",
-        files: {
-          "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
-          "M02-two.md": canonicalMilestoneBody({
-            title: "M02: Two",
-            status: "in-progress",
-            dependsOn: "M01",
-          }),
-        },
-        expected:
-          /active or complete milestone requires dependency M01 to be complete/u,
+      expected: /dependency cycle/u,
+    },
+    {
+      name: "state",
+      files: {
+        "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
+        "M02-two.md": canonicalMilestoneBody({
+          title: "M02: Two",
+          status: "in-progress",
+          dependsOn: "M01",
+        }),
       },
-    ];
+      expected:
+        /active or complete milestone requires dependency M01 to be complete/u,
+    },
+  ];
 
-    for (const testCase of cases) {
+  // Separate cases show the exact dependency failure in TAP output.
+  for (const testCase of dependencyFailureCases) {
+    it(`strict mode rejects ${testCase.name} dependency state`, () => {
       const temporaryRoot = mkdtempSync(
         join(tmpdir(), `goat-flow-plan-dependency-${testCase.name}-`),
       );
@@ -718,64 +719,65 @@ describe("plans check", () => {
       } finally {
         rmSync(temporaryRoot, { recursive: true, force: true });
       }
-    }
-  });
+    });
+  }
 
-  it("strict mode enforces lifecycle checkbox and Actual snapshots", () => {
-    const cases: Array<{
-      name: string;
-      body: string;
-      expected: RegExp;
-    }> = [
-      {
-        name: "not-started-work",
-        body: canonicalMilestoneBody({ isTaskChecked: true }),
-        expected: /not-started milestone has checked implementation tasks/u,
-      },
-      {
-        name: "not-started-proof",
-        body: canonicalMilestoneBody({
-          proofLines: [
-            "- [x] Outcome is already proven. [automated] (est: 1 min proof)",
-          ],
-        }),
-        expected: /not-started milestone has checked proof items/u,
-      },
-      {
-        name: "testing-open-task",
-        body: canonicalMilestoneBody({ status: "testing-gate" }),
-        expected: /testing-gate milestone has open implementation tasks/u,
-      },
-      {
-        name: "pending-open-proof",
-        body: canonicalMilestoneBody({
-          status: "human-verification-pending",
-          isTaskChecked: true,
-        }),
-        expected:
-          /human-verification-pending milestone requires structured Actual|executor proof item remains open/u,
-      },
-      {
-        name: "complete-open-human",
-        body: canonicalMilestoneBody({
-          status: "complete",
-          isTaskChecked: true,
-          proofLines: [
-            "- [x] Outcome is proven. [automated] (est: 1 min proof)",
-            "- [ ] [human] Approve completion. (est: 1 min proof)",
-          ],
-          includeActual: true,
-        }),
-        expected: /complete milestone has open proof items/u,
-      },
-      {
-        name: "invalid-status",
-        body: canonicalMilestoneBody({ status: "planned" }),
-        expected: /unsupported status `planned`/u,
-      },
-    ];
+  const lifecycleFailureCases: Array<{
+    name: string;
+    body: string;
+    expected: RegExp;
+  }> = [
+    {
+      name: "not-started-work",
+      body: canonicalMilestoneBody({ isTaskChecked: true }),
+      expected: /not-started milestone has checked implementation tasks/u,
+    },
+    {
+      name: "not-started-proof",
+      body: canonicalMilestoneBody({
+        proofLines: [
+          "- [x] Outcome is already proven. [automated] (est: 1 min proof)",
+        ],
+      }),
+      expected: /not-started milestone has checked proof items/u,
+    },
+    {
+      name: "testing-open-task",
+      body: canonicalMilestoneBody({ status: "testing-gate" }),
+      expected: /testing-gate milestone has open implementation tasks/u,
+    },
+    {
+      name: "pending-open-proof",
+      body: canonicalMilestoneBody({
+        status: "human-verification-pending",
+        isTaskChecked: true,
+      }),
+      expected:
+        /human-verification-pending milestone requires structured Actual|executor proof item remains open/u,
+    },
+    {
+      name: "complete-open-human",
+      body: canonicalMilestoneBody({
+        status: "complete",
+        isTaskChecked: true,
+        proofLines: [
+          "- [x] Outcome is proven. [automated] (est: 1 min proof)",
+          "- [ ] [human] Approve completion. (est: 1 min proof)",
+        ],
+        includeActual: true,
+      }),
+      expected: /complete milestone has open proof items/u,
+    },
+    {
+      name: "invalid-status",
+      body: canonicalMilestoneBody({ status: "planned" }),
+      expected: /unsupported status `planned`/u,
+    },
+  ];
 
-    for (const testCase of cases) {
+  // Separate cases show the exact lifecycle failure in TAP output.
+  for (const testCase of lifecycleFailureCases) {
+    it(`strict mode rejects ${testCase.name} lifecycle state`, () => {
       const temporaryRoot = mkdtempSync(
         join(tmpdir(), `goat-flow-plan-lifecycle-${testCase.name}-`),
       );
@@ -788,8 +790,8 @@ describe("plans check", () => {
       } finally {
         rmSync(temporaryRoot, { recursive: true, force: true });
       }
-    }
-  });
+    });
+  }
 
   it("strict mode ignores fenced metadata and checklist examples", () => {
     const temporaryRoot = mkdtempSync(

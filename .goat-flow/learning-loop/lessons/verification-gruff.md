@@ -11,7 +11,7 @@ last_reviewed: 2026-07-29
 
 **Root cause:** I treated human-readable comments and a local rename as complete before checking the analyzer vocabulary and parallel type surfaces.
 
-**Prevention:** For gruff-driven comment work, read `code-comments.md`, patch one file or cohesive cluster, then rerun `npx gruff-ts analyse <path>`. If a rename replaces a comment, grep the old identifier and run `npm run typecheck`. Evidence anchors: `src/cli/server/decoders.ts` (search: `Parse a JSON request body without throwing`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/learning-loop/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
+**Prevention:** For gruff-driven comment work, read `code-comments.md`, patch one file or cohesive cluster, then rerun `npx gruff-ts analyse <path>`. If a rename replaces a comment, grep the old identifier and run `npm run typecheck`. Evidence anchors: `src/cli/server/decoders.ts` (search: `Swallows parse errors into the shared decoder failure shape`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/learning-loop/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
 
 ## Lesson: Gruff hook compatibility probes need real configs and wrapper PATH
 

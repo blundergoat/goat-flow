@@ -54,6 +54,22 @@ const HARNESS_SCORE_INTERPRETATION =
 const FAST_CACHE_AUDIT_PLACEHOLDER =
   'The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.';
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
+const QUALITY_MODES = ["agent-setup", "process", "harness", "skills"] as const;
+const FOCUSED_QUALITY_MODES = ["process", "harness", "skills"] as const;
+const STAGED_DRAFT_MODES = ["skills", "harness", "agent-setup"] as const;
+const DRIFT_EVIDENCE = [
+  ".agents/skills/goat/SKILL.md",
+  "installed dispatcher differs",
+  "README.md:8 [removed-command-scan]",
+  "documentation teaches a removed command",
+] as const;
+const FORBIDDEN_STAGED_DRAFT_TEXT = [
+  "Use the bounded saver below",
+  "**Persist through the bounded saver.**",
+  "**Filename format:**",
+  "The saver derives",
+  ".goat-flow/logs/quality/<filename>.json",
+] as const;
 
 /** Extract the executable report-write block from a composed prompt. */
 function extractReportWriteBlock(prompt: string): string {
@@ -167,6 +183,65 @@ function assertCarriesContract(surface: string, text: string): void {
   );
 }
 
+/** Assert a focused prompt and its summary preserve every observed audit failure. */
+function assertCarriesAuditEvidence(
+  surface: string,
+  payload: ReturnType<typeof composeQuality>,
+): void {
+  for (const evidence of DRIFT_EVIDENCE) {
+    assert.ok(
+      payload.prompt.includes(evidence),
+      `${surface}: prompt omitted ${evidence}`,
+    );
+    assert.ok(
+      payload.auditSummary.includes(evidence),
+      `${surface}: auditSummary omitted ${evidence}`,
+    );
+  }
+}
+
+/** Assert the dashboard persistence variant omits every unreachable bounded-saver instruction. */
+function assertStagedDraftContract(surface: string, prompt: string): void {
+  assert.ok(
+    prompt.includes("**Persist through the dashboard.**"),
+    `${surface}: missing dashboard persistence section`,
+  );
+  assert.ok(
+    prompt.includes(
+      "/tmp/example-project/.goat-flow/logs/quality/staging/goat-quality-draft-claude-<nonce>.json",
+    ),
+    `${surface}: missing staged draft path`,
+  );
+  assert.ok(
+    prompt.includes(
+      "/tmp/example-project/.goat-flow/logs/quality/staging/goat-quality-result-claude-<nonce>.json",
+    ),
+    `${surface}: missing receipt path`,
+  );
+  assert.ok(
+    prompt.includes("persist-skipped: capture-unavailable"),
+    `${surface}: missing capture-unavailable sentinel`,
+  );
+  // An enforced dashboard session cannot run Bash persistence, so no bounded-saver path may survive.
+  assert.equal(
+    prompt.includes("quality save"),
+    false,
+    `${surface}: staged variant still mentions the Bash saver`,
+  );
+  assert.equal(
+    prompt.includes("<<'JSON'"),
+    false,
+    `${surface}: staged variant still contains a heredoc`,
+  );
+  for (const forbidden of FORBIDDEN_STAGED_DRAFT_TEXT) {
+    assert.equal(
+      prompt.includes(forbidden),
+      false,
+      `${surface}: staged variant still contains ${forbidden}`,
+    );
+  }
+}
+
 describe("quality report contract: CLI surfaces", () => {
   it("agent-setup prompt carries the full contract", () => {
     const payload = composeQuality(makeInput("agent-setup"));
@@ -183,26 +258,16 @@ describe("quality report contract: CLI surfaces", () => {
     assertCarriesContract("focused/process", payload.prompt);
   });
 
-  it("defines live audit precedence and narrow harness-score interpretation in every mode", () => {
-    for (const qualityMode of [
-      "agent-setup",
-      "process",
-      "harness",
-      "skills",
-    ] as const) {
+  for (const qualityMode of QUALITY_MODES) {
+    it(`defines live audit precedence and narrow harness-score interpretation in ${qualityMode} mode`, () => {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
       assert.ok(prompt.includes(AUDIT_STATUS_PRECEDENCE_RULE), qualityMode);
       assert.ok(prompt.includes(HARNESS_SCORE_INTERPRETATION), qualityMode);
-    }
-  });
+    });
+  }
 
-  it("redacts the completed JSON before any quality report reaches disk", () => {
-    for (const qualityMode of [
-      "agent-setup",
-      "process",
-      "harness",
-      "skills",
-    ] as const) {
+  for (const qualityMode of QUALITY_MODES) {
+    it(`redacts completed ${qualityMode} JSON before it reaches disk`, () => {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
       const writeBlock = extractReportWriteBlock(prompt);
       assert.match(
@@ -230,8 +295,8 @@ describe("quality report contract: CLI surfaces", () => {
         /node --import tsx src\/cli\/cli\.ts quality save '\/tmp\/example-project'/u,
         `${qualityMode}: missing framework source fallback`,
       );
-    }
-  });
+    });
+  }
 
   it("sends a realistic 60-field report block through the actual deny hook", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
@@ -269,17 +334,10 @@ describe("quality report contract: CLI surfaces", () => {
     assert.doesNotMatch(writeBlock, /--version|quality validate|ls -la/u);
   });
 
-  it("embeds live Verification and Recovery limits in every quality mode prompt and summary", () => {
-    const qualityModes = [
-      "agent-setup",
-      "process",
-      "harness",
-      "skills",
-    ] as const;
-    const auditReport = makeLimitedAuditReport();
-
-    // A user choosing any Quality mode must receive the same deterministic evidence boundaries.
-    for (const qualityMode of qualityModes) {
+  // A user choosing any Quality mode must receive the same deterministic evidence boundaries.
+  for (const qualityMode of QUALITY_MODES) {
+    it(`embeds live Verification and Recovery limits in ${qualityMode} prompt and summary`, () => {
+      const auditReport = makeLimitedAuditReport();
       const payload = composeQuality({
         ...makeInput(qualityMode),
         auditReport,
@@ -308,14 +366,12 @@ describe("quality report contract: CLI surfaces", () => {
         payload.auditSummary.includes(RED_FLAGS_METRIC_LIMIT),
         `${qualityMode}: auditSummary omitted red-flags metric limit`,
       );
-    }
-  });
+    });
+  }
 
-  it("keeps the focused cache-miss contract when no audit report is available", () => {
-    const focusedModes = ["process", "harness", "skills"] as const;
-
-    // A fast dashboard launch without cached evidence must disclose the gap instead of inventing limits.
-    for (const qualityMode of focusedModes) {
+  // A fast dashboard launch without cached evidence must disclose the gap instead of inventing limits.
+  for (const qualityMode of FOCUSED_QUALITY_MODES) {
+    it(`keeps the ${qualityMode} cache-miss contract when no audit report is available`, () => {
       const payload = composeQuality({
         ...makeInput(qualityMode),
         auditUnavailableReason: "fast-cache-only",
@@ -335,62 +391,47 @@ describe("quality report contract: CLI surfaces", () => {
       );
       assert.equal(payload.prompt.includes(PROJECT_VALIDATION_LIMIT), false);
       assert.equal(payload.prompt.includes(RECOVERY_RESUMABILITY_LIMIT), false);
-    }
-  });
+    });
+  }
 
-  it("embeds drift and content failures in focused prompts and summaries", () => {
-    const auditReport = makeLimitedAuditReport();
-    auditReport.status = "fail";
-    auditReport.overall.status = "fail";
-    auditReport.drift = {
-      status: "fail",
-      checked: 12,
-      findings: [
-        {
-          kind: "content",
-          path: ".agents/skills/goat/SKILL.md",
-          message: "installed dispatcher differs from its workflow source",
-        },
-      ],
-    };
-    auditReport.content = {
-      status: "fail",
-      warnings: 1,
-      infos: 0,
-      filesScanned: 4,
-      findings: [
-        {
-          severity: "warning",
-          rule: "removed-command-scan",
-          path: "README.md",
-          line: 8,
-          message: "documentation teaches a removed command",
-        },
-      ],
-    };
-
-    for (const qualityMode of ["process", "harness", "skills"] as const) {
+  for (const qualityMode of FOCUSED_QUALITY_MODES) {
+    it(`embeds drift and content failures in ${qualityMode} prompts and summaries`, () => {
+      const auditReport = makeLimitedAuditReport();
+      auditReport.status = "fail";
+      auditReport.overall.status = "fail";
+      auditReport.drift = {
+        status: "fail",
+        checked: 12,
+        findings: [
+          {
+            kind: "content",
+            path: ".agents/skills/goat/SKILL.md",
+            message: "installed dispatcher differs from its workflow source",
+          },
+        ],
+      };
+      auditReport.content = {
+        status: "fail",
+        warnings: 1,
+        infos: 0,
+        filesScanned: 4,
+        findings: [
+          {
+            severity: "warning",
+            rule: "removed-command-scan",
+            path: "README.md",
+            line: 8,
+            message: "documentation teaches a removed command",
+          },
+        ],
+      };
       const payload = composeQuality({
         ...makeInput(qualityMode),
         auditReport,
       });
-      for (const evidence of [
-        ".agents/skills/goat/SKILL.md",
-        "installed dispatcher differs",
-        "README.md:8 [removed-command-scan]",
-        "documentation teaches a removed command",
-      ]) {
-        assert.ok(
-          payload.prompt.includes(evidence),
-          `${qualityMode}: prompt omitted ${evidence}`,
-        );
-        assert.ok(
-          payload.auditSummary.includes(evidence),
-          `${qualityMode}: auditSummary omitted ${evidence}`,
-        );
-      }
-    }
-  });
+      assertCarriesAuditEvidence(qualityMode, payload);
+    });
+  }
 
   it("prior-report runs demand delta_tag; fresh runs forbid it", () => {
     const fresh = composeQuality(makeInput("agent-setup")).prompt;
@@ -418,60 +459,16 @@ describe("quality report contract: CLI surfaces", () => {
 });
 
 describe("quality report contract: staged-draft persistence variant", () => {
-  it("replaces the bounded saver with the dashboard draft contract (ADR-044)", () => {
-    for (const qualityMode of ["skills", "harness", "agent-setup"] as const) {
+  for (const qualityMode of STAGED_DRAFT_MODES) {
+    it(`replaces the ${qualityMode} bounded saver with the dashboard draft contract (ADR-044)`, () => {
       const prompt = composeQuality({
         ...makeInput(qualityMode),
         persistence: "staged-draft",
       }).prompt;
       const surface = `staged ${qualityMode}`;
-      assert.ok(
-        prompt.includes("**Persist through the dashboard.**"),
-        `${surface}: missing dashboard persistence section`,
-      );
-      assert.ok(
-        prompt.includes(
-          "/tmp/example-project/.goat-flow/logs/quality/staging/goat-quality-draft-claude-<nonce>.json",
-        ),
-        `${surface}: missing staged draft path`,
-      );
-      assert.ok(
-        prompt.includes(
-          "/tmp/example-project/.goat-flow/logs/quality/staging/goat-quality-result-claude-<nonce>.json",
-        ),
-        `${surface}: missing receipt path`,
-      );
-      assert.ok(
-        prompt.includes("persist-skipped: capture-unavailable"),
-        `${surface}: missing capture-unavailable sentinel`,
-      );
-      // No Bash persistence may survive in the staged variant: an enforced
-      // session cannot run the saver, so its mention would be a false path.
-      assert.equal(
-        prompt.includes("quality save"),
-        false,
-        `${surface}: staged variant still mentions the Bash saver`,
-      );
-      assert.equal(
-        prompt.includes("<<'JSON'"),
-        false,
-        `${surface}: staged variant still contains a heredoc`,
-      );
-      for (const forbidden of [
-        "Use the bounded saver below",
-        "**Persist through the bounded saver.**",
-        "**Filename format:**",
-        "The saver derives",
-        ".goat-flow/logs/quality/<filename>.json",
-      ]) {
-        assert.equal(
-          prompt.includes(forbidden),
-          false,
-          `${surface}: staged variant still contains ${forbidden}`,
-        );
-      }
-    }
-  });
+      assertStagedDraftContract(surface, prompt);
+    });
+  }
 
   it("keeps the bounded saver as the default persistence contract", () => {
     const prompt = composeQuality(makeInput("skills")).prompt;
