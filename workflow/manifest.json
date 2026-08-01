@@ -307,7 +307,8 @@
       "goat-review": [
         "references/examples.md",
         "references/refuter-spec.md",
-        "references/automated-review.md"
+        "references/automated-review.md",
+        "references/review-traps.md"
       ],
       "goat-security": [
         "references/common-threats.md",

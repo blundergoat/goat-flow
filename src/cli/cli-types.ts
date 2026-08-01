@@ -26,11 +26,15 @@ export type Command =
   | "diagnostics"
   | "index"
   | "redact"
+  | "review"
   | "plans"
   | "skill";
 
 /** Local plan operations; export previews or writes portable milestone bodies. */
 export type PlansSubcommand = "export" | "check";
+
+/** Deterministic checks for drafted goat-review Markdown. */
+export type ReviewSubcommand = "validate";
 
 /** Read-only diagnostics views an operator can run without changing the selected project. */
 export type DiagnosticsSubcommand =
@@ -105,13 +109,12 @@ export const COMMANDS: Command[] = [
   "diagnostics",
   "index",
   "redact",
+  "review",
   "plans",
   "skill",
 ];
 
 export const REMOVED_COMMANDS: Record<string, string> = {
-  review:
-    '"review" was removed in v1.1.0. Use "audit --harness" for deterministic harness scoring or "quality" for agent-driven assessment.',
   critique:
     '"critique" was removed in v1.1.0. Use "quality" for agent-driven assessment.',
   fix: '"fix" was removed in v1.1.0. Use "audit" or "quality" to identify issues, then apply fixes directly.',
@@ -158,6 +161,8 @@ export interface ParsedCLI extends CLIOptions {
   hookSubcommand: HookSubcommand | null;
   hookId: string | null;
   hookScenario: HookScenario | null;
+  reviewSubcommand: ReviewSubcommand | null;
+  reviewValidatePath: string | null;
   plansSubcommand: PlansSubcommand | null;
   plansStrict: boolean;
   diagnosticsSubcommand: DiagnosticsSubcommand | null;

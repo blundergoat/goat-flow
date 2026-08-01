@@ -33,6 +33,7 @@ import {
   type ParsedCLI,
   type PlansSubcommand,
   type QualitySubcommand,
+  type ReviewSubcommand,
   type SkillSubcommand,
 } from "./cli-types.js";
 import { parseDiagnosticsPositionals } from "./diagnostics-command-parser.js";
@@ -341,6 +342,24 @@ function parsePlansPositionals(positionals: string[]): {
   return { plansSubcommand: subcommand, projectPath: resolve(planPath) };
 }
 
+/** Parse stdin-first `review validate [report-file]` without treating the report as a project path. */
+function parseReviewPositionals(positionals: string[]): {
+  reviewSubcommand: ReviewSubcommand;
+  reviewValidatePath: string | null;
+} {
+  const [subcommand, reportPath, ...extraPositionals] = positionals;
+  if (subcommand !== "validate") {
+    throw new CLIError('review requires subcommand "validate".', 2);
+  }
+  if (extraPositionals.length > 0) {
+    throw new CLIError("review validate accepts at most one [report-file].", 2);
+  }
+  return {
+    reviewSubcommand: "validate",
+    reviewValidatePath: reportPath ? resolve(reportPath) : null,
+  };
+}
+
 function parseHookTogglePositionals(
   subcommand: "enable" | "disable",
   hookId: string | undefined,
@@ -411,6 +430,7 @@ const INFORMATIONAL_POSITIONALS: Partial<Record<Command, string[]>> = {
   events: ["tail"],
   hooks: ["list"],
   plans: ["export", "."],
+  review: ["validate"],
 };
 /** Choose real positionals unless the CLI will stop after rendering information. */
 function selectCommandPositionals(
@@ -682,7 +702,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   );
   const qualityPositionals = parseCommandPositionals(
     command,
-    commandPositionals,
+    command === "review" ? [] : commandPositionals,
     parsedString(parsedValues, "draft") ?? null,
   );
   const eventsPositionals =
@@ -701,6 +721,10 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     command === "plans"
       ? parsePlansPositionals(commandPositionals)
       : { plansSubcommand: null, projectPath: qualityPositionals.projectPath };
+  const reviewPositionals =
+    command === "review"
+      ? parseReviewPositionals(commandPositionals)
+      : { reviewSubcommand: null, reviewValidatePath: null };
   const diagnosticsPositionals: {
     diagnosticsSubcommand: DiagnosticsSubcommand | null;
     projectPath: string;
@@ -781,6 +805,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       hooksPositionals.hookSubcommand,
       parsedString(parsedValues, "scenario"),
     ),
+    reviewSubcommand: reviewPositionals.reviewSubcommand,
+    reviewValidatePath: reviewPositionals.reviewValidatePath,
     plansSubcommand: plansPositionals.plansSubcommand,
     plansStrict: parsedFlag(parsedValues, "strict"),
     diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,

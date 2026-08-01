@@ -20,6 +20,7 @@ import {
 import type { Command, ParsedCLI } from "./cli-types.js";
 import { createFS } from "./facts/fs.js";
 import { handleHooksCommand } from "./hooks-command.js";
+import { handleReviewCommand } from "./review-validate.js";
 import {
   buildInstallerInvocation,
   buildInstallerSpawnSpec,
@@ -657,6 +658,7 @@ const COMMAND_HANDLERS: Partial<
   diagnostics: handleDiagnosticsCommand,
   index: handleIndexCommand,
   redact: handleRedactCommand,
+  review: handleReviewCommand,
   plans: handlePlansCommand,
   status: handleStatusCommand,
   dashboard: runDashboardCommand,

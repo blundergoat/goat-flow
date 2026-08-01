@@ -3,7 +3,7 @@
 /**
  * Command-line entry point for goat-flow.
  * Handles argv parsing, command dispatch, exit codes, and output for audit,
- * quality, setup, diagnostics, dashboard, events, redaction, and information workflows.
+ * quality, setup, diagnostics, dashboard, events, redaction, review validation, and information workflows.
  */
 
 import { realpathSync } from "node:fs";
@@ -47,6 +47,7 @@ Commands:
   diagnostics threat-model  Show static agent/tool posture without executing target hooks
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
   redact            Scrub durable text from stdin before stdout or --output persistence
+  review validate [report-file]  Validate goat-review Markdown; anchors and ledgers resolve from cwd
   plans export      Preview or write redacted local milestone bundles
   plans check       Check milestone effort arithmetic; report rough 70/20/10 mix drift
   events tail       Read local gitignored evidence-envelope events
@@ -59,6 +60,7 @@ Commands:
   hooks verify      Run bounded managed deny-hook classifier proof for one agent
 Arguments:
   project-path    Target project directory (default: .)
+  report-file     Saved goat-review Markdown for review validate (omit to read stdin)
 
 Flags:
   --format <type>   Output format: json, text, markdown, sarif (omit for auto-detect: text in terminal, json otherwise)
@@ -124,6 +126,7 @@ Examples:
   goat-flow diagnostics threat-model . --agent codex --format json
   goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries
   goat-flow redact --output .goat-flow/logs/sessions/handoff.md
+  goat-flow review validate saved-review.md
   goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
   goat-flow plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
   goat-flow plans check .goat-flow/plans/1.14.0

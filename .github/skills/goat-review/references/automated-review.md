@@ -6,7 +6,7 @@ goat-flow-reference-version: "1.14.0"
 Loaded by `/goat-review` in PR mode. Defines how to ingest existing
 automated-reviewer findings (Copilot, CodeQL/github-advanced-security,
 claude[bot], or any other repo bot) after Pass 2 records local findings,
-and how to report the human-vs-automated split in Review Integrity.
+and how to report human/automated provenance in Review Integrity.
 
 Borrowed from awslabs/cli-agent-orchestrator PR #245 review pattern, where
 the human reviewer posted a Copilot/Manual finding tally that made the
@@ -46,7 +46,7 @@ Normalize known GitHub identities before matching:
 - `claude[bot]` -> `claude`
 - any other repo-specific bot the user names -> its stable login
 
-For each automated finding, record `{ reviewer, file, line?, brief }`,
+For each automated finding, record `{ reviewer, file, line?, brief, symbol?, ruleId?, category?, rootCause? }`,
 where `brief` is the first 80 chars of the inline comment body. Preserve the
 comment URL when available so a disputed overlap can be checked.
 
@@ -60,29 +60,30 @@ flag `automated-review-uningested` in Review Integrity.
 
 ## Post-Pass-2 Overlap Tagging
 
-Compare the recorded local findings list with the automated-review index and tag each finding:
+Keep the pre-ingestion local list immutable. Reconcile it with the automated index using four provenance classes:
 
-- `[overlap:<reviewer>]` - this human finding matches a known finding in
-  the automated-review index (same file, semantically similar brief).
-  Example: `[overlap:copilot-pull-request-reviewer]`.
-- `[new]` - this human finding does not appear in the index. Net-new
-  signal from this review.
+- `overlap-confirmed:<reviewer>` - a pre-ingestion local finding and bot finding describe the same root cause; keep the local finding and tag the confirming reviewer.
+- `local-only` - a local finding has no bot match; report it under "Local findings every bot missed."
+- `bot-only-locally-verified:<reviewer>` - no pre-ingestion local match; Pass 2 independently verifies it, so it enters Findings with bot provenance; never present it as independent discovery.
+- `disputed-match:<reviewer>` - location or wording overlaps but the evidence cannot prove one root cause; keep both records visible and explain the dispute.
 
-Semantic match heuristics: same `file` + Jaccard token overlap > 0.4 on
-the brief, OR same `file + line` exact. False matches favor `[new]` -
-better to over-attribute as net-new than to silently absorb an
-automated-only finding.
+For a bot-only candidate, rerun the normal Pass 2 evidence procedure: open the full file, try to disprove the claim, establish reachability, and assign evidence/proof tags. Only `bot-only-locally-verified` enters Findings. An unverified bot-only item remains in the reconciliation annex; it never becomes a local finding.
+
+### Matching Hierarchy
+
+Compare in this order: symbol, rule ID, category, root cause, line range, then token similarity on the normalized brief. File equality is a prerequisite, not proof of one defect. The same line with different root causes stays two findings. When confidence is insufficient, preserve the existing err-toward-`[new]` bias: use `local-only` plus `disputed-match` rather than merging. Never suppress a finding as overlap.
+
+Report both deltas explicitly: "Automated findings the local review missed" lists verified bot-only IDs; "Local findings every bot missed" lists local-only R-IDs. `overlap-confirmed` is confirmation, not independent local yield.
 
 ## Review Integrity Surface Extension
 
-Extend the Review Integrity surface defined in SKILL.md with this line
-when in PR mode:
+Extend the Review Integrity surface defined in SKILL.md with this line when in PR mode:
 
 ```
-- Automated-reviewer overlap: <K> overlap with <reviewer-list>, <M> net-new
+- Automated-review provenance: overlap-confirmed=<K>, local-only=<L>, bot-only-locally-verified=<B>, disputed-match=<D>; automated findings the local review missed: <IDs|none>; local findings every bot missed: <R-IDs|none>
 ```
 
-When no automated review: `Automated-reviewer overlap: no-automated-review-present`.
+When no automated review: `Automated-review provenance: no-automated-review-present`.
 When fetch failed: include `automated-review-uningested` in Degradation flags.
 Outside PR mode: omit the line entirely or write `n/a`.
 
@@ -95,15 +96,7 @@ legitimate "no bot has commented yet" state.
 
 ## Why This Surface Exists
 
-When automated review and human/skill review run in sequence, the human
-reviewer's value is the *delta*: findings the automated tools missed. A
-review that silently re-flags the same Copilot findings duplicates work
-and inflates the apparent review yield without adding signal.
-
-The overlap surface makes the delta explicit. It also rewards the
-automated reviewer for accurate findings (`[overlap]` is a positive
-signal, not a demotion) and surfaces gaps in automated coverage that the
-human review filled (`[new]` count is the per-PR review value).
+When automated and local review run in sequence, provenance must distinguish independent local discovery from later local verification. The four-way surface exposes both missed-finding sets without hiding confirmed overlap or crediting a bot lead as independent discovery.
 
 ## Anti-Patterns
 
@@ -111,12 +104,8 @@ human review filled (`[new]` count is the per-PR review value).
   blind review and makes the local delta unknowable.
 - **Silently omit overlap reporting when automated review exists.**
   Defeats the surface; presents human review as if it were standalone.
-- **Mark every finding `[new]` to inflate yield.** The semantic-match
-  heuristic should err toward `[new]`, but obvious overlap (same
-  file+line, same word-for-word brief) is `[overlap]`.
+- **Mark every finding `local-only` to inflate yield.** The matcher errs toward separate records when evidence is weak, but a hierarchy-confirmed shared root is `overlap-confirmed`.
 - **Refuse to run a finding because Copilot already flagged it.**
-  `[overlap]` is a tagging signal, not a suppression signal. Surface
-  the finding with the tag; the reviewer's confirmation independently
-  validates the automated finding.
+  Provenance is not suppression. Verify the claim, then surface it under the matching class.
 - **Treat `automated-review-uningested` as `no-automated-review-present`.**
   They are different states with different implications.

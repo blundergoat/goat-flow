@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-07-17
+last_reviewed: 2026-08-01
 ---
 
 ## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
@@ -48,6 +48,8 @@ last_reviewed: 2026-07-17
 
 **What happened:** While tightening CI-validation checks, the first pass on the workflow `run:` parser read the wrong regex capture group and then used a router heuristic that only matched commands containing the word `router`. The focused regression suite and `tsc` both failed before the broader test run finished.
 **Root cause:** Changed parsing and heuristics together without first validating the extracted command shape. The new regression covered the shell pattern, but the implementation still assumed the old capture layout and overfit to existing workflow wording.
+**Recurrence 2026-08-01:** Before implementing the goat-review output validator, the producer survey found that the systemic template and shipped examples disagreed on R-IDs, `Harm:`, Evidence/Proof, and the retired overlap tag. Reopening the producer milestone and adding grammar contracts prevented the consumer from forgiving contradictory formats. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-review finding examples on the validator-ready grammar`).
+**Decision changed:** Before a prose parser, enumerate every shipped producer shape and lock one grammar with focused fixtures; only then implement the consumer.
 **Fix:** For parser refactors, verify in this order: (1) print/exercise the extracted intermediate values, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, then (4) run the full test suite. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
 
 ---

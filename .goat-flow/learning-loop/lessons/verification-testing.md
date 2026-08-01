@@ -99,11 +99,11 @@ last_reviewed: 2026-08-01
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 15
+**Incident count:** 17
 
 **Latest occurrence:** 2026-08-01
 
-**What happened:** Fifteen edits crossed caps:
+**What happened:** Seventeen edits crossed caps:
 
 - **2026-05-19/22:** TDD packs hit 3022/3008 words, the preamble exceeded 1500, and QA exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
 - **2026-06-14:** Dispatcher guidance hit 653/555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
@@ -118,10 +118,8 @@ last_reviewed: 2026-08-01
 - **2026-07-17 quality remediation:** The preamble hit 1514, then compacted below 1500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
 - **2026-07-18 review independence:** Goat-review hit 2527, then compacted to 2488. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
 - **2026-07-19 review scope:** Worktree/area wording pushed goat-review to 2512; compaction restored 2498. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `defines two evidence-producing area audit passes`; `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-07-19 QA rows:** Goat-qa hit 2506, then 2499. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-08-01 verdict hardening:** Goat-review rose 2493→2500; the cap failed; compaction
-  restored 2490. Evidence: `test/contract/skill-hardening-contracts.test.ts`
-  (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- **2026-07-19 QA rows:** Goat-qa measured 2506→2499 at the functional-skill cap.
+- **2026-08-01 M01-M03:** Goat-review reached 2500, then 2762; M03's reasoning layer later reached 2629. Immediate measurement and compaction restored the M02 body to 2490 and the M03 body to 2362. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
 
 **Root cause:** Treated capped prose as tiny.
 
@@ -137,21 +135,18 @@ last_reviewed: 2026-08-01
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 5
+**Incident count:** 6
 
-**Latest occurrence:** 2026-07-19
+**Latest occurrence:** 2026-08-01
 
-**What happened:** Five compactions broke durable references:
+**What happened:** Six compactions broke durable or contract-pinned references:
 
-- **M15:** Removed `Use when work needs milestone tracking`; stats caught its footgun.
-- **2026-07-13:** `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`); `src/cli/facts/shared/learning-loop-entries.ts` (search: `isDecisionRecordMarkdown`).
-- **2026-07-16:** `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
-- **2026-07-17:** `workflow/skills/goat-qa/SKILL.md` (search: `safe to skip more PTY timing tests`).
-- **2026-07-19:** `workflow/skills/reference/skill-preamble.md` (search: "If stale, emit"; "Claim/proof examples live in"); stats and `preamble-sync.test.ts` restored both.
+- **2026-07-12–19:** M15, preamble, dispatcher, and QA compactions removed anchors; stats/contracts restored them. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`), `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
+- **2026-08-01 M02:** Compaction replaced the pinned “both local passes finish” wording, and a new assertion split one Markdown code span; focused contracts corrected both. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
 
 **Root cause:** Treated prose as self-contained despite durable cross-file anchors.
 
-**Prevention:** Search indexes before renames; run `stats --check`; repair every stale anchor in the same change.
+**Prevention:** Search indexes and contract tests before compaction; run focused contracts and `stats --check`; repair stale anchors in the same change.
 
 ---
 
