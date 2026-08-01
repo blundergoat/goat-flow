@@ -33,10 +33,10 @@ import {
   type ParsedCLI,
   type PlansSubcommand,
   type QualitySubcommand,
-  type ReviewSubcommand,
   type SkillSubcommand,
 } from "./cli-types.js";
 import { parseDiagnosticsPositionals } from "./diagnostics-command-parser.js";
+import { buildReviewCLIFields } from "./review-command-parser.js";
 import {
   buildSkillCLIFields,
   parseSkillPositionals,
@@ -340,24 +340,6 @@ function parsePlansPositionals(positionals: string[]): {
     throw new CLIError(`plans ${subcommand} requires one <plan-path>.`, 2);
   }
   return { plansSubcommand: subcommand, projectPath: resolve(planPath) };
-}
-
-/** Parse stdin-first `review validate [report-file]` without treating the report as a project path. */
-function parseReviewPositionals(positionals: string[]): {
-  reviewSubcommand: ReviewSubcommand;
-  reviewValidatePath: string | null;
-} {
-  const [subcommand, reportPath, ...extraPositionals] = positionals;
-  if (subcommand !== "validate") {
-    throw new CLIError('review requires subcommand "validate".', 2);
-  }
-  if (extraPositionals.length > 0) {
-    throw new CLIError("review validate accepts at most one [report-file].", 2);
-  }
-  return {
-    reviewSubcommand: "validate",
-    reviewValidatePath: reportPath ? resolve(reportPath) : null,
-  };
 }
 
 function parseHookTogglePositionals(
@@ -721,10 +703,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     command === "plans"
       ? parsePlansPositionals(commandPositionals)
       : { plansSubcommand: null, projectPath: qualityPositionals.projectPath };
-  const reviewPositionals =
-    command === "review"
-      ? parseReviewPositionals(commandPositionals)
-      : { reviewSubcommand: null, reviewValidatePath: null };
+  const reviewFields = buildReviewCLIFields(command, commandPositionals);
   const diagnosticsPositionals: {
     diagnosticsSubcommand: DiagnosticsSubcommand | null;
     projectPath: string;
@@ -805,8 +784,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       hooksPositionals.hookSubcommand,
       parsedString(parsedValues, "scenario"),
     ),
-    reviewSubcommand: reviewPositionals.reviewSubcommand,
-    reviewValidatePath: reviewPositionals.reviewValidatePath,
+    ...reviewFields,
     plansSubcommand: plansPositionals.plansSubcommand,
     plansStrict: parsedFlag(parsedValues, "strict"),
     diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,

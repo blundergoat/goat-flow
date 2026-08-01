@@ -15,27 +15,32 @@ import { CLIError } from "./cli-error.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { writeOutput } from "./cli-output.js";
 
+/** One actionable validation failure, optionally tied to a report line. */
 export interface ReviewValidationViolation {
   code: string;
   line: number | null;
   message: string;
 }
 
+/** Deterministic validator result consumed by tests and the CLI renderer. */
 export interface ReviewValidationResult {
   status: "pass" | "fail";
   violations: ReviewValidationViolation[];
 }
 
+/** One report line with its one-based source location. */
 interface LocatedLine {
   line: number;
   text: string;
 }
 
+/** H2 section body and the heading location used for missing-field errors. */
 interface MarkdownSection {
   headingLine: number;
   lines: LocatedLine[];
 }
 
+/** Refutation claim extracted while validating the integrity surface. */
 interface IntegrityResult {
   refutationsLogged: number;
   refutationsLine: number | null;
@@ -192,6 +197,70 @@ function validateAnchor(
   }
 }
 
+/** Validate Evidence, Proof, and severity-dependent Harm fields. */
+function validateFindingFields(
+  text: string,
+  severity: string,
+  line: number,
+  violations: ReviewValidationViolation[],
+): void {
+  if (!EVIDENCE_TAG.test(text)) {
+    addViolation(
+      violations,
+      "finding-evidence",
+      line,
+      "finding is missing Evidence: OBSERVED or Evidence: INFERRED",
+    );
+  }
+  if (!PROOF_TAG.test(text)) {
+    addViolation(
+      violations,
+      "finding-proof",
+      line,
+      "finding is missing a supported Proof: class",
+    );
+  }
+  const needsHarm = severity === "MUST" || severity === "SHOULD";
+  if (needsHarm && !HARM_TAG.test(text)) {
+    addViolation(
+      violations,
+      "finding-harm",
+      line,
+      "MUST and SHOULD findings require a non-empty Harm: segment",
+    );
+  }
+}
+
+/** Validate every literal semantic anchor carried by one finding. */
+function validateFindingAnchors(
+  locatedLine: LocatedLine,
+  projectRoot: string,
+  violations: ReviewValidationViolation[],
+): void {
+  const anchors = [...locatedLine.text.matchAll(ANCHOR)];
+  if (anchors.length === 0) {
+    addViolation(
+      violations,
+      "anchor-format",
+      locatedLine.line,
+      "finding requires at least one `path` (search: `literal`) anchor",
+    );
+    return;
+  }
+  for (const anchor of anchors) {
+    const filePath = anchor[1];
+    const searchText = anchor[2] ?? anchor[3];
+    if (filePath === undefined || searchText === undefined) continue;
+    validateAnchor(
+      projectRoot,
+      filePath,
+      searchText,
+      locatedLine.line,
+      violations,
+    );
+  }
+}
+
 /** Validate one finding definition after its containing section identifies it as review output. */
 function validateFindingLine(
   locatedLine: LocatedLine,
@@ -210,57 +279,78 @@ function validateFindingLine(
     return;
   }
 
-  if (!EVIDENCE_TAG.test(locatedLine.text)) {
-    addViolation(
-      violations,
-      "finding-evidence",
-      locatedLine.line,
-      "finding is missing Evidence: OBSERVED or Evidence: INFERRED",
-    );
-  }
-  if (!PROOF_TAG.test(locatedLine.text)) {
-    addViolation(
-      violations,
-      "finding-proof",
-      locatedLine.line,
-      "finding is missing a supported Proof: class",
-    );
-  }
-  if (
-    (prefixMatch[2] === "MUST" || prefixMatch[2] === "SHOULD") &&
-    !HARM_TAG.test(locatedLine.text)
-  ) {
-    addViolation(
-      violations,
-      "finding-harm",
-      locatedLine.line,
-      "MUST and SHOULD findings require a non-empty Harm: segment",
-    );
-  }
+  validateFindingFields(
+    locatedLine.text,
+    prefixMatch[2] ?? "",
+    locatedLine.line,
+    violations,
+  );
+  validateFindingAnchors(locatedLine, projectRoot, violations);
+}
 
-  const anchors = [...locatedLine.text.matchAll(ANCHOR)];
-  if (anchors.length === 0) {
+type IntegrityFieldMap = Map<string, { value: string; line: number }>;
+
+/** Extract colon-delimited integrity fields without interpreting their values. */
+function collectIntegrityFields(section: MarkdownSection): IntegrityFieldMap {
+  const fields: IntegrityFieldMap = new Map();
+  for (const locatedLine of section.lines) {
+    const match = locatedLine.text.match(/^\s*-\s+([^:]+):\s*(.*)$/u);
+    if (match?.[1] === undefined || match[2] === undefined) continue;
+    fields.set(match[1].trim(), {
+      value: match[2].trim(),
+      line: locatedLine.line,
+    });
+  }
+  return fields;
+}
+
+/** Validate all mandatory integrity fields against their bounded value grammar. */
+function validateRequiredIntegrityFields(
+  fields: IntegrityFieldMap,
+  section: MarkdownSection,
+  violations: ReviewValidationViolation[],
+): void {
+  for (const [label, valuePattern] of REQUIRED_INTEGRITY_FIELDS) {
+    const field = fields.get(label);
+    if (field && valuePattern.test(field.value)) continue;
     addViolation(
       violations,
-      "anchor-format",
-      locatedLine.line,
-      'finding requires at least one `path` (search: `literal`) anchor',
+      "integrity-format",
+      field?.line ?? section.headingLine,
+      field
+        ? `Review Integrity ${label} has an invalid value`
+        : `Review Integrity is missing ${label}`,
     );
-    return;
   }
-  for (const anchor of anchors) {
-    const filePath = anchor[1];
-    const searchText = anchor[2] ?? anchor[3];
-    if (filePath !== undefined && searchText !== undefined) {
-      validateAnchor(
-        projectRoot,
-        filePath,
-        searchText,
-        locatedLine.line,
-        violations,
-      );
-    }
+}
+
+/** Validate one optional extension only when the report emitted it. */
+function validateOptionalIntegrityField(
+  fields: IntegrityFieldMap,
+  label: string,
+  valuePattern: RegExp,
+  violations: ReviewValidationViolation[],
+): void {
+  const field = fields.get(label);
+  if (!field || valuePattern.test(field.value)) return;
+  addViolation(
+    violations,
+    "integrity-format",
+    field.line,
+    `${label} has an invalid value`,
+  );
+}
+
+/** Convert a valid integer refutation field into the ledger claim. */
+function readRefutationClaim(fields: IntegrityFieldMap): IntegrityResult {
+  const refutations = fields.get("Refutations logged");
+  if (!refutations || !/^\d+$/u.test(refutations.value)) {
+    return { refutationsLogged: 0, refutationsLine: refutations?.line ?? null };
   }
+  return {
+    refutationsLogged: Number.parseInt(refutations.value, 10),
+    refutationsLine: refutations.line,
+  };
 }
 
 /** Validate the full Review Integrity field set and return its ledger claim. */
@@ -268,53 +358,21 @@ function validateFullIntegrity(
   section: MarkdownSection,
   violations: ReviewValidationViolation[],
 ): IntegrityResult {
-  const fields = new Map<string, { value: string; line: number }>();
-  for (const locatedLine of section.lines) {
-    const match = locatedLine.text.match(/^\s*-\s+([^:]+):\s*(.*)$/u);
-    if (match?.[1] !== undefined && match[2] !== undefined) {
-      fields.set(match[1].trim(), { value: match[2].trim(), line: locatedLine.line });
-    }
-  }
-
-  for (const [label, valuePattern] of REQUIRED_INTEGRITY_FIELDS) {
-    const field = fields.get(label);
-    if (!field || !valuePattern.test(field.value)) {
-      addViolation(
-        violations,
-        "integrity-format",
-        field?.line ?? section.headingLine,
-        field ? `Review Integrity ${label} has an invalid value` : `Review Integrity is missing ${label}`,
-      );
-    }
-  }
-
-  const automatedReview = fields.get("Automated-review provenance");
-  if (automatedReview && !AUTOMATED_REVIEW_VALUE.test(automatedReview.value)) {
-    addViolation(
-      violations,
-      "integrity-format",
-      automatedReview.line,
-      "Automated-review provenance has an invalid value",
-    );
-  }
-  const refuter = fields.get("Refuter pass");
-  if (refuter && !REFUTER_VALUE.test(refuter.value)) {
-    addViolation(
-      violations,
-      "integrity-format",
-      refuter.line,
-      "Refuter pass has an invalid value",
-    );
-  }
-
-  const refutations = fields.get("Refutations logged");
-  return {
-    refutationsLogged:
-      refutations && /^\d+$/u.test(refutations.value)
-        ? Number.parseInt(refutations.value, 10)
-        : 0,
-    refutationsLine: refutations?.line ?? null,
-  };
+  const fields = collectIntegrityFields(section);
+  validateRequiredIntegrityFields(fields, section, violations);
+  validateOptionalIntegrityField(
+    fields,
+    "Automated-review provenance",
+    AUTOMATED_REVIEW_VALUE,
+    violations,
+  );
+  validateOptionalIntegrityField(
+    fields,
+    "Refuter pass",
+    REFUTER_VALUE,
+    violations,
+  );
+  return readRefutationClaim(fields);
 }
 
 /** Validate either the full integrity block or M04's compact clean-review line. */
@@ -325,7 +383,9 @@ function validateIntegrity(
   const fullSection = readSection(lines, "Review Integrity");
   if (fullSection) return validateFullIntegrity(fullSection, violations);
 
-  const compactIndex = lines.findIndex((line) => /^\s*Review Integrity:/u.test(line));
+  const compactIndex = lines.findIndex((line) =>
+    /^\s*Review Integrity:/u.test(line),
+  );
   if (compactIndex >= 0 && COMPACT_INTEGRITY.test(lines[compactIndex] ?? "")) {
     return { refutationsLogged: 0, refutationsLine: null };
   }
@@ -371,7 +431,46 @@ function validateRefutationLedger(
   }
 }
 
-/** Validate a drafted goat-review report against files in the reviewed project root. */
+/** Validate finding definitions in every output section that owns R-IDs. */
+function validateFindingSections(
+  lines: string[],
+  projectRoot: string,
+  violations: ReviewValidationViolation[],
+): void {
+  for (const heading of FINDING_SECTIONS) {
+    const section = readSection(lines, heading);
+    const locatedLines = section?.lines ?? [];
+    for (const locatedLine of locatedLines) {
+      validateFindingLine(locatedLine, projectRoot, violations);
+    }
+  }
+}
+
+/** Validate advisory-only Spec Drift bullets separately from findings. */
+function validateSpecDrift(
+  lines: string[],
+  violations: ReviewValidationViolation[],
+): void {
+  const section = readSection(lines, "Spec Drift");
+  for (const locatedLine of section?.lines ?? []) {
+    const isTaggedBullet = /^\s*-\s+\[/u.test(locatedLine.text);
+    if (!isTaggedBullet || SPEC_DRIFT_LINE.test(locatedLine.text)) continue;
+    addViolation(
+      violations,
+      "spec-drift-grammar",
+      locatedLine.line,
+      "Spec Drift bullets must use [advisory] or [ready-to-tick] with a bold title",
+    );
+  }
+}
+
+/**
+ * Validate a drafted goat-review report against files in the reviewed project root.
+ *
+ * @param markdown - drafted human-readable review report
+ * @param projectRoot - reviewed project whose anchors and ledgers must resolve
+ * @returns deterministic status plus every report violation
+ */
 export function validateReviewReport(
   markdown: string,
   projectRoot: string,
@@ -379,36 +478,25 @@ export function validateReviewReport(
   const lines = markdown.split(/\r?\n/u);
   const violations: ReviewValidationViolation[] = [];
   const integrity = validateIntegrity(lines, violations);
-
-  for (const heading of FINDING_SECTIONS) {
-    const section = readSection(lines, heading);
-    for (const locatedLine of section?.lines ?? []) {
-      validateFindingLine(locatedLine, projectRoot, violations);
-    }
-  }
-
-  const specDrift = readSection(lines, "Spec Drift");
-  for (const locatedLine of specDrift?.lines ?? []) {
-    if (/^\s*-\s+\[/u.test(locatedLine.text) && !SPEC_DRIFT_LINE.test(locatedLine.text)) {
-      addViolation(
-        violations,
-        "spec-drift-grammar",
-        locatedLine.line,
-        "Spec Drift bullets must use [advisory] or [ready-to-tick] with a bold title",
-      );
-    }
-  }
-
+  validateFindingSections(lines, projectRoot, violations);
+  validateSpecDrift(lines, violations);
   validateRefutationLedger(projectRoot, integrity, violations);
   return { status: violations.length === 0 ? "pass" : "fail", violations };
 }
 
-/** Render a deterministic human-readable validation result for shell pipelines. */
+/**
+ * Render a deterministic human-readable validation result for shell pipelines.
+ *
+ * @param result - pure validation result
+ * @returns one PASS line or a FAIL header followed by every violation
+ */
 export function renderReviewValidationResult(
   result: ReviewValidationResult,
 ): string {
   if (result.status === "pass") return "review validate: PASS";
-  const lines = [`review validate: FAIL (${result.violations.length} violations)`];
+  const lines = [
+    `review validate: FAIL (${result.violations.length} violations)`,
+  ];
   for (const violation of result.violations) {
     lines.push(
       `${violation.line === null ? "report" : `line ${violation.line}`} [${violation.code}] ${violation.message}`,
@@ -432,6 +520,9 @@ export function handleReviewCommand(options: ParsedCLI): void {
     );
   }
   const result = validateReviewReport(markdown, options.projectPath);
-  writeOutput({ ...options, output: null }, renderReviewValidationResult(result));
+  writeOutput(
+    { ...options, output: null },
+    renderReviewValidationResult(result),
+  );
   if (result.status === "fail") process.exitCode = 1;
 }

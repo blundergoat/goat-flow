@@ -45,12 +45,14 @@ last_reviewed: 2026-08-01
 ## Lesson: Workflow parser refactors need both fixture coverage and typecheck
 
 **Status:** active | **Created:** 2026-04-03
+**Incident count:** 2
+**Latest occurrence:** 2026-08-01
 
 **What happened:** While tightening CI-validation checks, the first pass on the workflow `run:` parser read the wrong regex capture group and then used a router heuristic that only matched commands containing the word `router`. The focused regression suite and `tsc` both failed before the broader test run finished.
 **Root cause:** Changed parsing and heuristics together without first validating the extracted command shape. The new regression covered the shell pattern, but the implementation still assumed the old capture layout and overfit to existing workflow wording.
-**Recurrence 2026-08-01:** Before implementing the goat-review output validator, the producer survey found that the systemic template and shipped examples disagreed on R-IDs, `Harm:`, Evidence/Proof, and the retired overlap tag. Reopening the producer milestone and adding grammar contracts prevented the consumer from forgiving contradictory formats. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-review finding examples on the validator-ready grammar`).
-**Decision changed:** Before a prose parser, enumerate every shipped producer shape and lock one grammar with focused fixtures; only then implement the consumer.
-**Fix:** For parser refactors, verify in this order: (1) print/exercise the extracted intermediate values, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, then (4) run the full test suite. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
+**Recurrence 2026-08-01:** Before implementing the goat-review output validator, the producer survey found that the systemic template and shipped examples disagreed on R-IDs, `Harm:`, Evidence/Proof, and the retired overlap tag. Independent Verify RED then found that the nominally valid fixture contradicted its Top 5 threshold, provenance totals, refuter state, and Spec Drift status; correcting it changed the verdict count and exposed a stale negative-fixture mutation. After behavioral tests and typecheck went green, whole-file ESLint and gruff still caught shared-parser complexity and file-length headroom, so review positional parsing moved to a bounded helper and validator checks split in place. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-review finding examples on the validator-ready grammar`), `test/unit/review-validate.test.ts` (search: `Verdicts: 4/0/0/0`), `src/cli/review-command-parser.ts` (search: `buildReviewCLIFields`).
+**Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's internal relationships, and lock one grammar with focused fixtures; at the first behavioral GREEN, check whole-file complexity and headroom before adding more branches.
+**Fix:** For parser refactors, verify in this order: (1) print/exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity/size analysis, then (5) run the full test suite. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
 
 ---
 

@@ -133,7 +133,7 @@ Check each finding against INDEX-first footguns and `references/review-traps.md`
 
 **Convergence guard:** after two review→fix cycles without the finding count dropping, stop, re-derive whether the original defect was real, and re-scope with the human.
 
-**Proof Gate:** per `skill-preamble.md`.
+**Proof Gate:** Version-matched CLI: pipe draft through `goat-flow review validate`; record `Review validator: validated` or `Review validator: validator-unavailable`. Validator-unavailable does not block.
 
 ## Area Audit (Full)
 
