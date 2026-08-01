@@ -457,6 +457,19 @@ describe("quality report contract: staged-draft persistence variant", () => {
         false,
         `${surface}: staged variant still contains a heredoc`,
       );
+      for (const forbidden of [
+        "Use the bounded saver below",
+        "**Persist through the bounded saver.**",
+        "**Filename format:**",
+        "The saver derives",
+        ".goat-flow/logs/quality/<filename>.json",
+      ]) {
+        assert.equal(
+          prompt.includes(forbidden),
+          false,
+          `${surface}: staged variant still contains ${forbidden}`,
+        );
+      }
     }
   });
 

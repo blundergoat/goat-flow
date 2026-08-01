@@ -127,6 +127,43 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(ctx.sessions[0]?.accessMode, "reporting");
   });
 
+  it("sends exactly one explicit report owner for staged-draft capture", async () => {
+    const createBodies: unknown[] = [];
+    const helpers = loadHelpers(async (input, init) => {
+      if (String(input) === "/api/terminal/create") {
+        createBodies.push(JSON.parse(String(init?.body ?? "{}")));
+        return {
+          json: async () => ({
+            id: "session-capture-owner",
+            wsUrl: "/ws/terminal/session-capture-owner",
+          }),
+        } as Response;
+      }
+      return { json: async () => ({ ok: true }) } as Response;
+    });
+    const ctx = makeContext({ projectPath: "/tmp/selected-target" });
+
+    await helpers.dashboardLaunchInTerminal(ctx, "assess process", "claude", {
+      cwdPath: "/tmp/controlling-goat-flow",
+      targetPath: "/tmp/selected-target",
+      accessMode: "reporting",
+      captureQualityDrafts: true,
+      qualityDraftProjectPath: "/tmp/controlling-goat-flow",
+    });
+
+    assert.deepStrictEqual(createBodies, [
+      {
+        prompt: "",
+        projectPath: "/tmp/controlling-goat-flow",
+        targetPath: "/tmp/selected-target",
+        runner: "claude",
+        accessMode: "reporting",
+        captureQualityDrafts: true,
+        qualityDraftProjectPath: "/tmp/controlling-goat-flow",
+      },
+    ]);
+  });
+
   it("sends terminal text to the requested session instead of the current active tab", async () => {
     const { helpers, ctx, sent } = makeRequestedSessionRoutingHarness();
 

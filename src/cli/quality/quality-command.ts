@@ -6,8 +6,8 @@
  * Heavy modules (history, candidacy, audit, prompt composition) are dynamically imported inside
  * each handler so the CLI startup path stays lean and only loads what a given invocation needs.
  * All filesystem and process behaviour is injected through QualityCommandDeps so the handlers
- * stay testable. The save handler is the one bounded write path: it chooses the report filename
- * beneath the selected project after redaction and strict validation.
+ * stay testable. The save handler is the one bounded write path: it strictly accepts the report,
+ * scrubs its strings, revalidates it, and then chooses a filename beneath the selected project.
  */
 import { randomBytes } from "node:crypto";
 import {
@@ -395,14 +395,28 @@ export interface PersistQualityReportOptions {
   sourceLabel?: string;
 }
 
+/** Recursively scrub every accepted report string while preserving its shape. */
+function scrubQualityReportStrings(value: unknown): unknown {
+  if (typeof value === "string") return scrubDurableText(value);
+  if (Array.isArray(value)) return value.map(scrubQualityReportStrings);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      scrubQualityReportStrings(child),
+    ]),
+  );
+}
+
 /**
- * Redact, strictly validate, and persist one current quality report held in memory.
+ * Strictly validate, redact, revalidate, and persist one current quality report.
  *
  * THE single bounded write path for quality reports: every error is thrown as
  * `deps.CLIError` with the exact `quality save:` message contract the CLI has
  * always emitted, so the stdin subcommand and the dashboard draft capture
- * reject identically. Raw text is scrubbed before parsing and never touches
- * disk here; only the validated, reserialized report is written.
+ * reject identically. Raw text is parsed and strictly accepted in memory before
+ * its report strings are scrubbed; only the revalidated serialization reaches
+ * disk.
  *
  * @param input - project path, raw report text, and the channel label for error messages
  * @param deps - CLIError constructor used for every rejection
@@ -421,20 +435,26 @@ export async function persistQualityReportText(
       2,
     );
   }
-  const scrubbed = scrubDurableText(input.rawText);
   let raw: unknown;
   try {
-    raw = JSON.parse(scrubbed);
-  } catch (error) {
-    throw new deps.CLIError(
-      `quality save: invalid JSON on ${sourceLabel}: ${error instanceof Error ? error.message : String(error)}`,
-      2,
-    );
+    raw = JSON.parse(input.rawText);
+  } catch {
+    throw new deps.CLIError(`quality save: invalid JSON on ${sourceLabel}.`, 2);
   }
   const { parseQualityReport } = await import("./schema.js");
-  const parsed = parseQualityReport(raw, { requireCurrentFields: true });
+  const accepted = parseQualityReport(raw, { requireCurrentFields: true });
+  if (!accepted.ok) {
+    throw new deps.CLIError(`quality save: schema error: ${accepted.error}`, 2);
+  }
+  // Traverse only the accepted report shape. Rejected JSON may contain
+  // attacker-controlled nesting deep enough to overflow a recursive scrubber.
+  const scrubbed = scrubQualityReportStrings(accepted.report);
+  const parsed = parseQualityReport(scrubbed, { requireCurrentFields: true });
   if (!parsed.ok) {
-    throw new deps.CLIError(`quality save: schema error: ${parsed.error}`, 2);
+    throw new deps.CLIError(
+      "quality save: redaction produced an invalid report.",
+      2,
+    );
   }
 
   assertReportOwnership(

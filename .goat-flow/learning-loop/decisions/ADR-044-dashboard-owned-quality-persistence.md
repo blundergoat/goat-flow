@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-31
+**Updated:** 2026-08-01
 **Ticket/Context:** `.goat-flow/plans/1.15.0/M06-claude-reporting-session-enforcement.md` (kill-criterion gate)
 
 ## Context
@@ -24,13 +25,14 @@ criterion fired, and the human chose dashboard-owned persistence over read-only 
 The enforced reporting session never persists the report. Instead:
 
 1. The generated dashboard reporting prompt instructs the agent to write ONE draft report JSON
-   through the file tool to a gitignored staging path under the selected project:
+   through the file tool to a gitignored staging path under the mode-selected report owner
+   (the controlling workspace for process/skills, or the selected target for agent-setup/harness):
    `.goat-flow/logs/quality/staging/goat-quality-draft-<agent>-<nonce>.json`. The `goat-` prefix
    follows the sentinel namespace rule; no stream markers exist in this design, so
    sentinel-position policy does not apply.
 2. The dashboard server owns persistence: it watches the staging directory for the session,
-   processes each draft in-process through the same redact -> strict-validate -> exclusive-create
-   persist chain as `quality save` (a shared exported core in
+   parses and strictly accepts each draft in-process, scrubs every accepted string value,
+   revalidates, then uses the same exclusive-create persist path as `quality save` (a shared core in
    `src/cli/quality/quality-command.ts`), writes the final report into
    `.goat-flow/logs/quality/`, deletes the draft, and records success or rejection as terminal
    events. A close-time sweep removes orphaned drafts.

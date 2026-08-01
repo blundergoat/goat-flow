@@ -129,19 +129,78 @@ describe("decodeTerminalCreateBody", () => {
       JSON.stringify({ accessMode: "reporting" }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
-    assert.equal(assertDecodeOk(absent).captureQualityDrafts, false);
+    const absentValue = assertDecodeOk(absent);
+    assert.equal(absentValue.captureQualityDrafts, false);
+    assert.equal(absentValue.qualityDraftProjectPath, "");
 
     const requested = decodeTerminalCreateBody(
-      JSON.stringify({ accessMode: "reporting", captureQualityDrafts: true }),
+      JSON.stringify({
+        accessMode: "reporting",
+        captureQualityDrafts: true,
+        qualityDraftProjectPath: "/tmp/report-owner",
+      }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
-    assert.equal(assertDecodeOk(requested).captureQualityDrafts, true);
+    const requestedValue = assertDecodeOk(requested);
+    assert.equal(requestedValue.captureQualityDrafts, true);
+    assert.equal(requestedValue.qualityDraftProjectPath, "/tmp/report-owner");
+
+    const missingOwner = decodeTerminalCreateBody(
+      JSON.stringify({
+        runner: "claude",
+        accessMode: "reporting",
+        captureQualityDrafts: true,
+      }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(
+      assertDecodeError(missingOwner).path,
+      "body.qualityDraftProjectPath",
+    );
+
+    const ownerWithoutCapture = decodeTerminalCreateBody(
+      JSON.stringify({ qualityDraftProjectPath: "/tmp/report-owner" }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(
+      assertDecodeError(ownerWithoutCapture).path,
+      "body.qualityDraftProjectPath",
+    );
 
     const invalid = decodeTerminalCreateBody(
       JSON.stringify({ captureQualityDrafts: "yes" }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
     assert.equal(assertDecodeError(invalid).path, "body.captureQualityDrafts");
+
+    const invalidOwner = decodeTerminalCreateBody(
+      JSON.stringify({
+        runner: "claude",
+        accessMode: "reporting",
+        captureQualityDrafts: true,
+        qualityDraftProjectPath: 42,
+      }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(
+      assertDecodeError(invalidOwner).path,
+      "body.qualityDraftProjectPath",
+    );
+
+    for (const invalidCombination of [
+      { runner: "codex", accessMode: "reporting" },
+      { runner: "claude", accessMode: "workspace" },
+    ]) {
+      const result = decodeTerminalCreateBody(
+        JSON.stringify({
+          ...invalidCombination,
+          captureQualityDrafts: true,
+          qualityDraftProjectPath: "/tmp/report-owner",
+        }),
+        { validRunners: RUNNERS, defaultRunner: "claude" },
+      );
+      assert.equal(assertDecodeError(result).path, "body.captureQualityDrafts");
+    }
   });
 });
 

@@ -139,6 +139,7 @@ Before merging or tagging:
 ## Related References
 
 - [`release-notes.md`](./release-notes.md) - user-facing announcement derived from the changelog.
+- [`writing-style.md`](./writing-style.md) - prose style for the entry text itself, once the category and version are settled.
 - [keepachangelog.com](https://keepachangelog.com)
 - [semver.org](https://semver.org)
 - Project instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) may declare project-specific changelog policy.

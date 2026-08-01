@@ -374,7 +374,10 @@ describe("dashboard terminal launch flow", () => {
   it("carries staged-draft capture through a retried launch", async () => {
     const { ctx, helpers, launchCalls } = makePreOutputRetryHarness();
     const refs = ctx._terminalRefs["session-error"];
-    if (refs) refs.retryCaptureQualityDrafts = true;
+    if (refs) {
+      refs.retryCaptureQualityDrafts = true;
+      refs.retryQualityDraftProjectPath = "/tmp/report-owner";
+    }
 
     await helpers.dashboardRetryTerminalSession(ctx, "session-error");
 
@@ -384,6 +387,14 @@ describe("dashboard terminal launch flow", () => {
       (launchCalls[0]?.options as { captureQualityDrafts?: boolean })
         ?.captureQualityDrafts,
       true,
+    );
+    assert.equal(
+      (
+        launchCalls[0]?.options as {
+          qualityDraftProjectPath?: string | null;
+        }
+      )?.qualityDraftProjectPath,
+      "/tmp/report-owner",
     );
   });
 

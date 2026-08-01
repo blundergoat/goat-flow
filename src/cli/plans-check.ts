@@ -472,7 +472,12 @@ function indexMilestones(
     }
     identitiesById.set(identity.id, identity);
 
-    const titleId = identity.record.title.match(/^(M\d+)\b/u)?.[1];
+    const compactTitleId = identity.record.title.match(/^(M\d+)\b/u)?.[1];
+    const longTitleNumber =
+      identity.record.title.match(/^Milestone\s+(\d+)\b/iu)?.[1];
+    const titleId =
+      compactTitleId ??
+      (longTitleNumber === undefined ? undefined : `M${longTitleNumber}`);
     if (titleId && titleId !== identity.id) {
       errors.push(
         `${identity.record.sourceFile}: title ID ${titleId} does not match filename ID ${identity.id}`,

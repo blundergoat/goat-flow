@@ -136,5 +136,6 @@ Before publishing:
 ## Related References
 
 - [`changelog.md`](./changelog.md) - source-of-truth release ledger.
+- [`writing-style.md`](./writing-style.md) - prose style for the narrative itself, once themes and structure are chosen.
 - Project's prior release announcements - match voice and structure before inventing a new one.
 - Project instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) may declare release-note policy.

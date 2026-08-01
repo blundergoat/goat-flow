@@ -6,10 +6,10 @@
  * heredoc `quality save` command (measured in plan M06), so enforced sessions
  * never persist reports themselves. Instead the agent writes ONE draft JSON
  * into a gitignored staging directory with its file tool, and this module -
- * running inside the dashboard server process - redacts, validates, and
- * persists the draft through the same `quality save` core as the CLI, deletes
- * the draft, and writes a receipt file the agent can read to confirm the
- * outcome.
+ * running inside the dashboard server process - validates, redacts, revalidates,
+ * and persists the draft through the same `quality save` core as the CLI,
+ * deletes the draft, and writes a receipt file the agent can read to confirm
+ * the outcome.
  *
  * Polling (not fs.watch) is deliberate: watch events are unreliable on WSL2
  * and network filesystems, and a poller with an mtime-stability threshold also
@@ -23,17 +23,22 @@
  * that could still be writing one.
  */
 import {
+  chmodSync,
   lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { persistQualityReportText } from "../quality/quality-command.js";
-import { recordEvidenceEvent } from "../evidence/envelope.js";
-import { scrubDurableText } from "../evidence/redaction.js";
+import {
+  recordEvidenceEvent,
+  type EvidencePayload,
+} from "../evidence/envelope.js";
+import { redactEvidenceText, scrubDurableText } from "../evidence/redaction.js";
 
 /** Draft filenames the poller will process; anything else in staging is ignored. */
 const DRAFT_NAME_PATTERN = /^goat-quality-draft-[A-Za-z0-9_-]{1,64}\.json$/u;
@@ -137,8 +142,37 @@ export function ensureQualityDraftStagingDirectory(
         mode: componentPath.endsWith("staging") ? 0o700 : undefined,
       });
     }
+    if (process.platform !== "win32" && componentPath === components.at(-1)) {
+      chmodSync(componentPath, 0o700);
+      if ((lstatSync(componentPath).mode & 0o077) !== 0) {
+        throw new Error(
+          "quality capture: staging directory must be private (0700).",
+        );
+      }
+    }
   }
   return components[components.length - 1] as string;
+}
+
+/** Resolve the receipt paired with one draft filename. */
+function captureReceiptPath(stagingDir: string, draftName: string): string {
+  const resultName =
+    RESULT_NAME_PREFIX + draftName.slice(DRAFT_NAME_PREFIX.length);
+  return join(stagingDir, resultName);
+}
+
+/** Refuse any receipt path that existed before this draft was processed. */
+function assertCaptureReceiptAvailable(
+  stagingDir: string,
+  draftName: string,
+): void {
+  try {
+    lstatSync(captureReceiptPath(stagingDir, draftName));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw new Error("quality capture: cannot inspect receipt destination.");
+  }
+  throw new Error("quality capture: receipt destination already exists.");
 }
 
 /** Write one receipt file beside the processed draft; receipt text is scrubbed. */
@@ -147,13 +181,72 @@ function writeCaptureReceipt(
   draftName: string,
   body: { ok: true; reportPath: string } | { ok: false; error: string },
 ): void {
-  const resultName =
-    RESULT_NAME_PREFIX + draftName.slice(DRAFT_NAME_PREFIX.length);
+  const resultPath = captureReceiptPath(stagingDir, draftName);
   const serialized = scrubDurableText(`${JSON.stringify(body, null, 2)}\n`);
-  writeFileSync(join(stagingDir, resultName), serialized, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
+  try {
+    writeFileSync(resultPath, serialized, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error("quality capture: receipt destination already exists.");
+    }
+    throw new Error("quality capture: could not write receipt.");
+  }
+  const stats = lstatSync(resultPath);
+  if (!stats.isFile() || stats.nlink !== 1) {
+    try {
+      unlinkSync(resultPath);
+    } catch {
+      /* the unsafe receipt path is already gone */
+    }
+    throw new Error(
+      "quality capture: receipt must be a single-link regular file.",
+    );
+  }
+}
+
+/** Replace an unsafe pre-existing receipt entry with one fixed rejection receipt. */
+function replacePreexistingReceiptWithRejection(
+  stagingDir: string,
+  draftName: string,
+): boolean {
+  const resultPath = captureReceiptPath(stagingDir, draftName);
+  try {
+    // Unlink removes only the staging entry; symlink and hard-link targets are
+    // never opened or truncated. The exclusive writer still closes the race.
+    unlinkSync(resultPath);
+    writeCaptureReceipt(stagingDir, draftName, {
+      ok: false,
+      error: "quality capture: receipt destination already existed.",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Map persistence failures to bounded diagnostics that cannot quote draft text. */
+function captureRejectionDiagnostic(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  if (message.startsWith("quality save: expected one JSON report")) {
+    return "quality capture: draft contains no JSON report.";
+  }
+  if (message.startsWith("quality save: invalid JSON")) {
+    return "quality capture: draft contains invalid JSON.";
+  }
+  if (message.startsWith("quality save: schema error:")) {
+    return "quality capture: draft failed schema validation.";
+  }
+  if (message.includes("report.project_path")) {
+    return "quality capture: draft failed report ownership validation.";
+  }
+  if (message.startsWith("quality save: report version")) {
+    return "quality capture: draft failed report version validation.";
+  }
+  return "quality capture: draft could not be persisted.";
 }
 
 /** Delete one draft; missing files are fine because dispose and process can race. */
@@ -168,9 +261,10 @@ function removeDraft(stagingDir: string, draftName: string): void {
 /**
  * Build the single poller that owns one project root's staging directory.
  *
- * Each eligible draft is processed exactly once per appearance: redact ->
- * validate -> persist through {@link persistQualityReportText}, delete the
- * draft, write a receipt, and record a `quality.persisted` or
+ * Each eligible draft is processed exactly once per appearance: strict
+ * validation -> redaction -> revalidation -> persist through
+ * {@link persistQualityReportText}, delete the draft, write a receipt, and
+ * record a `quality.persisted` or
  * `quality.rejected` evidence event. Failures never stop the poller - one
  * malformed draft must not block a later corrected draft.
  *
@@ -192,7 +286,7 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
 
   function recordCaptureEvent(
     eventType: "quality.persisted" | "quality.rejected",
-    payload: Record<string, string>,
+    payload: EvidencePayload,
   ): void {
     try {
       recordEvidenceEvent({
@@ -207,6 +301,7 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
     }
   }
 
+  // eslint-disable-next-line complexity -- the fail-closed draft sequence keeps receipt, persistence, evidence, and cleanup ordering explicit.
   async function processDraft(draftName: string): Promise<void> {
     const draftPath = join(stagingDir, draftName);
     let stats;
@@ -217,10 +312,36 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
     }
     if (!stats.isFile()) return;
     if (Date.now() - stats.mtimeMs < stableMs) return;
+    try {
+      assertCaptureReceiptAvailable(stagingDir, draftName);
+    } catch {
+      removeDraft(stagingDir, draftName);
+      const receiptAvailable = replacePreexistingReceiptWithRejection(
+        stagingDir,
+        draftName,
+      );
+      recordCaptureEvent("quality.rejected", {
+        draft: draftName,
+        error: "quality capture: receipt destination already existed.",
+        receipt: receiptAvailable ? "replaced" : "unavailable",
+      });
+      return;
+    }
     if (stats.size > MAX_DRAFT_BYTES) {
       removeDraft(stagingDir, draftName);
       const message = `quality capture: draft exceeds the ${MAX_DRAFT_BYTES} byte limit.`;
-      writeCaptureReceipt(stagingDir, draftName, { ok: false, error: message });
+      try {
+        writeCaptureReceipt(stagingDir, draftName, {
+          ok: false,
+          error: message,
+        });
+      } catch {
+        recordCaptureEvent("quality.rejected", {
+          draft: draftName,
+          error: "quality capture: receipt unavailable.",
+        });
+        return;
+      }
       recordCaptureEvent("quality.rejected", {
         draft: draftName,
         error: message,
@@ -243,18 +364,40 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
         { CLIError: QualityCaptureError },
       );
       removeDraft(stagingDir, draftName);
-      writeCaptureReceipt(stagingDir, draftName, { ok: true, reportPath });
+      try {
+        writeCaptureReceipt(stagingDir, draftName, { ok: true, reportPath });
+      } catch {
+        recordCaptureEvent("quality.persisted", {
+          draft: draftName,
+          report_path: reportPath,
+          receipt: "unavailable",
+        });
+        return;
+      }
       recordCaptureEvent("quality.persisted", {
         draft: draftName,
         report_path: reportPath,
       });
     } catch (error) {
       removeDraft(stagingDir, draftName);
-      const message = error instanceof Error ? error.message : String(error);
-      writeCaptureReceipt(stagingDir, draftName, { ok: false, error: message });
+      const message = captureRejectionDiagnostic(error);
+      try {
+        writeCaptureReceipt(stagingDir, draftName, {
+          ok: false,
+          error: message,
+        });
+      } catch {
+        recordCaptureEvent("quality.rejected", {
+          draft: draftName,
+          error: "quality capture: receipt unavailable.",
+          raw_json: redactEvidenceText("quality draft", rawText),
+        });
+        return;
+      }
       recordCaptureEvent("quality.rejected", {
         draft: draftName,
         error: message,
+        raw_json: redactEvidenceText("quality draft", rawText),
       });
     }
   }
@@ -286,7 +429,9 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
   }
 
   const timer = setInterval(() => {
-    void processNow();
+    void processNow().catch(() => {
+      /* one failed sweep must not become an unhandled server rejection */
+    });
   }, intervalMs);
   // A server shutdown must not be held open by an idle poller.
   timer.unref();
@@ -336,15 +481,16 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
 export function startQualityDraftCapture(
   options: QualityDraftCaptureOptions,
 ): QualityDraftCapture {
-  const key = resolve(options.projectRoot);
+  const key = realpathSync(resolve(options.projectRoot));
+  const canonicalOptions = { ...options, projectRoot: key };
   let entry = rootCaptures.get(key);
   if (entry === undefined) {
-    entry = { capture: createRootCapture(options), holders: 0 };
+    entry = { capture: createRootCapture(canonicalOptions), holders: 0 };
     rootCaptures.set(key, entry);
   } else {
     // A later holder must still see its staging directory exist even if an
     // earlier holder's tree was removed between acquisitions.
-    ensureQualityDraftStagingDirectory(options.projectRoot);
+    ensureQualityDraftStagingDirectory(key);
   }
   const held = entry;
   held.holders += 1;

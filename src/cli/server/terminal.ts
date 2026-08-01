@@ -3,7 +3,7 @@
  * It validates runner and project inputs, spawns CLI sessions, and brokers WebSocket traffic.
  */
 import { randomUUID } from "node:crypto";
-import { lstatSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import { extname, join } from "node:path";
 import { execFileSync } from "node:child_process";
 import type { WebSocket } from "ws";
@@ -530,19 +530,27 @@ function buildCodexReportingProfile(
  * @param runner - launching runner; only Claude uses dashboard-owned persistence
  * @param accessMode - session access mode; capture belongs to enforced reporting runs
  * @param captureRequested - whether the launch asked for staged-draft capture
- * @param roots - candidate report-owner roots, deduped because cwd may equal target
+ * @param reportOwnerRoot - the mode-selected owner root, or null when omitted
  * @returns roots to stage and watch, or an empty list when capture does not apply
  */
 function stagedQualityCaptureRoots(
   runner: Runner,
   accessMode: TerminalAccessMode,
   captureRequested: boolean,
-  roots: string[],
+  reportOwnerRoot: string | null,
 ): string[] {
-  if (runner !== "claude" || accessMode !== "reporting" || !captureRequested) {
-    return [];
+  if (!captureRequested) return [];
+  if (runner !== "claude" || accessMode !== "reporting") {
+    throw new Error(
+      "Quality draft capture is supported only for Claude reporting sessions.",
+    );
   }
-  return Array.from(new Set(roots));
+  if (reportOwnerRoot === null) {
+    throw new Error(
+      "Quality draft capture requires one explicit report-owner project.",
+    );
+  }
+  return [reportOwnerRoot];
 }
 
 /** Build the runner command embedded in the shell wrapper. */
@@ -777,6 +785,7 @@ class TerminalManager {
       targetPath?: string;
       accessMode?: TerminalAccessMode;
       captureQualityDrafts?: boolean;
+      qualityDraftProjectPath?: string;
     } = {},
   ): Promise<CreateResponse> {
     const activeSessions = Array.from(this.sessions.values()).filter(
@@ -841,6 +850,7 @@ class TerminalManager {
    * @param options - optional explicit target path for the launched agent
    * @returns the create response describing the now-active session
    */
+  // eslint-disable-next-line complexity -- launch validation keeps report-owner checks ahead of staging, permission construction, and spawn.
   private async startReservedSession(
     session: TerminalSession,
     prompt: string,
@@ -849,6 +859,7 @@ class TerminalManager {
       targetPath?: string;
       accessMode?: TerminalAccessMode;
       captureQualityDrafts?: boolean;
+      qualityDraftProjectPath?: string;
     },
   ): Promise<CreateResponse> {
     const { id, runner } = session;
@@ -865,6 +876,22 @@ class TerminalManager {
     const validatedTarget = validateProjectPath(
       options.targetPath || validatedCwd,
     );
+    const validatedQualityDraftProject = options.qualityDraftProjectPath
+      ? validateProjectPath(options.qualityDraftProjectPath)
+      : null;
+    if (validatedQualityDraftProject !== null) {
+      const canonicalOwner = realpathSync(validatedQualityDraftProject);
+      const allowedOwners = new Set(
+        [validatedCwd, validatedTarget].map((rootPath) =>
+          realpathSync(rootPath),
+        ),
+      );
+      if (!allowedOwners.has(canonicalOwner)) {
+        throw new Error(
+          "Quality draft report owner must match the terminal workspace or selected target.",
+        );
+      }
+    }
     // Staging must exist BEFORE the permission overlay is built below so a
     // fresh target still receives its `.goat-flow/logs` write allow. Failure
     // here fails the launch closed: a staged-draft session must never start
@@ -873,7 +900,9 @@ class TerminalManager {
       runner,
       session.accessMode,
       options.captureQualityDrafts === true,
-      [validatedCwd, validatedTarget],
+      validatedQualityDraftProject === null
+        ? null
+        : realpathSync(validatedQualityDraftProject),
     );
     for (const captureRoot of reportingCaptureRoots) {
       ensureQualityDraftStagingDirectory(captureRoot);

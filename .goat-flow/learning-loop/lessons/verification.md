@@ -334,13 +334,17 @@ last_reviewed: 2026-08-01
 
 **Status:** active | **Created:** 2026-07-13
 **Decision changed:** Test valid, invalid, and omitted forms for every required CLI choice; omission must not silently select a default. | **Trigger phase:** VERIFY
-**Incident count:** 1 | **Latest occurrence:** 2026-07-13
+**Incident count:** 3 | **Latest occurrence:** 2026-08-01
 
 **What happened:** M17's plan and handler required `--scenario deny-hook`, but the parser returned that value when the flag was absent. Positive, invalid-value, and live explicit-command checks all passed, so only a final omission probe exposed the false choice.
 
-**Root cause:** I treated the sole current scenario as a harmless default even though explicit user selection was part of the command's safety contract.
+A second incident added a required quality-report owner whenever staged draft capture is enabled. The first retry implementation forwarded an absent owner as explicit `null`, and the existing retry contract caught the changed payload shape during VERIFY.
 
-**Fix and prevention:** Add an omission RED test before implementation and make the parser exit 2 when the required value is absent. Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`) and `test/unit/hooks-runtime-evidence.test.ts` (search: `requires an explicit hook verification scenario group`).
+A third incident added a Claude/reporting-only relationship ahead of the owner relationship. The first missing-owner fixture omitted `accessMode`, so it exercised the new mode guard instead of the intended owner guard.
+
+**Root cause:** I treated omitted/defaulted fields as harmless while testing one relationship, even though an earlier relationship could legitimately reject the same payload first.
+
+**Fix and prevention:** Add omission RED tests before implementation. Required values must fail when absent; optional transport metadata must be omitted rather than converted to a new sentinel value. In each relationship test, make every preceding prerequisite explicit and valid so the assertion proves the intended error path. Cover enabled-with-owner, enabled-without-owner, disabled-with-owner, wrong-runner/mode, and retry payload presence/absence. Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`), `src/cli/server/decoders.ts` (search: `is supported only for Claude reporting sessions`), `src/dashboard/dashboard-terminal-connect.ts` (search: `qualityDraftProjectPath ?`), and `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts` (search: `carries staged-draft capture through a retried launch`).
 
 ---
 

@@ -11,8 +11,11 @@
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
+  linkSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -118,6 +121,20 @@ describe("quality draft capture", () => {
     assert.equal(ensureQualityDraftStagingDirectory(root), stagingDir);
   });
 
+  it("tightens an existing permissive staging directory to 0700", (t) => {
+    if (process.platform === "win32") {
+      t.skip("POSIX mode bits are not enforceable on Windows");
+      return;
+    }
+    const root = makeRoot();
+    const stagingDir = ensureQualityDraftStagingDirectory(root);
+    chmodSync(stagingDir, 0o777);
+
+    ensureQualityDraftStagingDirectory(root);
+
+    assert.equal(lstatSync(stagingDir).mode & 0o777, 0o700);
+  });
+
   it("persists a valid draft, deletes it, and writes an ok receipt", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
@@ -147,33 +164,120 @@ describe("quality draft capture", () => {
   it("rejects invalid JSON with a draft-labelled error and deletes the draft", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
+    const sensitiveValue = ["fixture", "-sensitive", "-value"].join("");
+    const sensitivePrefix = sensitiveValue.slice(0, 10);
     const draftPath = join(
       capture.stagingDir,
       "goat-quality-draft-claude-bbb222.json",
     );
-    writeFileSync(draftPath, "{not json");
+    writeFileSync(draftPath, `{"detail":${sensitiveValue}}`);
 
     await capture.processNow();
 
     assert.equal(existsSync(draftPath), false);
     const receipt = readReceipt(capture.stagingDir, "bbb222");
     assert.equal(receipt.ok, false);
-    assert.match(receipt.error ?? "", /invalid JSON on draft/u);
+    assert.equal(
+      receipt.error,
+      "quality capture: draft contains invalid JSON.",
+    );
+    assert.equal((receipt.error ?? "").includes(sensitivePrefix), false);
+
+    const eventsDir = join(root, ".goat-flow", "logs", "events");
+    const eventText = readdirSync(eventsDir)
+      .map((name) => readFileSync(join(eventsDir, name), "utf8"))
+      .join("\n");
+    assert.equal(eventText.includes(sensitivePrefix), false);
+    assert.match(eventText, /"raw_json":\{"kind":"redacted"/u);
+  });
+
+  it("refuses pre-existing symlink and multiply linked receipt destinations", async (t) => {
+    if (process.platform === "win32") {
+      t.skip("Link fixtures require POSIX link semantics");
+      return;
+    }
+    const root = makeRoot();
+    const capture = makeCapture(root);
+
+    const symlinkNonce = "receipt111";
+    const symlinkTarget = join(root, "symlink-target.txt");
+    const symlinkReceipt = join(
+      capture.stagingDir,
+      `goat-quality-result-claude-${symlinkNonce}.json`,
+    );
+    writeFileSync(symlinkTarget, "symlink marker");
+    symlinkSync(symlinkTarget, symlinkReceipt);
+    writeFileSync(
+      join(
+        capture.stagingDir,
+        `goat-quality-draft-claude-${symlinkNonce}.json`,
+      ),
+      validReport(root),
+    );
+
+    await assert.doesNotReject(capture.processNow());
+    assert.equal(readFileSync(symlinkTarget, "utf8"), "symlink marker");
+    assert.equal(lstatSync(symlinkReceipt).isFile(), true);
+    assert.equal(lstatSync(symlinkReceipt).nlink, 1);
+    assert.deepStrictEqual(readReceipt(capture.stagingDir, symlinkNonce), {
+      ok: false,
+      error: "quality capture: receipt destination already existed.",
+    });
+
+    const hardLinkNonce = "receipt222";
+    const hardLinkTarget = join(root, "hard-link-target.txt");
+    const hardLinkReceipt = join(
+      capture.stagingDir,
+      `goat-quality-result-claude-${hardLinkNonce}.json`,
+    );
+    writeFileSync(hardLinkTarget, "hard-link marker");
+    linkSync(hardLinkTarget, hardLinkReceipt);
+    writeFileSync(
+      join(
+        capture.stagingDir,
+        `goat-quality-draft-claude-${hardLinkNonce}.json`,
+      ),
+      validReport(root),
+    );
+
+    await assert.doesNotReject(capture.processNow());
+    assert.equal(readFileSync(hardLinkTarget, "utf8"), "hard-link marker");
+    assert.equal(lstatSync(hardLinkReceipt).isFile(), true);
+    assert.equal(lstatSync(hardLinkReceipt).nlink, 1);
+    assert.deepStrictEqual(readReceipt(capture.stagingDir, hardLinkNonce), {
+      ok: false,
+      error: "quality capture: receipt destination already existed.",
+    });
+    const reports = readdirSync(
+      join(root, ".goat-flow", "logs", "quality"),
+    ).filter((name) => name.endsWith(".json"));
+    assert.deepStrictEqual(reports, []);
   });
 
   it("rejects schema violations through the shared quality save core", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
+    const sensitiveValue = ["fixture", "-schema-key-secret"].join("");
     writeFileSync(
       join(capture.stagingDir, "goat-quality-draft-claude-ccc333.json"),
-      "{}",
+      JSON.stringify({ [`API_KEY=${sensitiveValue}`]: true }),
     );
 
     await capture.processNow();
 
     const receipt = readReceipt(capture.stagingDir, "ccc333");
     assert.equal(receipt.ok, false);
-    assert.match(receipt.error ?? "", /quality save: schema error:/u);
+    assert.equal(
+      receipt.error,
+      "quality capture: draft failed schema validation.",
+    );
+    const eventText = readdirSync(join(root, ".goat-flow", "logs", "events"))
+      .map((name) =>
+        readFileSync(join(root, ".goat-flow", "logs", "events", name), "utf8"),
+      )
+      .join("\n");
+    assert.equal(eventText.includes(sensitiveValue), false);
+    assert.match(eventText, /"raw_json":\{"kind":"redacted"/u);
   });
 
   it("rejects a report owned by a different project", async () => {
@@ -189,7 +293,10 @@ describe("quality draft capture", () => {
 
     const receipt = readReceipt(capture.stagingDir, "ddd444");
     assert.equal(receipt.ok, false);
-    assert.match(receipt.error ?? "", /does not match the selected project/u);
+    assert.equal(
+      receipt.error,
+      "quality capture: draft failed report ownership validation.",
+    );
   });
 
   it("rejects oversized drafts without reading them", async () => {
@@ -324,5 +431,31 @@ describe("quality draft capture", () => {
       1,
       `one draft must yield one report, got ${persisted.join(", ")}`,
     );
+  });
+
+  it("shares one capture across real-path and symlink aliases", async (t) => {
+    if (process.platform === "win32") {
+      t.skip("Directory symlink fixtures require Windows Developer Mode");
+      return;
+    }
+    const parent = makeRoot();
+    const realRoot = join(parent, "real");
+    const aliasRoot = join(parent, "alias");
+    mkdirSync(realRoot);
+    symlinkSync(realRoot, aliasRoot, "dir");
+    const first = makeCapture(realRoot);
+    const second = makeCapture(aliasRoot);
+    assert.equal(first.stagingDir, second.stagingDir);
+    writeFileSync(
+      join(first.stagingDir, "goat-quality-draft-claude-mmm333.json"),
+      validReport(realRoot),
+    );
+
+    await Promise.all([first.processNow(), second.processNow()]);
+
+    const persisted = readdirSync(
+      join(realRoot, ".goat-flow", "logs", "quality"),
+    ).filter((entry) => entry.endsWith(".json"));
+    assert.equal(persisted.length, 1);
   });
 });

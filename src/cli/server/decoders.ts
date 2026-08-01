@@ -19,6 +19,7 @@ interface TerminalCreateBody {
   runner: Runner;
   accessMode: TerminalAccessMode;
   captureQualityDrafts: boolean;
+  qualityDraftProjectPath: string;
 }
 
 /** Dashboard project-list state after omitted optional collections use their state-file fallbacks. */
@@ -158,7 +159,7 @@ function decodeStringArrayField(
  */
 function decodeOptionalStringField(
   raw: Record<string, unknown>,
-  key: "prompt" | "projectPath" | "targetPath",
+  key: "prompt" | "projectPath" | "targetPath" | "qualityDraftProjectPath",
 ): DecodeResult<string> {
   // Missing optional terminal fields mean "use the route default" instead of blocking launch.
   if (!Object.hasOwn(raw, key)) {
@@ -239,6 +240,7 @@ function decodeTerminalCaptureQualityDrafts(
  * @param options - allowed runners plus fallback; empty runner set means every explicit runner is rejected
  * @returns terminal-create payload, or an error the route can show without starting a session
  */
+// eslint-disable-next-line complexity -- flat launch-boundary checks preserve one precise error path per rejected field relationship.
 export function decodeTerminalCreateBody(
   body: string,
   options: { validRunners: ReadonlySet<string>; defaultRunner: AgentId },
@@ -272,6 +274,39 @@ export function decodeTerminalCreateBody(
 
   const captureQualityDrafts = decodeTerminalCaptureQualityDrafts(raw);
   if (!captureQualityDrafts.ok) return captureQualityDrafts;
+  if (
+    captureQualityDrafts.value &&
+    (runner.value !== "claude" || accessMode.value !== "reporting")
+  ) {
+    return err(
+      "body.captureQualityDrafts",
+      "is supported only for Claude reporting sessions",
+    );
+  }
+
+  const qualityDraftProjectPath = decodeOptionalStringField(
+    raw,
+    "qualityDraftProjectPath",
+  );
+  if (!qualityDraftProjectPath.ok) return qualityDraftProjectPath;
+  if (
+    captureQualityDrafts.value &&
+    qualityDraftProjectPath.value.trim().length === 0
+  ) {
+    return err(
+      "body.qualityDraftProjectPath",
+      "is required when staged-draft capture is enabled",
+    );
+  }
+  if (
+    !captureQualityDrafts.value &&
+    qualityDraftProjectPath.value.trim().length > 0
+  ) {
+    return err(
+      "body.qualityDraftProjectPath",
+      "requires staged-draft capture to be enabled",
+    );
+  }
 
   return {
     ok: true,
@@ -282,6 +317,7 @@ export function decodeTerminalCreateBody(
       runner: runner.value,
       accessMode: accessMode.value,
       captureQualityDrafts: captureQualityDrafts.value,
+      qualityDraftProjectPath: qualityDraftProjectPath.value,
     },
   };
 }

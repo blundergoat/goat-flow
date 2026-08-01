@@ -2890,6 +2890,7 @@ describe("ADR-023 word budget tiers", () => {
     "page-capture.md",
     "release-notes.md",
     "skill-playbook-authoring-sync.md",
+    "writing-style.md",
   ] as const;
 
   const FUNCTIONAL_SKILLS = [

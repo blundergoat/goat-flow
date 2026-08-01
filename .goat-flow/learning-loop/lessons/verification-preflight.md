@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-07-31
+last_reviewed: 2026-08-01
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -279,17 +279,15 @@ last_reviewed: 2026-07-31
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 6 | **Latest occurrence:** 2026-07-14
+**Decision changed:** Run ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 7 | **Latest occurrence:** 2026-08-01
 
-**What happened:** During the M07-M10 closeout, focused hook checks, typecheck, focused tests, `npm test`, and `npm publish --dry-run` were clean, but the first full `bash scripts/preflight-checks.sh` still failed in the TypeScript section with `Knip: 4 unused exports/types` and `Prettier (1 unformatted files)`. Direct reproduction showed `npx knip` reporting unlisted command binaries (`where`, `which`, `diff`) and `npm run format:check` reporting `test/unit/hook-registrar.test.ts`.
+**What happened:** Focused behavior, type, and test gates repeatedly passed before preflight exposed separate ESLint, Knip, or formatting failures. On 2026-08-01 it found four intentional complexity branches; Knip then exhausted Node's default 4 GB heap twice, while an isolated 8 GB run exited 0 with hints only.
 
-**Root cause:** I treated the focused behavioral and type gates as enough before preflight after touching CLI spawn logic and tests. Knip's binary-policy check is separate from typecheck and can be exposed by local tool/lockfile movement, while Prettier still checks all touched TypeScript tests even when they pass at runtime.
+**Root cause:** Typecheck and runtime tests do not exercise lint complexity, unused-code/binary policy, or formatting. Running a memory-heavy analyzer beside other gates can also turn a resource limit into a misleading tool failure.
 
-**Fix:** Add intentional platform/probe commands to `knip.json` `ignoreBinaries`, format the touched hook-registrar test, rerun `npx knip` and `npm run format:check`, then rerun full preflight from scratch. Evidence anchors: `knip.json` (search: `ignoreBinaries`), `src/cli/install-invocation.ts` (search: `buildInstallerSpawnSpec`), `test/unit/hook-registrar.test.ts` (search: `generated Claude launchers`).
+**Fix and prevention:** After TypeScript changes, run ESLint, Knip, and `npm run format:check` directly before preflight. Fix their exact findings. Run Knip independently; if it alone reaches the default heap and measured host headroom exists, rerun `node --max-old-space-size=8192 node_modules/knip/bin/knip.js` before classifying the crash. Evidence anchors: `knip.json` (search: `ignoreBinaries`), `src/cli/install-invocation.ts` (search: `buildInstallerSpawnSpec`), and `test/unit/hook-registrar.test.ts` (search: `generated Claude launchers`).
 
-**Prevention:** Before full preflight after changing CLI command spawning, hook launchers, or TypeScript tests, run the direct sub-gates that preflight will aggregate: `npx knip` and `npm run format:check`. If preflight reports the TypeScript section as failed, reproduce the subtool reports directly and fix those exact findings before collecting final pass evidence.
-
-**Measured recurrences:** M05/M06b (2026-06-10) exposed three ESLint errors and two unused exports; M08 (2026-07-13) exposed one unused export; M17 (2026-07-13) exposed one complexity error, three impossible conditions, and five unused exports; M23/M24 (2026-07-13/14) exposed internal-only support/readiness report types as unused exports. Direct ESLint and Knip runs isolated each failure before preflight was repeated.
+**Measured recurrences:** M05/M06b exposed three ESLint errors and two unused exports; M08 one unused export; M17 one complexity error, three impossible conditions, and five unused exports; M23/M24 internal-only exported types; the 1.15 quality-persistence review four complexity errors plus the measured Knip heap limit.
 
 ---
 

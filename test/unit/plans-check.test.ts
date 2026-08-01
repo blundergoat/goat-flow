@@ -531,6 +531,9 @@ describe("plans check", () => {
     const mismatchRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-title-id-"),
     );
+    const longMismatchRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-long-title-id-"),
+    );
     try {
       const duplicatePath = writeCheckPlan(duplicateRoot, {
         "M01-one.md": canonicalMilestoneBody({ title: "M01: One" }),
@@ -539,9 +542,15 @@ describe("plans check", () => {
       const mismatchPath = writeCheckPlan(mismatchRoot, {
         "M02-wrong.md": canonicalMilestoneBody({ title: "M03: Wrong ID" }),
       });
+      const longMismatchPath = writeCheckPlan(longMismatchRoot, {
+        "M01-wrong.md": canonicalMilestoneBody({
+          title: "Milestone 99: Wrong ID",
+        }),
+      });
 
       const duplicate = runPlansCheck(duplicatePath, "--strict");
       const mismatch = runPlansCheck(mismatchPath, "--strict");
+      const longMismatch = runPlansCheck(longMismatchPath, "--strict");
 
       assert.equal(duplicate.status, 1);
       assertSourceLabelledErrors(duplicate.stdout);
@@ -552,9 +561,35 @@ describe("plans check", () => {
         mismatch.stdout,
         /title ID M03 does not match filename ID M02/u,
       );
+      assert.equal(longMismatch.status, 1);
+      assertSourceLabelledErrors(longMismatch.stdout);
+      assert.match(
+        longMismatch.stdout,
+        /title ID M99 does not match filename ID M01/u,
+      );
     } finally {
       rmSync(duplicateRoot, { recursive: true, force: true });
       rmSync(mismatchRoot, { recursive: true, force: true });
+      rmSync(longMismatchRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode accepts the supported long-form milestone title ID", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-long-title-match-"),
+    );
+    try {
+      const planPath = writeCheckPlan(temporaryRoot, {
+        "M01-one.md": canonicalMilestoneBody({
+          title: "Milestone 01: One",
+        }),
+      });
+
+      const result = runPlansCheck(planPath, "--strict");
+
+      assert.equal(result.status, 0, result.stdout || result.stderr);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
 

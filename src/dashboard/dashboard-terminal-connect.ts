@@ -416,6 +416,7 @@ async function dashboardRetryTerminalSession(
   const targetPath = refs?.retryTargetPath ?? session.targetPath;
   const accessMode = refs?.retryAccessMode ?? session.accessMode;
   const captureQualityDrafts = refs?.retryCaptureQualityDrafts === true;
+  const qualityDraftProjectPath = refs?.retryQualityDraftProjectPath ?? null;
 
   dashboardClearTerminalLoadingTimers(ctx, sessionId);
   if (refs?.cleanup) refs.cleanup();
@@ -433,6 +434,7 @@ async function dashboardRetryTerminalSession(
     targetPath,
     accessMode,
     captureQualityDrafts,
+    ...(qualityDraftProjectPath ? { qualityDraftProjectPath } : {}),
   });
 }
 

@@ -23,6 +23,8 @@ const DOCUMENTED_EVENT_KINDS = {
   "audit.run": "audit.run",
   "setup.prompt": "setup.prompt",
   "quality.prompt": "quality.prompt",
+  "quality.persisted": "quality.persisted",
+  "quality.rejected": "quality.rejected",
   "index.regenerate": "index.regenerate",
   "project.save": "project.save",
   "project.remove": "project.remove",

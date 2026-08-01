@@ -37,7 +37,10 @@ const CLI_USAGE_EXIT_CODE = 2;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 
 /** Build one current report accepted by the strict quality schema. */
-function currentQualityReport(projectPath: string) {
+function currentQualityReport(
+  projectPath: string,
+  detail = "Token fixture ghp_abcdefghijklmnopqrstuvwxyz",
+) {
   const version = getPackageVersion();
   return {
     report_kind: "goat-flow-quality-report",
@@ -73,7 +76,7 @@ function currentQualityReport(projectPath: string) {
         file: null,
         line: null,
         summary: "Persistence fixture",
-        detail: "Token fixture ghp_abcdefghijklmnopqrstuvwxyz",
+        detail,
         evidence_quality: "OBSERVED",
         evidence_method: "static-analysis",
         delta_tag: null,
@@ -82,16 +85,24 @@ function currentQualityReport(projectPath: string) {
   };
 }
 
-/** Run the public source CLI saver with one in-memory report body. */
-function runQualitySave(projectPath: string, report: unknown) {
+/** Run the public source CLI saver with one raw stdin body. */
+function runQualitySaveText(projectPath: string, input: string) {
   return spawnSync(
     process.execPath,
     ["--import", "tsx", "src/cli/cli.ts", "quality", "save", projectPath],
     {
       cwd: REPOSITORY_ROOT,
       encoding: "utf8",
-      input: `${JSON.stringify(report, null, 2)}\n`,
+      input,
     },
+  );
+}
+
+/** Run the public source CLI saver with one in-memory report body. */
+function runQualitySave(projectPath: string, report: unknown) {
+  return runQualitySaveText(
+    projectPath,
+    `${JSON.stringify(report, null, 2)}\n`,
   );
 }
 
@@ -223,9 +234,17 @@ describe("quality save", () => {
   it("redacts, validates, and exclusively writes under the selected project", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
     try {
+      const sensitiveValue = ["fixture", "-credential", "-value"].join("");
+      const nestedDetail = [
+        "API",
+        "_KEY=",
+        sensitiveValue,
+        "; ",
+        JSON.stringify({ password: sensitiveValue }),
+      ].join("");
       const result = runQualitySave(
         projectRoot,
-        currentQualityReport(projectRoot),
+        currentQualityReport(projectRoot, nestedDetail),
       );
       assert.equal(result.status, 0, result.stderr || result.stdout);
       assert.match(
@@ -245,8 +264,9 @@ describe("quality save", () => {
       assert.equal(stats.isFile(), true);
       assert.equal(stats.nlink, 1);
       const saved = readFileSync(reportPath, "utf8");
-      assert.doesNotMatch(saved, /ghp_abcdefghijklmnopqrstuvwxyz/u);
-      assert.match(saved, /\[REDACTED:token\]/u);
+      assert.equal(saved.includes(sensitiveValue), false);
+      assert.match(saved, /\[REDACTED:env-value\]/u);
+      assert.match(saved, /\[REDACTED:field\]/u);
       assert.equal(JSON.parse(saved).project_path, projectRoot);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
@@ -275,6 +295,22 @@ describe("quality save", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
       rmSync(otherRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects deeply nested invalid input without overflowing the scrubber", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
+    try {
+      const nesting = 15_000;
+      const input = `{"unknown":${"[".repeat(nesting)}0${"]".repeat(nesting)}}`;
+      const result = runQualitySaveText(projectRoot, input);
+
+      assert.equal(result.status, CLI_USAGE_EXIT_CODE);
+      assert.match(result.stderr, /quality save: schema error/i);
+      assert.doesNotMatch(result.stderr, /Maximum call stack|RangeError/u);
+      assert.equal(readdirSync(projectRoot).includes(".goat-flow"), false);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 

@@ -1442,6 +1442,7 @@ const files = [
       "page-capture.md",
       "release-notes.md",
       "skill-playbook-authoring-sync.md",
+      "writing-style.md",
     ].flatMap((name) => [
       `workflow/skills/playbooks/${name}`,
       `.goat-flow/skill-docs/playbooks/${name}`,
@@ -2180,6 +2181,16 @@ if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill
     fi
 else
     skip "release-notes.md sync (one or both files missing)"
+fi
+# Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
+if [[ -f workflow/skills/playbooks/writing-style.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-style.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-style.md .goat-flow/skill-docs/playbooks/writing-style.md >/dev/null 2>&1; then
+        pass "writing-style.md: template and installed copy match"
+    else
+        fail "writing-style.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-style.md sync (one or both files missing)"
 fi
 # Hook maintainers need the same policy-test workflow that consumer agents receive.
 if [[ -f workflow/skills/playbooks/hook-policy-testing.md ]] && [[ -f .goat-flow/skill-docs/playbooks/hook-policy-testing.md ]]; then

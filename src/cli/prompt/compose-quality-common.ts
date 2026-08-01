@@ -483,6 +483,7 @@ function backtickList(values: readonly (string | number)[]): string {
  * @param input - run facts embedded into the contract (agent, paths, prior report, mode)
  * @param opts - per-surface presentation switches (detail level, separator, sample type)
  */
+// eslint-disable-next-line complexity -- persistence variants keep mutually exclusive saver contracts in one ordered renderer.
 export function appendQualityReportContract(
   lines: string[],
   input: ReportContractInput,
@@ -509,22 +510,27 @@ export function appendQualityReportContract(
   }
   lines.push("### Write the JSON report");
   lines.push("");
+  const usesStagedDraft = input.persistence === "staged-draft";
   lines.push(
-    "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` - that path is gitignored and expected. No tracked-file writes or implementation edits are permitted.",
+    usesStagedDraft
+      ? "Do **not** emit the JSON as a fenced block in your reply. Follow the dashboard staging contract below; no tracked-file writes or implementation edits are permitted."
+      : "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` - that path is gitignored and expected. No tracked-file writes or implementation edits are permitted.",
   );
   lines.push("");
-  // Full detail spells out WHY the file must exist on disk - a report that
-  // lives only in the agent's reply is invisible to history/diff.
-  pushFull(
-    "**CRITICAL:** Use the bounded saver below. It prints `OK <absolute-report-path>` only after redaction, strict validation, and an exclusive file write. A report that exists only in conversation history is invisible to `goat-flow quality history` and `goat-flow quality diff`.",
-    "",
-  );
-  lines.push("**Filename format:** `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`");
-  lines.push("");
-  pushFull(
-    `The saver derives the timestamp and random suffix at write time and uses the report's \`agent\` field (\`${input.agent}\`).`,
-    "",
-  );
+  if (!usesStagedDraft) {
+    // Full detail spells out WHY the file must exist on disk - a report that
+    // lives only in the agent's reply is invisible to history/diff.
+    pushFull(
+      "**CRITICAL:** Use the bounded saver below. It prints `OK <absolute-report-path>` only after redaction, strict validation, and an exclusive file write. A report that exists only in conversation history is invisible to `goat-flow quality history` and `goat-flow quality diff`.",
+      "",
+    );
+    lines.push("**Filename format:** `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`");
+    lines.push("");
+    pushFull(
+      `The saver derives the timestamp and random suffix at write time and uses the report's \`agent\` field (\`${input.agent}\`).`,
+      "",
+    );
+  }
   lines.push(
     "**Assessment rule:** Harness scores describe deterministic check coverage; reconcile declared `limits` and accepted ADRs before proposing new gates or score changes.",
   );
@@ -647,13 +653,13 @@ export function appendQualityReportContract(
   pushFull(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
   );
-  if (input.persistence !== "staged-draft") {
+  if (!usesStagedDraft) {
     pushFull(
       "- QUOTE the persistence delimiter (`<<'JSON'`, not `<<JSON`). Unquoted delimiters make the shell interpret `$`, backticks, and escapes inside the report.",
     );
   }
   lines.push("");
-  if (input.persistence === "staged-draft") {
+  if (usesStagedDraft) {
     appendStagedDraftPersistence(lines, input);
     return;
   }

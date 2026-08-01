@@ -108,6 +108,14 @@ const INSTALLED_PLAYBOOK_AUTHORING_SYNC = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
 );
+const TEMPLATE_WRITING_STYLE = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/writing-style.md",
+);
+const INSTALLED_WRITING_STYLE = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/writing-style.md",
+);
 const TEMPLATE_CHANGELOG = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/changelog.md",
@@ -308,6 +316,20 @@ describe("preamble/conventions sync: current state", () => {
       ),
       0,
       "skill-playbook-authoring-sync.md: template and installed should match",
+    );
+  });
+
+  // Prose-style guidance ships to consumers, so the installed copy must not drift.
+  it("template and installed writing-style.md match", () => {
+    assertMirrorExists(
+      TEMPLATE_WRITING_STYLE,
+      INSTALLED_WRITING_STYLE,
+      "writing-style.md",
+    );
+    assert.equal(
+      diffQuiet(TEMPLATE_WRITING_STYLE, INSTALLED_WRITING_STYLE),
+      0,
+      "writing-style.md: template and installed should match",
     );
   });
 

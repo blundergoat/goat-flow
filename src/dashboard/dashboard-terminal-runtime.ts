@@ -443,6 +443,7 @@ async function dashboardLaunchPreset(
     cwdPath?: string | null;
     targetPath?: string | null;
     captureQualityDrafts?: boolean;
+    qualityDraftProjectPath?: string | null;
   } = {},
 ): Promise<void> {
   // A launch is already in progress, so ignore duplicate button clicks.
@@ -484,6 +485,7 @@ async function dashboardLaunchPreset(
     targetPath: options.targetPath ?? ctx.projectPath,
     accessMode,
     captureQualityDrafts: options.captureQualityDrafts === true,
+    qualityDraftProjectPath: options.qualityDraftProjectPath ?? null,
   });
 }
 
@@ -665,6 +667,7 @@ async function dashboardLaunchInTerminal(
     targetPath = null,
     accessMode = "workspace",
     captureQualityDrafts = false,
+    qualityDraftProjectPath = null,
   }: {
     promptLabel?: string | null;
     presetId?: string | null;
@@ -672,6 +675,7 @@ async function dashboardLaunchInTerminal(
     targetPath?: string | null;
     accessMode?: TerminalAccessMode;
     captureQualityDrafts?: boolean;
+    qualityDraftProjectPath?: string | null;
   } = {},
 ): Promise<void> {
   if (
@@ -707,6 +711,7 @@ async function dashboardLaunchInTerminal(
         runner,
         accessMode,
         captureQualityDrafts,
+        ...(qualityDraftProjectPath ? { qualityDraftProjectPath } : {}),
       }),
     });
     const payload = readRecord(await res.json(), "Terminal create response");
@@ -750,6 +755,7 @@ async function dashboardLaunchInTerminal(
       // Retry must reopen with capture too, or the retried report has nowhere
       // to persist and the agent waits on a receipt that never arrives.
       retryCaptureQualityDrafts: captureQualityDrafts,
+      retryQualityDraftProjectPath: qualityDraftProjectPath,
     };
     dashboardArmTerminalLoadingTimers(ctx, session.id, session);
     ctx.activeSessionId = session.id;
