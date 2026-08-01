@@ -204,10 +204,10 @@ last_reviewed: 2026-08-01
 **Why it happens:** MSYS2/Cygwin has no `fork()`; it emulates process creation, so every subshell or external command costs orders of magnitude more than on Linux. A design that spawns per line looks linear during Linux development and becomes fork-bound on Windows. `$(...)` counts even with no external binary, because the subshell itself is the expensive part.
 
 **Evidence:**
-- 2026-08-01 measured on Windows 11 Pro 10.0.26200, Git Bash bash 5.3.15 (x86_64-pc-cygwin), NTFS: one forked pipeline costs ~44ms (200 pipelines = 8.852s) while 20,000 pure-bash loop iterations cost 0.151s (~7.5us each). One fork is therefore worth roughly 2,900 bash operations.
+- 2026-08-01 measured on Windows 11 Pro 10.0.26200, Git Bash bash 5.3.15 (x86_64-pc-cygwin), NTFS: one forked pipeline costs ~44ms (200 pipelines = 8.852s) while 20,000 pure-bash loop iterations cost 0.151s (~7.5us each). One fork is worth roughly 2,900 bash operations.
 - Same-workload comparison of `post-turn-safety.sh` (25 changed / 22 staged / 375 added lines across 10 env-assignment files, zero findings, exit 0): the pre-fix per-line design ran **4m22.109s** on Windows Git Bash but only **6.465s** on Linux (WSL2, bash 5.2.21) - a ~40x platform penalty on identical code. The batched rewrite runs **0.655s** on Windows and **0.027s** on Linux.
 - The pre-fix hot path spawned two `sed` per scanned line plus per-call `sed`/`tr` in helpers, and one `git diff` per changed path. Current batched anchors: `workflow/hooks/post-turn-safety.sh` (search: `run_diff_batch`), (search: `gate_scannable_files`), and (search: `scan_content_files`).
-- Counter-example measured the same day: `deny-dangerous.sh` spawns only 6 external processes per invocation (3 `jq`, 1 `git`, 1 `dirname`, 1 `cat`), yet still costs 1.23s per simple command and 2.72s per pipeline command. Its cost is bash-level re-parsing, not forking - see the separate entry below.
+- This reasoning does NOT generalise to every hook: the same day, removing forks from `deny-dangerous.sh` made it slower. See the entry below before applying it elsewhere.
 
 **Prevention:**
 1. In hook code, keep per-line and per-key work in bash builtins: `${var,,}` instead of `tr`, `${var##+([[:space:]])}` instead of a trim `sed`, `[[ =~ ]]` capture instead of `sed -nE 's/.../\1/p'`. Return through a global rather than `$(...)` so the call does not fork.
@@ -222,19 +222,22 @@ last_reviewed: 2026-08-01
 **Decision changed:** Whether adding another policy check to the PreToolUse dispatcher is free - it is not; each check that re-tokenises the command adds measurable latency to every Bash call the agent makes.
 **Trigger phase:** ACT
 
-**Symptoms:** Every Bash tool call the agent makes carries a visible pause before the command runs. The delay scales with command complexity (pipelines, nested substitutions) rather than with anything about the repository, and it applies to entirely benign read-only commands.
+**Symptoms:** Every Bash tool call carries a visible pause before the command runs, scaling with command complexity rather than with anything about the repository, and applying to benign read-only commands.
 
-**Why it happens:** The dispatcher is the highest-frequency hook in the system - it runs on every Bash PreToolUse. Its policy checks each independently call the shared tokenisers (`split_shell_words_into`, `split_command_segments_into`, `normalize_leading_command_word`, `strip_unquoted_shell_comments`), which walk the command string one character at a time with per-character bash string slicing and regex tests. The same input is therefore re-tokenised many times per invocation, and per-character `${input:i:1}` slicing on a long string is superlinear.
+**Why it happens:** The dispatcher runs on every Bash PreToolUse. Its policy checks each independently call the shared tokenisers (`split_shell_words_into`, `normalize_command_candidate`, `normalize_leading_command_word`), which walk the command one character at a time, so the same input is re-tokenised many times per invocation. The dominant term is NOT established - see the failed fix.
 
 **Evidence:**
-- 2026-08-01 measured on Windows 11 Git Bash (10 invocations each, wall clock divided): `npm run typecheck` payload = 12.263s/10 = **1.23s per call**; a four-stage pipeline payload = 27.202s/10 = **2.72s per call**. Bare `bash empty.sh` on the same machine is 0.05s, so essentially all of it is hook work.
-- Not a fork problem: an `xtrace` of one pipeline invocation recorded only 6 real external executions (3 `jq`, 1 `git`, 1 `dirname`, 1 `cat`) against 20,650 traced bash operations. Hot functions by traced-line share were `split_shell_words_into`, `split_command_segments_into`, `check_command_substitutions`, `normalize_leading_command_word`, and `strip_unquoted_shell_comments`.
-- Anchors: `workflow/hooks/deny-dangerous.sh` (search: `split_shell_words_into`), (search: `check_command_substitutions`), and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `normalize_command_candidate`), which re-derives the normalized candidate per check.
+- 2026-08-01, Windows 11 Git Bash, interleaved A/B, 30 invocations per cell: **272ms** per call for `--check='npm run typecheck'`, **309ms** for a four-stage pipeline, **652ms** for the JSON-stdin path (adds `jq`). Bare `bash empty.sh` is ~50ms.
+- Only 6 external processes run per invocation (3 `jq`, 1 `git`, 1 `dirname`, 1 `cat`), against ~1,959 traced bash operations for a simple command and ~5,329 for a pipeline.
+- One `$(fn)` costs ~12.5ms here and does NOT scale with script size (retested with 400 extra functions and a 200KB exported variable in the process).
+- Anchors: `workflow/hooks/deny-dangerous.sh` (search: `normalize_command_candidate`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `normalize_command_candidate`), which re-derives the normalized candidate per check.
+
+**Failed fix, do not repeat without new evidence:** Converting the hot tokenisers (`normalize_command_candidate`, `normalize_leading_command_word`, `first_word_base`, `drop_first_shell_word`) to fork-free `_into` forms returning through globals, plus memoizing `normalize_command_candidate`, **made the hook slower**: 272→392ms simple, 309→729ms pipeline, 652→751ms JSON, while executing ~3.3x MORE traced operations (simple 1,959→6,428). Verdicts stayed correct (272-case byte-exact corpus identical, `--self-test=full` 319/319), so it was a pure performance regression and was reverted. The cause of the 3.3x increase was not identified.
 
 **Prevention:**
-1. Tokenise once per invocation and pass the parsed result to policy checks, rather than having each check re-derive it from the raw string.
-2. Prefer `case`/glob tests over `[[ $char =~ ... ]]` inside per-character loops; a regex engine invocation per character is the dominant cost in these walks.
-3. Treat this as measured-before-change work: it is security-critical parsing with a large self-test corpus, so any restructuring needs `deny-dangerous-self-test.sh --self-test=full` green plus the false-positive grammar probes before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
+1. Measure with an INTERLEAVED A/B (alternate old/new per round). A sequential "all old, then all new" run is unreliable: the first run pays cold filesystem and git cache costs, which produced a false 2x "improvement" for a build that was actually 2x slower.
+2. Do not assume a `$( )` count predicts wall clock. Substitutions actually executed per invocation are far fewer than a count of traced lines mentioning a function name suggests.
+3. This is security-critical parsing: any restructuring needs `--self-test=full` green plus a byte-exact verdict corpus before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
 
 ## Resolved Entries
 
