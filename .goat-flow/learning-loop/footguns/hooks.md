@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-07-26
+last_reviewed: 2026-08-01
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-shell.md](deny-shell.md) (command grammar), [deny-secrets.md](deny-secrets.md) (secret-path reads), and [deny-writes.md](deny-writes.md) (external writes).
@@ -192,6 +192,49 @@ last_reviewed: 2026-07-26
 1. For default blocking Stop hooks, define "changed content" as committable content. Do not add `git ls-files --others -i --exclude-standard` scans unless the hook is explicitly opt-in or advisory.
 2. Preserve staged-diff scanning so `git add -f .env` still blocks even though the path is ignored.
 3. Any scanner expansion needs paired block/allow tests: one real staged hazard that must block and one ignored local-state fixture that must not wedge the agent.
+
+## Footgun: Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash
+
+**Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Whether a hook may call out to `sed`/`tr`/`awk`/`grep`/`git` once per line, per key, or per file - on Windows that design cannot meet any realistic hook timeout, so batch or use bash builtins instead.
+**Trigger phase:** ACT
+
+**Symptoms:** A hook is comfortably fast on Linux and unusably slow on Windows Git Bash, with `sys` time near half of wall clock. Claude Code shows the turn parked on `running stop hook · 4m 40s`. Because the runner kills a hook that exceeds its registered timeout, a scan that cannot finish reports nothing and is indistinguishable from a clean pass - the correctness failure is worse than the latency.
+
+**Why it happens:** MSYS2/Cygwin has no `fork()`; it emulates process creation, so every subshell or external command costs orders of magnitude more than on Linux. A design that spawns per line looks linear during Linux development and becomes fork-bound on Windows. `$(...)` counts even with no external binary, because the subshell itself is the expensive part.
+
+**Evidence:**
+- 2026-08-01 measured on Windows 11 Pro 10.0.26200, Git Bash bash 5.3.15 (x86_64-pc-cygwin), NTFS: one forked pipeline costs ~44ms (200 pipelines = 8.852s) while 20,000 pure-bash loop iterations cost 0.151s (~7.5us each). One fork is therefore worth roughly 2,900 bash operations.
+- Same-workload comparison of `post-turn-safety.sh` (25 changed / 22 staged / 375 added lines across 10 env-assignment files, zero findings, exit 0): the pre-fix per-line design ran **4m22.109s** on Windows Git Bash but only **6.465s** on Linux (WSL2, bash 5.2.21) - a ~40x platform penalty on identical code. The batched rewrite runs **0.655s** on Windows and **0.027s** on Linux.
+- The pre-fix hot path spawned two `sed` per scanned line plus per-call `sed`/`tr` in helpers, and one `git diff` per changed path. Current batched anchors: `workflow/hooks/post-turn-safety.sh` (search: `run_diff_batch`), (search: `gate_scannable_files`), and (search: `scan_content_files`).
+- Counter-example measured the same day: `deny-dangerous.sh` spawns only 6 external processes per invocation (3 `jq`, 1 `git`, 1 `dirname`, 1 `cat`), yet still costs 1.23s per simple command and 2.72s per pipeline command. Its cost is bash-level re-parsing, not forking - see the separate entry below.
+
+**Prevention:**
+1. In hook code, keep per-line and per-key work in bash builtins: `${var,,}` instead of `tr`, `${var##+([[:space:]])}` instead of a trim `sed`, `[[ =~ ]]` capture instead of `sed -nE 's/.../\1/p'`. Return through a global rather than `$(...)` so the call does not fork.
+2. Batch git plumbing. One `git diff --unified=0 -- <paths>` with `+++ b/<path>` header attribution replaces one diff per file; `git cat-file --batch-check` replaces per-path `cat-file -s`; `wc -c` and `grep -Il` accept many paths per call. Chunk argument lists (~64 paths) to stay under the Windows command-line limit.
+3. Put a cheap superset pre-filter in front of expensive per-line analysis, and document why each pattern is a provable superset of the real triggers so the filter cannot silently narrow detection.
+4. Benchmark hooks on Windows Git Bash, not only Linux. A Linux-only benchmark hides this entire class of defect.
+5. Give any bounded-time hook its own wall-clock budget that reports an explicit incomplete-scan message and a non-zero exit, and register a runner timeout above that budget. Silent truncation by the harness must not be reachable.
+
+## Footgun: deny-dangerous re-parses the same command string on every policy check
+
+**Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Whether adding another policy check to the PreToolUse dispatcher is free - it is not; each check that re-tokenises the command adds measurable latency to every Bash call the agent makes.
+**Trigger phase:** ACT
+
+**Symptoms:** Every Bash tool call the agent makes carries a visible pause before the command runs. The delay scales with command complexity (pipelines, nested substitutions) rather than with anything about the repository, and it applies to entirely benign read-only commands.
+
+**Why it happens:** The dispatcher is the highest-frequency hook in the system - it runs on every Bash PreToolUse. Its policy checks each independently call the shared tokenisers (`split_shell_words_into`, `split_command_segments_into`, `normalize_leading_command_word`, `strip_unquoted_shell_comments`), which walk the command string one character at a time with per-character bash string slicing and regex tests. The same input is therefore re-tokenised many times per invocation, and per-character `${input:i:1}` slicing on a long string is superlinear.
+
+**Evidence:**
+- 2026-08-01 measured on Windows 11 Git Bash (10 invocations each, wall clock divided): `npm run typecheck` payload = 12.263s/10 = **1.23s per call**; a four-stage pipeline payload = 27.202s/10 = **2.72s per call**. Bare `bash empty.sh` on the same machine is 0.05s, so essentially all of it is hook work.
+- Not a fork problem: an `xtrace` of one pipeline invocation recorded only 6 real external executions (3 `jq`, 1 `git`, 1 `dirname`, 1 `cat`) against 20,650 traced bash operations. Hot functions by traced-line share were `split_shell_words_into`, `split_command_segments_into`, `check_command_substitutions`, `normalize_leading_command_word`, and `strip_unquoted_shell_comments`.
+- Anchors: `workflow/hooks/deny-dangerous.sh` (search: `split_shell_words_into`), (search: `check_command_substitutions`), and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `normalize_command_candidate`), which re-derives the normalized candidate per check.
+
+**Prevention:**
+1. Tokenise once per invocation and pass the parsed result to policy checks, rather than having each check re-derive it from the raw string.
+2. Prefer `case`/glob tests over `[[ $char =~ ... ]]` inside per-character loops; a regex engine invocation per character is the dominant cost in these walks.
+3. Treat this as measured-before-change work: it is security-critical parsing with a large self-test corpus, so any restructuring needs `deny-dangerous-self-test.sh --self-test=full` green plus the false-positive grammar probes before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
 
 ## Resolved Entries
 

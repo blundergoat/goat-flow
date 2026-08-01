@@ -92,11 +92,15 @@ function commitAll(root: string, message: string): void {
   ]);
 }
 
-function runHook(root: string): ReturnType<typeof spawnSync> {
+function runHook(
+  root: string,
+  env?: Record<string, string>,
+): ReturnType<typeof spawnSync> {
   return spawnSync("bash", [HOOK_PATH], {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, ...env },
   });
 }
 
@@ -690,6 +694,136 @@ describe("post-turn-safety hook", () => {
       rmSync(join(root, "delete-me.txt"));
 
       assertHookAllows(root);
+    });
+  });
+
+  // The batched scanner reads diffs and file contents through pre-filtering
+  // greps instead of a per-line bash loop. Each case below pins a behaviour
+  // that batching could silently change while the headline detectors still
+  // pass: line bytes, path attribution, and diff-frame parsing.
+  describe("batched scanning preserves per-line semantics", () => {
+    it("leaves CRLF merge markers undetected, as a literal line comparison does", () => {
+      withTempRepo((root) => {
+        // The middle marker is matched as the exact string "=======", so a
+        // trailing CR means no match. A grep that strips CR would newly block
+        // this file and change the shipped contract.
+        writeFile(
+          root,
+          "conflict.txt",
+          "<<<<<<< HEAD\r\nleft\r\n=======\r\nright\r\n>>>>>>> branch\r\n",
+        );
+
+        assertHookAllows(root);
+      });
+    });
+
+    it("still detects LF merge markers in the same shape", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "conflict.txt",
+          "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> branch\n",
+        );
+
+        assertHookBlocks(root, /merge conflict marker/u);
+      });
+    });
+
+    it("attributes findings to paths that git reports quoted or with spaces", () => {
+      withTempRepo((root) => {
+        // Non-ASCII paths come back C-quoted from git unless quotepath is off,
+        // and spaces break naive header splitting; both must resolve to the
+        // real path in the finding message.
+        writeFile(root, "café.env", "password=Zx9AbCdEf123456\n");
+        writeFile(root, "my config.env", "password=Zx9AbCdEf654321\n");
+
+        const result = assertHookBlocks(
+          root,
+          /credential assignment \(password\) in café\.env/u,
+        );
+        assert.match(
+          result.stderr,
+          /credential assignment \(password\) in my config\.env/u,
+        );
+      });
+    });
+
+    it("does not read added content as diff frame headers", () => {
+      withTempRepo((root) => {
+        // An untracked file whose own text mimics diff headers must still be
+        // scanned as content, and must not retarget findings to a fake path.
+        writeFile(
+          root,
+          "fake.txt",
+          [
+            "+++ b/somewhere.env",
+            `+${TEST_AWS_ACCESS_KEY}`,
+            "@@ -1,2 +3,4 @@",
+            "",
+          ].join("\n"),
+        );
+
+        const result = assertHookBlocks(root, /AWS access key in fake\.txt/u);
+        assert.doesNotMatch(result.stderr, /somewhere\.env/u);
+      });
+    });
+
+    it("keeps findings attributed per file across a batched diff", () => {
+      withTempRepo((root) => {
+        writeFile(root, "one.env", "safe=1\n");
+        writeFile(root, "two.env", "safe=2\n");
+        writeFile(root, "three.env", "safe=3\n");
+        commitAll(root, "add env files");
+        writeFile(
+          root,
+          "one.env",
+          `safe=1\nAWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`,
+        );
+        writeFile(root, "two.env", "safe=2\nharmless=value\n");
+        writeFile(
+          root,
+          "three.env",
+          `safe=3\nSLACK_BOT_TOKEN=${TEST_SLACK_TOKEN}\n`,
+        );
+
+        const result = assertHookBlocks(root, /AWS access key in one\.env/u);
+        assert.match(result.stderr, /Slack token in three\.env/u);
+        assert.doesNotMatch(result.stderr, /two\.env/u);
+      });
+    });
+  });
+
+  describe("scan budget", () => {
+    it("reports unscanned files instead of truncating silently", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+
+        // A zero-second budget forces the bail path on the first check. The
+        // hook must say the scan was incomplete and fail, because a silent
+        // partial scan would look identical to a clean pass.
+        const result = runHook(root, {
+          GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "0",
+        });
+
+        assert.notEqual(result.status, 0);
+        assert.match(
+          result.stderr,
+          /post-turn-safety: scan incomplete, \d+ file\(s\) unscanned/u,
+        );
+      });
+    });
+
+    it("completes normally under a generous budget", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+
+        const result = runHook(root, {
+          GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: "600",
+        });
+
+        assert.equal(result.status, 0, result.stderr);
+        assert.doesNotMatch(result.stderr, /scan incomplete/u);
+      });
     });
   });
 

@@ -70,7 +70,10 @@ const HOOKS: HookSpec[] = [
     togglable: true,
     defaultEnabled: true,
     requiresConfirmDialog: false,
-    timeoutSec: 60,
+    // Above the script's internal 60s scan budget so its own
+    // "scan incomplete" diagnostic prints before the runner kills the
+    // wrapper; a silent mid-scan kill would mean unreported partial coverage.
+    timeoutSec: 90,
     unsupportedAgents: {
       copilot: "Copilot has no project-local post-turn hook event.",
       codex:
