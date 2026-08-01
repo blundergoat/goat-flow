@@ -574,6 +574,48 @@ describe("plans check", () => {
     }
   });
 
+  it("strict mode rejects lowercase filenames and missing IDs in multi-milestone titles", () => {
+    const lowercaseRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-lowercase-id-"),
+    );
+    const missingTitleRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-missing-title-id-"),
+    );
+    try {
+      const lowercasePath = writeCheckPlan(lowercaseRoot, {
+        "m01-lowercase.md": canonicalMilestoneBody({ title: "M01: One" }),
+      });
+      const missingTitlePath = writeCheckPlan(missingTitleRoot, {
+        "M01-one.md": canonicalMilestoneBody({ title: "Deliver one" }),
+        "M02-two.md": canonicalMilestoneBody({
+          title: "Deliver two",
+          dependsOn: "M01",
+        }),
+      });
+
+      const lowercase = runPlansCheck(lowercasePath, "--strict");
+      const missingTitle = runPlansCheck(missingTitlePath, "--strict");
+
+      assert.equal(lowercase.status, 1, lowercase.stdout + lowercase.stderr);
+      assert.match(
+        lowercase.stdout,
+        /filename must begin with an uppercase M/u,
+      );
+      assert.equal(
+        missingTitle.status,
+        1,
+        missingTitle.stdout + missingTitle.stderr,
+      );
+      assert.match(
+        missingTitle.stdout,
+        /multi-milestone title must begin with its milestone ID/u,
+      );
+    } finally {
+      rmSync(lowercaseRoot, { recursive: true, force: true });
+      rmSync(missingTitleRoot, { recursive: true, force: true });
+    }
+  });
+
   it("strict mode accepts the supported long-form milestone title ID", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-long-title-match-"),
@@ -689,6 +731,15 @@ describe("plans check", () => {
         expected: /not-started milestone has checked implementation tasks/u,
       },
       {
+        name: "not-started-proof",
+        body: canonicalMilestoneBody({
+          proofLines: [
+            "- [x] Outcome is already proven. [automated] (est: 1 min proof)",
+          ],
+        }),
+        expected: /not-started milestone has checked proof items/u,
+      },
+      {
         name: "testing-open-task",
         body: canonicalMilestoneBody({ status: "testing-gate" }),
         expected: /testing-gate milestone has open implementation tasks/u,
@@ -735,6 +786,62 @@ describe("plans check", () => {
       } finally {
         rmSync(temporaryRoot, { recursive: true, force: true });
       }
+    }
+  });
+
+  it("strict mode ignores fenced metadata and checklist examples", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-fenced-metadata-"),
+    );
+    const canonical = canonicalMilestoneBody();
+    const body = canonical.replace(
+      "# M01: Estimated milestone\n",
+      [
+        "# M01: Estimated milestone",
+        "```markdown",
+        "Status: complete",
+        "Actual: ~2 min agent-time (1 product / 1 proof / 0 other)",
+        "## Proof",
+        "- [x] Example only. (est: 999 min proof)",
+        "```",
+      ].join("\n") + "\n",
+    );
+    const planPath = writeCheckFixture(temporaryRoot, body);
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.doesNotMatch(result.stdout, /multiple .* values supplied/u);
+      assert.doesNotMatch(result.stdout, /checked proof items/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode rejects duplicate Actual fields", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-duplicate-actual-"),
+    );
+    const body = canonicalMilestoneBody({
+      status: "complete",
+      taskChecked: true,
+      proofLines: ["- [x] Outcome is proven. [automated] (est: 1 min proof)"],
+      actual: true,
+    }).replace(
+      /Actual: ~2 min agent-time \(1 product \/ 1 proof \/ 0 other\)/u,
+      [
+        "Actual: ~2 min agent-time (1 product / 1 proof / 0 other)",
+        "Actual: ~3 min agent-time (2 product / 1 proof / 0 other)",
+      ].join("\n"),
+    );
+    const planPath = writeCheckFixture(temporaryRoot, body);
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /multiple Actual values supplied/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
 

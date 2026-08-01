@@ -45,13 +45,15 @@ last_reviewed: 2026-08-01
 ## Lesson: Workflow parser refactors need both fixture coverage and typecheck
 
 **Status:** active | **Created:** 2026-04-03
-**Incident count:** 3
+**Incident count:** 5
 **Latest occurrence:** 2026-08-01
 
 **What happened:** While tightening CI-validation checks, the first pass on the workflow `run:` parser read the wrong regex capture group and then used a router heuristic that only matched commands containing the word `router`. The focused regression suite and `tsc` both failed before the broader test run finished.
 **Root cause:** Changed parsing and heuristics together without first validating the extracted command shape. The new regression covered the shell pattern, but the implementation still assumed the old capture layout and overfit to existing workflow wording.
 **Recurrence 2026-08-01:** Before implementing the goat-review output validator, the producer survey found that the systemic template and shipped examples disagreed on R-IDs, `Harm:`, Evidence/Proof, and the retired overlap tag. Independent Verify RED then found that the nominally valid fixture contradicted its Top 5 threshold, provenance totals, refuter state, and Spec Drift status; correcting it changed the verdict count and exposed a stale negative-fixture mutation. After behavioral tests and typecheck went green, whole-file ESLint and gruff still caught shared-parser complexity and file-length headroom, so review positional parsing moved to a bounded helper and validator checks split in place. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-review finding examples on the validator-ready grammar`), `test/unit/review-validate.test.ts` (search: `Verdicts: 4/0/0/0`), `src/cli/review-command-parser.ts` (search: `buildReviewCLIFields`).
 **Recurrence 2026-08-01 (state-authority M04):** The seeded V2 fixture used a broad first-occurrence replacement for `R-001`, so it changed the earlier integrity prose instead of the finding definition. The first combined lint then measured `validateConditionalSections` at complexity 12. A literal finding-prefix mutation and two narrow section-shape helpers restored the intended proof. The plan-wide anchor sweep next treated an unlabeled `path`/`literal` output placeholder as a live repository citation; changing it to `<target-project>/path` restored the explicit placeholder boundary and produced `live misses=0`. Evidence anchors: `test/unit/review-validate.test.ts` (search: `maps the seeded structural corpus to V1-V6 and V8`), `src/cli/review-validate.ts` (search: `warnTopFiveShape`), `test/contract/skill-hardening-contracts.test.ts` (search: `placeholder anchors exempted`).
+**Recurrence 2026-08-01 (PR #57 hardening):** A compiler correction used an under-specified patch context shared by adjacent estimate and Actual parsers, so `!match` landed in the estimate parser where only `estimateMatch` exists. Re-reading both complete functions and patching their distinct variable anchors fixed the correction; the next typecheck exited zero. Evidence anchor: `src/cli/plans-effort.ts` (search: `estimateText.match(EFFORT_ESTIMATE_PATTERN)`).
+**Recurrence 2026-08-01 (PR #57 preflight):** Focused behavior tests, typecheck, and the full package suite were green before repository preflight reported seven complexity-limit failures in newly hardened plan and review parsers. Splitting lifecycle, numeric-field, fence-state, and exact-ledger checks into named helpers preserved the tested contract while bringing each decision surface under the repository lint limit. That refactor removed an older evidence anchor in this entry; `stats --check` caught the stale reference before closeout, and the anchor moved to the surviving semantic parse call. Evidence anchors: `src/cli/plans-check.ts` (search: `collectNotStartedSnapshotErrors`), `src/cli/plans-effort.ts` (search: `readEffortNumbers`), `src/cli/plans-export.ts` (search: `shouldMaskFenceLine`), `src/cli/review-validate.ts` (search: `readDeclaredLedgerLines`).
 **Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's relationships, and lock one grammar with focused fixtures. Negative mutations target a unique semantic substring; shipped path examples label placeholders explicitly. At first behavioral GREEN, check whole-file complexity and headroom before adding branches.
 **Fix:** For parser refactors, verify in this order: (1) print/exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity/size analysis, then (5) run the full test suite. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
 
@@ -113,15 +115,22 @@ last_reviewed: 2026-08-01
 
 ---
 
-## Lesson: Stats fixtures need real files for line-reference assertions
+## Lesson: Isolated fixtures must create every dependency they assert
 
 **Status:** active | **Created:** 2026-04-27
+**Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
+**Trigger phase:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-08-01
 
 **What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
 
 **Root cause:** I reused a familiar root file path without checking the isolated fixture filesystem. The stats extractor validates refs against the temp repo, not the real goat-flow checkout.
 
-**Prevention:** In temp-repo stats fixtures, cite a file the fixture creates when asserting line-reference behavior. For this path, `.goat-flow/learning-loop/footguns/hooks.md` is created by the fixture and can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+**Recurrence 2026-08-01:** The first PR #57 terminal/dashboard batch failed three fixtures before exercising the product assertions: the ignored-root temp repo asserted `.goat-flow/plans/README.md` without creating it, the launch VM reached `window.__GOAT_FLOW_DEFAULT_PATH__` without injecting `window`, and a source-shape test searched `readDashboardAppSource()` even though that helper intentionally excludes `views/home.html`. The fixes created the asserted plan file, supplied the browser global, and read the owning HTML file directly. Evidence anchors: `test/unit/terminal-spawn.test.ts` (search: `grants build-directory writes only when Git proves they are ignored`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `__GOAT_FLOW_DEFAULT_PATH__`), and `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `launches Home setup and harness repair with workspace access`).
+
+**Recurrence 2026-08-01 (full suite):** The focused launch suite was green, but `dashboard-home.test.ts` separately deep-compared the complete setup launch-options object and retained its old two-field fixture. The full suite correctly failed until that consumer required `accessMode: "workspace"`. Evidence anchor: `test/unit/dashboard-home.test.ts` (search: `Setup Claude Code via Claude Code`).
+
+**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, and source graph the SUT or assertion will read, then create or inject them explicitly. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
 ---
 

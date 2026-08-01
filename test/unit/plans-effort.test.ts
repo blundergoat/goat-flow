@@ -71,6 +71,67 @@ describe("plans effort notation", () => {
     assert.deepEqual(warnings, ["effort estimate not parseable"]);
   });
 
+  it("rejects trailing estimate text instead of accepting a valid prefix", () => {
+    const warnings: string[] = [];
+
+    assert.equal(
+      parseEffortLineValue(
+        "~25 min agent-time (18 product / 5 proof / 2 other) surprise",
+        warnings,
+      ),
+      undefined,
+    );
+    assert.deepEqual(warnings, ["effort estimate not parseable"]);
+  });
+
+  it("rejects precision-losing minute values in every effort shape", () => {
+    const unsafe = "9007199254740992";
+    const effortWarnings: string[] = [];
+    const splitWarnings: string[] = [];
+    const actualWarnings: string[] = [];
+    const taskWarnings: string[] = [];
+    const adminWarnings: string[] = [];
+
+    assert.equal(
+      parseEffortLineValue(`~${unsafe} min agent-time`, effortWarnings),
+      undefined,
+    );
+    assert.equal(
+      parseEffortLineValue(
+        `~10 min agent-time (${unsafe} product / 0 proof / 0 other)`,
+        splitWarnings,
+      ),
+      undefined,
+    );
+    assert.equal(
+      parseEffortLineValue(
+        "~10 min agent-time (7 product / 2 proof / 1 other)",
+        actualWarnings,
+        `~${unsafe} min agent-time`,
+      )?.actual,
+      undefined,
+    );
+    assert.deepEqual(
+      readTaskEstimate(
+        `Unsafe task (est: ${unsafe} min product)`,
+        0,
+        taskWarnings,
+      ),
+      {},
+    );
+    assert.deepEqual(
+      readPlanAdminEstimate(`${unsafe} min other`, adminWarnings),
+      {},
+    );
+    assert.deepEqual(effortWarnings, ["effort estimate not parseable"]);
+    assert.deepEqual(splitWarnings, ["effort estimate not parseable"]);
+    assert.deepEqual(actualWarnings, ["actual effort not parseable"]);
+    assert.deepEqual(taskWarnings, ["task 1: estimate not parseable"]);
+    assert.deepEqual(adminWarnings, [
+      "plan/admin overhead estimate not parseable",
+    ]);
+  });
+
   it("warns when a supplied Actual is not machine-readable", () => {
     const warnings: string[] = [];
     const effort = parseEffortLineValue(

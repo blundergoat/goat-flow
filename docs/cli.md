@@ -257,6 +257,16 @@ npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/hando
 
 Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, only the scrubbed result is persisted. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
 
+### `goat-flow review validate [report-file] [--output <path>]`
+
+Validate a drafted goat-review Markdown report from a file or stdin. Semantic anchors and the declared refutation ledger resolve against the current working directory, so run it from the reviewed project's root. Structural V1-V6/V8 failures exit `1`; advisory V7 shape warnings and unknown degradation flags are printed but retain exit `0`. By default the result prints to stdout; `--output` writes the same PASS/FAIL report to the selected file.
+
+```bash
+npx @blundergoat/goat-flow@latest review validate review.md
+npx @blundergoat/goat-flow@latest review validate < review.md
+npx @blundergoat/goat-flow@latest review validate review.md --output validation.txt
+```
+
 ### `goat-flow plans export <plan-path> [--format markdown|json] [--output <path>] [--force]`
 
 Convert local `M*.md` milestones into portable, redacted Markdown issue bodies or JSON records. Exports retain title, status, dependencies, objective, scope, boundary notes, task checkboxes, proof and mid-proof items, effort/Actual fields, plan/admin overhead, exit criteria, and stop/rescope conditions. Canonical `Proof` and legacy Testing/Verification Gate headings share the existing verification fields; legacy Kill criteria and STOP conditions remain ordered in the new `stopMarkdown` field.
@@ -284,9 +294,9 @@ npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.14.0 --strict
 
 Default mode preserves legacy plans. It errors on malformed notation, a declared split that does not sum to its headline, task estimates exceeding a declared category, or unestimated Tasks beneath a declared effort line; plans without effort fields pass with one informational line.
 
-`--strict` is the current-plan authoring gate. It requires status, scope, tasks, proof, exit criteria, stop/rescope, and complete estimate accounting. Multi-milestone plans also require `Depends on: none` or comma-separated exact local milestone IDs. Filename IDs must be numerically unique, title IDs must agree, dependencies must resolve without self-reference or cycles, and active or completed milestones require completed prerequisites.
+`--strict` is the current-plan authoring gate. It requires status, scope, tasks, proof, exit criteria, stop/rescope, and complete estimate accounting. Fenced examples do not supply live fields, headings, or checkboxes; duplicate fields and competing sections fail. Effort values must match the complete notation and fit in safe integers. Multi-milestone plans also require `Depends on: none` or comma-separated exact local milestone IDs. Filenames must start with uppercase `M` plus digits, IDs must be numerically unique, every multi-milestone title must start with its matching ID, dependencies must resolve without self-reference or cycles, and active or completed milestones require completed prerequisites.
 
-Strict lifecycle checks accept `not-started`, `in-progress`, `testing-gate`, `human-verification-pending`, `blocked`, `abandoned`, and `complete`. They reject contradictory snapshots such as checked implementation work before start, open implementation work at testing, open executor proof or missing Actual at human review, open proof at completion, or multiple active milestones. Only explicitly tagged `[human]` proof may remain open at `human-verification-pending`; checkbox state never proves who approved a gate.
+Strict lifecycle checks accept `not-started`, `in-progress`, `testing-gate`, `human-verification-pending`, `blocked`, `abandoned`, and `complete`. They reject contradictory snapshots such as checked implementation, proof, mid-proof, or exit items before start; open implementation work at testing; open executor proof or missing Actual at human review; open proof at completion; or multiple active milestones. Only explicitly tagged `[human]` proof may remain open at `human-verification-pending`; checkbox state never proves who approved a gate.
 
 Strict validation checks supplied deterministic structure, not planning judgment. It does not infer risk level or require assumptions, manual proof, rollback, Boundary Notes, or other conditional fields. Default mode remains legacy-compatible, and neither mode reconstructs approval history or evaluates whether proof is semantically sufficient.
 

@@ -5,12 +5,12 @@
  */
 import {
   existsSync,
+  lstatSync,
   readFileSync,
-  readdirSync,
   realpathSync,
   statSync,
 } from "node:fs";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { CLIError } from "./cli-error.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { writeOutput } from "./cli-output.js";
@@ -47,6 +47,8 @@ interface IntegrityResult {
   refutationsLogged: number;
   isRefutationPersistenceSkipped: boolean;
   refutationsLine: number | null;
+  refutationLedger: string | null;
+  refutationLedgerLine: number | null;
   isAreaAudit: boolean;
 }
 
@@ -70,12 +72,15 @@ const CHECK_ID_BY_CODE = {
   "anchor-unresolved": "V1",
   "anchor-format": "V1",
   "finding-grammar": "V2",
+  "finding-section-duplicate": "V2",
   "finding-action-scope": "V2",
   "spec-drift-grammar": "V2",
   "finding-harm": "V3",
   "finding-evidence": "V4",
   "finding-proof": "V4",
   "integrity-format": "V5",
+  "integrity-section-duplicate": "V5",
+  "integrity-field-duplicate": "V5",
   "degradation-flag-unknown": "V5",
   "finding-id-duplicate": "V6",
   "finding-reference-unresolved": "V6",
@@ -120,6 +125,8 @@ const ANCHOR =
   /`([^`\r\n]+)`\s+\(search:\s*(?:`([^`\r\n]+)`|"([^"\r\n]+)")\)/gu;
 const SPEC_DRIFT_LINE =
   /^\s*-\s+\[(?:advisory|ready-to-tick)\]\s+\*\*[^*\n]+\*\*\s+-\s+\S/u;
+const REFUTATION_LEDGER_PATH =
+  /^\.goat-flow\/logs\/review\/goat-review-refutations\.[^\/\s]+\.txt$/u;
 
 const REQUIRED_INTEGRITY_FIELDS: ReadonlyArray<
   readonly [label: string, valuePattern: RegExp]
@@ -129,6 +136,10 @@ const REQUIRED_INTEGRITY_FIELDS: ReadonlyArray<
   ["Evidence", /^\d+ OBSERVED\s*\/\s*\d+ INFERRED$/u],
   ["Verdicts", /^\d+\/\d+\/\d+\/\d+$/u],
   ["Refutations logged", /^\d+(?:\s+\(persist-skipped\))?$/u],
+  [
+    "Refutation ledger",
+    /^(?:n\/a|persist-skipped|\.goat-flow\/logs\/review\/goat-review-refutations\.[^\/\s]+\.txt)$/u,
+  ],
   ["Review validator", /^(?:validated|validator-unavailable)$/u],
   ["Gates", /^(?:run|unavailable|skipped \(.+\))$/u],
   [
@@ -147,6 +158,10 @@ const REFUTER_VALUE =
   /^(?:yes|no|skipped);\s*confirmed=\d+,\s*refuted=\d+,\s*unresolved=\d+,\s*leads-verified=\d+,\s*model=\S.+$/u;
 const COMPACT_INTEGRITY =
   /^\s*Review Integrity:\s*(?:confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*\S.+;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+
+/** One durable ledger record; every field is mandatory and single-line. */
+const REFUTATION_LEDGER_RECORD =
+  /^-\s+R-\d{3}\s+\|\s+Suspicion:\s+[^|]*\S[^|]*\s+\|\s+Evidence:\s+[^|]*\S[^|]*\s+\|\s+Rationale:\s+\S.*$/u;
 
 const KNOWN_DEGRADATION_FLAGS = new Set([
   "none",
@@ -175,32 +190,60 @@ const KNOWN_DEGRADATION_FLAGS = new Set([
   "refuter-citation-unverified",
 ]);
 
-/** Return one H2 section without consuming nested H3 headings. */
-function readSection(lines: string[], heading: string): MarkdownSection | null {
-  let headingIndex = -1;
+/** Hide fenced examples while preserving one output string per source line. */
+function maskFencedLines(lines: string[]): string[] {
+  let fenceCharacter = "";
+  let fenceLength = 0;
+  return lines.map((line) => {
+    let shouldMask = fenceCharacter.length > 0;
+    if (!shouldMask) {
+      const opening = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
+      if (opening) {
+        fenceCharacter = opening[0] ?? "";
+        fenceLength = opening.length;
+        shouldMask = true;
+      }
+    } else {
+      const closingPattern = new RegExp(
+        `^ {0,3}${fenceCharacter}{${fenceLength},}\\s*$`,
+        "u",
+      );
+      if (closingPattern.test(line)) {
+        fenceCharacter = "";
+        fenceLength = 0;
+      }
+    }
+    return shouldMask ? " ".repeat(line.length) : line;
+  });
+}
+
+/** Return every matching H2 section without consuming nested H3 headings. */
+function readSections(lines: string[], heading: string): MarkdownSection[] {
+  const sections: MarkdownSection[] = [];
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index]?.match(/^##\s+(.+?)(?:\s+<!--.*)?\s*$/u);
-    if (match?.[1]?.trim() === heading) {
-      headingIndex = index;
-      break;
+    if (match?.[1]?.trim() !== heading) continue;
+    let endIndex = lines.length;
+    for (let end = index + 1; end < lines.length; end += 1) {
+      if (/^##\s+/u.test(lines[end] ?? "")) {
+        endIndex = end;
+        break;
+      }
     }
+    sections.push({
+      headingLine: index + 1,
+      lines: lines.slice(index + 1, endIndex).map((text, lineOffset) => ({
+        line: index + lineOffset + 2,
+        text,
+      })),
+    });
   }
-  if (headingIndex < 0) return null;
+  return sections;
+}
 
-  let endIndex = lines.length;
-  for (let index = headingIndex + 1; index < lines.length; index += 1) {
-    if (/^##\s+/u.test(lines[index] ?? "")) {
-      endIndex = index;
-      break;
-    }
-  }
-  return {
-    headingLine: headingIndex + 1,
-    lines: lines.slice(headingIndex + 1, endIndex).map((text, index) => ({
-      line: headingIndex + index + 2,
-      text,
-    })),
-  };
+/** Return the first matching H2 section for contracts that permit one copy. */
+function readSection(lines: string[], heading: string): MarkdownSection | null {
+  return readSections(lines, heading).at(0) ?? null;
 }
 
 /** Record one violation while preserving report order for readable CLI output. */
@@ -402,15 +445,34 @@ function validateFindingLine(
   };
 }
 
-type IntegrityFieldMap = Map<string, { value: string; line: number }>;
+interface IntegrityField {
+  value: string;
+  line: number;
+}
 
-/** Extract colon-delimited integrity fields without interpreting their values. */
-function collectIntegrityFields(section: MarkdownSection): IntegrityFieldMap {
+type IntegrityFieldMap = Map<string, IntegrityField>;
+
+/** Extract colon-delimited integrity fields and fail repeated authority claims. */
+function collectIntegrityFields(
+  section: MarkdownSection,
+  violations: ReviewValidationViolation[],
+): IntegrityFieldMap {
   const fields: IntegrityFieldMap = new Map();
   for (const locatedLine of section.lines) {
     const match = locatedLine.text.match(/^\s*-\s+([^:]+):\s*(.*)$/u);
     if (match?.[1] === undefined || match[2] === undefined) continue;
-    fields.set(match[1].trim(), {
+    const label = match[1].trim();
+    const prior = fields.get(label);
+    if (prior) {
+      addViolation(
+        violations,
+        "integrity-field-duplicate",
+        locatedLine.line,
+        `Review Integrity ${label} duplicates its value at line ${prior.line}`,
+      );
+      continue;
+    }
+    fields.set(label, {
       value: match[2].trim(),
       line: locatedLine.line,
     });
@@ -455,9 +517,14 @@ function validateOptionalIntegrityField(
   );
 }
 
-/** Convert a valid integer refutation field into the ledger claim. */
-function readRefutationClaim(fields: IntegrityFieldMap): IntegrityResult {
-  const refutations = fields.get("Refutations logged");
+/** Parse the refutation count field while rejecting precision-losing integers. */
+function readRefutationCount(
+  refutations: IntegrityField | undefined,
+  violations: ReviewValidationViolation[],
+): Pick<
+  IntegrityResult,
+  "refutationsLogged" | "isRefutationPersistenceSkipped" | "refutationsLine"
+> {
   const match = refutations?.value.match(
     /^(\d+)(?:\s+\((persist-skipped)\))?$/u,
   );
@@ -466,13 +533,36 @@ function readRefutationClaim(fields: IntegrityFieldMap): IntegrityResult {
       refutationsLogged: 0,
       isRefutationPersistenceSkipped: false,
       refutationsLine: refutations?.line ?? null,
-      isAreaAudit: false,
     };
   }
+  const refutationsLogged = Number(match[1]);
+  if (!Number.isSafeInteger(refutationsLogged)) {
+    addViolation(
+      violations,
+      "integrity-format",
+      refutations.line,
+      "Refutations logged must be a safe non-negative integer",
+    );
+  }
   return {
-    refutationsLogged: Number.parseInt(match[1], 10),
+    refutationsLogged: Number.isSafeInteger(refutationsLogged)
+      ? refutationsLogged
+      : 0,
     isRefutationPersistenceSkipped: match[2] === "persist-skipped",
     refutationsLine: refutations.line,
+  };
+}
+
+/** Convert valid refutation fields into one count-and-ledger claim. */
+function readRefutationClaim(
+  fields: IntegrityFieldMap,
+  violations: ReviewValidationViolation[],
+): IntegrityResult {
+  const ledger = fields.get("Refutation ledger");
+  return {
+    ...readRefutationCount(fields.get("Refutations logged"), violations),
+    refutationLedger: ledger?.value ?? null,
+    refutationLedgerLine: ledger?.line ?? null,
     isAreaAudit: false,
   };
 }
@@ -509,7 +599,7 @@ function validateFullIntegrity(
   violations: ReviewValidationViolation[],
   warnings: ReviewValidationViolation[],
 ): IntegrityResult {
-  const fields = collectIntegrityFields(section);
+  const fields = collectIntegrityFields(section, violations);
   validateRequiredIntegrityFields(fields, section, violations);
   validateOptionalIntegrityField(
     fields,
@@ -525,7 +615,7 @@ function validateFullIntegrity(
   );
   validateDegradationFlags(fields, warnings);
   return {
-    ...readRefutationClaim(fields),
+    ...readRefutationClaim(fields, violations),
     isAreaAudit: readAreaAuditMode(fields),
   };
 }
@@ -533,11 +623,21 @@ function validateFullIntegrity(
 /** Validate either the full integrity block or M04's compact clean-review line. */
 function validateIntegrity(
   lines: string[],
+  findingCandidateCount: number,
   violations: ReviewValidationViolation[],
   warnings: ReviewValidationViolation[],
 ): IntegrityResult {
-  const fullSection = readSection(lines, "Review Integrity");
+  const fullSections = readSections(lines, "Review Integrity");
+  const fullSection = fullSections.at(0);
   if (fullSection) {
+    for (const duplicate of fullSections.slice(1)) {
+      addViolation(
+        violations,
+        "integrity-section-duplicate",
+        duplicate.headingLine,
+        `Review Integrity duplicates the section at line ${fullSection.headingLine}`,
+      );
+    }
     return validateFullIntegrity(fullSection, violations, warnings);
   }
 
@@ -545,10 +645,20 @@ function validateIntegrity(
     /^\s*Review Integrity:/u.test(line),
   );
   if (compactIndex >= 0 && COMPACT_INTEGRITY.test(lines[compactIndex] ?? "")) {
+    if (findingCandidateCount > 0) {
+      addViolation(
+        violations,
+        "integrity-format",
+        compactIndex + 1,
+        "compact Review Integrity is permitted only for a zero-finding review",
+      );
+    }
     return {
       refutationsLogged: 0,
       isRefutationPersistenceSkipped: false,
       refutationsLine: null,
+      refutationLedger: null,
+      refutationLedgerLine: null,
       isAreaAudit: false,
     };
   }
@@ -564,44 +674,159 @@ function validateIntegrity(
     refutationsLogged: 0,
     isRefutationPersistenceSkipped: false,
     refutationsLine: null,
+    refutationLedger: null,
+    refutationLedgerLine: null,
     isAreaAudit: false,
   };
 }
 
-/** Check the claimed local refutation ledger without interpreting its free-form body. */
+/** Validate the ledger marker used when no refutations were logged. */
+function validateEmptyRefutationLedger(
+  integrity: IntegrityResult,
+  claimLine: number | null,
+  violations: ReviewValidationViolation[],
+): void {
+  const ledgerClaim = integrity.refutationLedger;
+  // Compact zero-finding reviews intentionally have no ledger fields.
+  if (ledgerClaim === null && integrity.refutationsLine === null) return;
+  if (ledgerClaim === "n/a") return;
+  addViolation(
+    violations,
+    "refutation-ledger",
+    claimLine,
+    "zero refutations require Refutation ledger: n/a",
+  );
+}
+
+/** Validate the ledger marker used when durable redaction was unavailable. */
+function validateSkippedRefutationLedger(
+  ledgerClaim: string | null,
+  claimLine: number | null,
+  violations: ReviewValidationViolation[],
+): void {
+  if (ledgerClaim === "persist-skipped") return;
+  addViolation(
+    violations,
+    "refutation-ledger",
+    claimLine,
+    "persist-skipped refutations require Refutation ledger: persist-skipped",
+  );
+}
+
+/** Read one exact, non-symlink ledger that resolves inside the reviewed project. */
+function readDeclaredLedgerLines(
+  projectRoot: string,
+  ledgerClaim: string,
+): string[] {
+  const lexicalProjectRoot = resolve(projectRoot);
+  const candidatePath = resolve(lexicalProjectRoot, ledgerClaim);
+  if (!isWithinProject(lexicalProjectRoot, candidatePath)) {
+    throw new Error("declared ledger is outside the project");
+  }
+  if (!existsSync(candidatePath)) {
+    throw new Error("declared ledger is absent");
+  }
+  if (lstatSync(candidatePath).isSymbolicLink()) {
+    throw new Error("declared ledger is a symlink");
+  }
+
+  const realProjectRoot = realpathSync(lexicalProjectRoot);
+  const realLedgerPath = realpathSync(candidatePath);
+  if (!isWithinProject(realProjectRoot, realLedgerPath)) {
+    throw new Error("declared ledger resolves outside the project");
+  }
+  if (!statSync(realLedgerPath).isFile()) {
+    throw new Error("declared ledger is not a regular project file");
+  }
+  return readFileSync(realLedgerPath, "utf-8")
+    .split(/\r?\n/u)
+    .filter((line) => line.trim().length > 0);
+}
+
+/** Fail the first non-canonical durable ledger record. */
+function validateLedgerRecordGrammar(
+  lines: string[],
+  claimLine: number | null,
+  violations: ReviewValidationViolation[],
+): boolean {
+  const invalidLine = lines.findIndex(
+    (line) => !REFUTATION_LEDGER_RECORD.test(line),
+  );
+  if (invalidLine < 0) return true;
+  addViolation(
+    violations,
+    "refutation-ledger",
+    claimLine,
+    `declared ledger record ${invalidLine + 1} does not match the required one-line grammar`,
+  );
+  return false;
+}
+
+/** Validate the path, grammar, and exact record count of a persisted ledger. */
+function validatePersistedRefutationLedger(
+  projectRoot: string,
+  integrity: IntegrityResult,
+  claimLine: number | null,
+  violations: ReviewValidationViolation[],
+): void {
+  const ledgerClaim = integrity.refutationLedger;
+  if (!ledgerClaim || !REFUTATION_LEDGER_PATH.test(ledgerClaim)) {
+    addViolation(
+      violations,
+      "refutation-ledger",
+      claimLine,
+      "persisted refutations require one declared goat-review-refutations.<random>.txt ledger path",
+    );
+    return;
+  }
+
+  try {
+    const ledgerLines = readDeclaredLedgerLines(projectRoot, ledgerClaim);
+    if (!validateLedgerRecordGrammar(ledgerLines, claimLine, violations))
+      return;
+    if (ledgerLines.length !== integrity.refutationsLogged) {
+      addViolation(
+        violations,
+        "refutation-ledger",
+        claimLine,
+        `declared ledger has ${ledgerLines.length} records but Refutations logged claims ${integrity.refutationsLogged}`,
+      );
+    }
+  } catch (error) {
+    addViolation(
+      violations,
+      "refutation-ledger",
+      claimLine,
+      `cannot verify declared refutation ledger: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/** Check that one declared ledger contains exactly the claimed canonical records. */
 function validateRefutationLedger(
   projectRoot: string,
   integrity: IntegrityResult,
   violations: ReviewValidationViolation[],
 ): void {
-  if (
-    integrity.refutationsLogged <= 0 ||
-    integrity.isRefutationPersistenceSkipped
-  ) {
+  const claimLine = integrity.refutationLedgerLine ?? integrity.refutationsLine;
+  if (integrity.refutationsLogged === 0) {
+    validateEmptyRefutationLedger(integrity, claimLine, violations);
     return;
   }
-  const ledgerRoot = join(projectRoot, ".goat-flow", "logs", "review");
-  let hasLedger = false;
-  if (existsSync(ledgerRoot)) {
-    try {
-      hasLedger = readdirSync(ledgerRoot, { withFileTypes: true }).some(
-        (entry) =>
-          entry.isFile() &&
-          /^goat-review-refutations\..+\.txt$/u.test(entry.name) &&
-          statSync(join(ledgerRoot, entry.name)).size > 0,
-      );
-    } catch {
-      hasLedger = false;
-    }
-  }
-  if (!hasLedger) {
-    addViolation(
+  if (integrity.isRefutationPersistenceSkipped) {
+    validateSkippedRefutationLedger(
+      integrity.refutationLedger,
+      claimLine,
       violations,
-      "refutation-ledger",
-      integrity.refutationsLine,
-      "Refutations logged is greater than zero but no non-empty goat-review-refutations.*.txt ledger exists",
     );
+    return;
   }
+  validatePersistedRefutationLedger(
+    projectRoot,
+    integrity,
+    claimLine,
+    violations,
+  );
 }
 
 /** Validate finding definitions in every output section that owns R-IDs. */
@@ -613,7 +838,16 @@ function validateFindingSections(
 ): FindingDefinition[] {
   const definitions: FindingDefinition[] = [];
   for (const heading of FINDING_SECTIONS) {
-    const section = readSection(lines, heading);
+    const sections = readSections(lines, heading);
+    const section = sections.at(0);
+    for (const duplicate of sections.slice(1)) {
+      addViolation(
+        violations,
+        "finding-section-duplicate",
+        duplicate.headingLine,
+        `${heading} duplicates the section at line ${section?.headingLine ?? "unknown"}`,
+      );
+    }
     const locatedLines = section?.lines ?? [];
     for (const locatedLine of locatedLines) {
       const definition = validateFindingLine(
@@ -627,6 +861,13 @@ function validateFindingSections(
     }
   }
   return definitions;
+}
+
+/** Count live finding-like bullets before selecting full or compact integrity. */
+function countFindingCandidates(lines: string[]): number {
+  return FINDING_SECTIONS.flatMap((heading) => readSections(lines, heading))
+    .flatMap((section) => section.lines)
+    .filter((locatedLine) => FINDING_CANDIDATE.test(locatedLine.text)).length;
 }
 
 /** Fail every repeated finding definition at its later source line. */
@@ -824,10 +1065,15 @@ export function validateReviewReport(
   markdown: string,
   projectRoot: string,
 ): ReviewValidationResult {
-  const lines = markdown.split(/\r?\n/u);
+  const lines = maskFencedLines(markdown.split(/\r?\n/u));
   const violations: ReviewValidationViolation[] = [];
   const warnings: ReviewValidationViolation[] = [];
-  const integrity = validateIntegrity(lines, violations, warnings);
+  const integrity = validateIntegrity(
+    lines,
+    countFindingCandidates(lines),
+    violations,
+    warnings,
+  );
   const definitions = validateFindingSections(
     lines,
     integrity.isAreaAudit,
@@ -896,9 +1142,6 @@ export function handleReviewCommand(options: ParsedCLI): void {
     );
   }
   const result = validateReviewReport(markdown, options.projectPath);
-  writeOutput(
-    { ...options, output: null },
-    renderReviewValidationResult(result),
-  );
+  writeOutput(options, renderReviewValidationResult(result));
   if (result.status === "fail") process.exitCode = 1;
 }

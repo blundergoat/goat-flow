@@ -244,23 +244,38 @@ describe("buildTerminalSpawnSpec", () => {
   });
 
   it("grants build-directory writes only when Git proves they are ignored", () => {
-    const spec = buildTerminalSpawnSpec(
-      "codex",
-      "/usr/local/bin/codex",
-      "",
-      { SHELL: "/bin/bash" },
-      "linux",
-      {
-        accessMode: "reporting",
-        projectPath: process.cwd(),
-        targetPath: process.cwd(),
-      },
-    );
+    const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-ignored-root-"));
+    try {
+      mkdirSync(join(tempRoot, "dist"), { recursive: true });
+      mkdirSync(join(tempRoot, ".goat-flow", "plans"), { recursive: true });
+      writeFileSync(
+        join(tempRoot, ".goat-flow", "plans", "README.md"),
+        "# Plans\n",
+      );
+      writeFileSync(join(tempRoot, ".gitignore"), "dist/\n");
+      execFileSync("git", ["-C", tempRoot, "init", "--quiet"]);
+      execFileSync("git", ["-C", tempRoot, "add", ".gitignore"]);
 
-    const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
-    assert.match(profile, /"dist"="write"/);
-    assert.doesNotMatch(profile, /"build"="write"/);
-    assert.match(profile, /"\.goat-flow\/plans\/README\.md"="read"/);
+      const spec = buildTerminalSpawnSpec(
+        "codex",
+        "/usr/local/bin/codex",
+        "",
+        { SHELL: "/bin/bash" },
+        "linux",
+        {
+          accessMode: "reporting",
+          projectPath: tempRoot,
+          targetPath: tempRoot,
+        },
+      );
+
+      const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
+      assert.match(profile, /"dist"="write"/);
+      assert.doesNotMatch(profile, /"build"="write"/);
+      assert.match(profile, /"\.goat-flow\/plans\/README\.md"="read"/);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("omits shared write roots when their protected layouts differ", () => {

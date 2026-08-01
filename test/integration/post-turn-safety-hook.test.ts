@@ -104,8 +104,8 @@ function runHook(
   });
 }
 
-function assertHookAllows(root: string): void {
-  const result = runHook(root);
+function assertHookAllows(root: string, env?: Record<string, string>): void {
+  const result = runHook(root, env);
   assert.equal(
     result.status,
     0,
@@ -116,8 +116,9 @@ function assertHookAllows(root: string): void {
 function assertHookBlocks(
   root: string,
   expectedPattern: RegExp,
+  env?: Record<string, string>,
 ): ReturnType<typeof spawnSync> {
-  const result = runHook(root);
+  const result = runHook(root, env);
   assert.equal(
     result.status,
     2,
@@ -789,6 +790,66 @@ describe("post-turn-safety hook", () => {
         const result = assertHookBlocks(root, /AWS access key in one\.env/u);
         assert.match(result.stderr, /Slack token in three\.env/u);
         assert.doesNotMatch(result.stderr, /two\.env/u);
+      });
+    });
+  });
+
+  describe("Bash 3 compatibility scan", () => {
+    const compatibilityEnv = {
+      GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "1",
+    };
+
+    it("allows safe placeholders", () => {
+      withTempRepo((root) => {
+        writeFile(root, ".env.example", "API_KEY=your_api_key_here\n");
+
+        assertHookAllows(root, compatibilityEnv);
+      });
+    });
+
+    it("blocks a staged-only raw token", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+        commitAll(root, "add safe settings");
+        writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+        runGit(root, ["add", "settings.env"]);
+        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+
+        assertHookBlocks(root, /API token/u, compatibilityEnv);
+      });
+    });
+
+    it("blocks an unstaged private-key header", () => {
+      withTempRepo((root) => {
+        writeFile(root, "key.pem", "safe\n");
+        commitAll(root, "add key fixture");
+        writeFile(root, "key.pem", `${TEST_PRIVATE_KEY_HEADER}\nbody\n`);
+
+        assertHookBlocks(root, /private key block/u, compatibilityEnv);
+      });
+    });
+
+    it("blocks an untracked merge-conflict triplet", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "conflict.txt",
+          "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> branch\n",
+        );
+
+        assertHookBlocks(root, /merge conflict marker/u, compatibilityEnv);
+      });
+    });
+
+    it("blocks literal credential assignments", () => {
+      withTempRepo((root) => {
+        writeFile(root, "config.ini", `password=${TEST_INI_PASSWORD}\n`);
+
+        assertHookBlocks(
+          root,
+          /credential assignment \(password\)/u,
+          compatibilityEnv,
+        );
       });
     });
   });

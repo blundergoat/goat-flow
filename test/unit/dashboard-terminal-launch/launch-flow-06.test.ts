@@ -446,6 +446,22 @@ describe("dashboard terminal launch flow", () => {
       source,
       /x-text="launching \? 'Starting setup\.\.\.' : 'Run Setup in Terminal'"/,
     );
+    assert.match(source, /launchPreset\([^\n]+accessMode: 'workspace'/u);
+  });
+
+  it("launches Home setup and harness repair with workspace access", () => {
+    const source = readFileSync(
+      resolve(PROJECT_ROOT, "src", "dashboard", "views", "home.html"),
+      "utf-8",
+    );
+    assert.match(
+      source,
+      /launchPreset\(setupPrompt,[^\n]+accessMode: 'workspace'/u,
+    );
+    assert.match(
+      source,
+      /launchPreset\(this\.harnessFixPrompt\(\),[^\n]+accessMode: 'workspace'/u,
+    );
   });
 
   it("uses agent-specific copy on the Setup prompt generating row", () => {

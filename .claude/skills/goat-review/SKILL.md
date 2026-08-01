@@ -94,7 +94,7 @@ Open full files from the declared authority, never unqualified checkout paths. F
 - **Try to DISPROVE it** using the anchor, guards, upstream checks, framework mitigation, and contracts.
 - **CONFIRMED** needs positive reachability; failed disproof → **UNRESOLVED**. **ADJUSTED** is real but narrower and restates severity; **REFUTED** cites a removing guard/contract. Forbid "confirmed with caveat", "matches prior behaviour", and "sloppy but not exploitable".
 - **Blast Radius Rule:** search consumers symbol-aware (LSP/MCP) → AST (`ast-grep`) → text (`rg`/`grep`); text-only adds `callsite-completeness-grep-only`. Include dynamic dispatch, reflection, DI, string keys, generated code, and external consumers. Verify one consumer or mark UNRESOLVED with `coverage-degraded`.
-- **Refutation Ledger:** draft entries with R-ID, suspicion, evidence, and rationale in memory; the host alone persists via `goat-flow redact --output <random-path>`. If the redactor is unavailable, do not persist and emit `Refutations logged: <N> (persist-skipped)`; omit entries from Findings.
+- **Refutation Ledger:** draft one record per line in memory with R-ID: `- R-NNN | Suspicion: ... | Evidence: ... | Rationale: ...`; host: `goat-flow redact --output .goat-flow/logs/review/goat-review-refutations.<random>.txt`; report exact path. If redactor is unavailable, do not persist; emit `Refutations logged: <N> (persist-skipped)` and ledger `persist-skipped`.
 - Add verified contextual integration/call-site/sibling-regression findings; re-verify output anchors.
 
 ### Pass 2.5 - Inline Re-framings
@@ -189,6 +189,7 @@ Offer Pass 3 when the user opts in, Review Integrity is `coverage-degraded`/`hig
 - **Gates:** `run` | `skipped (<reason>)` | `unavailable`.
 - **Gate evidence:** pass/changed-code/pre-existing/infrastructure/unresolved counts.
 - **Refutations logged:** `<N>` or `<N> (persist-skipped)` when redaction is unavailable.
+- **Refutation ledger:** `n/a` at zero; exact `.goat-flow/logs/review/goat-review-refutations.<random>.txt` when persisted; `persist-skipped` unavailable. Count matches records.
 - **Review validator:** `validated` | `validator-unavailable`.
 - **Spec drift:** `checked M[NN]` | `skipped` | `unavailable`. Optional skip is not degradation.
 - **Extensions:** PR: `overlap-confirmed`, `local-only`, `bot-only-locally-verified`, `disputed-match` counts plus missed lists, or `no-automated-review-present`; Pass 3: the `Refuter pass` line.
@@ -234,6 +235,7 @@ Machine-valid anchors use `<target-project>/path` (search: `literal`) in Finding
 - Evidence: <N> OBSERVED / <M> INFERRED
 - Verdicts: <c>/<a>/<r>/<u>
 - Refutations logged: <N> | <N> (persist-skipped)
+- Refutation ledger: n/a | persist-skipped | .goat-flow/logs/review/goat-review-refutations.<random>.txt
 - Review validator: validated | validator-unavailable
 - Gates: run | skipped (<reason>) | unavailable
 - Gate evidence: pass=<N>, changed-code=<N>, pre-existing=<N>, infrastructure=<N>, unresolved=<N>

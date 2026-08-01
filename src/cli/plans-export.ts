@@ -68,6 +68,59 @@ interface MarkdownSection {
   body: string;
 }
 
+/** Mutable delimiter state shared while masking one Markdown document. */
+interface MarkdownFenceState {
+  character: string;
+  length: number;
+}
+
+/** Update fence state for one line and report whether that line is fenced. */
+function shouldMaskFenceLine(line: string, state: MarkdownFenceState): boolean {
+  if (state.character.length > 0) {
+    const closingPattern = new RegExp(
+      `^ {0,3}${state.character}{${state.length},}\\s*$`,
+      "u",
+    );
+    if (closingPattern.test(line)) {
+      state.character = "";
+      state.length = 0;
+    }
+    return true;
+  }
+
+  const opening = line.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
+  if (!opening) return false;
+  state.character = opening[0] ?? "";
+  state.length = opening.length;
+  return true;
+}
+
+/** Mask one newline-preserving segment using the document's current fence state. */
+function maskMarkdownSegment(
+  segment: string,
+  state: MarkdownFenceState,
+): string {
+  if (segment.length === 0) return "";
+  const hasNewline = segment.endsWith("\n");
+  const line = hasNewline ? segment.slice(0, -1) : segment;
+  const rendered = shouldMaskFenceLine(line, state)
+    ? line.replace(/[^\r]/gu, " ")
+    : line;
+  return hasNewline ? `${rendered}\n` : rendered;
+}
+
+/**
+ * Replace fenced Markdown with spaces while preserving offsets and newlines.
+ * Structural parsers can then use match indexes against the original source
+ * without treating examples or quoted fixtures as live milestone metadata.
+ */
+function maskFencedMarkdown(content: string): string {
+  const state: MarkdownFenceState = { character: "", length: 0 };
+  return (content.match(/[^\n]*(?:\n|$)/gu) ?? [])
+    .map((segment) => maskMarkdownSegment(segment, state))
+    .join("");
+}
+
 /**
  * Invalid plan input that users can fix without a stack trace.
  * Use for missing plan directories, unreadable milestones, or absent titles.
@@ -94,22 +147,33 @@ export function isPlansExportInputError(
   return error instanceof PlansExportInputError;
 }
 
-/** Read a bold or plain single-line milestone field; missing content returns an empty value. */
-function readMilestoneField(content: string, label: string): string {
+/** Read one live bold or plain field and report competing copies. */
+function readMilestoneField(
+  content: string,
+  label: string,
+  warnings?: string[],
+): string {
   const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  const boldMatch = content.match(
-    new RegExp(`^\\*\\*${escapedLabel}:\\*\\*\\s*(.+)$`, "imu"),
+  const matches = Array.from(
+    maskFencedMarkdown(content).matchAll(
+      new RegExp(
+        `^(?:\\*\\*${escapedLabel}:\\*\\*|${escapedLabel}:)\\s*(.+)$`,
+        "gimu",
+      ),
+    ),
   );
-  // goat-plan's compact example shape writes bare `Status: not-started` lines,
-  // so a plain label is accepted whenever the bold form is absent.
-  const fieldMatch =
-    boldMatch ?? content.match(new RegExp(`^${escapedLabel}:\\s*(.+)$`, "imu"));
-  return fieldMatch?.[1]?.trim() ?? "";
+  if (matches.length > 1 && warnings) {
+    const warning = `multiple ${label} values supplied`;
+    if (!warnings.includes(warning)) warnings.push(warning);
+  }
+  return matches.at(0)?.[1]?.trim() ?? "";
 }
 
 /** Split level-two sections while preserving nested headings and user-authored Markdown. */
 function readMilestoneSections(content: string): MarkdownSection[] {
-  const headingMatches = Array.from(content.matchAll(/^##\s+(.+)$/gmu));
+  const headingMatches = Array.from(
+    maskFencedMarkdown(content).matchAll(/^##\s+(.+)$/gmu),
+  );
 
   // Each heading owns text until the next peer heading, matching goat-plan's milestone layout.
   return headingMatches.map((headingMatch, index) => {
@@ -173,13 +237,16 @@ function readChecklistItems(
   warnings: string[],
   itemLabel: string,
 ): PlanExportTask[] {
-  const taskStarts = Array.from(markdown.matchAll(/^\s*-\s+\[([ xX])\]\s+/gmu));
+  const maskedMarkdown = maskFencedMarkdown(markdown);
+  const taskStarts = Array.from(
+    maskedMarkdown.matchAll(/^\s*-\s+\[([ xX])\]\s+/gmu),
+  );
 
   // Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate.
   return taskStarts.map((startMatch, taskIndex) => {
     const bodyStart = startMatch.index + startMatch[0].length;
     const nextCheckbox = taskStarts.at(taskIndex + 1)?.index ?? markdown.length;
-    const nextHeadingOffset = markdown
+    const nextHeadingOffset = maskedMarkdown
       .slice(bodyStart)
       .search(/^\s*#{1,6}\s+/mu);
     const nextHeading =
@@ -249,7 +316,7 @@ function readFieldOrSectionMarkdown(
   warnings: string[],
   conflictLabel: string,
 ): string {
-  const field = readMilestoneField(content, fieldLabel);
+  const field = readMilestoneField(content, fieldLabel, warnings);
   const matches = readMilestoneSectionMatches(sections, headingAliases);
   const section = matches.at(0)?.body ?? "";
   addRepresentationConflict(
@@ -268,7 +335,7 @@ function readObjective(
   sections: MarkdownSection[],
   warnings: string[],
 ): string {
-  const objectiveField = readMilestoneField(content, "Objective");
+  const objectiveField = readMilestoneField(content, "Objective", warnings);
   const objectiveSections = readMilestoneSectionMatches(sections, [
     "objective",
   ]);
@@ -348,7 +415,7 @@ function readStopMarkdown(
       ? joinSectionBodies(canonical)
       : joinSectionBodies(legacySet);
   const embedded =
-    exitMarkdown
+    maskFencedMarkdown(exitMarkdown)
       .match(/^\s*-\s+Stop\s*\/\s*rescope if\s+.+$/imu)
       ?.at(0)
       ?.trim() ?? "";
@@ -379,7 +446,10 @@ export function parseMilestoneMarkdown(
   content: string,
   sourceFile: string,
 ): PlanExportRecord {
-  const title = content.match(/^#\s+(.+)$/mu)?.[1]?.trim() ?? "";
+  const title =
+    maskFencedMarkdown(content)
+      .match(/^#\s+(.+)$/mu)?.[1]
+      ?.trim() ?? "";
 
   // Without a title, users cannot identify or create the resulting issue safely.
   if (title.length === 0) {
@@ -388,10 +458,10 @@ export function parseMilestoneMarkdown(
     );
   }
 
-  const sections = readMilestoneSections(content);
-  const status = readMilestoneField(content, "Status");
-  const dependencies = readMilestoneField(content, "Depends on");
   const warnings: string[] = [];
+  const sections = readMilestoneSections(content);
+  const status = readMilestoneField(content, "Status", warnings);
+  const dependencies = readMilestoneField(content, "Depends on", warnings);
   const objective = readObjective(content, title, sections, warnings);
   const scopeMarkdown = readFieldOrSectionMarkdown(
     content,
@@ -449,7 +519,7 @@ export function parseMilestoneMarkdown(
   );
   const taskEstimateTotals = sumTaskEstimates(tasks);
   const planAdminEstimate = readPlanAdminEstimate(
-    readMilestoneField(content, "Plan/admin overhead"),
+    readMilestoneField(content, "Plan/admin overhead", warnings),
     warnings,
   );
   const workEstimateTotals = sumTaskEstimates([
@@ -459,9 +529,9 @@ export function parseMilestoneMarkdown(
     planAdminEstimate,
   ]);
   const effort = parseEffortLineValue(
-    readMilestoneField(content, "Effort estimate"),
+    readMilestoneField(content, "Effort estimate", warnings),
     warnings,
-    readMilestoneField(content, "Actual"),
+    readMilestoneField(content, "Actual", warnings),
   );
   addMissingFieldWarning(warnings, status, "status");
   addMissingFieldWarning(warnings, scopeMarkdown, "scope");
@@ -659,7 +729,7 @@ function renderPlanExportMarkdown(record: PlanExportRecord): string {
     "",
     providedOrMissing(record.taskMarkdown, missingText),
     "",
-    "## Verification Gate",
+    "## Proof",
     "",
     providedOrMissing(record.verificationMarkdown, missingText),
     "",

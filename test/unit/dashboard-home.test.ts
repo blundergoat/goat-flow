@@ -441,6 +441,7 @@ describe("Home harness summary", () => {
     assert.deepEqual(
       { ...launchPresetCalls[0]!.options },
       {
+        accessMode: "workspace",
         cwdPath: "/tmp/example-project",
         targetPath: "/tmp/example-project",
       },

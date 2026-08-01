@@ -100,7 +100,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 ## Definition of Done
 
 - `.github/copilot-instructions.md` exists, follows the canonical section order where compatible with Copilot compression, and stays under the hard line limit.
-- At least one accepted commit guide exists - preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md` - and `.github/copilot-instructions.md` references the preferred guide when both exist, otherwise the existing guide, under a `## Commit Messages` section. Fresh setup creates only the preferred file.
+- At least one accepted commit guide exists - preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md` - and `.github/copilot-instructions.md` references either accepted existing guide under `## Commit Messages`. When both exist, fact extraction prefers the new path but either bridge remains valid. Fresh setup creates only the preferred file.
 - Essential Commands list only real target-project commands.
 - Router Table contains installed project resources only; no `workflow/setup/`, `workflow/hooks/`, or manifest paths.
 - Tool playbook pointer to `.goat-flow/skill-docs/playbooks/` is present.

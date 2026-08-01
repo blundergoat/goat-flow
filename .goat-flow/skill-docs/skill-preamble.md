@@ -91,7 +91,7 @@ Use complexity only for **pre-invocation routing**. An explicitly invoked skill 
 |------------|----------|
 | Hotfix | Skip goat-plan and goat-critique. |
 | Small Feature | goat-plan: 1-2 milestones, minimal ceremony. Skip goat-critique. |
-| Standard | goat-plan: full milestones with testing gates. Don't auto-chain goat-critique. |
+| Standard | goat-plan: full milestones with claim-based Proof. Don't auto-chain goat-critique. |
 | System / Infrastructure | goat-plan: full milestones + cross-boundary verification + rollback. Don't auto-chain goat-critique. |
 
 ## Depth Choice

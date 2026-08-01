@@ -53,6 +53,7 @@ interface TestTerminalSession {
   idleTimer: ReturnType<typeof setTimeout> | null;
   detachBuffer: string[];
   detachBufferSize: number;
+  qualityCaptures: Array<{ dispose(): void }>;
 }
 
 /** Private TerminalManager fields initialized directly for focused tests. */
@@ -167,6 +168,7 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
     idleTimer: null,
     detachBuffer: [],
     detachBufferSize: 0,
+    qualityCaptures: [],
     ...overrides,
   };
   return { session, writes, resizes };
@@ -183,6 +185,8 @@ function makeSpawnedPty(): {
   writes: string[];
   /** Emit fake runner output into TerminalManager's PTY data handler. */
   emitData(data: string): void;
+  /** Emit runner exit independently from kill for teardown-order tests. */
+  emitExit(): void;
 } {
   const writes: string[] = [];
   let dataHandler: (data: string) => void = () => undefined;
@@ -211,6 +215,9 @@ function makeSpawnedPty(): {
     /** Emit fake runner output into TerminalManager's PTY data handler. */
     emitData(data: string): void {
       dataHandler(data);
+    },
+    emitExit(): void {
+      exitHandler({ exitCode: 0 });
     },
   };
 }
@@ -432,6 +439,31 @@ describe("terminal exports", () => {
       manager.shutdown();
       timers.reset();
     }
+  });
+
+  it("releases quality capture only after PTY termination begins", async () => {
+    const manager = makeManager();
+    const internals = managerInternals(manager);
+    const spawned = makeSpawnedPty();
+    const events: string[] = [];
+    const originalKill = spawned.pty.kill;
+    spawned.pty.kill = () => {
+      events.push("pty-kill");
+      originalKill();
+    };
+    internals.runnerPaths.set("claude", "/usr/local/bin/claude");
+    internals.nodePtyModule = { spawn: () => spawned.pty };
+    internals.nodePtyAvailable = true;
+
+    const created = await manager.create("", PROJECT_ROOT, "claude");
+    const session = internals.sessions.get(created.id);
+    assert.ok(session);
+    session.qualityCaptures = [
+      { dispose: () => events.push("capture-dispose") },
+    ];
+
+    assert.equal(manager.kill(created.id), true);
+    assert.deepStrictEqual(events, ["pty-kill", "capture-dispose"]);
   });
 
   it("sends a typed error and closes when attaching to a missing session", () => {

@@ -490,6 +490,42 @@ describe("plans export", () => {
     assert.ok(record.tasks.every((task) => !("estimateMinutes" in task)));
   });
 
+  it("ignores fenced metadata, headings, and checklist examples", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M01: Live milestone",
+        "```markdown",
+        "Status: complete",
+        "Effort estimate: ~999 min agent-time (999 product / 0 proof / 0 other)",
+        "## Tasks",
+        "- [x] Example task (est: 999 min product)",
+        "```",
+        "Status: not-started",
+        "Effort estimate: ~2 min agent-time (1 product / 1 proof / 0 other)",
+        "",
+        "## Tasks",
+        "- [ ] Live task (est: 1 min product)",
+        "",
+        "## Proof",
+        "- [ ] Live proof (est: 1 min proof)",
+        "",
+      ].join("\n"),
+      "M01-live.md",
+    );
+
+    assert.equal(record.status, "not-started");
+    assert.equal(record.effort?.totalMinutes, 2);
+    assert.deepEqual(
+      record.tasks.map((task) => task.text),
+      ["Live task (est: 1 min product)"],
+    );
+    assert.deepEqual(
+      record.testingGateItems.map((item) => item.text),
+      ["Live proof (est: 1 min proof)"],
+    );
+    assert.ok(!record.warnings.includes("multiple Status values supplied"));
+  });
+
   // Handoff-grade milestones carry machine-readable estimate and Actual fields.
   it("parses a bold effort line with a separate structured Actual", () => {
     const record = parseMilestoneMarkdown(
@@ -629,7 +665,7 @@ describe("plans export", () => {
       assert.equal(firstWrite.status, 0, firstWrite.stderr);
       const milestoneOutputPath = join(outputPath, "M42-portable-plan.md");
       const firstBody = readFileSync(milestoneOutputPath, "utf-8");
-      assert.match(firstBody, /## Verification Gate/u);
+      assert.match(firstBody, /## Proof/u);
       assert.match(firstBody, /\[REDACTED:token\]/u);
       assert.doesNotMatch(firstBody, new RegExp(fakeToken, "u"));
 

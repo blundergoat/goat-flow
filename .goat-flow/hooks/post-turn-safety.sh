@@ -15,31 +15,257 @@
 #
 # Exit codes:
 #   0  clean scan, no findings
-#   1  hook cannot run (no git root, no work dir, old bash) or the scan hit its
+#   1  hook cannot run (no git root or work dir) or the scan hit its
 #      wall-clock budget with no findings; stderr explains, the turn continues
 #   2  findings blocked, or the budget was hit after findings were already found
 #
-# Performance architecture (Windows Git Bash ships fork costs 10-40x Linux, so
-# the scan must not spawn per line or per file):
+# Bash 4+ performance architecture (Windows Git Bash ships fork costs 10-40x
+# Linux, so its optimized scan must not spawn per line or per file):
 #   1. Path sets come from the same `git diff --name-only -z` / `git ls-files -z`
 #      plumbing as before, but content is read through one batched
 #      `git diff --unified=0` per pass instead of one diff process per path.
 #   2. A grep pre-filter (a provable superset of every scan_line trigger, see
 #      the *_RE definitions) selects candidate lines; only matched lines reach
 #      the per-line bash analysis.
-#   3. All string helpers are pure bash (no sed/tr/subshell forks).
+#   3. Its string helpers are pure bash (no sed/tr/subshell forks).
 #   4. External commands are chunked to stay inside Windows' command-line
 #      length limit; total process count is O(passes), not O(files or lines).
+# The Bash 3 compatibility path favors coverage on stock macOS and remains
+# bounded by the same wall-clock, file-size, and output limits.
 
 set -uo pipefail
 
-# Everything below relies on bash 4 features (associative arrays, ${var,,},
-# mapfile). Degrading silently would mean silently weaker scanning, so refuse
-# loudly instead. Exit 1: the turn continues, but the user sees why.
-if ((BASH_VERSINFO[0] < 4)); then
-  printf 'post-turn-safety: bash >= 4.0 required (found %s); cannot scan changed content. On macOS install a newer bash (e.g. via Homebrew) or disable this hook.\n' "${BASH_VERSION:-unknown}" >&2
-  exit 1
+# Bash 3.2 ships with supported macOS versions. Keep this compatibility path
+# free of associative arrays, mapfile, and Bash-4 parameter expansions. The
+# force flag executes this exact path under newer Bash during integration tests.
+fallback_findings=0
+fallback_reported="
+"
+fallback_conflict_path=""
+fallback_conflict_state=0
+fallback_bail=0
+fallback_max_seconds="${GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS:-60}"
+fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
+fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
+
+fallback_budget_check() {
+  if [ "$SECONDS" -ge "$fallback_max_seconds" ]; then
+    fallback_bail=1
+    return 1
+  fi
+  return 0
+}
+
+fallback_report() {
+  local path="$1"
+  local family="$2"
+  local key="
+$path|$family
+"
+  case "$fallback_reported" in
+    *"$key"*) return 0 ;;
+  esac
+  fallback_reported="${fallback_reported}$path|$family
+"
+  fallback_findings=$((fallback_findings + 1))
+  if [ "$fallback_findings" -le "$fallback_max_findings" ]; then
+    printf 'post-turn-safety: %s in %s (Bash 3 compatibility scan).\n' "$family" "$path" >&2
+  fi
+}
+
+fallback_is_placeholder() {
+  local value
+  value=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  case "$value" in
+    "" | akiaiosfodnn7example | asiaiosfodnn7example | *example* | *placeholder* | *changeme* | *change-me* | *change_me* | *dummy* | *fake* | *sample* | *redacted* | *your-token* | *your_token* | *your-key* | *your_key* | *your-api-key* | *your_api_key* | not-a-secret | not_a_secret)
+      return 0
+      ;;
+    gh?_x* | github_pat_x* | npm_x* | sk-x*) return 0 ;;
+  esac
+  return 1
+}
+
+fallback_scan_assignment() {
+  local path="$1"
+  local line="$2"
+  local assignment_re='^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=][[:space:]]*(.+)$'
+  local key
+  local value
+
+  case "$line" in
+    [Ee][Nn][Vv]\ * | [Aa][Rr][Gg]\ *) line="${line#* }" ;;
+  esac
+  [[ "$line" =~ $assignment_re ]] || return 0
+  key=$(printf '%s' "${BASH_REMATCH[2]}" |
+    sed -E 's/([[:lower:][:digit:]])([[:upper:]])/\1_\2/g; s/([[:upper:]])([[:upper:]][[:lower:]])/\1_\2/g' |
+    tr '[:upper:]-' '[:lower:]_')
+  case "$key" in
+    tokens | *tokens | tokenizer | tokeniser | tokenize | *_count | *_index | *_id | *_name | *_type | *_header | *_url | *_path | *_list | *_pattern | *_field | *not_secret | *not_a_secret | *non_secret | *no_secret | *not_token | *not_a_token | *non_token | *no_token | *not_password | *not_a_password | *non_password | *no_password | *not_api_key | *not_an_api_key | *non_api_key | *no_api_key)
+      return 0
+      ;;
+    token | secret | secrets | password | passwords | api_key | apikey | private_key | access_token | auth_token | refresh_token | bearer_token | client_secret | secret_key | *_api_key | *_apikey | *_private_key | *_access_token | *_auth_token | *_refresh_token | *_bearer_token | *_client_secret | *_secret_key | *_password | *_token | *_secret)
+      ;;
+    *) return 0 ;;
+  esac
+
+  value=$(printf '%s' "${BASH_REMATCH[3]}" |
+    sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  case "$value" in
+    \"*\") value="${value#\"}"; value="${value%\"}" ;;
+    \'*\') value="${value#\'}"; value="${value%\'}" ;;
+  esac
+  [ "${#value}" -ge 12 ] || return 0
+  case "$value" in
+    *[[:space:]]* | \$* | '%env('* | '%'*'%' | '{{'* | '<%'* | *'goat-flow-allow-secret'*) return 0 ;;
+  esac
+  fallback_is_placeholder "$value" && return 0
+  fallback_report "$path" "credential assignment (${BASH_REMATCH[2]})"
+}
+
+fallback_reset_conflict() {
+  if [ "$fallback_conflict_path" != "$1" ]; then
+    fallback_conflict_path="$1"
+    fallback_conflict_state=0
+  fi
+}
+
+fallback_scan_line() {
+  local path="$1"
+  local line="$2"
+  local token
+
+  fallback_budget_check || return 1
+  case "$line" in
+    *goat-flow-allow-secret*) return 0 ;;
+  esac
+
+  fallback_reset_conflict "$path"
+  case "$line" in
+    '<<<<<<< '*) fallback_conflict_state=1 ;;
+    '=======')
+      if [ "$fallback_conflict_state" -eq 1 ]; then
+        fallback_conflict_state=2
+      fi
+      ;;
+    '>>>>>>> '*)
+      if [ "$fallback_conflict_state" -eq 2 ]; then
+        fallback_report "$path" "merge conflict marker"
+      fi
+      fallback_conflict_state=0
+      ;;
+  esac
+
+  if [[ "$line" =~ (AKIA|ASIA)[0-9A-Z]{16} ]]; then
+    token="${BASH_REMATCH[0]}"
+    fallback_is_placeholder "$token" || fallback_report "$path" "AWS access key"
+  fi
+  if [[ "$line" =~ gh[pousr]_[A-Za-z0-9]{20,} ]]; then
+    token="${BASH_REMATCH[0]}"
+    fallback_is_placeholder "$token" || fallback_report "$path" "GitHub token"
+  fi
+  if [[ "$line" =~ npm_[A-Za-z0-9]{20,} ]]; then
+    token="${BASH_REMATCH[0]}"
+    fallback_is_placeholder "$token" || fallback_report "$path" "npm token"
+  fi
+  if [[ "$line" =~ xox[baprs]-[A-Za-z0-9-]{20,} ]]; then
+    fallback_report "$path" "Slack token"
+  fi
+  if [[ "$line" =~ sk-[A-Za-z0-9_-]{20,} ]]; then
+    token="${BASH_REMATCH[0]}"
+    fallback_is_placeholder "$token" || fallback_report "$path" "API token"
+  fi
+  if [[ "$line" =~ -----BEGIN[[:space:]]+([A-Z0-9]+[[:space:]]+)*PRIVATE[[:space:]]+KEY----- ]]; then
+    fallback_report "$path" "private key block"
+  fi
+  fallback_scan_assignment "$path" "$line"
+}
+
+fallback_scan_diff() {
+  local root="$1"
+  shift
+  local path=""
+  local line
+
+  fallback_conflict_path=""
+  fallback_conflict_state=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    fallback_budget_check || break
+    case "$line" in
+      '+++ /dev/null') path="" ;;
+      '+++ b/'*) path="${line#+++ b/}" ;;
+      +++*) path="${line#+++ }" ;;
+      +*)
+        [ -n "$path" ] && fallback_scan_line "$path" "${line#+}"
+        ;;
+    esac
+  done < <(git -C "$root" diff --no-ext-diff --no-color --unified=0 "$@" 2>/dev/null)
+}
+
+fallback_scan_file() {
+  local root="$1"
+  local path="$2"
+  local full_path="$root/$path"
+  local size
+  local line
+
+  [ -f "$full_path" ] && [ ! -L "$full_path" ] || return 0
+  LC_ALL=C grep -Iq . "$full_path" 2>/dev/null || return 0
+  size=$(wc -c <"$full_path" 2>/dev/null | tr -d '[:space:]')
+  case "$size" in '' | *[!0-9]*) return 0 ;; esac
+  [ "$size" -le "$fallback_max_bytes" ] || return 0
+
+  fallback_conflict_path=""
+  fallback_conflict_state=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    fallback_scan_line "$path" "$line" || break
+  done <"$full_path"
+}
+
+fallback_main() {
+  local root
+  local path
+
+  case "$fallback_max_seconds" in '' | *[!0-9]*) fallback_max_seconds=60 ;; esac
+  case "$fallback_max_bytes" in '' | *[!0-9]*) fallback_max_bytes=1048576 ;; esac
+  case "$fallback_max_findings" in '' | *[!0-9]*) fallback_max_findings=20 ;; esac
+
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || root=""
+  if [ -z "$root" ]; then
+    printf 'post-turn-safety: git repository root unavailable; cannot scan changed content.\n' >&2
+    return 1
+  fi
+
+  fallback_scan_diff "$root"
+  if git -C "$root" rev-parse --verify HEAD >/dev/null 2>&1; then
+    fallback_scan_diff "$root" --cached
+  else
+    fallback_scan_diff "$root" --cached --root
+  fi
+
+  while IFS= read -r -d '' path; do
+    fallback_budget_check || break
+    fallback_scan_file "$root" "$path"
+  done < <(git -C "$root" ls-files --others --exclude-standard -z 2>/dev/null)
+
+  if [ "$fallback_findings" -gt 0 ]; then
+    if [ "$fallback_findings" -gt "$fallback_max_findings" ]; then
+      printf 'post-turn-safety: %s additional finding(s) hidden by output cap.\n' "$((fallback_findings - fallback_max_findings))" >&2
+    fi
+    printf 'post-turn-safety: fix or remove the flagged changed content before stopping.\n' >&2
+    return 2
+  fi
+  if [ "$fallback_bail" -ne 0 ]; then
+    printf 'post-turn-safety: Bash 3 compatibility scan incomplete (budget %ss exceeded).\n' "$fallback_max_seconds" >&2
+    return 1
+  fi
+  return 0
+}
+
+if ((BASH_VERSINFO[0] < 4)) || [ "${GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK:-0}" = 1 ]; then
+  fallback_main "$@"
+  exit $?
 fi
+
 
 # extglob is required by the +([[:space:]]) trim patterns in strip_space.
 shopt -s extglob

@@ -442,6 +442,7 @@ async function dashboardLaunchPreset(
     presetId?: string | null;
     cwdPath?: string | null;
     targetPath?: string | null;
+    accessMode?: TerminalAccessMode;
     captureQualityDrafts?: boolean;
     qualityDraftProjectPath?: string | null;
   } = {},
@@ -461,7 +462,8 @@ async function dashboardLaunchPreset(
   const promptLabel = label || preset?.name || "Custom prompt";
   const presetId = preset?.id || options.presetId || null;
   const runnerResolved = runner || ctx.activeRunner;
-  const accessMode = dashboardTerminalAccessMode(preset, ctx.userRole);
+  const accessMode =
+    options.accessMode ?? dashboardTerminalAccessMode(preset, ctx.userRole);
   // Preset badges show running state while the terminal session is active.
   if (presetId) ctx.promptRunStates[presetId] = "running";
   let adapted = ctx.adaptPrompt(prompt, runnerResolved);

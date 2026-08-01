@@ -1243,7 +1243,6 @@ class TerminalManager {
   /** Tear down a terminal session; swallows kill/close races because either side may already be gone. */
   private killSession(session: TerminalSession): void {
     this.clearIdleTimer(session);
-    this.disposeQualityCaptures(session);
     // Mark the session dead even if its PTY hasn't spawned yet - a "starting"
     // reservation cancelled mid-launch has no PTY to kill, but flagging it
     // terminated lets the in-flight startReservedSession see the cancellation
@@ -1256,6 +1255,9 @@ class TerminalManager {
         } catch {
           /* already dead */
         }
+      } else {
+        // No runner exists, so no process can create another staged draft.
+        this.disposeQualityCaptures(session);
       }
     }
     if (session.ws) {

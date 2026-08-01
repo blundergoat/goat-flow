@@ -54,7 +54,7 @@ Output as structured JSON matching the schema below.
 }
 ```
 
-The refuter runtime returns JSON to the host and never writes directly. The host keeps it in memory and persists only through `goat-flow redact --output .goat-flow/logs/review/goat-review-refuter.<random>.json`; only redacted output reaches disk. If the redactor is unavailable, do not persist; retain the count through `Refutations logged: <N> (persist-skipped)` in the main output.
+The refuter runtime returns JSON to the host and never writes directly. The host keeps it in memory and persists only through `goat-flow redact --output .goat-flow/logs/review/goat-review-refuter.<random>.json`; only redacted output reaches disk. Any Pass 2 refutations use a separate counted ledger whose exact `goat-review-refutations.<random>.txt` path is declared in `Refutation ledger`. If the redactor is unavailable, do not persist either artifact; retain the count through `Refutations logged: <N> (persist-skipped)` and emit `Refutation ledger: persist-skipped`.
 
 ## Synthesis Rules
 

@@ -91,7 +91,7 @@ After writing/updating the instruction file:
 - [ ] READ step keeps the canonical skill-docs/playbooks phrases: "Before declaring any tool or capability unavailable", `.goat-flow/skill-docs/playbooks/`, and "Availability Check"
 - [ ] Router table includes the canonical `.goat-flow/skill-docs/playbooks/` tool playbooks row
 - [ ] Router table keeps `.goat-flow/skill-docs/skill-quality-testing/` as the sibling skill-authoring methodology path
-- [ ] At least one accepted commit guide exists - `docs/coding-standards/git-commit-message.md` for fresh setup or compatible `docs/coding-standards/git-commit.md` in an existing project - with project-specific guidance or the generated insufficient-history stub header. Fresh setup creates only the preferred file; if both paths already exist, the instruction file references the preferred file under `## Commit Messages`
+- [ ] At least one accepted commit guide exists - `docs/coding-standards/git-commit-message.md` for fresh setup or compatible `docs/coding-standards/git-commit.md` in an existing project - with project-specific guidance or the generated insufficient-history stub header. Fresh setup creates only the preferred file; if both paths already exist, either accepted instruction-file bridge is valid while fact extraction prefers the new path
 - [ ] Every line fits the Quality Bar: behavioral rule, scope boundary, command, verification gate, router pointer, or composition rule. Domain knowledge and project history are routed to cold-path files, not inlined.
 - [ ] If Path B: no useful existing content was lost
 - [ ] If Path B: Execution Loop is the four-step v1.2 version; `rg 'CLASSIFY|→\s*LOG|->\s*LOG' <instruction-file>` returns zero hits

@@ -73,7 +73,7 @@ function isValidationWarning(warning: string, strict: boolean): boolean {
   if (!strict) return false;
   return (
     warning.includes("actual effort not parseable") ||
-    warning.includes("multiple Actual values") ||
+    /^multiple .+ values supplied$/u.test(warning) ||
     STRICT_STRUCTURAL_WARNINGS.has(warning) ||
     /^conflicting .+ representations$/u.test(warning)
   );
@@ -296,6 +296,35 @@ function collectCompleteSnapshotErrors(
   return errors;
 }
 
+/** Reject every completed-looking checkbox in a not-started snapshot. */
+function collectNotStartedSnapshotErrors(
+  record: PlanExportRecord,
+  checkedTasks: number,
+): string[] {
+  const errors: string[] = [];
+  if (checkedTasks > 0) {
+    errors.push(
+      `${record.sourceFile}: not-started milestone has checked implementation tasks`,
+    );
+  }
+  if (record.testingGateItems.some((item) => item.isChecked)) {
+    errors.push(
+      `${record.sourceFile}: not-started milestone has checked proof items`,
+    );
+  }
+  if (record.midProofItems.some((item) => item.isChecked)) {
+    errors.push(
+      `${record.sourceFile}: not-started milestone has checked mid-proof items`,
+    );
+  }
+  if (record.exitCriteriaItems.some((item) => item.isChecked)) {
+    errors.push(
+      `${record.sourceFile}: not-started milestone has checked exit criteria`,
+    );
+  }
+  return errors;
+}
+
 /** Validate one milestone's current lifecycle snapshot without reconstructing history. */
 function collectLifecycleErrors(record: PlanExportRecord): string[] {
   const status = record.status.trim().toLowerCase();
@@ -309,10 +338,8 @@ function collectLifecycleErrors(record: PlanExportRecord): string[] {
 
   const openTasks = countOpenItems(record.tasks);
   const checkedTasks = record.tasks.length - openTasks;
-  if (status === "not-started" && checkedTasks > 0) {
-    errors.push(
-      `${record.sourceFile}: not-started milestone has checked implementation tasks`,
-    );
+  if (status === "not-started") {
+    errors.push(...collectNotStartedSnapshotErrors(record, checkedTasks));
   }
   if (status === "testing-gate" && openTasks > 0) {
     errors.push(
@@ -378,11 +405,12 @@ interface MilestoneIdentity {
 function readMilestoneIdentity(
   record: PlanExportRecord,
 ): MilestoneIdentity | null {
-  const match = record.sourceFile.match(/^(M(\d+)).*\.md$/u);
-  if (!match?.[1] || !match[2]) return null;
+  const match = record.sourceFile.match(/^m(\d+).*\.md$/iu);
+  if (!match?.[1]) return null;
+  const id = `M${match[1]}`;
   return {
-    id: match[1],
-    numericId: match[2].replace(/^0+(?=\d)/u, ""),
+    id,
+    numericId: match[1].replace(/^0+(?=\d)/u, ""),
     record,
     dependencies: [],
   };
@@ -453,36 +481,67 @@ interface MilestoneIndexes {
   byNumber: Map<string, MilestoneIdentity>;
 }
 
+/** Read either supported title prefix into the canonical local ID shape. */
+function readTitleMilestoneId(title: string): string | undefined {
+  const compactTitleNumber = title.match(/^M(\d+)\b/iu)?.[1];
+  if (compactTitleNumber !== undefined) return `M${compactTitleNumber}`;
+  const longTitleNumber = title.match(/^Milestone\s+(\d+)\b/iu)?.[1];
+  return longTitleNumber === undefined ? undefined : `M${longTitleNumber}`;
+}
+
+/** Report filename and title drift for one local milestone identity. */
+function collectMilestoneIdentityErrors(
+  identity: MilestoneIdentity,
+  requiresTitleId: boolean,
+  errors: string[],
+): void {
+  if (!/^M\d.*\.md$/u.test(identity.record.sourceFile)) {
+    errors.push(
+      `${identity.record.sourceFile}: milestone filename must begin with an uppercase M and digits`,
+    );
+  }
+  const titleId = readTitleMilestoneId(identity.record.title);
+  if (!titleId && requiresTitleId) {
+    errors.push(
+      `${identity.record.sourceFile}: multi-milestone title must begin with its milestone ID`,
+    );
+  }
+  if (titleId && titleId !== identity.id) {
+    errors.push(
+      `${identity.record.sourceFile}: title ID ${titleId} does not match filename ID ${identity.id}`,
+    );
+  }
+}
+
+/** Insert one numeric identity while reporting zero-padding aliases. */
+function indexMilestoneNumber(
+  identity: MilestoneIdentity,
+  identitiesByNumber: Map<string, MilestoneIdentity>,
+  errors: string[],
+): void {
+  const duplicate = identitiesByNumber.get(identity.numericId);
+  if (duplicate) {
+    errors.push(
+      `${identity.record.sourceFile}: duplicate milestone ID ${identity.id} conflicts with ${duplicate.id}`,
+    );
+    return;
+  }
+  identitiesByNumber.set(identity.numericId, identity);
+}
+
 /** Index local IDs while reporting duplicate numeric identities and title drift. */
 function indexMilestones(
   identities: MilestoneIdentity[],
+  requiresTitleId: boolean,
   errors: string[],
 ): MilestoneIndexes {
   const identitiesById = new Map<string, MilestoneIdentity>();
   const identitiesByNumber = new Map<string, MilestoneIdentity>();
 
   for (const identity of identities) {
-    const duplicate = identitiesByNumber.get(identity.numericId);
-    if (duplicate) {
-      errors.push(
-        `${identity.record.sourceFile}: duplicate milestone ID ${identity.id} conflicts with ${duplicate.id}`,
-      );
-    } else {
-      identitiesByNumber.set(identity.numericId, identity);
-    }
+    collectMilestoneIdentityErrors(identity, requiresTitleId, errors);
+    indexMilestoneNumber(identity, identitiesByNumber, errors);
     identitiesById.set(identity.id, identity);
-
-    const compactTitleId = identity.record.title.match(/^(M\d+)\b/u)?.[1];
-    const longTitleNumber =
-      identity.record.title.match(/^Milestone\s+(\d+)\b/iu)?.[1];
-    const titleId =
-      compactTitleId ??
-      (longTitleNumber === undefined ? undefined : `M${longTitleNumber}`);
-    if (titleId && titleId !== identity.id) {
-      errors.push(
-        `${identity.record.sourceFile}: title ID ${titleId} does not match filename ID ${identity.id}`,
-      );
-    }
   }
   return { byId: identitiesById, byNumber: identitiesByNumber };
 }
@@ -557,7 +616,7 @@ function collectPlanStructureErrors(records: PlanExportRecord[]): string[] {
   const identities = records
     .map(readMilestoneIdentity)
     .filter((identity): identity is MilestoneIdentity => identity !== null);
-  const indexes = indexMilestones(identities, errors);
+  const indexes = indexMilestones(identities, records.length > 1, errors);
   collectDependencyReferenceErrors(
     identities,
     indexes.byId,

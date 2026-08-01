@@ -223,6 +223,19 @@ type HelperContext = {
     preset: { mayWriteFiles?: boolean } | null,
     userRole: string,
   ): "workspace" | "reporting";
+  /** Resolve a preset/custom prompt and launch it with explicit access overrides. */
+  dashboardLaunchPreset(
+    ctx: LaunchContext,
+    prompt: string,
+    runner?: string,
+    label?: string,
+    options?: {
+      presetId?: string | null;
+      cwdPath?: string | null;
+      targetPath?: string | null;
+      accessMode?: "workspace" | "reporting";
+    },
+  ): Promise<void>;
   /**
    * Sends text through an existing terminal WebSocket, including bracketed-paste
    * and delayed-submit behaviour.
@@ -452,6 +465,7 @@ globalThis.__helpers = {
   TERMINAL_PASTE_SUBMIT_RETRY_CADENCE_MS,
   TERMINAL_PASTE_SUBMIT_MAX_RETRIES,
   dashboardTerminalAccessMode,
+  dashboardLaunchPreset,
   dashboardSendToTerminalSession,
   dashboardLaunchInTerminal,
   dashboardConnectTerminal,

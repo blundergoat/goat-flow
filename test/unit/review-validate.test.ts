@@ -3,7 +3,13 @@
  * Fixtures use real files so semantic-anchor and refutation-ledger claims are behavioural.
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it, type TestContext } from "node:test";
@@ -38,6 +44,7 @@ function validReview(
   anchorPath = "src/example.ts",
   anchorText = "loadConfig",
   refutationsLogged: number | string = 0,
+  refutationLedger = "n/a",
 ): string {
   return `## TL;DR
 
@@ -49,6 +56,7 @@ One configuration defect survived review.
 - Evidence: 4 OBSERVED / 0 INFERRED
 - Verdicts: 4/0/0/0
 - Refutations logged: ${refutationsLogged}
+- Refutation ledger: ${refutationLedger}
 - Review validator: validated
 - Gates: skipped (not requested)
 - Gate evidence: pass=0, changed-code=0, pre-existing=0, infrastructure=0, unresolved=0
@@ -285,6 +293,90 @@ What I Didn't Examine: none.
     );
   });
 
+  it("ignores fenced examples but rejects fenced-only live integrity", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const fencedExample = validReview().replace(
+      "## Findings",
+      `\`\`\`markdown
+## Findings
+- R-999 [MUST:patch] **Example only** \`missing.ts\` (search: \`missing\`) | Harm: example | Evidence: OBSERVED | Proof: STATIC
+\`\`\`
+
+## Findings`,
+    );
+    assert.deepEqual(
+      validateReviewReport(fencedExample, projectRoot).violations,
+      [],
+    );
+
+    const fencedIntegrity = validReview().replace(
+      /## Review Integrity\n([\s\S]*?)\n## Findings/u,
+      "```markdown\n## Review Integrity\n$1\n```\n\n## Findings",
+    );
+    const result = validateReviewReport(fencedIntegrity, projectRoot);
+    assert.equal(
+      hasCheck(
+        result.violations as ValidationIssueShape[],
+        "V5",
+        "integrity-format",
+      ),
+      true,
+    );
+  });
+
+  it("rejects duplicate finding sections and integrity fields", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const duplicateFindings = validReview().replace(
+      "## Systemic Patterns",
+      "## Findings\n\nDuplicate surface.\n\n## Systemic Patterns",
+    );
+    const duplicateIntegrityField = validReview().replace(
+      "- Scope snapshot: source=worktree",
+      "- Scope snapshot: source=area\n- Scope snapshot: source=worktree",
+    );
+
+    assert.equal(
+      hasCheck(
+        validateReviewReport(duplicateFindings, projectRoot)
+          .violations as ValidationIssueShape[],
+        "V2",
+        "finding-section-duplicate",
+      ),
+      true,
+    );
+    assert.equal(
+      hasCheck(
+        validateReviewReport(duplicateIntegrityField, projectRoot)
+          .violations as ValidationIssueShape[],
+        "V5",
+        "integrity-field-duplicate",
+      ),
+      true,
+    );
+  });
+
+  it("permits compact integrity only on zero-finding reports", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const compactWithFindings = validReview().replace(
+      /## Review Integrity\n[\s\S]*?\n## Findings/u,
+      "Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.\n\n## Findings",
+    );
+    const result = validateReviewReport(compactWithFindings, projectRoot);
+
+    assert.equal(
+      hasCheck(
+        result.violations as ValidationIssueShape[],
+        "V5",
+        "integrity-format",
+      ),
+      true,
+    );
+    assert.match(
+      result.violations.map((violation) => violation.message).join("\n"),
+      /zero-finding review/u,
+    );
+  });
+
   it("requires a local refutation ledger when the report claims one", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const result = validateReviewReport(
@@ -294,19 +386,56 @@ What I Didn't Examine: none.
     assert.equal(hasViolation(result, "refutation-ledger"), true);
   });
 
-  it("accepts a claimed refutation when a non-empty ledger exists", (testContext) => {
+  it("accepts a claimed refutation only from its declared counted ledger", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const ledgerRoot = join(projectRoot, ".goat-flow", "logs", "review");
+    mkdirSync(ledgerRoot, { recursive: true });
+    const ledgerPath =
+      ".goat-flow/logs/review/goat-review-refutations.fixture.txt";
+    writeFileSync(
+      join(projectRoot, ledgerPath),
+      "- R-003 | Suspicion: missing guard | Evidence: caller rejects empty values | Rationale: the guard removes reachability\n",
+      "utf-8",
+    );
+    assert.deepEqual(
+      validateReviewReport(
+        validReview(undefined, undefined, 1, ledgerPath),
+        projectRoot,
+      ).violations,
+      [],
+    );
+  });
+
+  it("rejects stale unrelated ledgers and declared count mismatches", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const ledgerRoot = join(projectRoot, ".goat-flow", "logs", "review");
     mkdirSync(ledgerRoot, { recursive: true });
     writeFileSync(
-      join(ledgerRoot, "goat-review-refutations.fixture.txt"),
-      "R-003 refuted by an existing guard\n",
+      join(ledgerRoot, "goat-review-refutations.stale.txt"),
+      "- R-099 | Suspicion: stale | Evidence: stale | Rationale: stale\n",
       "utf-8",
     );
-    assert.deepEqual(
-      validateReviewReport(validReview(undefined, undefined, 1), projectRoot)
-        .violations,
-      [],
+    const unrelated = validateReviewReport(
+      validReview(undefined, undefined, 1),
+      projectRoot,
+    );
+    assert.equal(hasViolation(unrelated, "refutation-ledger"), true);
+
+    const declaredPath =
+      ".goat-flow/logs/review/goat-review-refutations.current.txt";
+    writeFileSync(
+      join(projectRoot, declaredPath),
+      "- R-003 | Suspicion: first | Evidence: guard | Rationale: disproved\n",
+      "utf-8",
+    );
+    const mismatch = validateReviewReport(
+      validReview(undefined, undefined, 2, declaredPath),
+      projectRoot,
+    );
+    assert.equal(hasViolation(mismatch, "refutation-ledger"), true);
+    assert.match(
+      mismatch.violations.map((violation) => violation.message).join("\n"),
+      /has 1 records.*claims 2/u,
     );
   });
 
@@ -316,6 +445,7 @@ What I Didn't Examine: none.
       undefined,
       undefined,
       "1 (persist-skipped)",
+      "persist-skipped",
     ).replace(
       "- Degradation flags: gates-not-run",
       "- Degradation flags: gates-not-run, persist-skipped: redactor-unavailable",
@@ -633,5 +763,31 @@ describe("review validate CLI", () => {
     assert.equal(warned.status, 0, warned.stderr);
     assert.match(warned.stdout, /review validate: PASS \(1 warning\)/u);
     assert.match(warned.stdout, /\[V5\/degradation-flag-unknown\]/u);
+  });
+
+  it("writes validation output through --output", (testContext) => {
+    const outputRoot = mkdtempSync(join(tmpdir(), "goat-flow-review-output-"));
+    testContext.after(() =>
+      rmSync(outputRoot, { recursive: true, force: true }),
+    );
+    const outputPath = join(outputRoot, "validation.txt");
+    const report = validReview("src/cli/cli.ts", "printHelp");
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        CLI_PATH,
+        "review",
+        "validate",
+        "--output",
+        outputPath,
+      ],
+      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: report },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(readFileSync(outputPath, "utf-8"), /review validate: PASS/u);
   });
 });

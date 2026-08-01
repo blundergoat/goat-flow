@@ -1159,6 +1159,16 @@ describe("skill hardening contracts", () => {
         /redactor is unavailable[^\n]+do not persist[^\n]+`Refutations logged: <N> \(persist-skipped\)`/iu,
         skillPath,
       );
+      assert.match(
+        diffReview,
+        /one record per line[^\n]+R-NNN[^\n]+Suspicion:[^\n]+Evidence:[^\n]+Rationale:/u,
+        skillPath,
+      );
+      assert.match(
+        diffReview,
+        /goat-review-refutations\.<random>\.txt[^\n]+exact path/u,
+        skillPath,
+      );
     });
 
     assertForEachTarget(
@@ -1178,6 +1188,11 @@ describe("skill hardening contracts", () => {
         assert.match(
           reference,
           /redactor is unavailable[^\n]+do not persist/iu,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /exact `goat-review-refutations\.<random>\.txt` path[^\n]+`Refutation ledger`/u,
           referencePath,
         );
         assert.doesNotMatch(reference, /^Output to:/mu, referencePath);
@@ -1220,6 +1235,16 @@ describe("skill hardening contracts", () => {
       assert.match(
         output,
         /Refutations logged:[^\n]+persist-skipped/u,
+        skillPath,
+      );
+      assert.match(
+        integrity,
+        /Refutation ledger:[^\n]+`n\/a`[^\n]+exact `\.goat-flow\/logs\/review\/goat-review-refutations\.<random>\.txt`[^\n]+`persist-skipped`/u,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /Refutation ledger: n\/a \| persist-skipped \| \.goat-flow\/logs\/review\/goat-review-refutations\.<random>\.txt/u,
         skillPath,
       );
       assert.match(

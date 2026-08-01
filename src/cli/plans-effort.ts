@@ -47,12 +47,9 @@ const TASK_ESTIMATE_PATTERN =
 /** Anything est-shaped at a task's end, used to warn on drifted notation. */
 const TASK_ESTIMATE_SHAPE = /\(est:[^)]*\)\s*$/iu;
 
-/** Headline shape of an effort line: `~25 min agent-time (...)`. */
-const EFFORT_TOTAL_PATTERN = /^\s*~?\s*(\d+)\s*min(?:ute)?s?\b/iu;
-
-/** Split shape inside an effort line: `(18 product / 5 proof / 2 other)`. */
-const EFFORT_SPLIT_PATTERN =
-  /\((\d+)\s+product\s*\/\s*(\d+)\s+proof\s*\/\s*(\d+)\s+other\)/iu;
+/** Complete effort-line grammar, including an optional category split. */
+const EFFORT_ESTIMATE_PATTERN =
+  /^\s*~?\s*(\d+)\s*min(?:ute)?s?(?:\s+agent-time)?(?:\s*\((\d+)\s+product\s*\/\s*(\d+)\s+proof\s*\/\s*(\d+)\s+other\))?\s*$/iu;
 
 /** Structured Actual shape with optional category split and explanatory reason. */
 const ACTUAL_PATTERN =
@@ -87,18 +84,45 @@ function readCapturedSplit(
   if (product === undefined) return undefined;
   if (proof === undefined) return undefined;
   if (other === undefined) return undefined;
-  return {
-    product: Number(product),
-    proof: Number(proof),
-    other: Number(other),
-  };
+  const parsedProduct = readSafeMinutes(product);
+  const parsedProof = readSafeMinutes(proof);
+  const parsedOther = readSafeMinutes(other);
+  if (
+    parsedProduct === undefined ||
+    parsedProof === undefined ||
+    parsedOther === undefined
+  ) {
+    return undefined;
+  }
+  return { product: parsedProduct, proof: parsedProof, other: parsedOther };
 }
 
-/** Parse a product/proof/other split from one effort-text value. */
-function readEffortSplit(value: string): PlanEffortSplit | undefined {
-  const match = value.match(EFFORT_SPLIT_PATTERN);
-  if (!match) return undefined;
-  return readCapturedSplit(match[1], match[2], match[3]);
+/** Parse decimal minute text without admitting precision-losing integers. */
+function readSafeMinutes(value: string): number | undefined {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+/** Numeric fields shared by estimate and Actual declarations. */
+interface ParsedEffortNumbers {
+  totalMinutes: number;
+  split?: PlanEffortSplit;
+}
+
+/** Parse the shared total-and-optional-split captures without precision loss. */
+function readEffortNumbers(
+  match: RegExpMatchArray | null,
+): ParsedEffortNumbers | undefined {
+  if (!match?.[1]) return undefined;
+  const totalMinutes = readSafeMinutes(match[1]);
+  if (totalMinutes === undefined) return undefined;
+
+  const split = readCapturedSplit(match[2], match[3], match[4]);
+  if (match[2] !== undefined && split === undefined) return undefined;
+
+  const parsed: ParsedEffortNumbers = { totalMinutes };
+  if (split) parsed.split = split;
+  return parsed;
 }
 
 /** Extract the legacy inline Actual tail from an effort line. */
@@ -145,9 +169,12 @@ export function readTaskEstimate(
     : undefined;
 
   // A well-formed entry gives the task the minutes and category later sums rely on.
-  if (estimateMatch?.[1] && category) {
+  const estimateMinutes = estimateMatch?.[1]
+    ? readSafeMinutes(estimateMatch[1])
+    : undefined;
+  if (estimateMinutes !== undefined && category) {
     return {
-      estimateMinutes: Number(estimateMatch[1]),
+      estimateMinutes,
       estimateCategory: category,
     };
   }
@@ -172,12 +199,13 @@ export function readPlanAdminEstimate(
 ): TaskEstimateFields {
   if (value.length === 0) return {};
   const match = value.match(PLAN_ADMIN_PATTERN);
-  if (!match?.[1]) {
+  const estimateMinutes = match?.[1] ? readSafeMinutes(match[1]) : undefined;
+  if (estimateMinutes === undefined) {
     warnings.push("plan/admin overhead estimate not parseable");
     return {};
   }
   return {
-    estimateMinutes: Number(match[1]),
+    estimateMinutes,
     estimateCategory: "other",
   };
 }
@@ -231,25 +259,26 @@ export function parseEffortLineValue(
 
   // Everything before the first `|` is the estimate; the remainder carries `Actual:`.
   const [estimateText = "", ...actualParts] = fieldValue.split("|");
-  const totalMatch = estimateText.match(EFFORT_TOTAL_PATTERN);
+  const parsedNumbers = readEffortNumbers(
+    estimateText.match(EFFORT_ESTIMATE_PATTERN),
+  );
 
   // Present-but-unreadable means drifted notation, not a legacy file.
-  if (!totalMatch?.[1]) {
+  if (!parsedNumbers) {
     warnings.push("effort estimate not parseable");
     return undefined;
   }
 
   // A headline without a split parses fine; `plans check` decides what its absence means.
-  const split = readEffortSplit(estimateText);
   const inlineActual = readInlineActual(actualParts);
   const actual = parseActualValue(
     selectActualText(actualFieldValue, inlineActual, warnings),
     warnings,
   );
   const effort: PlanExportEffort = {
-    totalMinutes: Number(totalMatch[1]),
+    totalMinutes: parsedNumbers.totalMinutes,
   };
-  if (split) effort.split = split;
+  if (parsedNumbers.split) effort.split = parsedNumbers.split;
   if (actual) effort.actual = actual;
   return effort;
 }
@@ -270,16 +299,16 @@ function parseActualValue(
   if (normalized === "_") return undefined;
 
   const match = normalized.match(ACTUAL_PATTERN);
-  if (!match?.[1]) {
+  const parsedNumbers = readEffortNumbers(match);
+  if (!match || !parsedNumbers) {
     warnings.push("actual effort not parseable");
     return undefined;
   }
-  const split = readCapturedSplit(match[2], match[3], match[4]);
   const actual: PlanEffortActual = {
-    totalMinutes: Number(match[1]),
+    totalMinutes: parsedNumbers.totalMinutes,
     reason: match[5]?.trim() ?? "",
   };
-  if (split) actual.split = split;
+  if (parsedNumbers.split) actual.split = parsedNumbers.split;
   return actual;
 }
 

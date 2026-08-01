@@ -84,6 +84,36 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  it("honors explicit workspace access for dynamic write-oriented prompts", async () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      { setTimeout, clearTimeout, setInterval, clearInterval },
+      { window: { __GOAT_FLOW_DEFAULT_PATH__: "/tmp/controller" } },
+    );
+    const launches: Array<Record<string, unknown>> = [];
+    const ctx = makeContext({
+      allPresets: [],
+      userRole: "builder",
+      async launchInTerminal(
+        prompt: string,
+        runner: string,
+        options: Record<string, unknown>,
+      ): Promise<void> {
+        launches.push({ prompt, runner, ...options });
+      },
+    });
+
+    await helpers.dashboardLaunchPreset(
+      ctx,
+      "repair the harness",
+      "claude",
+      "Harness repair",
+      { accessMode: "workspace" },
+    );
+
+    assert.equal(launches[0]?.accessMode, "workspace");
+  });
+
   it("keeps controlling cwd and selected target separate in terminal create payloads", async () => {
     const createBodies: unknown[] = [];
     const helpers = loadHelpers(async (input, init) => {

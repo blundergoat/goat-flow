@@ -31,7 +31,7 @@ flowchart LR
 |-------|---------|-----------|-------------|
 | [/goat](#goat--dispatcher) | Route to the right skill | -- | When intent is ambiguous; skip for simple implementations (the no-skill fast path in `skill-preamble.md`) |
 | [/goat-debug](#goat-debug) | Diagnosis-first debugging + investigate mode + browser evidence | No fixes until human reviews diagnosis | Bug or test failure, UI issues, exploring unfamiliar code |
-| [/goat-plan](#goat-plan) | Milestone planning with testing gates | Direct file-write mode; human approval between milestones | Before non-trivial implementation |
+| [/goat-plan](#goat-plan) | Milestone planning with claim-based Proof | Direct file-write mode; human approval between milestones | Before non-trivial implementation |
 | [/goat-review](#goat-review) | Structured code review + quality audit | Negative verification before presenting findings | Before merging, quality audits |
 | [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Runs only with delegated sub-agents; blocks on unresolved disputes before synthesis | High-stakes decisions, plans, assessments |
 | [/goat-security](#goat-security) | Threat-model-driven security assessment | MUST re-check framework/tooling mitigations before flagging findings | Before releases, after dependency changes, during audits |
@@ -225,7 +225,7 @@ Pass 1 never surfaces findings. Pass 2 is the source of truth: it opens full fil
 
 Findings use `R-NNN [SEVERITY:ACTION]`, semantic anchors, Evidence/Proof, and `Harm:` for MUST/SHOULD; every result includes Review Integrity. With a version-matched CLI, pipe the draft through `goat-flow review validate`; validator unavailability does not block reporting.
 
-Pass 2.5 re-frames only evidence already gathered and makes no new tool, file, command, or model calls. Refutation ledgers and captured refuter JSON use host-owned pre-write redaction; unavailable redaction skips persistence but preserves the count. Full and compact integrity output records `Review validator: validated | validator-unavailable`.
+Pass 2.5 re-frames only evidence already gathered and makes no new tool, file, command, or model calls. Refutation ledgers use a declared exact path and counted one-line records; ledgers and captured refuter JSON use host-owned pre-write redaction. Unavailable redaction skips persistence but preserves the count. Full and compact integrity output records `Review validator: validated | validator-unavailable`.
 
 Pass 3 is optional and requires explicit informed approval. An uncited or unresolvable refuter claim cannot remove a finding; a MUST remains blocking until the host verifies its cited guard, and only a verified citation can change Ship Verdict.
 

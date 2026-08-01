@@ -347,6 +347,7 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         presetId?: string | null;
         cwdPath?: string | null;
         targetPath?: string | null;
+        accessMode?: TerminalAccessMode;
         captureQualityDrafts?: boolean;
         qualityDraftProjectPath?: string | null;
       },
