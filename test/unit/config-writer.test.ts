@@ -87,6 +87,7 @@ describe("config writer", () => {
     });
   });
 
+  // Covers hook binaries overrides surviving a toggle: writes config, toggles, and expects them preserved.
   it("preserves hook binaries overrides through toggle writes", () => {
     withTempProject((root) => {
       const configPath = join(root, ".goat-flow", "config.yaml");
@@ -115,6 +116,7 @@ describe("config writer", () => {
     });
   });
 
+  // Covers unsafe top-level block keys: writes them and expects they are ignored, not built into a regex.
   it("ignores unsafe top-level block keys instead of constructing a regex", () => {
     withTempProject((root) => {
       const configPath = join(root, ".goat-flow", "config.yaml");

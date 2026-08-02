@@ -107,7 +107,7 @@ type ReviewCheckId = "V1" | "V2" | "V3" | "V4" | "V5" | "V6" | "V7" | "V8";
  * SKILL.md (search: `## Review Integrity (confidence signal)`), and
  * SKILL.md (search: `Render optional sections only with content`).
  */
-const CHECK_ID_BY_CODE = {
+const CHECK_IDENTIFIER_BY_CODE = {
   "anchor-outside-project": "V1",
   "anchor-unresolved": "V1",
   "anchor-format": "V1",
@@ -130,7 +130,7 @@ const CHECK_ID_BY_CODE = {
   "refutation-ledger": "V8",
 } as const satisfies Record<string, ReviewCheckId>;
 
-type ReviewIssueCode = keyof typeof CHECK_ID_BY_CODE;
+type ReviewIssueCode = keyof typeof CHECK_IDENTIFIER_BY_CODE;
 
 const FINDING_SECTIONS = [
   "Findings",
@@ -169,7 +169,7 @@ const REFUTATION_LEDGER_PATH =
   /^\.goat-flow\/logs\/review\/goat-review-refutations\.[^\/\s]+\.txt$/u;
 const REVIEW_BUNDLE_PATH =
   /^\.goat-flow\/logs\/review\/goat-review-bundle\.[^\/\s]+\.diff$/u;
-const IMMUTABLE_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
+const IMMUTABLE_OBJECT_IDENTIFIER = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
 const SCOPE_SNAPSHOT =
   /^source=(worktree|staged|unstaged|PR(?:\s+#[^,\s]+)?|branch diff|area|explicit path list),\s*base=([^,]+),\s*head=([^,]+),\s*authority=([^,]+),\s*drift=([^,]+),\s*uncommitted=(yes|no|n\/a),\s*signals=(\d+),\s*bundle=([^,]+),\s*chunking=(\S.*)$/iu;
 
@@ -271,7 +271,7 @@ function addViolation(
   line: number | null,
   message: string,
 ): void {
-  violations.push({ checkId: CHECK_ID_BY_CODE[code], code, line, message });
+  violations.push({ checkId: CHECK_IDENTIFIER_BY_CODE[code], code, line, message });
 }
 
 /** Record one advisory issue without changing the validator's failure status. */
@@ -281,7 +281,7 @@ function addWarning(
   line: number | null,
   message: string,
 ): void {
-  warnings.push({ checkId: CHECK_ID_BY_CODE[code], code, line, message });
+  warnings.push({ checkId: CHECK_IDENTIFIER_BY_CODE[code], code, line, message });
 }
 
 /** Return whether a resolved path remains under the reviewed project's real path. */
@@ -900,7 +900,7 @@ function readGitScopeAuthority(
   violations: ReviewValidationViolation[],
 ): ReviewAnchorAuthority {
   let isValidAuthority = hasValidState;
-  if (!IMMUTABLE_OBJECT_ID.test(scope.head) || scope.authority === "n/a") {
+  if (!IMMUTABLE_OBJECT_IDENTIFIER.test(scope.head) || scope.authority === "n/a") {
     addViolation(
       violations,
       "integrity-format",

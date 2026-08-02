@@ -56,6 +56,10 @@ const USER_FACING_CLI_COMMAND_SURFACES = [
 /**
  * Builds the smallest passing report needed to render the user's audit summary.
  * Use it when testing visible audit wording without running a real repository audit.
+ *
+ * Every field is constructed inline rather than loaded from a recorded fixture
+ * to avoid coupling copy assertions to this repository's live audit state,
+ * which would make the wording contract fail for unrelated harness changes.
  */
 function makePassingReport(): AuditReport {
   return {
@@ -252,6 +256,7 @@ describe("deployed landing evidence", () => {
     assert.doesNotMatch(landingPage, /Safety nets that can't be skipped/u);
   });
 
+  // Covers the landing-only deploy path: reads the shipped script and expects bounded, proof-backed steps.
   it("keeps landing-only deployment bounded and proof-backed", () => {
     const sandbox = mkdtempSync(join(tmpdir(), "goat-flow-landing-deploy-"));
     const fakeBin = join(sandbox, "bin");

@@ -40,6 +40,7 @@ function stalePermissionRules(groups: ClaudePermissionGroups): string[] {
 }
 
 describe("setup --apply installer upgrade migrations", () => {
+  // Covers upgrading past the retired plan checkbox guard: writes old config and expects it pruned.
   it("prunes retired plan checkbox guard config and selected-agent registration", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
@@ -120,6 +121,7 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.match(settings, /post-turn-safety\.sh/u);
   });
 
+  // Covers the same prune on CRLF config a Windows user committed: writes it and expects a clean result.
   it("prunes retired plan guard config from CRLF config files", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".claude"), { recursive: true });

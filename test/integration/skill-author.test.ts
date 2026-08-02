@@ -123,6 +123,7 @@ describe("skill new - description mode", () => {
     assert.ok(result.output.some((line) => line.includes("RED gate blocked")));
   });
 
+  // Covers a RED log that only mentions a failure: writes it and expects the draft rejected.
   it("rejects presence-only RED logs that do not prove a failing scenario", async () => {
     const projectRoot = makeTempProject();
     const name = "pg-index-empty-red";
@@ -148,6 +149,7 @@ describe("skill new - description mode", () => {
     assert.match(result.output.join("\n"), /verbatim rationalisation/u);
   });
 
+  // Covers a RED receipt whose fields read like success: writes it and expects the draft rejected.
   it("rejects RED receipts whose fields describe success instead of failure", async () => {
     const projectRoot = makeTempProject();
     const name = "pg-index-fake-red";
@@ -187,6 +189,7 @@ Rationalisations captured (verbatim):
     assert.match(result.output.join("\n"), /quoted verbatim rationalisation/u);
   });
 
+  // Covers negated RED evidence carrying canonical tokens: writes it and expects the draft rejected.
   it("rejects negated RED evidence that includes canonical tokens", async () => {
     const projectRoot = makeTempProject();
     const name = "pg-index-negated-red";
@@ -226,6 +229,7 @@ Rationalisations captured (verbatim):
     assert.match(result.output.join("\n"), /quoted verbatim rationalisation/u);
   });
 
+  // Covers alternate absence claims after canonical RED labels: writes them and expects a rejection.
   it("rejects alternate absence claims after canonical RED labels", async () => {
     const projectRoot = makeTempProject();
     const name = "pg-index-absent-red";
@@ -265,6 +269,7 @@ Rationalisations captured (verbatim):
     assert.match(result.output.join("\n"), /quoted verbatim rationalisation/u);
   });
 
+  // Covers a genuinely substantive RED log: writes positive pressure detail and expects acceptance.
   it("accepts positive pressure details and a substantive no-prefixed rationalisation", async () => {
     const projectRoot = makeTempProject();
     const name = "pg-index-positive-red";
@@ -299,6 +304,7 @@ Rationalisations captured (verbatim):
     assert.ok(existsSync(result.proposedPath));
   });
 
+  // Covers proof fields sitting in a later non-RED section: writes them and expects they are not borrowed.
   it("does not borrow proof fields from a later non-RED section", async () => {
     const projectRoot = makeTempProject();
     const name = "pg-index-wrong-section";
@@ -740,7 +746,12 @@ describe("skill new - draft mode", () => {
     );
   });
 
-  // Fixture purpose: creates same-name agent copies to ensure selected-agent draft scoring reads the requested SKILL.md.
+  /*
+   * Fixture purpose: writes same-name agent copies so selected-agent draft
+   * scoring is proven to read the requested SKILL.md. The selected agent's
+   * path must decide which copy is scored, even when an identically named
+   * draft exists for another agent.
+   */
   it("scores a substantive Codex SKILL.md draft without reading a same-name Claude copy", async () => {
     const projectRoot = makeTempProject();
     const name = "shared-draft";

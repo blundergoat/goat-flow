@@ -415,7 +415,8 @@ function configuredClaudeCredentialPaths(
   try {
     directoryPaths.push(realpathSync(absoluteDirectory));
   } catch {
-    // A configured directory may be created by Claude after launch.
+    // Resolving is optional here because Claude may create the configured
+    // directory after launch; the unresolved path stays in the list.
   }
 
   return Array.from(

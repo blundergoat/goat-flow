@@ -955,7 +955,8 @@ function renderRatio(ratio: number): string {
 /**
  * Render the informational calibration block.
  *
- * This never contributes errors and never changes a forecast: it reports how
+ * Contract: this block is advisory-only. It must never contribute errors and
+ * must never change a forecast: it reports how
  * past measured milestones landed against their estimates and leaves the
  * judgement to the author. Below three eligible samples it says `uncalibrated`
  * rather than offering a multiplier one or two data points cannot support.

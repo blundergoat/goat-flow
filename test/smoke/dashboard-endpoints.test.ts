@@ -579,6 +579,7 @@ describe("terminal exports", () => {
 });
 
 describe("terminal session concurrency cap", () => {
+  // Covers racing terminal creates: spawns concurrent requests and expects MAX_SESSIONS never exceeded.
   it("never exceeds MAX_SESSIONS when creates race around loadNodePty", async () => {
     const manager = makeManager();
     const internals = managerInternals(manager);

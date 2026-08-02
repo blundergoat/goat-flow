@@ -23,7 +23,7 @@ last_reviewed: 2026-08-01
 
 Three findings from Round 4 (2026-05-11) drove Prevention 5-7 below and are the ones worth remembering in detail:
 
-- Committed docs cited evidence under gitignored `.goat-flow/scratchpad/`, so a reader cloning the repo could not follow the reference. The same surfaces leaked third-party skill names and a vendor env var into goat-flow's own docs. Follow-up lesson: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Agent cited gitignored content as evidence in committed docs`).
+- Committed docs cited evidence under gitignored `.goat-flow/scratchpad/`, so a reader cloning the repo could not follow the reference. The same surfaces leaked third-party skill names and a vendor env var into goat-flow's own docs. Follow-up lesson: `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` (search: `Agent cited gitignored content as evidence in committed docs`).
 - `docs/skill-quality-config.md` formatted a bare skill-file basename as a code span; path-integrity read it as a repo path and failed the drift test in PR #36.
 - `scripts/check-instruction-parity.mjs` validated section headings only, so four instruction files could disagree on the content of the Never tier while parity passed.
 

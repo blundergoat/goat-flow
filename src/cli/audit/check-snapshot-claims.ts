@@ -7,8 +7,10 @@
  * 1. `CHANGELOG.md` - parsed section-by-section via `## vX.Y.Z` headers; each
  *    section validated against its own snapshot (sections without a snapshot
  *    are skipped).
- * 2. `.goat-flow/scratchpad/release.md` - single-version draft release notes;
- *    version extracted from the `# GOAT Flow vX.Y.Z Release Notes` H1;
+ * 2. The gitignored release-notes draft at .goat-flow/scratchpad/release.md -
+ *    single-version draft notes that exist only while a release is being
+ *    prepared, so this surface is skipped whenever the draft is absent. The
+ *    version comes from the `# GOAT Flow vX.Y.Z Release Notes` H1 and is
  *    validated against that version's snapshot.
  *
  * This stays in TypeScript so snapshot-claim checks share the audit fact model

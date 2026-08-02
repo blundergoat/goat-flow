@@ -108,7 +108,12 @@ function runQualitySave(projectPath: string, report: unknown) {
   );
 }
 
-/** Create a Git project whose exact quality report filename family is ignored. */
+/**
+ * Writes a Git project whose exact quality report filename family is gitignored.
+ * Use when a test needs the "report stays local" precondition the save path requires.
+ *
+ * @returns the project root path, already carrying the ignore rule the save path checks
+ */
 function makeIgnoredQualityRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
   execFileSync("git", ["-C", root, "init", "--quiet"]);

@@ -90,16 +90,21 @@ const TO_ID = "2026-06-15-0900-claude-bbbbb";
 
 describe("quality diff delta_tag disagreement signal", () => {
   it("flags contradictions when the diff pair matches the tag baseline", () => {
-    const from = entry(FROM_ID, "2026-06-01", [finding("f-1", null)], null);
+    const olderReport = entry(
+      FROM_ID,
+      "2026-06-01",
+      [finding("f-1", null)],
+      null,
+    );
     // f-1 persists but the agent tagged it "new"; f-2 is new and correctly
     // tagged; both directions of the check are exercised.
-    const to = entry(
+    const newerReport = entry(
       TO_ID,
       "2026-06-15",
       [finding("f-1", "new"), finding("f-2", "new")],
       FROM_ID,
     );
-    const result = buildQualityDiff([to, from], {
+    const result = buildQualityDiff([newerReport, olderReport], {
       agent: "claude",
       pair: `${FROM_ID}:${TO_ID}`,
     });
@@ -119,14 +124,19 @@ describe("quality diff delta_tag disagreement signal", () => {
   });
 
   it("stays silent when agent tags agree with the deterministic diff", () => {
-    const from = entry(FROM_ID, "2026-06-01", [finding("f-1", null)], null);
-    const to = entry(
+    const olderReport = entry(
+      FROM_ID,
+      "2026-06-01",
+      [finding("f-1", null)],
+      null,
+    );
+    const newerReport = entry(
       TO_ID,
       "2026-06-15",
       [finding("f-1", "persisted"), finding("f-2", "new")],
       FROM_ID,
     );
-    const result = buildQualityDiff([to, from], {
+    const result = buildQualityDiff([newerReport, olderReport], {
       agent: "claude",
       pair: `${FROM_ID}:${TO_ID}`,
     });
@@ -142,14 +152,19 @@ describe("quality diff delta_tag disagreement signal", () => {
     // The newer report was tagged against SOME OTHER baseline - comparing its
     // tags to this pair would manufacture disagreements about a diff the
     // agent never performed.
-    const from = entry(FROM_ID, "2026-06-01", [finding("f-1", null)], null);
-    const to = entry(
+    const olderReport = entry(
+      FROM_ID,
+      "2026-06-01",
+      [finding("f-1", null)],
+      null,
+    );
+    const newerReport = entry(
       TO_ID,
       "2026-06-15",
       [finding("f-1", "new")],
       "2026-05-01-0900-claude-zzzzz",
     );
-    const result = buildQualityDiff([to, from], {
+    const result = buildQualityDiff([newerReport, olderReport], {
       agent: "claude",
       pair: `${FROM_ID}:${TO_ID}`,
     });

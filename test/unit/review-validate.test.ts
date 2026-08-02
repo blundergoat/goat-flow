@@ -40,7 +40,12 @@ function createReviewedProject(testContext: TestContext): string {
   return projectRoot;
 }
 
-/** Create one immutable review authority whose file differs from the live checkout. */
+/**
+ * Writes one immutable review authority whose file differs from the live checkout.
+ * Use when a test must prove validation reads the pinned authority, not the working tree.
+ *
+ * @returns paths to the written project and its pinned authority file
+ */
 function createVersionedReviewedProject(testContext: TestContext): {
   head: string;
   projectRoot: string;
@@ -885,6 +890,7 @@ describe("review validate CLI", () => {
     assert.match(warned.stdout, /\[V5\/degradation-flag-unknown\]/u);
   });
 
+  // Covers writing validation output through --output: writes the file and expects its contents to match.
   it("writes validation output through --output", (testContext) => {
     const outputRoot = mkdtempSync(join(tmpdir(), "goat-flow-review-output-"));
     testContext.after(() =>

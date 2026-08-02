@@ -45,22 +45,6 @@ last_reviewed: 2026-08-02
 
 ---
 
-## Lesson: Test runners need CI-runtime reproduction when local Node is newer
-
-**Status:** active | **Created:** 2026-06-07 | **Incident count:** 3 | **Latest occurrence:** 2026-08-02
-
-**What happened:** PR #48 local verification ran on Node 22 and passed the programmatic `node:test` runner path. GitHub Actions ran Node 20.20.2 and failed every `.ts` test with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts"` because the programmatic runner's `execArgv: ["--import", "tsx"]` path did not behave like the CLI preload path on the supported minimum Node version.
-
-**Recurrence 2026-08-01:** PR #57 passed the staged-quality capture suite on local Node 22 but failed seven or eight cases per Node 20 CI run. The test override used `stableMs: 0`, yet the runtime still compared `Date.now() - stats.mtimeMs < 0`; CI filesystem timestamps could therefore leave a just-written draft unprocessed when its mtime appeared slightly ahead of the process clock. A deterministic future-mtime fixture reproduced the skipped draft. The correction makes zero explicitly disable the stability gate and keeps that future-mtime case in the focused suite.
-
-**Recurrence 2026-08-02:** An alternate-Node probe passed Gruff's POSIX wrapper to Node as JavaScript, causing a false `SyntaxError`. Putting Node 20 on `PATH` and executing the wrapper normally proved `gruff-ts 0.4.0` ran.
-
-**Root cause:** The package advertised `node >=20.11.0`, but the implementations were verified only on a newer local runtime. A green local test did not prove the CI-supported runtime and filesystem-time behavior matched.
-
-**Prevention:** When changing test infrastructure, reproduce the package's minimum supported Node path or the exact CI runner before treating local test output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. For shell-wrapped binaries, put the alternate Node on `PATH`; do not pass the wrapper to Node. Timing overrides must define zero explicitly and include a future-timestamp fixture instead of assuming the filesystem clock never leads `Date.now()`. Evidence anchors: `scripts/run-tests.mjs` (search: `--import`) and `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`).
-
----
-
 ## Lesson: Real-timer terminal smoke tests need isolated verification
 
 **Status:** active | **Created:** 2026-05-30
@@ -96,60 +80,6 @@ last_reviewed: 2026-08-02
 **Recurrence 2026-07-31 (prompt envelope):** The first bounded-saver retry generated a quality prompt through the CLI's default JSON output, then passed the complete `{ prompt, auditSummary }` envelope to Claude instead of the raw prompt. Claude still found the embedded instructions, but the run did not reproduce the dashboard payload shape and could not close the live boundary. Evidence anchor: `src/cli/quality/quality-command.ts` (search: `if (options.format === "json")`).
 
 **Prevention update:** When a prompt-generated workflow crosses tool and permission boundaries, reproduce the exact generated command and payload through the real runner. Use `--format text` or parse `.prompt` deliberately, then assert the payload shape before launch. A file-tool write, parser unit, permission-rule probe, or escaped JSON envelope proves only its own layer.
-
----
-
-## Lesson: `node --import <abs-path>` on Windows needs a file:// URL
-
-**Status:** active | **Created:** 2026-05-11
-
-**What happened:** Two `runCLI` test helpers (`test/unit/quality-command.test.ts`, `test/integration/quality-history-diff.test.ts`) passed `join(PROJECT_ROOT, "node_modules", "tsx", "dist", "loader.mjs")` to `spawnSync(process.execPath, ["--import", TSX_LOADER_PATH, ...])`. On Windows the path is `D:\dev-lab\...\loader.mjs`. Node's ESM loader rejected it with `ERR_UNSUPPORTED_ESM_URL_SCHEME: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. On Windows, absolute paths must be valid file:// URLs. Received protocol 'd:'.` Every test that shelled out via the helper failed with exit 1 - looked like CLI bugs, was actually the spawn shape. 25-test full-suite failure baseline on 2026-05-11 included these as 7-8 of the original count.
-
-**Root cause:** Node's `--import` flag goes through the ESM loader, which parses the value as a URL. Drive-letter `D:` looks like a scheme. POSIX absolute paths happen to be valid `file://` -less URLs on Linux/macOS so the bug never surfaces there.
-
-**Fix:** Convert the loader path via `pathToFileURL(...).href` before passing to `--import`:
-```ts
-import { pathToFileURL } from "node:url";
-const TSX_LOADER_URL = pathToFileURL(
-  join(PROJECT_ROOT, "node_modules", "tsx", "dist", "loader.mjs"),
-).href;
-spawnSync(process.execPath, ["--import", TSX_LOADER_URL, CLI_PATH, ...args], ...);
-```
-
-**Prevention:**
-1. Any test that spawns Node with `--import`, `--loader`, or `--experimental-loader` and passes an absolute path must convert it via `pathToFileURL` first.
-2. Same rule applies to dynamic `import()` of absolute paths in production code on Windows. `import("D:\\...\\foo.js")` will throw; `import(pathToFileURL("D:\\...\\foo.js").href)` works.
-3. Treat `ERR_UNSUPPORTED_ESM_URL_SCHEME` as a likely Windows path-shape issue, not an actual code bug, until the file:// conversion is verified.
-
----
-
-## Lesson: Windows test runs require explicit EPERM handling for symlink fixtures
-
-**Status:** active | **Created:** 2026-05-11
-
-**What happened:** Three tests (`main-module guard via symlink`, `skips symlink entries in skill walk roots`, `rejects upload paths that escape through symlinked components`) call `fs.symlinkSync()` to build fixtures. On Windows without Developer Mode (or admin rights), `symlinkSync` throws `EPERM: operation not permitted`. The tests failed because they treated the fixture setup as guaranteed; the production code under test is correct on all platforms, but the test harness can't reach it.
-
-**Root cause:** Windows blocks unprivileged symlink creation by default. Test fixtures need to be defensive about platform capabilities. Plain `assert.fail`-on-error is wrong because the test infrastructure - not the code under test - is unreachable.
-
-**Fix:** Wrap `symlinkSync` in a helper that catches `EPERM` and calls `t.skip(...)`:
-```ts
-function symlinkOrSkip(t: TestContext, target: string, link: string): boolean {
-  try { symlinkSync(target, link); return true; }
-  catch (err) {
-    if (err instanceof Error && (err as NodeJS.ErrnoException).code === "EPERM") {
-      t.skip("Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)");
-      return false;
-    }
-    throw err;
-  }
-}
-```
-Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`) and bails early when the helper returns false. Evidence: `test/integration/main-guard.test.ts` (search: `symlinkOrSkip`), `test/unit/skill-quality/helpers.ts` (search: `symlinkOrSkip`), `test/unit/terminal-uploads.test.ts` (search: `symlinkOrSkip`).
-
-**Prevention:**
-1. Any new test that calls `symlinkSync`, `linkSync`, or any privileged fs op must guard against `EPERM` with a `t.skip(...)`.
-2. The skip message must name the platform constraint so a reader knows why coverage dropped, not just that it dropped.
-3. Don't try to detect "is Windows" via `process.platform` - the privilege depends on Developer Mode / admin context, not the OS. Always try-and-catch.
 
 ---
 
@@ -228,20 +158,6 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 **Root cause:** The installer verified the Python modules and direct Playwright launch path, but not the generated `browser-use` wrapper and daemon launch path. In this root container, browser-use's Docker detection returned false, so it omitted Chrome's no-sandbox flags and Chrome exited before CDP came up. `browser-use close` also removed session metadata while leaving the daemon/browser process alive in this environment.
 
 **Prevention:** Browser tooling installers must run a real wrapper-level smoke: `command -v browser-use`, `browser-use open` against a localhost-served page, a DOM/title read, and session cleanup. For root-run wrappers, set `IN_DOCKER=true` before `browser_use.config` imports so Chrome gets no-sandbox flags. Snapshot and reap browser-use daemon PIDs around `close`, because PID files may disappear before the process exits. Evidence anchors: `scripts/install-browser-tools.sh` (search: `browser-use uses IN_DOCKER`), `scripts/install-browser-tools.sh` (search: `Verifying browser-use CLI launches`), `scripts/install-browser-tools.sh` (search: `browser_use_kill_pid`).
-
----
-
-## Lesson: Shared npm build scripts must avoid shell builtins on Windows
-
-**Status:** active | **Created:** 2026-04-29
-
-**What happened:** `npm run dashboard` failed on Windows during `build:dashboard` with `The syntax of the command is incorrect.` even though Git's Unix tools were available on `PATH`. Reproducing the subcommand under `cmd.exe` showed `mkdir -p dist/dashboard` failing before the later copy steps ran.
-
-**Root cause:** npm uses `cmd.exe` by default on Windows when `script-shell` is unset. Mixed shell chains are only partially portable in that setup: external GNU helpers such as `rm`, `cp`, and `chmod` may resolve from Git for Windows, but `cmd` still intercepts builtins like `mkdir` and applies Windows syntax rules.
-
-**Prevention:** For shared npm scripts that create, remove, copy, discover, or glob files, prefer `node:fs` or an explicit cross-platform helper instead of raw `rm -rf`, `mkdir -p`, `cp`, `chmod`, shell command substitution, or shell-expanded globs in `package.json`. Evidence anchors: `package.json` (search: `require('node:fs').rmSync`), reproduction command `cmd /d /c "mkdir -p dist/dashboard"` -> `The syntax of the command is incorrect.`
-
-**Updated 2026-06-07:** Windows preflight exposed the same portability class in test scripts: `npm run test:fast` failed before the suite started because `cmd.exe` parsed the Bash-only `$(find ... | sort)` expression as a Windows command, producing `'sort)' is not recognized as an internal or external command`. The fix moved test discovery into `scripts/run-tests.mjs` (search: `filesForMode`) and changed `package.json` (search: `node scripts/run-tests.mjs fast`) so `test:fast`, `test:coverage`, `test:slow`, and `test:performance` no longer depend on npm's shell.
 
 ---
 

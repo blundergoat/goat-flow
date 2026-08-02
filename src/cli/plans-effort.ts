@@ -34,7 +34,12 @@ interface PlanEffortUnknownActual {
 export type PlanEffortActual =
   PlanEffortNumericActual | PlanEffortUnknownActual;
 
-/** Narrow an Actual to the two states that carry numeric minute fields. */
+/**
+ * Narrow an Actual to the two states that carry numeric minute fields.
+ *
+ * @param actual - The recorded Actual to test, in any of its states.
+ * @returns True when `actual` is measured or retrospective, so callers may read its minute fields.
+ */
 export function isNumericActual(
   actual: PlanEffortActual,
 ): actual is PlanEffortNumericActual {

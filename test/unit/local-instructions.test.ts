@@ -180,6 +180,7 @@ describe("extractLocalInstructions", () => {
 });
 
 describe("instruction release metadata", () => {
+  // Covers an instruction header date disagreeing with the changelog: writes it and expects a rejection.
   it("rejects a live instruction header date that differs from the changelog release", () => {
     const fixtureRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-instruction-parity-"),

@@ -112,7 +112,12 @@ describe("agent deny hook template comparison", () => {
     return readInstalledGuardrail;
   }
 
-  /** Exercise the configured Codex launcher with quoted evidence and a real write-shaped payload. */
+  /**
+   * Exercise the configured Codex launcher with quoted evidence and a real
+   * write-shaped payload. Both halves run in one case because the deny hook
+   * only earns its keep if it separates quoting repository content from
+   * writing to it - passing either half alone would hide a regression.
+   */
   it("allows quoted repository evidence while the registered hook still blocks repository writes", () => {
     const registeredHookConfig = JSON.parse(
       readFileSync(resolve(PROJECT_ROOT, ".codex/hooks.json"), "utf-8"),

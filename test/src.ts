@@ -57,8 +57,10 @@ export { extractSettingsFacts } from "../src/cli/facts/agent/settings.js";
 export { extractSkillFacts } from "../src/cli/facts/agent/skills.js";
 export { createFS } from "../src/cli/facts/fs.js";
 export { extractProjectFacts } from "../src/cli/facts/orchestrator.js";
+export { composeArtifactQualityPrompt } from "../src/cli/prompt/compose-quality.js";
 export { composeSetup } from "../src/cli/prompt/compose-setup.js";
 export {
+  composeArtifactContent,
   discoverArtifacts,
   findArtifact,
 } from "../src/cli/quality/skill-quality-content.js";

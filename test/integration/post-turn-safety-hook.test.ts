@@ -124,7 +124,13 @@ function runHook(
   });
 }
 
-/** Normalize scanner-specific prose to the common finding-family/path decision. */
+/**
+ * Normalize scanner-specific prose to the common finding-family/path decision.
+ *
+ * Callers compare these signatures across scanner implementations, so the
+ * returned shape is a stable contract: same family and path in, same signature
+ * out, regardless of which scanner produced the wording.
+ */
 function hookFindingSignatures(stderr: string): string[] {
   return stderr
     .split("\n")
@@ -792,6 +798,7 @@ describe("post-turn-safety hook", () => {
   // that batching could silently change while the headline detectors still
   // pass: line bytes, path attribution, and diff-frame parsing.
   describe("batched scanning preserves per-line semantics", () => {
+    // Covers CRLF merge markers a literal line comparison misses: writes that diff and expects no detection.
     it("leaves CRLF merge markers undetected, as a literal line comparison does", () => {
       withTempRepo((root) => {
         // The middle marker is matched as the exact string "=======", so a

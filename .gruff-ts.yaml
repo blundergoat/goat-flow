@@ -27,6 +27,13 @@ paths:
     # outside its rule surface. Keep this as path ignore, not threshold tuning.
     - "*.css"
     - "**/*.css"
+    # 2026-08-02: machine-written audit/quality/skill-pressure run outputs.
+    # Every file here is gitignored and untracked, but the bare `logs` pattern
+    # in .gitignore does not exclude them from the recursive scan, so they were
+    # reporting size.file-length as if they were source. They are generated
+    # data, not code to refactor. Keep this as a path ignore, not a threshold
+    # change.
+    - ".goat-flow/logs/**"
 
 allowlists:
   acceptedAbbreviations:
@@ -78,6 +85,11 @@ allowlists:
   # `enabled`) because those names mirror UI state, query params, or persisted
   # JSON. Revisit if these prefixes start appearing in domain logic where an
   # `is/has/can/should` name would read better.
+  # 2026-08-02: `capture`/`retry` cover the terminal-create wire contract
+  # (`TerminalCreateBody.captureQualityDrafts`) and the `retry*` window-state
+  # family that mirrors it; `plans` covers the ParsedCLI option DTO fields that
+  # sit beside the already-accepted `skill*` flags. Renaming these would break
+  # the request body or split a uniform field family.
   booleanPrefixes:
     - is
     - has
@@ -107,6 +119,7 @@ allowlists:
     - audit
     - available
     - bodies
+    - capture
     - clean
     - co
     - compliance
@@ -139,12 +152,14 @@ allowlists:
     - needs
     - ok
     - paste
+    - plans
     - previous
     - promote
     - projects
     - quality
     - rejected
     - require
+    - retry
     - selected
     - setup
     - shape

@@ -9,6 +9,7 @@
  * which the leak-sensitive terminal test lesson requires this suite to prove.
  */
 import { after, describe, it } from "node:test";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
@@ -48,6 +49,25 @@ const QUALITY_IGNORE_RULES = [
   ".goat-flow/logs/events/*.jsonl",
   "",
 ].join("\n");
+
+/**
+ * Report a POSIX-only fixture as skipped when the suite runs on Windows.
+ *
+ * Keeping the runtime skip here rather than inline in each test states the
+ * platform contract once, and keeps a conditional platform guard from reading
+ * like a committed focused/skipped test at the call site.
+ *
+ * @param testContext - Running test context used to record the skip reason.
+ * @param reason - Why the fixture cannot express its contract on Windows.
+ * @returns True when the caller must return early because the test was skipped.
+ */
+function skipOnWindows(testContext: TestContext, reason: string): boolean {
+  if (process.platform !== "win32") {
+    return false;
+  }
+  testContext.skip(reason);
+  return true;
+}
 
 /** Build one schema-valid minimal report owned by the given project root. */
 function validReport(projectRoot: string): string {
@@ -99,7 +119,12 @@ describe("quality draft capture", () => {
   const roots: string[] = [];
   const captures: QualityDraftCapture[] = [];
 
-  /** Create and track one temporary project root for capture cleanup after the suite. */
+  /**
+ * Writes and tracks one temporary project root so capture cleanup runs after the suite.
+ * Use for every capture test that needs a disposable project the dashboard could have selected.
+ *
+ * @returns the new project root path; every caller gets a distinct directory
+ */
   function makeRoot(ignoreRules: string | null = QUALITY_IGNORE_RULES): string {
     const root = mkdtempSync(join(tmpdir(), "goat-quality-capture-"));
     roots.push(root);
@@ -150,8 +175,12 @@ describe("quality draft capture", () => {
   });
 
   it("tightens an existing permissive staging directory to 0700", (testContext) => {
-    if (process.platform === "win32") {
-      testContext.skip("POSIX mode bits are not enforceable on Windows");
+    if (
+      skipOnWindows(
+        testContext,
+        "POSIX mode bits are not enforceable on Windows",
+      )
+    ) {
       return;
     }
     const root = makeRoot();
@@ -246,9 +275,11 @@ describe("quality draft capture", () => {
     assert.match(eventText, /"raw_json":\{"kind":"redacted"/u);
   });
 
+  // Covers pre-existing symlink and multiply linked receipt destinations: writes both and expects refusal.
   it("refuses pre-existing symlink and multiply linked receipt destinations", async (testContext) => {
-    if (process.platform === "win32") {
-      testContext.skip("Link fixtures require POSIX link semantics");
+    if (
+      skipOnWindows(testContext, "Link fixtures require POSIX link semantics")
+    ) {
       return;
     }
     const root = makeRoot();
@@ -381,6 +412,7 @@ describe("quality draft capture", () => {
     assert.match(receipt.error ?? "", /byte limit/u);
   });
 
+  // Covers files outside the draft name contract plus symlinked drafts: writes them and expects them ignored.
   it("ignores files outside the draft name contract and symlinked drafts", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
@@ -492,6 +524,7 @@ describe("quality draft capture", () => {
     );
   });
 
+  // Covers dispose with drafts still open: writes them and expects each finalized with its receipt kept.
   it("finalizes every remaining draft on dispose and keeps receipts", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
@@ -562,11 +595,14 @@ describe("quality draft capture", () => {
     );
   });
 
+  // Covers a project reached by real path and symlink: writes via each and expects one shared capture.
   it("shares one capture across real-path and symlink aliases", async (testContext) => {
-    if (process.platform === "win32") {
-      testContext.skip(
+    if (
+      skipOnWindows(
+        testContext,
         "Directory symlink fixtures require Windows Developer Mode",
-      );
+      )
+    ) {
       return;
     }
     const parent = makeRoot();

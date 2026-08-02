@@ -298,6 +298,7 @@ describe("quality report contract: CLI surfaces", () => {
     });
   }
 
+  // Covers a realistic 60-field report through the real deny hook: writes it and expects it to pass.
   it("sends a realistic 60-field report block through the actual deny hook", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
     const writeBlock = extractReportWriteBlock(prompt);

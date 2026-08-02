@@ -522,7 +522,7 @@ describe("gruff-code-quality hook", () => {
     assert.deepEqual(readInvocations(root), ["src/sample.py"]);
   });
 
-  // Fixture purpose: names a nested-venv analyzer only in .goat-flow/config.yaml to cover repo-owned overrides.
+  // Fixture purpose: writes a nested-venv analyzer path into .goat-flow/config.yaml to cover repo overrides.
   it("uses a repo-owned config binaries override for a non-standard monorepo gruff binary", () => {
     const root = makeRoot();
     writeMockGruffBinary(
@@ -567,6 +567,7 @@ describe("gruff-code-quality hook", () => {
     assert.deepEqual(readInvocations(root), ["src/sample.py"]);
   });
 
+  // Covers both override spellings a maintainer may write: writes each form and expects both honoured.
   it("uses compact and commented config binary override forms", () => {
     const fixtures = [
       {

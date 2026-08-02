@@ -63,6 +63,10 @@ function maskHtmlComments(line: string, state: MarkdownMaskState): string {
  * Mask fenced code and HTML comments without changing source length or newlines.
  * Structural Markdown consumers can match this view and safely reuse offsets
  * against the original source without promoting examples into live metadata.
+ *
+ * @param content - Raw Markdown source to mask.
+ * @returns The same source with fenced code and HTML comments blanked out,
+ *   identical in length and line count so caller offsets stay valid.
  */
 export function maskNonRenderedMarkdown(content: string): string {
   const state: MarkdownMaskState = {

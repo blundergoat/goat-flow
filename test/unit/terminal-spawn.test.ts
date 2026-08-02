@@ -220,6 +220,7 @@ describe("buildTerminalSpawnSpec", () => {
     );
   });
 
+  // Covers credentials under the active Claude config directory: the fixture expects them denied.
   it("denies credentials under the active Claude config directory", () => {
     const tempRoot = mkdtempSync(
       join(tmpdir(), "goat-terminal-claude-config-"),
@@ -303,6 +304,7 @@ describe("buildTerminalSpawnSpec", () => {
     assert.match(profile, /"\*\*\/\.env"="deny"/);
   });
 
+  // Covers build-directory writes: granted only when Git proves the directory is ignored.
   it("grants build-directory writes only when Git proves they are ignored", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-ignored-root-"));
     try {
@@ -338,6 +340,7 @@ describe("buildTerminalSpawnSpec", () => {
     }
   });
 
+  // Covers shared write roots whose protected layouts differ: expects them omitted rather than merged.
   it("omits shared write roots when their protected layouts differ", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-profile-"));
     const controllerPath = join(tempRoot, "controller");

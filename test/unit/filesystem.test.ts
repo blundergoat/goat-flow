@@ -45,7 +45,7 @@ async function withTempProject(
 }
 
 describe("createFS directory readiness", () => {
-  // A user restoring local state can have an empty directory, a same-named file, or no path at all.
+  // A user restoring local state may have an empty dir, a same-named file, or none: the fixture writes each.
   it("distinguishes readable directories from files and missing paths", async () => {
     await withTempProject(
       async (root) => {

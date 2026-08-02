@@ -31,7 +31,7 @@ import {
   listHookSpecs,
 } from "../../src/cli/server/hooks-registry.js";
 
-const HOOK_ID = "deny-dangerous";
+const HOOK_IDENTIFIER = "deny-dangerous";
 const CLAUDE_SAFE_PAYLOAD =
   '{"tool_name":"Bash","tool_input":{"command":"echo safe"}}';
 const CLAUDE_DANGEROUS_PAYLOAD =
@@ -173,7 +173,7 @@ function assertCodexPreToolUseOnly(root: string): void {
 function installClaudeDenyHook(root: string): string {
   mkdirSync(join(root, ".claude"), { recursive: true });
   writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
-  applyHookState(HOOK_ID, true, root);
+  applyHookState(HOOK_IDENTIFIER, true, root);
   return readClaudeDenyLauncher(root);
 }
 
@@ -489,7 +489,7 @@ describe("hook registrar", () => {
       mkdirSync(join(root, ".codex"), { recursive: true });
       writeFileSync(join(root, ".codex", "config.toml"), "\n");
 
-      applyHookState(HOOK_ID, true, root);
+      applyHookState(HOOK_IDENTIFIER, true, root);
 
       const launcher = readCodexDenyLauncher(root);
       assert.match(launcher, /git rev-parse --show-toplevel/u);
@@ -518,13 +518,13 @@ describe("hook registrar", () => {
 
   it("does not scaffold uninstalled agent surfaces on clean target toggles", () => {
     withTempProject((root) => {
-      applyHookState(HOOK_ID, false, root);
+      applyHookState(HOOK_IDENTIFIER, false, root);
 
       assertMissing(root, GENERATED_AGENT_SURFACES);
     });
 
     withTempProject((root) => {
-      applyHookState(HOOK_ID, true, root);
+      applyHookState(HOOK_IDENTIFIER, true, root);
 
       assertMissing(root, GENERATED_AGENT_SURFACES);
     });
@@ -543,7 +543,7 @@ describe("hook registrar", () => {
       mkdirSync(join(root, ".codex"), { recursive: true });
       writeFileSync(join(root, ".codex", "config.toml"), "");
 
-      applyHookState(HOOK_ID, true, root);
+      applyHookState(HOOK_IDENTIFIER, true, root);
 
       assertPresent(root, [
         ".codex/hooks.json",
@@ -571,7 +571,7 @@ describe("hook registrar", () => {
       mkdirSync(join(root, ".codex"), { recursive: true });
       writeFileSync(join(root, ".codex", "config.toml"), "");
 
-      const denyState = applyHookState(HOOK_ID, true, root);
+      const denyState = applyHookState(HOOK_IDENTIFIER, true, root);
       const gruffState = applyHookState("gruff-code-quality", true, root);
       const safetyState = applyHookState("post-turn-safety", true, root);
 
@@ -585,6 +585,7 @@ describe("hook registrar", () => {
     });
   });
 
+  // Covers upgrading a project with stale managed Codex entries: writes them and expects them pruned.
   it("prunes stale managed Codex post-tool and stop hook entries", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".codex"), { recursive: true });
@@ -676,7 +677,7 @@ describe("hook registrar", () => {
       writeFileSync(join(root, ".codex", "config.toml"), "");
       writeFileSync(join(root, ".goat-flow", ".gitignore"), "*\n!.gitignore\n");
 
-      applyHookState(HOOK_ID, true, root);
+      applyHookState(HOOK_IDENTIFIER, true, root);
 
       const gitignore = readFileSync(
         join(root, ".goat-flow", ".gitignore"),
@@ -777,6 +778,7 @@ describe("hook registrar", () => {
     });
   });
 
+  // Covers sync pruning removed plan-checkbox-guard entries: writes stale config and expects it gone.
   it("sync prunes stale removed plan-checkbox-guard entries and config", () => {
     withTempProject((root) => {
       writePostTurnCapableSurfaces(root);
@@ -930,6 +932,7 @@ describe("hook registrar", () => {
     });
   });
 
+  // Covers the same prune driven by a direct hook toggle: writes stale config and expects it gone.
   it("direct hook toggles prune stale removed plan-checkbox-guard entries and config", () => {
     withTempProject((root) => {
       writePostTurnCapableSurfaces(root);
@@ -994,7 +997,7 @@ describe("hook registrar", () => {
       writeFileSync(join(root, "AGENTS.md"), "# Local agent instructions\n");
       mkdirSync(join(root, ".agents", "skills"), { recursive: true });
 
-      applyHookState(HOOK_ID, true, root);
+      applyHookState(HOOK_IDENTIFIER, true, root);
 
       assertMissing(root, [
         ".codex/hooks.json",
@@ -1043,7 +1046,7 @@ describe("hook registrar", () => {
         "",
       );
 
-      applyHookState(HOOK_ID, false, root);
+      applyHookState(HOOK_IDENTIFIER, false, root);
 
       assertMissing(root, [
         ".claude/settings.json",

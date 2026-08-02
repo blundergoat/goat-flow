@@ -28,6 +28,41 @@ import type {
 } from "../../src/cli/evidence/envelope.js";
 import { redactEvidenceText } from "../../src/cli/evidence/redaction.js";
 
+/**
+ * Hardlink `existingPath` to `linkPath`, or report the test as skipped when the
+ * host filesystem refuses hardlinks.
+ *
+ * Stating the host-capability contract in one helper keeps a runtime capability
+ * guard from reading like a committed focused or skipped test at the call site.
+ *
+ * @param testContext - Running test context used to record the skip reason.
+ * @param existingPath - Existing file the hardlink should point at.
+ * @param linkPath - Hardlink path this fixture writes.
+ * @returns True when the caller must return early because the host filesystem
+ *   blocks hardlinks; throws any error that is not a hardlink-capability refusal.
+ */
+function skipWhenHardlinksUnsupported(
+  testContext: TestContext,
+  existingPath: string,
+  linkPath: string,
+): boolean {
+  try {
+    linkSync(existingPath, linkPath);
+    return false;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      ["EACCES", "EPERM", "EXDEV"].includes(
+        (error as NodeJS.ErrnoException).code ?? "",
+      )
+    ) {
+      testContext.skip("Skipped: host filesystem blocks hardlinks");
+      return true;
+    }
+    throw error;
+  }
+}
+
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
 const CURRENT_EVENT_KINDS = {
@@ -257,6 +292,7 @@ describe("EvidenceEnvelope", () => {
     });
   });
 
+  // Covers a symlinked events directory: the fixture proves no write escapes the project.
   it("rejects a symlinked events directory without writing outside the project", (testContext) => {
     withTempProject((root) => {
       const outsideDirectory = mkdtempSync(
@@ -294,6 +330,7 @@ describe("EvidenceEnvelope", () => {
     });
   });
 
+  // Covers a symlinked daily event file: the fixture proves appending never changes the target.
   it("rejects a symlinked daily event file without changing its target", (testContext) => {
     withTempProject((root) => {
       const outsideDirectory = mkdtempSync(
@@ -333,25 +370,21 @@ describe("EvidenceEnvelope", () => {
     });
   });
 
+  // Covers a hardlinked daily event file: the fixture proves appending never changes its peer.
   it("rejects a hardlinked daily event file without changing its peer", (testContext) => {
     withTempProject((root) => {
       const eventsDirectory = join(root, ".goat-flow", "logs", "events");
       const victimPath = join(root, "victim.jsonl");
       mkdirSync(eventsDirectory, { recursive: true });
       writeFileSync(victimPath, "keep\n", "utf-8");
-      try {
-        linkSync(victimPath, join(eventsDirectory, "2026-05-17.jsonl"));
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          ["EACCES", "EPERM", "EXDEV"].includes(
-            (error as NodeJS.ErrnoException).code ?? "",
-          )
-        ) {
-          testContext.skip("Skipped: host filesystem blocks hardlinks");
-          return;
-        }
-        throw error;
+      if (
+        skipWhenHardlinksUnsupported(
+          testContext,
+          victimPath,
+          join(eventsDirectory, "2026-05-17.jsonl"),
+        )
+      ) {
+        return;
       }
       const envelope = createEvidenceEnvelope({
         eventType: "audit.run",

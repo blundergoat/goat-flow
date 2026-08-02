@@ -627,11 +627,14 @@ describe("plans export", () => {
       join(tmpdir(), "goat-flow-plan-receipt-"),
     );
     const planPath = join(temporaryRoot, "1.15.0");
+    const productSeconds = 61;
+    const proofSeconds = 59;
+    const recordedSeconds = productSeconds + proofSeconds;
     const receipt = [
       "## Timing Receipt",
       "",
       "**Receipt state:** finalized",
-      "**Recorded seconds:** 120 total (61 product / 59 proof / 0 other)",
+      `**Recorded seconds:** ${recordedSeconds} total (${productSeconds} product / ${proofSeconds} proof / 0 other)`,
       "**Allocated minutes:** 2 total (1 product / 1 proof / 0 other)",
       "",
       "| Segment | Category | Start UTC / epoch | End UTC / epoch | Seconds | State |",
@@ -657,7 +660,10 @@ describe("plans export", () => {
         timingReceiptMarkdown: string;
       }>;
       assert.equal(records[0]?.timingReceipt.state, "finalized");
-      assert.equal(records[0]?.timingReceipt.summary.totalSeconds, 120);
+      assert.equal(
+        records[0]?.timingReceipt.summary.totalSeconds,
+        recordedSeconds,
+      );
       assert.match(records[0]?.timingReceiptMarkdown ?? "", /M42-S02/u);
       assert.match(markdownResult.stdout, /## Timing Receipt/u);
       assert.match(markdownResult.stdout, /120 recorded-unpaused|120 total/u);

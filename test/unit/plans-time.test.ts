@@ -27,7 +27,13 @@ import {
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(REPOSITORY_ROOT, "src", "cli", "cli.ts");
 
-/** Create one canonical milestone nested under a selected project's plan tree. */
+/**
+ * Writes one canonical milestone nested under a selected project's plan tree.
+ * Use as the starting point for any timing test that needs a real milestone file on disk.
+ *
+ * @param temporaryRoot - throwaway directory the fixture writes into; the caller removes it
+ * @returns paths to the written milestone, its plan directory, and the project root
+ */
 function writeTimingFixture(temporaryRoot: string): {
   milestonePath: string;
   planPath: string;
@@ -77,7 +83,13 @@ function writeTimingFixture(temporaryRoot: string): {
   return { milestonePath, planPath, projectRoot };
 }
 
-/** Run a real plans command so parser and dispatch coverage stays end-to-end. */
+/**
+ * Spawns the real plans CLI so parser and dispatch coverage stays end-to-end.
+ * Use instead of calling the handler directly when the test must prove command wiring too.
+ *
+ * @param args - argv after `plans`; empty means the bare command, which prints usage
+ * @returns the finished process result, including stdout the user would have seen
+ */
 function runPlans(...args: string[]) {
   return spawnSync(
     process.execPath,
@@ -171,6 +183,7 @@ describe("plans time", () => {
     );
   });
 
+  // Covers pause, category change, and finalization in one run: writes each transition into the milestone.
   it("records pause, category change, and finalization inside the milestone", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
     const { milestonePath, planPath, projectRoot } =
@@ -253,27 +266,34 @@ describe("plans time", () => {
     }
   });
 
+  // Covers an interrupted span: writes the discard and expects no invented end or duration.
   it("discards an interrupted span without inventing an end or duration", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
     const { milestonePath } = writeTimingFixture(temporaryRoot);
+
+    const startEpochSeconds = 100;
+    const discardEpochSeconds = 500;
 
     try {
       applyPlanTimeTransition(
         milestonePath,
         { action: "start", category: "other" },
-        100,
+        startEpochSeconds,
       );
       const discarded = applyPlanTimeTransition(
         milestonePath,
         { action: "stop", discardOpen: true },
-        500,
+        discardEpochSeconds,
       );
       const content = readFileSync(milestonePath, "utf-8");
 
       assert.equal(discarded.receipt.state, "incomplete");
       assert.equal(discarded.receipt.segments[0]?.endEpochSeconds, null);
       assert.equal(discarded.receipt.segments[0]?.seconds, null);
-      assert.equal(discarded.receipt.segments[0]?.discardedAtEpochSeconds, 500);
+      assert.equal(
+        discarded.receipt.segments[0]?.discardedAtEpochSeconds,
+        discardEpochSeconds,
+      );
       assert.match(
         content,
         /\| _ \| _ \| discarded 1970-01-01T00:08:20Z \/ 500 \|/u,
@@ -287,6 +307,7 @@ describe("plans time", () => {
     }
   });
 
+  // Covers reopening a finalized receipt when verification continues: writes the reopen transition.
   it("reopens a finalized receipt when verification continues", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
     const { milestonePath } = writeTimingFixture(temporaryRoot);
@@ -351,10 +372,11 @@ describe("plans time", () => {
   });
 
   /*
-   * The clock-reversal error tells the operator to discard the span, so the
-   * discard has to work under the exact condition that raises it. Testing
-   * reversal and discard on separate spans passes while their intersection -
-   * the only path a stuck operator can actually take - stays broken.
+   * Covers the intersection a stuck operator actually hits: writes a span the
+   * clock reversed under, then discards it. The clock-reversal error tells the
+   * operator to discard, so the discard has to work under the exact condition
+   * that raises it. Testing reversal and discard on separate spans passes while
+   * their intersection - the only path out - stays broken.
    */
   it("lets discard-open recover a span the clock reversed under", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));

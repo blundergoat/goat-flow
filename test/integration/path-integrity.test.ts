@@ -196,8 +196,7 @@ describe("path-integrity script: copilot surfaces", () => {
 // docs/*.md cross-references resolve the same way on a clean checkout
 // ---------------------------------------------------------------------------
 describe("path-integrity script: docs cross-references", () => {
-  // Fixture purpose: puts the only matching file under gitignored local state,
-  // the shape that let a dead ref pass locally and fail CI on a clean checkout.
+  // Covers a ref resolving only via gitignored local state: writes the shape that passed locally and failed CI.
   it("fails when a docs ref resolves only through gitignored local state", () => {
     const dir = makeTempProject();
     try {
@@ -229,8 +228,7 @@ describe("path-integrity script: docs cross-references", () => {
     }
   });
 
-  // Fixture purpose: names the two artifacts goat-flow documents but does not
-  // ship - the /goat-plan ISSUE.md and the ADR-043 compatibility commit guide.
+  // Covers two artifacts goat-flow documents but never ships: writes refs to ISSUE.md and the ADR-043 guide.
   it("allows docs refs to artifacts that live outside this repo by design", () => {
     const dir = makeTempProject();
     try {

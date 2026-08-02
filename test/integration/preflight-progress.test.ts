@@ -442,6 +442,7 @@ describe("preflight Tests-phase progress", () => {
     );
     fixtureTemporaryDirectories.add(parentStopTemporaryDirectory);
     const parentStopReadyFile = join(parentStopTemporaryDirectory, "ready");
+    // Fixture source for a process tree that ignores SIGTERM: spawns a worker and writes a ready file.
     const parentStopFixtureSource = String.raw`
       const { spawn } = require("node:child_process");
       const { writeFileSync } = require("node:fs");

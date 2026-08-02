@@ -263,6 +263,7 @@ function eligibleSampleBody(
 }
 
 describe("plans check", () => {
+  // Covers the smallest plan an author writes: writes it and expects strict mode to accept the compact shape.
   it("accepts the compact Small rendering in strict mode", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -297,7 +298,7 @@ describe("plans check", () => {
     }
   });
 
-  // The worked-example arithmetic (18 + 5 + 2 = 25) passes without advisories.
+  // Covers the worked example authors copy (18 + 5 + 2 = 25): writes it and expects a clean exit 0.
   it("reports a consistent plan and exits 0", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -328,8 +329,7 @@ describe("plans check", () => {
     }
   });
 
-  // A split that cannot reproduce its own headline is exactly the unauditable
-  // aggregate this command exists to catch.
+  // Covers the unauditable aggregate this command exists to catch: writes a split that misses its headline.
   it("exits 1 when the split does not sum to the headline", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -353,7 +353,7 @@ describe("plans check", () => {
     }
   });
 
-  // Declaring an effort line creates the per-task obligation.
+  // Covers the obligation an effort line creates: writes tasks with no est entries the author must fill.
   it("exits 1 when tasks lack est entries under a declared effort line", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -377,7 +377,7 @@ describe("plans check", () => {
     }
   });
 
-  // Optional local workflow state is never scored: estimate-less plans pass.
+  // Covers older estimate-less plans: writes one and expects one info line, because local state is not scored.
   it("passes legacy estimate-less plans with a single info line", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -404,7 +404,7 @@ describe("plans check", () => {
     }
   });
 
-  // Drift from 70/20/10 informs without failing - the target is a prior, not a gate.
+  // Covers drift from the 70/20/10 prior: writes a proof-heavy plan and expects advice, not a failing gate.
   it("reports proof-heavy mix drift as advisory with exit 0", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -429,6 +429,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers derived work that still drifts on mix: writes it and expects a pass with drift left advisory.
   it("strict mode accepts fully derived work while keeping mix drift advisory", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -464,6 +465,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers the three canonical shapes an author picks: writes each and expects strict mode to accept all.
   it("strict mode accepts canonical Small, Standard, and high-risk shapes", () => {
     const temporaryRoots: string[] = [];
     try {
@@ -573,6 +575,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers a plan naming both canonical and legacy headings: writes it and expects the ambiguity rejected.
   it("strict mode rejects conflicting canonical and legacy aliases", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-aliases-"),
@@ -620,6 +623,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers milestone IDs that collide or disagree with the filename: writes both and expects each rejected.
   it("strict mode rejects duplicate and mismatched milestone IDs", () => {
     const duplicateRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-duplicate-id-"),
@@ -670,6 +674,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers milestone files named by hand: writes lowercase and ID-less variants and expects both rejected.
   it("strict mode rejects lowercase filenames and missing IDs in multi-milestone titles", () => {
     const lowercaseRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-lowercase-id-"),
@@ -798,7 +803,7 @@ describe("plans check", () => {
     },
   ];
 
-  // Separate cases show the exact dependency failure in TAP output.
+  // Covers each dependency failure separately so TAP names the exact one: every case writes a plan fixture.
   for (const testCase of dependencyFailureCases) {
     it(`strict mode rejects ${testCase.name} dependency state`, () => {
       const temporaryRoot = mkdtempSync(
@@ -874,7 +879,7 @@ describe("plans check", () => {
     },
   ];
 
-  // Separate cases show the exact lifecycle failure in TAP output.
+  // Covers each lifecycle failure separately so TAP names the exact one: every case writes a plan fixture.
   for (const testCase of lifecycleFailureCases) {
     it(`strict mode rejects ${testCase.name} lifecycle state`, () => {
       const temporaryRoot = mkdtempSync(
@@ -892,6 +897,7 @@ describe("plans check", () => {
     });
   }
 
+  // Covers documentation an author pastes in: writes fenced metadata and examples that must not be scored.
   it("strict mode ignores fenced metadata and checklist examples", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-fenced-metadata-"),
@@ -921,6 +927,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers a milestone recording two Actual lines: writes it and expects the ambiguous record rejected.
   it("strict mode rejects duplicate Actual fields", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-duplicate-actual-"),
@@ -948,6 +955,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers a milestone waiting on human review: writes it and expects only [human] proof left open.
   it("strict mode allows only human-owned proof to remain open at the pending gate", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-human-pending-"),
@@ -974,6 +982,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers a plan where two milestones claim to be in progress: writes it and expects the second rejected.
   it("strict mode rejects more than one active milestone", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-multiple-active-"),
@@ -1045,6 +1054,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers proof work left unestimated: writes bare testing tasks and expects strict mode to reject them.
   it("strict mode rejects unestimated testing and mid-proof work", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -1077,6 +1087,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers a milestone marked done with no measured Actual: writes it and expects the claim rejected.
   it("strict mode rejects a completed milestone without structured Actual", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -1105,6 +1116,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers finished-and-recorded work: writes a completed milestone with a structured Actual, expects a pass.
   it("strict mode accepts a completed milestone with structured Actual", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -1140,6 +1152,7 @@ describe("plans check", () => {
     "Actual: unavailable: timing was never started",
     "Actual: incomplete: receipt contains a discarded open span",
   ]) {
+    // Covers milestones that decline to invent minutes: writes each honest no-number Actual and expects a pass.
     it(`strict mode accepts the honest no-number state in ${actualLine}`, () => {
       const temporaryRoot = mkdtempSync(
         join(tmpdir(), "goat-flow-plan-check-"),
@@ -1169,6 +1182,7 @@ describe("plans check", () => {
     });
   }
 
+  // Covers a measured claim with no receipt behind it: writes the plan and expects strict mode to reject it.
   it("strict mode rejects measured Actual without a finalized embedded receipt", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -1214,6 +1228,7 @@ describe("plans check", () => {
     "## Scope",
   ].join("\n");
 
+  // Covers hand-written receipts predating plans time: writes one no Actual cites and expects advisory only.
   it("treats a malformed receipt as advisory when no Actual claims it", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-legacy-"));
     const planPath = writeCheckFixture(
@@ -1239,6 +1254,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers the same malformed receipt once an Actual cites it: writes it and expects a hard rejection.
   it("still rejects a malformed receipt a measured Actual claims", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-claim-"));
     const planPath = writeCheckFixture(
@@ -1265,6 +1281,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers the reconcile step behind a measured Actual: writes receipt seconds and minutes that must agree.
   it("strict mode reconciles measured Actual with receipt seconds and allocation", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const matchingBody = withFinalizedTimingReceipt(
@@ -1306,9 +1323,10 @@ describe("plans check", () => {
   });
 
   /*
-   * An open span is stronger evidence that work started than an unchecked box.
-   * Checking only checkbox state lets a milestone claim not-started while its
-   * own receipt records time being spent on it.
+   * Covers a milestone that says not-started while its own receipt is running:
+   * writes that plan fixture and expects strict mode to reject it. An open span
+   * is stronger evidence that work started than an unchecked box, so trusting
+   * checkbox state alone would let time already spent go unreported.
    */
   it("strict mode rejects an active timing receipt on a not-started milestone", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-open-"));
@@ -1351,7 +1369,7 @@ describe("plans check", () => {
     }
   });
 
-  // An optional band is only meaningful if it shares the headline's unit and centre.
+  // Covers an optional forecast band: writes one sharing the headline's unit and centre and expects a pass.
   it("strict mode accepts an ordered forecast range centred on the headline", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));
     const planPath = writeCheckFixture(
@@ -1403,7 +1421,9 @@ describe("plans check", () => {
     },
   ];
 
+  // Covers each bad forecast band separately so TAP names the exact one.
   for (const testCase of forecastRangeFailureCases) {
+    // Covers one malformed band an author could type: writes that plan fixture and expects a rejection.
     it(`strict mode rejects ${testCase.name} forecast ranges`, () => {
       const temporaryRoot = mkdtempSync(
         join(tmpdir(), `goat-flow-plan-range-${testCase.name}-`),
@@ -1432,7 +1452,7 @@ describe("plans check", () => {
     });
   }
 
-  // Fewer than three samples cannot support a correction factor, so say so instead of guessing one.
+  // Covers thin calibration data: writes fewer than three samples and expects uncalibrated, not a guess.
   it("reports uncalibrated below three eligible measured samples", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-calib-"));
     const planPath = writeCheckPlan(temporaryRoot, {
@@ -1451,7 +1471,7 @@ describe("plans check", () => {
     }
   });
 
-  // The three Actual shapes goat-debug-improve actually carries must all stay out of calibration.
+  // Covers the three Actual shapes that must stay out of calibration: writes each and expects all excluded.
   it("excludes prose-measured, retrospective, and empty legacy Actuals from calibration", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-legacy-"));
     const legacyBody = (
@@ -1501,7 +1521,7 @@ describe("plans check", () => {
     }
   });
 
-  // Human ratification is the eligibility signal; measured data alone is not enough.
+  // Covers milestones awaiting human sign-off: writes one and expects it excluded until ratified.
   it("excludes human-verification-pending milestones from calibration", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-gate-"));
     const planPath = writeCheckPlan(temporaryRoot, {
@@ -1525,7 +1545,7 @@ describe("plans check", () => {
     }
   });
 
-  // Ratios divide raw receipt seconds by estimated minutes so rounding never compounds.
+  // Covers the calibration maths: writes three eligible samples and expects a median plus observed bounds.
   it("reports a calibration median and observed bounds from three eligible samples", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-median-"));
     const planPath = writeCheckPlan(temporaryRoot, {
@@ -1550,6 +1570,7 @@ describe("plans check", () => {
     }
   });
 
+  // Covers an Actual whose split misses its own total: writes it and expects strict mode to reject it.
   it("strict mode rejects an Actual split that does not sum to its total", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(
@@ -1614,7 +1635,7 @@ describe("plans check", () => {
     assert.match(result.stderr, /--strict is only valid for plans check/u);
   });
 
-  // Write-oriented flags have no meaning for a read-only report.
+  // Covers write-oriented flags on a read-only report: writes a plan fixture and expects a usage error.
   it("rejects --force and --output as usage errors", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const planPath = writeCheckFixture(

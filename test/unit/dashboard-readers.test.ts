@@ -498,6 +498,7 @@ describe("dashboard payload readers", () => {
     assert.equal(score, expectedTwoPassesOutOfFourScore);
   });
 
+  // Covers older reports with no concern limits: they must read as an empty list, not missing data.
   it("preserves concern limits and treats older missing limits as an empty list", () => {
     const report = loadHelpers().readDashboardReport({
       status: "pass",

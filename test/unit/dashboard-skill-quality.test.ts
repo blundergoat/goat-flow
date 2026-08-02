@@ -16,6 +16,12 @@ const SKILL_QUALITY_FRAGMENT_PATH = resolve(
   "dashboard-app-skill-quality-fragments.ts",
 );
 
+/** Verdict copy the dashboard renders beside one skill-quality score. */
+interface SkillEvaluatorVerdict {
+  title: string;
+  desc: string;
+}
+
 /** Browser-local skill-quality helpers exposed to this VM contract fixture. */
 interface SkillQualityHelpers {
   /** Render the banner that exposes composition limits beside a skill score. */
@@ -31,10 +37,7 @@ interface SkillQualityHelpers {
   /** Return the evaluator helper used to temper clean verdicts with evidence limits. */
   dashboardSkillEvaluatorResultFragment(): {
     /** Derive the evaluator verdict shown for one skill-quality report. */
-    skillEvaluatorVerdict(report: Record<string, unknown>): {
-      title: string;
-      desc: string;
-    };
+    skillEvaluatorVerdict(report: Record<string, unknown>): SkillEvaluatorVerdict;
   };
 }
 

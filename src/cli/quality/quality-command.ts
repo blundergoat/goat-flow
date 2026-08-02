@@ -220,7 +220,14 @@ async function handleQualityValidateSubcommand(
   deps.writeOutput(options, `OK ${path}`);
 }
 
-/** Ask Git whether one exact prospective local report path is ignored. */
+/**
+ * Ask Git whether one exact prospective local report path is ignored.
+ *
+ * @param projectRoot - Repository root the `git check-ignore` query runs in.
+ * @param relativePath - Prospective report path, relative to `projectRoot`.
+ * @returns True when Git reports the path as ignored, so writing it keeps local
+ *   quality state out of version control.
+ */
 export function isQualityPersistencePathIgnored(
   projectRoot: string,
   relativePath: string,

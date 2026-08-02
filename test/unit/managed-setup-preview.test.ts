@@ -128,7 +128,7 @@ describe("managed setup classification", () => {
   });
 
   /**
-   * Fixture models the first CLI install into a target set up before
+   * Fixture writes the first CLI install into a target set up before
    * install-state existed: a differing regular managed file must warn and
    * refresh, never block the whole upgrade behind --force.
    */
@@ -231,7 +231,12 @@ describe("managed install state", () => {
     }
   });
 
-  /** This fixture plants a symlinked temp entry and proves the baseline write cannot be redirected. */
+  /**
+   * This fixture writes a symlinked temp entry, then proves the preview still
+   * writes baseline bytes to the real destination. The redirect must fail even
+   * when an attacker pre-plants the temp path, so the victim file outside the
+   * project stays untouched.
+   */
   it("never writes baseline bytes through a pre-planted temp symlink", () => {
     const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-preview-state-"));
     const victimPath = join(
