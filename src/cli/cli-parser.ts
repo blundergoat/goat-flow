@@ -32,6 +32,8 @@ import {
   type ParsedArgValues,
   type ParsedCLI,
   type PlansSubcommand,
+  type PlansTimeAction,
+  type PlansTimeCategory,
   type QualitySubcommand,
   type SkillSubcommand,
 } from "./cli-types.js";
@@ -321,25 +323,78 @@ function parseHookScenarioArg(
 }
 
 /**
- * Parse the required `plans export|check <plan-path>` user journey.
+ * Parse read-only plan paths or `plans time <action> <milestone-file>`.
  * Throws CLIError when the operation or plan-path arity is invalid.
  */
 function parsePlansPositionals(positionals: string[]): {
   plansSubcommand: PlansSubcommand;
+  plansTimeAction: PlansTimeAction | null;
   projectPath: string;
 } {
-  const [subcommand, planPath, ...extraPositionals] = positionals;
+  const [subcommand, second, third, ...extraPositionals] = positionals;
 
-  // Export and check are the only local plan operations exposed by the CLI.
-  if (subcommand !== "export" && subcommand !== "check") {
-    throw new CLIError('plans requires subcommand "export" or "check".', 2);
+  if (subcommand === "time") {
+    return parsePlansTimePositionals(second, third, extraPositionals);
   }
 
-  // A concrete plan directory is required and extra paths would make output ambiguous.
-  if (!planPath || extraPositionals.length > 0) {
+  return parsePlansReadPositionals(subcommand, second, third, extraPositionals);
+}
+
+/** Parse the action and milestone path owned by `plans time`. */
+function parsePlansTimePositionals(
+  action: string | undefined,
+  milestonePath: string | undefined,
+  extraPositionals: string[],
+): {
+  plansSubcommand: "time";
+  plansTimeAction: PlansTimeAction;
+  projectPath: string;
+} {
+  if (action !== "start" && action !== "stop" && action !== "status") {
+    throw new CLIError(
+      'plans time requires action "start", "stop", or "status".',
+      2,
+    );
+  }
+  if (!milestonePath || extraPositionals.length > 0) {
+    throw new CLIError(
+      `plans time ${action} requires one <milestone-file>.`,
+      2,
+    );
+  }
+  return {
+    plansSubcommand: "time",
+    plansTimeAction: action,
+    projectPath: resolve(milestonePath),
+  };
+}
+
+/** Parse the single plan directory consumed by export and check. */
+function parsePlansReadPositionals(
+  subcommand: string | undefined,
+  planPath: string | undefined,
+  third: string | undefined,
+  extraPositionals: string[],
+): {
+  plansSubcommand: "export" | "check";
+  plansTimeAction: null;
+  projectPath: string;
+} {
+  if (subcommand !== "export" && subcommand !== "check") {
+    throw new CLIError(
+      'plans requires subcommand "export", "check", or "time".',
+      2,
+    );
+  }
+  // Read-only consumers accept exactly one plan directory after their subcommand.
+  if (!planPath || third !== undefined || extraPositionals.length > 0) {
     throw new CLIError(`plans ${subcommand} requires one <plan-path>.`, 2);
   }
-  return { plansSubcommand: subcommand, projectPath: resolve(planPath) };
+  return {
+    plansSubcommand: subcommand,
+    plansTimeAction: null,
+    projectPath: resolve(planPath),
+  };
 }
 
 function parseHookTogglePositionals(
@@ -485,6 +540,19 @@ function validatePlansFlags(
   command: Command,
   values: ParsedArgValues,
   plansSubcommand: PlansSubcommand | null,
+  plansTimeAction: PlansTimeAction | null,
+): void {
+  validatePlansStrictFlag(command, values, plansSubcommand);
+  validatePlansCategoryFlag(command, values, plansSubcommand, plansTimeAction);
+  validatePlansStopFlags(command, values, plansSubcommand, plansTimeAction);
+  validatePlansForceFlag(command, values, plansSubcommand);
+}
+
+/** Keep strict accounting on the read-only check route. */
+function validatePlansStrictFlag(
+  command: Command,
+  values: ParsedArgValues,
+  plansSubcommand: PlansSubcommand | null,
 ): void {
   if (
     parsedFlag(values, "strict") &&
@@ -492,6 +560,78 @@ function validatePlansFlags(
   ) {
     throw new CLIError("--strict is only valid for plans check.", 2);
   }
+}
+
+/** Require a valid category only on timing starts. */
+function validatePlansCategoryFlag(
+  command: Command,
+  values: ParsedArgValues,
+  plansSubcommand: PlansSubcommand | null,
+  plansTimeAction: PlansTimeAction | null,
+): void {
+  const category = parsedString(values, "category");
+  const isTimingStart =
+    command === "plans" &&
+    plansSubcommand === "time" &&
+    plansTimeAction === "start";
+  if (category !== undefined && !isTimingStart) {
+    throw new CLIError("--category is only valid for plans time start.", 2);
+  }
+  if (isTimingStart && category === undefined) {
+    throw new CLIError("plans time start requires --category.", 2);
+  }
+}
+
+/** Keep pause recovery/finalization flags on timing stops and mutually exclusive. */
+function validatePlansStopFlags(
+  command: Command,
+  values: ParsedArgValues,
+  plansSubcommand: PlansSubcommand | null,
+  plansTimeAction: PlansTimeAction | null,
+): void {
+  const shouldFinalize = parsedFlag(values, "finalize");
+  const shouldDiscardOpen = parsedFlag(values, "discard-open");
+  const hasStopFlag = shouldFinalize || shouldDiscardOpen;
+  const isTimingStop =
+    command === "plans" &&
+    plansSubcommand === "time" &&
+    plansTimeAction === "stop";
+  if (hasStopFlag && !isTimingStop) {
+    throw new CLIError(
+      "--finalize and --discard-open are only valid for plans time stop.",
+      2,
+    );
+  }
+  if (shouldFinalize && shouldDiscardOpen) {
+    throw new CLIError("--finalize and --discard-open cannot be combined.", 2);
+  }
+}
+
+/** Keep plan-force semantics limited to generated export replacement. */
+function validatePlansForceFlag(
+  command: Command,
+  values: ParsedArgValues,
+  plansSubcommand: PlansSubcommand | null,
+): void {
+  if (
+    parsedFlag(values, "force") &&
+    command === "plans" &&
+    plansSubcommand !== "export"
+  ) {
+    throw new CLIError("--force is only valid for plans export.", 2);
+  }
+}
+
+/** Parse a start category after route validation has rejected misplaced flags. */
+function parsePlansTimeCategoryArg(
+  value: string | undefined,
+  action: PlansTimeAction | null,
+): PlansTimeCategory | null {
+  if (action !== "start" || value === undefined) return null;
+  if (value !== "product" && value !== "proof" && value !== "other") {
+    throw new CLIError("--category must be product, proof, or other.", 2);
+  }
+  return value;
 }
 
 /** Returns true when the command resolves to a deterministic install/apply path. */
@@ -589,13 +729,14 @@ function validateFlagCombinations(
   skillSubcommand: SkillSubcommand | null,
   hookSubcommand: HookSubcommand | null,
   plansSubcommand: PlansSubcommand | null,
+  plansTimeAction: PlansTimeAction | null,
 ): void {
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
   validateQualityFlags(command, values, qualitySubcommand);
   validateSkillFlags(command, values, qualitySubcommand, skillSubcommand);
   validateHookFlags(command, values, hookSubcommand);
-  validatePlansFlags(command, values, plansSubcommand);
+  validatePlansFlags(command, values, plansSubcommand, plansTimeAction);
 }
 
 /** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
@@ -667,6 +808,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       skill: { type: "string" },
       scenario: { type: "string" },
       strict: { type: "boolean", default: false },
+      category: { type: "string" },
+      finalize: { type: "boolean", default: false },
+      "discard-open": { type: "boolean", default: false },
       yes: { type: "boolean", short: "y", default: false },
       json: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -702,7 +846,11 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   const plansPositionals =
     command === "plans"
       ? parsePlansPositionals(commandPositionals)
-      : { plansSubcommand: null, projectPath: qualityPositionals.projectPath };
+      : {
+          plansSubcommand: null,
+          plansTimeAction: null,
+          projectPath: qualityPositionals.projectPath,
+        };
   const reviewFields = buildReviewCLIFields(command, commandPositionals);
   const diagnosticsPositionals: {
     diagnosticsSubcommand: DiagnosticsSubcommand | null;
@@ -743,6 +891,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     skillPositionals.skillSubcommand,
     hooksPositionals.hookSubcommand,
     plansPositionals.plansSubcommand,
+    plansPositionals.plansTimeAction,
   );
 
   return {
@@ -787,6 +936,13 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     ...reviewFields,
     plansSubcommand: plansPositionals.plansSubcommand,
     plansStrict: parsedFlag(parsedValues, "strict"),
+    plansTimeAction: plansPositionals.plansTimeAction,
+    plansTimeCategory: parsePlansTimeCategoryArg(
+      parsedString(parsedValues, "category"),
+      plansPositionals.plansTimeAction,
+    ),
+    plansTimeFinalize: parsedFlag(parsedValues, "finalize"),
+    plansTimeDiscardOpen: parsedFlag(parsedValues, "discard-open"),
     diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,
     includeAll: parsedFlag(parsedValues, "all"),
     isDevMode: parsedFlag(parsedValues, "dev"),

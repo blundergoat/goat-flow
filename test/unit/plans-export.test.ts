@@ -615,10 +615,56 @@ describe("plans export", () => {
     assert.equal(record.effort?.totalMinutes, plannedTotalMinutes);
     assert.deepEqual(record.effort?.split, { product: 34, proof: 7, other: 3 });
     assert.deepEqual(record.effort?.actual, {
+      state: "retrospective",
       totalMinutes: 51,
       split: { product: 39, proof: 9, other: 3 },
       reason: "one extra proof cycle",
     });
+  });
+
+  it("preserves finalized timing receipts in JSON and Markdown exports", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-receipt-"),
+    );
+    const planPath = join(temporaryRoot, "1.15.0");
+    const receipt = [
+      "## Timing Receipt",
+      "",
+      "**Receipt state:** finalized",
+      "**Recorded seconds:** 120 total (61 product / 59 proof / 0 other)",
+      "**Allocated minutes:** 2 total (1 product / 1 proof / 0 other)",
+      "",
+      "| Segment | Category | Start UTC / epoch | End UTC / epoch | Seconds | State |",
+      "|---|---|---|---|---:|---|",
+      "| M42-S01 | product | 1970-01-01T00:01:40Z / 100 | 1970-01-01T00:02:41Z / 161 | 61 | closed |",
+      "| M42-S02 | proof | 1970-01-01T00:03:20Z / 200 | 1970-01-01T00:04:19Z / 259 | 59 | closed |",
+      "",
+    ].join("\n");
+    const body = completeMilestoneBody().replace(
+      "## Scope Discipline",
+      `${receipt}## Scope Discipline`,
+    );
+    writePlanFixture(planPath, body);
+
+    try {
+      const jsonResult = runPlansExport(planPath, "--format", "json");
+      const markdownResult = runPlansExport(planPath, "--format", "markdown");
+
+      assert.equal(jsonResult.status, 0, jsonResult.stderr);
+      assert.equal(markdownResult.status, 0, markdownResult.stderr);
+      const records = JSON.parse(jsonResult.stdout) as Array<{
+        timingReceipt: { state: string; summary: { totalSeconds: number } };
+        timingReceiptMarkdown: string;
+      }>;
+      assert.equal(records[0]?.timingReceipt.state, "finalized");
+      assert.equal(records[0]?.timingReceipt.summary.totalSeconds, 120);
+      assert.match(records[0]?.timingReceiptMarkdown ?? "", /M42-S02/u);
+      assert.match(markdownResult.stdout, /## Timing Receipt/u);
+      assert.match(markdownResult.stdout, /120 recorded-unpaused|120 total/u);
+      assert.match(markdownResult.stdout, /M42-S02/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
   });
 
   // A body without its milestone heading is malformed because an issue title cannot be inferred safely.

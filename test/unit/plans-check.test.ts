@@ -168,6 +168,27 @@ function canonicalMilestoneBody(
     : body;
 }
 
+/** Insert one finalized receipt before the first body section. */
+function withFinalizedTimingReceipt(body: string, totalSeconds = 120): string {
+  return body.replace(
+    "## Scope",
+    [
+      "## Timing Receipt",
+      "",
+      "**Receipt state:** finalized",
+      `**Recorded seconds:** ${totalSeconds} total (61 product / 59 proof / 0 other)`,
+      "**Allocated minutes:** 2 total (1 product / 1 proof / 0 other)",
+      "",
+      "| Segment | Category | Start UTC / epoch | End UTC / epoch | Seconds | State |",
+      "|---|---|---|---|---:|---|",
+      "| M01-S01 | product | 1970-01-01T00:01:40Z / 100 | 1970-01-01T00:02:41Z / 161 | 61 | closed |",
+      "| M01-S02 | proof | 1970-01-01T00:03:20Z / 200 | 1970-01-01T00:04:19Z / 259 | 59 | closed |",
+      "",
+      "## Scope",
+    ].join("\n"),
+  );
+}
+
 describe("plans check", () => {
   it("accepts the compact Small rendering in strict mode", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
@@ -1034,9 +1055,112 @@ describe("plans check", () => {
       assert.equal(result.status, 0, result.stderr);
       assert.match(
         result.stdout,
-        /actual: ~12 min \(8 product \/ 3 proof \/ 1 other\) - one extra focused check/u,
+        /actual: retrospective ~12 min \(8 product \/ 3 proof \/ 1 other\) - one extra focused check/u,
       );
       assert.doesNotMatch(result.stdout, /error:/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  for (const actualLine of [
+    "Actual: unavailable: timing was never started",
+    "Actual: incomplete: receipt contains a discarded open span",
+  ]) {
+    it(`strict mode accepts the honest no-number state in ${actualLine}`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-plan-check-"),
+      );
+      const planPath = writeCheckFixture(
+        temporaryRoot,
+        estimatedMilestoneBody(
+          "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+          ["- [x] Build the thing (est: 7 min product)"],
+          {
+            status: "complete",
+            actualLine,
+            planAdminOverhead: "1 min other",
+            testingGateLines: ["- [x] Run typecheck (est: 2 min proof)"],
+          },
+        ),
+      );
+
+      try {
+        const result = runPlansCheck(planPath, "--strict");
+
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.doesNotMatch(result.stdout, /error:/u);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  it("strict mode rejects measured Actual without a finalized embedded receipt", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+        ["- [x] Build the thing (est: 7 min product)"],
+        {
+          status: "complete",
+          actualLine:
+            "Actual: measured: ~2 min agent-time (1 product / 1 proof / 0 other) - receipt 120 recorded-unpaused seconds",
+          planAdminOverhead: "1 min other",
+          testingGateLines: ["- [x] Run typecheck (est: 2 min proof)"],
+        },
+      ),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+
+      assert.equal(result.status, 1);
+      assert.match(
+        result.stdout,
+        /measured Actual requires a finalized embedded Timing Receipt/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode reconciles measured Actual with receipt seconds and allocation", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
+    const matchingBody = withFinalizedTimingReceipt(
+      estimatedMilestoneBody(
+        "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+        ["- [x] Build the thing (est: 7 min product)"],
+        {
+          status: "complete",
+          actualLine:
+            "Actual: measured: ~2 min agent-time (1 product / 1 proof / 0 other) - receipt 120 recorded-unpaused seconds",
+          planAdminOverhead: "1 min other",
+          testingGateLines: ["- [x] Run typecheck (est: 2 min proof)"],
+        },
+      ),
+    );
+    const planPath = writeCheckFixture(temporaryRoot, matchingBody);
+
+    try {
+      const matching = runPlansCheck(planPath, "--strict");
+      assert.equal(matching.status, 0, matching.stdout + matching.stderr);
+
+      writeFileSync(
+        join(planPath, "M01-fixture.md"),
+        matchingBody.replace(
+          "receipt 120 recorded-unpaused seconds",
+          "receipt 121 recorded-unpaused seconds",
+        ),
+        "utf-8",
+      );
+      const mismatched = runPlansCheck(planPath, "--strict");
+      assert.equal(mismatched.status, 1);
+      assert.match(
+        mismatched.stdout,
+        /measured Actual receipt says 121 seconds but Timing Receipt says 120/u,
+      );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

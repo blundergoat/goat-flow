@@ -130,6 +130,8 @@ Local-only artifacts may prove that a named producer recorded bounded metadata a
 
 `EvidenceEnvelope` is the only runtime event schema. Payloads contain JSON-compatible summary metadata; raw prompts, terminal output or scrollback, uploads, screenshots, JSON/HTML bodies, and tool output require hash-only `RedactedEvidenceValue` markers. Paths, labels, identifiers, warning text, and other metadata remain local-sensitive and must be scrubbed before any shareable export. There is no automatic retention or purge promise; users control cleanup of gitignored artifacts.
 
+Timing receipts are milestone-local plan state. The embedded receipt, not the local event stream, is the validation authority for a measured Actual. Removing, truncating, or moving gitignored event logs must not change a finalized receipt's validity.
+
 | Event kind | Status | Expected producer | Actor | Allowed payload budget | Redaction requirement | Intended local consumer |
 |------------|--------|-------------------|-------|------------------------|-----------------------|-------------------------|
 | `terminal.create` | existing | `dashboard-session-trace` | server | Session id, runner, working directory, target path | No prompt or terminal body | Dashboard recovery and support diagnosis |
@@ -149,8 +151,9 @@ Local-only artifacts may prove that a named producer recorded bounded metadata a
 | `project.remove` | existing | `dashboard-session-trace` | server | Removed-project count | No removed path list | Project-list continuity |
 | `project.switch` | existing | `dashboard-session-trace` | server | Readiness state and project identity metadata | No config or file body | Selected-target diagnosis |
 | `hook.verify` | new in 1.14.0 | `hooks-runtime-evidence` | cli | Scenario id, agent, expected/observed state, verdict, evidence level, duration, and reason code | No command operand, stdout, stderr, or external-agent delivery claim | Checkout-local deny-hook proof and diagnosis |
+| `plan.time` | new in 1.15.0 | `plans-time` | cli | Action, category, receipt state, segment count, and finalized raw-second total | No milestone body, work descriptions, prompts, commands, or source content | Timing-transition diagnosis; never Actual validation |
 
-Route/checkpoint/promotion event families and all other runtime event families remain **deferred**. M17 owns `hook.verify`; every future producer must add its exact event kind, producer, actor, bounded payload, redaction rule, consumer, and focused validation before extending `EvidenceEventKind`. M14 added no event kind.
+M01 timing adds `plan.time`; route/checkpoint/promotion event families and all other runtime event families remain **deferred**. Every future producer must add its exact event kind, producer, actor, bounded payload, redaction rule, consumer, and focused validation before extending `EvidenceEventKind`.
 
 ### Evidence Depth and Tool Trust
 

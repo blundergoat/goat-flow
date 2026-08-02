@@ -31,6 +31,10 @@ import {
   type PlanExportEffort,
   type TaskEstimateFields,
 } from "./plans-effort.js";
+import {
+  parseTimingReceiptMarkdown,
+  type PlanTimingReceipt,
+} from "./plans-time.js";
 
 /** One task checkbox preserved for JSON consumers and future body generators. */
 interface PlanExportTask extends TaskEstimateFields {
@@ -54,6 +58,8 @@ export interface PlanExportRecord {
   midProofItems: PlanExportTask[];
   exitCriteriaItems: PlanExportTask[];
   effort?: PlanExportEffort;
+  timingReceiptMarkdown: string;
+  timingReceipt?: PlanTimingReceipt;
   taskEstimateTotals?: PlanEffortSplit;
   planAdminEstimate?: TaskEstimateFields;
   workEstimateTotals?: PlanEffortSplit;
@@ -431,6 +437,16 @@ export function parseMilestoneMarkdown(
     warnings,
     "task",
   );
+  const timingReceiptMarkdown = readSingleSectionMarkdown(
+    sections,
+    ["timing receipt"],
+    warnings,
+    "timing receipt",
+  );
+  const timingReceipt = parseTimingReceiptMarkdown(
+    timingReceiptMarkdown,
+    warnings,
+  );
   const verificationMarkdown = readProofMarkdown(sections, warnings);
   const midProofMarkdown = readSingleSectionMarkdown(
     sections,
@@ -497,6 +513,7 @@ export function parseMilestoneMarkdown(
     scopeMarkdown,
     boundaryMarkdown,
     taskMarkdown,
+    timingReceiptMarkdown,
     tasks,
     testingGateItems,
     midProofMarkdown,
@@ -514,6 +531,7 @@ export function parseMilestoneMarkdown(
     planAdminEstimate,
     workEstimateTotals,
   );
+  if (timingReceipt) record.timingReceipt = timingReceipt;
   return record;
 }
 
@@ -592,6 +610,16 @@ export function redactPlanExportRecord(
     scopeMarkdown: scrubDurableText(record.scopeMarkdown),
     boundaryMarkdown: scrubDurableText(record.boundaryMarkdown),
     taskMarkdown: scrubDurableText(record.taskMarkdown),
+    timingReceiptMarkdown: scrubDurableText(record.timingReceiptMarkdown),
+    ...(record.timingReceipt && {
+      timingReceipt: {
+        ...record.timingReceipt,
+        segments: record.timingReceipt.segments.map((segment) => ({
+          ...segment,
+          id: scrubDurableText(segment.id),
+        })),
+      },
+    }),
     tasks: record.tasks.map((task) => ({
       ...task,
       text: scrubDurableText(task.text),
@@ -665,6 +693,9 @@ function renderPlanExportMarkdown(record: PlanExportRecord): string {
     ...renderEffortMetadata(record),
     `**Objective:** ${providedOrMissing(record.objective, missingText)}`,
     "",
+    ...(record.timingReceiptMarkdown
+      ? ["## Timing Receipt", "", record.timingReceiptMarkdown, ""]
+      : []),
     "## Scope",
     "",
     providedOrMissing(record.scopeMarkdown, missingText),

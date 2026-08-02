@@ -30,8 +30,14 @@ export type Command =
   | "plans"
   | "skill";
 
-/** Local plan operations; export previews or writes portable milestone bodies. */
-export type PlansSubcommand = "export" | "check";
+/** Local plan operations: portable reads plus explicit milestone timing transitions. */
+export type PlansSubcommand = "export" | "check" | "time";
+
+/** Explicit lifecycle actions under `plans time`. */
+export type PlansTimeAction = "start" | "stop" | "status";
+
+/** Categories stamped on timing spans and reconciled into structured Actuals. */
+export type PlansTimeCategory = "product" | "proof" | "other";
 
 /** Deterministic checks for drafted goat-review Markdown. */
 export type ReviewSubcommand = "validate";
@@ -165,6 +171,10 @@ export interface ParsedCLI extends CLIOptions {
   reviewValidatePath: string | null;
   plansSubcommand: PlansSubcommand | null;
   plansStrict: boolean;
+  plansTimeAction: PlansTimeAction | null;
+  plansTimeCategory: PlansTimeCategory | null;
+  plansTimeFinalize: boolean;
+  plansTimeDiscardOpen: boolean;
   diagnosticsSubcommand: DiagnosticsSubcommand | null;
   includeAll: boolean;
 }

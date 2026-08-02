@@ -50,6 +50,7 @@ Commands:
   review validate [report-file] [--output <path>]  Validate goat-review Markdown; structural failures exit 1, advisory warnings stay at exit 0
   plans export      Preview or write redacted local milestone bundles
   plans check       Check milestone effort arithmetic; report rough 70/20/10 mix drift
+  plans time        System-stamp start/stop/status timing receipts in one milestone
   events tail       Read local gitignored evidence-envelope events
   skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
   skill doctor      Explain installed skill paths, invocation syntax, and static load blockers.
@@ -79,6 +80,9 @@ Flags:
   --red-log <file>  Skill new: failing RED receipt required before a skill write
   --scenario <name> Hooks verify: required bounded scenario group (deny-hook)
   --strict          Plans check: require fully derived current-format estimates and completed Actuals
+  --category <kind> Plans time start: product, proof, or other
+  --finalize        Plans time stop: close the open span and finalize a measured receipt
+  --discard-open    Plans time stop: discard an interrupted span without inventing an end
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
   --dry-run         Install/setup: preview managed template drift without changing the target
   --force           Install/setup --apply: overwrite managed seeds; plans export: regenerate output
@@ -131,6 +135,10 @@ Examples:
   goat-flow plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
   goat-flow plans check .goat-flow/plans/1.14.0
   goat-flow plans check .goat-flow/plans/1.14.0 --strict
+  goat-flow plans time start .goat-flow/plans/1.15.0/example/M01-example.md --category product
+  goat-flow plans time stop .goat-flow/plans/1.15.0/example/M01-example.md
+  goat-flow plans time stop .goat-flow/plans/1.15.0/example/M01-example.md --finalize
+  goat-flow plans time status .goat-flow/plans/1.15.0/example/M01-example.md
   goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
   goat-flow skill new "<description>" --red-log <file>
                                       Scaffold a skill after failing RED evidence

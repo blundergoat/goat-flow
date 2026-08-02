@@ -38,6 +38,7 @@ describe("plans effort notation", () => {
     );
 
     assert.deepEqual(effort?.actual, {
+      state: "retrospective",
       totalMinutes: 51,
       split: { product: 39, proof: 9, other: 3 },
       reason: "one extra proof cycle",
@@ -54,10 +55,65 @@ describe("plans effort notation", () => {
     );
 
     assert.deepEqual(effort?.actual, {
+      state: "retrospective",
       totalMinutes: 35,
       split: { product: 22, proof: 10, other: 3 },
       reason: "rotation needed another check",
     });
+    assert.deepEqual(warnings, []);
+  });
+
+  it("parses explicit measured, retrospective, unavailable, and incomplete states", () => {
+    const warnings: string[] = [];
+
+    assert.deepEqual(
+      parseEffortLineValue(
+        "~3 min agent-time (1 product / 1 proof / 1 other)",
+        warnings,
+        "measured: ~2 min agent-time (1 product / 1 proof / 0 other) - receipt 120 recorded-unpaused seconds",
+      )?.actual,
+      {
+        state: "measured",
+        totalMinutes: 2,
+        split: { product: 1, proof: 1, other: 0 },
+        reason: "receipt 120 recorded-unpaused seconds",
+      },
+    );
+    assert.deepEqual(
+      parseEffortLineValue(
+        "~3 min agent-time (1 product / 1 proof / 1 other)",
+        warnings,
+        "retrospective: ~4 min agent-time (2 product / 1 proof / 1 other) - timing was not instrumented",
+      )?.actual,
+      {
+        state: "retrospective",
+        totalMinutes: 4,
+        split: { product: 2, proof: 1, other: 1 },
+        reason: "timing was not instrumented",
+      },
+    );
+    assert.deepEqual(
+      parseEffortLineValue(
+        "~3 min agent-time (1 product / 1 proof / 1 other)",
+        warnings,
+        "unavailable: timing was never started",
+      )?.actual,
+      {
+        state: "unavailable",
+        reason: "timing was never started",
+      },
+    );
+    assert.deepEqual(
+      parseEffortLineValue(
+        "~3 min agent-time (1 product / 1 proof / 1 other)",
+        warnings,
+        "incomplete: receipt contains a discarded open span",
+      )?.actual,
+      {
+        state: "incomplete",
+        reason: "receipt contains a discarded open span",
+      },
+    );
     assert.deepEqual(warnings, []);
   });
 
@@ -199,6 +255,7 @@ describe("plans effort notation", () => {
         totalMinutes: 25,
         split: { product: 18, proof: 5, other: 2 },
         actual: {
+          state: "retrospective",
           totalMinutes: 35,
           split: { product: 22, proof: 10, other: 3 },
           reason: "one extra proof cycle",
@@ -208,11 +265,19 @@ describe("plans effort notation", () => {
     );
     assert.equal(
       renderActualLine({
+        state: "retrospective",
         totalMinutes: 35,
         split: { product: 22, proof: 10, other: 3 },
         reason: "one extra proof cycle",
       }),
-      "**Actual:** ~35 min agent-time (22 product / 10 proof / 3 other) - one extra proof cycle",
+      "**Actual:** retrospective: ~35 min agent-time (22 product / 10 proof / 3 other) - one extra proof cycle",
+    );
+    assert.equal(
+      renderActualLine({
+        state: "unavailable",
+        reason: "timing was never started",
+      }),
+      "**Actual:** unavailable: timing was never started",
     );
   });
 });

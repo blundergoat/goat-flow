@@ -7,7 +7,11 @@
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
-import { type PlanEffortSplit } from "./plans-effort.js";
+import {
+  isNumericActual,
+  type PlanEffortNumericActual,
+  type PlanEffortSplit,
+} from "./plans-effort.js";
 import {
   handlePlansExportCommand,
   isPlansExportInputError,
@@ -15,6 +19,10 @@ import {
   redactPlanExportRecord,
   type PlanExportRecord,
 } from "./plans-export.js";
+import {
+  handlePlansTimeCommand,
+  type PlanTimingSummary,
+} from "./plans-time.js";
 
 /** Plan-level effort-mix target percentages from goat-plan's estimation guidance. */
 const MIX_TARGET: PlanEffortSplit = { product: 70, proof: 20, other: 10 };
@@ -73,6 +81,7 @@ function isValidationWarning(warning: string, strict: boolean): boolean {
   if (!strict) return false;
   return (
     warning.includes("actual effort not parseable") ||
+    warning.startsWith("timing receipt") ||
     /^multiple .+ values supplied$/u.test(warning) ||
     STRICT_STRUCTURAL_WARNINGS.has(warning) ||
     /^conflicting .+ representations$/u.test(warning)
@@ -207,13 +216,24 @@ function collectActualErrors(record: PlanExportRecord): string[] {
       `${record.sourceFile}: not-started milestone must not include Actual before work begins`,
     );
   }
-  if (!actual.split) {
-    errors.push(
-      `${record.sourceFile}: structured Actual requires a product/proof/other split`,
-    );
+  if (!isNumericActual(actual)) {
     return errors;
   }
+  errors.push(...collectNumericActualErrors(record, actual));
+  return errors;
+}
 
+/** Validate the split shared by measured and retrospective numeric Actuals. */
+function collectNumericActualErrors(
+  record: PlanExportRecord,
+  actual: PlanEffortNumericActual,
+): string[] {
+  if (!actual.split) {
+    return [
+      `${record.sourceFile}: structured Actual requires a product/proof/other split`,
+    ];
+  }
+  const errors: string[] = [];
   const actualSplitSum =
     actual.split.product + actual.split.proof + actual.split.other;
   if (actualSplitSum !== actual.totalMinutes) {
@@ -221,7 +241,76 @@ function collectActualErrors(record: PlanExportRecord): string[] {
       `${record.sourceFile}: Actual split ${renderSplit(actual.split)} sums to ${actualSplitSum} min but Actual says ${actual.totalMinutes} min`,
     );
   }
+  if (actual.state === "measured") {
+    errors.push(...collectMeasuredActualErrors(record, actual, actual.split));
+  }
   return errors;
+}
+
+/** Require measured minutes and receipt prose to match one finalized summary. */
+function collectMeasuredActualErrors(
+  record: PlanExportRecord,
+  actual: PlanEffortNumericActual,
+  split: PlanEffortSplit,
+): string[] {
+  const receipt = record.timingReceipt;
+  if (receipt?.state !== "finalized" || receipt.summary === undefined) {
+    return [
+      `${record.sourceFile}: measured Actual requires a finalized embedded Timing Receipt`,
+    ];
+  }
+  const errors = collectClaimedSecondsErrors(
+    record.sourceFile,
+    actual.reason,
+    receipt.summary.totalSeconds,
+  );
+  if (!actualMatchesTimingSummary(actual, split, receipt.summary)) {
+    errors.push(
+      `${record.sourceFile}: measured Actual total and split must match the Timing Receipt minute allocation`,
+    );
+  }
+  return errors;
+}
+
+/** Validate the fixed measured-reason grammar and its raw-second claim. */
+function collectClaimedSecondsErrors(
+  sourceFile: string,
+  reason: string,
+  receiptSeconds: number,
+): string[] {
+  const captured = reason.match(
+    /^receipt\s+(\d+)\s+recorded-unpaused seconds$/u,
+  )?.[1];
+  if (captured === undefined) {
+    return [
+      `${sourceFile}: measured Actual reason must name receipt <seconds> recorded-unpaused seconds`,
+    ];
+  }
+  const claimedSeconds = Number(captured);
+  if (!Number.isSafeInteger(claimedSeconds)) {
+    return [
+      `${sourceFile}: measured Actual reason must name receipt <seconds> recorded-unpaused seconds`,
+    ];
+  }
+  return claimedSeconds === receiptSeconds
+    ? []
+    : [
+        `${sourceFile}: measured Actual receipt says ${claimedSeconds} seconds but Timing Receipt says ${receiptSeconds}`,
+      ];
+}
+
+/** Compare numeric Actual fields with the deterministic receipt allocation. */
+function actualMatchesTimingSummary(
+  actual: PlanEffortNumericActual,
+  split: PlanEffortSplit,
+  summary: PlanTimingSummary,
+): boolean {
+  return (
+    actual.totalMinutes === summary.totalMinutes &&
+    split.product === summary.minutes.product &&
+    split.proof === summary.minutes.proof &&
+    split.other === summary.minutes.other
+  );
 }
 
 /** Count open checklist items without treating their text as approval evidence. */
@@ -655,11 +744,14 @@ function renderMilestoneLine(record: PlanExportRecord): string | null {
     ? ` ${renderSplit(record.effort.split)}`
     : "";
   const actual = record.effort.actual;
-  const actualSplitText = actual?.split ? ` ${renderSplit(actual.split)}` : "";
-  const actualReasonText = actual?.reason ? ` - ${actual.reason}` : "";
-  const actualText = actual
-    ? ` | actual: ~${actual.totalMinutes} min${actualSplitText}${actualReasonText}`
-    : "";
+  let actualText = "";
+  if (actual && !isNumericActual(actual)) {
+    actualText = ` | actual: ${actual.state} - ${actual.reason}`;
+  } else if (actual && isNumericActual(actual)) {
+    const actualSplitText = actual.split ? ` ${renderSplit(actual.split)}` : "";
+    const actualReasonText = actual.reason ? ` - ${actual.reason}` : "";
+    actualText = ` | actual: ${actual.state} ~${actual.totalMinutes} min${actualSplitText}${actualReasonText}`;
+  }
   return `${record.sourceFile}: ~${record.effort.totalMinutes} min${splitText}${actualText}`;
 }
 
@@ -812,6 +904,10 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
  * @returns nothing; the chosen subcommand owns all output and exit codes
  */
 export function handlePlansCommand(options: ParsedCLI): void {
+  if (options.plansSubcommand === "time") {
+    handlePlansTimeCommand(options);
+    return;
+  }
   // The user asked for the effort report rather than an export bundle.
   if (options.plansSubcommand === "check") {
     handlePlansCheckCommand(options);

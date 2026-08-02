@@ -16,11 +16,29 @@ export interface PlanEffortSplit {
   other: number;
 }
 
-/** Machine-readable effort captured after a milestone finishes. */
-export interface PlanEffortActual {
+/** Numeric Actuals are either receipt-backed measurements or explicit estimates after the fact. */
+export interface PlanEffortNumericActual {
+  state: "measured" | "retrospective";
   totalMinutes: number;
   split?: PlanEffortSplit;
   reason: string;
+}
+
+/** Honest no-number states avoid manufacturing precision when timing is absent or interrupted. */
+interface PlanEffortUnknownActual {
+  state: "unavailable" | "incomplete";
+  reason: string;
+}
+
+/** Machine-readable effort captured or disclosed after a milestone finishes. */
+export type PlanEffortActual =
+  PlanEffortNumericActual | PlanEffortUnknownActual;
+
+/** Narrow an Actual to the two states that carry numeric minute fields. */
+export function isNumericActual(
+  actual: PlanEffortActual,
+): actual is PlanEffortNumericActual {
+  return actual.state === "measured" || actual.state === "retrospective";
 }
 
 /**
@@ -51,9 +69,15 @@ const TASK_ESTIMATE_SHAPE = /\(est:[^)]*\)\s*$/iu;
 const EFFORT_ESTIMATE_PATTERN =
   /^\s*~?\s*(\d+)\s*min(?:ute)?s?(?:\s+agent-time)?(?:\s*\((\d+)\s+product\s*\/\s*(\d+)\s+proof\s*\/\s*(\d+)\s+other\))?\s*$/iu;
 
-/** Structured Actual shape with optional category split and explanatory reason. */
+/** Numeric Actual shape with optional category split and explanatory reason. */
 const ACTUAL_PATTERN =
   /^\s*~?\s*(\d+)\s*min(?:ute)?s?(?:\s+agent-time)?(?:\s*\((\d+)\s+product\s*\/\s*(\d+)\s+proof\s*\/\s*(\d+)\s+other\))?(?:\s*[-—]\s*(.+))?\s*$/iu;
+
+/** Explicit provenance marker preceding a numeric Actual. */
+const ACTUAL_NUMERIC_STATE_PATTERN = /^\s*(measured|retrospective):\s*(.+)$/iu;
+
+/** Honest states that intentionally carry no invented minute value. */
+const ACTUAL_UNKNOWN_STATE_PATTERN = /^\s*(unavailable|incomplete):\s*(.+)$/iu;
 
 /** Dedicated non-checkbox estimate for orientation, plan upkeep, and status work. */
 const PLAN_ADMIN_PATTERN = /^\s*(\d+)\s*min(?:ute)?s?\s+other\s*$/iu;
@@ -299,18 +323,61 @@ function parseActualValue(
   if (normalized.length === 0) return undefined;
   if (normalized === "_") return undefined;
 
-  const match = normalized.match(ACTUAL_PATTERN);
+  const unknownActual = parseUnknownActual(normalized);
+  if (unknownActual) return unknownActual;
+  const numericActual = parseNumericActual(normalized);
+  if (numericActual) return numericActual;
+  warnings.push("actual effort not parseable");
+  return undefined;
+}
+
+/** Parse an explicit honest state that intentionally carries no minute value. */
+function parseUnknownActual(
+  normalized: string,
+): PlanEffortUnknownActual | undefined {
+  const unknownMatch = normalized.match(ACTUAL_UNKNOWN_STATE_PATTERN);
+  const state = unknownMatch?.[1]?.toLowerCase();
+  const reason = unknownMatch?.[2]?.trim();
+  if (!state || !reason) return undefined;
+  return {
+    state: state === "unavailable" ? "unavailable" : "incomplete",
+    reason,
+  };
+}
+
+/** Parse an explicit numeric state or classify untagged legacy notation retrospectively. */
+function parseNumericActual(
+  normalized: string,
+): PlanEffortNumericActual | undefined {
+  const explicitMatch = normalized.match(ACTUAL_NUMERIC_STATE_PATTERN);
+  const numericText = readNumericActualText(explicitMatch, normalized);
+  const match = numericText.match(ACTUAL_PATTERN);
   const parsedNumbers = readEffortNumbers(match);
-  if (!match || !parsedNumbers) {
-    warnings.push("actual effort not parseable");
-    return undefined;
-  }
-  const actual: PlanEffortActual = {
+  if (!match || !parsedNumbers) return undefined;
+  const actual: PlanEffortNumericActual = {
+    state: readNumericActualState(explicitMatch),
     totalMinutes: parsedNumbers.totalMinutes,
     reason: match[5]?.trim() ?? "",
   };
   if (parsedNumbers.split) actual.split = parsedNumbers.split;
   return actual;
+}
+
+/** Return the numeric portion after an optional explicit state marker. */
+function readNumericActualText(
+  explicitMatch: RegExpMatchArray | null,
+  normalized: string,
+): string {
+  return explicitMatch?.[2] ?? normalized;
+}
+
+/** Untagged numeric Actuals are retrospective by compatibility contract. */
+function readNumericActualState(
+  explicitMatch: RegExpMatchArray | null,
+): "measured" | "retrospective" {
+  return explicitMatch?.[1]?.toLowerCase() === "measured"
+    ? "measured"
+    : "retrospective";
 }
 
 /**
@@ -335,9 +402,12 @@ export function renderEffortLine(effort: PlanExportEffort): string {
  * @returns one standalone `**Actual:**` Markdown line
  */
 export function renderActualLine(actual: PlanEffortActual): string {
+  if (!isNumericActual(actual)) {
+    return `**Actual:** ${actual.state}: ${actual.reason}`;
+  }
   const splitText = actual.split
     ? ` (${actual.split.product} product / ${actual.split.proof} proof / ${actual.split.other} other)`
     : "";
   const reasonText = actual.reason ? ` - ${actual.reason}` : "";
-  return `**Actual:** ~${actual.totalMinutes} min agent-time${splitText}${reasonText}`;
+  return `**Actual:** ${actual.state}: ~${actual.totalMinutes} min agent-time${splitText}${reasonText}`;
 }

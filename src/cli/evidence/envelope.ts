@@ -43,7 +43,8 @@ export type EvidenceEventKind =
   | "project.save"
   | "project.remove"
   | "project.switch"
-  | "hook.verify";
+  | "hook.verify"
+  | "plan.time";
 
 type EvidencePayloadValue =
   | string

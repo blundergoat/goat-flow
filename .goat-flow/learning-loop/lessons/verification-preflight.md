@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-02
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -294,6 +294,7 @@ last_reviewed: 2026-08-01
 ## Lesson: Verification grep patterns must not carry Markdown backticks into Bash
 
 **Status:** active | **Created:** 2026-06-07
+**Decision changed:** Validate every persisted semantic anchor against its source with the literal search shape a future agent will run.
 
 **What happened:** During the M04 review-cleanup verification, a stale-path `rg` sweep embedded a Markdown-formatted fragment inside a double-quoted shell pattern. Bash treated the backticks around `decisions/` as command substitution, printed `/bin/bash: line 1: decisions/: No such file or directory`, and then ran `rg` with a mangled pattern that produced noisy, unusable output.
 
@@ -306,5 +307,7 @@ last_reviewed: 2026-08-01
 **Recurrence update (2026-06-10):** The same failure recurred while proving the M06b lifecycle sentence across docs: a double-quoted `rg` fixed-string pattern containing `` `goat-flow index` `` and `` `goat-flow stats --check` `` triggered command substitution, ran the CLI commands, and produced a mangled regex error instead of useful grep evidence. The corrected proof used `rg -n -F 'Re-run `goat-flow index` ...' ...` with single quotes around the whole fixed-string pattern.
 
 **Recurrence update (2026-08-01):** M06 learning retrieval again placed backticked lesson titles inside a double-quoted `rg` expression. The PreToolUse hook blocked the command before Bash could substitute anything, so no search evidence was produced and no repository write occurred. The corrected retrieval searched plain semantic tokens inside single quotes, then opened the matched source entries directly.
+
+**Recurrence update (2026-08-02):** An effort-estimation milestone cited a prose rendering of an architecture sentence as its `(search: ...)` anchor, but the source wrapped `EvidenceEnvelope` in Markdown backticks. The fixed-string verification could not match the persisted anchor. The plan now anchors on the exact `## Local Data and Evidence Budget` heading, which is both literal and formatting-independent.
 
 ---
