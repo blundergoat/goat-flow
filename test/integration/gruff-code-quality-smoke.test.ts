@@ -35,7 +35,7 @@ import {
 } from "./gruff-code-quality-smoke.helpers.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
-const GRUFF_HOOK_COPIES = [
+const GRUFF_HOOK_COPY_ENTRIES = [
   {
     label: "workflow",
     path: join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh"),
@@ -106,14 +106,16 @@ function assertSelfTestOk(
 }
 
 describe("gruff-code-quality hook", () => {
-  it("passes the smoke self-test for both hook copies with system jq", () => {
-    for (const hook of GRUFF_HOOK_COPIES) {
+  // One named case per hook copy, so a failure names which copy drifted.
+  for (const hook of GRUFF_HOOK_COPY_ENTRIES) {
+    // Covers the shipped hook a consumer actually runs, using whatever jq is on their PATH.
+    it(`passes the smoke self-test with system jq for the ${hook.label} hook copy`, () => {
       assertSelfTestOk(
         hook.label,
         runHookSelfTest(hook.path, process.env.PATH ?? "/usr/bin:/bin"),
       );
-    }
-  });
+    });
+  }
 
   const jq16 = resolveJq16Binary();
   it(
@@ -130,7 +132,7 @@ describe("gruff-code-quality hook", () => {
       symlinkSync(jq16.path, join(pinnedBin, "jq"));
       const pathPrefix = `${pinnedBin}:${process.env.PATH ?? "/usr/bin:/bin"}`;
 
-      for (const hook of GRUFF_HOOK_COPIES) {
+      for (const hook of GRUFF_HOOK_COPY_ENTRIES) {
         assertSelfTestOk(hook.label, runHookSelfTest(hook.path, pathPrefix));
       }
     },
@@ -567,7 +569,7 @@ describe("gruff-code-quality hook", () => {
     assert.deepEqual(readInvocations(root), ["src/sample.py"]);
   });
 
-  // Covers both override spellings a maintainer may write: writes each form and expects both honoured.
+  // Covers both override spellings a maintainer writes, because compact and commented forms must both work.
   it("uses compact and commented config binary override forms", () => {
     const fixtures = [
       {

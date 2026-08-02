@@ -37,7 +37,9 @@ interface SkillQualityHelpers {
   /** Return the evaluator helper used to temper clean verdicts with evidence limits. */
   dashboardSkillEvaluatorResultFragment(): {
     /** Derive the evaluator verdict shown for one skill-quality report. */
-    skillEvaluatorVerdict(report: Record<string, unknown>): SkillEvaluatorVerdict;
+    skillEvaluatorVerdict(
+      report: Record<string, unknown>,
+    ): SkillEvaluatorVerdict;
   };
 }
 

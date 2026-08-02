@@ -585,7 +585,7 @@ describe("hook registrar", () => {
     });
   });
 
-  // Covers upgrading a project with stale managed Codex entries: writes them and expects them pruned.
+  // Covers a project with stale managed Codex entries: writes them, because an upgrade must prune them.
   it("prunes stale managed Codex post-tool and stop hook entries", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".codex"), { recursive: true });
@@ -778,7 +778,7 @@ describe("hook registrar", () => {
     });
   });
 
-  // Covers sync pruning removed plan-checkbox-guard entries: writes stale config and expects it gone.
+  // Covers sync pruning removed plan-checkbox-guard entries: writes stale config, because sync must clear it.
   it("sync prunes stale removed plan-checkbox-guard entries and config", () => {
     withTempProject((root) => {
       writePostTurnCapableSurfaces(root);
@@ -932,7 +932,7 @@ describe("hook registrar", () => {
     });
   });
 
-  // Covers the same prune driven by a direct hook toggle: writes stale config and expects it gone.
+  // Covers the same prune driven by a direct toggle: writes stale config, because a toggle must clear it too.
   it("direct hook toggles prune stale removed plan-checkbox-guard entries and config", () => {
     withTempProject((root) => {
       writePostTurnCapableSurfaces(root);

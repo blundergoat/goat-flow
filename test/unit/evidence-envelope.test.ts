@@ -292,7 +292,7 @@ describe("EvidenceEnvelope", () => {
     });
   });
 
-  // Covers a symlinked events directory: the fixture proves no write escapes the project.
+  // Covers a symlinked events directory, because appending must never let writes escape the project.
   it("rejects a symlinked events directory without writing outside the project", (testContext) => {
     withTempProject((root) => {
       const outsideDirectory = mkdtempSync(
@@ -330,7 +330,7 @@ describe("EvidenceEnvelope", () => {
     });
   });
 
-  // Covers a symlinked daily event file: the fixture proves appending never changes the target.
+  // Covers a symlinked daily event file, because appending writes must never change the symlink target.
   it("rejects a symlinked daily event file without changing its target", (testContext) => {
     withTempProject((root) => {
       const outsideDirectory = mkdtempSync(
@@ -370,7 +370,7 @@ describe("EvidenceEnvelope", () => {
     });
   });
 
-  // Covers a hardlinked daily event file: the fixture proves appending never changes its peer.
+  // Covers a hardlinked daily event file, because appending writes must never change its peer.
   it("rejects a hardlinked daily event file without changing its peer", (testContext) => {
     withTempProject((root) => {
       const eventsDirectory = join(root, ".goat-flow", "logs", "events");

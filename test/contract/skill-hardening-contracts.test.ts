@@ -2671,7 +2671,7 @@ describe("skill hardening contracts", () => {
   });
 
   it("routes every goat-qa risk and coverage combination exhaustively", () => {
-    const expectedMatrixRows = [
+    const expectedMatrixCases = [
       /\| CRITICAL \| Blocking \| Blocking \| Blocking \| Defer \|/,
       /\| HIGH \| Blocking \| Blocking \| High-value \| Defer \|/,
       /\| MEDIUM \| High-value \| High-value \| High-value \| Defer \|/,
@@ -2681,7 +2681,7 @@ describe("skill hardening contracts", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Exhaustive priority matrix/, skillPath);
-      for (const matrixRow of expectedMatrixRows) {
+      for (const matrixRow of expectedMatrixCases) {
         assert.match(skillGuidance, matrixRow, skillPath);
       }
       assert.match(

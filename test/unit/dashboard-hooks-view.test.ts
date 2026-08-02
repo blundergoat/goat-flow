@@ -37,15 +37,15 @@ describe("dashboard Hooks view", () => {
   });
 
   it("keeps Codex non-PreToolUse exclusions paired with reasons", () => {
-    const codexUnsupportedSpecs = listHookSpecs().filter(
+    const codexUnsupportedHookEntries = listHookSpecs().filter(
       (hook) => hook.unsupportedAgents?.codex,
     );
 
     assert.ok(
-      codexUnsupportedSpecs.length > 0,
+      codexUnsupportedHookEntries.length > 0,
       "Codex should have explicit unsupported hook entries",
     );
-    for (const hook of codexUnsupportedSpecs) {
+    for (const hook of codexUnsupportedHookEntries) {
       assert.notEqual(hook.event, "PreToolUse");
       assert.match(hook.unsupportedAgents?.codex ?? "", /^Codex /);
     }

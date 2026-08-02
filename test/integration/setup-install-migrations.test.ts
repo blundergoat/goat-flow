@@ -40,7 +40,7 @@ function stalePermissionRules(groups: ClaudePermissionGroups): string[] {
 }
 
 describe("setup --apply installer upgrade migrations", () => {
-  // Covers upgrading past the retired plan checkbox guard: writes old config and expects it pruned.
+  // Covers upgrading past the retired guard: writes old config, which must be pruned because it is retired.
   it("prunes retired plan checkbox guard config and selected-agent registration", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });

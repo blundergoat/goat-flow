@@ -120,11 +120,11 @@ describe("quality draft capture", () => {
   const captures: QualityDraftCapture[] = [];
 
   /**
- * Writes and tracks one temporary project root so capture cleanup runs after the suite.
- * Use for every capture test that needs a disposable project the dashboard could have selected.
- *
- * @returns the new project root path; every caller gets a distinct directory
- */
+   * Writes and tracks one temporary project root so capture cleanup runs after the suite.
+   * Use for every capture test that needs a disposable project the dashboard could have selected.
+   *
+   * @returns the new project root path; every caller gets a distinct directory
+   */
   function makeRoot(ignoreRules: string | null = QUALITY_IGNORE_RULES): string {
     const root = mkdtempSync(join(tmpdir(), "goat-quality-capture-"));
     roots.push(root);
@@ -524,7 +524,7 @@ describe("quality draft capture", () => {
     );
   });
 
-  // Covers dispose with drafts still open: writes them and expects each finalized with its receipt kept.
+  // Covers dispose with drafts still open: writes them; each must be finalized with its receipt kept.
   it("finalizes every remaining draft on dispose and keeps receipts", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);

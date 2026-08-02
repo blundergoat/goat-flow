@@ -271,7 +271,12 @@ function addViolation(
   line: number | null,
   message: string,
 ): void {
-  violations.push({ checkId: CHECK_IDENTIFIER_BY_CODE[code], code, line, message });
+  violations.push({
+    checkId: CHECK_IDENTIFIER_BY_CODE[code],
+    code,
+    line,
+    message,
+  });
 }
 
 /** Record one advisory issue without changing the validator's failure status. */
@@ -281,7 +286,12 @@ function addWarning(
   line: number | null,
   message: string,
 ): void {
-  warnings.push({ checkId: CHECK_IDENTIFIER_BY_CODE[code], code, line, message });
+  warnings.push({
+    checkId: CHECK_IDENTIFIER_BY_CODE[code],
+    code,
+    line,
+    message,
+  });
 }
 
 /** Return whether a resolved path remains under the reviewed project's real path. */
@@ -900,7 +910,10 @@ function readGitScopeAuthority(
   violations: ReviewValidationViolation[],
 ): ReviewAnchorAuthority {
   let isValidAuthority = hasValidState;
-  if (!IMMUTABLE_OBJECT_IDENTIFIER.test(scope.head) || scope.authority === "n/a") {
+  if (
+    !IMMUTABLE_OBJECT_IDENTIFIER.test(scope.head) ||
+    scope.authority === "n/a"
+  ) {
     addViolation(
       violations,
       "integrity-format",

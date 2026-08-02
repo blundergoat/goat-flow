@@ -154,7 +154,7 @@ describe("checkDrift: hook templates", () => {
     }
   });
 
-  // Covers a stale optional script for an unsupported lifecycle: writes it and expects no agent-scoped failure.
+  // Covers a stale optional script for an unsupported lifecycle: writes it; an agent audit must ignore it.
   it("ignores registry hook scripts unsupported by the selected agent", () => {
     const root = setupFixture();
     try {

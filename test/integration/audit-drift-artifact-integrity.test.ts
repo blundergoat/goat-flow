@@ -231,7 +231,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
-  // Covers a playbook a consumer marked as their own: writes it and expects the audit to leave it alone.
+  // Covers a playbook a consumer marked as their own: writes it; the audit must leave user-owned files alone.
   it("accepts an explicitly user-owned consumer playbook", () => {
     const fixtureRoot = setupFixture();
     try {
@@ -270,7 +270,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
-  // Covers marked vs unmarked custom skills: writes both and expects only the unmarked one reported.
+  // Covers marked vs unmarked custom skills: writes both; only the unmarked one must be reported.
   it("accepts an explicitly user-owned custom skill but reports an unmarked one", () => {
     const fixtureRoot = setupFixture();
     try {
@@ -373,7 +373,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
-  // Covers dispatcher docs that drifted from the code: writes stale claims and expects each reported.
+  // Covers dispatcher docs that drifted from the code: writes stale claims; each one must be reported.
   it("reports stale dispatcher control-flow, retrieval, and learning-loop claims", () => {
     // Regression: docs/skills.md flattened every request into one route,
     // attributed routed-skill retrieval to the dispatcher, and told every
@@ -409,7 +409,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
-  // Covers public skill docs promising gates the skill lost: writes them and expects each reported.
+  // Covers public skill docs promising gates the skill lost: writes them; each must be reported.
   it("reports stale public skill workflow gates and modes", () => {
     const fixtureRoot = setupFixture();
     try {
@@ -570,7 +570,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
-  // Covers a project still on the old commit-guidance filename: writes it and expects no audit failure.
+  // Covers a project still on the old commit-guidance filename: writes it; the audit must not fail it.
   it("accepts the ADR-043 commit-guidance compatibility path", () => {
     const fixtureRoot = setupFixture();
     try {
@@ -600,7 +600,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
-  // Covers a doc reference pointing nowhere: writes the dangling path and expects it reported.
+  // Covers a doc reference pointing nowhere: writes the dangling path, which must be reported.
   it("reports an arbitrary missing documentation path", () => {
     const fixtureRoot = setupFixture();
     try {

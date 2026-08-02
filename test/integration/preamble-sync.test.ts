@@ -453,8 +453,10 @@ describe("preamble/conventions sync: Proof Gate presence (ADR-018)", () => {
 });
 
 describe("preamble/conventions sync: proof-evidence pointer", () => {
-  it("points both preambles directly to the verification claim evidence table", () => {
-    for (const preamblePath of [TEMPLATE_PREAMBLE, INSTALLED_PREAMBLE]) {
+  // One named case per preamble copy, so a failure names the template or the installed file.
+  for (const preamblePath of [TEMPLATE_PREAMBLE, INSTALLED_PREAMBLE]) {
+    // Covers where an agent is sent for proof examples: the stale README pointer must be gone.
+    it(`points directly to the verification claim evidence table in ${preamblePath}`, () => {
       const content = readFileSync(preamblePath, "utf-8");
       assert.match(
         content,
@@ -466,6 +468,6 @@ describe("preamble/conventions sync: proof-evidence pointer", () => {
         /Concrete claim\/proof examples live in `\.goat-flow\/skill-docs\/skill-quality-testing\/README\.md`/,
         preamblePath,
       );
-    }
-  });
+    });
+  }
 });

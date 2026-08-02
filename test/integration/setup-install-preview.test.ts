@@ -377,7 +377,7 @@ describe("managed setup preview", () => {
     }
   });
 
-  // Covers a symlinked baseline under --force: writes it and expects the install blocked before any write.
+  // Covers a symlinked baseline under --force: writes it; the install must be blocked before any write.
   it("blocks an invalid symlinked install-state baseline under force before writes", (testContext) => {
     const projectPath = makeTempProject();
     const redirectedStatePath = makeTempProject();

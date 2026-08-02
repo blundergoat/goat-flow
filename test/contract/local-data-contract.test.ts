@@ -32,7 +32,7 @@ const DOCUMENTED_EVENT_KINDS = {
   "hook.verify": "hook.verify",
 } satisfies Record<EvidenceEventKind, EvidenceEventKind>;
 
-const LOCAL_STATE_README_PAIRS = [
+const LOCAL_STATE_README_ENTRIES = [
   [
     ".goat-flow/logs/events/README.md",
     "workflow/setup/reference/events-readme.md",
@@ -95,7 +95,7 @@ describe("local data contract", () => {
 
   describe("local-state guides", () => {
     // Each named case protects this workspace and the corresponding fresh-install template.
-    for (const [installedReadme, setupTemplate] of LOCAL_STATE_README_PAIRS) {
+    for (const [installedReadme, setupTemplate] of LOCAL_STATE_README_ENTRIES) {
       // Users get the same boundary whether they read an installed guide or its setup source.
       it(`links ${installedReadme} and its setup template to the contract`, () => {
         assertLocalStateGuide(installedReadme);

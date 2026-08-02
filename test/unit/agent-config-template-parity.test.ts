@@ -15,49 +15,52 @@ function escapeRegExp(value: string): string {
 }
 
 describe("agent config template parity", () => {
-  it("keeps Codex secret-path denies aligned with Claude", () => {
-    const claude = JSON.parse(
-      readFileSync(
-        join(PROJECT_ROOT, "workflow/hooks/agent-config/claude.json"),
-        "utf-8",
-      ),
-    ) as { permissions?: { deny?: unknown; allow?: unknown } };
-    const claudeDeny = Array.isArray(claude.permissions?.deny)
-      ? claude.permissions.deny.filter(
-          (entry): entry is string => typeof entry === "string",
-        )
-      : [];
-    const claudeAllow = Array.isArray(claude.permissions?.allow)
-      ? claude.permissions.allow.filter(
-          (entry): entry is string => typeof entry === "string",
-        )
-      : [];
-    const claudeReadPatterns = new Set(
-      claudeDeny.flatMap((entry) => {
-        const match = entry.match(/^Read\((.+)\)$/u);
-        return match?.[1] ? [match[1]] : [];
-      }),
-    );
-    const codexTemplate = readFileSync(
-      join(PROJECT_ROOT, "workflow/hooks/agent-config/codex.toml"),
+  const claude = JSON.parse(
+    readFileSync(
+      join(PROJECT_ROOT, "workflow/hooks/agent-config/claude.json"),
       "utf-8",
-    );
+    ),
+  ) as { permissions?: { deny?: unknown; allow?: unknown } };
+  const claudeDeny = Array.isArray(claude.permissions?.deny)
+    ? claude.permissions.deny.filter(
+        (entry): entry is string => typeof entry === "string",
+      )
+    : [];
+  const claudeAllow = Array.isArray(claude.permissions?.allow)
+    ? claude.permissions.allow.filter(
+        (entry): entry is string => typeof entry === "string",
+      )
+    : [];
+  const claudeReadPatterns = new Set(
+    claudeDeny.flatMap((entry) => {
+      const match = entry.match(/^Read\((.+)\)$/u);
+      return match?.[1] ? [match[1]] : [];
+    }),
+  );
+  const codexTemplate = readFileSync(
+    join(PROJECT_ROOT, "workflow/hooks/agent-config/codex.toml"),
+    "utf-8",
+  );
 
-    // Env policy: deny rules beat allow rules on BOTH agents, so a broad
-    // **/.env* deny would shadow .env.example. Each real env variant is
-    // denied individually instead - for Read AND Edit - so .env.example stays
-    // readable and writable (matching the Bash deny hook).
-    const envDenyPatterns = [
-      "**/.env",
-      "**/.env.local",
-      "**/.env.development",
-      "**/.env.production",
-      "**/.env.staging",
-      "**/.env.test",
-      "**/.envrc",
-      "**/.env.*.local",
-    ];
-    for (const pattern of envDenyPatterns) {
+  // Env policy: deny rules beat allow rules on BOTH agents, so a broad
+  // **/.env* deny would shadow .env.example. Each real env variant is
+  // denied individually instead - for Read AND Edit - so .env.example stays
+  // readable and writable (matching the Bash deny hook).
+  const envDenyPaths = [
+    "**/.env",
+    "**/.env.local",
+    "**/.env.development",
+    "**/.env.production",
+    "**/.env.staging",
+    "**/.env.test",
+    "**/.envrc",
+    "**/.env.*.local",
+  ];
+
+  // One named case per env file, so a failure names the variant left readable.
+  for (const pattern of envDenyPaths) {
+    // Covers one real env variant: both agents must deny it for Read and Edit.
+    it(`keeps Codex secret-path denies aligned with Claude for ${pattern}`, () => {
       assert.ok(
         claudeReadPatterns.has(pattern),
         `Claude template should deny Read(${pattern})`,
@@ -71,7 +74,11 @@ describe("agent config template parity", () => {
         new RegExp(`"${escapeRegExp(pattern)}"\\s*=\\s*"deny"`),
         `Codex template should deny ${pattern}`,
       );
-    }
+    });
+  }
+
+  // Covers the broad-glob trap: a wildcard deny would shadow the .env.example allow.
+  it("keeps .env.example usable by avoiding a broad env deny", () => {
     assert.ok(
       !claudeReadPatterns.has("**/.env*"),
       "broad Read(**/.env*) would shadow the .env.example allow (deny wins)",
@@ -115,16 +122,19 @@ describe("agent config template parity", () => {
   // AND the controlling workspace settings to a form Claude actually matches.
   // Keep this allow-set in sync with REMOVED_CLAUDE_TOOLS and
   // UNMATCHED_RULE_REWRITES in workflow/install-goat-flow.sh.
-  it("never carries a rule form Claude will not match (MultiEdit, Write, NotebookEdit, Glob)", () => {
-    const matchedRuleTools = new Set(["Bash", "Read", "Edit"]);
-    for (const configPath of [
-      "workflow/hooks/agent-config/claude.json",
-      ".claude/settings.json",
-    ]) {
-      const claude = JSON.parse(
-        readFileSync(join(PROJECT_ROOT, configPath), "utf-8"),
-      ) as { permissions?: Record<string, unknown> };
-      for (const arrayName of ["deny", "allow", "ask"]) {
+  // One named case per config file and rule list, so a failure names the exact list to open.
+  for (const configPath of [
+    "workflow/hooks/agent-config/claude.json",
+    ".claude/settings.json",
+  ]) {
+    for (const arrayName of ["deny", "allow", "ask"]) {
+      // Covers rule forms Claude cannot match: a rule naming an unmatched tool never applies,
+      // so a user would believe a permission is enforced while it silently does nothing.
+      it(`never carries a rule form Claude will not match in ${configPath} ${arrayName}`, () => {
+        const matchedRuleTools = new Set(["Bash", "Read", "Edit"]);
+        const claude = JSON.parse(
+          readFileSync(join(PROJECT_ROOT, configPath), "utf-8"),
+        ) as { permissions?: Record<string, unknown> };
         const rules = Array.isArray(claude.permissions?.[arrayName])
           ? (claude.permissions?.[arrayName] as unknown[]).filter(
               (entry): entry is string => typeof entry === "string",
@@ -139,7 +149,7 @@ describe("agent config template parity", () => {
           [],
           `${configPath} ${arrayName} rules must use permission-matched tools (Bash/Read/Edit); got ${unmatchedRules.join(", ")}`,
         );
-      }
+      });
     }
-  });
+  }
 });
