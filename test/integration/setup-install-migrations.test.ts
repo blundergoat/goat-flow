@@ -10,7 +10,12 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { makeTempProject, runInstaller } from "./setup-install.helpers.js";
+import {
+  makeTempProject,
+  POST_TURN_SAFETY_TIMEOUT_SECONDS,
+  readClaudePostTurnSafetyTimeout,
+  runInstaller,
+} from "./setup-install.helpers.js";
 
 /** Permission arrays read from one migrated Claude settings contract. */
 interface ClaudePermissionGroups {
@@ -84,6 +89,15 @@ describe("setup --apply installer upgrade migrations", () => {
                 hooks: [
                   {
                     type: "command",
+                    command: "bash .goat-flow/hooks/post-turn-safety.sh",
+                    timeout: 60,
+                  },
+                ],
+              },
+              {
+                hooks: [
+                  {
+                    type: "command",
                     command: "bash .goat-flow/hooks/plan-checkbox-guard.sh",
                   },
                 ],
@@ -119,6 +133,10 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.doesNotMatch(gitignore, /plan-guard-state/u);
     assert.doesNotMatch(settings, /plan-checkbox-guard\.sh/u);
     assert.match(settings, /post-turn-safety\.sh/u);
+    assert.equal(
+      readClaudePostTurnSafetyTimeout(root),
+      POST_TURN_SAFETY_TIMEOUT_SECONDS,
+    );
   });
 
   // Covers the same prune on CRLF config a Windows user committed: writes it and expects a clean result.

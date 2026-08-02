@@ -317,7 +317,7 @@ interface QualityHistoryLatest {
 /** Server-side terminal session info, enriched by `/api/terminal/sessions`. */
 type TerminalAccessMode = "workspace" | "reporting";
 
-/** Terminal session row returned by the server before browser-local state is merged. */
+/** Server session contract preserved before browser-local reconnect state is merged. */
 interface ServerSessionInfo {
   id: string;
   status: SessionStatus;
@@ -327,6 +327,10 @@ interface ServerSessionInfo {
   targetPath: string;
   runner: RunnerId;
   accessMode: TerminalAccessMode;
+  /** Whether retry/reconnect must restore dashboard-owned quality draft capture. */
+  captureQualityDrafts: boolean;
+  /** Report-owner project, or null when the session has no staged capture channel. */
+  qualityDraftProjectPath: string | null;
   lastInputAt: number;
   age?: number | undefined;
   idleDuration?: number | undefined;
@@ -348,6 +352,8 @@ interface LocalSession
   cwd: string;
   targetPath: string;
   accessMode: TerminalAccessMode;
+  captureQualityDrafts: boolean;
+  qualityDraftProjectPath: string | null;
   startTime: number;
   lastInputTime: number;
   outputTail?: string;
@@ -398,6 +404,8 @@ interface SavedSession {
   cwd: string;
   targetPath: string;
   accessMode: TerminalAccessMode;
+  captureQualityDrafts: boolean;
+  qualityDraftProjectPath: string | null;
 }
 
 // ---------------------------------------------------------------------------

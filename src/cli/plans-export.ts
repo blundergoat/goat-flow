@@ -593,6 +593,40 @@ export function loadPlanExportRecords(planPath: string): PlanExportRecord[] {
 }
 
 /**
+ * Scrub the optional explanations nested inside effort metadata before a preview or file export.
+ * Numeric estimates stay unchanged, while absent Actuals or forecast bands remain absent for users.
+ *
+ * @param effort - parsed effort data whose explanations may contain pasted credentials
+ * @returns export-safe effort data with every user-authored explanation scrubbed
+ */
+function redactExportEffort(effort: PlanExportEffort): PlanExportEffort {
+  // An absent Actual is normal before work finishes, so the export keeps that field absent.
+  const redactedActual = effort.actual
+    ? {
+        ...effort.actual,
+        reason: scrubDurableText(effort.actual.reason),
+      }
+    : undefined;
+
+  // A missing forecast band means the author supplied one point estimate, not incomplete data.
+  const redactedForecastRange = effort.forecastRange
+    ? {
+        ...effort.forecastRange,
+        // The optional rationale is user-authored, so pasted tokens receive the shared redaction.
+        ...(effort.forecastRange.rationale !== undefined && {
+          rationale: scrubDurableText(effort.forecastRange.rationale),
+        }),
+      }
+    : undefined;
+
+  return {
+    ...effort,
+    ...(redactedActual && { actual: redactedActual }),
+    ...(redactedForecastRange && { forecastRange: redactedForecastRange }),
+  };
+}
+
+/**
  * Scrub every user-authored string before it can reach stdout or a generated file.
  *
  * @param record - parsed milestone whose text fields may hold tokens or secrets
@@ -642,17 +676,9 @@ export function redactPlanExportRecord(
     verificationMarkdown: scrubDurableText(record.verificationMarkdown),
     exitCriteriaMarkdown: scrubDurableText(record.exitCriteriaMarkdown),
     stopMarkdown: scrubDurableText(record.stopMarkdown),
-    // Actual reasons are user-authored; numeric effort fields need no scrub.
+    // Effort numbers are safe to preserve, while nested author explanations need redaction.
     ...(record.effort && {
-      effort: {
-        ...record.effort,
-        ...(record.effort.actual && {
-          actual: {
-            ...record.effort.actual,
-            reason: scrubDurableText(record.effort.actual.reason),
-          },
-        }),
-      },
+      effort: redactExportEffort(record.effort),
     }),
   };
 }

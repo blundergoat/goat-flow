@@ -33,7 +33,7 @@ export type Runner = AgentId;
 /** Filesystem access selected when the dashboard starts a runner session. */
 export type TerminalAccessMode = "workspace" | "reporting";
 
-/** Metadata for an active or recently terminated terminal session. */
+/** Public session contract shared by terminal APIs and reconnecting dashboard clients. */
 export interface SessionInfo {
   id: string;
   status: SessionStatus;
@@ -47,6 +47,10 @@ export interface SessionInfo {
   runner: Runner;
   /** Reporting sessions restrict Codex to reads plus known local artifact paths. */
   accessMode: TerminalAccessMode;
+  /** True when this reporting session owns the dashboard's staged-report receipt channel. */
+  captureQualityDrafts: boolean;
+  /** Canonical report-owner project, or null when the user did not request staged capture. */
+  qualityDraftProjectPath: string | null;
   /** Epoch milliseconds of last user input (for idle duration calculation) */
   lastInputAt: number;
 }

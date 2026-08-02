@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-07-29
+last_reviewed: 2026-08-03
 ---
 
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
@@ -42,3 +42,17 @@ last_reviewed: 2026-07-29
 **Root cause:** Two correct rules collide: gruff rules must not be disabled, but comments must only explain non-obvious WHY. This rule had no tuning options, leaving only fix, rename, or baseline.
 
 **Prevention:** Triage `docs.missing-internal-function-doc` with the gruff-code-quality playbook. Add comments only when they meet the contract bar; otherwise rename or baseline with rationale. Revisit when gruff-ts gains threshold/name-match tuning. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Doc comments are mandatory under that playbook`), `scripts/preflight-checks.sh` (search: `Gruff Policy`).
+
+## Lesson: Keep the binary path returned by the gruff availability check
+
+**Status:** active | **Created:** 2026-08-03
+
+**Decision changed:** Run later gruff commands through the exact `$found` path instead of guessing a global install location.
+
+**Trigger phase:** VERIFY
+
+**What happened:** The required availability check found the repo-local `node_modules/.bin/gruff-ts`, but the first analysis command discarded that result and invoked `$HOME/.local/bin/gruff-ts`. Bash reported `No such file or directory`, while the following `jq` stage returned zero and made the failed probe easy to misread as analyzer output.
+
+**Root cause:** I verified that a gruff binary existed but treated discovery as a boolean instead of preserving the executable path for the verification command. I also omitted pipeline failure propagation on a command whose analyzer output was piped through `jq`.
+
+**Prevention:** Keep and reuse `$found` for the complete gruff loop, and enable `pipefail` whenever analyzer output is filtered. Confirm the analyzer emitted a JSON object before interpreting counts. Evidence anchor: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `## Availability Check`).

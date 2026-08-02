@@ -1316,15 +1316,17 @@ function appendGruffHookEntries(currentHooks) {
   return true;
 }
 
+// Builds the Stop registration users receive when setup enables safety scanning.
 function postTurnSafetyHookEntries() {
-  const script = "post-turn-safety.sh";
+  const hookScriptName = "post-turn-safety.sh";
+  // Codex keeps no active Stop registration until delivery is verified.
   if (agent === "codex") {
     return [
       {
         hooks: [
           {
             type: "command",
-            command: rootResolvingCommand(script),
+            command: rootResolvingCommand(hookScriptName),
             statusMessage: "Post-turn safety guard",
           },
         ],
@@ -1336,8 +1338,8 @@ function postTurnSafetyHookEntries() {
       hooks: [
         {
           type: "command",
-          command: rootResolvingCommand(script),
-          timeout: 60,
+          command: rootResolvingCommand(hookScriptName),
+          timeout: 90,
         },
       ],
     },

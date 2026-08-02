@@ -169,9 +169,9 @@ Successful AI proof records structured `Actual:` and sets `human-verification-pe
 
 **BLOCKING GATE (Human Verification):** Present changed files, exit evidence, estimate versus Actual, and assumption outcomes. "M[N] evidence is ready. Approve completion and M[N+1], or adjust?"
 
-After approval, capture learnings, complete the milestone, re-read/update the next milestone, and start it only when `Depends on` permits. Human-requested changes return the milestone to `in-progress`; never amend silently. Rerun strict validation after each transition.
+After approval for a non-final milestone, capture learnings, complete it, re-read/update the next milestone, and start it only when `Depends on` permits. Human-requested changes return the milestone to `in-progress`; never amend silently. Rerun strict validation after each transition.
 
-The final pending milestone enters one combined Phase 4 review instead of a duplicate intermediate approval.
+The final pending milestone enters the combined Phase 4 review; do not mark it complete in Phase 3.
 
 ## Phase 4 - Plan Complete
 
@@ -179,7 +179,7 @@ When predecessors are complete and the final milestone is `human-verification-pe
 
 ### AI Verification Gate
 
-Verify every implementation task and ISSUE How item is closed, exits and Proof claims have fresh evidence, assumptions are resolved, statuses are coherent, and required learning-loop updates exist. Keep What as stable requirements. Surface gaps and aggregate all UNVERIFIED items; do not rerun fresh evidence for presentation.
+Verify every implementation task and, when `ISSUE.md` exists, every ISSUE How item is closed. Verify exits and Proof claims have fresh evidence, assumptions are resolved, statuses are coherent, and required learning-loop updates exist. Keep What as stable requirements. Surface gaps and aggregate all UNVERIFIED items; do not rerun fresh evidence for presentation.
 
 ### Human Verification Gate
 

@@ -757,6 +757,40 @@ describe("plans export", () => {
     }
   });
 
+  /**
+   * Fixture purpose: a user pastes a token into forecast reasoning, then previews both export formats.
+   * Process/filesystem side effects: spawns the CLI and writes only one temporary milestone.
+   */
+  it("redacts forecast rationale from JSON and Markdown previews", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));
+    const planPath = join(temporaryRoot, "1.15.0");
+    const fakeToken = ["ghp", "r".repeat(36)].join("_");
+    const milestoneBody = completeMilestoneBody().replace(
+      "## Scope Discipline",
+      [
+        "**Effort estimate:** ~25 min agent-time (17 product / 6 proof / 2 other)",
+        `**Forecast range:** 10-60 agent-time minutes on one recorded-unpaused milestone timeline; likely 25; ${fakeToken}`,
+        "",
+        "## Scope Discipline",
+      ].join("\n"),
+    );
+    writePlanFixture(planPath, milestoneBody);
+
+    try {
+      const jsonPreview = runPlansExport(planPath, "--format", "json");
+      const markdownPreview = runPlansExport(planPath, "--format", "markdown");
+
+      assert.equal(jsonPreview.status, 0, jsonPreview.stderr);
+      assert.equal(markdownPreview.status, 0, markdownPreview.stderr);
+      assert.doesNotMatch(jsonPreview.stdout, new RegExp(fakeToken, "u"));
+      assert.doesNotMatch(markdownPreview.stdout, new RegExp(fakeToken, "u"));
+      assert.match(jsonPreview.stdout, /\[REDACTED:token\]/u);
+      assert.match(markdownPreview.stdout, /\[REDACTED:token\]/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   // A body without its milestone heading is malformed because an issue title cannot be inferred safely.
   it("rejects milestone markdown without a title", () => {
     assert.throws(

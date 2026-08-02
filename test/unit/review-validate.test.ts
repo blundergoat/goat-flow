@@ -130,7 +130,7 @@ One configuration defect survived review.
 - [ready-to-tick] **Validator fixture** - now satisfied by diff, milestone still shows open
 
 ## Ship Verdict
-Decision: **YES WITH CONDITIONS**
+Decision: **PARTIAL**
 Reasoning: R-001 remains open.
 Confidence: MEDIUM
 `;
@@ -305,11 +305,16 @@ What I Didn't Examine: none.
       "- Verdicts: 4/0/0/0",
       "- Verdicts: 3/0/0/0",
     );
+    const impossibleFileCoverage = validReview().replace(
+      "- Files opened in Pass 2: 1/1",
+      "- Files opened in Pass 2: 2/1",
+    );
 
     for (const report of [
       incompleteScope,
       wrongEvidenceTotal,
       wrongVerdictTotal,
+      impossibleFileCoverage,
     ]) {
       assert.equal(
         hasViolation(
@@ -425,6 +430,21 @@ What I Didn't Examine: none.
         "integrity-format",
       ),
       true,
+    );
+  });
+
+  it("ignores indented code examples inside live report sections", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const indentedExample = validReview().replace(
+      "### MUST / SHOULD / MAY",
+      `    - R-999 [MUST:patch] **Example only** \`missing.ts\` (search: \`missing\`) | Harm: example | Evidence: OBSERVED | Proof: STATIC
+
+### MUST / SHOULD / MAY`,
+    );
+
+    assert.deepEqual(
+      validateReviewReport(indentedExample, projectRoot).violations,
+      [],
     );
   });
 
@@ -658,17 +678,85 @@ What I Didn't Examine: none.
 
   it("resolves every semantic anchor cited by Top 5 Risks", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = withTopFiveRisk(
+    const longHeadingReport = withTopFiveRisk(
       withSixSurfacedFindings(validReview()),
       "R-001",
       "missingTopFiveAnchor",
     );
-    const result = validateReviewReport(report, projectRoot);
+    const shortHeadingReport = longHeadingReport.replace(
+      "## Top 5 Risks (cross-tier)",
+      "## Top 5 Risks",
+    );
+
+    const longHeadingResult = validateReviewReport(
+      longHeadingReport,
+      projectRoot,
+    );
+    const shortHeadingResult = validateReviewReport(
+      shortHeadingReport,
+      projectRoot,
+    );
     assert.equal(
       hasCheck(
-        result.violations as ValidationIssueShape[],
+        longHeadingResult.violations as ValidationIssueShape[],
         "V1",
         "anchor-unresolved",
+      ),
+      true,
+    );
+    assert.equal(
+      hasCheck(
+        shortHeadingResult.violations as ValidationIssueShape[],
+        "V1",
+        "anchor-unresolved",
+      ),
+      true,
+    );
+  });
+
+  it("accepts both documented Top 5 headings without a missing-section warning", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const report = withTopFiveRisk(
+      withSixSurfacedFindings(validReview()),
+    ).replace("## Top 5 Risks (cross-tier)", "## Top 5 Risks");
+    const result = validateReviewReport(report, projectRoot);
+
+    assert.deepEqual(result.violations, []);
+    assert.equal(hasCheck(warningsOf(result), "V7", "top-five-missing"), false);
+  });
+
+  it("rejects Ship Verdict decisions that contradict severity or integrity", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const severityConflict = validReview()
+      .replace("[SHOULD:patch]", "[MUST:patch]")
+      .replace("Decision: **PARTIAL**", "Decision: **YES**");
+    const degradationConflict = validReview().replace(
+      "Decision: **PARTIAL**",
+      "Decision: **YES WITH CONDITIONS**",
+    );
+
+    const severityConflictResult = validateReviewReport(
+      severityConflict,
+      projectRoot,
+    );
+    const degradationConflictResult = validateReviewReport(
+      degradationConflict,
+      projectRoot,
+    );
+
+    assert.equal(
+      hasCheck(
+        severityConflictResult.violations as ValidationIssueShape[],
+        "V5",
+        "ship-verdict-contradiction",
+      ),
+      true,
+    );
+    assert.equal(
+      hasCheck(
+        degradationConflictResult.violations as ValidationIssueShape[],
+        "V5",
+        "ship-verdict-contradiction",
       ),
       true,
     );

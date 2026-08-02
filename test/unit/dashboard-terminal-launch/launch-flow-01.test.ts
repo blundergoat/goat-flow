@@ -112,6 +112,49 @@ describe("dashboard terminal launch flow", () => {
     );
 
     assert.equal(launches[0]?.accessMode, "workspace");
+    assert.match(
+      String(launches[0]?.prompt),
+      /this preset may write only after the prompt or user explicitly approves it/u,
+    );
+    assert.doesNotMatch(String(launches[0]?.prompt), /reporting-only/u);
+  });
+
+  it("describes native Claude enforcement only for reporting Claude launches", async () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      { setTimeout, clearTimeout, setInterval, clearInterval },
+      { window: { __GOAT_FLOW_DEFAULT_PATH__: "/tmp/controller" } },
+    );
+    const launches: Array<Record<string, unknown>> = [];
+    const ctx = makeContext({
+      allPresets: [],
+      userRole: "builder",
+      async launchInTerminal(
+        prompt: string,
+        runner: string,
+        options: Record<string, unknown>,
+      ): Promise<void> {
+        launches.push({ prompt, runner, ...options });
+      },
+    });
+
+    await helpers.dashboardLaunchPreset(ctx, "review", "claude", "Review", {
+      accessMode: "reporting",
+    });
+    await helpers.dashboardLaunchPreset(
+      ctx,
+      "review",
+      "antigravity",
+      "Review",
+      { accessMode: "reporting" },
+    );
+
+    assert.match(String(launches[0]?.prompt), /Claude permission overlay/u);
+    assert.doesNotMatch(
+      String(launches[0]?.prompt),
+      /prompt and hook guardrails/u,
+    );
+    assert.match(String(launches[1]?.prompt), /prompt and hook guardrails/u);
   });
 
   it("keeps controlling cwd and selected target separate in terminal create payloads", async () => {

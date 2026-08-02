@@ -211,14 +211,15 @@ Always emit; minimum: "confident - no degradation flags".
 
 **Both modes:**
 - MUST apply the Blast Radius Rule, severity/action tags, Footgun Cross-Check, systemic grouping, and Review Integrity in both modes
-- MUST order findings by severity, not by file or discovery order
-- MUST propose chunking above 20 files in either mode, or 3000 changed lines in diff mode
+- MUST order findings by severity, never file or discovery order
+- MUST propose chunking above 20 files, or 3000 changed lines in diff mode
 - Emit Spec Drift only when opted in. If skipped, record `Spec drift: skipped` without a degradation flag
 - MUST NOT edit files unless user says "implement"; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.
 - Render optional sections only with content. Emit Top 5 Risks only above five surfaced findings; at five or fewer, Findings is the risk surface.
 - **Ship Verdict rules (diff/PR or explicit release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. Refuter output changes Ship Verdict only after host reproduction. Downgrade ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` moves one rung.
-- **Zero-findings HALT:** If Pass 2 produces zero findings, state what was checked and why no issues surfaced. Zero findings must be defended.
+- **Zero-findings HALT:** Defend zero Pass 2 findings: state what was checked and why no issue surfaced.
+- Universal constraints from `skill-preamble.md` apply.
 
 ## Output Format
 

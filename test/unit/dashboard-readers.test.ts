@@ -26,6 +26,12 @@ const MODEL_READERS_PATH = resolve(
 
 type HelperContext = {
   readRunnerId: (_value: unknown) => string | null;
+  readServerSessionInfo: (_value: unknown) =>
+    | (Record<string, unknown> & {
+        captureQualityDrafts: boolean;
+        qualityDraftProjectPath: string | null;
+      })
+    | null;
   readInjectedSupportedAgents: () => SupportedAgent[];
   readDashboardReport: (_value: unknown) => {
     scopes: {
@@ -175,6 +181,7 @@ function loadHelpers(
     `${js}
 globalThis.__helpers = {
   readRunnerId,
+  readServerSessionInfo,
   readInjectedSupportedAgents,
   readDashboardReport,
   readTaskState,
@@ -388,6 +395,26 @@ function readPlansViewTaskState(): ReturnType<HelperContext["readTaskState"]> {
 }
 
 describe("dashboard payload readers", () => {
+  it("preserves reporting capture metadata from backend session records", () => {
+    const helpers = loadHelpers();
+    const session = helpers.readServerSessionInfo({
+      id: "session-reporting",
+      status: "active",
+      runner: "claude",
+      createdAt: "2026-08-03T00:00:00.000Z",
+      projectPath: "/tmp/example",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/example",
+      accessMode: "reporting",
+      captureQualityDrafts: true,
+      qualityDraftProjectPath: "/tmp/example",
+      lastInputAt: 1,
+    });
+
+    assert.equal(session?.captureQualityDrafts, true);
+    assert.equal(session?.qualityDraftProjectPath, "/tmp/example");
+  });
+
   it("narrows supported agents from injected runner metadata", () => {
     const helpers = loadHelpers({
       __GOAT_FLOW_RUNNER_IDS__: ["claude", "codex"],

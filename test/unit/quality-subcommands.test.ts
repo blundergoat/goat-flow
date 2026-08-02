@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -33,6 +34,7 @@ import {
 } from "../../src/cli/cli-types.js";
 import type { ParsedCLI } from "../../src/cli/cli-types.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
+import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
 
 const CLI_USAGE_EXIT_CODE = 2;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -362,6 +364,95 @@ describe("quality save", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
       rmSync(redirectRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Preserve both reports when two first saves observe the same missing directory chain.
+   * Side effects: writes two local reports and removes the temporary project afterwards.
+   * Fixture purpose: the injected creator completes a competing save before the first mkdir resumes.
+   */
+  it("keeps both valid reports when first-save directory creation races", () => {
+    const projectRoot = makeIgnoredQualityRoot();
+    let competingReportPath: string | null = null;
+    const firstSaveDependencies = {
+      CLIError,
+      /** Writes the competing report, then retries this directory creation. */
+      createReportDirectory(directoryPath: string): void {
+        // Example: another dashboard session completes its first save while this user is saving.
+        if (competingReportPath === null) {
+          competingReportPath = persistQualityReportText(
+            {
+              projectPath: projectRoot,
+              rawText: JSON.stringify(
+                currentQualityReport(projectRoot, "Competing session"),
+              ),
+              sourceLabel: "competing draft",
+            },
+            { CLIError },
+          );
+        }
+        mkdirSync(directoryPath);
+      },
+    };
+
+    try {
+      const firstReportPath = persistQualityReportText(
+        {
+          projectPath: projectRoot,
+          rawText: JSON.stringify(
+            currentQualityReport(projectRoot, "First session"),
+          ),
+          sourceLabel: "first draft",
+        },
+        firstSaveDependencies,
+      );
+
+      assert.ok(competingReportPath);
+      const savedReports = readdirSync(
+        join(projectRoot, ".goat-flow", "logs", "quality"),
+      ).map((name) => join(projectRoot, ".goat-flow", "logs", "quality", name));
+      assert.equal(savedReports.length, 2);
+      assert.ok(savedReports.includes(firstReportPath));
+      assert.ok(savedReports.includes(competingReportPath));
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Reject a path changed to a file while the user's first report directory is being created.
+   * Side effects: writes the unsafe fixture, verifies rejection, then removes the temporary project.
+   * Fixture purpose: the injected creator swaps in a file and reproduces an unsafe EEXIST race.
+   */
+  it("fails closed when a first-save race creates a non-directory", () => {
+    const projectRoot = makeIgnoredQualityRoot();
+    const unsafeSaveDependencies = {
+      CLIError,
+      /** Writes a file at the requested folder path to model an unsafe race. */
+      createReportDirectory(directoryPath: string): void {
+        // Example: an external process replaces the expected folder before the save reaches mkdir.
+        writeFileSync(directoryPath, "not a directory");
+        mkdirSync(directoryPath);
+      },
+    };
+
+    try {
+      assert.throws(
+        () =>
+          persistQualityReportText(
+            {
+              projectPath: projectRoot,
+              rawText: JSON.stringify(currentQualityReport(projectRoot)),
+              sourceLabel: "racing draft",
+            },
+            unsafeSaveDependencies,
+          ),
+        /must be a real project-local directory/u,
+      );
+      assert.equal(lstatSync(join(projectRoot, ".goat-flow")).isFile(), true);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
     }
   });
 });

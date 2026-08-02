@@ -75,6 +75,8 @@ type LaunchOptions = {
   cwdPath?: string | null;
   targetPath?: string | null;
   accessMode?: "workspace" | "reporting";
+  captureQualityDrafts?: boolean;
+  qualityDraftProjectPath?: string | null;
 };
 
 type LaunchContext = Record<"launching", boolean> & {
@@ -109,6 +111,8 @@ type LaunchContext = Record<"launching", boolean> & {
       retryCwdPath?: string | null;
       retryTargetPath?: string | null;
       retryAccessMode?: "workspace" | "reporting";
+      retryCaptureQualityDrafts?: boolean;
+      retryQualityDraftProjectPath?: string | null;
       loadingSlowTimer?: ReturnType<typeof setTimeout>;
       loadingRetryTimer?: ReturnType<typeof setTimeout>;
       launchPromptFallbackTimer?: ReturnType<typeof setTimeout>;
@@ -116,6 +120,8 @@ type LaunchContext = Record<"launching", boolean> & {
       launchPromptOutputSeen?: boolean;
     }
   >;
+  _projectSessions: Record<string, Array<Record<string, unknown>>>;
+  _projectActiveSession: Record<string, string>;
   showMaxSessionsModal: boolean;
   /**
    * Keeps runner-specific prompt rewriting injectable so payload tests can opt
@@ -197,6 +203,8 @@ type TestTerminalSession = Record<string, unknown> & {
   age: string;
   presetId: string | null;
   accessMode?: "workspace" | "reporting";
+  captureQualityDrafts: boolean;
+  qualityDraftProjectPath: string | null;
 };
 
 type TerminalSendHarness = {
@@ -229,12 +237,7 @@ type HelperContext = {
     prompt: string,
     runner?: string,
     label?: string,
-    options?: {
-      presetId?: string | null;
-      cwdPath?: string | null;
-      targetPath?: string | null;
-      accessMode?: "workspace" | "reporting";
-    },
+    options?: LaunchOptions,
   ): Promise<void>;
   /**
    * Sends text through an existing terminal WebSocket, including bracketed-paste
@@ -270,6 +273,15 @@ type HelperContext = {
     ctx: LaunchContext,
     serverSession: Record<string, unknown>,
   ): Promise<void>;
+  /** Reconnect every saved browser session that the backend still reports active. */
+  dashboardReconnectTerminal(ctx: LaunchContext): Promise<boolean>;
+  /** Save browser session metadata before detaching from the current project. */
+  dashboardDetachTerminal(ctx: LaunchContext, projectPath?: string): void;
+  /** Project one ended local session into the recent-session rail. */
+  dashboardRememberRecentSession(
+    ctx: LaunchContext,
+    session: TestTerminalSession,
+  ): void;
   /**
    * Ends a local session and records the recent-session fallback title.
    */
@@ -470,6 +482,9 @@ globalThis.__helpers = {
   dashboardLaunchInTerminal,
   dashboardConnectTerminal,
   dashboardOpenServerSession,
+  dashboardReconnectTerminal,
+  dashboardDetachTerminal,
+  dashboardRememberRecentSession,
   dashboardEndSession,
   dashboardOutputLooksAwaitingInput,
   dashboardOutputLooksReadyForLaunchPrompt,
@@ -511,6 +526,8 @@ function makeContext(
     launching: false,
     activeSessionId: null,
     _terminalRefs: {},
+    _projectSessions: {},
+    _projectActiveSession: {},
     showMaxSessionsModal: false,
     // Default contexts assert raw payloads, so prompt adaptation is opt-in per test.
     adaptPrompt(prompt: string): string {
@@ -601,6 +618,8 @@ function makeTerminalSession(
     age: "0s",
     presetId: null,
     accessMode: "workspace",
+    captureQualityDrafts: false,
+    qualityDraftProjectPath: null,
     ...overrides,
   };
 }

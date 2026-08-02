@@ -21,11 +21,25 @@ import {
   git,
   gitAvailable,
   makeTempProject,
+  POST_TURN_SAFETY_TIMEOUT_SECONDS,
+  readClaudePostTurnSafetyTimeout,
   runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
 
 describe("setup --apply installer", () => {
+  // A fresh Claude user needs enough runner time to see the hook's own incomplete-scan warning.
+  it("registers Claude post-turn safety with the registry timeout", () => {
+    const root = makeTempProject();
+    const result = runInstaller(root, "--agent", "claude");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(
+      readClaudePostTurnSafetyTimeout(root),
+      POST_TURN_SAFETY_TIMEOUT_SECONDS,
+    );
+  });
+
   it("scaffolds config.yaml without an agents allowlist", () => {
     const root = makeTempProject();
     const result = runInstaller(root, "--agent", "codex");

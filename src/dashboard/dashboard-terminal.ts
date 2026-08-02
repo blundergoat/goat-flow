@@ -1,6 +1,7 @@
 /**
  * Browser-side terminal/session helpers for the dashboard Alpine app.
  * The Alpine app owns view state; this file owns xterm/WebSocket mechanics.
+ * Use when users launch, reconnect, switch, or review Workspace terminal sessions.
  */
 
 const TERMINAL_REFIT_RETRY_DELAY_MS = 50; // Retry budget: one render tick before measuring xterm again.
@@ -180,6 +181,8 @@ function dashboardRememberRecentSession(
     targetPath: session.targetPath,
     runner: session.runner,
     accessMode: session.accessMode,
+    captureQualityDrafts: session.captureQualityDrafts,
+    qualityDraftProjectPath: session.qualityDraftProjectPath,
     lastInputAt: session.lastInputTime,
     age: Math.max(0, Math.floor((Date.now() - session.startTime) / 1000)),
     projectName: ctx.displayNameFor(session.projectPath),

@@ -16,6 +16,7 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 export const disposables: string[] = [];
@@ -23,6 +24,14 @@ export const gitAvailable =
   spawnSync("git", ["--version"], {
     encoding: "utf-8",
   }).status === 0;
+const postTurnSafetyHookSpec = getHookSpec("post-turn-safety");
+assert.ok(
+  postTurnSafetyHookSpec?.timeoutSec,
+  "post-turn-safety must define the runner timeout used by installer tests",
+);
+/** Registry-owned Stop timeout the standalone installer must give users. */
+export const POST_TURN_SAFETY_TIMEOUT_SECONDS =
+  postTurnSafetyHookSpec.timeoutSec;
 
 after(() => {
   for (const dir of disposables) {
@@ -53,6 +62,39 @@ export function makeTempProject(): string {
  */
 export function runInstaller(root: string, ...extraArgs: string[]) {
   return runInstallerWithEnvironment(root, {}, ...extraArgs);
+}
+
+/**
+ * Returns the Stop safety timeout a Claude user receives; undefined means no registration exists.
+ * @param targetProjectPath - Non-empty installed project root; empty has no settings file to inspect.
+ * @returns Configured seconds, or undefined when the user has no managed Stop command.
+ */
+export function readClaudePostTurnSafetyTimeout(
+  targetProjectPath: string,
+): number | undefined {
+  const claudeSettings = JSON.parse(
+    readFileSync(join(targetProjectPath, ".claude", "settings.json"), "utf-8"),
+  ) as {
+    hooks?: {
+      Stop?: Array<{
+        hooks?: Array<{ command?: string; timeout?: number }>;
+      }>;
+    };
+  };
+  const stopEventGroups = claudeSettings.hooks?.Stop ?? [];
+
+  // Each group may contain a user hook or the managed Stop safety command.
+  for (const stopEventGroup of stopEventGroups) {
+    const commandEntries = stopEventGroup.hooks ?? [];
+    // A matching command is the registration Claude will run after the user's turn.
+    for (const commandEntry of commandEntries) {
+      // Missing command text means this entry cannot be the managed safety hook.
+      if (commandEntry.command?.includes("post-turn-safety.sh")) {
+        return commandEntry.timeout;
+      }
+    }
+  }
+  return undefined;
 }
 
 /**

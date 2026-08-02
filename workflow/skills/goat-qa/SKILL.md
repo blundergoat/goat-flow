@@ -68,7 +68,7 @@ Standard maps Blocking to Must test, High-value to Should test, and Defer to Saf
 
 **No existing tests:** mark coverage `NONE`: "No automated tests; verification falls to human and AI reviewers."
 
-**CHECKPOINT:** Standard: "Analysing [N] changed files against [existing test plan / no test plan]." Audit: "Auditing [scope] against [existing tests / no tests]." Proceed unless scope, audience, or test plan is ambiguous.
+**CHECKPOINT:** Regression Guard: "Mapping [N] invariants against [prior fix evidence / unavailable evidence]." Standard: "Analysing [N] changed files against [existing test plan / no test plan]." Audit: "Auditing [scope] against [existing tests / no tests]." Proceed unless scope, audience, or test plan is ambiguous.
 
 ## Phase 1 - Change Risk Analysis
 
@@ -185,7 +185,7 @@ Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MED
 
 **Worked Audit example:** Read tests, not filenames: integration coverage can make a file PARTIAL-BEHAVIOURAL. Classify `<target-project>/src/content-check.ts` as NONE only after checking unit, integration, and exported-symbol references.
 
-**BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template below.
+**BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template in `references/output-templates.md`.
 
 ## Regression Guard Mode
 

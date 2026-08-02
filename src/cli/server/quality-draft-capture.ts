@@ -1,27 +1,7 @@
 /**
- * Dashboard-owned quality report persistence for enforced Claude reporting
- * sessions (ADR-044).
- *
- * Claude Code 2.1.220's permission rules cannot authorize the multi-line
- * heredoc `quality save` command (measured in plan M06), so enforced sessions
- * never persist reports themselves. Instead the agent writes ONE draft JSON
- * into a gitignored staging directory with its file tool, and this module -
- * running inside the dashboard server process - validates, redacts, revalidates,
- * and persists the draft through the same `quality save` core as the CLI,
- * deletes the draft, and writes a receipt file the agent can read to confirm
- * the outcome.
- *
- * Polling (not fs.watch) is deliberate: watch events are unreliable on WSL2
- * and network filesystems. The poller requires repeated size/mtime observations
- * and retains parse failures until the last writer exits, so a paused writer is
- * never mistaken for a completed invalid draft.
- *
- * Ownership is per project root, not per session: the staging directory is
- * shared by every session on a root, so one reference-counted poller owns it
- * and each session holds a handle. Every session MUST dispose its handle when
- * it ends (see the cleanup-layering footgun); the last release clears the timer
- * and sweeps leftover drafts, so no unredacted draft outlives the last session
- * that could still be writing one.
+ * Own quality-report persistence when a Claude reporting agent stages a draft (ADR-044).
+ * Repeated size/mtime observations protect changing files on WSL2 and network filesystems.
+ * Stable outcomes get visible receipts immediately; one root poller sweeps leftovers at shutdown.
  */
 import {
   chmodSync,
@@ -55,7 +35,11 @@ const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 const DEFAULT_INTERVAL_MS = 750;
 const DEFAULT_STABLE_MS = 500;
 
-/** Error type satisfying the `quality save` core's injected CLIError contract. */
+/**
+ * Translate shared quality-save failures into capture outcomes the reporting agent can read.
+ * Use only inside the dashboard-owned persistence path; the exit code preserves CLI parity.
+ * The error message is later reduced to a bounded, secret-free receipt diagnostic.
+ */
 class QualityCaptureError extends Error {
   constructor(
     message: string,
@@ -112,7 +96,6 @@ const rootCaptures = new Map<
   string,
   { capture: RootCapture; holders: number }
 >();
-
 /** One prospective staging component and its non-following filesystem observation. */
 interface InspectedDraftDirectory {
   componentPath: string;
@@ -317,7 +300,6 @@ interface RootCaptureContext {
   stagingDir: string;
   stableMs: number;
 }
-
 /** Mutable poller state shared by direct calls, timer polls, and finalization. */
 interface RootCaptureState {
   isDisposed: boolean;
@@ -330,7 +312,6 @@ interface DraftObservation {
   mtimeMs: number;
   size: number;
 }
-
 /** Eligible draft metadata captured before receipt reservation and content reads. */
 interface StableDraft extends DraftObservation {
   path: string;
@@ -431,7 +412,7 @@ function reserveCaptureReceipt(
     assertCaptureReceiptAvailable(context.stagingDir, draftName);
     return true;
   } catch {
-    // A pre-existing receipt is user-owned state, so reject the draft without overwriting it.
+    // A stale or unsafe receipt blocks this run; replace only its staging entry with a rejection.
     removeDraft(context.stagingDir, draftName);
     const receiptAvailable = replacePreexistingReceiptWithRejection(
       context.stagingDir,
@@ -571,7 +552,6 @@ function processCaptureDraft(
   if (!reserveCaptureReceipt(context, draftName)) return;
   // Oversized input is rejected before its unredacted contents are loaded into memory.
   if (draft.size > MAX_DRAFT_BYTES) {
-    if (!finalizing) return;
     rejectOversizedDraft(context, draftName);
     state.observations.delete(draftName);
     return;
@@ -598,9 +578,7 @@ function processCaptureDraft(
     recordPersistedDraft(context, draftName, reportPath);
     state.observations.delete(draftName);
   } catch (error) {
-    // Parse/schema/ownership failures can be a paused writer's partial bytes.
-    // Keep them private and retry while any producing session remains alive.
-    if (!finalizing) return;
+    // Example: Claude finished malformed JSON; the user needs a rejection receipt without closing.
     recordRejectedDraft(context, draftName, rawText, error);
     state.observations.delete(draftName);
   }

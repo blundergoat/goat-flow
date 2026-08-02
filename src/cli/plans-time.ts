@@ -27,6 +27,7 @@ import {
 } from "./evidence/envelope.js";
 import { renderActualLine } from "./plans-effort.js";
 import {
+  latestRecordedTimingEpoch,
   parseTimingReceiptMarkdown,
   renderTimingReceiptMarkdown,
   summarizeTimingReceipt,
@@ -36,6 +37,22 @@ import {
   type PlanTimingSegment,
 } from "./plans-time-receipt.js";
 import { maskNonRenderedMarkdown } from "./rendered-markdown.js";
+
+/** Stable CLI errors that tell users how to recover without echoing milestone content. */
+const TIMING_ERROR = {
+  nonNegativeEpoch: "Timing needs a non-negative whole epoch second.",
+  unsupportedDate: "Timing timestamp is outside the supported date range.",
+  outsidePlans:
+    "Milestone must be inside a project .goat-flow/plans directory.",
+  escapingPath: "Milestone path escapes its .goat-flow/plans directory.",
+  multipleReceipts: "Milestone has multiple Timing Receipt sections.",
+  missingEstimate: "Milestone needs an Effort estimate before Actual.",
+  concurrentEdit: "Milestone changed during timing; retry the transition.",
+  multipleOpen: "Timing Receipt has more than one open segment.",
+  historyClock: "System clock predates timing history; wait before starting.",
+  emptyFinalization: "Cannot finalize before recording a timing segment.",
+  openClock: "System clock moved backwards in the open span; discard it.",
+} as const;
 
 export {
   allocateTimingMinutes,
@@ -88,24 +105,21 @@ interface ReceiptTransitionResult {
   eventCategory: PlanTimeCategory | null;
 }
 
-/**
- * Convert an epoch second into the canonical UTC form written to receipts.
- *
+/** Test-only callback that simulates a user saving immediately before milestone replacement. */
+type BeforeMilestoneReplacement = () => void;
+
+/** Convert an epoch second into the canonical UTC form written to receipts.
  * @throws CLIError - when the supplied instant cannot be represented safely
  */
 function stampFromEpoch(epochSeconds: number): TimingStamp {
+  // Invalid test or system time cannot become trustworthy user-visible evidence.
   if (!Number.isSafeInteger(epochSeconds) || epochSeconds < 0) {
-    throw new CLIError(
-      "Timing timestamp must be a non-negative epoch second.",
-      2,
-    );
+    throw new CLIError(TIMING_ERROR.nonNegativeEpoch, 2);
   }
   const instant = new Date(epochSeconds * 1000);
+  // An out-of-range date cannot be shown consistently in the receipt UI.
   if (Number.isNaN(instant.valueOf())) {
-    throw new CLIError(
-      "Timing timestamp is outside the supported date range.",
-      2,
-    );
+    throw new CLIError(TIMING_ERROR.unsupportedDate, 2);
   }
   return {
     iso: instant.toISOString().replace(".000Z", "Z"),
@@ -129,15 +143,14 @@ function locatePlansRoot(milestonePath: string): string | null {
   }
 }
 
-/**
- * Read one path component without accepting missing or inaccessible entries.
- *
+/** Read one selected path component without accepting missing or inaccessible entries.
  * @throws CLIError - when the selected path component cannot be inspected
  */
 function requiredPathStats(path: string, label: string): Stats {
   try {
     return lstatSync(path);
   } catch (error) {
+    // Example: the user selected a milestone and another tool moved it before Start.
     throw new CLIError(
       `Cannot inspect ${label}: ${error instanceof Error ? error.message : String(error)}`,
       2,
@@ -145,31 +158,23 @@ function requiredPathStats(path: string, label: string): Stats {
   }
 }
 
-/**
- * Require the milestone filename shape accepted by the planning workflow.
- *
+/** Require the milestone filename shape accepted by the planning workflow.
  * @throws CLIError - when the selected document is not an M*.md milestone
  */
 function requireMilestoneFilename(milestonePath: string): void {
   // A non-milestone document must not receive timing fields through this command.
-  if (!/^M\d.*\.md$/iu.test(basename(milestonePath))) {
+  if (!/^M\d.*\.md$/iu.test(basename(milestonePath)))
     throw new CLIError("plans time requires an M*.md milestone file.", 2);
-  }
 }
 
-/**
- * Resolve the containing plans directory or explain the required project layout.
- *
+/** Resolve the containing plans directory or explain the required project layout.
  * @throws CLIError - when the milestone is outside a containing `.goat-flow/plans` tree
  */
 function requirePlansRoot(milestonePath: string): string {
   const plansRoot = locatePlansRoot(milestonePath);
   // Without a containing plan tree, the command cannot identify the selected project safely.
   if (plansRoot === null) {
-    throw new CLIError(
-      "Milestone must be nested under a containing project .goat-flow/plans directory.",
-      2,
-    );
+    throw new CLIError(TIMING_ERROR.outsidePlans, 2);
   }
   return plansRoot;
 }
@@ -186,16 +191,11 @@ function requireNestedMilestone(
     nestedPath === ".." ||
     nestedPath.startsWith(`..${sep}`)
   ) {
-    throw new CLIError(
-      "Milestone path escapes the containing plan directory.",
-      2,
-    );
+    throw new CLIError(TIMING_ERROR.escapingPath, 2);
   }
 }
 
-/**
- * Require a real containing project directory before inspecting its milestone path.
- *
+/** Require a real project directory before inspecting the user's milestone path.
  * @throws CLIError - when the project root is redirected or is not a directory
  */
 function requireProjectDirectory(projectRoot: string): void {
@@ -204,13 +204,11 @@ function requireProjectDirectory(projectRoot: string): void {
     "containing project root",
   );
   // A redirected root would make the selected project identity ambiguous.
-  if (projectStats.isSymbolicLink()) {
+  if (projectStats.isSymbolicLink())
     throw new CLIError("Containing project root must not be a symlink.", 2);
-  }
   // A non-directory cannot contain the planning workspace shown to the user.
-  if (!projectStats.isDirectory()) {
+  if (!projectStats.isDirectory())
     throw new CLIError("Containing project root must be a directory.", 2);
-  }
 }
 
 /** Validate one milestone path component and return whether it is the destination. */
@@ -260,10 +258,7 @@ function inspectMilestonePath(
   throw new CLIError("Milestone path has no destination component.", 2);
 }
 
-/**
- * Resolve a nested milestone to its selected project and reject symlinks,
- * non-directory parents, and linked/non-regular destinations.
- */
+/** Resolve one nested milestone while rejecting redirected or linked destinations. */
 function resolvePlanFileContext(inputPath: string): PlanFileContext {
   const milestonePath = resolve(inputPath);
   requireMilestoneFilename(milestonePath);
@@ -275,19 +270,14 @@ function resolvePlanFileContext(inputPath: string): PlanFileContext {
   return { milestonePath, projectRoot, plansRoot, fileStats };
 }
 
-/**
- * Find the one rendered Timing Receipt section while preserving source offsets.
- *
+/** Find the one rendered Timing Receipt section while preserving source offsets.
  * @throws CLIError - when the milestone contains more than one rendered receipt section
  */
 function findReceiptSection(content: string): ReceiptSection | null {
   const masked = maskNonRenderedMarkdown(content);
   const headings = Array.from(masked.matchAll(/^##\s+Timing Receipt\s*$/gimu));
   if (headings.length > 1) {
-    throw new CLIError(
-      "Milestone contains multiple Timing Receipt sections.",
-      2,
-    );
+    throw new CLIError(TIMING_ERROR.multipleReceipts, 2);
   }
   const heading = headings[0];
   if (heading?.index === undefined) return null;
@@ -319,9 +309,7 @@ function writeReceiptSection(
   return `${content.trimEnd()}\n\n${rendered}`;
 }
 
-/**
- * Replace the one live Actual field, or insert it after the effort estimate.
- *
+/** Replace the one live Actual field, or insert it after the effort estimate.
  * @throws CLIError - when the milestone has ambiguous Actual fields or no estimate anchor
  */
 function writeActualField(content: string, actualLine: string): string {
@@ -340,19 +328,25 @@ function writeActualField(content: string, actualLine: string): string {
     /^(?:\*\*Effort estimate:\*\*|Effort estimate:).*$/imu,
   );
   if (effort?.index === undefined) {
-    throw new CLIError(
-      "Milestone requires an Effort estimate before Actual.",
-      2,
-    );
+    throw new CLIError(TIMING_ERROR.missingEstimate, 2);
   }
   const insertion = effort.index + effort[0].length;
   return `${content.slice(0, insertion)}\n${actualLine}${content.slice(insertion)}`;
 }
 
-/** Keep the destination identity stable between read and adjacent atomic rename. */
+/**
+ * Replace one milestone only when neither an editor save nor path swap changed what the user selected.
+ * The temporary file stays adjacent so the successful replacement remains atomic for dashboard readers.
+ * @param initialContext - verified milestone identity captured before reading the user's file
+ * @param milestoneContentAtRead - exact content the timing transition was calculated from
+ * @param updatedMilestoneContent - receipt and Actual content ready for atomic replacement
+ * @param beforeMilestoneReplacement - test-only editor-save simulation; omitted during normal CLI use
+ */
 function writeMilestoneAtomically(
   initialContext: PlanFileContext,
-  content: string,
+  milestoneContentAtRead: string,
+  updatedMilestoneContent: string,
+  beforeMilestoneReplacement?: BeforeMilestoneReplacement,
 ): void {
   const tempPath = join(
     dirname(initialContext.milestonePath),
@@ -362,32 +356,33 @@ function writeMilestoneAtomically(
   try {
     descriptor = openSync(tempPath, "wx", 0o600);
     fchmodSync(descriptor, initialContext.fileStats.mode & 0o777);
-    writeFileSync(descriptor, content, "utf-8");
+    writeFileSync(descriptor, updatedMilestoneContent, "utf-8");
     fsyncSync(descriptor);
     closeSync(descriptor);
     descriptor = null;
-
+    // Tests use this seam to reproduce a user saving in another editor at the last safe moment.
+    beforeMilestoneReplacement?.();
     const currentContext = resolvePlanFileContext(initialContext.milestonePath);
-    if (
+    const destinationIdentityChanged =
       currentContext.fileStats.dev !== initialContext.fileStats.dev ||
-      currentContext.fileStats.ino !== initialContext.fileStats.ino
-    ) {
-      throw new CLIError(
-        "Milestone changed while timing was being recorded; retry the transition.",
-        2,
-      );
-    }
+      currentContext.fileStats.ino !== initialContext.fileStats.ino;
+    const destinationContentChanged =
+      readFileSync(currentContext.milestonePath, "utf-8") !==
+      milestoneContentAtRead;
+    // Atomic and in-place editor saves both mean the user's newer file must win.
+    if (destinationIdentityChanged || destinationContentChanged)
+      throw new CLIError(TIMING_ERROR.concurrentEdit, 2);
     renameSync(tempPath, initialContext.milestonePath);
   } catch (error) {
+    // Example: the user saves in another editor, or the disk rejects the temporary write.
     if (descriptor !== null) closeSync(descriptor);
+    // A failed transition must not leave a hidden temporary file beside the user's milestone.
     if (existsSync(tempPath)) unlinkSync(tempPath);
     throw error;
   }
 }
 
-/**
- * Return the sole open segment, rejecting a corrupted multi-open receipt.
- *
+/** Return the sole open segment, rejecting a corrupted multi-open receipt.
  * @throws CLIError - when the receipt contains more than one active span
  */
 function readOpenSegment(receipt: PlanTimingReceipt): PlanTimingSegment | null {
@@ -395,10 +390,7 @@ function readOpenSegment(receipt: PlanTimingReceipt): PlanTimingSegment | null {
     (segment) => segment.state === "open",
   );
   if (openSegments.length > 1) {
-    throw new CLIError(
-      "Timing Receipt contains more than one open segment.",
-      2,
-    );
+    throw new CLIError(TIMING_ERROR.multipleOpen, 2);
   }
   return openSegments[0] ?? null;
 }
@@ -412,9 +404,7 @@ function nextSegmentId(
   return `${milestoneId.toUpperCase()}-S${String(segments.length + 1).padStart(2, "0")}`;
 }
 
-/**
- * Parse an existing receipt or initialize empty paused state for the first start.
- *
+/** Parse an existing receipt or initialize paused state for the user's first Start.
  * @throws CLIError - when the embedded receipt cannot be parsed or validated
  */
 function readReceipt(content: string): PlanTimingReceipt {
@@ -459,9 +449,13 @@ function startReceipt(
   stamp: TimingStamp,
   milestonePath: string,
 ): ReceiptTransitionResult {
-  if (openSegment) {
+  // Starting twice would create two clocks the user cannot stop independently.
+  if (openSegment)
     throw new CLIError("Timing Receipt already has an open segment.", 2);
-  }
+  const latestHistoryEpoch = latestRecordedTimingEpoch(receipt.segments);
+  // A Start before visible history would overlap work and make the receipt impossible to verify.
+  if (latestHistoryEpoch !== null && stamp.epochSeconds < latestHistoryEpoch)
+    throw new CLIError(TIMING_ERROR.historyClock, 2);
   const next: PlanTimingSegment = {
     id: nextSegmentId(milestonePath, receipt.segments),
     category,
@@ -490,7 +484,7 @@ function stopReceipt(
   transition: Extract<PlanTimeTransition, { action: "stop" }>,
   stamp: TimingStamp,
 ): ReceiptTransitionResult {
-  validateStopTransition(openSegment, transition, stamp);
+  validateStopTransition(receipt, openSegment, transition, stamp);
   const segments = receipt.segments.map((segment) =>
     updateStoppedSegment(segment, openSegment, transition, stamp),
   );
@@ -514,29 +508,30 @@ function stopReceipt(
   };
 }
 
-/** Reject contradictory recovery, missing spans, and backwards clocks before mutation. */
+/** Reject contradictory recovery, empty finalization, and backwards clocks before mutation. */
 function validateStopTransition(
+  receipt: PlanTimingReceipt,
   openSegment: PlanTimingSegment | null,
   transition: Extract<PlanTimeTransition, { action: "stop" }>,
   stamp: TimingStamp,
 ): void {
-  if (transition.discardOpen && transition.finalize) {
+  // Contradictory flags cannot tell the user whether the running span should count or be discarded.
+  if (transition.discardOpen && transition.finalize)
     throw new CLIError("--discard-open and --finalize cannot be combined.", 2);
+  // Finalizing before Start would publish a measured zero even though no clock ever ran.
+  if (transition.finalize && receipt.segments.length === 0) {
+    throw new CLIError(TIMING_ERROR.emptyFinalization, 2);
   }
-  if (!openSegment && !transition.finalize) {
+  // A normal Stop needs the active span the user expects it to close.
+  if (!openSegment && !transition.finalize)
     throw new CLIError("Timing Receipt has no open segment to stop.", 2);
-  }
+  // Finalizing an already paused nonempty receipt is valid and needs no active-span clock check.
   if (!openSegment) return;
 
-  // Discard is the recovery this error names, and it never derives a duration
-  // from the clock - the span keeps a null end and null seconds either way.
-  // Running the ordering check against it would reject the only way out.
+  // Discard derives no duration, so skipping clock order preserves rollback recovery.
   if (transition.discardOpen) return;
   if (stamp.epochSeconds >= openSegment.startEpochSeconds) return;
-  throw new CLIError(
-    "System clock moved backwards during the open timing span; discard it instead.",
-    2,
-  );
+  throw new CLIError(TIMING_ERROR.openClock, 2);
 }
 
 /** Preserve incomplete state after any discarded span. */
@@ -628,20 +623,19 @@ function recordTimingEvent(
   );
 }
 
-/**
- * Safely apply one timing action. The optional epoch is for deterministic
- * library tests; CLI callers always omit it and therefore use the system clock.
- *
+/** Safely apply one user timing action; optional clocks and callbacks support deterministic tests.
  * @param milestoneInputPath - milestone selected by the user; empty or invalid paths are rejected
  * @param transition - requested timing action; status reads without writing or recording an event
  * @param nowEpochSeconds - system-clock instant; omitted means capture the current whole second
+ * @param beforeMilestoneReplacement - test-only editor-save simulation; omitted for user commands
  * @returns the verified project, updated receipt, and best-effort diagnostic event result
  * @throws CLIError - when the path, receipt, transition, clock, or atomic write is invalid
  */
 export function applyPlanTimeTransition(
   milestoneInputPath: string,
   transition: PlanTimeTransition,
-  nowEpochSeconds = Math.floor(Date.now() / 1000),
+  nowEpochSeconds?: number,
+  beforeMilestoneReplacement?: BeforeMilestoneReplacement,
 ): PlanTimeCommandResult {
   const context = resolvePlanFileContext(milestoneInputPath);
   const content = readFileSync(context.milestonePath, "utf-8");
@@ -660,7 +654,10 @@ export function applyPlanTimeTransition(
     };
   }
 
-  const stamp = stampFromEpoch(nowEpochSeconds);
+  // User commands omit the deterministic test clock and use the current whole second.
+  const transitionEpochSeconds =
+    nowEpochSeconds ?? Math.floor(Date.now() / 1000);
+  const stamp = stampFromEpoch(transitionEpochSeconds);
   const transitioned = transitionReceipt(
     receipt,
     transition,
@@ -674,7 +671,12 @@ export function applyPlanTimeTransition(
     transitioned.receipt,
   );
   if (actualLine) nextContent = writeActualField(nextContent, actualLine);
-  writeMilestoneAtomically(context, nextContent);
+  writeMilestoneAtomically(
+    context,
+    content,
+    nextContent,
+    beforeMilestoneReplacement,
+  );
   const event = recordTimingEvent(
     context,
     transition,
@@ -715,9 +717,7 @@ function renderPlanTimeResult(
   ].join("\n");
 }
 
-/**
- * Dispatch parsed `plans time` fields into the safe timing transition.
- *
+/** Dispatch parsed `plans time` fields into the safe timing transition.
  * @param options - parsed CLI request; absent timing fields produce a usage error
  * @throws CLIError - when the action or its required category is missing or invalid
  */

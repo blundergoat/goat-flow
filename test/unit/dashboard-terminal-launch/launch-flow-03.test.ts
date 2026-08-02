@@ -398,6 +398,28 @@ describe("dashboard terminal launch flow", () => {
     );
   });
 
+  it("falls back to rehydrated session capture metadata when retry refs are absent", async () => {
+    const { ctx, helpers, launchCalls, session } = makePreOutputRetryHarness();
+    session.captureQualityDrafts = true;
+    session.qualityDraftProjectPath = "/tmp/report-owner";
+
+    await helpers.dashboardRetryTerminalSession(ctx, "session-error");
+
+    assert.equal(
+      (launchCalls[0]?.options as { captureQualityDrafts?: boolean })
+        ?.captureQualityDrafts,
+      true,
+    );
+    assert.equal(
+      (
+        launchCalls[0]?.options as {
+          qualityDraftProjectPath?: string | null;
+        }
+      )?.qualityDraftProjectPath,
+      "/tmp/report-owner",
+    );
+  });
+
   it("treats terminal WebSocket close as detach until an exit message arrives", () => {
     const { globals, sockets } = makeBrowserTerminalGlobals();
     const calls: string[] = [];

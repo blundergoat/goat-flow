@@ -362,21 +362,55 @@ function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
   };
 }
 
-/** Detect managed hook entries by script reference so drift repair preserves unrelated hooks. */
-function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+/** Detect a command entry that directly launches one managed hook script. */
+function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+  // Non-object JSON cannot represent a runnable hook command.
   if (!isRecord(entry)) return false;
   const commands = [
     typeof entry.command === "string" ? entry.command : "",
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
   ].join("\n");
-  if (spec.scriptFiles.some((script) => commands.includes(script))) {
-    return true;
-  }
+  return spec.scriptFiles.some((script) => commands.includes(script));
+}
+
+/** Detect managed hook entries by script reference so drift repair preserves unrelated hooks. */
+function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+  // Non-object JSON cannot contain a managed hook command or nested hook list.
+  if (!isRecord(entry)) return false;
+  // A direct command match identifies an entry setup owns.
+  if (commandEntryReferencesSpec(entry, spec)) return true;
+  // Matcher groups nest runnable commands under their hooks array.
   if (Array.isArray(entry.hooks)) {
     return entry.hooks.some((hook) => entryReferencesSpec(hook, spec));
   }
   return false;
+}
+
+/**
+ * Collect direct managed commands so timeout drift is checked at the runner entry users execute.
+ */
+function collectManagedHookCommands(
+  value: unknown,
+  spec: HookSpec,
+  matchingCommands: Record<string, unknown>[],
+): void {
+  // Arrays represent event groups or nested command lists in agent settings.
+  if (Array.isArray(value)) {
+    // Every entry can independently carry a managed command and timeout.
+    for (const nestedValue of value) {
+      collectManagedHookCommands(nestedValue, spec, matchingCommands);
+    }
+    return;
+  }
+  // Primitive or null values cannot contain a runnable command.
+  if (!isRecord(value)) return;
+  // Direct matches are the leaf registrations whose timeout affects the user.
+  if (commandEntryReferencesSpec(value, spec)) matchingCommands.push(value);
+  // Agent formats may add matcher or hook-id containers around the command.
+  for (const nestedValue of Object.values(value)) {
+    collectManagedHookCommands(nestedValue, spec, matchingCommands);
+  }
 }
 
 function ensureHooksObject(
@@ -459,19 +493,16 @@ function removeHookEntries(
 }
 
 /**
- * Parse the installed hook template before optional dashboard toggles are applied.
- * Use when Copilot users need drift checks to account for enabled or disabled optional hooks.
- * Swallows malformed JSON as a fallback so users still get the normal template drift comparison.
- *
- * @param template - hook config JSON from the template; invalid or empty JSON means drift falls back to the raw template
- * @returns parsed hook config, or `null` when the template cannot safely drive user-facing drift output
+ * Parses hook JSON for template and installed-config comparisons; null leaves malformed input to setup validation.
  */
-function parsedHookTemplate(template: string): Record<string, unknown> | null {
+function parseHookConfigJson(
+  hookConfigText: string,
+): Record<string, unknown> | null {
   let config: unknown;
   try {
-    config = JSON.parse(template);
+    config = JSON.parse(hookConfigText);
   } catch {
-    // Malformed templates should not invent drift; users see the original template comparison instead.
+    // A user may stop editing settings mid-object; setup validation owns that malformed JSON.
     return null;
   }
 
@@ -528,7 +559,7 @@ function expectedHookConfig(
   // Non-Copilot agents do not use the JSON hook registry, so users see the plain template comparison.
   if (agentId !== "copilot" || !isAgentId(agentId)) return template;
 
-  const config = parsedHookTemplate(template);
+  const config = parseHookConfigJson(template);
 
   // If the template cannot be parsed, the safest user-facing result is the unmodified template.
   if (config === null) return template;
@@ -639,6 +670,138 @@ function compareHooks(
   return checked;
 }
 
+/** Installed settings plus the path users can pass to the repair command. */
+interface InstalledHookTimeoutConfig {
+  hookConfigPath: string;
+  hookConfig: Record<string, unknown>;
+}
+
+/** Reads one installed hook config when it can provide trustworthy timeout evidence. */
+function readInstalledHookTimeoutConfig(
+  fs: ReadonlyFS,
+  agentProfile: AgentProfile,
+): InstalledHookTimeoutConfig | null {
+  const hookConfigPath = agentProfile.hook_config_file;
+  // Hookless or uninstalled profiles remain the responsibility of setup checks.
+  if (!hookConfigPath || !fs.exists(hookConfigPath)) return null;
+  const installedHookConfigText = fs.readFile(hookConfigPath);
+  // An unreadable config has no trustworthy timeout evidence for the user.
+  if (installedHookConfigText === null) return null;
+  const hookConfig = parseHookConfigJson(installedHookConfigText);
+  // Malformed settings are reported by setup validation without duplicate drift noise.
+  if (hookConfig === null) return null;
+  return { hookConfigPath, hookConfig };
+}
+
+/** Names the timeout field used by the selected runner's public hook schema. */
+function hookTimeoutField(agentIdentifier: AgentId): "timeout" | "timeoutSec" {
+  return agentIdentifier === "copilot" ? "timeoutSec" : "timeout";
+}
+
+/** Formats the stale timeout values users must replace, including an unset field. */
+function staleTimeoutLabels(
+  staleTimeoutCommands: Record<string, unknown>[],
+  timeoutField: "timeout" | "timeoutSec",
+): string {
+  return [
+    ...new Set(
+      staleTimeoutCommands.map((commandEntry) => {
+        const configuredTimeout = commandEntry[timeoutField];
+        return typeof configuredTimeout === "number"
+          ? `${configuredTimeout}s`
+          : "unset";
+      }),
+    ),
+  ].join(", ");
+}
+
+/** Compares one present managed command and reports the exact sync action on mismatch. */
+function compareManagedHookTimeout(
+  installedConfig: InstalledHookTimeoutConfig,
+  agentIdentifier: AgentId,
+  hookSpec: HookSpec,
+  findings: DriftFinding[],
+): number {
+  // Agent defaults remain valid when the registry defines no timeout.
+  if (hookSpec.timeoutSec === undefined) return 0;
+  // Unsupported lifecycles must not make this agent's audit fail.
+  if (hookSpec.unsupportedAgents?.[agentIdentifier]) return 0;
+  const matchingCommands: Record<string, unknown>[] = [];
+  collectManagedHookCommands(
+    installedConfig.hookConfig,
+    hookSpec,
+    matchingCommands,
+  );
+  // A missing registration is setup state, not content drift.
+  if (matchingCommands.length === 0) return 0;
+  const expectedTimeoutSeconds = hookSpec.timeoutSec;
+  const timeoutField = hookTimeoutField(agentIdentifier);
+  const staleTimeoutCommands = matchingCommands.filter(
+    (commandEntry) => commandEntry[timeoutField] !== expectedTimeoutSeconds,
+  );
+  // Matching registrations give the user the registry's full runtime window.
+  if (staleTimeoutCommands.length === 0) return 1;
+  findings.push({
+    kind: "content",
+    path: installedConfig.hookConfigPath,
+    message: `${hookSpec.id}: registered runner timeout ${staleTimeoutLabels(staleTimeoutCommands, timeoutField)}; registry requires ${expectedTimeoutSeconds}s; run goat-flow hooks sync`,
+  });
+  return 1;
+}
+
+/** Compares every timeout-bearing managed command in one installed agent config. */
+function compareAgentHookTimeouts(
+  fs: ReadonlyFS,
+  findings: DriftFinding[],
+  agentIdentifier: AgentId,
+  agentProfile: AgentProfile,
+): number {
+  const installedConfig = readInstalledHookTimeoutConfig(fs, agentProfile);
+  // No installed readable config means setup checks own this user's next action.
+  if (installedConfig === null) return 0;
+  let checked = 0;
+  // Each registry hook can carry an independent runner timeout.
+  for (const hookSpec of listHookSpecs()) {
+    checked += compareManagedHookTimeout(
+      installedConfig,
+      agentIdentifier,
+      hookSpec,
+      findings,
+    );
+  }
+  return checked;
+}
+
+/**
+ * Compare installed managed-command timeouts with the registry value setup will write.
+ * Missing registrations remain owned by setup checks; present stale values become actionable drift.
+ */
+function compareManagedHookTimeouts(
+  fs: ReadonlyFS,
+  findings: DriftFinding[],
+  agentFilter: AgentId | null | undefined,
+): number {
+  let checked = 0;
+  const manifest = loadManifest();
+
+  // Every installed agent config can carry a runner-specific timeout field.
+  for (const [agentIdentifier, agentProfile] of Object.entries(
+    manifest.agents,
+  )) {
+    // Unknown manifest keys cannot be matched safely to registry support metadata.
+    if (!isAgentId(agentIdentifier)) continue;
+    // A selected-agent audit reports only the runner the user asked about.
+    if (agentFilter && agentIdentifier !== agentFilter) continue;
+    checked += compareAgentHookTimeouts(
+      fs,
+      findings,
+      agentIdentifier,
+      agentProfile,
+    );
+  }
+  return checked;
+}
+
 /**
  * Decide whether the registry safety-net should compare one optional hook script.
  * Setup owns missing defaults; drift checks only installed or explicitly enabled copies.
@@ -738,6 +901,7 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
     checkedHookArtifacts,
     agentFilter,
   );
+  checked += compareManagedHookTimeouts(fs, findings, agentFilter);
   checked += compareRegistryHookScripts(
     fs,
     templateRoot,

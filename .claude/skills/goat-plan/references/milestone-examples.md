@@ -13,7 +13,7 @@ Use one file, at most 500 words and 40 nonblank lines. Omit every untriggered se
 # <Outcome>
 
 **Status:** not-started
-**Effort estimate:** <agent-time and product/proof/other split>
+**Effort estimate:** ~<total> min agent-time (<product> product / <proof> proof / <other> other)
 **Scope:** <included result>; not included: <one tempting exclusion>
 
 ## Tasks
@@ -39,7 +39,7 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 **Status:** not-started
 **Planned at:** `<sha>`, YYYY-MM-DD
 **Depends on:** <local milestone IDs or none>
-**Effort estimate:** <agent-time from countable units; product/proof/other split>
+**Effort estimate:** ~<total> min agent-time (<product> product / <proof> proof / <other> other)
 **Actual:** _
 
 ## Objective

@@ -389,7 +389,11 @@ describe("skill hardening contracts", () => {
         "Review Integrity (confidence signal)",
       );
       assert.match(integrity, /diff mode also lists paths/u, skillPath);
-      assert.match(constraints, /above 20 files in either mode/u, skillPath);
+      assert.match(
+        constraints,
+        /\*\*Both modes:\*\*[\s\S]*above 20 files, or 3000 changed lines/u,
+        skillPath,
+      );
       assert.match(outputFormat, /diff paths: <list or "n\/a">/u, skillPath);
       assert.match(outputFormat, /N\/A - AREA AUDIT ONLY/u, skillPath);
     });
@@ -977,6 +981,16 @@ describe("skill hardening contracts", () => {
       presetCatalog,
       /zero MUST findings[^\n]+defend what was checked[^\n]+Review Integrity/u,
     );
+  });
+
+  it("keeps goat-review bound to the universal skill constraints", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      assert.match(
+        readMarkdownSection(skillPath, "Constraints"),
+        /Universal constraints from `?skill-preamble\.md`? apply/u,
+        skillPath,
+      );
+    });
   });
 
   it("reconciles automated review with four-way provenance", () => {
@@ -1883,7 +1897,12 @@ describe("skill hardening contracts", () => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
-        /After approval, capture learnings, complete the milestone, re-read\/update the next milestone/u,
+        /After approval for a non-final milestone, capture learnings, complete it, re-read\/update the next milestone/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /do not mark it complete in Phase 3/u,
         skillPath,
       );
       assert.match(
@@ -1909,6 +1928,30 @@ describe("skill hardening contracts", () => {
         examplePath,
       );
       assert.doesNotMatch(milestoneExample, /already amended/, examplePath);
+    });
+  });
+
+  it("keeps goat-plan ISSUE close-out conditional for compact Small plans", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const artifactRules = readMarkdownSection(
+        skillPath,
+        "Phase 2 - Deliver Milestones",
+      );
+      const completionGate = readMarkdownSection(
+        skillPath,
+        "Phase 4 - Plan Complete",
+      );
+
+      assert.match(
+        artifactRules,
+        /Small only for a requested GitHub brief, multiple milestones, or shared requirements\/budget/u,
+        skillPath,
+      );
+      assert.match(
+        completionGate,
+        /when `ISSUE\.md` exists, every ISSUE How item/u,
+        skillPath,
+      );
     });
   });
 
@@ -1969,6 +2012,13 @@ describe("skill hardening contracts", () => {
           milestoneExample,
           /diagnostic guide, never a quota or pass\/fail gate/,
           examplePath,
+        );
+        assert.equal(
+          milestoneExample.match(
+            /\*\*Effort estimate:\*\* ~<total> min agent-time \(<product> product \/ <proof> proof \/ <other> other\)/gu,
+          )?.length,
+          2,
+          `${examplePath}: both plan templates must show the strict effort grammar`,
         );
         assert.match(
           milestoneExample,
@@ -2130,7 +2180,7 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         skillGuidance,
-        /final pending milestone enters one combined Phase 4 review/u,
+        /final pending milestone enters the combined Phase 4 review/u,
         skillPath,
       );
     });
@@ -2421,8 +2471,32 @@ describe("skill hardening contracts", () => {
       glossary,
       /milestone state remains primary; only when no active milestone exists, or the user explicitly requests it, write a redacted session log/u,
     );
+    // Contributors need every user-visible skill root before checking mirror drift.
+    for (const skillRoot of [
+      "workflow/skills",
+      ".claude/skills",
+      ".agents/skills",
+      ".github/skills",
+    ]) {
+      assert.equal(glossary.includes(skillRoot), true, skillRoot);
+    }
     assert.doesNotMatch(glossary, /\| Handoff \| Deprecated in v1\.1\.0\./u);
     assert.doesNotMatch(glossary, /On `\/compact`, session log written/u);
+  });
+
+  it("keeps historical Claude Write-rule evidence distinct from current guidance", () => {
+    const settingsFootguns = readProjectFile(
+      ".goat-flow/learning-loop/footguns/agent-settings.md",
+    );
+    assert.match(settingsFootguns, /At the 2026-06-07 fix/u);
+    assert.match(
+      settingsFootguns,
+      /2026-07-16 follow-up below later removed unmatched Write rules/u,
+    );
+    assert.match(
+      settingsFootguns,
+      /`audit` drift \(search: `differs from the current goat-flow template`\)/u,
+    );
   });
 
   it("documents task-path classifier examples", () => {
@@ -2494,6 +2568,11 @@ describe("skill hardening contracts", () => {
         skillPath,
       );
       assert.match(
+        readMarkdownSection(skillPath, "Audit Mode"),
+        /Audit post-gate template in `references\/output-templates\.md`/u,
+        skillPath,
+      );
+      assert.match(
         outputTemplates,
         /### Standard mode - Phase 2 output/,
         referencePath,
@@ -2507,6 +2586,17 @@ describe("skill hardening contracts", () => {
     assert.deepStrictEqual(manifest.skills.references["goat-qa"], [
       "references/output-templates.md",
     ]);
+  });
+
+  it("gives goat-qa Regression Guard users a mode-specific intake checkpoint", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      assert.match(
+        intake,
+        /CHECKPOINT:[^\n]+Regression Guard:[^\n]+Mapping \[N\] invariants against \[prior fix evidence \/ unavailable evidence\]/u,
+        skillPath,
+      );
+    });
   });
 
   it("keeps optional machine findings distinct from goat-qa Markdown output", () => {
@@ -4226,11 +4316,14 @@ describe("skill hardening contracts", () => {
   it("keeps remediated workflow examples byte-identical across agent mirrors", () => {
     const mirroredFiles = [
       "goat-plan/SKILL.md",
+      "goat-plan/references/milestone-examples.md",
       "goat-debug/SKILL.md",
       "goat-debug/references/diagnostic-techniques.md",
       "goat-security/SKILL.md",
       "goat-qa/SKILL.md",
+      "goat-qa/references/output-templates.md",
       "goat-critique/references/rubric-examples.md",
+      "goat-review/SKILL.md",
       "goat-review/references/examples.md",
     ];
 

@@ -1,5 +1,7 @@
 /**
  * Dashboard terminal paste and launch-prompt lifecycle helpers.
+ * Use when the Workspace adapts prompts, explains access, or submits text to a runner.
+ * Prompt guidance must describe the same authority the backend applies to that session.
  */
 function dashboardMutateLocalSession(
   ctx: DashboardTerminalContext,
@@ -389,14 +391,18 @@ function dashboardTerminalAccessMode(
     : "reporting";
 }
 
-/** Build target context appended to launched preset prompts. */
+/**
+ * Build the target and write-authority context appended to a user's launch prompt.
+ * Use the resolved backend access mode so dynamic and overridden launches receive matching guidance.
+ */
 function dashboardGlobalLaunchContext(
   ctx: DashboardTerminalContext,
   runner: RunnerId,
   preset: Preset | null,
+  accessMode: TerminalAccessMode,
 ): string {
   const controllingWorkspace = dashboardControllingWorkspace();
-  const accessMode = dashboardTerminalAccessMode(preset, ctx.userRole);
+  // Custom prompts have no preset text, so route-specific guidance stays empty.
   const presetPrompt = preset?.prompt.trim() ?? "";
   // Launched prompts may suggest learning-loop follow-up, but automatic
   // durable lesson/footgun/pattern/decision writes require opted-in CLI capture.
@@ -405,7 +411,9 @@ function dashboardGlobalLaunchContext(
       ? "Write behavior: this preset may write only after the prompt or user explicitly approves it."
       : runner === "codex"
         ? "Write behavior: this terminal is reporting-only. Local report/build artifacts may be written, but the Codex permission profile blocks tracked project writes; start a write-enabled preset or manual session for implementation."
-        : "Write behavior: this terminal is reporting-only. Do not write tracked project files; this runner relies on prompt and hook guardrails rather than the Codex filesystem profile.";
+        : runner === "claude"
+          ? "Write behavior: this terminal is reporting-only. Local report artifacts may be written, but the Claude permission overlay blocks tracked project writes; start a write-enabled preset or manual session for implementation."
+          : "Write behavior: this terminal is reporting-only. Do not write tracked project files; this runner relies on prompt and hook guardrails rather than a native filesystem profile.";
   const routeLine =
     preset?.route === "goat-plan" && /^\/goat-plan\b/.test(presetPrompt)
       ? "goat-plan global mode: honor Step 0 modes; analysis/path-only stay read-only, while File-Write modes may create target .goat-flow/plans when this preset allows writes or the prompt explicitly requests files."

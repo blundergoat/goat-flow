@@ -446,6 +446,12 @@ function collectCompleteSnapshotErrors(
       `${record.sourceFile}: complete milestone has open exit criteria`,
     );
   }
+  // A completed milestone cannot still show the user a running plan clock.
+  if (record.timingReceipt?.state === "active") {
+    errors.push(
+      `${record.sourceFile}: complete milestone must not have an active Timing Receipt`,
+    );
+  }
   return errors;
 }
 
@@ -476,11 +482,10 @@ function collectNotStartedSnapshotErrors(
     );
   }
 
-  // A recorded span is stronger evidence that work began than any checkbox:
-  // the receipt is system-stamped, so an unchecked task cannot outweigh it.
-  if (record.timingReceipt?.state === "active") {
+  // Any receipt means timing already began; paused work contradicts not-started just as active work does.
+  if (record.timingReceipt !== undefined) {
     errors.push(
-      `${record.sourceFile}: not-started milestone has an active timing receipt`,
+      `${record.sourceFile}: not-started milestone must not include a Timing Receipt`,
     );
   }
   return errors;

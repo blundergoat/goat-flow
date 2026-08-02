@@ -303,6 +303,56 @@ function runCodexLauncher(
 }
 
 describe("hook registrar", () => {
+  // Writes a stale timeout because dashboard state must stay off until sync replaces it.
+  it("treats a stale Claude hook timeout as uninstalled", () => {
+    withTempProject((root) => {
+      const postTurnSafetySpec = getHookSpec("post-turn-safety");
+      assert.ok(postTurnSafetySpec);
+      mkdirSync(join(root, ".claude"), { recursive: true });
+      writeFileSync(
+        join(root, ".claude", "settings.json"),
+        `${JSON.stringify(
+          {
+            hooks: {
+              Stop: [
+                {
+                  hooks: [
+                    {
+                      type: "command",
+                      command: "bash .goat-flow/hooks/post-turn-safety.sh",
+                      timeout: 60,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      const staleTimeoutState = readAgentHookState(
+        root,
+        PROFILES.claude,
+        postTurnSafetySpec,
+      );
+      assert.equal(staleTimeoutState.installed, false);
+
+      writeAgentHookState(root, PROFILES.claude, postTurnSafetySpec, true);
+      const repairedTimeoutState = readAgentHookState(
+        root,
+        PROFILES.claude,
+        postTurnSafetySpec,
+      );
+      assert.equal(repairedTimeoutState.installed, true);
+      assert.match(
+        readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
+        /"timeout": 90/u,
+      );
+    });
+  });
+
   it("persists hook state through the writer and exposes registry specs", () => {
     withTempProject((root) => {
       const spec = getHookSpec("deny-dangerous");

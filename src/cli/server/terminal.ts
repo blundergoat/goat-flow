@@ -1,6 +1,7 @@
 /**
  * PTY-backed terminal session manager used by the dashboard.
  * It validates runner and project inputs, spawns CLI sessions, and brokers WebSocket traffic.
+ * Use when a user launches, reconnects to, or ends a runner from the Workspace UI.
  */
 import { randomUUID } from "node:crypto";
 import { lstatSync, realpathSync } from "node:fs";
@@ -132,7 +133,7 @@ export const INITIAL_PROMPT_CHUNK_SIZE = 2048;
 
 const DETACH_BUFFER_LIMIT = 512 * 1024; // Buffer limit: 512KB preserves reconnect scrollback without unbounded server memory.
 
-/** Internal state for a single PTY terminal session */
+/** Internal session contract that keeps PTY resources and user-selected launch authority together. */
 interface TerminalSession {
   id: string;
   status: SessionStatus;
@@ -145,6 +146,10 @@ interface TerminalSession {
   targetPath: string;
   runner: Runner;
   accessMode: TerminalAccessMode;
+  /** Whether retry/reconnect must restore the dashboard-owned quality receipt channel. */
+  captureQualityDrafts: boolean;
+  /** Validated report-owner root, or null when this session has no staged report capture. */
+  qualityDraftProjectPath: string | null;
   lastInputAt: number;
   pty: IPty | null;
   ws: WebSocket | null;
@@ -791,7 +796,11 @@ function looksLikePromptSend(input: string): boolean {
   return input.includes("\x1b[200~");
 }
 
-/** Manages PTY-backed terminal sessions for the dashboard */
+/**
+ * Own every dashboard PTY session from launch reservation through cleanup.
+ * Use when Workspace users start, reconnect, send input to, or close runner terminals.
+ * Public snapshots retain the access and report-capture intent needed for safe retries.
+ */
 class TerminalManager {
   private sessions = new Map<string, TerminalSession>();
   private runnerPaths = new Map<Runner, string>();
@@ -829,13 +838,8 @@ class TerminalManager {
   }
 
   /**
-   * Create a terminal session for the requested runner and project.
-   *
-   * A slot is reserved synchronously - a `starting` placeholder lands in the
-   * session map before any async work - so the MAX_SESSIONS cap holds even when
-   * the dashboard fires several launches at once (a user double-clicking "Run",
-   * or opening two runner tabs together). The reservation becomes a live
-   * session once the PTY spawns, or is released if any startup step fails.
+   * Reserve and create one runner terminal for the user's selected project.
+   * The synchronous placeholder keeps double-clicks under the session cap, then becomes active or is released.
    */
   async create(
     prompt: string,
@@ -872,6 +876,8 @@ class TerminalManager {
       targetPath: projectPath,
       runner,
       accessMode: options.accessMode ?? "workspace",
+      captureQualityDrafts: false,
+      qualityDraftProjectPath: null,
       lastInputAt: Date.now(),
       pty: null,
       ws: null,
@@ -939,14 +945,20 @@ class TerminalManager {
     const validatedQualityDraftProject = options.qualityDraftProjectPath
       ? validateProjectPath(options.qualityDraftProjectPath)
       : null;
-    if (validatedQualityDraftProject !== null) {
-      const canonicalOwner = realpathSync(validatedQualityDraftProject);
+    // A missing owner means this launch has no report receipt channel to restore later.
+    const canonicalQualityDraftProject =
+      validatedQualityDraftProject === null
+        ? null
+        : realpathSync(validatedQualityDraftProject);
+    // A supplied owner must remain one of the projects the user deliberately launched.
+    if (canonicalQualityDraftProject !== null) {
       const allowedOwners = new Set(
         [validatedCwd, validatedTarget].map((rootPath) =>
           realpathSync(rootPath),
         ),
       );
-      if (!allowedOwners.has(canonicalOwner)) {
+      // A different owner could redirect a reporting draft into an unrelated project.
+      if (!allowedOwners.has(canonicalQualityDraftProject)) {
         throw new Error(
           "Quality draft report owner must match the terminal workspace or selected target.",
         );
@@ -960,10 +972,11 @@ class TerminalManager {
       runner,
       session.accessMode,
       options.captureQualityDrafts === true,
-      validatedQualityDraftProject === null
-        ? null
-        : realpathSync(validatedQualityDraftProject),
+      canonicalQualityDraftProject,
     );
+    session.captureQualityDrafts = reportingCaptureRoots.length > 0;
+    session.qualityDraftProjectPath = reportingCaptureRoots[0] ?? null;
+    // Each capture root must exist before Claude receives permission to write its one draft.
     for (const captureRoot of reportingCaptureRoots) {
       ensureQualityDraftStagingDirectory(captureRoot);
     }
@@ -1410,6 +1423,8 @@ class TerminalManager {
       targetPath: session.targetPath,
       runner: session.runner,
       accessMode: session.accessMode,
+      captureQualityDrafts: session.captureQualityDrafts,
+      qualityDraftProjectPath: session.qualityDraftProjectPath,
       lastInputAt: session.lastInputAt,
     };
   }

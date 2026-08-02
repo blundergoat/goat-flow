@@ -165,20 +165,136 @@ fallback_is_dockerfile_path() {
   return 1
 }
 
-fallback_scan_literal_assignment() {
-  local path="$1"
-  local raw_key="$2"
-  local raw_value="$3"
-  local dotted_reference_re='^(app|application|cfg|conf|config|configs|configuration|constant|constants|context|credentials|credential|creds|ctx|default|defaults|env|environ|environment|os|process|self|setting|settings|this)(\.[a-z_][a-z0-9_]*)+$'
-  local key
-  local lower_value
-  local quoted=0
-  local value
+# Extracts the literal a stock macOS user placed in a credential assignment.
+# Sets FALLBACK_LITERAL_VALUE on success; references and expressions stay allowed.
+fallback_literal_assignment_value() {
+  local dotted_identifier_re
+  local literal_value
+  local operator_expression_re
+  local operator_left_identifier
+  local raw_assignment_value
+  local text_after_closing_quote
+  local text_after_opening_quote
+  local unquoted_assignment_value
+  local value_first_segment
+  local value_first_segment_lower
 
-  key=$(printf '%s' "$raw_key" |
+  FALLBACK_LITERAL_VALUE=""
+  raw_assignment_value=$(printf '%s' "$1" |
+    sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  # Keep language-formatted strings in the allowed expression path.
+  case "$raw_assignment_value" in
+    [fF]\"* | [fF]\'* | [fF][rR]\"* | [fF][rR]\'* | [rR][fF]\"* | [rR][fF]\'*)
+      return 1
+      ;;
+  esac
+
+  # Parse quoted values so a trailing user comment cannot hide a credential.
+  case "$raw_assignment_value" in
+    \"*)
+      text_after_opening_quote="${raw_assignment_value#?}"
+      # An unclosed quote is not a literal the scanner can classify safely.
+      case "$text_after_opening_quote" in *\"*) ;; *) return 1 ;; esac
+      literal_value="${text_after_opening_quote%%\"*}"
+      # Whitespace or interpolation means the user entered an expression.
+      case "$literal_value" in
+        *[[:space:]]* | *'$'*) return 1 ;;
+      esac
+      # References stay allowed because they do not embed a credential.
+      is_reference_or_interpolation "$literal_value" && return 1
+      text_after_closing_quote="${text_after_opening_quote#*\"}"
+      text_after_closing_quote=$(printf '%s' "$text_after_closing_quote" |
+        sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+      # Only an empty suffix or a user comment may follow the closing quote.
+      case "$text_after_closing_quote" in
+        "" | \#*) ;;
+        *) return 1 ;;
+      esac
+      FALLBACK_LITERAL_VALUE="$literal_value"
+      return 0
+      ;;
+    \'*)
+      text_after_opening_quote="${raw_assignment_value#?}"
+      # An unclosed quote is not a literal the scanner can classify safely.
+      case "$text_after_opening_quote" in *\'*) ;; *) return 1 ;; esac
+      literal_value="${text_after_opening_quote%%\'*}"
+      # Whitespace means the user entered more than one literal token.
+      case "$literal_value" in *[[:space:]]*) return 1 ;; esac
+      # References stay allowed because they do not embed a credential.
+      is_reference_or_interpolation "$literal_value" && return 1
+      text_after_closing_quote="${text_after_opening_quote#*\'}"
+      text_after_closing_quote=$(printf '%s' "$text_after_closing_quote" |
+        sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+      # Only an empty suffix or a user comment may follow the closing quote.
+      case "$text_after_closing_quote" in
+        "" | \#*) ;;
+        *) return 1 ;;
+      esac
+      FALLBACK_LITERAL_VALUE="$literal_value"
+      return 0
+      ;;
+  esac
+
+  # Remove a trailing user comment before classifying an unquoted value.
+  unquoted_assignment_value="${raw_assignment_value%%#*}"
+  unquoted_assignment_value=$(printf '%s' "$unquoted_assignment_value" |
+    sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  # An empty value gives the user no credential to rotate.
+  [ -n "$unquoted_assignment_value" ] || return 1
+  # Expression punctuation keeps ordinary code out of credential warnings.
+  case "$unquoted_assignment_value" in
+    *[[:space:]]* | *"("* | *")"* | *"["* | *"]"* | *"{"* | *"}"* | *","* | *";"* | *"<"* | *">"* | *"|"* | *"&"* | *'`'* | *'$'*)
+      return 1
+      ;;
+  esac
+  # A lowercase identifier is a variable reference, not an embedded secret.
+  if [[ "$unquoted_assignment_value" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+    return 1
+  fi
+  dotted_identifier_re='^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$'
+  # Dotted config references stay allowed unless their first segment is token-like.
+  if [[ "$unquoted_assignment_value" =~ $dotted_identifier_re ]]; then
+    value_first_segment="${unquoted_assignment_value%%.*}"
+    value_first_segment_lower=$(printf '%s' "$value_first_segment" | tr '[:upper:]' '[:lower:]')
+    case "$value_first_segment_lower" in
+      app | application | cfg | conf | config | configs | configuration | constant | constants | context | credentials | credential | creds | ctx | default | defaults | env | environ | environment | os | process | self | setting | settings | this)
+        return 1
+        ;;
+    esac
+    # A low-entropy first segment still behaves like an ordinary reference.
+    if ! has_credential_entropy "$value_first_segment"; then
+      return 1
+    fi
+  fi
+  operator_expression_re='^([A-Za-z_][A-Za-z0-9_]*)([+*/%=]|==|!=)([A-Za-z_][A-Za-z0-9_]*)$'
+  # Operators remain allowed when their left side is clearly an identifier.
+  if [[ "$unquoted_assignment_value" =~ $operator_expression_re ]]; then
+    operator_left_identifier="${BASH_REMATCH[1]}"
+    has_credential_entropy "$operator_left_identifier" || return 1
+  fi
+  # Report only long, token-shaped values the user could need to rotate.
+  if [[ ! "$unquoted_assignment_value" =~ ^[A-Za-z0-9._+/=~-]{12,}$ ]]; then
+    return 1
+  fi
+  # Require enough character variety to avoid warning on ordinary words.
+  has_credential_entropy "$unquoted_assignment_value" || return 1
+  FALLBACK_LITERAL_VALUE="$unquoted_assignment_value"
+  return 0
+}
+
+# Warns when a changed assignment embeds a literal credential.
+# Stock Bash 3 users receive the same Stop-hook decision as newer Bash users.
+fallback_scan_literal_assignment() {
+  local changed_file_path="$1"
+  local credential_key_text="$2"
+  local assignment_value_text="$3"
+  local literal_value
+  local normalized_credential_key
+
+  normalized_credential_key=$(printf '%s' "$credential_key_text" |
     sed -E 's/([[:lower:][:digit:]])([[:upper:]])/\1_\2/g; s/([[:upper:]])([[:upper:]][[:lower:]])/\1_\2/g' |
     tr '[:upper:]-' '[:lower:]_')
-  case "$key" in
+  case "$normalized_credential_key" in
     tokens | *tokens | tokenizer | tokeniser | tokenize | *tokenizer* | *tokeniser* | *tokenize* | *_count | *_index | *_id | *_name | *_type | *_header | *_url | *_path | *_list | *_re | *_pattern | *_field | *not_secret | *not_a_secret | *non_secret | *no_secret | *not_token | *not_a_token | *non_token | *no_token | *not_password | *not_a_password | *non_password | *no_password | *not_api_key | *not_an_api_key | *non_api_key | *no_api_key | *not_private_key | *not_a_private_key | *non_private_key | *no_private_key)
       return 0
       ;;
@@ -187,24 +303,14 @@ fallback_scan_literal_assignment() {
     *) return 0 ;;
   esac
 
-  value=$(printf '%s' "$raw_value" |
-    sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-  case "$value" in
-    \"*\") value="${value#\"}"; value="${value%\"}"; quoted=1 ;;
-    \'*\') value="${value#\'}"; value="${value%\'}"; quoted=1 ;;
-  esac
-  [ "${#value}" -ge 12 ] || return 0
-  case "$value" in *[[:space:]]* | *'goat-flow-allow-secret'*) return 0 ;; esac
-  is_reference_or_interpolation "$value" && return 0
-  if [ "$quoted" -eq 0 ]; then
-    lower_value=$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')
-    [[ "$lower_value" =~ $dotted_reference_re ]] && return 0
-    [[ "$value" =~ ^[a-z_][a-z0-9_]*$ ]] && return 0
-    [[ "$value" =~ ^[A-Za-z0-9._+/=~-]{12,}$ ]] || return 0
-    has_credential_entropy "$value" || return 0
-  fi
-  fallback_is_placeholder "$value" && return 0
-  fallback_report "$path" "credential assignment ($raw_key)"
+  # Parse only embedded literals; references remain safe for the user.
+  fallback_literal_assignment_value "$assignment_value_text" || return 0
+  literal_value="$FALLBACK_LITERAL_VALUE"
+  # Short values are not credential-shaped enough to interrupt the turn.
+  [ "${#literal_value}" -ge 12 ] || return 0
+  # Documented placeholders stay usable in examples and setup screens.
+  fallback_is_placeholder "$literal_value" && return 0
+  fallback_report "$changed_file_path" "credential assignment ($credential_key_text)"
 }
 
 fallback_scan_assignment() {
@@ -340,25 +446,86 @@ fallback_scan_line() {
   fi
 }
 
+# Returns success when one changed file fits the user's configured scan limit.
+# Staged paths use the index blob so staged-only content gets the same decision.
+fallback_diff_path_within_byte_cap() {
+  local repository_root="$1"
+  local changed_file_path="$2"
+  local uses_staged_blob="$3"
+  local changed_file_bytes
+  local worktree_file_path
+
+  # A staged scan measures exactly what the user placed in the index.
+  if [ "$uses_staged_blob" -eq 1 ]; then
+    changed_file_bytes=$(git -C "$repository_root" cat-file -s ":$changed_file_path" 2>/dev/null | tr -d '[:space:]')
+  else
+    worktree_file_path="$repository_root/$changed_file_path"
+    # Missing or unreadable worktree content cannot be scanned for the user.
+    [ -f "$worktree_file_path" ] && [ -r "$worktree_file_path" ] || return 1
+    changed_file_bytes=$(wc -c <"$worktree_file_path" 2>/dev/null | tr -d '[:space:]')
+  fi
+  # An empty or invalid size cannot prove that the file fits the scan limit.
+  case "$changed_file_bytes" in '' | *[!0-9]*) return 1 ;; esac
+  # Files over the limit are skipped consistently on both supported shells.
+  [ "$changed_file_bytes" -le "$fallback_max_bytes" ]
+}
+
+# Scans added diff lines while preserving the configured file-size boundary.
+# For example, a staged-only secret is checked against the staged blob size.
 fallback_scan_diff() {
-  local root="$1"
+  local repository_root="$1"
   shift
-  local path=""
-  local line
+  local changed_file_path=""
+  local diff_argument
+  local diff_line
+  local scan_changed_file=0
+  local uses_staged_blob=0
+
+  # Detect whether this diff represents the user's staged snapshot.
+  for diff_argument in "$@"; do
+    # Cached diffs must measure content from Git's index rather than the worktree.
+    if [ "$diff_argument" = "--cached" ]; then
+      uses_staged_blob=1
+      break
+    fi
+  done
 
   fallback_conflict_path=""
   fallback_conflict_state=0
-  while IFS= read -r line || [ -n "$line" ]; do
+  # Read every added diff line, including a final line without a newline.
+  while IFS= read -r diff_line || [ -n "$diff_line" ]; do
     fallback_budget_check || break
-    case "$line" in
-      '+++ /dev/null') path="" ;;
-      '+++ b/'*) path="${line#+++ b/}" ;;
-      +++*) path="${line#+++ }" ;;
+    case "$diff_line" in
+      '+++ /dev/null')
+        changed_file_path=""
+        scan_changed_file=0
+        ;;
+      '+++ b/'*)
+        changed_file_path="${diff_line#+++ b/}"
+        # Scan this file only when its selected content fits the user's byte cap.
+        if fallback_diff_path_within_byte_cap "$repository_root" "$changed_file_path" "$uses_staged_blob"; then
+          scan_changed_file=1
+        else
+          scan_changed_file=0
+        fi
+        ;;
+      +++*)
+        changed_file_path="${diff_line#+++ }"
+        # Scan this file only when its selected content fits the user's byte cap.
+        if fallback_diff_path_within_byte_cap "$repository_root" "$changed_file_path" "$uses_staged_blob"; then
+          scan_changed_file=1
+        else
+          scan_changed_file=0
+        fi
+        ;;
       +*)
-        [ -n "$path" ] && fallback_scan_line "$path" "${line#+}"
+        # An eligible path means the added line can affect the user's Stop result.
+        if [ -n "$changed_file_path" ] && [ "$scan_changed_file" -eq 1 ]; then
+          fallback_scan_line "$changed_file_path" "${diff_line#+}"
+        fi
         ;;
     esac
-  done < <(git -C "$root" diff --no-ext-diff --no-color --unified=0 "$@" 2>/dev/null)
+  done < <(git -C "$repository_root" diff --no-ext-diff --no-color --unified=0 "$@" 2>/dev/null)
 }
 
 fallback_scan_file() {
@@ -418,9 +585,10 @@ fallback_main() {
     printf 'post-turn-safety: fix or remove the flagged changed content before stopping.\n' >&2
     return 2
   fi
+  # An incomplete compatibility scan must block instead of showing a clean turn.
   if [ "$fallback_bail" -ne 0 ]; then
     printf 'post-turn-safety: Bash 3 compatibility scan incomplete (budget %ss exceeded).\n' "$fallback_max_seconds" >&2
-    return 1
+    return 2
   fi
   return 0
 }
@@ -1360,6 +1528,7 @@ main() {
     if ((BAIL == 0)); then PENDING_FILES=0; fi
   fi
 
+  # An incomplete native scan must block instead of showing a clean turn.
   if ((BAIL)); then
     ((PENDING_FILES > 0)) || PENDING_FILES=1
     printf 'post-turn-safety: scan incomplete, %s file(s) unscanned (budget %ss exceeded; raise GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS to scan more).\n' "$PENDING_FILES" "$MAX_SECONDS" >&2
@@ -1374,7 +1543,7 @@ main() {
   fi
 
   if ((BAIL)); then
-    return 1
+    return 2
   fi
 
   return 0

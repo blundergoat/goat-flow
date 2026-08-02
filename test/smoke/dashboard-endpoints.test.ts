@@ -47,6 +47,8 @@ interface TestTerminalSession {
   targetPath: string;
   runner: "claude";
   accessMode: "workspace" | "reporting";
+  captureQualityDrafts: boolean;
+  qualityDraftProjectPath: string | null;
   lastInputAt: number;
   pty: TestPty | null;
   ws: TerminalWebSocket | null;
@@ -162,6 +164,8 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
     targetPath: "/tmp/project",
     runner: "claude",
     accessMode: "workspace",
+    captureQualityDrafts: false,
+    qualityDraftProjectPath: null,
     lastInputAt: 0,
     pty,
     ws: null,
@@ -498,6 +502,21 @@ describe("terminal exports", () => {
     const payload = JSON.stringify(manager.list());
     assert.equal(payload.includes("sensitive prompt text"), false);
     assert.equal(payload.includes("GOAT_PROMPT"), false);
+  });
+
+  it("projects reporting capture intent into reconnectable session metadata", () => {
+    const manager = makeManager();
+    const { session } = makeSession({
+      accessMode: "reporting",
+      captureQualityDrafts: true,
+      qualityDraftProjectPath: "/tmp/project",
+    });
+    managerInternals(manager).sessions.set(session.id, session);
+
+    const projected = manager.list()[0];
+
+    assert.equal(projected?.captureQualityDrafts, true);
+    assert.equal(projected?.qualityDraftProjectPath, "/tmp/project");
   });
 
   it("replays detached output exactly once when a browser reconnects", () => {

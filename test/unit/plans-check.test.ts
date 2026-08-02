@@ -191,6 +191,42 @@ function withFinalizedTimingReceipt(body: string, totalSeconds = 120): string {
   );
 }
 
+/** Add one paused receipt showing that the milestone has already recorded work. */
+function withPausedTimingReceipt(body: string): string {
+  return body.replace(
+    "## Scope",
+    [
+      "## Timing Receipt",
+      "",
+      "**Receipt state:** paused",
+      "",
+      "| Segment | Category | Start UTC / epoch | End UTC / epoch | Seconds | State |",
+      "|---|---|---|---|---:|---|",
+      `| M01-S01 | product | ${receiptStamp(100)} | ${receiptStamp(160)} | 60 | closed |`,
+      "",
+      "## Scope",
+    ].join("\n"),
+  );
+}
+
+/** Add one active receipt showing that the user still has a running clock. */
+function withActiveTimingReceipt(body: string): string {
+  return body.replace(
+    "## Scope",
+    [
+      "## Timing Receipt",
+      "",
+      "**Receipt state:** active",
+      "",
+      "| Segment | Category | Start UTC / epoch | End UTC / epoch | Seconds | State |",
+      "|---|---|---|---|---:|---|",
+      `| M01-S01 | product | ${receiptStamp(100)} | _ | _ | open |`,
+      "",
+      "## Scope",
+    ].join("\n"),
+  );
+}
+
 /** Render the UTC stamp a receipt segment carries beside its epoch second. */
 function receiptStamp(epochSeconds: number): string {
   return `${new Date(epochSeconds * 1000).toISOString().replace(/\.\d{3}Z$/u, "Z")} / ${epochSeconds}`;
@@ -846,6 +882,11 @@ describe("plans check", () => {
       expected: /not-started milestone must not include Actual/u,
     },
     {
+      name: "not-started-paused-receipt",
+      body: withPausedTimingReceipt(canonicalMilestoneBody()),
+      expected: /not-started milestone must not include a Timing Receipt/u,
+    },
+    {
       name: "testing-open-task",
       body: canonicalMilestoneBody({ status: "testing-gate" }),
       expected: /testing-gate milestone has open implementation tasks/u,
@@ -871,6 +912,20 @@ describe("plans check", () => {
         includeActual: true,
       }),
       expected: /complete milestone has open proof items/u,
+    },
+    {
+      name: "complete-active-receipt",
+      body: withActiveTimingReceipt(
+        canonicalMilestoneBody({
+          status: "complete",
+          isTaskChecked: true,
+          proofLines: [
+            "- [x] Outcome is proven. [automated] (est: 1 min proof)",
+          ],
+          includeActual: true,
+        }),
+      ),
+      expected: /complete milestone must not have an active Timing Receipt/u,
     },
     {
       name: "invalid-status",
@@ -1328,7 +1383,7 @@ describe("plans check", () => {
    * is stronger evidence that work started than an unchecked box, so trusting
    * checkbox state alone would let time already spent go unreported.
    */
-  it("strict mode rejects an active timing receipt on a not-started milestone", () => {
+  it("strict mode rejects any timing receipt on a not-started milestone", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-open-"));
     const planPath = writeCheckFixture(
       temporaryRoot,
@@ -1362,7 +1417,7 @@ describe("plans check", () => {
       assertSourceLabelledErrors(result.stdout);
       assert.match(
         result.stdout,
-        /not-started milestone has an active timing receipt/u,
+        /not-started milestone must not include a Timing Receipt/u,
       );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });

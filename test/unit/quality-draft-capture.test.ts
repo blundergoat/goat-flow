@@ -3,10 +3,10 @@
  * capture (ADR-044): draft acceptance, every rejection class, receipt
  * contents, filename filtering, dispose-time sweep, and handle hygiene.
  *
- * Most processing is driven through `processNow()` with `stableMs: 0`; one
- * paused-writer regression uses repeated old size/mtime observations without
- * wall-clock waits. The interval itself is unref'd and cleared by dispose,
- * which the leak-sensitive terminal test lesson requires this suite to prove.
+ * Most processing is driven through `processNow()` with `stableMs: 0`; changing-writer
+ * regressions use repeated size/mtime observations without wall-clock waits. The
+ * interval itself is unref'd and cleared by dispose, which the leak-sensitive terminal
+ * test lesson requires this suite to prove.
  */
 import { after, describe, it } from "node:test";
 import type { TestContext } from "node:test";
@@ -231,13 +231,11 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
-    assert.equal(existsSync(draftPath), true);
-    capture.dispose();
     assert.equal(existsSync(draftPath), false);
     assert.equal(readReceipt(capture.stagingDir, "future-mtime").ok, false);
   });
 
-  it("retains invalid JSON live, then rejects it after writer shutdown", async () => {
+  it("rejects stable invalid JSON before the reporting session closes", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
     const sensitiveValue = ["fixture", "-sensitive", "-value"].join("");
@@ -250,14 +248,6 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
-    assert.equal(existsSync(draftPath), true);
-    assert.equal(
-      existsSync(
-        join(capture.stagingDir, "goat-quality-result-claude-bbb222.json"),
-      ),
-      false,
-    );
-    capture.dispose();
     assert.equal(existsSync(draftPath), false);
     const receipt = readReceipt(capture.stagingDir, "bbb222");
     assert.equal(receipt.ok, false);
@@ -355,9 +345,8 @@ describe("quality draft capture", () => {
       existsSync(
         join(capture.stagingDir, "goat-quality-draft-claude-ccc333.json"),
       ),
-      true,
+      false,
     );
-    capture.dispose();
     const receipt = readReceipt(capture.stagingDir, "ccc333");
     assert.equal(receipt.ok, false);
     assert.equal(
@@ -384,7 +373,12 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
-    capture.dispose();
+    assert.equal(
+      existsSync(
+        join(capture.stagingDir, "goat-quality-draft-claude-ddd444.json"),
+      ),
+      false,
+    );
     const receipt = readReceipt(capture.stagingDir, "ddd444");
     assert.equal(receipt.ok, false);
     assert.equal(
@@ -404,8 +398,6 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
-    assert.equal(existsSync(draftPath), true);
-    capture.dispose();
     assert.equal(existsSync(draftPath), false);
     const receipt = readReceipt(capture.stagingDir, "eee555");
     assert.equal(receipt.ok, false);
@@ -444,24 +436,41 @@ describe("quality draft capture", () => {
     );
   });
 
-  it("processes an invalid draft after the live writer corrects it", async () => {
+  /**
+   * Keep a changing report private until two observations agree.
+   * Fixture purpose: writes partial then valid JSON to model an agent replacing its draft.
+   */
+  it("waits for a changing draft before processing the completed report", async () => {
     const root = makeRoot();
-    const capture = makeCapture(root);
+    const capture = startQualityDraftCapture({
+      projectRoot: root,
+      intervalMs: 60_000,
+      stableMs: 500,
+    });
+    captures.push(capture);
     const draftPath = join(
       capture.stagingDir,
       "goat-quality-draft-claude-ggg777.json",
     );
     writeFileSync(draftPath, "{}");
+    const quietTimestamp = new Date(Date.now() - 2_000);
+    utimesSync(draftPath, quietTimestamp, quietTimestamp);
+
+    // Example: the reporting agent has created the file but has not finished replacing its contents.
     await capture.processNow();
     assert.equal(existsSync(draftPath), true);
 
     writeFileSync(draftPath, validReport(root));
+    utimesSync(draftPath, quietTimestamp, quietTimestamp);
+    await capture.processNow();
+    assert.equal(existsSync(draftPath), true);
+
     await capture.processNow();
     const receipt = readReceipt(capture.stagingDir, "ggg777");
     assert.equal(receipt.ok, true);
   });
 
-  it("preserves a paused open writer until its completed report persists", async () => {
+  it("preserves a draft while its open writer is still changing it", async () => {
     const root = makeRoot();
     const capture = startQualityDraftCapture({
       projectRoot: root,
@@ -481,7 +490,6 @@ describe("quality draft capture", () => {
     futimesSync(descriptor, old, old);
 
     await capture.processNow();
-    await capture.processNow();
 
     assert.equal(existsSync(draftPath), true);
     assert.equal(
@@ -491,10 +499,11 @@ describe("quality draft capture", () => {
       false,
     );
 
+    // Example: Claude resumes its paused file write and appends the rest of the report.
     writeSync(descriptor, raw.slice(split));
     futimesSync(descriptor, old, old);
-    closeSync(descriptor);
     await capture.processNow();
+    closeSync(descriptor);
     await capture.processNow();
 
     assert.equal(existsSync(draftPath), false);
@@ -512,8 +521,6 @@ describe("quality draft capture", () => {
 
     await capture.processNow();
 
-    assert.equal(existsSync(draftPath), true);
-    capture.dispose();
     assert.equal(existsSync(draftPath), false);
     assert.equal(readReceipt(capture.stagingDir, "final-ignore").ok, false);
     assert.deepStrictEqual(
@@ -524,7 +531,11 @@ describe("quality draft capture", () => {
     );
   });
 
-  // Covers dispose with drafts still open: writes them; each must be finalized with its receipt kept.
+  /**
+   * Finalize unobserved drafts when the user closes the last reporting terminal.
+   * Invariant: every accepted or rejected draft keeps one terminal receipt after shutdown.
+   * Fixture purpose: writes both outcomes, then dispose performs their filesystem side effects.
+   */
   it("finalizes every remaining draft on dispose and keeps receipts", async () => {
     const root = makeRoot();
     const capture = makeCapture(root);
@@ -532,7 +543,6 @@ describe("quality draft capture", () => {
       join(capture.stagingDir, "goat-quality-draft-claude-iii999.json"),
       "{}",
     );
-    await capture.processNow();
     writeFileSync(
       join(capture.stagingDir, "goat-quality-draft-claude-jjj000.json"),
       validReport(root),

@@ -154,15 +154,18 @@ function powershellCommand(agent: AgentProfile, spec: HookSpec): string {
   return `if (Get-Command bash -ErrorAction SilentlyContinue) { bash ${path} } else { Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run ${path} on Windows."}' }`;
 }
 
-/** Detect any existing hook entry that already points at one of the spec's managed scripts. */
-function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+/** Detect a command entry that directly launches one managed hook script. */
+function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+  // Non-object JSON cannot represent a runnable hook command.
   if (!isObject(entry)) return false;
   const commands = [
     typeof entry.command === "string" ? entry.command : "",
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
   ].join("\n");
+  // Current managed script names identify the registration setup owns.
   if (spec.scriptFiles.some((script) => commands.includes(script))) return true;
+  // Historical deny script names remain managed so upgrades can remove them.
   if (
     spec.id === "deny-dangerous" &&
     LEGACY_DENY_DANGEROUS_SCRIPT_NAMES.some((script) =>
@@ -171,8 +174,44 @@ function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   ) {
     return true;
   }
+  return false;
+}
+
+/** Detect any nested hook entry that points at one of the spec's managed scripts. */
+function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+  // Non-object JSON cannot contain a managed hook command or nested hook list.
+  if (!isObject(entry)) return false;
+  // A direct command match is enough for upgrade removal and replacement.
+  if (commandEntryReferencesSpec(entry, spec)) return true;
+  // Matcher groups nest the runnable command under their hooks array.
   if (Array.isArray(entry.hooks)) {
     return entry.hooks.some((hook) => entryReferencesSpec(hook, spec));
+  }
+  return false;
+}
+
+/**
+ * Checks command and runner timeout so dashboard state matches what users will actually run.
+ */
+function entryMatchesSpecRegistration(
+  entry: unknown,
+  agent: AgentProfile,
+  spec: HookSpec,
+): boolean {
+  // Non-object JSON cannot represent a valid managed registration.
+  if (!isObject(entry)) return false;
+  // A direct command must also carry the timeout supported by this runner.
+  if (commandEntryReferencesSpec(entry, spec)) {
+    // Codex has no timeout field, and hooks without a registry timeout use agent defaults.
+    if (agent.id === "codex" || spec.timeoutSec === undefined) return true;
+    const timeoutField = agent.id === "copilot" ? "timeoutSec" : "timeout";
+    return entry[timeoutField] === spec.timeoutSec;
+  }
+  // Matcher groups are valid when one nested command has the complete registration.
+  if (Array.isArray(entry.hooks)) {
+    return entry.hooks.some((hook) =>
+      entryMatchesSpecRegistration(hook, agent, spec),
+    );
   }
   return false;
 }
@@ -312,14 +351,15 @@ function hasAntigravityExpectedEntries(
   if (!Array.isArray(entries)) return false;
   if (spec.event === "Stop") {
     return entries.some(
-      (entry) => isObject(entry) && entryReferencesSpec(entry, spec),
+      (entry) =>
+        isObject(entry) && entryMatchesSpecRegistration(entry, agent, spec),
     );
   }
   return entries.some(
     (entry) =>
       isObject(entry) &&
       entry.matcher === matcherForAgent(agent, spec) &&
-      entryReferencesSpec(entry, spec),
+      entryMatchesSpecRegistration(entry, agent, spec),
   );
 }
 
@@ -332,17 +372,21 @@ function hasEventExpectedEntries(
   const entries = hooks[hookEventKey(agent, spec)];
   if (!Array.isArray(entries)) return false;
   if (spec.event === "Stop") {
-    return entries.some((entry) => entryReferencesSpec(entry, spec));
+    return entries.some((entry) =>
+      entryMatchesSpecRegistration(entry, agent, spec),
+    );
   }
   if (agent.id === "copilot") {
-    return entries.some((entry) => entryReferencesSpec(entry, spec));
+    return entries.some((entry) =>
+      entryMatchesSpecRegistration(entry, agent, spec),
+    );
   }
   return matcherParts(spec.matcher).every((matcher) =>
     entries.some(
       (entry) =>
         isObject(entry) &&
         entry.matcher === matcher &&
-        entryReferencesSpec(entry, spec),
+        entryMatchesSpecRegistration(entry, agent, spec),
     ),
   );
 }

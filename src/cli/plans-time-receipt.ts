@@ -71,6 +71,36 @@ const RECORDED_SECONDS_PATTERN =
 const ALLOCATED_MINUTES_PATTERN =
   /^(?:\*\*Allocated minutes:\*\*|Allocated minutes:)\s*(\d+)\s+total\s*\((\d+)\s+product\s*\/\s*(\d+)\s+proof\s*\/\s*(\d+)\s+other\)\s*$/imu;
 
+/**
+ * Read one receipt authority field without silently choosing between merge duplicates.
+ * Missing fields stay absent for legacy inference; duplicates add a fixed user-facing warning.
+ *
+ * @param markdown - rendered receipt body selected from the user's milestone
+ * @param pattern - anchored field grammar whose first capture carries the field value
+ * @param fieldLabel - plain-English field name used in a validation warning
+ * @param warnings - caller-owned warning list that receives no milestone-controlled values
+ * @returns the sole match, or undefined when the field is absent or duplicated
+ */
+function readUniqueReceiptField(
+  markdown: string,
+  pattern: RegExp,
+  fieldLabel: string,
+  warnings: string[],
+): RegExpMatchArray | undefined {
+  const globalPattern = new RegExp(
+    pattern.source,
+    `${pattern.flags.replace("g", "")}g`,
+  );
+  const fieldMatches = Array.from(markdown.matchAll(globalPattern));
+
+  // Two rendered values leave users with no trustworthy receipt authority after a merge.
+  if (fieldMatches.length > 1) {
+    warnings.push(`multiple ${fieldLabel} values supplied`);
+    return undefined;
+  }
+  return fieldMatches[0];
+}
+
 /** Return whether a category string belongs to the timing contract. */
 function isTimingCategory(value: string): value is PlanTimeCategory {
   return TIMING_CATEGORIES.some((category) => category === value);
@@ -202,7 +232,6 @@ function parseDiscardedSegment(
   if (!discardedText) return null;
   const discardedAt = parseStamp(discardedText);
   if (discardedAt === null) return null;
-  if (discardedAt.epochSeconds < start.epochSeconds) return null;
   return {
     id,
     category,
@@ -215,6 +244,34 @@ function parseDiscardedSegment(
     discardedAtIso: discardedAt.iso,
     discardedAtEpochSeconds: discardedAt.epochSeconds,
   };
+}
+
+/** Return the latest system-clock instant carried by one receipt row. */
+function latestSegmentEpoch(segment: PlanTimingSegment): number {
+  return Math.max(
+    segment.startEpochSeconds,
+    segment.endEpochSeconds ?? segment.startEpochSeconds,
+    segment.discardedAtEpochSeconds ?? segment.startEpochSeconds,
+  );
+}
+
+/**
+ * Find the latest recorded instant users can see anywhere in their timing history.
+ * Use before Start so a recovered or corrected system clock cannot create overlapping work.
+ *
+ * @param segments - existing receipt rows; empty means the user has not started timing
+ * @returns the latest epoch second, or null when no timing row exists
+ */
+export function latestRecordedTimingEpoch(
+  segments: readonly PlanTimingSegment[],
+): number | null {
+  // With no prior row, the user's first Start has no historical clock boundary.
+  return segments.reduce<number | null>((latestEpoch, segment) => {
+    const segmentEpoch = latestSegmentEpoch(segment);
+    return latestEpoch === null
+      ? segmentEpoch
+      : Math.max(latestEpoch, segmentEpoch);
+  }, null);
 }
 
 /** Parse a closed span only when timestamps and stored duration reconcile. */
@@ -252,9 +309,21 @@ function parseTimingSummary(
   markdown: string,
   warnings: string[],
 ): PlanTimingSummary | undefined {
-  const secondsMatch = markdown.match(RECORDED_SECONDS_PATTERN);
-  const minutesMatch = markdown.match(ALLOCATED_MINUTES_PATTERN);
+  const secondsMatch = readUniqueReceiptField(
+    markdown,
+    RECORDED_SECONDS_PATTERN,
+    "Recorded seconds",
+    warnings,
+  );
+  const minutesMatch = readUniqueReceiptField(
+    markdown,
+    ALLOCATED_MINUTES_PATTERN,
+    "Allocated minutes",
+    warnings,
+  );
+  // A receipt without either summary line is an ordinary active or paused receipt.
   if (!secondsMatch && !minutesMatch) return undefined;
+  // Finalized summary evidence is usable only when both authoritative lines are present once.
   if (!secondsMatch || !minutesMatch) {
     warnings.push("timing receipt summary is incomplete");
     return undefined;
@@ -308,10 +377,36 @@ function validateTimingReceipt(receipt: PlanTimingReceipt): string[] {
   return [
     ...new Set([
       ...collectSegmentIdentityErrors(receipt.segments),
+      ...collectSegmentTimelineErrors(receipt.segments),
       ...collectReceiptStateErrors(receipt),
       ...collectReceiptSummaryErrors(receipt),
     ]),
   ];
+}
+
+/** Reject reordered, overlapping, or post-open rows that cannot describe one user timeline. */
+function collectSegmentTimelineErrors(
+  segments: readonly PlanTimingSegment[],
+): string[] {
+  let priorLatestEpoch: number | null = null;
+  let isPriorSegmentOpen = false;
+
+  // Each row must begin after every recorded instant in the rows the user sees above it.
+  for (const segment of segments) {
+    // A later row cannot follow an unfinished span or begin before the prior row finished.
+    if (
+      isPriorSegmentOpen ||
+      (priorLatestEpoch !== null &&
+        segment.startEpochSeconds < priorLatestEpoch)
+    ) {
+      return [
+        "timing receipt segments must be chronological and non-overlapping",
+      ];
+    }
+    priorLatestEpoch = latestSegmentEpoch(segment);
+    isPriorSegmentOpen = segment.state === "open";
+  }
+  return [];
 }
 
 /** Find duplicate segment identifiers without copying target-controlled ids into errors. */
@@ -492,9 +587,16 @@ function parseReceiptState(
   segments: readonly PlanTimingSegment[],
   warnings: string[],
 ): PlanTimingReceiptState {
-  const stateText = markdown.match(RECEIPT_STATE_PATTERN)?.[1]?.toLowerCase();
+  const stateText = readUniqueReceiptField(
+    markdown,
+    RECEIPT_STATE_PATTERN,
+    "Receipt state",
+    warnings,
+  )?.[1]?.toLowerCase();
   const inferredState = inferReceiptState(segments);
+  // Missing or duplicated state text falls back only for parsing; its duplicate warning still rejects writes.
   if (stateText === undefined) return inferredState;
+  // A recognized state can be checked against the table rows below.
   if (isReceiptState(stateText)) return stateText;
   warnings.push("timing receipt state is not parseable");
   return inferredState;

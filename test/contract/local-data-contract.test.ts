@@ -30,6 +30,7 @@ const DOCUMENTED_EVENT_KINDS = {
   "project.remove": "project.remove",
   "project.switch": "project.switch",
   "hook.verify": "hook.verify",
+  "plan.time": "plan.time",
 } satisfies Record<EvidenceEventKind, EvidenceEventKind>;
 
 const LOCAL_STATE_README_ENTRIES = [

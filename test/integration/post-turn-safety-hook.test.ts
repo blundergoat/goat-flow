@@ -895,15 +895,23 @@ describe("post-turn-safety hook", () => {
       GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "1",
     };
 
+    /**
+     * Confirms that stock macOS Bash and newer Bash give the user one Stop result.
+     */
     function assertScannerParity(
       root: string,
       expectedStatus: 0 | 2,
       expectedPattern?: RegExp,
+      env: Record<string, string> = {},
     ): void {
       const nativeResult = runHook(root, {
+        ...env,
         GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK: "0",
       });
-      const compatibilityResult = runHook(root, compatibilityEnv);
+      const compatibilityResult = runHook(root, {
+        ...env,
+        ...compatibilityEnv,
+      });
       const diagnostics = [
         `native status=${nativeResult.status}`,
         `native stderr:\n${nativeResult.stderr}`,
@@ -917,6 +925,7 @@ describe("post-turn-safety hook", () => {
         nativeResult.status,
         diagnostics,
       );
+      // A supplied warning pattern confirms both paths explain the same user action.
       if (expectedPattern) {
         assert.match(nativeResult.stderr, expectedPattern, diagnostics);
         assert.match(compatibilityResult.stderr, expectedPattern, diagnostics);
@@ -1046,6 +1055,69 @@ describe("post-turn-safety hook", () => {
         );
       });
     });
+
+    // Writes three commented credentials so both scanners must block the same user edit.
+    it("matches literal assignments followed by trailing comments", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "config.env",
+          [
+            `API_KEY="${TEST_CLIENT_SECRET}" # rotate quarterly`,
+            `password='${TEST_INI_PASSWORD}' # rotate quarterly`,
+            `AUTH_TOKEN=${TEST_CLIENT_SECRET} # rotate quarterly`,
+            "",
+          ].join("\n"),
+        );
+
+        assertScannerParity(root, 2, /credential assignment/u);
+      });
+    });
+
+    // Writes a bare-dollar expression so both scanners leave the user's turn unblocked.
+    it("allows a bare dollar inside a double-quoted assignment", () => {
+      withTempRepo((root) => {
+        writeFile(root, "config.env", `API_KEY="${TEST_CLIENT_SECRET}$"\n`);
+
+        assertScannerParity(root, 0);
+      });
+    });
+
+    // Writes and commits an oversized tracked file so both scanners honor the user's byte cap.
+    it("applies the byte cap to tracked worktree diffs", () => {
+      withTempRepo((root) => {
+        writeFile(root, "large.env", "safe=1\n");
+        commitAll(root, "add capped fixture");
+        writeFile(
+          root,
+          "large.env",
+          `safe=${"x".repeat(80)}\nAPI_KEY=${TEST_CLIENT_SECRET}\n`,
+        );
+
+        assertScannerParity(root, 0, undefined, {
+          GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "64",
+        });
+      });
+    });
+
+    // Writes and stages an oversized secret, then restores the worktree so scanners measure the index blob.
+    it("applies the byte cap to staged-only diffs", () => {
+      withTempRepo((root) => {
+        writeFile(root, "large.env", "safe=1\n");
+        commitAll(root, "add staged capped fixture");
+        writeFile(
+          root,
+          "large.env",
+          `safe=${"x".repeat(80)}\nAPI_KEY=${TEST_CLIENT_SECRET}\n`,
+        );
+        runGit(root, ["add", "large.env"]);
+        writeFile(root, "large.env", "safe=1\n");
+
+        assertScannerParity(root, 0, undefined, {
+          GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "64",
+        });
+      });
+    });
   });
 
   describe("scan budget", () => {
@@ -1065,8 +1137,8 @@ describe("post-turn-safety hook", () => {
           [FORCE_BASH3_ENV_KEY]: "1",
         });
 
-        assert.notEqual(result.status, 0);
-        assert.equal(compatibilityResult.status, result.status);
+        assert.equal(result.status, 2);
+        assert.equal(compatibilityResult.status, 2);
         assert.match(
           result.stderr,
           /post-turn-safety: scan incomplete, \d+ file\(s\) unscanned/u,

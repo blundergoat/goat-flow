@@ -27,6 +27,22 @@ import {
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(REPOSITORY_ROOT, "src", "cli", "cli.ts");
 
+/** Receipt fields that must remain singular when a user resolves or merges milestone edits. */
+const DUPLICATE_RECEIPT_AUTHORITY_CASES = [
+  {
+    name: "receipt state",
+    line: "**Receipt state:** finalized",
+  },
+  {
+    name: "recorded seconds",
+    line: "**Recorded seconds:** 60 total (60 product / 0 proof / 0 other)",
+  },
+  {
+    name: "allocated minutes",
+    line: "**Allocated minutes:** 1 total (1 product / 0 proof / 0 other)",
+  },
+] as const;
+
 /**
  * Writes one canonical milestone nested under a selected project's plan tree.
  * Use as the starting point for any timing test that needs a real milestone file on disk.
@@ -96,6 +112,11 @@ function runPlans(...args: string[]) {
     ["--import", "tsx", CLI_PATH, "plans", ...args],
     { cwd: REPOSITORY_ROOT, encoding: "utf-8" },
   );
+}
+
+/** Render the same readable UTC/epoch cell users see inside a timing receipt. */
+function timingStamp(epochSeconds: number): string {
+  return `${new Date(epochSeconds * 1000).toISOString().replace(/\.\d{3}Z$/u, "Z")} / ${epochSeconds}`;
 }
 
 /** Create a symlink, or skip only when the host forbids unprivileged links. */
@@ -183,6 +204,34 @@ describe("plans time", () => {
     );
   });
 
+  /**
+   * Fixture purpose: a user clicks Finalize before Start and must keep the original milestone.
+   * Filesystem side effects: writes and reads one temporary milestone without changing it.
+   */
+  it("rejects finalization before any timing segment exists", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
+    const { milestonePath } = writeTimingFixture(temporaryRoot);
+    const milestoneBeforeFinalization = readFileSync(milestonePath, "utf-8");
+
+    try {
+      assert.throws(
+        () =>
+          applyPlanTimeTransition(
+            milestonePath,
+            { action: "stop", finalize: true },
+            100,
+          ),
+        /cannot finalize before recording a timing segment/iu,
+      );
+      assert.equal(
+        readFileSync(milestonePath, "utf-8"),
+        milestoneBeforeFinalization,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   // Covers pause, category change, and finalization in one run: writes each transition into the milestone.
   it("records pause, category change, and finalization inside the milestone", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
@@ -265,6 +314,49 @@ describe("plans time", () => {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
+
+  // Separate test names identify which merged authority field reached the user's receipt.
+  for (const authorityCase of DUPLICATE_RECEIPT_AUTHORITY_CASES) {
+    /**
+     * Fixture purpose: a user or merge leaves one authoritative receipt field duplicated.
+     * Filesystem side effects: writes and rewrites only one temporary finalized milestone.
+     */
+    it(`rejects duplicate ${authorityCase.name} authority`, () => {
+      const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
+      const { milestonePath } = writeTimingFixture(temporaryRoot);
+
+      try {
+        applyPlanTimeTransition(
+          milestonePath,
+          { action: "start", category: "product" },
+          100,
+        );
+        applyPlanTimeTransition(
+          milestonePath,
+          { action: "stop", finalize: true },
+          160,
+        );
+        const finalizedMilestone = readFileSync(milestonePath, "utf-8");
+        const milestoneWithDuplicate = finalizedMilestone.replace(
+          authorityCase.line,
+          `${authorityCase.line}\n${authorityCase.line}`,
+        );
+        writeFileSync(milestonePath, milestoneWithDuplicate, "utf-8");
+
+        assert.throws(
+          () =>
+            applyPlanTimeTransition(milestonePath, { action: "status" }, 200),
+          /multiple .* values supplied/iu,
+        );
+        assert.equal(
+          readFileSync(milestonePath, "utf-8"),
+          milestoneWithDuplicate,
+        );
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
 
   // Covers an interrupted span: writes the discard and expects no invented end or duration.
   it("discards an interrupted span without inventing an end or duration", () => {
@@ -371,6 +463,78 @@ describe("plans time", () => {
     }
   });
 
+  /**
+   * Fixture purpose: a recovered user clock is still behind earlier work and cannot Start safely.
+   * Filesystem side effects: writes a temporary receipt, then verifies rejection leaves it unchanged.
+   */
+  it("rejects a new segment that starts before recorded timing history", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
+    const { milestonePath } = writeTimingFixture(temporaryRoot);
+
+    try {
+      applyPlanTimeTransition(
+        milestonePath,
+        { action: "start", category: "product" },
+        100,
+      );
+      applyPlanTimeTransition(milestonePath, { action: "stop" }, 160);
+      const milestoneBeforeOverlap = readFileSync(milestonePath, "utf-8");
+
+      assert.throws(
+        () =>
+          applyPlanTimeTransition(
+            milestonePath,
+            { action: "start", category: "proof" },
+            159,
+          ),
+        /clock predates timing history/iu,
+      );
+      assert.equal(
+        readFileSync(milestonePath, "utf-8"),
+        milestoneBeforeOverlap,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: a manual merge reorders two valid rows and the user requests Status.
+   * Filesystem side effects: writes the overlapping rows into one temporary milestone for validation.
+   */
+  it("rejects receipt rows that overlap earlier timing history", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
+    const { milestonePath } = writeTimingFixture(temporaryRoot);
+
+    try {
+      applyPlanTimeTransition(
+        milestonePath,
+        { action: "start", category: "product" },
+        100,
+      );
+      applyPlanTimeTransition(milestonePath, { action: "stop" }, 160);
+      applyPlanTimeTransition(
+        milestonePath,
+        { action: "start", category: "proof" },
+        200,
+      );
+      applyPlanTimeTransition(milestonePath, { action: "stop" }, 260);
+      const overlappingReceipt = readFileSync(milestonePath, "utf-8").replace(
+        `${timingStamp(200)} | ${timingStamp(260)}`,
+        `${timingStamp(150)} | ${timingStamp(210)}`,
+      );
+      writeFileSync(milestonePath, overlappingReceipt, "utf-8");
+
+      assert.throws(
+        () => applyPlanTimeTransition(milestonePath, { action: "status" }),
+        /chronological and non-overlapping/iu,
+      );
+      assert.equal(readFileSync(milestonePath, "utf-8"), overlappingReceipt);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   /*
    * Covers the intersection a stuck operator actually hits: writes a span the
    * clock reversed under, then discards it. The clock-reversal error tells the
@@ -400,6 +564,12 @@ describe("plans time", () => {
       assert.equal(result.receipt.segments[0]?.state, "discarded");
       assert.equal(result.receipt.segments[0]?.seconds, null);
       assert.equal(result.receipt.segments[0]?.endEpochSeconds, null);
+      const statusAfterRecovery = applyPlanTimeTransition(
+        milestonePath,
+        { action: "status" },
+        101,
+      );
+      assert.equal(statusAfterRecovery.receipt.state, "incomplete");
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -423,6 +593,35 @@ describe("plans time", () => {
         readFileSync(milestonePath, "utf-8"),
         /\*\*Receipt state:\*\* active/u,
       );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: simulate a user saving the open milestone after Start has already read it.
+   * Filesystem side effects: the injected editor save rewrites one temporary file in place.
+   */
+  it("preserves an in-place user edit detected before atomic replacement", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
+    const { milestonePath } = writeTimingFixture(temporaryRoot);
+    const userEditedMilestone = readFileSync(milestonePath, "utf-8").replace(
+      "Record one milestone timeline.",
+      "Record one milestone timeline with the user's newer editor save.",
+    );
+
+    try {
+      assert.throws(
+        () =>
+          applyPlanTimeTransition(
+            milestonePath,
+            { action: "start", category: "product" },
+            100,
+            () => writeFileSync(milestonePath, userEditedMilestone, "utf-8"),
+          ),
+        /changed during timing/iu,
+      );
+      assert.equal(readFileSync(milestonePath, "utf-8"), userEditedMilestone);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

@@ -220,6 +220,40 @@ describe("buildTerminalSpawnSpec", () => {
     );
   });
 
+  // Fixture writes and removes a parenthesized project because `)` must remain rule content.
+  it("preserves parenthesized project paths in Claude permission rules", () => {
+    const parenthesizedProjectPath = mkdtempSync(
+      join(tmpdir(), "goat-terminal-my (old) app-"),
+    );
+    try {
+      const spec = buildTerminalSpawnSpec(
+        "claude",
+        "/usr/local/bin/claude",
+        "",
+        { SHELL: "/bin/bash" },
+        "linux",
+        {
+          accessMode: "reporting",
+          projectPath: parenthesizedProjectPath,
+          targetPath: parenthesizedProjectPath,
+        },
+      );
+      const settings = JSON.parse(
+        spec.env.GOAT_CLAUDE_REPORTING_SETTINGS ?? "",
+      ) as { permissions: { allow: string[]; deny: string[] } };
+      const permissionPath = `//${parenthesizedProjectPath.replace(/^\/+/, "")}`;
+
+      assert.ok(
+        settings.permissions.allow.includes(`Read(${permissionPath}/**)`),
+      );
+      assert.ok(
+        settings.permissions.deny.includes(`Read(${permissionPath}/**/.env)`),
+      );
+    } finally {
+      rmSync(parenthesizedProjectPath, { recursive: true, force: true });
+    }
+  });
+
   // Covers credentials under the active Claude config directory: the fixture writes them and expects denial.
   it("denies credentials under the active Claude config directory", () => {
     const tempRoot = mkdtempSync(

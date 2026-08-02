@@ -1,6 +1,7 @@
 /**
  * Dashboard model readers for injected shell data and API payloads that feed
  * presets, projects, sessions, quality views, and task state.
+ * Use when server responses must become safe, complete browser-facing models.
  */
 function readSupportedAgent(rawAgent: unknown): SupportedAgent | null {
   if (!isRecord(rawAgent)) return null;
@@ -207,6 +208,12 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
   // permission grant: fall back to the restricted mode rather than carry a
   // write-enabled session into the retry and reconnect payloads.
   const accessMode = readTerminalAccessMode(rawSession.accessMode);
+  // Legacy sessions omit capture metadata, which means the UI has no receipt channel to restore.
+  const captureQualityDrafts = rawSession.captureQualityDrafts === true;
+  // An empty owner remains null so retry fails visibly instead of targeting an invented project.
+  const qualityDraftProjectPath = captureQualityDrafts
+    ? readString(rawSession.qualityDraftProjectPath) || null
+    : null;
   if (
     !id ||
     !status ||
@@ -227,6 +234,8 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
     targetPath: targetPath || projectPath,
     runner,
     accessMode,
+    captureQualityDrafts,
+    qualityDraftProjectPath,
     lastInputAt: rawSession.lastInputAt,
     age: readOptionalSessionMetric(rawSession.age),
     idleDuration: readOptionalSessionMetric(rawSession.idleDuration),

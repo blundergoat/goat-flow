@@ -469,7 +469,13 @@ async function dashboardLaunchPreset(
   if (presetId) ctx.promptRunStates[presetId] = "running";
   let adapted = ctx.adaptPrompt(prompt, runnerResolved);
   adapted +=
-    "\n\n" + dashboardGlobalLaunchContext(ctx, runnerResolved, preset ?? null);
+    "\n\n" +
+    dashboardGlobalLaunchContext(
+      ctx,
+      runnerResolved,
+      preset ?? null,
+      accessMode,
+    );
   // Investigator role opens read-only guidance from the user's configured perspective.
   if (ctx.userRole === "investigator") {
     adapted =
@@ -544,6 +550,8 @@ function dashboardDetachTerminal(
       cwd: s.cwd,
       targetPath: s.targetPath,
       accessMode: s.accessMode,
+      captureQualityDrafts: s.captureQualityDrafts,
+      qualityDraftProjectPath: s.qualityDraftProjectPath,
     }));
   if (toSave.length > 0) {
     ctx._projectSessions[savePath] = toSave;
@@ -610,6 +618,12 @@ async function dashboardReconnectTerminal(
   for (const saved of liveSaved) {
     const alive = aliveMap.get(saved.sessionId);
     if (!alive) continue;
+    // Legacy backend rows may omit capture, so the browser's saved true value preserves the receipt channel.
+    const reconnectCaptureQualityDrafts =
+      alive.captureQualityDrafts || saved.captureQualityDrafts;
+    // Prefer the backend's validated owner; a missing legacy value falls back to the saved launch owner.
+    const reconnectQualityDraftProjectPath =
+      alive.qualityDraftProjectPath ?? saved.qualityDraftProjectPath;
     const session: LocalSession = {
       id: saved.sessionId,
       runner: saved.agent,
@@ -618,6 +632,8 @@ async function dashboardReconnectTerminal(
       cwd: alive.cwd || saved.cwd || alive.projectPath,
       targetPath: alive.targetPath || saved.targetPath || alive.projectPath,
       accessMode: alive.accessMode,
+      captureQualityDrafts: reconnectCaptureQualityDrafts,
+      qualityDraftProjectPath: reconnectQualityDraftProjectPath,
       startTime: saved.startTime,
       lastInputTime: alive.lastInputAt,
       connected: false,
@@ -639,6 +655,8 @@ async function dashboardReconnectTerminal(
       retryCwdPath: session.cwd,
       retryTargetPath: session.targetPath,
       retryAccessMode: session.accessMode,
+      retryCaptureQualityDrafts: session.captureQualityDrafts,
+      retryQualityDraftProjectPath: session.qualityDraftProjectPath,
     };
     dashboardArmTerminalLoadingTimers(ctx, session.id, session);
   }
@@ -733,6 +751,8 @@ async function dashboardLaunchInTerminal(
       cwd: controllingCwd,
       targetPath: selectedTargetPath,
       accessMode,
+      captureQualityDrafts,
+      qualityDraftProjectPath,
       startTime: Date.now(),
       lastInputTime: Date.now(),
       connected: false,

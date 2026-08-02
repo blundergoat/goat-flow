@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-02
+last_reviewed: 2026-08-03
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -69,6 +69,8 @@ last_reviewed: 2026-08-02
 
 **Status:** active | **Created:** 2026-05-31
 
+**Incident count:** 2 | **Latest occurrence:** 2026-08-03
+
 **What happened:** During the gruff findings cleanup, I treated `waste.unused-import` findings as safe mechanical removals. Removing `realpathSync` / `fileURLToPath` from `src/cli/cli.ts` broke `npm run typecheck`, and removing `rename` / `TERMINAL_UPLOAD_MAX_BODY_BYTES` from `test/integration/dashboard-server.test.ts` broke the focused dashboard-server test.
 
 **Root cause:** The analyzer reported imports as unused even though the symbols were referenced later in large files. I trusted the finding before doing a local symbol search or running the focused test.
@@ -89,11 +91,19 @@ last_reviewed: 2026-08-02
 
 **Status:** active | **Created:** 2026-05-31
 
+**Incident count:** 4 | **Latest occurrence:** 2026-08-03
+
 **What happened:** During the gruff naming cleanup, the full `npm test` run reached the installer round-trip fixture and failed its temp-repo preflight because local style gates still had issues: ESLint flagged a non-null assertion in `src/cli/cli-parser.ts`, and Prettier found an unformatted modified contract test.
 
 **Root cause:** I verified the target gruff rule and typecheck first, then jumped to the expensive full suite before running the cheap local style gates that the round-trip preflight also enforces.
 
-**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`).
+**Recurrence 2026-08-03:** The PR #57 hardening pass ran the 96-second installer round-trip before targeted ESLint. Its temp preflight then rejected `compareManagedHookTimeouts` at complexity 16, although typecheck, focused tests, and gruff comment checks were already green. Extracting config-read, per-agent, and per-hook helpers cleared ESLint immediately.
+
+**Recurrence 2026-08-03 (M03):** The reporting-capture race fix launched focused tests and gruff alongside Prettier before confirming formatting. The behavior tests passed, but Prettier rejected `src/cli/quality/quality-command.ts`, gruff found four missing side-effect comments, and the corrected style pass then caught an unbound-method signature. Running the cheap style checks first would have kept the proof run clean.
+
+**Same-day recurrence:** M02 correctly ran cheap gates before broad tests, and Prettier caught the newly edited `plans-time.ts` before the timing suites. Formatting first prevented a later preflight or round-trip failure; the proof sequence stopped, formatted the file, and re-ran the exact check before continuing.
+
+**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`), `src/cli/plans-time.ts` (search: `beforeMilestoneReplacement`).
 
 ## Lesson: Size refactors must preserve browser script load graphs in tests
 

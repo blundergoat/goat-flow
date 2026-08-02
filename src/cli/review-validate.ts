@@ -47,6 +47,7 @@ interface MarkdownSection {
 /** Refutation claim extracted while validating the integrity surface. */
 interface IntegrityResult {
   anchorAuthority: ReviewAnchorAuthority;
+  conclusion: ReviewIntegrityConclusion | null;
   evidenceCounts: EvidenceCountClaim | null;
   refutationsLogged: number;
   isRefutationPersistenceSkipped: boolean;
@@ -59,10 +60,38 @@ interface IntegrityResult {
 
 /** Parsed finding definition used for stable-ID and conditional-section checks. */
 interface FindingDefinition {
+  action: FindingAction;
   evidence: "INFERRED" | "OBSERVED" | null;
   id: string;
   line: number;
   section: (typeof FINDING_SECTIONS)[number];
+  severity: FindingSeverity;
+}
+
+type FindingAction =
+  | "patch"
+  | "needs-decision"
+  | "intent-mismatch"
+  | "needs-signal"
+  | "pre-existing";
+
+type FindingSeverity = "MUST" | "SHOULD" | "MAY";
+
+type ReviewIntegrityConclusion =
+  "confident" | "coverage-degraded" | "high-inference" | "partial";
+
+type ShipVerdictDecision =
+  | "YES"
+  | "YES WITH CONDITIONS"
+  | "PARTIAL"
+  | "NO"
+  | "PENDING REFUTER/HUMAN"
+  | "N/A - AREA AUDIT ONLY";
+
+/** Parsed user-facing decision and the report line that declared it. */
+interface ShipVerdictClaim {
+  decision: ShipVerdictDecision;
+  line: number;
 }
 
 /** Source whose bytes semantic anchors must be resolved against. */
@@ -121,6 +150,8 @@ const CHECK_IDENTIFIER_BY_CODE = {
   "integrity-format": "V5",
   "integrity-section-duplicate": "V5",
   "integrity-field-duplicate": "V5",
+  "ship-verdict-format": "V5",
+  "ship-verdict-contradiction": "V5",
   "degradation-flag-unknown": "V5",
   "finding-id-duplicate": "V6",
   "finding-reference-unresolved": "V6",
@@ -152,6 +183,8 @@ const OPTIONAL_SECTIONS = [
   "Refuted by Refuter",
   "What's Good",
 ] as const;
+
+const TOP_FIVE_HEADINGS = ["Top 5 Risks", "Top 5 Risks (cross-tier)"] as const;
 
 const FINDING_CANDIDATE = /^\s*-\s+\S/u;
 const FINDING_PREFIX =
@@ -202,7 +235,18 @@ const AUTOMATED_REVIEW_VALUE =
 const REFUTER_VALUE =
   /^(?:yes|no|skipped);\s*confirmed=\d+,\s*refuted=\d+,\s*unresolved=\d+,\s*leads-verified=\d+,\s*model=\S.+$/u;
 const COMPACT_INTEGRITY =
-  /^\s*Review Integrity:\s*(?:confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*\S.+;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*\S.+;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+
+const FULL_SHIP_VERDICT =
+  /^\s*Decision:\s*\*\*(YES|YES WITH CONDITIONS|PARTIAL|NO|PENDING REFUTER\/HUMAN|N\/A - AREA AUDIT ONLY)\*\*\s*$/u;
+const COMPACT_SHIP_VERDICT =
+  /^\s*Ship Verdict:\s*\*\*(YES|YES WITH CONDITIONS|PARTIAL|NO|PENDING REFUTER\/HUMAN|N\/A - AREA AUDIT ONLY)\*\*/u;
+const SHIP_VERDICT_LADDER = [
+  "YES",
+  "YES WITH CONDITIONS",
+  "PARTIAL",
+  "NO",
+] as const;
 
 /** One durable ledger record; every field is mandatory and single-line. */
 const REFUTATION_LEDGER_RECORD =
@@ -555,10 +599,12 @@ function validateFindingLine(
   );
   validateFindingAnchors(locatedLine, projectRoot, authority, violations);
   return {
+    action: (prefixMatch[3] ?? "patch") as FindingAction,
     evidence: readFindingEvidence(locatedLine.text),
     id: prefixMatch[1] ?? "",
     line: locatedLine.line,
     section,
+    severity: (prefixMatch[2] ?? "MAY") as FindingSeverity,
   };
 }
 
@@ -616,6 +662,55 @@ function validateRequiredIntegrityFields(
         : `Review Integrity is missing ${label}`,
     );
   }
+}
+
+/** Reject a Pass 2 file count that claims more opened files than the reviewed scope contains. */
+function validateOpenedFileCoverage(
+  fields: IntegrityFieldMap,
+  violations: ReviewValidationViolation[],
+): void {
+  const coverageField = fields.get("Files opened in Pass 2");
+  const coverageMatch = coverageField?.value.match(/^(\d+)\/(\d+)\b/u);
+  // The required-field check already explains a missing or malformed coverage value.
+  if (!coverageField || !coverageMatch?.[1] || !coverageMatch[2]) return;
+  const openedFileCount = readSafeIntegrityCount(
+    coverageMatch[1],
+    "Files opened in Pass 2 numerator",
+    coverageField.line,
+    violations,
+  );
+  const scopedFileCount = readSafeIntegrityCount(
+    coverageMatch[2],
+    "Files opened in Pass 2 denominator",
+    coverageField.line,
+    violations,
+  );
+  // Unsafe integers already have a precise format violation for the report author.
+  if (openedFileCount === null || scopedFileCount === null) return;
+  // A reviewer cannot open more unique files than the scope presented to the user.
+  if (openedFileCount > scopedFileCount) {
+    addViolation(
+      violations,
+      "integrity-format",
+      coverageField.line,
+      `Files opened in Pass 2 claims ${openedFileCount}/${scopedFileCount}; opened files cannot exceed scoped files`,
+    );
+  }
+}
+
+/** Read the validated integrity conclusion used to apply the user-visible verdict downgrade. */
+function readIntegrityConclusion(
+  fields: IntegrityFieldMap,
+): ReviewIntegrityConclusion | null {
+  const conclusion = fields.get("Conclusion")?.value;
+  return [
+    "confident",
+    "coverage-degraded",
+    "high-inference",
+    "partial",
+  ].includes(conclusion ?? "")
+    ? (conclusion as ReviewIntegrityConclusion)
+    : null;
 }
 
 /** Validate one optional extension only when the report emitted it. */
@@ -982,6 +1077,7 @@ function validateFullIntegrity(
 ): IntegrityResult {
   const fields = collectIntegrityFields(section, violations);
   validateRequiredIntegrityFields(fields, section, violations);
+  validateOpenedFileCoverage(fields, violations);
   validateOptionalIntegrityField(
     fields,
     "Automated-review provenance",
@@ -998,6 +1094,7 @@ function validateFullIntegrity(
   const scope = readScopeAuthority(fields, violations);
   return {
     ...scope,
+    conclusion: readIntegrityConclusion(fields),
     evidenceCounts: readEvidenceCounts(fields, violations),
     ...readRefutationClaim(fields, violations),
     verdictCounts: readVerdictCounts(fields, violations),
@@ -1013,7 +1110,9 @@ function validateIntegrity(
 ): IntegrityResult {
   const fullSections = readSections(lines, "Review Integrity");
   const fullSection = fullSections.at(0);
+  // A full receipt is authoritative whenever the user includes its H2 section.
   if (fullSection) {
+    // Repeated receipts would let a report present conflicting validation state.
     for (const duplicate of fullSections.slice(1)) {
       addViolation(
         violations,
@@ -1028,7 +1127,12 @@ function validateIntegrity(
   const compactIndex = lines.findIndex((line) =>
     /^\s*Review Integrity:/u.test(line),
   );
-  if (compactIndex >= 0 && COMPACT_INTEGRITY.test(lines[compactIndex] ?? "")) {
+  const compactIntegrityMatch = (lines[compactIndex] ?? "").match(
+    COMPACT_INTEGRITY,
+  );
+  // Zero-finding reviews may use the shorter user-facing integrity line.
+  if (compactIndex >= 0 && compactIntegrityMatch) {
+    // A compact receipt cannot account for visible finding evidence or verdict totals.
     if (findingCandidateCount > 0) {
       addViolation(
         violations,
@@ -1039,6 +1143,8 @@ function validateIntegrity(
     }
     return {
       anchorAuthority: { kind: "invalid" },
+      conclusion: (compactIntegrityMatch[1] ??
+        "confident") as ReviewIntegrityConclusion,
       evidenceCounts: null,
       refutationsLogged: 0,
       isRefutationPersistenceSkipped: false,
@@ -1059,6 +1165,7 @@ function validateIntegrity(
   );
   return {
     anchorAuthority: { kind: "invalid" },
+    conclusion: null,
     evidenceCounts: null,
     refutationsLogged: 0,
     isRefutationPersistenceSkipped: false,
@@ -1335,6 +1442,29 @@ function validateIntegrityCounts(
   }
 }
 
+/** Read either documented Top 5 heading and reject multiple risk summaries. */
+function readTopFiveSection(
+  lines: string[],
+  violations: ReviewValidationViolation[],
+): MarkdownSection | null {
+  const topFiveSections = TOP_FIVE_HEADINGS.flatMap((heading) =>
+    readSections(lines, heading),
+  ).sort((left, right) => left.headingLine - right.headingLine);
+  const firstTopFiveSection = topFiveSections.at(0);
+  // With no risk summary, the finding count later decides whether to warn the user.
+  if (!firstTopFiveSection) return null;
+  // Multiple aliases would present competing risk rankings in one review.
+  for (const duplicateSection of topFiveSections.slice(1)) {
+    addViolation(
+      violations,
+      "finding-section-duplicate",
+      duplicateSection.headingLine,
+      `Top 5 Risks duplicates the section at line ${firstTopFiveSection.headingLine}`,
+    );
+  }
+  return firstTopFiveSection;
+}
+
 /** Resolve every literal semantic anchor cited in one reference-only section. */
 function validateSectionAnchors(
   section: MarkdownSection | null,
@@ -1438,11 +1568,12 @@ function warnEmptyOptionalSections(
 
 /** Warn when Top 5 presence contradicts the surfaced-finding threshold. */
 function warnTopFiveShape(
-  lines: string[],
+  topFive: MarkdownSection | null,
+  findingsHeadingLine: number | null,
   surfacedCount: number,
   warnings: ReviewValidationViolation[],
 ): void {
-  const topFive = readSection(lines, "Top 5 Risks (cross-tier)");
+  // An empty risk section adds a heading in the UI without any ranked guidance.
   if (topFive && !hasSectionContent(topFive)) {
     addWarning(
       warnings,
@@ -1451,6 +1582,7 @@ function warnTopFiveShape(
       "Top 5 Risks is present but empty",
     );
   }
+  // Five or fewer surfaced findings already fit in the primary user-facing list.
   if (topFive && surfacedCount <= 5) {
     addWarning(
       warnings,
@@ -1459,11 +1591,12 @@ function warnTopFiveShape(
       `Top 5 Risks is present with only ${surfacedCount} surfaced findings`,
     );
   }
+  // Above five findings, the review contract promises users a ranked summary.
   if (!topFive && surfacedCount > 5) {
     addWarning(
       warnings,
       "top-five-missing",
-      readSection(lines, "Findings")?.headingLine ?? null,
+      findingsHeadingLine,
       `Top 5 Risks is missing for ${surfacedCount} surfaced findings`,
     );
   }
@@ -1472,6 +1605,7 @@ function warnTopFiveShape(
 /** Warn when optional sections or the Top 5 threshold contradict the skill. */
 function validateConditionalSections(
   lines: string[],
+  topFive: MarkdownSection | null,
   definitions: FindingDefinition[],
   warnings: ReviewValidationViolation[],
 ): void {
@@ -1479,7 +1613,9 @@ function validateConditionalSections(
   const surfacedCount = definitions.filter((definition) =>
     SURFACED_FINDING_SECTIONS.has(definition.section),
   ).length;
-  warnTopFiveShape(lines, surfacedCount, warnings);
+  const findingsHeadingLine =
+    readSection(lines, "Findings")?.headingLine ?? null;
+  warnTopFiveShape(topFive, findingsHeadingLine, surfacedCount, warnings);
 }
 
 /** Validate advisory-only Spec Drift bullets separately from findings. */
@@ -1498,6 +1634,197 @@ function validateSpecDrift(
       "Spec Drift bullets must use [advisory] or [ready-to-tick] with a bold title",
     );
   }
+}
+
+/** Parse one bold Ship Verdict decision from its full or compact user-facing line. */
+function parseShipVerdictDecision(
+  line: string,
+  pattern: RegExp,
+): ShipVerdictDecision | null {
+  return (line.match(pattern)?.[1] as ShipVerdictDecision | undefined) ?? null;
+}
+
+/** Read one dedicated Ship Verdict section after the caller has selected it as authority. */
+function readFullShipVerdictClaim(
+  fullVerdictSection: MarkdownSection,
+  duplicateSections: MarkdownSection[],
+  violations: ReviewValidationViolation[],
+): ShipVerdictClaim | null {
+  // More than one decision section leaves users without one authoritative outcome.
+  for (const duplicateSection of duplicateSections) {
+    addViolation(
+      violations,
+      "ship-verdict-format",
+      duplicateSection.headingLine,
+      `Ship Verdict duplicates the section at line ${fullVerdictSection.headingLine}`,
+    );
+  }
+  const decisionLines = fullVerdictSection.lines.filter(({ text }) =>
+    /^\s*Decision:/u.test(text),
+  );
+  const decisionLine = decisionLines.at(0);
+  // The UI needs exactly one decision line to summarize the review safely.
+  if (decisionLines.length !== 1 || !decisionLine) {
+    addViolation(
+      violations,
+      "ship-verdict-format",
+      fullVerdictSection.headingLine,
+      "Ship Verdict must contain exactly one bold Decision line",
+    );
+    return null;
+  }
+  const decision = parseShipVerdictDecision(
+    decisionLine.text,
+    FULL_SHIP_VERDICT,
+  );
+  // Plain or unknown decision text does not satisfy the published report grammar.
+  if (decision === null) {
+    addViolation(
+      violations,
+      "ship-verdict-format",
+      decisionLine.line,
+      "Ship Verdict Decision must use one documented bold decision value",
+    );
+    return null;
+  }
+  return { decision, line: decisionLine.line };
+}
+
+/** Read the report's single Ship Verdict claim and explain malformed or repeated decisions. */
+function readShipVerdictClaim(
+  lines: string[],
+  violations: ReviewValidationViolation[],
+): ShipVerdictClaim | null {
+  const fullVerdictSections = readSections(lines, "Ship Verdict");
+  const fullVerdictSection = fullVerdictSections.at(0);
+  // Full reports show the decision beneath a dedicated heading.
+  if (fullVerdictSection) {
+    return readFullShipVerdictClaim(
+      fullVerdictSection,
+      fullVerdictSections.slice(1),
+      violations,
+    );
+  }
+
+  const compactVerdictLines = lines
+    .map((text, lineIndex) => ({ line: lineIndex + 1, text }))
+    .filter(({ text }) => /^\s*Ship Verdict:/u.test(text));
+  const compactVerdictLine = compactVerdictLines.at(0);
+  // Even a clean compact review needs one visible outcome for the user.
+  if (!compactVerdictLine) {
+    addViolation(
+      violations,
+      "ship-verdict-format",
+      null,
+      "report is missing Ship Verdict",
+    );
+    return null;
+  }
+  // Repeated compact decisions are as ambiguous as repeated full sections.
+  if (compactVerdictLines.length > 1) {
+    addViolation(
+      violations,
+      "ship-verdict-format",
+      compactVerdictLines[1]?.line ?? compactVerdictLine.line,
+      `Ship Verdict duplicates the decision at line ${compactVerdictLine.line}`,
+    );
+  }
+  const decision = parseShipVerdictDecision(
+    compactVerdictLine.text,
+    COMPACT_SHIP_VERDICT,
+  );
+  // A malformed compact line cannot be trusted as the review's visible outcome.
+  if (decision === null) {
+    addViolation(
+      violations,
+      "ship-verdict-format",
+      compactVerdictLine.line,
+      "compact Ship Verdict must use one documented bold decision value",
+    );
+    return null;
+  }
+  return { decision, line: compactVerdictLine.line };
+}
+
+/** Move one final decision down the documented confidence ladder. */
+function downgradeShipVerdict(
+  decision: (typeof SHIP_VERDICT_LADDER)[number],
+): (typeof SHIP_VERDICT_LADDER)[number] {
+  const currentDecisionIndex = SHIP_VERDICT_LADDER.indexOf(decision);
+  const downgradedDecisionIndex = Math.min(
+    currentDecisionIndex + 1,
+    SHIP_VERDICT_LADDER.length - 1,
+  );
+  return SHIP_VERDICT_LADDER[downgradedDecisionIndex] ?? "NO";
+}
+
+/** Derive the decision users should see from surfaced severity and integrity confidence. */
+function expectedShipVerdict(
+  definitions: FindingDefinition[],
+  conclusion: ReviewIntegrityConclusion | null,
+): (typeof SHIP_VERDICT_LADDER)[number] {
+  const surfacedFindings = definitions.filter((definition) =>
+    SURFACED_FINDING_SECTIONS.has(definition.section),
+  );
+  const hasBlockingFinding = surfacedFindings.some(
+    (definition) =>
+      definition.severity === "MUST" || definition.action === "intent-mismatch",
+  );
+  const hasConditionalFinding = surfacedFindings.some(
+    (definition) => definition.severity === "SHOULD",
+  );
+  let expectedDecision: (typeof SHIP_VERDICT_LADDER)[number] =
+    hasBlockingFinding
+      ? "NO"
+      : hasConditionalFinding
+        ? "YES WITH CONDITIONS"
+        : "YES";
+  const requiresConfidenceDowngrade =
+    conclusion !== null && conclusion !== "confident";
+  // Degraded review coverage moves the visible outcome down exactly one rung.
+  if (requiresConfidenceDowngrade) {
+    expectedDecision = downgradeShipVerdict(expectedDecision);
+  }
+  return expectedDecision;
+}
+
+/** Reject a final decision that understates or contradicts the report's visible risk surface. */
+function validateShipVerdict(
+  lines: string[],
+  integrity: IntegrityResult,
+  definitions: FindingDefinition[],
+  violations: ReviewValidationViolation[],
+): void {
+  const verdictClaim = readShipVerdictClaim(lines, violations);
+  // A missing or malformed claim already has a user-actionable format error.
+  if (verdictClaim === null) return;
+  // Pending review states intentionally defer the final risk decision.
+  if (verdictClaim.decision === "PENDING REFUTER/HUMAN") return;
+  // Area audits may report no release decision because shipping was outside the user's question.
+  if (verdictClaim.decision === "N/A - AREA AUDIT ONLY") {
+    // Diff and PR reviews must still give the user a release decision.
+    if (!integrity.isAreaAudit) {
+      addViolation(
+        violations,
+        "ship-verdict-contradiction",
+        verdictClaim.line,
+        "N/A - AREA AUDIT ONLY is valid only when Scope snapshot declares source=area",
+      );
+    }
+    return;
+  }
+  const expectedDecision = expectedShipVerdict(
+    definitions,
+    integrity.conclusion,
+  );
+  // Matching severity and confidence produces one deterministic decision.
+  if (verdictClaim.decision === expectedDecision) return;
+  addViolation(
+    violations,
+    "ship-verdict-contradiction",
+    verdictClaim.line,
+    `Ship Verdict claims ${verdictClaim.decision} but surfaced findings and Review Integrity require ${expectedDecision}`,
+  );
 }
 
 /**
@@ -1529,7 +1856,8 @@ export function validateReviewReport(
   );
   validateUniqueFindingIds(definitions, violations);
   validateIntegrityCounts(integrity, definitions, violations);
-  const topFive = readSection(lines, "Top 5 Risks (cross-tier)");
+  validateShipVerdict(lines, integrity, definitions, violations);
+  const topFive = readTopFiveSection(lines, violations);
   validateSectionAnchors(
     topFive,
     projectRoot,
@@ -1539,7 +1867,7 @@ export function validateReviewReport(
   validateTopFiveReferences(topFive, definitions, violations);
   validateRefuterReferences(lines, definitions, violations);
   validateSpecDrift(lines, violations);
-  validateConditionalSections(lines, definitions, warnings);
+  validateConditionalSections(lines, topFive, definitions, warnings);
   validateRefutationLedger(projectRoot, integrity, violations);
   return {
     status: violations.length === 0 ? "pass" : "fail",
