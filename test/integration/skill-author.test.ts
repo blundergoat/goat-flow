@@ -771,7 +771,7 @@ describe("skill new - draft mode", () => {
         "---",
         `name: ${name}`,
         'description: "Use when reviewing database changes."',
-        'goat-flow-skill-version: "1.14.0"',
+        'goat-flow-skill-version: "1.15.0"',
         "---",
         `# /${name}`,
         "## When to Use",

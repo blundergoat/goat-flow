@@ -274,9 +274,9 @@ Convert local `M*.md` milestones into portable, redacted Markdown issue bodies o
 A missing top-level title is rejected. An explicit Objective wins; otherwise export uses the outcome title without its milestone prefix. Missing status, scope, tasks, proof, exit criteria, or stop/rescope content remains visible as an export warning. Dependencies, a separate Objective, and Boundary Notes are conditional, so their absence does not create warning noise. Competing canonical and legacy representations produce deterministic conflict warnings.
 
 ```bash
-npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format markdown
-npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format markdown --output .goat-flow/plans/exports/1.14.0
-npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format markdown
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format markdown --output .goat-flow/plans/exports/1.15.0
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format json --output .goat-flow/plans/exports/1.15.0.json
 ```
 
 Without `--output`, the redacted bundle is printed to stdout and nothing is created. Markdown output treats `--output` as a directory and writes one file per milestone; JSON output treats it as one array file. Existing output is preserved unless `--force` explicitly authorizes regeneration.
@@ -290,8 +290,8 @@ This command does not contact GitHub, Beads, Linear, or any other remote service
 Check goat-plan's deterministic milestone contract and effort arithmetic. The accounting input includes `(est: n min category)` entries in Tasks, Proof or legacy testing gates, and Mid-implementation proof; `Plan/admin overhead: n min other`; machine-readable `Effort estimate:` / `Actual:` fields; and the plan-level product/proof/other mix.
 
 ```bash
-npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.14.0
-npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.14.0 --strict
+npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.15.0
+npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.15.0 --strict
 ```
 
 Default mode preserves legacy plans. It errors on malformed notation, a declared split that does not sum to its headline, task estimates exceeding a declared category, or unestimated Tasks beneath a declared effort line; plans without effort fields pass with one informational line.

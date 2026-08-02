@@ -177,7 +177,7 @@ npx @blundergoat/goat-flow@latest install . --agent claude     # Copy/update sys
 npx @blundergoat/goat-flow@latest setup . --agent claude       # Generate setup prompt
 npx @blundergoat/goat-flow@latest quality . --agent claude     # Generate quality-assessment prompt
 npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md
-npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format markdown
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format markdown
 npx @blundergoat/goat-flow@latest status .                     # Project state (bare/partial/v0.9/outdated/current/error)
 npx @blundergoat/goat-flow@latest manifest                     # Agent support matrix
 ```

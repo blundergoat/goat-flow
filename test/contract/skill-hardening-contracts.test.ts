@@ -817,7 +817,7 @@ describe("skill hardening contracts", () => {
         const reference = readProjectFile(referencePath);
         assert.match(
           reference,
-          /goat-flow-reference-version: "1\.14\.0"/u,
+          /goat-flow-reference-version: "1\.15\.0"/u,
           referencePath,
         );
         for (const trapName of [
@@ -3183,7 +3183,7 @@ describe("skill hardening contracts", () => {
         // Asserting the wrong one here is what let this file drift out of version parity.
         assert.match(
           referenceGuidance,
-          /goat-flow-reference-version: "1\.14\.0"/u,
+          /goat-flow-reference-version: "1\.15\.0"/u,
           referencePath,
         );
       },

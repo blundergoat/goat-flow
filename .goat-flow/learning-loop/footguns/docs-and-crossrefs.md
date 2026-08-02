@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-07-27
+last_reviewed: 2026-08-03
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -170,21 +170,20 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Version bump checks do not cover synthetic project config strings
 
 **Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 3 | **Latest occurrence:** 2026-08-03
 
-**Symptoms:** `bash scripts/bump-version.sh <version>` and `npm run check-versions` both pass, but helper scripts, integration fixtures, or secondary reference/playbook trees can still retain the previous release version.
+**Symptoms:** The bump and version checks pass while helpers, examples, fixtures, or mirrors still name the previous release.
 
-**Why it happens:** The bump script intentionally updates a curated list of release surfaces, and `check-versions.mjs` verifies the version surfaces it knows about. Synthetic project builders that embed a config file as an inline string, or newly split reference directories that are not added to both the bump script and checker, stay outside both surfaces unless they are manually grepped.
+**Why it happens:** Both tools cover curated paths, not arbitrary embedded strings or newly added release surfaces.
 
-**Evidence:** During the v1.3.2 M07 release gate, `npm run check-versions` printed `All template and reference versions match 1.3.2`, but `rg -n "1\\.3\\.1" ... scripts/profile-dashboard-audit.mjs test` still found current-version strings in `scripts/profile-dashboard-audit.mjs` (search: `writeSyntheticProject`) and `test/integration/dashboard-server.helpers.ts` (search: `makeDashboardCacheProject`). During the v1.6.1 bump on 2026-05-11, `bash scripts/bump-version.sh 1.6.1` and `npm run check-versions` passed while `rg -n 'goat-flow-reference-version: "1\\.6\\.0"' workflow/skills/playbooks .goat-flow/skill-docs/playbooks` still found stale playbook frontmatter.
+**Evidence:** v1.3.2 checks passed with old values in `scripts/profile-dashboard-audit.mjs` (search: `writeSyntheticProject`) and `test/integration/dashboard-server.helpers.ts` (search: `makeDashboardCacheProject`). v1.6.1 checks missed stale frontmatter under `workflow/skills/playbooks/`. v1.15.0 checks missed 1.14.0 plan examples in `README.md`, `docs/cli.md`, and `src/cli/cli.ts` (search: `plans export .goat-flow/plans/1.15.0`), plus two regex-escaped assertions in `test/contract/skill-hardening-contracts.test.ts` (search: `goat-flow-reference-version: "1\.15\.0"`).
 
 **Structural anchors:**
 - `scripts/bump-version.sh` (search: `# ── Source files (version string replacement)`) lists the curated surfaces the bump workflow edits.
 - `scripts/check-versions.mjs` (search: `goat-flow-reference-version`) verifies skill and reference frontmatter, not arbitrary embedded config stubs.
 - `workflow/skills/playbooks/README.md` (search: `goat-flow-reference-version`) is a standalone playbook tree that must be included alongside `workflow/skills/reference/`.
-- `scripts/profile-dashboard-audit.mjs` (search: `writeSyntheticProject`) creates a synthetic `.goat-flow/config.yaml` for profiler runs.
-- `test/integration/dashboard-server.helpers.ts` (search: `makeDashboardCacheProject`) creates a dashboard-cache fixture project with an embedded config string.
 
-**Prevention:** After every release bump, run a targeted stale-version grep across scripts, tests, packages, workflow templates, installed skill/reference/playbook mirrors, and config files, not just `npm run check-versions`: `rg -n "<old-version>" scripts test package.json package-lock.json .goat-flow/config.yaml workflow .agents .claude .github/skills .goat-flow/skill-docs .goat-flow/skill-docs/playbooks`.
+**Prevention:** After each bump, search the same repository-wide path set for both literal old versions (`rg -n -F '1.14.0' ...`) and regex-escaped forms (`rg -n -F '1\.14\.0' ...`), then classify historical and compatibility evidence.
 
 ---
 

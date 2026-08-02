@@ -131,10 +131,10 @@ Examples:
   goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries
   goat-flow redact --output .goat-flow/logs/sessions/handoff.md
   goat-flow review validate saved-review.md
-  goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
-  goat-flow plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
-  goat-flow plans check .goat-flow/plans/1.14.0
-  goat-flow plans check .goat-flow/plans/1.14.0 --strict
+  goat-flow plans export .goat-flow/plans/1.15.0 --format markdown
+  goat-flow plans export .goat-flow/plans/1.15.0 --format json --output .goat-flow/plans/exports/1.15.0.json
+  goat-flow plans check .goat-flow/plans/1.15.0
+  goat-flow plans check .goat-flow/plans/1.15.0 --strict
   goat-flow plans time start .goat-flow/plans/1.15.0/example/M01-example.md --category product
   goat-flow plans time stop .goat-flow/plans/1.15.0/example/M01-example.md
   goat-flow plans time stop .goat-flow/plans/1.15.0/example/M01-example.md --finalize

@@ -806,7 +806,7 @@ describe("plans export", () => {
 
   // CLI parsing keeps the plan path distinct from the export subcommand users invoked.
   it("parses plans export as a first-class CLI command", () => {
-    const planPath = resolve(".goat-flow/plans/1.14.0");
+    const planPath = resolve(".goat-flow/plans/1.15.0");
     const parsed = parseCLIArgs([
       "plans",
       "export",
@@ -829,7 +829,7 @@ describe("plans export", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-preview-"),
     );
-    const planPath = join(temporaryRoot, "1.14.0");
+    const planPath = join(temporaryRoot, "1.15.0");
     const fakeToken = ["ghp", "p".repeat(36)].join("_");
     writePlanFixture(
       planPath,
@@ -858,8 +858,8 @@ describe("plans export", () => {
    */
   it("writes a redacted JSON record bundle to an explicit output file", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-json-"));
-    const planPath = join(temporaryRoot, "1.14.0");
-    const outputPath = join(temporaryRoot, "exports", "1.14.0.json");
+    const planPath = join(temporaryRoot, "1.15.0");
+    const outputPath = join(temporaryRoot, "exports", "1.15.0.json");
     writePlanFixture(planPath, completeMilestoneBody());
 
     try {
@@ -891,7 +891,7 @@ describe("plans export", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-markdown-"),
     );
-    const planPath = join(temporaryRoot, "1.14.0");
+    const planPath = join(temporaryRoot, "1.15.0");
     const outputPath = join(temporaryRoot, "exports");
     const fakeToken = ["npm", "q".repeat(36)].join("_");
     writePlanFixture(planPath, completeMilestoneBody(fakeToken));
@@ -949,7 +949,7 @@ describe("plans export", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-filename-collision-"),
     );
-    const planPath = join(temporaryRoot, "1.14.0");
+    const planPath = join(temporaryRoot, "1.15.0");
     const outputPath = join(temporaryRoot, "exports");
     writePlanFixture(planPath, completeMilestoneBody(), "M01-a!.md");
     writePlanFixture(planPath, completeMilestoneBody(), "M01-a?.md");
@@ -980,7 +980,7 @@ describe("plans export", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-redaction-collision-"),
     );
-    const planPath = join(temporaryRoot, "1.14.0");
+    const planPath = join(temporaryRoot, "1.15.0");
     const outputPath = join(temporaryRoot, "exports");
     const firstToken = ["ghp", "a".repeat(36)].join("_");
     const secondToken = ["ghp", "b".repeat(36)].join("_");
@@ -1018,7 +1018,7 @@ describe("plans export", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-json-directory-"),
     );
-    const planPath = join(temporaryRoot, "1.14.0");
+    const planPath = join(temporaryRoot, "1.15.0");
     const outputPath = join(temporaryRoot, "exports");
     writePlanFixture(planPath, completeMilestoneBody());
     mkdirSync(outputPath, { recursive: true });
