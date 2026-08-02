@@ -578,6 +578,25 @@ describe("terminal exports", () => {
   });
 });
 
+/**
+ * Confirm every create past the cap failed with the message the user actually sees.
+ * Use after a concurrency burst: it separates "the cap held" from "something crashed",
+ * which look identical in a plain rejected-count assertion.
+ *
+ * @param rejections - creates the manager refused; an empty list means the cap never
+ *   engaged, which the caller asserts separately
+ */
+function assertRejectionsCarryCapMessage(
+  rejections: PromiseRejectedResult[],
+): void {
+  // Overflow creates fail with the visible cap message, not a stray crash.
+  for (const rejection of rejections) {
+    const message =
+      rejection.reason instanceof Error ? rejection.reason.message : "";
+    assert.match(message, /Maximum \d+ concurrent sessions/);
+  }
+}
+
 describe("terminal session concurrency cap", () => {
   // Covers racing terminal creates: spawns concurrent requests and expects MAX_SESSIONS never exceeded.
   it("never exceeds MAX_SESSIONS when creates race around loadNodePty", async () => {
@@ -612,12 +631,7 @@ describe("terminal session concurrency cap", () => {
       assert.equal(manager.list().length, MAX_SESSIONS);
       assert.equal(created, MAX_SESSIONS);
       assert.equal(rejected.length, attempts - MAX_SESSIONS);
-      // Overflow creates fail with the visible cap message, not a stray crash.
-      for (const rejection of rejected) {
-        const message =
-          rejection.reason instanceof Error ? rejection.reason.message : "";
-        assert.match(message, /Maximum \d+ concurrent sessions/);
-      }
+      assertRejectionsCarryCapMessage(rejected);
     } finally {
       manager.shutdown();
     }

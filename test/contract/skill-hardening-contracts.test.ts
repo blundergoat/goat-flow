@@ -109,6 +109,90 @@ function assertForEachTarget<T>(
   }
 }
 
+// Every obligation a milestone-examples reference must state before a plan author can
+// trust an Actual: how to record time, how to stop it, and how each Actual state reads.
+const TIMING_OBLIGATION_CHECKS = [
+  /goat-flow plans time start/u,
+  /--finalize/u,
+  /--discard-open/u,
+  /Stop before every human wait/u,
+  /Delegated or parallel-agent effort is disclosed separately/u,
+  /`measured:/u,
+  /`retrospective:/u,
+  /`unavailable:/u,
+  /`incomplete:/u,
+  /must equal the `Effort estimate` headline/u,
+  /uncalibrated/u,
+];
+
+/**
+ * Resolve every `path` (search: `anchor`) citation in a skill bundle against its target file.
+ * Use when a skill points a reader at another document: a citation that no longer matches
+ * sends the agent to text that is not there, which reads as a missing instruction.
+ *
+ * Anchors naming `<target-project>` are consumer-project placeholders, not files in this
+ * checkout, so they are counted and skipped rather than resolved.
+ *
+ * @param reviewRoot - bundle root used to resolve `SKILL.md` and `references/` citations
+ * @param bundlePaths - files to scan; an empty list returns zero counts and proves nothing,
+ *   which the caller guards by asserting the checked count is above zero
+ * @returns how many anchors resolved and how many placeholders were exempted
+ */
+function verifyNamedAnchorsResolve(
+  reviewRoot: string,
+  bundlePaths: readonly string[],
+): { anchorsChecked: number; placeholderAnchors: number } {
+  const namedAnchorPattern = /`([^`\n]+)`\s*\(search:\s*`([^`]+)`\)/gu;
+  let anchorsChecked = 0;
+  let placeholderAnchors = 0;
+
+  for (const sourcePath of bundlePaths) {
+    const source = readProjectFile(sourcePath);
+    for (const anchorMatch of source.matchAll(namedAnchorPattern)) {
+      const citedPath = anchorMatch[1];
+      const anchor = anchorMatch[2];
+      // A consumer-project placeholder cannot resolve here, so it is exempted, not failed.
+      if (citedPath.includes("<target-project>")) {
+        placeholderAnchors += 1;
+        continue;
+      }
+
+      const targetPath =
+        citedPath === "SKILL.md"
+          ? `${reviewRoot}/SKILL.md`
+          : citedPath.startsWith("references/")
+            ? `${reviewRoot}/${citedPath}`
+            : citedPath;
+      assert.match(
+        readProjectFile(targetPath),
+        new RegExp(anchor.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"),
+        `${sourcePath}: ${citedPath} missing search anchor ${anchor}`,
+      );
+      anchorsChecked += 1;
+    }
+  }
+
+  return { anchorsChecked, placeholderAnchors };
+}
+
+/**
+ * Confirm one milestone-examples section documents every timing and forecast obligation.
+ * Use per installed harness: an author reading only their own agent's copy must still be
+ * told how to record, stop, and disclose milestone time.
+ *
+ * @param effortEstimates - the reference's Effort Estimates section text
+ * @param referencePath - path reported on failure, so the failing harness copy is named
+ */
+function assertTimingObligationsDocumented(
+  effortEstimates: string,
+  referencePath: string,
+): void {
+  // A harness missing any one of these would emit Actuals that look measured but rest on nothing.
+  for (const obligation of TIMING_OBLIGATION_CHECKS) {
+    assert.match(effortEstimates, obligation, referencePath);
+  }
+}
+
 describe("skill hardening contracts", () => {
   const forbiddenCodexExceptionPattern = new RegExp("Exception: on C" + "odex");
   const forbiddenCodexConsentPattern = new RegExp(
@@ -255,33 +339,16 @@ describe("skill hardening contracts", () => {
       );
     });
 
-    const timingObligations = [
-      /goat-flow plans time start/u,
-      /--finalize/u,
-      /--discard-open/u,
-      /Stop before every human wait/u,
-      /Delegated or parallel-agent effort is disclosed separately/u,
-      /`measured:/u,
-      /`retrospective:/u,
-      /`unavailable:/u,
-      /`incomplete:/u,
-      /must equal the `Effort estimate` headline/u,
-      /uncalibrated/u,
-    ];
-
     assertForEachTarget(
       installedSkillReferencePaths(
         "goat-plan",
         "references/milestone-examples.md",
       ),
       (referencePath) => {
-        const effortEstimates = readMarkdownSection(
+        assertTimingObligationsDocumented(
+          readMarkdownSection(referencePath, "Effort Estimates"),
           referencePath,
-          "Effort Estimates",
         );
-        for (const obligation of timingObligations) {
-          assert.match(effortEstimates, obligation, referencePath);
-        }
       },
     );
   });
@@ -1166,34 +1233,10 @@ describe("skill hardening contracts", () => {
       `${reviewRoot}/references/refuter-spec.md`,
       `${reviewRoot}/references/review-traps.md`,
     ];
-    const namedAnchorPattern = /`([^`\n]+)`\s*\(search:\s*`([^`]+)`\)/gu;
-    let anchorsChecked = 0;
-    let placeholderAnchors = 0;
-
-    for (const sourcePath of bundlePaths) {
-      const source = readProjectFile(sourcePath);
-      for (const anchorMatch of source.matchAll(namedAnchorPattern)) {
-        const citedPath = anchorMatch[1];
-        const anchor = anchorMatch[2];
-        if (citedPath.includes("<target-project>")) {
-          placeholderAnchors += 1;
-          continue;
-        }
-
-        const targetPath =
-          citedPath === "SKILL.md"
-            ? `${reviewRoot}/SKILL.md`
-            : citedPath.startsWith("references/")
-              ? `${reviewRoot}/${citedPath}`
-              : citedPath;
-        assert.match(
-          readProjectFile(targetPath),
-          new RegExp(anchor.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"), "u"),
-          `${sourcePath}: ${citedPath} missing search anchor ${anchor}`,
-        );
-        anchorsChecked += 1;
-      }
-    }
+    const { anchorsChecked, placeholderAnchors } = verifyNamedAnchorsResolve(
+      reviewRoot,
+      bundlePaths,
+    );
 
     const examples = readProjectFile(`${reviewRoot}/references/examples.md`);
     assert.doesNotMatch(examples, /Automated-reviewer overlap/u);
@@ -3314,12 +3357,12 @@ describe("skill hardening contracts", () => {
       "Footgun: Fail-soft analyzer skips can silently uncover a configured language",
     );
 
-    for (const resolvedEntry of [optionalMigration, failSoftAnalyzer]) {
-      assert.match(
-        resolvedEntry,
-        /\*\*Status:\*\* resolved[^\n]+\*\*Resolved:\*\* 2026-07-17/u,
-      );
-    }
+    // Both footguns must read as resolved on the same date, or a reader cannot tell
+    // which boundary is still live. Asserted separately so a failure names the entry.
+    const resolvedStamp =
+      /\*\*Status:\*\* resolved[^\n]+\*\*Resolved:\*\* 2026-07-17/u;
+    assert.match(optionalMigration, resolvedStamp, "optional hook migration");
+    assert.match(failSoftAnalyzer, resolvedStamp, "fail-soft analyzer skip");
     assert.match(
       optionalMigration,
       /setup-install-migrations\.test\.ts[^\n]+prunes legacy Codex gruff hook registrations because Codex gruff is unsupported/u,

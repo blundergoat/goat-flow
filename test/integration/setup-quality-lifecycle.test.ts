@@ -301,6 +301,82 @@ function consumerQualityReport(consumerTargetPath: string): object {
   };
 }
 
+/** Per-mode prompt patterns a Quality-page choice must still satisfy after switching mode. */
+interface QualityModeExpectations {
+  scopeContextByMode: Record<QualityMode, RegExp>;
+  agentContextByMode: Record<QualityMode, RegExp>;
+  priorContextByMode: Record<QualityMode, RegExp>;
+  priorIdentifierByMode: Record<QualityMode, RegExp>;
+  deltaContractByMode: Record<QualityMode, RegExp>;
+}
+
+/**
+ * Confirm every Quality-page mode keeps the same selected target, agent, and destination.
+ * Use after a consumer install: a user switching mode on the Quality page must not silently
+ * repoint the prompt at the controlling workspace or lose their prior-report context.
+ *
+ * @param consumerTargetPath - selected consumer project every mode must keep naming; the
+ *   saved report has to land in this project's own .goat-flow/logs/quality/
+ * @param expectations - per-mode patterns the rendered prompt must match
+ */
+function assertEveryQualityModeStaysScoped(
+  consumerTargetPath: string,
+  expectations: QualityModeExpectations,
+): void {
+  // Each Quality-page choice must retain the same selected target, agent, destination, and mode scope.
+  for (const qualityMode of QUALITY_MODES) {
+    const qualityResult = runPublicCli([
+      "quality",
+      consumerTargetPath,
+      "--agent",
+      "codex",
+      "--mode",
+      qualityMode,
+      "--format",
+      "json",
+    ]);
+    assertCliSucceeded(qualityResult, `${qualityMode} quality prompt`);
+    const qualityPayload = parseCliJson<ConsumerQualityPayload>(qualityResult);
+    assert.equal(qualityPayload.auditStatus, "pass");
+    assert.match(qualityPayload.prompt, new RegExp(consumerTargetPath, "u"));
+    assert.match(
+      qualityPayload.prompt,
+      expectations.agentContextByMode[qualityMode],
+    );
+    assert.match(
+      qualityPayload.prompt,
+      expectations.scopeContextByMode[qualityMode],
+    );
+    // The saver command must name the consumer's own project so the report
+    // lands in that project's .goat-flow/logs/quality/. Replaces the
+    // QUALITY_DIR shell-variable assertion that dc67f967 made dead when
+    // persistence moved behind `quality save`; plain includes() keeps the
+    // check safe for Windows paths that a RegExp would read as escapes.
+    assert.ok(
+      qualityPayload.prompt.includes(
+        `goat-flow quality save '${consumerTargetPath}' <<'JSON'`,
+      ),
+      `${qualityMode}: prompt does not persist to the consumer project`,
+    );
+    assert.match(
+      qualityPayload.prompt,
+      new RegExp(`"quality_mode": "${qualityMode}"`, "u"),
+    );
+    assert.match(
+      qualityPayload.prompt,
+      expectations.priorContextByMode[qualityMode],
+    );
+    assert.match(
+      qualityPayload.prompt,
+      expectations.priorIdentifierByMode[qualityMode],
+    );
+    assert.match(
+      qualityPayload.prompt,
+      expectations.deltaContractByMode[qualityMode],
+    );
+  }
+}
+
 describe("consumer setup to quality-report lifecycle", () => {
   it("keeps setup, audit, prompts, and report history on the selected consumer", async () => {
     await withTemporaryConsumerTarget(async (consumerTargetPath) => {
@@ -421,62 +497,13 @@ describe("consumer setup to quality-report lifecycle", () => {
         skills: /"delta_tag": null/u,
       };
 
-      // Each Quality-page choice must retain the same selected target, agent, destination, and mode scope.
-      for (const qualityMode of QUALITY_MODES) {
-        const qualityResult = runPublicCli([
-          "quality",
-          consumerTargetPath,
-          "--agent",
-          "codex",
-          "--mode",
-          qualityMode,
-          "--format",
-          "json",
-        ]);
-        assertCliSucceeded(qualityResult, `${qualityMode} quality prompt`);
-        const qualityPayload =
-          parseCliJson<ConsumerQualityPayload>(qualityResult);
-        assert.equal(qualityPayload.auditStatus, "pass");
-        assert.match(
-          qualityPayload.prompt,
-          new RegExp(consumerTargetPath, "u"),
-        );
-        assert.match(
-          qualityPayload.prompt,
-          expectedAgentContextByMode[qualityMode],
-        );
-        assert.match(
-          qualityPayload.prompt,
-          expectedScopeContextByMode[qualityMode],
-        );
-        // The saver command must name the consumer's own project so the report
-        // lands in that project's .goat-flow/logs/quality/. Replaces the
-        // QUALITY_DIR shell-variable assertion that dc67f967 made dead when
-        // persistence moved behind `quality save`; plain includes() keeps the
-        // check safe for Windows paths that a RegExp would read as escapes.
-        assert.ok(
-          qualityPayload.prompt.includes(
-            `goat-flow quality save '${consumerTargetPath}' <<'JSON'`,
-          ),
-          `${qualityMode}: prompt does not persist to the consumer project`,
-        );
-        assert.match(
-          qualityPayload.prompt,
-          new RegExp(`"quality_mode": "${qualityMode}"`, "u"),
-        );
-        assert.match(
-          qualityPayload.prompt,
-          expectedPriorContextByMode[qualityMode],
-        );
-        assert.match(
-          qualityPayload.prompt,
-          expectedPriorIdentifierByMode[qualityMode],
-        );
-        assert.match(
-          qualityPayload.prompt,
-          expectedDeltaContractByMode[qualityMode],
-        );
-      }
+      assertEveryQualityModeStaysScoped(consumerTargetPath, {
+        scopeContextByMode: expectedScopeContextByMode,
+        agentContextByMode: expectedAgentContextByMode,
+        priorContextByMode: expectedPriorContextByMode,
+        priorIdentifierByMode: expectedPriorIdentifierByMode,
+        deltaContractByMode: expectedDeltaContractByMode,
+      });
     });
   });
 

@@ -69,6 +69,23 @@ function readContractFile(relativePath: string): string {
   return readFileSync(resolve(PROJECT_ROOT, relativePath), "utf-8");
 }
 
+/**
+ * Confirm the architecture budget lists every runtime event kind by name.
+ * Use when a producer gains a new event: the budget row is what tells a maintainer
+ * the event is allowed to be emitted at all.
+ *
+ * @param architecture - text of the architecture contract; missing rows fail per event kind
+ */
+function assertEveryEventKindBudgeted(architecture: string): void {
+  // A union addition must also add a visible event-budget row for maintainers.
+  for (const eventKind of Object.values(DOCUMENTED_EVENT_KINDS)) {
+    assert.ok(
+      architecture.includes(`\`${eventKind}\``),
+      `architecture must budget the literal event kind ${eventKind}`,
+    );
+  }
+}
+
 /** Confirm one local-state guide tells users where its evidence can and cannot go next. */
 function assertLocalStateGuide(relativePath: string): void {
   const readme = readContractFile(relativePath);
@@ -82,13 +99,7 @@ describe("local data contract", () => {
     const architecture = readContractFile(".goat-flow/architecture.md");
 
     assert.match(architecture, /## Local Data and Evidence Budget/u);
-    // A union addition must also add a visible event-budget row for maintainers.
-    for (const eventKind of Object.values(DOCUMENTED_EVENT_KINDS)) {
-      assert.ok(
-        architecture.includes(`\`${eventKind}\``),
-        `architecture must budget the literal event kind ${eventKind}`,
-      );
-    }
+    assertEveryEventKindBudgeted(architecture);
     assert.match(architecture, /route\/checkpoint\/promotion.*deferred/iu);
     assert.match(architecture, /other runtime event families.*deferred/iu);
   });
