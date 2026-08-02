@@ -1,7 +1,7 @@
 ---
 name: goat-debug-diagnostic-techniques
 description: "Progressive causal, mutation-safety, and worked-example guidance for goat-debug Diagnose mode."
-goat-flow-skill-version: "1.14.0"
+goat-flow-reference-version: "1.14.0"
 ---
 # Diagnostic Techniques
 

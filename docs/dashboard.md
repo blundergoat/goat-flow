@@ -66,7 +66,7 @@ Dedicated prompt library. Two-pane layout: left pane is the list with search, ca
 Good default presets to start with:
 
 - `Debug UI in Browser` routes to `/goat-debug` and diagnoses browser-visible bugs with live browser evidence. It checks for `browser-use`, asks for the URL and symptom, captures page state and screenshots, then maps the evidence back to source before proposing a fix.
-- `Fix Bug` runs `/goat-debug` from diagnosis through a minimal fix and post-fix verification.
+- `Fix Bug` runs `/goat-debug` from diagnosis through a minimal fix and post-fix verification, pausing for your approval before the fix plan and again before implementation.
 - `Review Uncommitted` runs `/goat-review` as a pre-commit gate for MUST-level findings only.
 - `Pre Walk-Through with Draft Targeted Testing` turns a PR and issue into reviewer questions plus targeted local UI test tasks.
 - `Test Plan vs Code Changes` compares a proposed test plan against the actual diff and calls out coverage gaps.

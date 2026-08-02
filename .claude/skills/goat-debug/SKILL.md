@@ -102,16 +102,14 @@ For high-stakes diagnoses, run a 5-Whys chain. Every "because" MUST cite `file +
 
 **BLOCKING GATE:** Present diagnosis, then pause. Human decides: dig deeper, propose fix, or stop. If confidence is MEDIUM or LOW with multiple competing hypotheses, consider `/goat-critique` on the hypothesis set before choosing a fix direction.
 
-Full diagnosis-only may stop at D2. If a Quick diagnosis leads to a fix request, promote to Full at the D2 gate; do not skip either approval.
-
 ### D3 - Fix Plan (only if human approved)
 
 Approval to write D3 authorizes planning only, not implementation. State what changes (files + functions), blast radius, architecture check (`.goat-flow/architecture.md`), diagnostic cleanup, rollback, and verification method.
 
 **BLOCKING GATE:** Present the fix plan, then pause. Implement only after explicit approval.
 
-### D4 - Post-Fix Verification (only after implementation)
-Rerun the **original reproduction** from D2 - a code change is not a fix until the symptom is gone. Then run D3 verification, check adjacent regressions, and grep for old patterns after renames.
+### D4 - Post-Fix Verification (only after approved implementation)
+Rerun the **original, unminimized reproduction** from D2 - a code change is not a fix until the symptom is gone under the case that first showed it, since a minimised case proves less. Then run D3 verification, check adjacent regressions, and grep for old patterns after renames. Do not close while any approved diagnostic mutation from D1 remains uncleaned: confirm each cleanup marker, and leave user-owned diagnostics in place.
 
 **3-fix abort rule:** If three independent fixes have failed to resolve the symptom, STOP and reconsider whether the architecture or the root-cause hypothesis is wrong. Do not attempt a fourth patch without first re-entering D1 with a fresh hypothesis set.
 

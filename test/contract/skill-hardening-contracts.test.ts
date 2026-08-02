@@ -2896,13 +2896,42 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         skillGuidance,
-        /### D4 - Post-Fix Verification \(only after implementation\)/u,
+        /### D4 - Post-Fix Verification \(only after approved implementation\)/u,
         skillPath,
       );
       assert.doesNotMatch(
         skillGuidance,
         /\*\*Full path:\*\* run D1.D1\.5.D2.D3.D4/u,
         `${skillPath}: Full must be gated rather than a linear phase list`,
+      );
+    });
+  });
+
+  /*
+   * D4 is where a fix gets called done, so the protections that decide closure
+   * must be stated there. A cleanup rule that lives only in D1 is not
+   * load-bearing at the moment someone declares the bug fixed, and a minimised
+   * reproducer proves a narrower claim than the one the reporter filed.
+   */
+  it("closes goat-debug only on the original reproduction with diagnostics cleaned", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+
+      assert.match(
+        skillGuidance,
+        /Rerun the \*\*original, unminimized reproduction\*\* from D2/u,
+        skillPath,
+      );
+      assert.match(skillGuidance, /a minimised case proves less/u, skillPath);
+      assert.match(
+        skillGuidance,
+        /Do not close while any approved diagnostic mutation from D1 remains uncleaned/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /user-owned diagnostics are never removed without permission/u,
+        skillPath,
       );
     });
   });
@@ -3017,9 +3046,11 @@ describe("skill hardening contracts", () => {
           /Illustrative scenario - input\/output shape only; never evidence/u,
           referencePath,
         );
+        // Reference files carry `reference-version`; `skill-version` is the SKILL.md key.
+        // Asserting the wrong one here is what let this file drift out of version parity.
         assert.match(
           referenceGuidance,
-          /goat-flow-skill-version: "1\.14\.0"/u,
+          /goat-flow-reference-version: "1\.14\.0"/u,
           referencePath,
         );
       },

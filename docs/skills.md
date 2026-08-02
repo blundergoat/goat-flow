@@ -122,21 +122,22 @@ flowchart TD
     S0["Step 0\nGather context\nFootgun check\nUI bug detection"] --> D1
 
     subgraph Diagnose["Diagnose Mode"]
-        D1["D1: Investigate\nHypotheses (2+ categories)\nTrace code paths"] --> BrowserCheck{UI bug?}
+        D1["D1: Investigate\nHypotheses (2+ categories)\nTrace code paths"] --> D15["D1.5: Minimise\nMethod fits the failure shape\nPreserve the load-bearing condition"]
+        D15 --> BrowserCheck{UI bug?}
         BrowserCheck -->|Yes| Browser["Browser evidence\nbrowser-use open/state/screenshot\nOBSERVED data"]
         BrowserCheck -->|No| D2
         Browser --> D2["D2: Diagnosis\nConfidence: HIGH/MEDIUM/LOW"]
     end
 
     D2 -->|"BLOCKING GATE"| Decision{Human decision}
-    Decision -->|"Fix it"| D3["D3: Fix Plan"]
+    Decision -->|"Fix it"| D3["D3: Fix Plan\nplanning only"]
     Decision -->|"Go deeper"| D1
     Decision -->|"Just report"| Close
-    D3 --> D4["D4: Post-Fix Verification\n+ browser re-verification for UI bugs"]
+    D3 -->|"BLOCKING GATE"| D4["D4: Post-Fix Verification\nOriginal unminimized reproduction\n+ browser re-verification for UI bugs"]
     D4 -->|"CHECKPOINT"| Close["Closing\nLearning loop"]
 ```
 
-No fixes until human reviews diagnosis. Confidence levels: HIGH = reproduced, MEDIUM = traced but not reproduced, LOW = inferred from code reading. For UI bugs, Step 0 detects browser-visible symptoms and loads `.goat-flow/skill-docs/playbooks/browser-use.md` on-demand. D1 uses browser evidence (screenshots, DOM state) to confirm or eliminate hypotheses after initial code reading. D4 reruns the browser reproduction post-fix as proof. Browser evidence is OBSERVED data; interpretations remain INFERRED until mapped to `file + semantic anchor`. When `browser-use` is unavailable, the reference includes a manual fallback using OS screenshot tools and browser DevTools.
+No fixes until human reviews diagnosis, and approval to write D3 authorizes planning only - implementation needs its own approval. Symptom reproduction is not root-cause proof: HIGH requires a traced mechanism plus a distinguishing counterfactual or intervention, MEDIUM means the mechanism is traced but distinguishing proof is unavailable or unsafe, and LOW rests on a load-bearing inferred link. For UI bugs, Step 0 detects browser-visible symptoms and loads `.goat-flow/skill-docs/playbooks/browser-use.md` on-demand. D1 uses browser evidence (screenshots, DOM state) to confirm or eliminate hypotheses after initial code reading. D4 reruns the browser reproduction post-fix as proof. Browser evidence is OBSERVED data; interpretations remain INFERRED until mapped to `file + semantic anchor`. When `browser-use` is unavailable, the reference includes a manual fallback using OS screenshot tools and browser DevTools.
 
 **Investigate mode:**
 
