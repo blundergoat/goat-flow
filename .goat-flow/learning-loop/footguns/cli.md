@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-02
 ---
 
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
@@ -73,3 +73,23 @@ last_reviewed: 2026-08-01
 3. Subprocesses spawned by goat-flow (hooks, git, install scripts) must have their stdout / stderr captured separately. Never merge a subprocess's stdout into the parent's stdout when the parent is in structured-output mode.
 4. Contract test pattern: for every structured-output CLI mode, write a test that exercises a code path KNOWN to log (e.g., cache miss, telemetry init, version check). Assert that the captured stdout parses cleanly as the expected format. If logging would corrupt it, the test fails.
 5. For MCP specifically: stdout is the protocol channel. Treat any `console.log` / `process.stdout.write` outside the MCP framing as a bug. Enforce with a source-grep guardrail (see `.goat-flow/learning-loop/patterns/verification.md` search: `Source-grep guardrail`) banning `console.log` in MCP server source files.
+
+---
+
+## Footgun: Structured Actual cannot represent uninstrumented time
+
+**Status:** active | **Created:** 2026-08-02 | **Evidence:** OBSERVED
+**Decision changed:** Instrument timing before work; if timing is missing, disclose the low-confidence proxy instead of manufacturing precision.
+**Trigger phase:** VERIFY
+
+**Symptoms:** A completed or `human-verification-pending` milestone must contain a numeric Actual total and product/proof/other split even when no clock was started. `_`, `unknown`, or an explanation without a number fails strict validation. An agent under completion pressure can therefore turn task estimates into a precise-looking Actual value that has no elapsed-time evidence.
+
+**Why it happens:** `src/cli/plans-check.ts` (search: `requires a structured Actual with total and product/proof/other split`) makes numeric Actual mandatory at the human gate. `src/cli/plans-effort.ts` (search: `ACTUAL_PATTERN`) accepts only numeric minutes and an optional numeric split; it has no measurement-provenance or unknown state.
+
+**Safe handling now:**
+1. Start a segmented UTC/epoch receipt before milestone work and close it before every human wait.
+2. Preserve raw seconds and measurement method beside the rounded structured Actual.
+3. If prospective timing was missed, use an explicitly low-confidence retrospective proxy and say it was not instrumented; never back-calculate from planned estimates.
+4. Treat estimate accuracy and Actual accuracy as separate claims.
+
+**Potential durable fix:** Extend the plan schema with measurement provenance such as `measured | retrospective | unknown` and permit `Actual: unknown - not instrumented` without declaring a numeric observation. That requires separate CLI/schema work and is not implied by this footgun entry.

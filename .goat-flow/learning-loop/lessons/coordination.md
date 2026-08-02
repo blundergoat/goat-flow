@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-02
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -103,3 +103,27 @@ last_reviewed: 2026-08-01
 **Fix:** Move the unchanged human gate to Proof and rerun strict plan validation.
 
 **Prevention:** Before a pending transition, confirm Tasks has no unchecked boxes and Proof has no open executor-owned boxes. Evidence anchor: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`).
+
+---
+
+## Lesson: Actual time must come from prospective active-time segments
+
+**Status:** active | **Created:** 2026-08-02
+**Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
+**Trigger phase:** VERIFY
+**Incident count:** 1
+**Latest occurrence:** 2026-08-02
+
+**What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
+
+**Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
+
+**Prevention:**
+1. Before the first action, record UTC and epoch seconds for an active segment tagged `product`, `proof`, or `other`.
+2. Close the segment before a human gate, interruption, or unrelated task; open a new segment only when work resumes.
+3. Preserve raw seconds in the milestone and round once when rendering structured Actual. The category split must come from those segments, not task weights.
+4. Report wall-clock and aggregate subagent time separately. Parallel agent effort must never be added and presented as elapsed time.
+5. If timing was not started prospectively, label Actual as a low-confidence retrospective estimate. Never call it measured or derive it from the plan.
+6. Calibrate future estimates only after at least three comparable measured milestones. Use the median `actual / estimate` ratio plus a low/likely/high range; one fast milestone is evidence, not a universal multiplier.
+
+**Evidence anchors:** `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI proof records`) defines the handoff requirement; `src/cli/plans-effort.ts` (search: `renderActualLine`) renders the recorded value but cannot create timing evidence.

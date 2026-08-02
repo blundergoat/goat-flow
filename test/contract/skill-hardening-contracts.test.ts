@@ -2804,6 +2804,269 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("keeps goat-debug lifecycle gates explicit and conditional", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+
+      assert.match(
+        skillGuidance,
+        /If a Quick diagnosis leads to a fix request, promote to Full at the D2 gate; do not skip either approval\./u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Full diagnosis-only may stop at D2/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Approval to write D3 authorizes planning only, not implementation\./u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Present the fix plan, then pause.*Implement only after explicit approval/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /### D4 - Post-Fix Verification \(only after implementation\)/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        /\*\*Full path:\*\* run D1.D1\.5.D2.D3.D4/u,
+        `${skillPath}: Full must be gated rather than a linear phase list`,
+      );
+    });
+  });
+
+  it("separates symptom reproduction from goat-debug causal confidence", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+
+      assert.match(
+        skillGuidance,
+        /Symptom reproduction is not root-cause proof\./u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /HIGH requires a traced mechanism plus a distinguishing counterfactual or intervention, or deterministic proof that entails the symptom\./u,
+        skillPath,
+      );
+      assert.match(skillGuidance, /Causation/u, skillPath);
+      assert.match(skillGuidance, /Necessity/u, skillPath);
+      assert.match(skillGuidance, /Sufficiency/u, skillPath);
+      assert.doesNotMatch(skillGuidance, /HIGH = reproduced/u, skillPath);
+    });
+  });
+
+  it("applies repository authority to goat-debug diagnostic mutations", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+
+      assert.match(
+        skillGuidance,
+        /Read-only observation may proceed within repository rules/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /source, configuration, local state, network, production, or sensitive data/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /target, expected signal, affected state, rollback, and a cleanup marker/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /wait for explicit current-session approval/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Incomplete cleanup blocks a fixed claim/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("keeps goat-debug evidence states honest without burdening Investigate", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      const investigateMode = readMarkdownSection(
+        skillPath,
+        "Investigate Mode",
+      );
+
+      for (const evidenceState of [
+        "OBSERVED",
+        "INFERRED",
+        "UNVERIFIED",
+        "HUMAN-PENDING",
+      ]) {
+        assert.match(skillGuidance, new RegExp(evidenceState), skillPath);
+      }
+      assert.match(
+        skillGuidance,
+        /Omit D3, D4, UI, and diagnostic-mutation fields when they are not applicable\./u,
+        skillPath,
+      );
+      assert.match(
+        investigateMode,
+        /Investigate mode does not require reproduction, bug hypotheses, minimisation, or causal proof\./u,
+        skillPath,
+      );
+    });
+  });
+
+  it("loads one manifest-owned goat-debug diagnostic reference", () => {
+    const manifest = JSON.parse(
+      readProjectFile("workflow/manifest.json"),
+    ) as {
+      skills?: { references?: Record<string, string[]> };
+    };
+    assert.deepEqual(manifest.skills?.references?.["goat-debug"], [
+      "references/diagnostic-techniques.md",
+    ]);
+
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      assert.match(
+        readProjectFile(skillPath),
+        /`references\/diagnostic-techniques\.md`/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-debug",
+        "references/diagnostic-techniques.md",
+      ),
+      (referencePath) => {
+        const referenceGuidance = readProjectFile(referencePath);
+        assert.match(
+          referenceGuidance,
+          /Illustrative scenario - input\/output shape only; never evidence/u,
+          referencePath,
+        );
+        assert.match(
+          referenceGuidance,
+          /goat-flow-skill-version: "1\.14\.0"/u,
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("selects goat-debug reduction by failure shape instead of universal binary search", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      assert.doesNotMatch(
+        readProjectFile(skillPath),
+        /Binary-search each variable/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-debug",
+        "references/diagnostic-techniques.md",
+      ),
+      (referencePath) => {
+        const referenceGuidance = readProjectFile(referencePath);
+        assert.match(
+          referenceGuidance,
+          /Choose the reduction method that preserves the property required for the failure\./u,
+          referencePath,
+        );
+        assert.match(
+          referenceGuidance,
+          /Deterministic unordered input/u,
+          referencePath,
+        );
+        assert.match(
+          referenceGuidance,
+          /Ordered or stateful sequence/u,
+          referencePath,
+        );
+        assert.match(
+          referenceGuidance,
+          /Interacting conditions/u,
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("uses decision signal rather than a fixed goat-debug read count", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.doesNotMatch(
+        skillGuidance,
+        /Can't reproduce after 5 file reads/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /If repeated reads or experiments produce no new decision signal, checkpoint: state what was checked, which hypotheses remain, and the next distinguishing evidence needed\./u,
+        skillPath,
+      );
+    });
+  });
+
+  it("does not eliminate intermittent goat-debug hypotheses after one pass", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-debug",
+        "references/diagnostic-techniques.md",
+      ),
+      (referencePath) => {
+        const referenceGuidance = readProjectFile(referencePath);
+        assert.match(
+          referenceGuidance,
+          /A single passing run cannot eliminate an intermittent hypothesis\./u,
+          referencePath,
+        );
+        assert.match(
+          referenceGuidance,
+          /Record runs and failures only when intermittency is decision-relevant/u,
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("preserves the triggering workload during goat-debug performance reduction", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-debug",
+        "references/diagnostic-techniques.md",
+      ),
+      (referencePath) => {
+        const referenceGuidance = readProjectFile(referencePath);
+        assert.match(
+          referenceGuidance,
+          /preserve the triggering workload/iu,
+          referencePath,
+        );
+        assert.match(
+          referenceGuidance,
+          /comparable environment and repeated measurements/u,
+          referencePath,
+        );
+        assert.doesNotMatch(
+          referenceGuidance,
+          /always run exactly \d+|universal failure-rate threshold/iu,
+          referencePath,
+        );
+      },
+    );
+  });
+
   it("lets an explicit read-only investigation pass its scope checkpoint", () => {
     assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
       const investigateMode = readMarkdownSection(
@@ -3619,7 +3882,10 @@ describe("skill hardening contracts", () => {
       ),
     ];
     const scenarioTargets = [
-      ...installedSkillPaths("goat-debug"),
+      ...installedSkillReferencePaths(
+        "goat-debug",
+        "references/diagnostic-techniques.md",
+      ),
       ...installedSkillPaths("goat-security"),
       ...installedSkillPaths("goat-qa"),
       ...planScenarioTargets,
@@ -3823,6 +4089,7 @@ describe("skill hardening contracts", () => {
     const mirroredFiles = [
       "goat-plan/SKILL.md",
       "goat-debug/SKILL.md",
+      "goat-debug/references/diagnostic-techniques.md",
       "goat-security/SKILL.md",
       "goat-qa/SKILL.md",
       "goat-critique/references/rubric-examples.md",
@@ -4136,6 +4403,10 @@ describe("ADR-023 word budget tiers", () => {
     const measuredReferenceFiles = [
       ...skillQualityTestingFiles,
       ...topLevelPlaybookPaths,
+      ...installedSkillReferencePaths(
+        "goat-debug",
+        "references/diagnostic-techniques.md",
+      ),
     ].map((referencePath) => ({
       referencePath,
       userFacingWordCount: countSkillBodyWords(referencePath),

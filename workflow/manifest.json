@@ -296,6 +296,7 @@
       "goat-qa"
     ],
     "references": {
+      "goat-debug": ["references/diagnostic-techniques.md"],
       "goat-plan": [
         "references/milestone-examples.md",
         "references/issue-format.md"

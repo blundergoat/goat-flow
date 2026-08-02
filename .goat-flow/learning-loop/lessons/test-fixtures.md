@@ -219,6 +219,9 @@ last_reviewed: 2026-08-02
 ## Lesson: Pressure scenarios must isolate the rule under test
 
 **Status:** active | **Created:** 2026-07-12
+**Decision changed:** Validate the provenance of every pressure fact before launching an evaluator; a source-grounded target decision does not make transplanted urgency or simplicity facts valid.
+**Trigger phase:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-08-02
 
 **What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-040 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
 
@@ -226,7 +229,11 @@ last_reviewed: 2026-08-02
 
 **Fix:** The replacement uses an explicitly labelled illustrative security-depth scenario and holds file scope plus mirror duties constant; only test-first ordering differs. The shipped scenario defines input/output shape, never incident evidence; live runs must substitute current target-project facts. Evidence anchors: `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Illustrative four-pressure scenario`) and `test/contract/skill-hardening-contracts.test.ts` (search: `isolated from repository-history policy`).
 
-**Prevention:** Before using an A/B/C pressure fixture, compare every option with always-loaded instructions and accepted ADRs. Keep all non-target obligations equal so only the rule under test explains the result.
+**Recurrence 2026-08-02:** The first goat-debug hardening wave used source-grounded lifecycle and probe decisions but added an unsupported “one-line patch” and transplanted “teammate is waiting” pressure from a different historical scenario. All three evaluators selected the safe option, and the host invalidated the entire wave rather than treating its rationales as RED evidence. The redacted receipt remains local current-run context, not durable evidence. Committed evidence anchor: `src/dashboard/preset-prompts.json` (search: `"id": "fix-bug"`) contains the real fix intent but no patch-size or waiting claim.
+
+**Recurrence 2026-08-02 (same hardening run):** After correcting fact provenance, a hypothesis evaluator prompt explicitly requested “What would disconfirm each.” The evaluator returned good falsifiers, but the prompt had named the target field and therefore measured recitation rather than unaided technique use. The host excluded the run and rewound after the second scenario-method correction. This is the same isolation failure at a different layer: the fixture supplied the decision it claimed to test.
+
+**Prevention:** Before using a pressure or application fixture, compare every option with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend facts from separate incidents or ask the evaluator to recite the target technique. Keep all non-target obligations equal so only the rule under test explains the result.
 
 **Current-run record:** `.goat-flow/logs/sessions/2026-08-01-goat-review-tdd.md` preserves the M06 pressure and seeded-corpus receipts for this checkout. It is gitignored session evidence, not a durable repository anchor.
 
