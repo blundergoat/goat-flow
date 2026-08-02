@@ -75,26 +75,54 @@ function renderSplit(split: PlanEffortSplit): string {
   return `(${split.product} product / ${split.proof} proof / ${split.other} other)`;
 }
 
-/** Decide which parser warnings are fatal under the selected compatibility mode. */
-function isValidationWarning(warning: string, strict: boolean): boolean {
+/**
+ * Decide which parser warnings are fatal under the selected compatibility mode.
+ *
+ * @param warning - one parser warning from the milestone record
+ * @param strict - whether strict current-plan validation is selected
+ * @param receiptIsClaimed - whether an Actual derives its authority from the receipt
+ * @returns true when the warning should become a check error
+ */
+function isValidationWarning(
+  warning: string,
+  strict: boolean,
+  receiptIsClaimed: boolean,
+): boolean {
   if (warning.includes("estimate not parseable")) return true;
+
+  // Drifted range notation is as fatal as a drifted estimate: both hide real numbers.
+  if (warning === "forecast range not parseable") return true;
   if (!strict) return false;
   return (
     warning.includes("actual effort not parseable") ||
-    warning.startsWith("timing receipt") ||
+    (receiptIsClaimed && warning.startsWith("timing receipt")) ||
     /^multiple .+ values supplied$/u.test(warning) ||
     STRICT_STRUCTURAL_WARNINGS.has(warning) ||
     /^conflicting .+ representations$/u.test(warning)
   );
 }
 
-/** Convert fatal parser warnings into source-labelled check errors. */
+/**
+ * Convert fatal parser warnings into source-labelled check errors.
+ *
+ * A receipt is evidence for a claim, so its shape is only fatal when an Actual
+ * claims authority from it. Hand-written receipts predating `plans time` sit
+ * beside retrospective Actuals that never cite them; failing the plan on their
+ * shape would invalidate finished work over decoration nothing depends on.
+ * `measured` Actuals still fail twice over - here and in the reconciliation
+ * check that compares their minutes against the receipt allocation.
+ *
+ * @param record - one parsed milestone
+ * @param strict - whether strict current-plan validation is selected
+ * @returns error lines naming the milestone; empty means no warning was fatal
+ */
 function collectWarningErrors(
   record: PlanExportRecord,
   strict: boolean,
 ): string[] {
+  const receiptIsClaimed = record.effort?.actual?.state === "measured";
   return record.warnings
-    .filter((warning) => isValidationWarning(warning, strict))
+    .filter((warning) => isValidationWarning(warning, strict, receiptIsClaimed))
     .map((warning) => `${record.sourceFile}: ${warning}`);
 }
 
@@ -159,6 +187,37 @@ function collectSplitErrors(
     );
   }
   errors.push(...collectCategoryErrors(record, split, strict));
+  return errors;
+}
+
+/**
+ * Check an optional forecast band against its own ordering and the headline.
+ *
+ * Validation exists only when the band does: a milestone that forecasts one
+ * point stays valid, so this returns nothing rather than demanding notation
+ * legacy and in-flight plans were never written with.
+ */
+function collectForecastRangeErrors(record: PlanExportRecord): string[] {
+  const effort = record.effort;
+  const range = effort?.forecastRange;
+  if (!effort || !range) return [];
+
+  const errors: string[] = [];
+  if (
+    range.lowMinutes > range.likelyMinutes ||
+    range.likelyMinutes > range.highMinutes
+  ) {
+    errors.push(
+      `${record.sourceFile}: forecast range must satisfy low <= likely <= high (${range.lowMinutes}-${range.likelyMinutes}-${range.highMinutes} min)`,
+    );
+  }
+
+  // One milestone cannot forecast two different centres, whatever the band's width.
+  if (range.likelyMinutes !== effort.totalMinutes) {
+    errors.push(
+      `${record.sourceFile}: forecast range likely (${range.likelyMinutes} min) must equal the Effort estimate total (${effort.totalMinutes} min)`,
+    );
+  }
   return errors;
 }
 
@@ -481,6 +540,7 @@ function collectMilestoneErrors(
 
   errors.push(...collectSplitErrors(record, strict));
   errors.push(...collectCoverageErrors(record, strict));
+  errors.push(...collectForecastRangeErrors(record));
   if (strict) {
     errors.push(...collectActualErrors(record));
   }
@@ -814,6 +874,109 @@ function renderPlanSummary(records: PlanExportRecord[]): string[] {
   return lines;
 }
 
+/** Below this many eligible samples a correction factor would be a guess, not calibration. */
+const MINIMUM_CALIBRATION_SAMPLES = 3;
+
+/** One milestone's measured-versus-estimated outcome, expressed as a raw-seconds ratio. */
+interface CalibrationSample {
+  sourceFile: string;
+  ratio: number;
+  measuredSeconds: number;
+  estimatedMinutes: number;
+}
+
+/**
+ * Turn one milestone into a calibration sample, or nothing when it is ineligible.
+ *
+ * Eligibility is deliberately narrow. `complete` is the existing human
+ * ratification signal, so `human-verification-pending` never qualifies however
+ * good its receipt is; `measured` is the only Actual state backed by
+ * system-stamped spans, so retrospective guesses, unavailable, and incomplete
+ * states stay out rather than dragging a median toward invented numbers.
+ *
+ * @param record - one parsed milestone
+ * @returns the sample; undefined means this milestone cannot calibrate anything
+ */
+function readCalibrationSample(
+  record: PlanExportRecord,
+): CalibrationSample | undefined {
+  const effort = record.effort;
+
+  // Raw seconds are the authority; the rounded Actual minutes would compound rounding.
+  const summary = record.timingReceipt?.summary;
+  if (!effort || !summary) return undefined;
+  if (record.status.trim().toLowerCase() !== "complete") return undefined;
+  if (effort.actual?.state !== "measured") return undefined;
+
+  // A zero-minute estimate has no ratio to report, so it contributes nothing.
+  if (effort.totalMinutes <= 0) return undefined;
+  return {
+    sourceFile: record.sourceFile,
+    ratio: summary.totalSeconds / (effort.totalMinutes * 60),
+    measuredSeconds: summary.totalSeconds,
+    estimatedMinutes: effort.totalMinutes,
+  };
+}
+
+/**
+ * Select the milestones whose Actual may legitimately calibrate a forecast.
+ *
+ * @param records - every parsed milestone in the plan directory
+ * @returns one sample per eligible milestone, in source order
+ */
+function collectCalibrationSamples(
+  records: PlanExportRecord[],
+): CalibrationSample[] {
+  return records
+    .map(readCalibrationSample)
+    .filter((sample): sample is CalibrationSample => sample !== undefined);
+}
+
+/** Middle value of a sorted ratio list, averaging the pair when the count is even. */
+function medianRatio(sortedRatios: number[]): number {
+  const middle = Math.floor(sortedRatios.length / 2);
+  if (sortedRatios.length % 2 === 1) return sortedRatios[middle] ?? 0;
+  return ((sortedRatios[middle - 1] ?? 0) + (sortedRatios[middle] ?? 0)) / 2;
+}
+
+/** Format a ratio the way the report shows it, so comparisons stay eyeball-able. */
+function renderRatio(ratio: number): string {
+  return `${ratio.toFixed(2)}x`;
+}
+
+/**
+ * Render the informational calibration block.
+ *
+ * This never contributes errors and never changes a forecast: it reports how
+ * past measured milestones landed against their estimates and leaves the
+ * judgement to the author. Below three eligible samples it says `uncalibrated`
+ * rather than offering a multiplier one or two data points cannot support.
+ *
+ * @param records - every parsed milestone in the plan directory
+ * @returns report lines; always at least the count line once the plan has milestones
+ */
+function renderCalibrationSummary(records: PlanExportRecord[]): string[] {
+  const samples = collectCalibrationSamples(records);
+  if (samples.length < MINIMUM_CALIBRATION_SAMPLES) {
+    return [
+      `calibration: uncalibrated - ${samples.length} of ${MINIMUM_CALIBRATION_SAMPLES} eligible measured samples`,
+    ];
+  }
+
+  const sortedRatios = samples
+    .map((sample) => sample.ratio)
+    .sort((a, b) => a - b);
+  const lowest = sortedRatios[0] ?? 0;
+  const highest = sortedRatios[sortedRatios.length - 1] ?? 0;
+  return [
+    `calibration: ${samples.length} eligible measured samples - median ${renderRatio(medianRatio(sortedRatios))}, observed ${renderRatio(lowest)}-${renderRatio(highest)}`,
+    ...samples.map(
+      (sample) =>
+        `calibration sample: ${sample.sourceFile} ${renderRatio(sample.ratio)} (${sample.measuredSeconds}s measured / ${sample.estimatedMinutes} min estimated)`,
+    ),
+  ];
+}
+
 /**
  * Reject flags that have no meaning for the read-only check report.
  * `--format` is deliberately ignored rather than rejected: its default value is
@@ -878,7 +1041,13 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
   const milestoneLines = records
     .map(renderMilestoneLine)
     .filter((line): line is string => line !== null);
-  const reportLines = [...milestoneLines, ...renderPlanSummary(records)];
+  const planSummary = renderPlanSummary(records);
+  const reportLines = [...milestoneLines, ...planSummary];
+
+  // Calibration only means something next to a mix summary, so it follows the same gate.
+  if (planSummary.length > 0) {
+    reportLines.push(...renderCalibrationSummary(records));
+  }
 
   // Nothing estimated and nothing wrong: tell the user the plan predates the notation.
   if (reportLines.length === 0 && errors.length === 0) {

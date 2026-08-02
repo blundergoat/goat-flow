@@ -94,7 +94,7 @@ Each item states the claim and evidence with a proof-class tag. Omit inapplicabl
 
 **Tasks:** Use one action, target, and done condition. Put rationale, paths, and proof beneath the task only when needed. Pin paths when downstream work depends on them.
 
-**Effort estimate (agent-time):** Count task, proof, mid-proof, and admin units; never use human wall-clock intuition. Plan-level target: ~70% product work, ~20% proof, ~10% everything else—a flexible guide, not a quota. Remove duplicate proof; retain justified deviations.
+**Effort estimate (agent-time):** Count task, proof, mid-proof, and admin units; never use human wall-clock intuition. Start a `plans time` receipt first; switch category when work kind changes. Plan-level target: ~70% product work, ~20% proof, ~10% everything else—a flexible guide, not a quota. Remove duplicate proof; retain justified deviations. Optional `Forecast range:` carries a `likely` equal to the headline.
 
 **Cold-start bar:** A fresh agent can identify relevant files, conventions, scope, commands, and recovery steps without prior conversation.
 
@@ -165,7 +165,7 @@ For a fresh plan, create a slugged directory, update `.goat-flow/plans/.active` 
 
 After implementation tasks finish, set `testing-gate` and apply the Proof Gate from `skill-preamble.md`. Audit fresh evidence against every task and exit; rerun only stale/failed checks or when risk requires it.
 
-Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items stay open and no later milestone becomes active.
+Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items stay open and no later milestone becomes active. Finalize the receipt before `Actual:`; with none, declare `retrospective`, `unavailable`, or `incomplete` instead of inventing minutes. Calibration eligibility starts at `complete`.
 
 **BLOCKING GATE (Human Verification):** Present changed files, exit evidence, estimate versus Actual, and assumption outcomes. "M[N] evidence is ready. Approve completion and M[N+1], or adjust?"
 

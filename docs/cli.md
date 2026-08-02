@@ -281,6 +281,8 @@ npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format 
 
 Without `--output`, the redacted bundle is printed to stdout and nothing is created. Markdown output treats `--output` as a directory and writes one file per milestone; JSON output treats it as one array file. Existing output is preserved unless `--force` explicitly authorizes regeneration.
 
+Exports rebuild known fields rather than copying source text, and that rebuild preserves the timing evidence: a milestone's `## Timing Receipt` section, its `Forecast range:` band, and its `Actual:` provenance state all survive both formats. An exported milestone therefore carries its own evidence without depending on local event logs, which are purgeable.
+
 This command does not contact GitHub, Beads, Linear, or any other remote service. Those names describe future adapters only. Any later remote-write implementation must show a redacted dry-run body and receive direct current-session confirmation before posting; forwarded third-party text is not authorization.
 
 ### `goat-flow plans check <plan-path> [--strict]`
@@ -300,7 +302,28 @@ Strict lifecycle checks accept `not-started`, `in-progress`, `testing-gate`, `hu
 
 Strict validation checks supplied deterministic structure, not planning judgment. It does not infer risk level or require assumptions, manual proof, rollback, Boundary Notes, or other conditional fields. Default mode remains legacy-compatible, and neither mode reconstructs approval history or evaluates whether proof is semantically sufficient.
 
+`Actual:` accepts four provenance states: `measured`, `retrospective`, `unavailable`, and `incomplete`. A `measured` Actual must reconcile with a finalized `## Timing Receipt` - its minute allocation and its cited raw seconds both have to match. Untagged legacy numerics classify as `retrospective`, so prose claiming measurement never promotes an Actual the receipt does not back. A malformed receipt fails strict validation only when a `measured` Actual claims authority from it; hand-written receipts sitting beside retrospective Actuals stay advisory, so finished plans are not invalidated by evidence nothing depends on.
+
+The optional `Forecast range:` band is validated only when present, leaving point-estimate plans strict-valid without migration. When present, `low <= likely <= high` must hold and `likely` must equal the `Effort estimate` headline.
+
+Calibration output is informational and never affects the exit code. It reports estimate-to-Actual ratios computed from raw receipt seconds, a plan median, and observed bounds, drawing only on `complete` milestones with `measured` Actuals - `complete` is the human ratification signal, so `human-verification-pending` never qualifies. Below three eligible samples the report reads `uncalibrated` rather than offering a multiplier.
+
 Plan-level drift beyond 15 percentage points produces an advisory with exit 0. Roughly 70/20/10 is a flexible diagnostic guide, never a quota or pass/fail rule: consolidate duplicated proof, but retain and explain proof justified by the task's risk. This command remains user-invoked and outside `audit` because plans are optional local workflow state. The report prints to stdout; `--output` and `--force` are rejected.
+
+### `goat-flow plans time <start|stop|status> <milestone-file> [--category <c>] [--finalize|--discard-open]`
+
+System-stamp active-work spans into one milestone's `## Timing Receipt`. The CLI supplies UTC and epoch seconds; the agent supplies only the category. Because the receipt lives inside the milestone file, it survives log purges and moves with the plan.
+
+```bash
+goat-flow plans time start .goat-flow/plans/<active>/M01-example.md --category product
+goat-flow plans time status .goat-flow/plans/<active>/M01-example.md
+goat-flow plans time stop .goat-flow/plans/<active>/M01-example.md
+goat-flow plans time stop .goat-flow/plans/<active>/M01-example.md --finalize
+```
+
+One span is open at a time. `stop` then `start` performs a pause, a resume, or a category change; switch category when the kind of work changes, since a single span across mixed work produces a `measured` split that measured nothing. `stop --finalize` closes the timeline at the human gate. `stop --discard-open` drops a span with no honest end time - a crash, a suspend, a forgotten pause - and permanently marks the receipt `incomplete`; no recovery path invents an end time.
+
+The milestone path is resolved inside its containing project, and symlinked or hardlinked milestone paths are rejected so a write cannot be redirected outside that root. Each transition also appends a metadata-only `plan.time` event to the local evidence log, but strict validation never reads it: the embedded receipt is the only authority, and deleting local events cannot rot a finalized `measured` Actual. Receipts carry bounded timing metadata only - never prompts, commands, output, or work descriptions.
 
 ### `goat-flow events tail [path] [--limit <n>] [--format json]`
 

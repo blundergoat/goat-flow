@@ -220,6 +220,72 @@ describe("skill hardening contracts", () => {
     );
   });
 
+  /*
+   * Timing evidence is only trustworthy if every harness records it the same way.
+   * A harness that learned a weaker contract would emit Actuals that look
+   * identical to measured ones while resting on nothing.
+   */
+  it("carries one timing and forecast contract into every installed harness", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const breakdown = readMarkdownSection(
+        skillPath,
+        "Phase 1 - Milestone Breakdown",
+      );
+      const betweenMilestones = readMarkdownSection(
+        skillPath,
+        "Phase 3 - Between Milestones",
+      );
+
+      assert.match(breakdown, /Start a `plans time` receipt first/u, skillPath);
+      assert.match(breakdown, /Optional `Forecast range:`/u, skillPath);
+      assert.match(
+        betweenMilestones,
+        /Finalize the receipt before `Actual:`/u,
+        skillPath,
+      );
+      assert.match(
+        betweenMilestones,
+        /instead of inventing minutes/u,
+        skillPath,
+      );
+      assert.match(
+        betweenMilestones,
+        /Calibration eligibility starts at `complete`/u,
+        skillPath,
+      );
+    });
+
+    const timingObligations = [
+      /goat-flow plans time start/u,
+      /--finalize/u,
+      /--discard-open/u,
+      /Stop before every human wait/u,
+      /Delegated or parallel-agent effort is disclosed separately/u,
+      /`measured:/u,
+      /`retrospective:/u,
+      /`unavailable:/u,
+      /`incomplete:/u,
+      /must equal the `Effort estimate` headline/u,
+      /uncalibrated/u,
+    ];
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-plan",
+        "references/milestone-examples.md",
+      ),
+      (referencePath) => {
+        const effortEstimates = readMarkdownSection(
+          referencePath,
+          "Effort Estimates",
+        );
+        for (const obligation of timingObligations) {
+          assert.match(effortEstimates, obligation, referencePath);
+        }
+      },
+    );
+  });
+
   it("keeps area audits independent of diff-only metadata and verdicts", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const scopeSnapshot = readMarkdownSection(
@@ -2924,9 +2990,7 @@ describe("skill hardening contracts", () => {
   });
 
   it("loads one manifest-owned goat-debug diagnostic reference", () => {
-    const manifest = JSON.parse(
-      readProjectFile("workflow/manifest.json"),
-    ) as {
+    const manifest = JSON.parse(readProjectFile("workflow/manifest.json")) as {
       skills?: { references?: Record<string, string[]> };
     };
     assert.deepEqual(manifest.skills?.references?.["goat-debug"], [

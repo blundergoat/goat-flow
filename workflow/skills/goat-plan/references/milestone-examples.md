@@ -119,6 +119,47 @@ High-risk detail has no safety-reducing hard cap; output above 1,200 words names
 - Before the human gate, record structured **Actual:** and recalibrate the next milestone.
 - Run `goat-flow plans check .goat-flow/plans/<active> --strict` before implementation and after transitions.
 
+### Timing receipts
+
+Start a receipt before the first action. The CLI stamps UTC and epoch seconds into the milestone file itself, so the evidence survives log purges and travels with the plan.
+
+```bash
+goat-flow plans time start <milestone-file> --category <product|proof|other>
+goat-flow plans time stop <milestone-file>             # pause; resume with another start
+goat-flow plans time status <milestone-file>           # read the open span and totals
+goat-flow plans time stop <milestone-file> --finalize  # close the timeline at the gate
+```
+
+- Switch category when the *kind* of work changes, not when the milestone changes. Running the test suite is proof time. One long span across a mixed session yields a `measured` split that measured nothing.
+- Stop before every human wait, interruption, and unrelated task. Manual pauses cannot detect machine suspend or a forgotten wait, so a span left open overnight is worthless.
+- `stop --discard-open` drops a span no honest end time exists for - a crash, a suspend, a forgotten pause - and permanently marks the receipt incomplete. No recovery path invents an end time.
+- Delegated or parallel-agent effort is disclosed separately. Never fold it into elapsed time on one timeline.
+
+### Actual states
+
+`Actual:` carries its own provenance, so a missing clock never forces an invented number.
+
+| State | Use when |
+|---|---|
+| `measured: ~N min agent-time (...) - receipt <n> recorded-unpaused seconds` | A finalized receipt backs every minute, and its allocation reconciles with the split. |
+| `retrospective: <numbers> - <reason>` | The numbers are an after-the-fact estimate. Untagged legacy numerics classify here automatically; prose claiming measurement does not promote them. |
+| `unavailable: <reason>` | No timing was recorded and no honest number exists. |
+| `incomplete: <reason>` | A span was discarded, so the total under-reports real elapsed time. |
+
+### Optional forecast ranges
+
+```markdown
+**Forecast range:** <low>-<high> agent-time minutes on one recorded-unpaused milestone timeline; likely <n>; <confidence and why>
+```
+
+Optional by contract: plans that forecast a single point stay valid and need no migration. When the band is present, `likely` must equal the `Effort estimate` headline and every value uses that same unit.
+
+### Calibration
+
+`plans check` reports estimate-to-Actual ratios from raw receipt seconds, plus a plan median and observed bounds. Only `complete` milestones carrying `measured` Actuals qualify, because `complete` is the human ratification signal - a milestone still at `human-verification-pending` calibrates nothing however good its receipt. Below three eligible samples the report says `uncalibrated` instead of offering a multiplier. The output is informational: it never rewrites a forecast or changes strict pass/fail.
+
+One milestone landing far from its estimate is a data point, not a correction factor. An early goat-debug milestone estimated two hours and self-reported 256 active seconds. Under this contract that Actual is `retrospective` rather than `measured`, so it cannot calibrate anything - and even if it could, a single ratio would have mis-sized every later milestone.
+
 ## Deferred and Backlog Routing
 
 Record a cut item once in the milestone with its destination, then place it in plan-level `backlog.md` under Next, Later, or Maybe. ISSUE.md names only exclusions reviewers would reasonably expect. Omit empty Deferred, backlog, and maintenance sections.

@@ -76,20 +76,40 @@ last_reviewed: 2026-08-02
 
 ---
 
-## Footgun: Structured Actual cannot represent uninstrumented time
+## Footgun: Strict validation of a new evidence artifact retroactively fails finished plans
 
-**Status:** active | **Created:** 2026-08-02 | **Evidence:** OBSERVED
-**Decision changed:** Instrument timing before work; if timing is missing, disclose the low-confidence proxy instead of manufacturing precision.
+**Status:** active | **Created:** 2026-08-02 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Gate an evidence artifact's shape on whether something claims authority from it, not on its mere presence.
 **Trigger phase:** VERIFY
 
-**Symptoms:** A completed or `human-verification-pending` milestone must contain a numeric Actual total and product/proof/other split even when no clock was started. `_`, `unknown`, or an explanation without a number fails strict validation. An agent under completion pressure can therefore turn task estimates into a precise-looking Actual value that has no elapsed-time evidence.
+**Symptoms:** A milestone that passed strict validation for weeks starts failing after an unrelated release. The errors name an artifact the milestone does not depend on - here, five `timing receipt ... inconsistent` errors on a `complete` goat-debug-improve milestone whose Actual is `retrospective` and cites no receipt at all. The failure surfaces late because the new validation was only ever exercised against the plan that introduced it.
 
-**Why it happens:** `src/cli/plans-check.ts` (search: `requires a structured Actual with total and product/proof/other split`) makes numeric Actual mandatory at the human gate. `src/cli/plans-effort.ts` (search: `ACTUAL_PATTERN`) accepts only numeric minutes and an optional numeric split; it has no measurement-provenance or unknown state.
+**Why it happens:** `src/cli/plans-time-receipt.ts` (search: `export function parseTimingReceiptMarkdown`) defines a receipt grammar requiring a `State` column and a `**Receipt state:**` header. Hand-written receipts predating the CLI used a free-text `Work` column instead. `src/cli/plans-check.ts` (search: `function isValidationWarning`) then promoted every `timing receipt` warning to a strict error regardless of whether any Actual cited the receipt.
 
 **Safe handling now:**
-1. Start a segmented UTC/epoch receipt before milestone work and close it before every human wait.
-2. Preserve raw seconds and measurement method beside the rounded structured Actual.
-3. If prospective timing was missed, use an explicitly low-confidence retrospective proxy and say it was not instrumented; never back-calculate from planned estimates.
-4. Treat estimate accuracy and Actual accuracy as separate claims.
+1. Before shipping validation for a new artifact, run the checker across *every* existing plan directory, not just the one the feature was built in.
+2. Make the artifact's shape fatal only when a claim depends on it - `src/cli/plans-check.ts` (search: `const receiptIsClaimed`) gates receipt warnings on a `measured` Actual.
+3. Keep the claimed path failing twice over: shape validation plus reconciliation, so relaxing the unclaimed case cannot weaken the claimed one.
+4. Treat "this artifact is decorative here" as a first-class state rather than forcing migration of finished work.
 
-**Potential durable fix:** Extend the plan schema with measurement provenance such as `measured | retrospective | unknown` and permit `Actual: unknown - not instrumented` without declaring a numeric observation. That requires separate CLI/schema work and is not implied by this footgun entry.
+---
+
+## Resolved Entries
+
+## Footgun: Structured Actual cannot represent uninstrumented time
+
+**Status:** resolved | **Created:** 2026-08-02 | **Evidence:** OBSERVED
+**Decision changed:** Instrument timing before work; if timing is missing, declare the honest state instead of manufacturing precision.
+**Trigger phase:** VERIFY
+
+**Symptoms:** A completed or `human-verification-pending` milestone had to contain a numeric Actual total and product/proof/other split even when no clock was started. `_`, `unknown`, or an explanation without a number failed strict validation. An agent under completion pressure could therefore turn task estimates into a precise-looking Actual value with no elapsed-time evidence.
+
+**Why it happened:** `src/cli/plans-check.ts` (search: `function collectActualErrors`) made numeric Actual mandatory at the human gate. `src/cli/plans-effort.ts` (search: `ACTUAL_PATTERN`) accepted only numeric minutes and an optional numeric split, with no measurement-provenance or unknown state.
+
+**Resolved by:** `src/cli/plans-effort.ts` (search: `ACTUAL_UNKNOWN_STATE_PATTERN`) now parses four Actual states - `measured`, `retrospective`, `unavailable`, `incomplete`. `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) system-stamps UTC/epoch spans into a `## Timing Receipt` inside the milestone, and `measured` requires a finalized internally consistent receipt. Untagged legacy numerics classify as `retrospective` rather than silently becoming measured. Verified 2026-08-02: a `complete` milestone carrying `Actual: unavailable: no clock was started for this milestone` passes `plans check --strict` at exit 0.
+
+**Safe handling now:**
+1. `goat-flow plans time start <milestone-file> --category <product|proof|other>` before work; `stop` before every human wait; `stop --finalize` at the gate.
+2. Let the receipt supply raw seconds; the rounded structured Actual is derived, never hand-written.
+3. If prospective timing was missed, declare `unavailable:` or `incomplete:` with a reason - never back-calculate from planned estimates.
+4. Treat estimate accuracy and Actual accuracy as separate claims.

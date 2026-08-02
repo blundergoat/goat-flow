@@ -26,6 +26,7 @@ import {
   readTaskEstimate,
   renderActualLine,
   renderEffortLine,
+  renderForecastRangeLine,
   sumTaskEstimates,
   type PlanEffortSplit,
   type PlanExportEffort,
@@ -496,6 +497,7 @@ export function parseMilestoneMarkdown(
     readMilestoneField(content, "Effort estimate", warnings),
     warnings,
     readMilestoneField(content, "Actual", warnings),
+    readMilestoneField(content, "Forecast range", warnings),
   );
   addMissingFieldWarning(warnings, status, "status");
   addMissingFieldWarning(warnings, scopeMarkdown, "scope");
@@ -665,6 +667,9 @@ function renderEffortMetadata(record: PlanExportRecord): string[] {
   const lines: string[] = [];
   if (record.effort) {
     lines.push(renderEffortLine(record.effort));
+  }
+  if (record.effort?.forecastRange) {
+    lines.push(renderForecastRangeLine(record.effort.forecastRange));
   }
   if (record.effort?.actual) {
     lines.push(renderActualLine(record.effort.actual));

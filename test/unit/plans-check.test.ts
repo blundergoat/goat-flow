@@ -70,6 +70,7 @@ interface EstimatedMilestoneOptions {
   proofHeading?: string;
   testingGateLines?: string[];
   midProofLines?: string[];
+  forecastRangeLine?: string;
 }
 
 /**
@@ -90,6 +91,7 @@ function estimatedMilestoneBody(
     `Status: ${options.status ?? "not-started"}`,
     `Depends on: ${options.dependsOn ?? "none"}`,
     effortLine,
+    ...(options.forecastRangeLine ? [options.forecastRangeLine] : []),
     ...(options.actualLine ? [options.actualLine] : []),
     ...(options.planAdminOverhead
       ? [`Plan/admin overhead: ${options.planAdminOverhead}`]
@@ -186,6 +188,77 @@ function withFinalizedTimingReceipt(body: string, totalSeconds = 120): string {
       "",
       "## Scope",
     ].join("\n"),
+  );
+}
+
+/** Render the UTC stamp a receipt segment carries beside its epoch second. */
+function receiptStamp(epochSeconds: number): string {
+  return `${new Date(epochSeconds * 1000).toISOString().replace(/\.\d{3}Z$/u, "Z")} / ${epochSeconds}`;
+}
+
+/**
+ * Insert a finalized single-product-segment receipt worth an exact minute count.
+ *
+ * Calibration ratios divide raw seconds by estimated minutes, so fixtures need
+ * receipts whose seconds are chosen rather than inherited from a shared default.
+ *
+ * @param body - milestone Markdown containing a `## Scope` heading
+ * @param productSeconds - whole recorded-unpaused seconds, all in the product category
+ * @param milestoneId - milestone ID the segment rows are named after, such as `M02`
+ * @returns the milestone Markdown with a receipt above its scope section
+ */
+function withProductReceipt(
+  body: string,
+  productSeconds: number,
+  milestoneId = "M01",
+): string {
+  const minutes = Math.round(productSeconds / 60);
+  return body.replace(
+    "## Scope",
+    [
+      "## Timing Receipt",
+      "",
+      "**Receipt state:** finalized",
+      `**Recorded seconds:** ${productSeconds} total (${productSeconds} product / 0 proof / 0 other)`,
+      `**Allocated minutes:** ${minutes} total (${minutes} product / 0 proof / 0 other)`,
+      "",
+      "| Segment | Category | Start UTC / epoch | End UTC / epoch | Seconds | State |",
+      "|---|---|---|---|---:|---|",
+      `| ${milestoneId}-S01 | product | ${receiptStamp(100)} | ${receiptStamp(100 + productSeconds)} | ${productSeconds} | closed |`,
+      "",
+      "## Scope",
+    ].join("\n"),
+  );
+}
+
+/**
+ * Build one calibration-eligible milestone: complete, measured, receipt-backed.
+ *
+ * @param productSeconds - recorded-unpaused seconds the receipt and Actual both declare
+ * @param milestoneId - milestone ID shared by the title, filename, and receipt rows
+ * @param status - lifecycle status; only `complete` is calibration-eligible
+ * @returns milestone Markdown estimating 10 minutes against the supplied Actual
+ */
+function eligibleSampleBody(
+  productSeconds: number,
+  milestoneId = "M01",
+  status = "complete",
+): string {
+  const minutes = Math.round(productSeconds / 60);
+  return withProductReceipt(
+    estimatedMilestoneBody(
+      "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+      ["- [x] Build the thing (est: 7 min product)"],
+      {
+        title: `${milestoneId}: Measured milestone`,
+        status,
+        actualLine: `Actual: measured: ~${minutes} min agent-time (${minutes} product / 0 proof / 0 other) - receipt ${productSeconds} recorded-unpaused seconds`,
+        planAdminOverhead: "1 min other",
+        testingGateLines: ["- [x] Run typecheck (est: 2 min proof)"],
+      },
+    ),
+    productSeconds,
+    milestoneId,
   );
 }
 
@@ -1126,6 +1199,72 @@ describe("plans check", () => {
     }
   });
 
+  /*
+   * A receipt is evidence for a claim. Pre-CLI hand-written receipts sit beside
+   * retrospective Actuals that never cite them, so failing the plan on their
+   * shape would invalidate finished work over decoration nothing depends on.
+   */
+  const unclaimedReceiptMarkdown = [
+    "## Timing Receipt",
+    "",
+    "| Segment | Category | Start UTC / epoch | End UTC / epoch | Seconds | Work |",
+    "|---|---|---|---|---:|---|",
+    "| M01-S01 | other | 2026-08-02T00:50:41Z / 1785631841 | 2026-08-02T00:51:07Z / 1785631867 | 26 | Setup |",
+    "",
+    "## Scope",
+  ].join("\n");
+
+  it("treats a malformed receipt as advisory when no Actual claims it", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-legacy-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+        ["- [x] Build the thing (est: 7 min product)"],
+        {
+          status: "complete",
+          actualLine:
+            "Actual: ~4 min agent-time (1 product / 1 proof / 2 other) - rough retrospective guess; timing was not instrumented",
+          planAdminOverhead: "1 min other",
+          testingGateLines: ["- [x] Run typecheck (est: 2 min proof)"],
+        },
+      ).replace("## Scope", unclaimedReceiptMarkdown),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("still rejects a malformed receipt a measured Actual claims", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-claim-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+        ["- [x] Build the thing (est: 7 min product)"],
+        {
+          status: "complete",
+          actualLine:
+            "Actual: measured: ~4 min agent-time (1 product / 1 proof / 2 other) - receipt 26 recorded-unpaused seconds",
+          planAdminOverhead: "1 min other",
+          testingGateLines: ["- [x] Run typecheck (est: 2 min proof)"],
+        },
+      ).replace("## Scope", unclaimedReceiptMarkdown),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /timing receipt/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   it("strict mode reconciles measured Actual with receipt seconds and allocation", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));
     const matchingBody = withFinalizedTimingReceipt(
@@ -1160,6 +1299,205 @@ describe("plans check", () => {
       assert.match(
         mismatched.stdout,
         /measured Actual receipt says 121 seconds but Timing Receipt says 120/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  // An optional band is only meaningful if it shares the headline's unit and centre.
+  it("strict mode accepts an ordered forecast range centred on the headline", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+        ["- [ ] Build the thing (est: 7 min product)"],
+        {
+          forecastRangeLine:
+            "Forecast range: 4-30 agent-time minutes on one recorded-unpaused milestone timeline; likely 10; low confidence because no same-shape measured sample exists",
+          planAdminOverhead: "1 min other",
+          testingGateLines: ["- [ ] Run typecheck (est: 2 min proof)"],
+        },
+      ),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  const forecastRangeFailureCases = [
+    {
+      name: "likely-disagrees-with-headline",
+      rangeLine:
+        "Forecast range: 4-30 agent-time minutes on one recorded-unpaused milestone timeline; likely 12; drifted from the headline",
+      expected:
+        /forecast range likely \(12 min\) must equal the Effort estimate total \(10 min\)/u,
+    },
+    {
+      name: "low-above-likely",
+      rangeLine:
+        "Forecast range: 14-30 agent-time minutes on one recorded-unpaused milestone timeline; likely 10; inverted lower bound",
+      expected: /forecast range must satisfy low <= likely <= high/u,
+    },
+    {
+      name: "likely-above-high",
+      rangeLine:
+        "Forecast range: 4-8 agent-time minutes on one recorded-unpaused milestone timeline; likely 10; inverted upper bound",
+      expected: /forecast range must satisfy low <= likely <= high/u,
+    },
+    {
+      name: "missing-one-timeline-units",
+      rangeLine: "Forecast range: 4-30 minutes; likely 10",
+      expected: /forecast range not parseable/u,
+    },
+  ];
+
+  for (const testCase of forecastRangeFailureCases) {
+    it(`strict mode rejects ${testCase.name} forecast ranges`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), `goat-flow-plan-range-${testCase.name}-`),
+      );
+      const planPath = writeCheckFixture(
+        temporaryRoot,
+        estimatedMilestoneBody(
+          "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+          ["- [ ] Build the thing (est: 7 min product)"],
+          {
+            forecastRangeLine: testCase.rangeLine,
+            planAdminOverhead: "1 min other",
+            testingGateLines: ["- [ ] Run typecheck (est: 2 min proof)"],
+          },
+        ),
+      );
+
+      try {
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assertSourceLabelledErrors(result.stdout);
+        assert.match(result.stdout, testCase.expected);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  // Fewer than three samples cannot support a correction factor, so say so instead of guessing one.
+  it("reports uncalibrated below three eligible measured samples", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-calib-"));
+    const planPath = writeCheckPlan(temporaryRoot, {
+      "M01-sample.md": eligibleSampleBody(300),
+    });
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /calibration: uncalibrated - 1 of 3 eligible measured samples/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  // The three Actual shapes goat-debug-improve actually carries must all stay out of calibration.
+  it("excludes prose-measured, retrospective, and empty legacy Actuals from calibration", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-legacy-"));
+    const legacyBody = (
+      milestoneId: string,
+      actualLine: string | undefined,
+      status: string,
+    ) =>
+      estimatedMilestoneBody(
+        "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+        [
+          `- [${status === "not-started" ? " " : "x"}] Build the thing (est: 7 min product)`,
+        ],
+        {
+          title: `${milestoneId}: Legacy milestone`,
+          status,
+          actualLine,
+          planAdminOverhead: "1 min other",
+          testingGateLines: [
+            `- [${status === "not-started" ? " " : "x"}] Run typecheck (est: 2 min proof)`,
+          ],
+        },
+      );
+    const planPath = writeCheckPlan(temporaryRoot, {
+      // Prose claiming measurement never overrides the untagged legacy grammar.
+      "M01-prose.md": legacyBody(
+        "M01",
+        "Actual: ~4 min agent-time (1 product / 1 proof / 2 other) - measured 256 active seconds from prospective UTC/epoch segments; excludes human waits",
+        "complete",
+      ),
+      "M02-guess.md": legacyBody(
+        "M02",
+        "Actual: ~15 min agent-time (5 product / 10 proof / 0 other) - rough retrospective guess; timing was not instrumented, so treat this figure as low-confidence",
+        "complete",
+      ),
+      "M03-empty.md": legacyBody("M03", "Actual: _", "not-started"),
+    });
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /calibration: uncalibrated - 0 of 3 eligible measured samples/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Human ratification is the eligibility signal; measured data alone is not enough.
+  it("excludes human-verification-pending milestones from calibration", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-gate-"));
+    const planPath = writeCheckPlan(temporaryRoot, {
+      "M01-approved.md": eligibleSampleBody(300),
+      "M02-pending.md": eligibleSampleBody(
+        600,
+        "M02",
+        "human-verification-pending",
+      ),
+    });
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /calibration: uncalibrated - 1 of 3 eligible measured samples/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Ratios divide raw receipt seconds by estimated minutes so rounding never compounds.
+  it("reports a calibration median and observed bounds from three eligible samples", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-median-"));
+    const planPath = writeCheckPlan(temporaryRoot, {
+      "M01-fast.md": eligibleSampleBody(300),
+      "M02-even.md": eligibleSampleBody(600, "M02"),
+      "M03-slow.md": eligibleSampleBody(1200, "M03"),
+    });
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /calibration: 3 eligible measured samples - median 1\.00x, observed 0\.50x-2\.00x/u,
+      );
+      assert.match(
+        result.stdout,
+        /calibration sample: M01-fast\.md 0\.50x \(300s measured \/ 10 min estimated\)/u,
       );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });

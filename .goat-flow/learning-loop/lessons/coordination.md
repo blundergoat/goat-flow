@@ -127,3 +127,26 @@ last_reviewed: 2026-08-02
 6. Calibrate future estimates only after at least three comparable measured milestones. Use the median `actual / estimate` ratio plus a low/likely/high range; one fast milestone is evidence, not a universal multiplier.
 
 **Evidence anchors:** `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI proof records`) defines the handoff requirement; `src/cli/plans-effort.ts` (search: `renderActualLine`) renders the recorded value but cannot create timing evidence.
+
+---
+
+## Lesson: A running receipt makes a wrong category split look measured
+
+**Status:** active | **Created:** 2026-08-02
+**Decision changed:** Switch the receipt category at the work boundary, not at the milestone boundary; a stale category is a silent data error, not a rounding detail.
+**Trigger phase:** VERIFY
+**Incident count:** 1
+**Latest occurrence:** 2026-08-02
+
+**What happened:** Effort-estimation-timing M02 opened a `product` span and left it open across implementation, a full test-suite run, lint, format, and unused-export checks. The finalized receipt reported 1112 product / 99 proof seconds. The total (1354s) was correct and system-stamped, but the split was badly wrong - most of that "product" time was proof. Nothing flagged it: the receipt was open, finalized cleanly, reconciled against the Actual, and passed strict validation, because the CLI can only stamp the category it was given.
+
+**Root cause:** Starting a receipt feels like the whole discipline, so category maintenance gets treated as optional bookkeeping. A single long span is also the path of least resistance - `stop` then `start` is two commands, while doing nothing is zero. The resulting split carries the full authority of a `measured` Actual while being no better than a guess.
+
+**Prevention:**
+1. Switch category when the *kind* of work changes, not when the milestone changes: entering a proof cycle, returning to implementation, or starting plan bookkeeping each warrant `stop` then `start --category <new>`.
+2. Treat "I am about to run the test suite / lint / typecheck" as a category-switch trigger; that is proof time by definition.
+3. Before finalizing, read the segment list and ask whether the shape matches the session. One 1000-second span across a mixed session is the smell.
+4. If the split is known-wrong at the gate, disclose it in the human-verification report rather than presenting the receipt's authority for a number it did not really measure.
+5. Prefer under-claiming: the total is the trustworthy part of a mis-tagged receipt, so say so explicitly.
+
+**Evidence anchors:** `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) performs the category change; `src/cli/plans-check.ts` (search: `function collectMeasuredActualErrors`) reconciles Actual against the receipt but cannot detect a mis-tagged category. Related: `.goat-flow/learning-loop/lessons/coordination.md` (search: `## Lesson: Actual time must come from prospective active-time segments`) covers the prior failure of never starting a receipt at all.

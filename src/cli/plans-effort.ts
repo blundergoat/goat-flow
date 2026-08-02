@@ -42,6 +42,22 @@ export function isNumericActual(
 }
 
 /**
+ * Optional `Forecast range:` uncertainty band for a milestone estimate.
+ *
+ * Every value is recorded-unpaused coding-agent minutes on one active milestone
+ * timeline - the same unit as the headline - so `likelyMinutes` must equal the
+ * headline total. The band is optional by contract: legacy and in-flight
+ * point-estimate plans stay valid without it, so absence is never an error.
+ * Human waiting is excluded, matching the Actual it will later be compared to.
+ */
+export interface PlanEffortForecastRange {
+  lowMinutes: number;
+  likelyMinutes: number;
+  highMinutes: number;
+  rationale?: string;
+}
+
+/**
  * Parsed `Effort estimate:` milestone line in agent-time minutes.
  * Records omit this entirely when a milestone predates effort estimation -
  * legacy plans are valid local state and must stay noise-free.
@@ -50,6 +66,7 @@ export interface PlanExportEffort {
   totalMinutes: number;
   split?: PlanEffortSplit;
   actual?: PlanEffortActual;
+  forecastRange?: PlanEffortForecastRange;
 }
 
 /** Optional estimate fields a work item gains when it carries an `(est: ...)` entry. */
@@ -81,6 +98,13 @@ const ACTUAL_UNKNOWN_STATE_PATTERN = /^\s*(unavailable|incomplete):\s*(.+)$/iu;
 
 /** Dedicated non-checkbox estimate for orientation, plan upkeep, and status work. */
 const PLAN_ADMIN_PATTERN = /^\s*(\d+)\s*min(?:ute)?s?\s+other\s*$/iu;
+
+/**
+ * Optional forecast band, unit phrase included so the range can never be read
+ * in different units from the headline it must agree with.
+ */
+const FORECAST_RANGE_PATTERN =
+  /^\s*(\d+)\s*-\s*(\d+)\s+agent-time minutes on one recorded-unpaused milestone timeline;\s*likely\s+(\d+)\s*(?:;\s*(.+))?$/iu;
 
 /**
  * Narrow a regex-captured category word to the effort vocabulary without casting.
@@ -235,6 +259,68 @@ export function readPlanAdminEstimate(
 }
 
 /**
+ * Convert the three required band captures into minutes without precision loss.
+ *
+ * @param match - a `FORECAST_RANGE_PATTERN` result, or null when the text drifted
+ * @returns the three bounds; undefined means the band cannot be trusted as numbers
+ */
+function readRangeMinutes(
+  match: RegExpMatchArray | null,
+): Omit<PlanEffortForecastRange, "rationale"> | undefined {
+  const lowMinutes = readOptionalMinutes(match?.[1]);
+  const highMinutes = readOptionalMinutes(match?.[2]);
+  const likelyMinutes = readOptionalMinutes(match?.[3]);
+  if (
+    lowMinutes === undefined ||
+    highMinutes === undefined ||
+    likelyMinutes === undefined
+  ) {
+    return undefined;
+  }
+  return { lowMinutes, likelyMinutes, highMinutes };
+}
+
+/** Read one optional numeric capture, treating absence and unsafe values alike. */
+function readOptionalMinutes(capture: string | undefined): number | undefined {
+  return capture === undefined ? undefined : readSafeMinutes(capture);
+}
+
+/**
+ * Parse the optional `Forecast range:` field into low, likely, and high minutes.
+ *
+ * Absence is the legacy and in-flight default and stays silent; a supplied but
+ * unreadable band is drifted notation and warns with a fixed string. The unit
+ * phrase is part of the grammar, so a band that omits it fails to parse rather
+ * than being silently compared against headline minutes it may not share.
+ * Ordering and headline agreement are `plans check`'s job, not the parser's.
+ *
+ * @param value - raw text after the `Forecast range:` label; empty means absent
+ * @param warnings - record warning sink receiving the fixed-string parse warning
+ * @returns the parsed band; undefined means absent or unreadable
+ */
+function parseForecastRangeValue(
+  value: string,
+  warnings: string[],
+): PlanEffortForecastRange | undefined {
+  const normalized = value.trim();
+
+  // No band at all - the common case for legacy and point-estimate milestones.
+  if (normalized.length === 0) return undefined;
+
+  const match = normalized.match(FORECAST_RANGE_PATTERN);
+  const bounds = readRangeMinutes(match);
+  if (!bounds) {
+    warnings.push("forecast range not parseable");
+    return undefined;
+  }
+
+  const range: PlanEffortForecastRange = { ...bounds };
+  const rationale = match?.[4]?.trim();
+  if (rationale) range.rationale = rationale;
+  return range;
+}
+
+/**
  * Sum parsed work estimates by category for downstream arithmetic checking.
  *
  * @param tasks - work items that may carry estimate fields
@@ -272,13 +358,21 @@ export function sumTaskEstimates(
  *   milestone predates estimation and stays silent
  * @param warnings - record warning sink receiving fixed-string parse warnings
  * @param actualFieldValue - optional structured Actual text; empty means no completed-work comparison is available
+ * @param forecastRangeFieldValue - optional `Forecast range:` text; empty means the milestone forecasts one point
  * @returns parsed effort fields; undefined means the line is absent or unusable
  */
 export function parseEffortLineValue(
   fieldValue: string,
   warnings: string[],
   actualFieldValue = "",
+  forecastRangeFieldValue = "",
 ): PlanExportEffort | undefined {
+  // Parse the band first so drifted range notation still warns on a legacy milestone.
+  const forecastRange = parseForecastRangeValue(
+    forecastRangeFieldValue,
+    warnings,
+  );
+
   // No effort line at all - a legacy milestone, valid and reported nowhere.
   if (fieldValue.length === 0) return undefined;
 
@@ -305,6 +399,7 @@ export function parseEffortLineValue(
   };
   if (parsedNumbers.split) effort.split = parsedNumbers.split;
   if (actual) effort.actual = actual;
+  if (forecastRange) effort.forecastRange = forecastRange;
   return effort;
 }
 
@@ -393,6 +488,24 @@ export function renderEffortLine(effort: PlanExportEffort): string {
     : "";
 
   return `**Effort estimate:** ~${effort.totalMinutes} min agent-time${splitText}`;
+}
+
+/**
+ * Render one parsed forecast band back into the notation authors write.
+ *
+ * Exports rebuild known fields rather than copying source lines, so a band that
+ * cannot round-trip through here would be silently dropped from every export.
+ *
+ * @param range - parsed low, likely, high minutes and optional rationale
+ * @returns one standalone `**Forecast range:**` Markdown line
+ */
+export function renderForecastRangeLine(
+  range: PlanEffortForecastRange,
+): string {
+  // The rationale is free text the author supplied; absence is normal, not a gap.
+  const rationaleText = range.rationale ? `; ${range.rationale}` : "";
+
+  return `**Forecast range:** ${range.lowMinutes}-${range.highMinutes} agent-time minutes on one recorded-unpaused milestone timeline; likely ${range.likelyMinutes}${rationaleText}`;
 }
 
 /**

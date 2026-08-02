@@ -667,6 +667,90 @@ describe("plans export", () => {
     }
   });
 
+  it("parses an optional forecast range in headline units", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M02: Range-carrying milestone",
+        "",
+        "**Status:** in-progress",
+        "**Effort estimate:** ~25 min agent-time (17 product / 6 proof / 2 other)",
+        "**Forecast range:** 10-60 agent-time minutes on one recorded-unpaused milestone timeline; likely 25; low confidence because no same-shape measured sample exists",
+        "",
+      ].join("\n"),
+      "M02-range.md",
+    );
+
+    assert.deepEqual(record.effort?.forecastRange, {
+      lowMinutes: 10,
+      likelyMinutes: 25,
+      highMinutes: 60,
+      rationale: "low confidence because no same-shape measured sample exists",
+    });
+  });
+
+  // Absence is the legacy and in-flight default, so it must stay silent rather than warn.
+  it("keeps milestones without a forecast range free of range fields and warnings", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M02: Point-estimate milestone",
+        "",
+        "**Status:** in-progress",
+        "**Effort estimate:** ~25 min agent-time (17 product / 6 proof / 2 other)",
+        "",
+      ].join("\n"),
+      "M02-point.md",
+    );
+
+    assert.equal(record.effort?.forecastRange, undefined);
+    assert.deepEqual(
+      record.warnings.filter((warning) => warning.includes("forecast")),
+      [],
+    );
+  });
+
+  it("preserves optional forecast ranges in JSON and Markdown exports", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));
+    const planPath = join(temporaryRoot, "1.15.0");
+    const body = completeMilestoneBody().replace(
+      "## Scope Discipline",
+      [
+        "**Effort estimate:** ~25 min agent-time (17 product / 6 proof / 2 other)",
+        "**Forecast range:** 10-60 agent-time minutes on one recorded-unpaused milestone timeline; likely 25; low confidence because no same-shape measured sample exists",
+        "",
+        "## Scope Discipline",
+      ].join("\n"),
+    );
+    writePlanFixture(planPath, body);
+
+    try {
+      const jsonResult = runPlansExport(planPath, "--format", "json");
+      const markdownResult = runPlansExport(planPath, "--format", "markdown");
+
+      assert.equal(jsonResult.status, 0, jsonResult.stderr);
+      assert.equal(markdownResult.status, 0, markdownResult.stderr);
+      const records = JSON.parse(jsonResult.stdout) as Array<{
+        effort: {
+          forecastRange?: {
+            lowMinutes: number;
+            likelyMinutes: number;
+            highMinutes: number;
+          };
+        };
+      }>;
+      assert.deepEqual(records[0]?.effort.forecastRange, {
+        lowMinutes: 10,
+        likelyMinutes: 25,
+        highMinutes: 60,
+        rationale:
+          "low confidence because no same-shape measured sample exists",
+      });
+      assert.match(markdownResult.stdout, /\*\*Forecast range:\*\* 10-60/u);
+      assert.match(markdownResult.stdout, /likely 25/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   // A body without its milestone heading is malformed because an issue title cannot be inferred safely.
   it("rejects milestone markdown without a title", () => {
     assert.throws(
