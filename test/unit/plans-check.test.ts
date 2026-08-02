@@ -1305,6 +1305,52 @@ describe("plans check", () => {
     }
   });
 
+  /*
+   * An open span is stronger evidence that work started than an unchecked box.
+   * Checking only checkbox state lets a milestone claim not-started while its
+   * own receipt records time being spent on it.
+   */
+  it("strict mode rejects an active timing receipt on a not-started milestone", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-open-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~10 min agent-time (7 product / 2 proof / 1 other)",
+        ["- [ ] Build the thing (est: 7 min product)"],
+        {
+          status: "not-started",
+          planAdminOverhead: "1 min other",
+          testingGateLines: ["- [ ] Run typecheck (est: 2 min proof)"],
+        },
+      ).replace(
+        "## Scope",
+        [
+          "## Timing Receipt",
+          "",
+          "**Receipt state:** active",
+          "",
+          "| Segment | Category | Start UTC / epoch | End UTC / epoch | Seconds | State |",
+          "|---|---|---|---|---:|---|",
+          `| M01-S01 | product | ${receiptStamp(100)} | _ | _ | open |`,
+          "",
+          "## Scope",
+        ].join("\n"),
+      ),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assertSourceLabelledErrors(result.stdout);
+      assert.match(
+        result.stdout,
+        /not-started milestone has an active timing receipt/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   // An optional band is only meaningful if it shares the headline's unit and centre.
   it("strict mode accepts an ordered forecast range centred on the headline", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));

@@ -350,6 +350,39 @@ describe("plans time", () => {
     }
   });
 
+  /*
+   * The clock-reversal error tells the operator to discard the span, so the
+   * discard has to work under the exact condition that raises it. Testing
+   * reversal and discard on separate spans passes while their intersection -
+   * the only path a stuck operator can actually take - stays broken.
+   */
+  it("lets discard-open recover a span the clock reversed under", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
+    const { milestonePath } = writeTimingFixture(temporaryRoot);
+
+    try {
+      applyPlanTimeTransition(
+        milestonePath,
+        { action: "start", category: "product" },
+        100,
+      );
+
+      const result = applyPlanTimeTransition(
+        milestonePath,
+        { action: "stop", discardOpen: true },
+        99,
+      );
+
+      assert.equal(result.receipt.state, "incomplete");
+      assert.equal(result.receipt.segments.length, 1);
+      assert.equal(result.receipt.segments[0]?.state, "discarded");
+      assert.equal(result.receipt.segments[0]?.seconds, null);
+      assert.equal(result.receipt.segments[0]?.endEpochSeconds, null);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   it("keeps a successful receipt write when the diagnostic event path is blocked", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
     const { milestonePath, projectRoot } = writeTimingFixture(temporaryRoot);

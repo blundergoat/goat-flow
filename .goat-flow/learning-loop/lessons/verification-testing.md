@@ -103,23 +103,22 @@ last_reviewed: 2026-08-02
 
 **Latest occurrence:** 2026-08-02
 
-**What happened:** Twenty-one edits or learning captures crossed caps:
+**What happened:** Twenty-two edits or learning captures crossed caps. Unless noted, the gate is `test/contract/skill-hardening-contracts.test.ts`:
 
-- **2026-05-19/22:** TDD packs hit 3022/3008 words, the preamble exceeded 1500, and QA exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
-- **2026-06-14:** Dispatcher guidance hit 653/555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
-- **2026-07-12 M33:** `verification-preflight.md` hit 40KB. Evidence: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
-- **2026-07-12 boundary rollout:** Plan/QA hit 2503/2524 while a bad delimiter count said 1202. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `Counts user-facing skill guidance without YAML frontmatter`).
-- **2026-07-12 M15:** Plan hit 2533. Evidence: `workflow/skills/goat-plan/SKILL.md` (search: `Handoff-grade artifacts`).
-- **2026-07-13 M13:** Shared references hit 1560/1601, then compacted to 1484/1490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
-- **2026-07-16 PR #56:** Goat/plan/preamble/TDD measured 597/2689/1540/3021; compaction also repaired stale assertions. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap`; `requires pre-write redaction for durable local text`).
-- **2026-07-17–19:** QA, plan, review, and preamble edits repeatedly reached 2506–2531/1514 words; focused contracts restored every surface below its cap. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`; `always-loaded shared references stay within the 1500-word cap`).
-- **2026-08-01 review hardening:** Goat-review crossed its cap five times (2500–2762 words); focused contracts forced compaction before mirror sync. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-08-01 M03:** A new lesson pushed `verification-testing.md` to 40KB; narrower routing and recurrence consolidation restored the bucket below 39KB. Evidence: `src/cli/stats/stats.ts` (search: `rule: "bucket-size"`).
-- **2026-08-02 PR #57:** Duplicated dispatcher snapshots hit 579/555 words; the focused contract forced a conditional field. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap across all mirrors`).
+- **2026-05-19/22:** TDD packs 3022/3008 words, preamble over 1500, QA over 2578 (search: `progressive reference packs stay within the 3000-word cap per file`).
+- **2026-06-14:** Dispatcher 653/555 - `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
+- **2026-07-12 M33:** `verification-preflight.md` hit 40KB - `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
+- **2026-07-12 boundary rollout:** Plan/QA 2503/2524 while a bad delimiter count said 1202 (search: `Counts user-facing skill guidance without YAML frontmatter`).
+- **2026-07-12 M15:** Plan 2533 - `workflow/skills/goat-plan/SKILL.md` (search: `Handoff-grade artifacts`).
+- **2026-07-13 M13:** Shared references 1560/1601, compacted to 1484/1490 (search: `always-loaded shared references stay within the 1500-word cap`).
+- **2026-07-16 PR #56:** Goat/plan/preamble/TDD 597/2689/1540/3021; compaction also repaired stale assertions (search: `requires pre-write redaction for durable local text`).
+- **2026-07-17–19, 2026-08-01 review hardening, 2026-08-02 PR #57:** QA, plan, review, preamble, and dispatcher edits repeatedly reached 2506–2762 / 1514 / 579 words; focused contracts restored every surface before mirror sync (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- **2026-08-01 M03:** A new lesson pushed this bucket to 40KB; narrower routing and recurrence consolidation restored it - `src/cli/stats/stats.ts` (search: `rule: "bucket-size"`).
+- **2026-08-02 PR #57 CI:** `verification-preflight.md` reached 40,415 bytes and failed the merge build - the round-trip installer fixture runs preflight inside a temp install. Local `stats --check` had flagged it for days as an accepted baseline. Buckets gate the build.
 
 **Root cause:** Treated capped prose as tiny.
 
-**Prevention:** Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` after each edit; compact before expanding scope.
+**Prevention:** Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` after each edit; compact before expanding scope. Check bucket headroom first; several sit within tens of bytes of the 40,000-byte gate.
 
 ---
 
@@ -313,6 +312,9 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **Prevention:** For credential-scanner changes, run a matrix that includes must-block misses and must-allow placeholder assignments after each parser edit. Parse/normalize the assignment key first, classify it second, and expect a broader key match to require explicit placeholder allowlist proof. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_env_assignment`), `test/integration/post-turn-safety-hook.test.ts` (search: `blocks exported credential assignments`), and `test/integration/post-turn-safety-hook.test.ts` (search: `allows safe placeholders in env examples`).
 
 **Recurrence 2026-08-02:** The PR #57 scanner-parity fix first lost the raw assignment key because a placeholder helper overwrote Bash's global `BASH_REMATCH`, then broader forced-fallback fixtures exposed Docker space-form and multi-assignment drift, dotted config-reference drift, npm secondary-assignment drift, and quoted-password mismatches. The complete native-versus-fallback finding-set comparison caught these after the initial named examples agreed. Capture regex matches before calling helpers, and compare normalized findings across the full existing block-and-allow corpus rather than treating a few equal exit codes as parity. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_literal_credential_assignment`), and `test/integration/post-turn-safety-hook.test.ts` (search: `hookFindingSignatures`).
+
+**Recurrence 2026-08-02:** PR #57 review found `plans time` rejecting `stop --discard-open` under the clock reversal whose own error names discard as the remedy. The suite had a discard case and a reversal case; neither crossed. Rule: when an error names a recovery path, test that path under the condition raising it. Evidence: `src/cli/plans-time.ts` (search: `if (transition.discardOpen) return;`), `test/unit/plans-time.test.ts` (search: `lets discard-open recover a span the clock reversed under`).
+
 ---
 
 ## Lesson: Scanner scope gates need parser-shape fixtures for each claimed file family

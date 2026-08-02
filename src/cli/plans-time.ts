@@ -527,6 +527,11 @@ function validateStopTransition(
     throw new CLIError("Timing Receipt has no open segment to stop.", 2);
   }
   if (!openSegment) return;
+
+  // Discard is the recovery this error names, and it never derives a duration
+  // from the clock - the span keeps a null end and null seconds either way.
+  // Running the ordering check against it would reject the only way out.
+  if (transition.discardOpen) return;
   if (stamp.epochSeconds >= openSegment.startEpochSeconds) return;
   throw new CLIError(
     "System clock moved backwards during the open timing span; discard it instead.",

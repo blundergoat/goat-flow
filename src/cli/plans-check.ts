@@ -475,6 +475,14 @@ function collectNotStartedSnapshotErrors(
       `${record.sourceFile}: not-started milestone has checked exit criteria`,
     );
   }
+
+  // A recorded span is stronger evidence that work began than any checkbox:
+  // the receipt is system-stamped, so an unchecked task cannot outweigh it.
+  if (record.timingReceipt?.state === "active") {
+    errors.push(
+      `${record.sourceFile}: not-started milestone has an active timing receipt`,
+    );
+  }
   return errors;
 }
 
