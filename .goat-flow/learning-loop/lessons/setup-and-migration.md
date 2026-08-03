@@ -1,6 +1,20 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-07-18
+last_reviewed: 2026-08-03
+---
+
+## Lesson: Packaged install smoke is not a completed setup audit
+
+**Created:** 2026-08-03
+**Decision changed:** Release probes verify deterministic installation and adapted-project audit as separate stages.
+**Trigger phase:** VERIFY
+
+**What happened:** A packaged-release probe ran `setup --apply` against an empty git repository and immediately required the full harness audit to pass. The installer correctly wrote its 69 managed files, but the audit failed because no agent had yet authored the project-specific `AGENTS.md`, architecture, or code map named in the installer's own next steps.
+
+**Evidence:** `src/cli/cli-handlers.ts` (search: `Setup preview and setup apply both use the deterministic install path`) routes `setup --apply` through managed installation, while plain `setup` composes the adaptive guidance. The packaged installer output explicitly says `Run the setup steps to create project-specific content` after the managed files are installed.
+
+**Prevention:** In a package smoke, assert version and managed install results on a fresh target. Run harness/content/drift audit against a fixture or checkout whose adaptive project content is already complete; do not treat deterministic file installation as proof that the LLM-authored setup phase ran.
+
 ---
 
 ## Lesson: Skill edits must fan out to all four installed mirrors, and removed anchors cascade
