@@ -11,7 +11,7 @@ last_reviewed: 2026-08-03
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 22
+**Incident count:** 23
 
 **Latest occurrence:** 2026-08-03
 
@@ -28,6 +28,7 @@ last_reviewed: 2026-08-03
 - **2026-08-01 M03:** A new lesson pushed this bucket to 40KB; narrower routing and recurrence consolidation restored it - `src/cli/stats/stats.ts` (search: `rule: "bucket-size"`).
 - **2026-08-02 PR #57 CI:** `verification-preflight.md` reached 40,415 bytes and failed the merge build - the round-trip installer fixture runs preflight inside a temp install. Local `stats --check` had flagged it for days as an accepted baseline. Buckets gate the build.
 - **2026-08-03 v1.15 ship hardening:** Unifying goat-critique's meta-audit rubric left every mirrored SKILL.md at exactly 2,500 words, so the focused contract failed until the new pointer was compacted. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `uses one reproducible goat-critique meta-audit rubric`).
+- **2026-08-03 goat-review base clause:** A one-clause scope fix added 23 words to a skill sitting at 2,498/2,500 and simultaneously reworded away a contract-pinned literal, so two contracts failed at once (search: `stops oversized inferred branch scopes before review begins`). Wording edits have two budgets, not one: the word cap AND the exact phrases contracts assert. Measure headroom and grep `test/` for the phrases being reworded BEFORE editing; when headroom is one word, attach the change to an unpinned line and pay for it with a same-line trim.
 
 **Root cause:** Treated capped prose as tiny.
 

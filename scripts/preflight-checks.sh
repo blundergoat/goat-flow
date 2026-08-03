@@ -366,7 +366,7 @@ run_command_capture_with_timeout() {
 phase_for() {
     case "$1" in
         "Shell Scripts"|"TypeScript") printf 'STATIC' ;;
-        "Deny Policy"|"ADR Enforcement"|"Gruff Policy") printf 'POLICY' ;;
+        "Deny Policy"|"ADR Enforcement"|"Gruff Policy"|"Commit Subjects") printf 'POLICY' ;;
         "Agent Config Parity"|"Skill and Reference Versions"|"Version Consistency") printf 'CONFIG INTEGRITY' ;;
         "Skill Static Contracts"|"Reference Budgets"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
         "Tests"|"Dependency Audit") printf 'TESTS' ;;
@@ -383,6 +383,7 @@ display_for() {
         "Deny Policy") printf 'Deny policy' ;;
         "ADR Enforcement") printf 'ADR enforcement' ;;
         "Gruff Policy") printf 'Gruff policy' ;;
+        "Commit Subjects") printf 'Commit subjects' ;;
         "Agent Config Parity") printf 'Agent config parity' ;;
         "Skill and Reference Versions") printf 'Skill versions' ;;
         "Version Consistency") printf 'Version consistency' ;;
@@ -413,6 +414,7 @@ collapsed_desc_for() {
         "Deny Policy") printf 'self-test + runtime smokes' ;;
         "ADR Enforcement") printf 'no removed patterns' ;;
         "Gruff Policy") printf 'no enabled:false in .gruff-ts.yaml' ;;
+        "Commit Subjects") printf 'conventional · =<72 · one scope' ;;
         "Agent Config Parity") printf 'claude · codex · antigravity · copilot' ;;
         "Skill and Reference Versions") printf 'templates + installed match version' ;;
         "Version Consistency") printf 'package.json · config.yaml' ;;
@@ -517,7 +519,7 @@ _compute_widths() {
     local sec disp d
     local known=(
         "Shell Scripts" "TypeScript"
-        "Deny Policy" "ADR Enforcement" "Gruff Policy"
+        "Deny Policy" "ADR Enforcement" "Gruff Policy" "Commit Subjects"
         "Agent Config Parity" "Skill and Reference Versions" "Version Consistency"
         "Skill Static Contracts" "Cross-Agent Consistency"
         "Reference Budgets"
@@ -1874,6 +1876,24 @@ if [[ -f .gruff-ts.yaml ]]; then
     fi
 else
     skip "Gruff Policy (.gruff-ts.yaml not found)"
+fi
+
+# ── Commit Subjects ───────────────────────────────────────────────────
+# Closes the loop on docs/coding-standards/git-commit-message.md: the
+# `commit-guidance` harness check only asserts the doc exists, so subject
+# drift went unmeasured. Scoped to commits after the gate's baseline;
+# existing history is not rewritten.
+if [[ -f scripts/check-commit-subjects.sh ]]; then
+    section "Commit Subjects"
+    subjects_output=$(bash scripts/check-commit-subjects.sh 2>&1) && subjects_exit=0 || subjects_exit=$?
+    if [[ "$subjects_exit" -eq 0 ]]; then
+        pass "${subjects_output##*$'\n'}"
+    else
+        fail "Commit subject(s) violate the standard"
+        printf '%s\n' "$subjects_output" | head -6 | details_pipe
+    fi
+else
+    skip "Commit Subjects (scripts/check-commit-subjects.sh not found)"
 fi
 
 # ── GOAT Flow Audit ────────────────────────────────────────────────────

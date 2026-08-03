@@ -27,9 +27,9 @@ Use for diff/PR review or codebase-area quality audits.
 - Dispatcher depth wins unless material risk forces Full; clarify vague scope.
 - Use explicit input, then combined dirty worktree; otherwise measure diff. Over 20 files/3000 lines, stop before Pass 1; request PR/base/head, commit/range, worktree, or area; never guess commit windows.
 
-**PR/base:** without checkout, resolve explicit → configured → remote HEAD → prompt → `main`; fetch only after network approval. Record URL/baseRefName/source/SHA/failures. Automated-review conclusions stay unread until both local passes finish.
+**PR/base, clean worktree:** without checkout, resolve explicit → configured → remote HEAD → prompt → `main`; fetch only after network approval. Record URL/baseRefName/source/SHA/failures. Automated-review conclusions stay unread until both local passes finish.
 
-**Scope sizing:** use `references/examples.md` (search: `Depth Signals`). A material-risk override → Full; else 3+ → full, 2 → offer, 0–1 → quick. Quick keeps Pass 1 → Pass 2. Refused Full: `risk-depth-declined`, Conclusion `partial`, verdict max `PARTIAL`.
+**Scope sizing:** `references/examples.md` (search: `Depth Signals`). A material-risk override → Full; else 3+ → full, 2 → offer, 0–1 → quick. Quick keeps Pass 1 → Pass 2. Refused Full: `risk-depth-declined`, Conclusion `partial`, verdict max `PARTIAL`.
 
 **Pass 0 gates:** with explicit current-session consent, run non-fixing instruction/CI gates once; never fix/rerun. Classify per `references/examples.md` (search: `Gate Evidence Classification`): `changed-code | pre-existing | infrastructure | unresolved`; only host-proven changed-code is a defect. Emit `Gates: run | skipped (<reason>) | unavailable`; non-run adds `gates-not-run`; tracked mutation stops.
 

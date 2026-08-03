@@ -7,6 +7,7 @@
 import type { BuildCheck } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
 import { AUDIT_VERSION } from "../constants.js";
+import { projectIsAheadOfCli } from "../version-compare.js";
 import {
   missingSkillReferenceInstructionRequirements,
   presentInstructionFiles,
@@ -583,6 +584,14 @@ const configVersionCurrent: BuildCheck = {
       };
     }
     if (version !== AUDIT_VERSION) {
+      // An older CLI must not prescribe rewriting a newer install backwards.
+      if (projectIsAheadOfCli(version, AUDIT_VERSION)) {
+        return {
+          check: "Config version",
+          message: `Config version ${version} is newer than this CLI (${AUDIT_VERSION})`,
+          howToFix: `This CLI is the stale side. Re-run with \`npx @blundergoat/goat-flow@${version}\` (or upgrade the installed CLI) and do not downgrade the version field in .goat-flow/config.yaml.`,
+        };
+      }
       return {
         check: "Config version",
         message: `Config version ${version} does not match current ${AUDIT_VERSION}`,
@@ -638,6 +647,20 @@ const hookVersionCurrent: BuildCheck = {
       }
       const stampedVersion = stamped[1];
       if (stampedVersion !== AUDIT_VERSION) {
+        // `hooks sync` rewrites installed hook files from the running CLI's
+        // bundle, so telling an older CLI to sync would overwrite newer
+        // guardrails with its own older copies.
+        if (
+          stampedVersion !== undefined &&
+          projectIsAheadOfCli(stampedVersion, AUDIT_VERSION)
+        ) {
+          return {
+            check: "Hook version",
+            message: `${relPath} is goat-flow-hook-version ${stampedVersion}, newer than this CLI (${AUDIT_VERSION})`,
+            evidence: relPath,
+            howToFix: `This CLI is the stale side. Re-run with \`npx @blundergoat/goat-flow@${stampedVersion}\`; do not run \`hooks sync\` from ${AUDIT_VERSION}, which would overwrite the newer hook files.`,
+          };
+        }
         return {
           check: "Hook version",
           message: `${relPath} is goat-flow-hook-version ${stampedVersion} but the current release is ${AUDIT_VERSION}`,

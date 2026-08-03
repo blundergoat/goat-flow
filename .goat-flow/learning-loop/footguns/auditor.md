@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-07-26
+last_reviewed: 2026-08-03
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -127,6 +127,30 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 - `test/integration/setup-quality-lifecycle.test.ts` (search: `consumer setup to quality-report lifecycle`) proves a newly installed consumer reaches a passing selected-agent harness before any incident entries exist.
 
 **Prevention:** Do not interpret a general-purpose diagnostic field as an error flag. Classify each documented diagnostic state at the consuming boundary, and keep a fresh-install fixture beside malformed-metadata coverage.
+
+---
+
+## Footgun: Version checks that test inequality without direction prescribe a downgrade
+
+**Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Any version comparison that drives user-facing remediation or a file write must branch on direction, not on `!==`.
+**Trigger phase:** VERIFY
+**hallucination-risk:** high
+
+**Symptoms:** A globally installed `goat-flow` v1.14.0 audited a v1.15.0 checkout and returned `"overall": {"status": "fail"}` with exit 1 on a target the matching source CLI passes cleanly. It emitted `Config version 1.15.0 does not match current 1.14.0` with remediation pointing at 1.14.0, plus `deny-dangerous.sh is goat-flow-hook-version 1.15.0 but the current release is 1.14.0` telling the user to run `hooks sync` from the older release. Roughly 45 further drift findings ("templates differ", "stale installed shared artifact") were artifacts of the version gap, not target defects.
+
+**Why it happens:** `AUDIT_VERSION` is the running CLI's own package version, so an older CLI treats itself as the reference. A bare `version !== AUDIT_VERSION` cannot distinguish "project is behind" from "project is ahead", and the remediation string interpolates `AUDIT_VERSION` either way. The template-comparison sections diff the target against the bundle inside that older CLI, so every newer file reads as drift.
+
+**Why it matters:** `hooks sync` is not advisory. `src/cli/server/hook-registrar.ts` (search: `export function syncHookStates`) documents that it rewrites installed hook files, and `copyHookScripts` writes `hookScriptContent(script)` from the running CLI's bundle. Following the older CLI's advice replaces current deny/safety hooks with stale copies - a silent downgrade of the guardrail layer.
+
+**Evidence:**
+- `src/cli/version-compare.ts` (search: `projectIsAheadOfCli`) - direction test now shared by the audit and the hook writer.
+- `src/cli/audit/check-goat-flow.ts` (search: `is newer than this CLI`) - config and hook checks branch before prescribing remediation.
+- `src/cli/audit/audit.ts` (search: `function targetIsAheadOfCli`) - drift and content sections return null when the CLI is the stale side, instead of rendering gap artifacts as defects.
+- `src/cli/server/hook-registrar.ts` (search: `Refusing to overwrite`) - `copyHookScripts` throws rather than downgrading a newer-stamped hook.
+- `test/unit/version-compare.test.ts` (search: `flags the CLI as the stale side when the project is newer`) - locks the direction contract, including that `1.10.0` sorts above `1.9.0`.
+
+**Prevention:** Never drive remediation or a write from version inequality alone. Compare direction first; when the local tool is older, say so and stop, rather than proposing to bring the target back to the tool's version. Skew guards belong at the write boundary too, not only in the message.
 
 ---
 
