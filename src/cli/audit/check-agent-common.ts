@@ -6,6 +6,8 @@
  */
 import type { AuditContext, AuditFailure } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
+import { AUDIT_VERSION } from "../constants.js";
+import { projectIsAheadOfCli } from "../version-compare.js";
 
 /** Date the agent-check provenance was last hand-verified; stamped onto every record these factories emit. */
 const VERIFIED_ON = "2026-04-18";
@@ -55,6 +57,27 @@ export function incidentProvenance(paths: string[]): CheckEvidence {
  */
 export function uniquePaths(paths: string[]): string[] {
   return Array.from(new Set(paths));
+}
+
+/**
+ * Report whether a valid target config belongs to a newer goat-flow release than the running CLI.
+ * Template-relative checks use this as a skip gate because an older bundle cannot authoritatively
+ * assess or repair skills and guardrails installed by a newer release.
+ *
+ * @param ctx - audit context containing the parsed target config
+ * @returns true when the target version is newer and the running CLI is the stale side
+ */
+export function targetUsesNewerGoatFlow(ctx: AuditContext): boolean {
+  const version = ctx.config.config.version;
+  if (
+    !ctx.config.exists ||
+    !ctx.config.valid ||
+    ctx.config.parseError !== null ||
+    !version
+  ) {
+    return false;
+  }
+  return projectIsAheadOfCli(version, AUDIT_VERSION);
 }
 
 export function checkSelectedInstructionAvailable(

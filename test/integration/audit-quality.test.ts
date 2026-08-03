@@ -13,6 +13,7 @@ import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
 import { runAudit } from "../../src/cli/audit/audit.js";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { createFS } from "../../src/cli/facts/fs.js";
 import { extractSharedFacts } from "../../src/cli/facts/shared/index.js";
@@ -48,6 +49,51 @@ function getRepoAudit(opts: {
   }
   return report;
 }
+
+describe("audit against a project from a newer goat-flow release", () => {
+  it("reports version skew without older-template agent or drift findings", () => {
+    const futureVersion = "999.0.0";
+    const base = createFS(PROJECT_ROOT);
+    const fs = {
+      ...base,
+      readFile: (path: string) => {
+        const content = base.readFile(path);
+        if (content === null) return null;
+        if (
+          path === ".goat-flow/config.yaml" ||
+          path.startsWith(".agents/skills/") ||
+          path.startsWith(".goat-flow/hooks/")
+        ) {
+          return content.replaceAll(AUDIT_VERSION, futureVersion);
+        }
+        return content;
+      },
+    };
+
+    const report = runAudit(fs, PROJECT_ROOT, {
+      agentFilter: "codex",
+      harness: false,
+      checkDrift: true,
+      checkContent: true,
+      denyMechanismEvidenceLevel: "static",
+    });
+
+    const setupFailures = report.scopes.setup.checks
+      .filter((check) => check.status === "fail")
+      .map((check) => check.id);
+    assert.deepEqual(setupFailures, ["config-version", "hook-version"]);
+    for (const id of ["agent-skills", "agent-guardrails"]) {
+      const check = report.scopes.agent.checks.find(
+        (candidate) => candidate.id === id,
+      );
+      assertExists(check);
+      assert.equal(check.status, "skipped");
+      assert.equal(check.failure, undefined);
+    }
+    assert.equal(report.drift, null);
+    assert.equal(report.content, null);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Harness concerns produce pass/fail status

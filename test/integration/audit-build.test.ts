@@ -15,7 +15,14 @@ import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 
 const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
-import { makeCtx, stubAgentFacts, stubFS } from "../fixtures/projects/index.js";
+import {
+  makeCtx,
+  stubAgentFacts,
+  stubConfig,
+  stubFS,
+} from "../fixtures/projects/index.js";
+
+const FUTURE_GOAT_FLOW_VERSION = "999.0.0";
 
 const skillDocsCheck = SETUP_CHECKS.find(
   (check) => check.id === "instruction-file-skill-docs-pointer",
@@ -387,6 +394,42 @@ describe("audit build: skill-docs discoverability", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Version skew direction
+// ---------------------------------------------------------------------------
+const configVersionCheck = SETUP_CHECKS.find(
+  (check) => check.id === "config-version",
+);
+assertExists(configVersionCheck);
+
+describe("audit build: version skew direction", () => {
+  it("identifies the CLI as stale without prescribing a project downgrade", () => {
+    const result = configVersionCheck.run(
+      makeCtx({
+        config: stubConfig({ version: FUTURE_GOAT_FLOW_VERSION }),
+      }),
+    );
+
+    assertExists(result);
+    assert.match(result.message, /newer than this CLI/u);
+    assert.match(result.howToFix ?? "", /source checkout/u);
+    assert.doesNotMatch(result.howToFix ?? "", /update-config-version/u);
+  });
+
+  it("skips template-relative agent checks when the target is newer", () => {
+    const ctx = makeCtx({
+      agentFilter: "codex",
+      config: stubConfig({ version: FUTURE_GOAT_FLOW_VERSION }),
+    });
+
+    for (const id of ["agent-skills", "agent-guardrails"]) {
+      const check = AGENT_CHECKS.find((candidate) => candidate.id === id);
+      assertExists(check);
+      assert.equal(check.skip?.(ctx), true, `${id} should be skipped`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Hook version currency
 // ---------------------------------------------------------------------------
 const hookVersionCheck = SETUP_CHECKS.find((c) => c.id === "hook-version");
@@ -442,6 +485,19 @@ describe("audit build: hook version currency", () => {
       /gruff-code-quality\.sh is goat-flow-hook-version 0\.0\.1/,
     );
     assert.match(result.howToFix ?? "", /hooks sync/);
+  });
+
+  it("identifies a newer dispatcher without prescribing an older hooks sync", () => {
+    const result = hookVersionCheck.run(
+      hookVersionCtx(
+        `#!/usr/bin/env bash\n# goat-flow-hook-version: ${FUTURE_GOAT_FLOW_VERSION}\n`,
+      ),
+    );
+
+    assertExists(result);
+    assert.match(result.message, /newer than this CLI/u);
+    assert.match(result.howToFix ?? "", /source checkout/u);
+    assert.match(result.howToFix ?? "", /do not run `hooks sync`/iu);
   });
 
   it("fails when the installed dispatcher has no version stamp", () => {

@@ -589,7 +589,7 @@ const configVersionCurrent: BuildCheck = {
         return {
           check: "Config version",
           message: `Config version ${version} is newer than this CLI (${AUDIT_VERSION})`,
-          howToFix: `This CLI is the stale side. Re-run with \`npx @blundergoat/goat-flow@${version}\` (or upgrade the installed CLI) and do not downgrade the version field in .goat-flow/config.yaml.`,
+          howToFix: `This CLI is the stale side. Use the source checkout that installed goat-flow ${version}, or run \`npx @blundergoat/goat-flow@${version}\` after that release is published. Do not downgrade the version field in .goat-flow/config.yaml.`,
         };
       }
       return {
@@ -658,7 +658,7 @@ const hookVersionCurrent: BuildCheck = {
             check: "Hook version",
             message: `${relPath} is goat-flow-hook-version ${stampedVersion}, newer than this CLI (${AUDIT_VERSION})`,
             evidence: relPath,
-            howToFix: `This CLI is the stale side. Re-run with \`npx @blundergoat/goat-flow@${stampedVersion}\`; do not run \`hooks sync\` from ${AUDIT_VERSION}, which would overwrite the newer hook files.`,
+            howToFix: `This CLI is the stale side. Use the source checkout that installed goat-flow ${stampedVersion}, or run \`npx @blundergoat/goat-flow@${stampedVersion}\` after that release is published. Do not run \`hooks sync\` from ${AUDIT_VERSION}, which would overwrite the newer hook files.`,
           };
         }
         return {

@@ -17,12 +17,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import {
   readAgentHookState,
   writeAgentHookState,
 } from "../../src/cli/server/agent-hook-writer.js";
 import {
   applyHookState,
+  HookRegistrarError,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
 import {
@@ -303,6 +305,32 @@ function runCodexLauncher(
 }
 
 describe("hook registrar", () => {
+  it("refuses to overwrite a hook stamped newer than the running CLI", () => {
+    withTempProject((root) => {
+      const hookDir = join(root, ".goat-flow", "hooks");
+      const hookPath = join(hookDir, "deny-dangerous.sh");
+      const futureHook =
+        "#!/usr/bin/env bash\n# goat-flow-hook-version: 999.0.0\n";
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      mkdirSync(hookDir, { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "\n");
+      writeFileSync(hookPath, futureHook);
+
+      assert.throws(
+        () => syncHookStates(root),
+        (error: unknown) => {
+          assert.ok(error instanceof HookRegistrarError);
+          assert.equal(error.statusCode, 409);
+          assert.match(error.message, /Refusing to overwrite/u);
+          assert.match(error.message, new RegExp(`CLI \\(${AUDIT_VERSION}\\)`));
+          return true;
+        },
+      );
+      assert.equal(readFileSync(hookPath, "utf-8"), futureHook);
+      assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+    });
+  });
+
   // Writes a stale timeout because dashboard state must stay off until sync replaces it.
   it("treats a stale Claude hook timeout as uninstalled", () => {
     withTempProject((root) => {

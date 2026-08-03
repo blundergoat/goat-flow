@@ -11,8 +11,6 @@ import { SETUP_CHECKS } from "./check-goat-flow.js";
 import { AGENT_CHECKS } from "./check-agent-setup.js";
 import { HARNESS_CHECKS } from "./harness/index.js";
 import { checkDrift } from "./check-drift.js";
-import { AUDIT_VERSION } from "../constants.js";
-import { projectIsAheadOfCli } from "../version-compare.js";
 import {
   buildEnforcementMatrix,
   type AgentEnforcementCapability,
@@ -26,6 +24,7 @@ import {
 } from "./audit-provenance.js";
 import { buildProjectStructure } from "./audit-structure.js";
 import { agentSummary, setupSummary } from "./audit-summaries.js";
+import { targetUsesNewerGoatFlow } from "./check-agent-common.js";
 import type {
   AuditContext,
   AuditConcern,
@@ -644,30 +643,13 @@ function computeHarnessWithProfile(
   );
 }
 
-/**
- * Report whether the target records a goat-flow version newer than the running CLI.
- * Template-comparison sections diff the target against the bundle shipped inside this CLI, so when the
- * CLI is the stale side every newer file reads as drift or as an orphan the older manifest cannot map.
- * Those findings describe the version gap, not the project, and must not be rendered as target defects.
- *
- * @param ctx - target audit context carrying the parsed `.goat-flow/config.yaml`
- * @returns true when the project's recorded version is ahead of this CLI's version
- */
-function targetIsAheadOfCli(ctx: AuditContext): boolean {
-  const version = ctx.config.config.version;
-  if (!version || !ctx.config.exists || ctx.config.parseError !== null) {
-    return false;
-  }
-  return projectIsAheadOfCli(version, AUDIT_VERSION);
-}
-
 function shouldRunDriftCheck(
   ctx: AuditContext,
   options: AuditOptions,
 ): boolean {
   // A stale CLI cannot produce a trustworthy template comparison; the
   // config-version check already reports the skew as the actionable failure.
-  if (targetIsAheadOfCli(ctx)) return false;
+  if (targetUsesNewerGoatFlow(ctx)) return false;
   if (options.checkDrift === true) return true;
   return options.shouldRunAutoDrift !== false && shouldAutoRunDrift(ctx);
 }
@@ -705,7 +687,7 @@ function computeContentWithProfile(
   if (!options.checkContent) return null;
   // Same stale-CLI reasoning as drift: newer cold-path content would be linted
   // against rules this release does not carry yet.
-  if (targetIsAheadOfCli(ctx)) return null;
+  if (targetUsesNewerGoatFlow(ctx)) return null;
   return span(options.profile, `${profileScope} content checks`, () =>
     computeContent(ctx),
   );

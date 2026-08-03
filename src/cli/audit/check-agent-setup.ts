@@ -14,6 +14,7 @@ import { agentDenyMechanism } from "./check-agent-deny-mechanism.js";
 import {
   checkSelectedInstructionAvailable,
   specProvenance,
+  targetUsesNewerGoatFlow,
   uniquePaths,
 } from "./check-agent-common.js";
 
@@ -495,6 +496,8 @@ const agentSkills: BuildCheck = {
     "workflow/manifest.json",
     ".goat-flow/learning-loop/footguns/skills.md",
   ]),
+  // A stale CLI's manifest and skill templates cannot identify defects in a newer install.
+  skip: targetUsesNewerGoatFlow,
   /** Run the Agent skills check. */
   run: (ctx) => {
     // Aggregate mode gets instruction-level coverage; skill mirrors are checked per selected agent.

@@ -135,6 +135,7 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 **Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Any version comparison that drives user-facing remediation or a file write must branch on direction, not on `!==`.
 **Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-03
 **hallucination-risk:** high
 
 **Symptoms:** A globally installed `goat-flow` v1.14.0 audited a v1.15.0 checkout and returned `"overall": {"status": "fail"}` with exit 1 on a target the matching source CLI passes cleanly. It emitted `Config version 1.15.0 does not match current 1.14.0` with remediation pointing at 1.14.0, plus `deny-dangerous.sh is goat-flow-hook-version 1.15.0 but the current release is 1.14.0` telling the user to run `hooks sync` from the older release. Roughly 45 further drift findings ("templates differ", "stale installed shared artifact") were artifacts of the version gap, not target defects.
@@ -146,9 +147,11 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 **Evidence:**
 - `src/cli/version-compare.ts` (search: `projectIsAheadOfCli`) - direction test now shared by the audit and the hook writer.
 - `src/cli/audit/check-goat-flow.ts` (search: `is newer than this CLI`) - config and hook checks branch before prescribing remediation.
-- `src/cli/audit/audit.ts` (search: `function targetIsAheadOfCli`) - drift and content sections return null when the CLI is the stale side, instead of rendering gap artifacts as defects.
+- `src/cli/audit/check-agent-common.ts` (search: `targetUsesNewerGoatFlow`) - one validated target-version gate now suppresses older-template skill, guardrail, drift, and content checks.
 - `src/cli/server/hook-registrar.ts` (search: `Refusing to overwrite`) - `copyHookScripts` throws rather than downgrading a newer-stamped hook.
 - `test/unit/version-compare.test.ts` (search: `flags the CLI as the stale side when the project is newer`) - locks the direction contract, including that `1.10.0` sorts above `1.9.0`.
+- `test/integration/audit-quality.test.ts` (search: `reports version skew without older-template agent or drift findings`) - simulates a newer installed config, skills, and hooks against the current CLI and pins the user-visible audit result.
+- `test/unit/hook-registrar.test.ts` (search: `refuses to overwrite a hook stamped newer than the running CLI`) - proves the write boundary preserves the newer hook byte-for-byte.
 
 **Prevention:** Never drive remediation or a write from version inequality alone. Compare direction first; when the local tool is older, say so and stop, rather than proposing to bring the target back to the tool's version. Skew guards belong at the write boundary too, not only in the message.
 
