@@ -6,12 +6,17 @@ last_reviewed: 2026-08-03
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
 
 **Status:** active | **Created:** 2026-06-03
+**Decision changed:** Verify fallback and optimized hook paths against the same adversarial repository configuration, not only the same payload.
+**Trigger phase:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-08-03
 
 **What happened:** During PR #47 follow-up fixes, the first deny-dangerous fallback patch set the unsafe JSON status inside helper functions called through command substitution. The focused full self-test still failed the top-level unsupported unicode regression because Bash ran the helpers in subshells and the caller never saw the updated variable. The first gruff staged-hunk patch had a similar over-broad shape: adding cached diff ranges unconditionally widened explicit payload scopes and broke existing changed-range tests before the fallback-only test could be trusted.
 
-**Root cause:** I changed fallback behavior without keeping the failure signal at the same boundary the caller observes. For deny-dangerous that meant relying on mutated shell state across `$(...)`; for gruff that meant mixing explicit payload paths and pathless git fallback paths before proving their different contracts.
+**Recurrence 2026-08-03:** The optimized `post-turn-safety` path pinned Git's diff prefixes, but its Bash 3 fallback consumed the repository's default diff format. With `diff.mnemonicPrefix=true`, the fallback stopped recognizing destination headers, skipped a changed credential file, and exited zero while the optimized path blocked it. Pinning `core.quotepath`, mnemonic-prefix behavior, and source/destination prefixes at the fallback's own `git diff` boundary restored parity. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `fallback_scan_diff`) and `test/integration/post-turn-safety-hook.test.ts` (search: `pins mnemonic Git diff prefixes on both paths`).
 
-**Prevention:** For hook fallback changes, add the exact regression probe first, then verify that helper return status or source-aware branching reaches the caller boundary. Keep explicit payload scopes and git-discovered fallback scopes separate until focused tests prove both paths. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `extraction_status`), `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `top-level unsupported unicode escape`), and `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses staged hunks for pathless fallback files`).
+**Root cause:** I changed fallback behavior without keeping the failure signal and input grammar at the same boundary the caller observes. For deny-dangerous that meant relying on mutated shell state across `$(...)`; for gruff that meant mixing explicit payload paths and pathless git fallback paths before proving their different contracts; for post-turn-safety it meant allowing repository Git configuration to change only the fallback parser's input shape.
+
+**Prevention:** For hook fallback changes, add the exact regression probe first, then verify that helper return status or source-aware branching reaches the caller boundary. Force compatibility paths under adversarial user and repository configuration, assert parity with the optimized path, and pin any machine-readable Git output grammar at the command that produces it. Keep explicit payload scopes and git-discovered fallback scopes separate until focused tests prove both paths. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `extraction_status`), `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `top-level unsupported unicode escape`), and `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses staged hunks for pathless fallback files`).
 
 ---
 
@@ -158,8 +163,11 @@ last_reviewed: 2026-08-03
 ## Lesson: Temp cleanup must satisfy destructive-command hooks
 
 **Status:** active | **Created:** 2026-05-08
+**Incident count:** 2 | **Latest occurrence:** 2026-08-03
 
 **What happened:** While smoke-testing `scripts/install-browser-tools.sh` wrapper-guard behavior, a temp-directory cleanup command used `rm -rf "$tmpdir"`. The PreToolUse hook blocked the command with `BLOCKED: rm -r without safe scoping. Specify an explicit target path.` The smoke test had to be rerun with non-recursive cleanup: `rm -f "$tmpdir/browser-use"; rmdir "$tmpdir"`.
+
+**Recurrence 2026-08-03:** A packaged-release smoke again placed variable-scoped `rm -rf` in the same shell program as the validation. The hook rejected the complete command before `mktemp` ran, so no validation state was created. The rerun omitted destructive cleanup and retained its printed `/tmp/goat-flow-release-check.*` directory as disposable local evidence.
 
 **Root cause:** Treated a `mktemp` path as self-evidently safe, but the hook cannot prove variable-scoped recursive deletion is bounded.
 

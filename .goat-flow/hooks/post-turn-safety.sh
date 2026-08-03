@@ -545,7 +545,15 @@ fallback_scan_diff() {
         fi
         ;;
     esac
-  done < <(git -C "$repository_root" diff --no-ext-diff --no-color --unified=0 "$@" 2>/dev/null)
+  done < <(
+    git -C "$repository_root" \
+      -c core.quotepath=off \
+      -c diff.noprefix=false \
+      -c diff.mnemonicprefix=false \
+      -c diff.srcprefix=a/ \
+      -c diff.dstprefix=b/ \
+      diff --no-ext-diff --no-color --unified=0 "$@" 2>/dev/null
+  )
 }
 
 fallback_scan_file() {

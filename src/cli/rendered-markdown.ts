@@ -11,6 +11,7 @@ interface MarkdownMaskState {
   inHtmlComment: boolean;
   rawHtmlClosingPattern: RegExp | null;
   rawHtmlUntilBlank: boolean;
+  previousRenderedLineWasParagraph: boolean;
   previousRenderedLineWasHeading: boolean;
   previousRenderedLineWasBlank: boolean;
 }
@@ -144,8 +145,25 @@ function findInlineCodeSpan(
   return null;
 }
 
+/** Find the next HTML comment opener whose less-than sign is not escaped. */
+function findUnescapedHtmlCommentOpener(
+  line: string,
+  startIndex: number,
+): number {
+  let openIndex = line.indexOf("<!--", startIndex);
+  while (openIndex >= 0) {
+    if (countPrecedingBackslashes(line, openIndex) % 2 === 0) {
+      return openIndex;
+    }
+    openIndex = line.indexOf("<!--", openIndex + 4);
+  }
+  return -1;
+}
+
 const RAW_HTML_BLOCK_TAGS =
   /^(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)$/iu;
+const COMPLETE_HTML_TAG =
+  /^ {0,3}(?:<\/[A-Za-z][A-Za-z0-9-]*[\t ]*>|<[A-Za-z][A-Za-z0-9-]*(?:[\t ]+[A-Za-z_:][A-Za-z0-9_.:-]*(?:[\t ]*=[\t ]*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*[\t ]*\/?>)[\t ]*$/u;
 
 /** Consume one line when a raw HTML block was opened earlier. */
 function continuesRawHtmlBlock(
@@ -223,13 +241,25 @@ function opensBlankTerminatedHtmlBlock(
   return true;
 }
 
+/** Open a CommonMark type-7 tag block without interrupting visible prose. */
+function opensTypeSevenHtmlBlock(
+  comparableLine: string,
+  state: MarkdownMaskState,
+): boolean {
+  if (state.previousRenderedLineWasParagraph) return false;
+  if (!COMPLETE_HTML_TAG.test(comparableLine)) return false;
+  state.rawHtmlUntilBlank = true;
+  return true;
+}
+
 /** Return whether Markdown renders this source line as a raw HTML block. */
 function isRawHtmlBlockLine(line: string, state: MarkdownMaskState): boolean {
   const comparableLine = line.endsWith("\r") ? line.slice(0, -1) : line;
   if (continuesRawHtmlBlock(comparableLine, state)) return true;
   if (opensRawTagBlock(comparableLine, state)) return true;
   if (opensRawMarkerBlock(comparableLine, state)) return true;
-  return opensBlankTerminatedHtmlBlock(comparableLine, state);
+  if (opensBlankTerminatedHtmlBlock(comparableLine, state)) return true;
+  return opensTypeSevenHtmlBlock(comparableLine, state);
 }
 
 /** Record the rendered-line state needed to classify the next source line. */
@@ -238,9 +268,12 @@ function recordRenderedLine(
   canBeHeading: boolean,
   state: MarkdownMaskState,
 ): string {
-  state.previousRenderedLineWasHeading =
-    canBeHeading && isMarkdownHeading(visibleLine);
-  state.previousRenderedLineWasBlank = visibleLine.trim().length === 0;
+  const lineIsBlank = visibleLine.trim().length === 0;
+  const lineIsHeading = canBeHeading && isMarkdownHeading(visibleLine);
+  state.previousRenderedLineWasHeading = lineIsHeading;
+  state.previousRenderedLineWasBlank = lineIsBlank;
+  state.previousRenderedLineWasParagraph =
+    canBeHeading && !lineIsBlank && !lineIsHeading;
   return visibleLine;
 }
 
@@ -292,7 +325,7 @@ function maskHtmlComments(line: string, state: MarkdownMaskState): string {
       continue;
     }
 
-    const openIndex = line.indexOf("<!--", cursor);
+    const openIndex = findUnescapedHtmlCommentOpener(line, cursor);
     const inlineCode = findInlineCodeSpan(line, cursor);
     // HTML-like text inside a balanced code span is visible code, not a comment.
     if (inlineCode && (openIndex < 0 || inlineCode.start < openIndex)) {
@@ -329,6 +362,7 @@ export function maskNonRenderedMarkdown(content: string): string {
     inHtmlComment: false,
     rawHtmlClosingPattern: null,
     rawHtmlUntilBlank: false,
+    previousRenderedLineWasParagraph: false,
     previousRenderedLineWasHeading: false,
     previousRenderedLineWasBlank: true,
   };

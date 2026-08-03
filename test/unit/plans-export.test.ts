@@ -178,6 +178,36 @@ describe("plans export", () => {
     );
   });
 
+  it("masks type-7 custom-tag blocks without hiding later visible structure", () => {
+    const content = [
+      "<x-review>",
+      "## Hidden custom-tag heading",
+      "</x-review>",
+      "",
+      "## Live heading",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    assert.equal(masked.length, content.length);
+    assert.doesNotMatch(masked, /Hidden custom-tag/u);
+    assert.equal(
+      masked.indexOf("## Live heading"),
+      content.indexOf("## Live heading"),
+    );
+  });
+
+  it("keeps a complete custom tag visible when it continues a paragraph", () => {
+    const content = [
+      "Visible paragraph",
+      "<x-review>",
+      "## Live heading",
+      "",
+    ].join("\n");
+
+    assert.equal(maskNonRenderedMarkdown(content), content);
+  });
+
   it("keeps HTML-comment delimiters inside inline code visible", () => {
     const content = [
       "Checked the literal `<!--` token.",
@@ -196,6 +226,41 @@ describe("plans export", () => {
       assert.equal(masked.indexOf(visible), content.indexOf(visible));
     }
     assert.doesNotMatch(masked, /hidden comment/u);
+  });
+
+  it("keeps backslash-escaped HTML comment openers visible", () => {
+    const content = [
+      "Checked the visible literal \\<!-- token.",
+      "## Live before comment",
+      "<!-- hidden comment -->",
+      "## Live after comment",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    for (const visible of [
+      "Checked the visible literal \\<!-- token.",
+      "## Live before comment",
+      "## Live after comment",
+    ]) {
+      assert.equal(masked.indexOf(visible), content.indexOf(visible));
+    }
+    assert.doesNotMatch(masked, /hidden comment/u);
+  });
+
+  it("masks an HTML comment after an escaped backslash", () => {
+    const content = [
+      "Visible \\\\<!-- hidden even-slash comment --> tail.",
+      "## Live after comment",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    assert.doesNotMatch(masked, /hidden even-slash comment/u);
+    assert.equal(
+      masked.indexOf("## Live after comment"),
+      content.indexOf("## Live after comment"),
+    );
   });
 
   it("does not protect HTML comments with escaped backticks", () => {

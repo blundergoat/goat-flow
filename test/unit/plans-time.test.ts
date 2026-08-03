@@ -315,6 +315,76 @@ describe("plans time", () => {
     }
   });
 
+  it("allocates a new segment after the highest existing suffix", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
+    const { milestonePath } = writeTimingFixture(temporaryRoot);
+
+    try {
+      applyPlanTimeTransition(
+        milestonePath,
+        { action: "start", category: "product" },
+        100,
+      );
+      applyPlanTimeTransition(milestonePath, { action: "stop" }, 160);
+      applyPlanTimeTransition(
+        milestonePath,
+        { action: "start", category: "proof" },
+        200,
+      );
+      applyPlanTimeTransition(milestonePath, { action: "stop" }, 260);
+      const receiptWithGap = readFileSync(milestonePath, "utf-8").replace(
+        "M01-S02",
+        "M01-S03",
+      );
+      writeFileSync(milestonePath, receiptWithGap, "utf-8");
+
+      const started = applyPlanTimeTransition(
+        milestonePath,
+        { action: "start", category: "other" },
+        300,
+      );
+
+      assert.equal(started.receipt.segments.at(-1)?.id, "M01-S04");
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects timing table rows with extra cells", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
+    const { milestonePath } = writeTimingFixture(temporaryRoot);
+
+    try {
+      applyPlanTimeTransition(
+        milestonePath,
+        { action: "start", category: "product" },
+        100,
+      );
+      applyPlanTimeTransition(
+        milestonePath,
+        { action: "stop", finalize: true },
+        160,
+      );
+      const malformedRow = `| M01-S02 | proof | ${timingStamp(200)} | ${timingStamp(1200)} | 1000 | closed | unexpected |`;
+      const finalizedContent = readFileSync(milestonePath, "utf-8");
+      const validRow = `| M01-S01 | product | ${timingStamp(100)} | ${timingStamp(160)} | 60 | closed |`;
+      const receiptWithExtraCell = finalizedContent.replace(
+        validRow,
+        `${validRow}\n${malformedRow}`,
+      );
+      assert.notEqual(receiptWithExtraCell, finalizedContent);
+      writeFileSync(milestonePath, receiptWithExtraCell, "utf-8");
+
+      assert.throws(
+        () => applyPlanTimeTransition(milestonePath, { action: "status" }),
+        /timing receipt table row must contain exactly 6 cells/iu,
+      );
+      assert.equal(readFileSync(milestonePath, "utf-8"), receiptWithExtraCell);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   // Separate test names identify which merged authority field reached the user's receipt.
   for (const authorityCase of DUPLICATE_RECEIPT_AUTHORITY_CASES) {
     /**

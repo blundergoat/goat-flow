@@ -395,13 +395,22 @@ function readOpenSegment(receipt: PlanTimingReceipt): PlanTimingSegment | null {
   return openSegments[0] ?? null;
 }
 
-/** Generate the next stable segment id from the milestone id and receipt count. */
+/** Generate the next stable segment id after the highest canonical suffix. */
 function nextSegmentId(
   milestonePath: string,
   segments: readonly PlanTimingSegment[],
 ): string {
   const milestoneId = basename(milestonePath).match(/^M\d+/iu)?.[0] ?? "M";
-  return `${milestoneId.toUpperCase()}-S${String(segments.length + 1).padStart(2, "0")}`;
+  const prefix = `${milestoneId.toUpperCase()}-S`;
+  const suffixPattern = new RegExp(`^${prefix}(\\d+)$`, "iu");
+  let highestSuffix = 0;
+  for (const segment of segments) {
+    const suffix = Number(segment.id.match(suffixPattern)?.[1]);
+    if (Number.isSafeInteger(suffix) && suffix > highestSuffix) {
+      highestSuffix = suffix;
+    }
+  }
+  return `${prefix}${String(highestSuffix + 1).padStart(2, "0")}`;
 }
 
 /** Parse an existing receipt or initialize paused state for the user's first Start.

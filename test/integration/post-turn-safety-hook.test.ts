@@ -956,6 +956,29 @@ describe("post-turn-safety hook", () => {
       });
     }
 
+    it("pins mnemonic Git diff prefixes on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "mnemonic.env", "safe=1\n");
+        commitAll(root, "add mnemonic prefix fixture");
+        runGit(root, ["config", "diff.mnemonicPrefix", "true"]);
+        writeFile(root, "mnemonic.env", `API_KEY=${TEST_API_TOKEN}\n`);
+
+        assertScannerParity(root, 2, /API token in mnemonic\.env/u);
+      });
+    });
+
+    it("pins custom Git diff source and destination prefixes on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "custom.env", "safe=1\n");
+        commitAll(root, "add custom prefix fixture");
+        runGit(root, ["config", "diff.srcPrefix", "before/"]);
+        runGit(root, ["config", "diff.dstPrefix", "after/"]);
+        writeFile(root, "custom.env", `API_KEY=${TEST_API_TOKEN}\n`);
+
+        assertScannerParity(root, 2, /API token in custom\.env/u);
+      });
+    });
+
     it("combines staged and unstaged conflict-marker state on both paths", () => {
       withTempRepo((root) => {
         writeFile(root, "conflict.txt", "safe\n");

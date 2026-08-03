@@ -8,8 +8,11 @@ last_reviewed: 2026-08-03
 **Created:** 2026-08-03
 **Decision changed:** Release probes verify deterministic installation and adapted-project audit as separate stages.
 **Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-03
 
 **What happened:** A packaged-release probe ran `setup --apply` against an empty git repository and immediately required the full harness audit to pass. The installer correctly wrote its 69 managed files, but the audit failed because no agent had yet authored the project-specific `AGENTS.md`, architecture, or code map named in the installer's own next steps.
+
+**Recurrence 2026-08-03:** A second release-readiness pass repeated the same bare-target audit even though this lesson already existed. The packaged CLI again installed 69 managed files and correctly failed the incomplete target. Re-reading this entry redirected the actual package proof to the configured goat-flow checkout, where setup, Codex agent setup, all five harness concerns, 49 drift comparisons, and 234-file content lint passed. The failed bare-target result remains evidence of an invalid smoke contract, not a release defect.
 
 **Evidence:** `src/cli/cli-handlers.ts` (search: `Setup preview and setup apply both use the deterministic install path`) routes `setup --apply` through managed installation, while plain `setup` composes the adaptive guidance. The packaged installer output explicitly says `Run the setup steps to create project-specific content` after the managed files are installed.
 

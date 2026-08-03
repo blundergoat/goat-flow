@@ -218,9 +218,39 @@ What I Didn't Examine: none.
     assert.deepEqual(validateReviewReport(compact, projectRoot).violations, []);
   });
 
+  it("keeps proof fields after an escaped HTML comment opener", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const report = `Checked the visible literal \\<!-- token.
+Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
+Ship Verdict: **YES** - no blocking finding survived Pass 2.
+Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
+Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
+What I Didn't Examine: none.
+`;
+
+    assert.deepEqual(validateReviewReport(report, projectRoot).violations, []);
+  });
+
   it("rejects structural review evidence inside a raw HTML block", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = `<pre>\n${validReview()}\n</pre>\n`;
+    const result = validateReviewReport(report, projectRoot);
+
+    assert.equal(result.status, "fail");
+    assert.equal(hasViolation(result, "integrity-format"), true);
+    assert.equal(hasViolation(result, "ship-verdict-format"), true);
+  });
+
+  it("rejects structural review evidence inside a type-7 HTML block", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const report = `<x-review>
+Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
+Ship Verdict: **YES** - no blocking finding survived Pass 2.
+Zero findings: checked boundary conditions, error paths, and integration seams.
+Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
+What I Didn't Examine: none.
+</x-review>
+`;
     const result = validateReviewReport(report, projectRoot);
 
     assert.equal(result.status, "fail");

@@ -558,7 +558,7 @@ function parseTimingSegments(
   const segments: PlanTimingSegment[] = [];
   let rowIndex = 0;
   for (const line of markdown.split("\n")) {
-    const columns = readTimingDataColumns(line);
+    const columns = readTimingDataColumns(line, warnings);
     if (!columns) continue;
     rowIndex += 1;
     const segment = parseSegmentRow(columns, rowIndex, warnings);
@@ -567,15 +567,21 @@ function parseTimingSegments(
   return segments;
 }
 
-/** Return six data cells while skipping header, separator, and non-table lines. */
-function readTimingDataColumns(line: string): string[] | null {
+/** Return six data cells while warning on malformed timing-table rows. */
+function readTimingDataColumns(
+  line: string,
+  warnings: string[],
+): string[] | null {
   if (!/^\s*\|.*\|\s*$/u.test(line)) return null;
   const columns = line
     .trim()
     .slice(1, -1)
     .split("|")
     .map((value) => value.trim());
-  if (columns.length !== 6) return null;
+  if (columns.length !== 6) {
+    warnings.push("timing receipt table row must contain exactly 6 cells");
+    return null;
+  }
   if (columns[0]?.toLowerCase() === "segment") return null;
   if (columns.every((value) => /^:?-+:?$/u.test(value))) return null;
   return columns;
