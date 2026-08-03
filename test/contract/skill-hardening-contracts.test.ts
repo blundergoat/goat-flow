@@ -407,13 +407,49 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         scopeSnapshot,
-        /dirty worktree \(combine staged and unstaged changes into one declared change set\)/u,
+        /combined dirty worktree/u,
         skillPath,
       );
       assert.match(scopeSnapshot, /\*\*Source:\*\*[^\n]+worktree/u, skillPath);
       assert.match(
         scopeSnapshot,
         /For `worktree`, bind the combined tracked diff plus untracked membership/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("stops oversized inferred branch scopes before review begins", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const scope = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+
+      assert.match(
+        scope,
+        /measure diff[\s\S]+20 files\/3000 lines/u,
+        skillPath,
+      );
+      assert.match(
+        scope,
+        /20 files\/3000 lines[\s\S]+stop before Pass 1/u,
+        skillPath,
+      );
+      assert.match(
+        scope,
+        /never guess commit windows/u,
+        skillPath,
+      );
+      assert.match(
+        scope,
+        /request PR\/base\/head[^\n]+commit\/range[^\n]+worktree[^\n]+area/u,
+        skillPath,
+      );
+      assert.match(
+        constraints,
+        /MUST chunk above 20 files, or 3000 changed lines/u,
         skillPath,
       );
     });
@@ -3568,6 +3604,50 @@ describe("skill hardening contracts", () => {
         referencePath,
       );
     });
+  });
+
+  it("merges goat-critique rubric context maps into the fixed context split", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(
+        skillGuidance,
+        /Merge the selected rubric map[^\n]+fixed A\/B\/C split[^\n]+never replace baseline context/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/rubric-examples.md",
+      ),
+      (referencePath) => {
+        const contextMaps = readMarkdownSection(
+          referencePath,
+          "Rubric Context Maps",
+        );
+        assert.match(
+          contextMaps,
+          /Each map lists additions to the fixed Context split[^\n]+never replaces it/u,
+          referencePath,
+        );
+        assert.match(
+          contextMaps,
+          /Agents A and B keep their artifact[^\n]+architecture[^\n]+rubric baseline/iu,
+          referencePath,
+        );
+        assert.match(
+          contextMaps,
+          /empty C list means no additional project context/iu,
+          referencePath,
+        );
+        assert.equal(
+          contextMaps.match(/- \*\*C:\*\* \[\]/gu)?.length,
+          7,
+          referencePath,
+        );
+      },
+    );
   });
 
   it("uses one reproducible goat-critique meta-audit rubric", () => {

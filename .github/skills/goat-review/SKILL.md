@@ -25,7 +25,7 @@ Use for diff/PR review or codebase-area quality audits.
 
 - If user already says "quick", "PR", or "full", follow it unless material risk forces Full.
 - Dispatcher depth wins unless material risk forces Full; clarify vague scope.
-- Auto-detect explicit input, else a dirty worktree (combine staged and unstaged changes into one declared change set), else a branch diff.
+- Use explicit input, then combined dirty worktree; otherwise measure diff. Over 20 files/3000 lines, stop before Pass 1; request PR/base/head, commit/range, worktree, or area; never guess commit windows.
 
 **PR/base:** without checkout, resolve explicit → configured → remote HEAD → prompt → `main`; fetch only after network approval. Record URL/baseRefName/source/SHA/failures. Automated-review conclusions stay unread until both local passes finish.
 
@@ -212,7 +212,7 @@ Always emit; minimum: "confident - no degradation flags".
 **Both modes:**
 - MUST apply the Blast Radius Rule, severity/action tags, Footgun Cross-Check, systemic grouping, and Review Integrity in both modes
 - MUST order findings by severity, never file or discovery order
-- MUST propose chunking above 20 files, or 3000 changed lines in diff mode
+- MUST chunk above 20 files, or 3000 changed lines
 - Emit Spec Drift only when opted in. If skipped, record `Spec drift: skipped` without a degradation flag
 - MUST NOT edit files unless user says "implement"; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.

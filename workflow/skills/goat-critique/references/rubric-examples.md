@@ -7,7 +7,7 @@ goat-flow-reference-version: "1.15.0"
 
 ## Rubric Context Maps
 
-Each rubric has a context map that Step 0 reads and passes to sub-agent spawn directives. Footgun/lesson entries mean targeted INDEX-first hits from those buckets, not whole-directory reads. Agent C's isolation enforcement (Phase 2 step 1 grep check) is unchanged regardless of context map. Generic fallback uses the default split.
+Each map lists additions to the fixed Context split in `SKILL.md` and never replaces it. Agents A and B keep their artifact, architecture, and rubric baseline; an empty C list means no additional project context, so C still reads artifact + rubric only. Footgun/lesson entries mean targeted INDEX-first hits from those buckets, not whole-directory reads. Agent C's isolation enforcement (Phase 2 step 1 grep check) is unchanged regardless of context map. Generic fallback uses the default split plus the additions below.
 
 ### Plan
 - **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
