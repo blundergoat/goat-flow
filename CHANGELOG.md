@@ -28,6 +28,7 @@
 - **Runtime boundaries cover the shipped surface** - Instructions protect dashboard server runtime, the code map includes managed setup and deny enforcement, and learning records cover access modes plus multi-root permissions.
 - **Shared references load as documented** - Router tables and the playbook index say `skill-conventions.md` loads only at full depth and never through `/goat`.
 - **Upgrades add the prose-style trigger** - Add `prose style` to each active instruction file's playbook-disciplines list without replacing custom wording; fresh setups already include it.
+- **goat-* prose edits preserve meaning and plan controls** - The shared writing-style playbook verifies source facts before style, protects status, requirements, uncertainty, human-authored passages and replies, and leaves approved milestone criteria and control repetition unchanged.
 - **Orientation docs cover the dashboard** - The code map lists every CLI-server and dashboard module; architecture describes roughly 20 TypeScript modules rather than only HTML and views.
 - **Evidence anchors resolve** - The glossary points to the live quality command; the deny footgun records `hooks verify` as shipped in 1.14.0 while external-runtime proof remains unbuilt.
 - **`scripts/gruff-ts.sh` produces parseable output** - It runs the bundled binary from repo root for banner-free, config-aware JSON; no arguments prints `summary`, arguments pass through, and exits remain 1 for findings or 2 for diagnostics.

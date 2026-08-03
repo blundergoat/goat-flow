@@ -3790,7 +3790,7 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         engineeringStandards,
-        /fixed schema fields, task\/proof checklists, commands, tables, and catalogues stay exempt/u,
+        /fixed schema fields, exact paths, commands, approved requirements and acceptance\/proof\/verification\/exit criteria, task\/proof checklists, tables, catalogues, and deliberate control repetition stay exempt/u,
         referencePath,
       );
     }
@@ -3807,7 +3807,7 @@ describe("skill hardening contracts", () => {
       );
       assert.match(
         scopeGate,
-        /fixed schema fields, task\/proof checklists, commands, tables, INDEX and catalogue formats\s*\|\s*No/u,
+        /fixed schema fields, task\/proof checklists, commands, approved requirements and acceptance\/proof\/verification\/exit criteria, tables, INDEX and catalogue formats\s*\|\s*No/u,
         playbookPath,
       );
       assert.match(scopeGate, /Mixed planning artifacts/u, playbookPath);
@@ -3815,6 +3815,114 @@ describe("skill hardening contracts", () => {
         scopeGate,
         /Objective, Context, Scope, assumptions, rollback, and testing-rationale prose/u,
         playbookPath,
+      );
+      assert.match(
+        scopeGate,
+        /If an exempt control surface conflicts with a source of truth, report the discrepancy/u,
+        playbookPath,
+      );
+    }
+  });
+
+  it("keeps writing-style edits truth-preserving and source-aware", () => {
+    for (const playbookPath of [
+      "workflow/skills/playbooks/writing-style.md",
+      ".goat-flow/skill-docs/playbooks/writing-style.md",
+    ]) {
+      const scopeGate = readMarkdownSection(playbookPath, "Scope Gate");
+      assert.match(
+        scopeGate,
+        /playbooks and other agent-read references/u,
+        playbookPath,
+      );
+      assert.match(
+        scopeGate,
+        /Comments and replies addressed to a person\s*\|\s*Correctness and residue only/u,
+        playbookPath,
+      );
+      assert.match(
+        scopeGate,
+        /social-meaning guard and Colleague check/u,
+        playbookPath,
+      );
+      assert.match(scopeGate, /deliberate control repetition/u, playbookPath);
+
+      const correctnessGate = readMarkdownSection(
+        playbookPath,
+        "Correctness and Meaning",
+      );
+      assert.match(
+        correctnessGate,
+        /names, numbers, units, versions, flags, options, and paths/u,
+        playbookPath,
+      );
+      assert.match(
+        correctnessGate,
+        /proposal[^\n]+decision[^\n]+assumption[^\n]+fact/u,
+        playbookPath,
+      );
+      assert.match(
+        correctnessGate,
+        /optional[^\n]+required[^\n]+planned or pending check[^\n]+passed check/u,
+        playbookPath,
+      );
+
+      const sourceGate = readMarkdownSection(
+        playbookPath,
+        "Before Editing Existing Prose",
+      );
+      assert.match(
+        sourceGate,
+        /human-authored, generated, mixed, or unknown/u,
+        playbookPath,
+      );
+      assert.match(sourceGate, /lightest effective edit/u, playbookPath);
+      assert.match(sourceGate, /Unknown provenance/u, playbookPath);
+
+      const fixOnSight = readMarkdownSection(playbookPath, "Fix on Sight");
+      assert.match(fixOnSight, /verified meaning/u, playbookPath);
+      assert.match(fixOnSight, /Canonical terminology/u, playbookPath);
+      assert.match(
+        fixOnSight,
+        /Manufactured engagement closers/u,
+        playbookPath,
+      );
+      assert.match(fixOnSight, /Report issues at the tracker/u, playbookPath);
+
+      const structure = readMarkdownSection(playbookPath, "Structure");
+      assert.match(structure, /Process bleed/u, playbookPath);
+      assert.match(structure, /Illustrative before/u, playbookPath);
+
+      const guards = readMarkdownSection(
+        playbookPath,
+        "Guards Against Misapplication",
+      );
+      assert.match(guards, /Plan uniformity is control grammar/u, playbookPath);
+      assert.match(
+        guards,
+        /Replies to people carry social meaning/u,
+        playbookPath,
+      );
+
+      const verification = readMarkdownSection(
+        playbookPath,
+        "Verification Gate",
+      );
+      assert.match(
+        verification,
+        /status, requirement level, uncertainty, and provenance/u,
+        playbookPath,
+      );
+    }
+
+    for (const readmePath of [
+      "workflow/skills/playbooks/README.md",
+      ".goat-flow/skill-docs/playbooks/README.md",
+    ]) {
+      assert.match(
+        readProjectFile(readmePath),
+        /writing-style\.md[^\n]+correctness and meaning preservation/u,
+        readmePath,
       );
     }
   });
