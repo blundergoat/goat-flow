@@ -87,9 +87,11 @@ last_reviewed: 2026-08-03
 **Root cause:** Treated the first matching line as the whole problem instead of verifying all repeated claims for that concept across the touched docs before closing the edit.
 **Fix:** After a doc truthfulness fix, run a focused `rg` for both the old phrase and the corrected concept across every touched doc before claiming the update is complete.
 
+**Recurrence 2026-08-03:** A patch intended for the `Pre-release prompts can resolve an older global CLI` metadata matched the first generic `Incident count` block in `quality.md` and briefly changed an unrelated footgun. Reading the exact diff caught it before validation; the corrected patch included the target heading as context.
+
 **Prevention:**
 1. For duplicated release-note bullets or summary sections, assume the same claim may appear more than once and verify with `rg`, not by eyeballing one section.
-2. After any doc-only patch, read the exact changed hunk or `git diff` once before closeout to catch accidental copy-edit regressions.
+2. Anchor patches for repeated field names with the owning heading, then read the exact changed hunk or `git diff` once before closeout to catch accidental edits to a sibling entry.
 
 ---
 
@@ -177,13 +179,15 @@ A third incident added a Claude/reporting-only relationship ahead of the owner r
 
 **Status:** active | **Created:** 2026-07-17
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient. | **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-07-31
+**Incident count:** 3 | **Latest occurrence:** 2026-08-03
 
 **What happened:** The 1.15.0 milestone files looked structurally complete and passed a custom heading/count check, but the first `plans export` preview warned that all 11 records lacked portable objectives and boundary notes. At that revision, the exporter accepted only the bold `Objective` field, while the files used a level-two `Objective` section. They also omitted `Boundary Notes` and initially placed CAO incident gates in peer sections the exporter would not include in task bodies.
 
 **Recurrence (2026-07-31):** Goat-plan's compact reference introduced an inline Scope plus canonical `## Exit` containing `Stop/rescope if`, while the parser still accepted only a Scope section, legacy `## Exit criteria`, and a separate stop heading. The first full preflight also caught three parser complexity errors missed by the focused M02 suite. The correction added an end-to-end strict Small fixture, exporter coverage for compact Exit/stop, and split parser branches before rerunning repository gates.
 
 **Dashboard recurrence (2026-07-31):** The first M03 dashboard GREEN reused the filename fallback as an objective when malformed Markdown had no outcome heading. Manual diff review caught the false objective before handoff. The correction keeps filename fallback for the row title, passes only a parsed outcome heading into objective fallback, and asserts that malformed objectives remain blank.
+
+**Recurrence (2026-08-03):** A new milestone followed the field guide's prose form `Plan/admin overhead: n min other`, but the parser required the bold field `**Plan/admin overhead:**`. Strict validation rejected the unparseable estimate before implementation; correcting the field cleared the error. Evidence anchor: `src/cli/plans-export.ts` (search: `readMilestoneField(content, "Plan/admin overhead"`).
 
 **Root cause:** I validated the authoring layout I had produced instead of the repository's consumer contract. A Markdown reader could infer the intended fields, while `parseMilestoneMarkdown` intentionally recognizes a narrower portable schema.
 

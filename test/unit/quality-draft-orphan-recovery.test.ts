@@ -7,6 +7,7 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -63,6 +64,10 @@ describe("quality draft orphan recovery", () => {
         claimPath,
         `${JSON.stringify({ owner: "c".repeat(32), pid: 789, claimed_at: "2026-08-03T00:00:00.000Z" })}\n`,
       );
+      // A zero lease means immediate expiry even when filesystem timestamp
+      // precision places the new marker fractionally ahead of Date.now().
+      const futureMtime = new Date(Date.now() + 60_000);
+      utimesSync(claimPath, futureMtime, futureMtime);
 
       await capture.processNow();
 

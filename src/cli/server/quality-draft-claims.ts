@@ -121,6 +121,10 @@ function staleClaimSnapshot(
     return null;
   }
   if (!isSafeFile) return snapshot;
+  // Zero is the test/recovery contract for immediate expiry. Bypass timestamp
+  // arithmetic because filesystem mtime precision may place a fresh marker
+  // fractionally ahead of the integer-valued Date.now() clock.
+  if (staleMs <= 0) return snapshot;
   return Date.now() - snapshot.mtimeMs >= staleMs ? snapshot : null;
 }
 

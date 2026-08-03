@@ -236,7 +236,7 @@ const AUTOMATED_REVIEW_VALUE =
 const REFUTER_VALUE =
   /^(?:yes|no|skipped);\s*confirmed=\d+,\s*refuted=\d+,\s*unresolved=\d+,\s*leads-verified=\d+,\s*model=\S.+$/u;
 const COMPACT_INTEGRITY =
-  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*\S.+;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*no degradation flags;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
 
 const FULL_SHIP_VERDICT =
   /^\s*Decision:\s*\*\*(YES|YES WITH CONDITIONS|PARTIAL|NO|PENDING REFUTER\/HUMAN|N\/A - AREA AUDIT ONLY)\*\*\s*$/u;

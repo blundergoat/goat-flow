@@ -218,6 +218,30 @@ What I Didn't Examine: none.
     assert.deepEqual(validateReviewReport(compact, projectRoot).violations, []);
   });
 
+  it("rejects structural review evidence inside a raw HTML block", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const report = `<pre>\n${validReview()}\n</pre>\n`;
+    const result = validateReviewReport(report, projectRoot);
+
+    assert.equal(result.status, "fail");
+    assert.equal(hasViolation(result, "integrity-format"), true);
+    assert.equal(hasViolation(result, "ship-verdict-format"), true);
+  });
+
+  it("rejects degradation flags in compact integrity receipts", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const report = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
+Ship Verdict: **YES** - no blocking finding survived Pass 2.
+Zero findings: checked boundary conditions, error paths, and integration seams.
+Review Integrity: confident; 1/1 files opened; risk-depth-declined; validator=validated.
+What I Didn't Examine: none.
+`;
+    const result = validateReviewReport(report, projectRoot);
+
+    assert.equal(result.status, "fail");
+    assert.equal(hasViolation(result, "integrity-format"), true);
+  });
+
   it("requires validator status and gate evidence in full and compact integrity", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const missingValidator = validateReviewReport(

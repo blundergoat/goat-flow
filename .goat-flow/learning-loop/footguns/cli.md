@@ -94,6 +94,41 @@ last_reviewed: 2026-08-03
 
 ---
 
+## Footgun: Markdown proof gates can promote hidden examples into authority
+
+**Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Validate structural evidence against rendered Markdown semantics and exact documented field values, then pair every exclusion fixture with a visible-content control.
+**Trigger phase:** VERIFY
+
+**Symptoms:** A review report containing every required field inside a raw `<pre>` block passed validation. A balanced inline-code span containing the literal `<!--` token opened comment state and hid later visible fields. Separately, the compact Review Integrity grammar accepted `risk-depth-declined` in its degradation slot while returning `isRiskDepthDeclined: false`, so a degraded review could claim a stronger conclusion and verdict.
+
+**Why it happens:** `src/cli/rendered-markdown.ts` (search: `export function maskNonRenderedMarkdown`) is a source-aligned Markdown masker rather than a complete Markdown parser; every omitted exclusion form can accidentally grant hidden examples structural authority or suppress visible evidence. `src/cli/review-validate.ts` (search: `const COMPACT_INTEGRITY`) compounded that risk by accepting any non-empty degradation text even though the documented compact form permits only `no degradation flags`.
+
+**Safe handling now:**
+1. Add paired regressions for every Markdown exclusion change: hidden headings and fields must stay hidden, while visible structure immediately after the construct must retain its original offset.
+2. Treat comment markers inside balanced inline-code spans as visible code, but keep real comments masked; include escaped-delimiter controls so the exception cannot swallow comments.
+3. Match compact proof receipts to their canonical documented values. Do not accept arbitrary text and then hardcode the corresponding semantic state.
+4. Re-run both the shared masker tests and the consuming proof-gate tests. Evidence anchors: `test/unit/plans-export.test.ts` (search: `masks raw HTML blocks without hiding later visible structure`) and `test/unit/review-validate.test.ts` (search: `rejects degradation flags in compact integrity receipts`).
+
+---
+
+## Footgun: Zero-duration filesystem leases can look live at the clock boundary
+
+**Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Handle a zero-duration lease as an explicit immediate-expiry state instead of deriving it from wall-clock subtraction.
+**Trigger phase:** VERIFY
+
+**Symptoms:** Identical CI runs at the same commit disagree on `rejects an orphaned stale claim when its draft is already gone`. The failing run keeps the claim marker and produces no rejection receipt, while a parallel run passes. A local 10,000-sample probe observed 93 freshly written marker timestamps ahead of `Date.now()`, with the most negative delta at about -0.6 ms.
+
+**Why it happens:** `src/cli/server/quality-draft-claims.ts` (search: `function staleClaimSnapshot`) previously classified every lease with `Date.now() - snapshot.mtimeMs >= staleMs`. Node's clock is integer milliseconds, while filesystem modification times can retain fractional precision or be rounded ahead. For the test/recovery contract `staleMs: 0`, a just-created marker can therefore appear live even though zero means immediate expiry.
+
+**Safe handling now:**
+1. Treat non-positive lease durations as immediate expiry before doing timestamp arithmetic; keep positive leases on the normal age comparison.
+2. Make the boundary deterministic in `test/unit/quality-draft-orphan-recovery.test.ts` (search: `rejects an orphaned stale claim when its draft is already gone`) by setting the marker mtime ahead of the process clock.
+3. When testing time boundaries, force the boundary condition rather than depending on scheduler delay or filesystem timestamp rounding to reproduce it.
+
+---
+
 ## Resolved Entries
 
 ## Footgun: Structured Actual cannot represent uninstrumented time

@@ -155,6 +155,64 @@ describe("plans export", () => {
     assert.doesNotMatch(masked, /Hidden/u);
   });
 
+  it("masks raw HTML blocks without hiding later visible structure", () => {
+    const content = [
+      "<pre>",
+      "## Hidden pre heading",
+      "</pre>",
+      "",
+      "<div>",
+      "## Hidden div heading",
+      "</div>",
+      "",
+      "## Live heading",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    assert.equal(masked.length, content.length);
+    assert.doesNotMatch(masked, /Hidden/u);
+    assert.equal(
+      masked.indexOf("## Live heading"),
+      content.indexOf("## Live heading"),
+    );
+  });
+
+  it("keeps HTML-comment delimiters inside inline code visible", () => {
+    const content = [
+      "Checked the literal `<!--` token.",
+      "## Live before comment",
+      "<!-- hidden comment -->",
+      "## Live after comment",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    for (const visible of [
+      "Checked the literal `<!--` token.",
+      "## Live before comment",
+      "## Live after comment",
+    ]) {
+      assert.equal(masked.indexOf(visible), content.indexOf(visible));
+    }
+    assert.doesNotMatch(masked, /hidden comment/u);
+  });
+
+  it("does not protect HTML comments with escaped backticks", () => {
+    const content = [
+      "Escaped \\`<!-- hidden comment -->\\` markers.",
+      "## Live after comment",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    assert.doesNotMatch(masked, /hidden comment/u);
+    assert.equal(
+      masked.indexOf("## Live after comment"),
+      content.indexOf("## Live after comment"),
+    );
+  });
+
   for (const [flag, field] of [
     ["--help", "showHelp"],
     ["--version", "showVersion"],

@@ -3,13 +3,13 @@ goat-flow-reference-version: "1.15.0"
 ---
 # Writing Style
 
-Use this when producing or editing prose a person will read: release notes, changelog entries, review and report narrative, decision records, README and documentation prose, issue and pull-request bodies, commit message bodies. It names the patterns that make generated text read as generated, and it names the cases where those same patterns are correct and must be left alone.
+Use this when producing or editing prose a person will read: release notes, changelog entries, review and report narrative, decision records, README and documentation prose, issue and pull-request bodies, commit message bodies. It names common reader-cost patterns in generated prose and the cases where those same shapes are correct and must be left alone.
 
 Sibling playbooks own their formats. `changelog.md` owns changelog structure and `release-notes.md` owns per-release narrative shape; this playbook owns how the sentences inside them read.
 
 ## Availability Check
 
-Documentary discipline reference. No CLI probe applies: there is no tool to detect and no command that proves the rules are satisfied. Mechanical checks may catch residue or placeholders; none prove factual accuracy, semantic preservation, or correct exceptions. Load this file when a task produces or edits human-read prose, then apply the Scope Gate before the first edit.
+Documentary discipline reference. No CLI probe applies: there is no tool to detect and no command that proves the rules are satisfied. Mechanical checks may catch residue or placeholders; none prove factual accuracy, semantic preservation, or correct exceptions. Load this file when a task produces or edits human-read prose, then apply the Scope Gate before the first edit. A review authorizes diagnosis, not an unrequested rewrite.
 
 ## Intent
 
@@ -23,7 +23,7 @@ The goal is readability. It is never disguising who wrote something.
 
 Apply this before editing anything. Running the rules on an exempt surface is worse than not running them at all, because the exemptions below are load-bearing.
 
-Project-documented style in instruction files, style guides, and enforced linters outranks this playbook's taste; the Integrity rules below outrank every style source.
+Resolve conflicts in this order: verified facts and safety; the user's task, audience, and required meaning; project-documented style and supplied voice; this playbook's defaults. Integrity outranks style. Lower layers never change higher ones.
 
 | Surface | Rules apply? |
 |---|---|
@@ -55,19 +55,32 @@ Run this before every style rule on every in-scope surface. Verify prose against
 - Correct typos, wrong word forms, dangling subjects, and broken parallelism.
 - Check names, numbers, units, versions, flags, options, and paths against the source of truth.
 - Open a cited document, issue, or benchmark and confirm it supports the claim.
+- Match claim strength and specificity to the evidence. Do not inflate a narrow result or reflexively hedge a supported conclusion.
+- Connect named attribution to a specific inspectable point; otherwise name the evidence or remove the prestige cue.
 - Preserve claims, constraints, uncertainty, and provenance. Do not turn a proposal into a decision, an assumption into a fact, an optional action into a required one, or a planned or pending check into a passed check.
 
 A fluent false sentence is worse than a clumsy true one. Style never outranks this gate.
 
 ## Before Editing Existing Prose
 
-Classify known source material as human-authored, generated, mixed, or unknown. Line-edit strong human-authored passages only for correctness or a diagnosed defect. In mixed prose, repair weak generated passages without smoothing voice-bearing human passages into one uniform register.
+Classify source material as human-authored, generated, mixed, or unknown. Protect strong human passages; edit them only for correctness or a diagnosed defect. Quirks, abruptness, and interpersonal softeners are not defects by themselves. In mixed prose, repair weak generated passages without smoothing the protected passages into one register.
 
-Unknown provenance starts conservative. Use the lightest effective edit, and ask about authorship only when the answer would materially change the result.
+Unknown provenance starts conservative. Use the lightest effective edit, and ask about authorship only when it would change the result. Rewrite weak generated prose from verified claims, not synonym substitutions; transcripts supply material, not a required shape.
+
+## Register
+
+Choose the register from the artifact, reader, and supplied voice before applying generic rules. Neutral and conventional are valid voices; do not decorate them for distinctiveness.
+
+- Documentation and decisions stay plain and precise about ownership, evidence, and uncertainty.
+- Reports and reviews keep necessary terminology, hedging, citations, and causal relationships.
+- Release and changelog prose follows its sibling playbook, states user impact, and keeps caveats.
+- Issues and pull requests lead with the decision, behaviour, or action when useful for scanning.
+
+The Scope Gate governs every register. Replies remain correctness-and-residue-only surfaces whose social meaning must survive.
 
 ## Fix on Sight
 
-One of these is enough to lose a technical reader. Each is worth fixing alone, without waiting for a second signal. Rewrite a flagged sentence from its verified meaning; do not swap a flagged word for a synonym.
+These diagnose reader cost, not authorship. A diagnosed instance can justify an edit; a pattern count cannot. When labels overlap, record the primary cost once. If known-good prose repeatedly triggers a label without that cost, narrow the rule or guard. Rewrite from verified meaning, not synonym substitution.
 
 **Assistant voice.** The register of a helpful chat reply rather than a document.
 
@@ -107,7 +120,7 @@ Run these before sentence-level work on anything longer than a few paragraphs. W
 
 **Fractal summaries.** A closing section that restates the document's own structure back to a reader who just read it. Cut it. A document that needs a recap of itself has a structure problem the recap will not fix.
 
-**Repeated section templates.** Three or more sections running the identical movement, such as `[problem] → [what breaks] → [the fix is X]`. The content changes and the machinery does not, which is what the reader feels.
+**Repeated section templates.** Three or more sections running the identical movement, such as `[problem] → [what breaks] → [the fix is X]`. The content changes and the machinery does not. Catalogue-shaped repetition is exempt: a repeated option-and-tradeoff beat aids scanning. Repetition is defective only when it hides priority, causality, or progression.
 
 **Process bleed.** Do not narrate the drafting or build session instead of describing the result. Write verified facts in the reader's order; keep chronology only when the sequence itself explains a cause, decision, or constraint. Illustrative before: `We inspected the parser, ran a fixture, and then found the flag is ignored.` Illustrative after: `The parser ignores the flag when the fixture omits a value.`
 
@@ -118,17 +131,13 @@ Run these before sentence-level work on anything longer than a few paragraphs. W
 - Restatement, so fix it: `**Scalability:** The system is designed to be scalable.`
 - Reference label, so keep it: `**Blast radius:** Search every consumer before changing an exported type.`
 
-The bolded word in the first example is the whole sentence. In the second it is an index entry and the sentence carries new content.
+The bolded word in the first example is the whole sentence. In the second it is an index entry and the sentence carries new content. Reference-list labels remain valid whenever the sentence carries information the label does not.
 
 ## Guards Against Misapplication
 
 These exist because each rule above has a shape it misfires on. Check the guard before acting on the rule.
 
-**Catalogue uniformity is not template uniformity.** A section running six `[option] → [tradeoff]` beats because it is surveying six options is a reference table rendered as prose. Its uniformity is what makes it scannable. The repeated-template rule fires when repetition is the shape of the *argument*, not when it is the shape of the *catalogue*.
-
 **Tables and code are intentionally parallel.** Do not vary a table row or a code sample to make it read as less mechanical. That is the same error as writing a worse table on purpose.
-
-**Reference-list labels are not restatement.** A fast scan sees the bold token and stops there, so a working index reads as the defect it is not. Run the restatement test against the sentence, never against the formatting.
 
 **Plan uniformity is control grammar, not template slop.** Milestone headings, status fields, task/proof/exit structure, Definitions of Done, and repeated gates are execution and recovery interfaces. Do not vary or delete them to make the plan feel less templated.
 
@@ -139,6 +148,7 @@ These exist because each rule above has a shape it misfires on. Check the guard 
 These outrank every style rule in this file. A more readable document that breaks one of them is a worse document.
 
 - **Never invent an incident, example, metric, quotation, or name.** Not for illustration, not to make a point land. This is the hardest rule to keep while editing for readability, because invented specifics always read better than missing ones.
+- **Never manufacture point of view or texture.** Preserve opinions, uncertainty, humour, irritation, and limitations when the source owns them; leave them out when it does not.
 - **An illustrative example must be labelled as illustrative.** A placeholder scenario that reads as a real event becomes evidence in the next reader's hands.
 - **Prefer a visible placeholder to a fabricated detail.** `[NEEDS REAL EXAMPLE]` blocks a release. A convincing invention does not, and ships.
 - **Never describe agent-written text as human-authored.** Editing prose so it reads well is legitimate. Claiming a person wrote it is not.
@@ -152,7 +162,7 @@ Cheap enough to run on a finished draft. On anything longer than a few paragraph
 2. **So-what ladder.** Chase each claim with "so what?" until the answer is something only this project could say. Stop when you hit it, or delete the claim.
 3. **Read it aloud.** Sentences that cannot be spoken in one breath, and sentences that all land the same way, both surface here and nowhere else.
 4. **Feelings check.** Is the sentence telling the reader how to feel about a fact? State the fact instead and let them feel what they feel.
-5. **Reader/action check.** Where relevant, does the artifact name the behaviour or decision, affected surface, consequence, evidence or uncertainty, required action, and observable completion condition? A decision record states the strongest case for a rejected option before saying why it lost.
+5. **Reader/action check.** Where relevant, does the artifact use the right register and name the behaviour or decision, affected surface, consequence, evidence or uncertainty, required action, and observable completion condition? A decision record states the strongest case for a rejected option before saying why it lost.
 6. **Colleague check.** For a reply to a person, would the exact sentence preserve the intended confidence and social meaning if sent to a colleague?
 
 For a substantial high-stakes plan, decision record, report, or release note, a fresh reader may check whether the decision, action, and uncertainty survive without drafting context. Do not add a reviewer or sub-agent solely for this check without existing authorization.
@@ -184,8 +194,8 @@ The revision removes the announcement, significance claim, and manufactured reas
 
 Walk this once against the actual draft. Do not mark an item clean from memory.
 
-1. Scope Gate and, when editing existing prose, source classification applied; no exempt surface was edited for style.
-2. Names, numbers, units, versions, flags, paths, and cited claims match their source of truth.
+1. Scope Gate, register, and, when editing existing prose, source classification applied; no exempt surface was edited for style.
+2. Names, numbers, units, versions, flags, paths, claim strength, attribution, and cited claims match their source of truth.
 3. Meaning is preserved: status, requirement level, uncertainty, and provenance did not change, and no planned check became passed.
 4. No leaked scaffolding, shipped placeholder, or broken dash spacing survives.
 5. No assistant-voice framing, announcement, manufactured engagement closer, or closing restatement remains.
@@ -194,7 +204,7 @@ Walk this once against the actual draft. Do not mark an item clean from memory.
 8. No content appears in more than one representation without a reason; process chronology survives only when causally relevant.
 9. Bolded bullets pass the restatement test, and each technical referent keeps one canonical name.
 10. Every example, metric, incident, and quotation is real, or is labelled illustrative.
-11. Known human-authored passages retain their voice; agent-written prose is not described as human-authored.
+11. Protected human-authored passages retain their voice; agent-written prose is not described as human-authored.
 12. The six Quick Tests pass at document level.
 
 If the gate passes, stop editing.

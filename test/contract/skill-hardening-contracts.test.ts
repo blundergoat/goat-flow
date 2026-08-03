@@ -3901,6 +3901,16 @@ describe("skill hardening contracts", () => {
       "workflow/skills/playbooks/writing-style.md",
       ".goat-flow/skill-docs/playbooks/writing-style.md",
     ]) {
+      const availability = readMarkdownSection(
+        playbookPath,
+        "Availability Check",
+      );
+      assert.match(
+        availability,
+        /review authorizes diagnosis, not an unrequested rewrite/u,
+        playbookPath,
+      );
+
       const scopeGate = readMarkdownSection(playbookPath, "Scope Gate");
       assert.match(
         scopeGate,
@@ -3918,6 +3928,11 @@ describe("skill hardening contracts", () => {
         playbookPath,
       );
       assert.match(scopeGate, /deliberate control repetition/u, playbookPath);
+      assert.match(
+        scopeGate,
+        /verified facts and safety[\s\S]+user's task, audience, and required meaning[\s\S]+project-documented style and supplied voice/u,
+        playbookPath,
+      );
 
       const correctnessGate = readMarkdownSection(
         playbookPath,
@@ -3938,6 +3953,16 @@ describe("skill hardening contracts", () => {
         /optional[^\n]+required[^\n]+planned or pending check[^\n]+passed check/u,
         playbookPath,
       );
+      assert.match(
+        correctnessGate,
+        /claim strength and specificity to the evidence/u,
+        playbookPath,
+      );
+      assert.match(
+        correctnessGate,
+        /named attribution to a specific inspectable point/u,
+        playbookPath,
+      );
 
       const sourceGate = readMarkdownSection(
         playbookPath,
@@ -3950,9 +3975,38 @@ describe("skill hardening contracts", () => {
       );
       assert.match(sourceGate, /lightest effective edit/u, playbookPath);
       assert.match(sourceGate, /Unknown provenance/u, playbookPath);
+      assert.match(sourceGate, /Protect strong human passages/u, playbookPath);
+      assert.match(
+        sourceGate,
+        /verified claims, not synonym substitutions/u,
+        playbookPath,
+      );
+
+      const register = readMarkdownSection(playbookPath, "Register");
+      assert.match(
+        register,
+        /Neutral and conventional are valid voices/u,
+        playbookPath,
+      );
+      assert.match(
+        register,
+        /Documentation and decisions[\s\S]+Reports and reviews[\s\S]+Release and changelog prose/u,
+        playbookPath,
+      );
+      assert.match(
+        register,
+        /correctness-and-residue-only surfaces whose social meaning must survive/u,
+        playbookPath,
+      );
 
       const fixOnSight = readMarkdownSection(playbookPath, "Fix on Sight");
       assert.match(fixOnSight, /verified meaning/u, playbookPath);
+      assert.match(
+        fixOnSight,
+        /diagnose reader cost, not authorship/u,
+        playbookPath,
+      );
+      assert.match(fixOnSight, /record the primary cost once/u, playbookPath);
       assert.match(fixOnSight, /Canonical terminology/u, playbookPath);
       assert.match(
         fixOnSight,
@@ -3964,6 +4018,16 @@ describe("skill hardening contracts", () => {
       const structure = readMarkdownSection(playbookPath, "Structure");
       assert.match(structure, /Process bleed/u, playbookPath);
       assert.match(structure, /Illustrative before/u, playbookPath);
+      assert.match(
+        structure,
+        /Catalogue-shaped repetition is exempt/u,
+        playbookPath,
+      );
+      assert.match(
+        structure,
+        /Reference-list labels remain valid/u,
+        playbookPath,
+      );
 
       const guards = readMarkdownSection(
         playbookPath,
@@ -3985,6 +4049,16 @@ describe("skill hardening contracts", () => {
         /status, requirement level, uncertainty, and provenance/u,
         playbookPath,
       );
+      assert.match(
+        verification,
+        /Scope Gate, register,[^\n]+source classification applied/u,
+        playbookPath,
+      );
+      assert.match(
+        verification,
+        /claim strength, attribution, and cited claims/u,
+        playbookPath,
+      );
     }
 
     for (const readmePath of [
@@ -3993,7 +4067,7 @@ describe("skill hardening contracts", () => {
     ]) {
       assert.match(
         readProjectFile(readmePath),
-        /writing-style\.md[^\n]+correctness and meaning preservation/u,
+        /writing-style\.md[^\n]+correctness and meaning preservation[^\n]+register- and source-aware editing/u,
         readmePath,
       );
     }
