@@ -115,24 +115,26 @@ last_reviewed: 2026-08-03
 
 ---
 
+## Resolved Entries
+
 ## Footgun: Zero-duration filesystem leases can look live at the clock boundary
 
-**Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
+**Status:** resolved | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Handle a zero-duration lease as an explicit immediate-expiry state instead of deriving it from wall-clock subtraction.
 **Trigger phase:** VERIFY
 
 **Symptoms:** Identical CI runs at the same commit disagree on `rejects an orphaned stale claim when its draft is already gone`. The failing run keeps the claim marker and produces no rejection receipt, while a parallel run passes. A local 10,000-sample probe observed 93 freshly written marker timestamps ahead of `Date.now()`, with the most negative delta at about -0.6 ms.
 
-**Why it happens:** `src/cli/server/quality-draft-claims.ts` (search: `function staleClaimSnapshot`) previously classified every lease with `Date.now() - snapshot.mtimeMs >= staleMs`. Node's clock is integer milliseconds, while filesystem modification times can retain fractional precision or be rounded ahead. For the test/recovery contract `staleMs: 0`, a just-created marker can therefore appear live even though zero means immediate expiry.
+**Why it happened:** `src/cli/server/quality-draft-claims.ts` (search: `function staleClaimSnapshot`) previously classified every lease with `Date.now() - snapshot.mtimeMs >= staleMs`. Node's clock is integer milliseconds, while filesystem modification times can retain fractional precision or be rounded ahead. For the test/recovery contract `staleMs: 0`, a just-created marker can therefore appear live even though zero means immediate expiry.
+
+**Resolved by:** `src/cli/server/quality-draft-claims.ts` (search: `if (staleMs <= 0) return snapshot`) now bypasses timestamp arithmetic for non-positive leases. `test/unit/quality-draft-orphan-recovery.test.ts` (search: `rejects an orphaned stale claim when its draft is already gone`) forces a future marker mtime and verifies immediate expiry.
 
 **Safe handling now:**
 1. Treat non-positive lease durations as immediate expiry before doing timestamp arithmetic; keep positive leases on the normal age comparison.
-2. Make the boundary deterministic in `test/unit/quality-draft-orphan-recovery.test.ts` (search: `rejects an orphaned stale claim when its draft is already gone`) by setting the marker mtime ahead of the process clock.
+2. Keep the deterministic future-mtime regression so clock precision cannot make the test intermittent again.
 3. When testing time boundaries, force the boundary condition rather than depending on scheduler delay or filesystem timestamp rounding to reproduce it.
 
 ---
-
-## Resolved Entries
 
 ## Footgun: Structured Actual cannot represent uninstrumented time
 
