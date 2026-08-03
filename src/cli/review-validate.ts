@@ -237,6 +237,26 @@ const REFUTER_VALUE =
   /^(?:yes|no|skipped);\s*confirmed=\d+,\s*refuted=\d+,\s*unresolved=\d+,\s*leads-verified=\d+,\s*model=\S.+$/u;
 const COMPACT_INTEGRITY =
   /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*no degradation flags;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+const COMPACT_CLEAN_REVIEW_FIELDS = [
+  {
+    label: "Scope",
+    prefix: /^\s*Scope:/u,
+    value: /^\s*Scope:\s*\S.*$/u,
+    requirement: "must not be empty",
+  },
+  {
+    label: "Zero findings",
+    prefix: /^\s*Zero findings:/u,
+    value: /^\s*Zero findings:\s*\S.*;\s*\S.*$/u,
+    requirement: "must name checks and the evidence that disproved suspicions",
+  },
+  {
+    label: "What I Didn't Examine",
+    prefix: /^\s*What I Didn't Examine:/u,
+    value: /^\s*What I Didn't Examine:\s*\S.*$/u,
+    requirement: "must name an unexamined surface or state none",
+  },
+] as const;
 
 const FULL_SHIP_VERDICT =
   /^\s*Decision:\s*\*\*(YES|YES WITH CONDITIONS|PARTIAL|NO|PENDING REFUTER\/HUMAN|N\/A - AREA AUDIT ONLY)\*\*\s*$/u;
@@ -1139,37 +1159,71 @@ function validateFullIntegrity(
   };
 }
 
-/** Validate either the full integrity block or M04's compact clean-review line. */
-function validateIntegrity(
+/** Require one visible, non-empty copy of each disclosure surrounding a compact receipt. */
+function validateCompactCleanReviewFields(
+  lines: string[],
+  violations: ReviewValidationViolation[],
+): void {
+  for (const field of COMPACT_CLEAN_REVIEW_FIELDS) {
+    const matches = lines
+      .map((text, lineIndex) => ({ line: lineIndex + 1, text }))
+      .filter(({ text }) => field.prefix.test(text));
+    const first = matches.at(0);
+    if (!first) {
+      addViolation(
+        violations,
+        "integrity-format",
+        null,
+        `compact clean review is missing ${field.label}`,
+      );
+      continue;
+    }
+    if (!field.value.test(first.text)) {
+      addViolation(
+        violations,
+        "integrity-format",
+        first.line,
+        `compact ${field.label} ${field.requirement}`,
+      );
+    }
+    for (const duplicate of matches.slice(1)) {
+      addViolation(
+        violations,
+        "integrity-field-duplicate",
+        duplicate.line,
+        `compact ${field.label} duplicates the field at line ${first.line}`,
+      );
+    }
+  }
+}
+
+/** Validate M04's compact clean-review receipt and its surrounding disclosures. */
+function validateCompactIntegrity(
   lines: string[],
   findingCandidateCount: number,
   violations: ReviewValidationViolation[],
-  warnings: ReviewValidationViolation[],
 ): IntegrityResult {
-  const fullSections = readSections(lines, "Review Integrity");
-  const fullSection = fullSections.at(0);
-  // A full receipt is authoritative whenever the user includes its H2 section.
-  if (fullSection) {
-    // Repeated receipts would let a report present conflicting validation state.
-    for (const duplicate of fullSections.slice(1)) {
-      addViolation(
-        violations,
-        "integrity-section-duplicate",
-        duplicate.headingLine,
-        `Review Integrity duplicates the section at line ${fullSection.headingLine}`,
-      );
-    }
-    return validateFullIntegrity(fullSection, violations, warnings);
-  }
-
-  const compactIndex = lines.findIndex((line) =>
-    /^\s*Review Integrity:/u.test(line),
-  );
+  const compactIntegrityLines = lines
+    .map((text, lineIndex) => ({ line: lineIndex + 1, text }))
+    .filter(({ text }) => /^\s*Review Integrity:/u.test(text));
+  const compactIntegrityLine = compactIntegrityLines.at(0);
+  const compactIndex = compactIntegrityLine
+    ? compactIntegrityLine.line - 1
+    : -1;
   const compactIntegrityMatch = (lines[compactIndex] ?? "").match(
     COMPACT_INTEGRITY,
   );
   // Zero-finding reviews may use the shorter user-facing integrity line.
   if (compactIndex >= 0 && compactIntegrityMatch) {
+    for (const duplicate of compactIntegrityLines.slice(1)) {
+      addViolation(
+        violations,
+        "integrity-field-duplicate",
+        duplicate.line,
+        `compact Review Integrity duplicates the field at line ${compactIndex + 1}`,
+      );
+    }
+    validateCompactCleanReviewFields(lines, violations);
     // A compact receipt cannot account for visible finding evidence or verdict totals.
     if (findingCandidateCount > 0) {
       addViolation(
@@ -1215,6 +1269,31 @@ function validateIntegrity(
     isAreaAudit: false,
     verdictCounts: null,
   };
+}
+
+/** Validate either the full integrity block or M04's compact clean-review line. */
+function validateIntegrity(
+  lines: string[],
+  findingCandidateCount: number,
+  violations: ReviewValidationViolation[],
+  warnings: ReviewValidationViolation[],
+): IntegrityResult {
+  const fullSections = readSections(lines, "Review Integrity");
+  const fullSection = fullSections.at(0);
+  // A full receipt is authoritative whenever the user includes its H2 section.
+  if (fullSection) {
+    // Repeated receipts would let a report present conflicting validation state.
+    for (const duplicate of fullSections.slice(1)) {
+      addViolation(
+        violations,
+        "integrity-section-duplicate",
+        duplicate.headingLine,
+        `Review Integrity duplicates the section at line ${fullSection.headingLine}`,
+      );
+    }
+    return validateFullIntegrity(fullSection, violations, warnings);
+  }
+  return validateCompactIntegrity(lines, findingCandidateCount, violations);
 }
 
 /** Validate the ledger marker used when no refutations were logged. */

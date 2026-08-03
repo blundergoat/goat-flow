@@ -5,21 +5,28 @@
  * Use this module wherever a mismatch drives user-facing remediation or a file write.
  */
 
-/** Parse a dotted version into numeric segments; unparseable segments become 0 so malformed input never throws. */
-function segments(version: string): number[] {
-  return version
-    .trim()
-    .split(".")
-    .map((part) => {
-      const parsed = Number.parseInt(part, 10);
-      return Number.isNaN(parsed) ? 0 : parsed;
-    });
+const RELEASE_VERSION = /^\d+\.\d+\.\d+$/u;
+
+/** Return whether a value is one plain numeric `X.Y.Z` goat-flow release. */
+export function isReleaseVersion(version: string): boolean {
+  return RELEASE_VERSION.test(version);
+}
+
+/** Parse one validated release into its three numeric segments. */
+function segments(version: string): [number, number, number] {
+  if (!isReleaseVersion(version)) {
+    throw new TypeError(
+      `version must use numeric X.Y.Z release format: ${JSON.stringify(version)}`,
+    );
+  }
+  const [major, minor, patch] = version.split(".");
+  return [Number(major), Number(minor), Number(patch)];
 }
 
 /**
- * Compare two dotted versions segment by segment.
- * Missing trailing segments count as 0, so `1.15` and `1.15.0` compare equal.
- * Pre-release and build metadata are not interpreted; goat-flow ships plain `X.Y.Z` releases.
+ * Compare two validated dotted releases segment by segment.
+ * Pre-release, build metadata, shortened versions, and malformed segments are rejected;
+ * goat-flow ships plain `X.Y.Z` releases.
  *
  * @param a - left version, typically the project's recorded version
  * @param b - right version, typically the running CLI's version
@@ -48,5 +55,8 @@ export function projectIsAheadOfCli(
   installedVersion: string,
   cliVersion: string,
 ): boolean {
+  if (!isReleaseVersion(installedVersion) || !isReleaseVersion(cliVersion)) {
+    return false;
+  }
   return compareVersions(installedVersion, cliVersion) > 0;
 }

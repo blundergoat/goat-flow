@@ -218,6 +218,67 @@ What I Didn't Examine: none.
     assert.deepEqual(validateReviewReport(compact, projectRoot).violations, []);
   });
 
+  it("requires the compact clean-review disclosures", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const result = validateReviewReport(
+      `Ship Verdict: **YES** - no blocking finding survived Pass 2.
+Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
+`,
+      projectRoot,
+    );
+    const messages = result.violations.map((violation) => violation.message);
+
+    assert.equal(result.status, "fail");
+    for (const label of ["Scope", "Zero findings", "What I Didn't Examine"]) {
+      assert.equal(
+        messages.includes(`compact clean review is missing ${label}`),
+        true,
+        JSON.stringify(messages),
+      );
+    }
+  });
+
+  it("rejects empty, undefended, or repeated compact disclosures", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const compact = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
+Ship Verdict: **YES** - no blocking finding survived Pass 2.
+Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
+Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
+What I Didn't Examine: none.
+`;
+    const emptyDisclosure = validateReviewReport(
+      compact.replace(
+        "What I Didn't Examine: none.",
+        "What I Didn't Examine:   ",
+      ),
+      projectRoot,
+    );
+    const undefendedZeroFindings = validateReviewReport(
+      compact.replace(
+        "Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.",
+        "Zero findings: checked boundary conditions.",
+      ),
+      projectRoot,
+    );
+    const duplicateIntegrity = validateReviewReport(
+      compact.replace(
+        "Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.",
+        "Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.\nReview Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.",
+      ),
+      projectRoot,
+    );
+
+    assert.equal(hasViolation(emptyDisclosure, "integrity-format"), true);
+    assert.equal(
+      hasViolation(undefendedZeroFindings, "integrity-format"),
+      true,
+    );
+    assert.equal(
+      hasViolation(duplicateIntegrity, "integrity-field-duplicate"),
+      true,
+    );
+  });
+
   it("keeps proof fields after an escaped HTML comment opener", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = `Checked the visible literal \\<!-- token.

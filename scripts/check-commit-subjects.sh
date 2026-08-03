@@ -32,24 +32,19 @@ if ! git merge-base --is-ancestor "$GRANDFATHER_BASE" HEAD 2>/dev/null; then
     exit 0
 fi
 
-# --no-merges: merge subjects ("Merge pull request #56 from ...") are generated
-# by the forge, not authored against this standard. Gating them would produce
-# false failures on every merge and get the whole check switched off.
-mapfile -t commits < <(git rev-list --no-merges "$GRANDFATHER_BASE..HEAD")
-
-if [[ ${#commits[@]} -eq 0 ]]; then
-    echo "PASS: no commits after baseline to check"
-    exit 0
-fi
-
 violations=0
+checked=0
 
 report() {
     printf '  %s: %s\n' "$1" "$2"
     violations=$((violations + 1))
 }
 
-for sha in "${commits[@]}"; do
+# --no-merges: merge subjects ("Merge pull request #56 from ...") are generated
+# by the forge, not authored against this standard. Process substitution keeps
+# counters in this shell and works on stock macOS Bash 3.2, unlike `mapfile`.
+while IFS= read -r sha; do
+    checked=$((checked + 1))
     subject=$(git log -1 --format='%s' "$sha")
     short="${sha:0:8}"
 
@@ -81,9 +76,12 @@ for sha in "${commits[@]}"; do
     if printf '%s' "$body_text" | grep -qiE "^($WEAK_VERBS)\b"; then
         report "$short" "subject leads with a weak verb - name the observable change: $subject"
     fi
-done
+done < <(git rev-list --no-merges "$GRANDFATHER_BASE..HEAD")
 
-checked=${#commits[@]}
+if [[ "$checked" -eq 0 ]]; then
+    echo "PASS: no commits after baseline to check"
+    exit 0
+fi
 
 if [[ "$violations" -gt 0 ]]; then
     echo "FAIL: $violations commit-subject violation(s) across $checked commit(s) after $GRANDFATHER_BASE"

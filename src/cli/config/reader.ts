@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { load } from "js-yaml";
 import type { ReadonlyFS } from "../types.js";
 import { AUDIT_VERSION } from "../constants.js";
+import { isReleaseVersion } from "../version-compare.js";
 import type {
   GoatFlowConfig,
   LearningLoopAutoCaptureTarget,
@@ -598,9 +599,13 @@ function validateVersionField(
   _warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  // Missing version is fine; a present value must be printable.
-  if ("version" in raw && typeof raw.version !== "string") {
-    pushError(errors, "version", "must be a string");
+  // Missing version is fine; a present value must name one published release shape.
+  if ("version" in raw) {
+    if (typeof raw.version !== "string") {
+      pushError(errors, "version", "must be a string");
+    } else if (!isReleaseVersion(raw.version)) {
+      pushError(errors, "version", "must use numeric X.Y.Z release format");
+    }
   }
 }
 
