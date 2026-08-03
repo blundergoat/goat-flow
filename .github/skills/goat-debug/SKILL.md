@@ -54,7 +54,7 @@ Read `references/diagnostic-techniques.md` only when a diagnosis needs mutation 
 
 After reading the primary file, declare a scope snapshot: symptom boundary (what is failing), affected components (files/modules/services involved), read estimate, and decision-relevant source/runtime/configuration state. Record material drift without persisting secrets or raw sensitive values.
 
-Write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, Configuration. If the bug involves loops, indices, or pagination, include a boundary/counting hypothesis. After tracing, mark each: CONFIRMED / ELIMINATED / UNRESOLVED with `file + semantic anchor` evidence.
+Write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, Configuration. If the bug involves loops, indices, or pagination, include a boundary/counting hypothesis. After tracing, mark each: CONFIRMED / ADJUSTED / ELIMINATED / UNRESOLVED with `file + semantic anchor` evidence.
 
 **Multi-component failures** (CI → build → deploy, request → middleware → handler → DB, etc.): inspect existing evidence boundary by boundary. Record input, output, and the broken invariant, then investigate the failing component. If new instrumentation is needed, apply the diagnostic-experiment authority below before modifying anything.
 
@@ -122,7 +122,7 @@ Rerun the **original, unminimized reproduction** from D2 - a code change is not 
 Every diagnose-mode report ends with this section. It tells the reader how much of the investigation is grounded.
 
 - **Files read:** count
-- **Hypotheses tested:** count (CONFIRMED + ELIMINATED + UNRESOLVED)
+- **Hypotheses tested:** count (CONFIRMED + ADJUSTED + ELIMINATED + UNRESOLVED)
 - **Categories covered:** which of Data/Logic/Timing/Environment/Configuration were tested
 - **Reproduction attempted:** yes / no / partial
 - **Evidence states:** OBSERVED (literal result) / INFERRED (reasoned link) / UNVERIFIED (not executed) / HUMAN-PENDING: specific human-owned check
@@ -186,7 +186,7 @@ Keep Quick output compact. Omit D3, D4, UI, and diagnostic-mutation fields when 
 ## UI Evidence  <!-- optional: only when browser evidence was captured -->
 ## Debug Integrity
 - Files read: [N]
-- Hypotheses tested: [N] (CONFIRMED: [n] / ELIMINATED: [n] / UNRESOLVED: [n])
+- Hypotheses tested: [N] (CONFIRMED: [n] / ADJUSTED: [n] / ELIMINATED: [n] / UNRESOLVED: [n])
 - Categories covered: [list]
 - Reproduction attempted: [yes/no/partial]
 - Evidence states: OBSERVED=[n] / INFERRED=[n] / UNVERIFIED=[n] / HUMAN-PENDING=[n]

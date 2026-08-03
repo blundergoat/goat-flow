@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-04
 ---
 
 **Scope:** Hook runtime delivery, Stop-scanner behavior, execution performance, and resolved hook history. Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -79,28 +79,30 @@ last_reviewed: 2026-08-03
 4. Benchmark hooks on Windows Git Bash, not only Linux. A Linux-only benchmark hides this entire class of defect.
 5. Give any bounded-time hook its own wall-clock budget that reports an explicit incomplete-scan message and a non-zero exit, and register a runner timeout above that budget. Silent truncation by the harness must not be reachable.
 
-## Footgun: deny-dangerous re-parses the same command string on every policy check
+## Footgun: Policy modules must share one prepared command context
 
 **Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Whether adding another policy check to the PreToolUse dispatcher is free - it is not; each check that re-tokenises the command adds measurable latency to every Bash call the agent makes.
+**Decision changed:** Whether each PreToolUse policy module may prepare its own segment context - it may not; preparation belongs to the dispatcher and adding a policy must not multiply parsing work.
 **Trigger phase:** ACT
 
-**Symptoms:** Every Bash tool call carries a visible pause before the command runs, scaling with command complexity rather than with anything about the repository, and applying to benign read-only commands.
+**Symptoms:** Every Bash tool call carries a visible pause before the command runs, scaling with command complexity and the number of policy modules rather than with anything about the repository. The regression signature is more than one `prepare_segment_context` trace for a simple command, or a policy module calling that function directly.
 
-**Why it happens:** The dispatcher runs on every Bash PreToolUse. Its policy checks each independently call the shared tokenisers (`split_shell_words_into`, `normalize_command_candidate`, `normalize_leading_command_word`), which walk the command one character at a time, so the same input is re-tokenised many times per invocation. The dominant term is NOT established - see the failed fix.
+**Why it happens:** The dispatcher runs on every Bash PreToolUse. When its policy checks independently call `prepare_segment_context`, the shared tokenisers (`split_shell_words_into`, `normalize_command_candidate`, `normalize_leading_command_word`) walk the same command again for each policy. The dominant term is NOT established - see the failed fix.
 
 **Evidence:**
 - 2026-08-01, Windows 11 Git Bash, interleaved A/B, 30 invocations per cell: **272ms** per call for `--check='npm run typecheck'`, **309ms** for a four-stage pipeline, **652ms** for the JSON-stdin path (adds `jq`). Bare `bash empty.sh` is ~50ms.
 - Only 6 external processes run per invocation (3 `jq`, 1 `git`, 1 `dirname`, 1 `cat`), against ~1,959 traced bash operations for a simple command and ~5,329 for a pipeline.
 - One `$(fn)` costs ~12.5ms here and does NOT scale with script size (retested with 400 extra functions and a 200KB exported variable in the process).
-- Anchors: `workflow/hooks/deny-dangerous.sh` (search: `normalize_command_candidate`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `normalize_command_candidate`), which re-derives the normalized candidate per check.
+- 2026-08-04 Linux interleaved A/B, 30 invocations per cell: hoisting preparation from three policy calls to one reduced the simple-command median from **39.08ms to 30.99ms** and the four-stage-pipeline median from **102.62ms to 93.12ms**. A 15-case byte-exact verdict comparison reported 0 mismatches, and both installed and workflow full corpora passed 327/327.
+- Current anchor: `workflow/hooks/deny-dangerous.sh` (search: `Parse once per segment`). A `bash -x` trace for `npm run typecheck` records one `prepare_segment_context` call; the pre-fix checkout records three.
 
 **Failed fix, do not repeat without new evidence:** Converting the hot tokenisers (`normalize_command_candidate`, `normalize_leading_command_word`, `first_word_base`, `drop_first_shell_word`) to fork-free `_into` forms returning through globals, plus memoizing `normalize_command_candidate`, **made the hook slower**: 272→392ms simple, 309→729ms pipeline, 652→751ms JSON, while executing ~3.3x MORE traced operations (simple 1,959→6,428). Verdicts stayed correct (272-case byte-exact corpus identical, `--self-test=full` 319/319), so it was a pure performance regression and was reverted. The cause of the 3.3x increase was not identified.
 
 **Prevention:**
 1. Measure with an INTERLEAVED A/B (alternate old/new per round). A sequential "all old, then all new" run is unreliable: the first run pays cold filesystem and git cache costs, which produced a false 2x "improvement" for a build that was actually 2x slower.
 2. Do not assume a `$( )` count predicts wall clock. Substitutions actually executed per invocation are far fewer than a count of traced lines mentioning a function name suggests.
-3. This is security-critical parsing: any restructuring needs `--self-test=full` green plus a byte-exact verdict corpus before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
+3. Prepare segment context once in `check_segment`; policy modules consume the shared `CMD_*` and `HAS_*` values. A new module must not call `prepare_segment_context` itself.
+4. This is security-critical parsing: any restructuring needs `--self-test=full` green plus a byte-exact verdict corpus before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
 
 ## Resolved Entries
 

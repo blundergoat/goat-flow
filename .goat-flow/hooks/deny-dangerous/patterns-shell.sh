@@ -520,8 +520,6 @@ check_pipeline_xargs_destructive_payloads() {
 
 check_destructive_segment() {
   local cmd="$1"
-  local depth="${2:-0}"
-  prepare_segment_context "$cmd" "$depth" || return $?
   cmd="$CMD_TRIMMED"
 
   if [[ "$HAS_PIPE" -eq 1 ]]; then

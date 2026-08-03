@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-04
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -152,7 +152,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Repeat incident 2026-07-13:** While building an ignored rollback patch, `: >` and `truncate -s 0` were both blocked as destructive truncation. After two blocked variants, the workflow rewound: verify the destination is absent, create it from the first `diff`, then append later diffs. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the shipped guard that produced the block.
 
-**Recurrence update 2026-07-16:** A read-only source search embedded a destructive-command literal in the search expression, so the deny hook rejected the entire command before `rg` ran. The corrected search used semantic terms such as `destructive` and `truncate` instead of replaying an executable-looking command. Evidence: `.goat-flow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the matching guard; this entry (search: `When deny hook blocks a command, use the unblocked equivalent`) records the recovery.
+**Recurrence update 2026-07-16:** A read-only source search embedded a destructive-command literal in the search expression, so the deny hook rejected the entire command before `rg` ran. The corrected search used semantic terms such as `destructive` and `truncate` instead of replaying an executable-looking command. Evidence: `.goat-flow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the matching guard; `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `When deny hook blocks a command, use the unblocked equivalent`) records the recovery.
 
 **Recurrence 2026-07-19:** A `node -e` dry-run summarizer embedded `child_process`, so the hook blocked it before execution. Piping the direct CLI output to `jq` produced the same assertion without a shell-execution wrapper. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 

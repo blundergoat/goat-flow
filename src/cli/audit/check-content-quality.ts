@@ -21,6 +21,7 @@ import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
 import { getSkillNames } from "../constants.js";
 import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
+import { evaluateSearchAnchors } from "../facts/shared/learning-loop-common.js";
 import { STANDALONE_PLAYBOOK_FILES } from "./skill-docs-contract.js";
 
 /**
@@ -267,9 +268,85 @@ function shouldScanStaleSkillPlaybooksPath(path: string): boolean {
   return !HISTORICAL_REFERENCE_DIRS.some((dir) => path.startsWith(dir));
 }
 
-/** One iteration of code-block state: toggled on fence lines, guards all matchers. */
-function isFenceLine(line: string): boolean {
-  return /^\s*```/.test(line);
+/** Markdown fence character, used to close only the delimiter that opened. */
+function fenceCharacter(line: string): "`" | "~" | null {
+  const match = /^\s*(`{3,}|~{3,})/.exec(line);
+  if (!match?.[1]) return null;
+  return match[1][0] as "`" | "~";
+}
+
+interface MarkdownFenceState {
+  active: "`" | "~" | null;
+  isFenceLine: boolean;
+}
+
+/** Advance fenced-block state while keeping unlike fence characters nested. */
+function advanceFenceState(
+  line: string,
+  active: "`" | "~" | null,
+): MarkdownFenceState {
+  const fence = fenceCharacter(line);
+  if (fence === null) return { active, isFenceLine: false };
+  if (active === null) return { active: fence, isFenceLine: true };
+  if (active === fence) return { active: null, isFenceLine: true };
+  return { active, isFenceLine: true };
+}
+
+/** Headings that explicitly advertise unanswered readiness work. */
+const READINESS_SECTION_HEADING =
+  /\b(?:open|pending|unresolved)\s+(?:questions?|issues?)\b/i;
+
+/** Track whether the current Markdown position belongs to a readiness section. */
+function nextReadinessHeadingLevel(
+  line: string,
+  currentLevel: number | null,
+): number | null {
+  const headingMatch = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+  if (!headingMatch?.[1] || headingMatch[2] === undefined) {
+    return currentLevel;
+  }
+  const headingLevel = headingMatch[1].length;
+  if (READINESS_SECTION_HEADING.test(headingMatch[2])) return headingLevel;
+  if (currentLevel !== null && headingLevel <= currentLevel) return null;
+  return currentLevel;
+}
+
+/** Return the unresolved marker carried by one readiness-section line. */
+function unresolvedContentMarker(line: string): string | null {
+  const todoMarker = /\b(?:TBD|TODO)\b/i.exec(line);
+  if (todoMarker) return todoMarker[0];
+  if (line.includes("???")) return "???";
+
+  const normalized = line
+    .trim()
+    .replace(/^[-*+]\s+/, "")
+    .replace(/^\|\s*/, "")
+    .replace(/\s*\|$/, "")
+    .trim();
+  if (/^(?:\*\*)?Answer(?:\*\*)?\s*:\s*$/i.test(normalized)) {
+    return "empty Answer:";
+  }
+  return null;
+}
+
+/** Add one blocking content finding for a marker inside a readiness section. */
+function applyUnresolvedContentMarker(
+  line: string,
+  lineNumber: number,
+  path: string,
+  findings: ContentFinding[],
+): void {
+  const marker = unresolvedContentMarker(line);
+  if (marker === null) return;
+  findings.push({
+    severity: "warning",
+    rule: "unresolved-content-marker",
+    path,
+    line: lineNumber,
+    message: `Unresolved readiness marker "${marker}" remains in an open, pending, or unresolved questions section.`,
+    suggestion:
+      "Answer the question, remove the marker, or move genuine implementation work to the task tracker.",
+  });
 }
 
 /** Detect a Markdown table separator row, e.g. `| --- | :---: | ---: |`.
@@ -368,20 +445,57 @@ export function scanContentQuality(
 ): ContentFinding[] {
   const findings: ContentFinding[] = [];
   const lines = text.split(/\r?\n/);
-  let inCodeBlock = false;
+  let activeFence: "`" | "~" | null = null;
+  let readinessHeadingLevel: number | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
-    if (isFenceLine(line)) {
-      inCodeBlock = !inCodeBlock;
-      continue;
-    }
-    if (inCodeBlock) continue;
+    const fenceState = advanceFenceState(line, activeFence);
+    activeFence = fenceState.active;
+    if (fenceState.isFenceLine) continue;
+    if (activeFence !== null) continue;
+    readinessHeadingLevel = nextReadinessHeadingLevel(
+      line,
+      readinessHeadingLevel,
+    );
     if (line.includes("|") && isTableSeparatorLine(lines[i + 1] ?? "")) {
       continue;
     }
     scanLine(line, i + 1, path, findings, mode);
+    if (readinessHeadingLevel !== null) {
+      applyUnresolvedContentMarker(line, i + 1, path, findings);
+    }
   }
   return findings;
+}
+
+/**
+ * Find moved literal anchors on current guidance surfaces.
+ *
+ * Missing files remain owned by path-integrity checks. Existing targets with
+ * missing needles are unambiguous drift, including accepted ADR evidence: a
+ * historical decision still needs a grep-resolvable pointer to its live proof.
+ */
+function scanSemanticAnchorQuality(
+  ctx: AuditContext,
+  path: string,
+  text: string,
+): ContentFinding[] {
+  return evaluateSearchAnchors(ctx.fs, text, {
+    ignoreMissingFiles: true,
+  })
+    .filter(
+      (evaluation) =>
+        evaluation.status === "stale" && evaluation.reason === "missing-needle",
+    )
+    .map((evaluation) => ({
+      severity: "warning" as const,
+      rule: "stale-semantic-anchor",
+      path,
+      line: evaluation.line,
+      message: `Semantic anchor "${evaluation.needle}" no longer appears in ${evaluation.filePath}.`,
+      suggestion:
+        "Update the cited path or literal needle to a current grep-resolvable anchor.",
+    }));
 }
 
 /**
@@ -457,6 +571,7 @@ export function runContentQualityChecks(ctx: AuditContext): {
     if (text === null) continue;
     filesScanned++;
     findings.push(...scanContentQuality(rel, text, "full"));
+    findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
   }
   for (const dir of LEARNING_LOOP_DIRS) {
     for (const rel of listBucketMarkdown(ctx, dir)) {
@@ -464,6 +579,7 @@ export function runContentQualityChecks(ctx: AuditContext): {
       if (text === null) continue;
       filesScanned++;
       findings.push(...scanContentQuality(rel, text, "restricted"));
+      findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
     }
   }
   return { findings, filesScanned };

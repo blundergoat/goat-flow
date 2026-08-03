@@ -1,6 +1,6 @@
 ---
 category: deny-shell
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-04
 ---
 
 Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
@@ -15,7 +15,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 
 **Why it happens:** `split_command_segments_into` split on `&&`/`||`/`;`/newline tracking quotes but not parenthesis depth, so an operator inside an unquoted `$( ... )` split it across segments, leaving an orphan `$(` that `check_command_substitutions`' residual catch-all blocked. The catch-all is correct; the orphan was manufactured upstream, so the reported "catch-all too broad" lead was a downstream symptom. Arithmetic `$(( ))` was unrecognised by the `$( )`-only scanner; for `.env.example`, any `HAS_REDIRECT` (incl. `2>&1`) counted as a write.
 
-**Evidence:** `workflow/hooks/deny-dangerous.sh` (search: `Command/process substitution openers`) tracks `subst_depth` for `$(` `<(` `>(` (plain `(...)` stays splittable so `(cmd && rm -rf /)` cannot bypass); (search: `pure arithmetic; mask it`); (search: `chain-count cap at nested depths`). `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`). Self-test (search: `unquoted subst with || fallback`), (search: `rm behind || inside subst`). (That redirect-write matcher was removed 2026-07-18; `.env.example` writes are now allowed.)
+**Evidence:** `workflow/hooks/deny-dangerous.sh` (search: `Command/process substitution openers`) tracks `subst_depth` for `$(` `<(` `>(` (plain `(...)` stays splittable so `(cmd && rm -rf /)` cannot bypass) and enforces the (search: `chain-count cap at nested depths`). `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `arithmetic expansion`) covers `$(( ))`. `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`). The self-test also covers `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`) and (search: `rm behind || inside subst`). (That redirect-write matcher was removed 2026-07-18; `.env.example` writes are now allowed.)
 
 **Prevention:**
 1. A tokenizer splitting shell control operators MUST respect `$(`/`<(`/`>(` boundaries; quotes alone are insufficient, and plain `(...)` subshells must stay splittable (nothing recurses into them).

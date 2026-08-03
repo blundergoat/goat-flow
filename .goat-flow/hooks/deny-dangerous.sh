@@ -2135,7 +2135,10 @@ check_segment() {
   local depth="${2:-0}"
   local previous_scope="${GOAT_ACTIVE_GUARD_SCOPE-}"
 
+  # Parse once per segment. Every policy module below consumes the same
+  # CMD_* and HAS_* context; reparsing here would add policy-count latency.
   GOAT_ACTIVE_GUARD_SCOPE="destructive"
+  prepare_segment_context "$cmd" "$depth" || return $?
   check_destructive_segment "$cmd" "$depth" || return $?
   GOAT_ACTIVE_GUARD_SCOPE="secret"
   check_secret_segment "$cmd" "$depth" || return $?

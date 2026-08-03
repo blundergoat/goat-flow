@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-04
 ---
 
 ## Lesson: Packaged install smoke is not a completed setup audit
@@ -56,7 +56,7 @@ last_reviewed: 2026-08-03
 
 **What happened:** Both rampart and sus-form-detector agents dropped Sub-Agent Objectives (f) and Communication When Blocked (g) when compressing CLAUDE.md toward the line target. In the historical setup prompt flow, the instructions said "Do NOT skip sections (f)-(i)" in Prompt B, but Prompt A (used for new projects) didn't have this warning. That old setup-prompt path no longer exists; current per-agent setup guidance lives under `workflow/setup/agents/`.
 
-**Prevention:** Every constraint that agents are likely to cut under pressure must appear in both the shared template (`workflow/setup/reference/execution-loop.md` (search: `Target: under 125 lines. Hard limit: 150.`)) and the current per-agent setup guide under `workflow/setup/agents/` (search: `configured line target and hard limit`). A rule in only one place is a rule that gets missed.
+**Prevention:** Every constraint that agents are likely to cut under pressure must appear in the shared template (`workflow/setup/reference/execution-loop.md` (search: `Target: under 125 lines. Hard limit: 150.`)) and, where an agent guide owns the same limit, in that guide: `workflow/setup/agents/claude.md` (search: `125-line target and 150-line hard limit`) and `workflow/setup/agents/copilot.md` (search: `150-line hard limit and 125-line target`). A rule in only one applicable place is a rule that gets missed.
 
 ---
 

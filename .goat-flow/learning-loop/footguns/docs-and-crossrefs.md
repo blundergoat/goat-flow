@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-04
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -17,6 +17,8 @@ last_reviewed: 2026-08-03
 
 **Recurrence update (2026-08-01):** Same script, opposite direction. `scripts/check-path-integrity.sh` section 8 resolved a `docs/*.md` ref by finding its basename anywhere under the repo, pruning only `node_modules`, `.git`, and `dist` - so untracked trees *satisfied* refs instead of failing them: worktree and scratchpad copies of the renamed commit guide resolved `docs/coding-standards/git-commit.md`, and `.goat-flow/plans/*/ISSUE.md` resolved `ISSUE.md`. It passed on every developer machine and failed only on CI's tracked-only checkout, inside PR #57's installer round-trip preflight. Section 8 now prunes `.claude/worktrees`, `.goat-flow/plans`, `.goat-flow/scratchpad`, and `.goat-flow/logs` from that fallback, and exempts the two refs absent by design: the `/goat-plan` `ISSUE.md` artifact and the ADR-043 compatibility commit-guide path. `test/integration/path-integrity.test.ts` (search: `docs cross-references`) covers both directions. A basename fallback is only as trustworthy as the tree it searches.
 
+**Recurrence update (2026-08-04):** `evaluateSearchAnchors` initially called `isCheckableForStaleness` before classifying gitignored evidence, making that violation branch unreachable. `test/unit/learning-loop.test.ts` (search: `flags a gitignored plans path used as a search anchor even when the file exists`) caught it. Classify exceptional policy paths before generic skip predicates.
+
 ---
 
 ## Footgun: Playbooks reference goat-flow repo-internal files absent from consumer installs
@@ -27,7 +29,7 @@ last_reviewed: 2026-08-03
 
 **Why it happens:** Playbooks are dual-purpose - goat-flow's own working docs AND shipped artifacts installed into consumer projects. Anything that resolves in this repo but is not installed becomes a dead reference downstream. Only sibling playbooks (`observability.md`, `code-comments.md`) and the consumer's own instruction files (`CLAUDE.md` / `AGENTS.md` / `.github/copilot-instructions.md`) are present in both contexts. `check-drift.ts` enforces template-vs-installed byte parity but does NOT catch this: a repo-internal reference drifts identically in both copies and passes drift.
 
-**Evidence:** 2026-05-29 portability pass on `workflow/skills/playbooks/code-comments.md` (search: `Related References`) removed an ADR-024 pointer, `check-drift.ts`/`check-goat-flow.ts` source refs, `DESIGN_TARGET` jargon, and a "conventional-comments.md (when it exists)" entry. `workflow/skills/playbooks/gruff-code-quality.md` (search: `Related References`) had the same class: `.goat-flow/learning-loop/patterns|lessons|footguns` Related-References, a goat-flow-only `node --import tsx src/cli/cli.ts stats --check` gate, and a repo-historical `contract:` marker scan - all genericized or removed. 2026-06-05 ship-readiness pass: `browser-use.md` and `page-capture.md` (search: `browser-use-python` wrapper) plus `goat-debug` SKILL.md (search: `Browser evidence detection`) offered `scripts/install-browser-tools.sh` as an install path, but that script lives only at top-level `scripts/` and is in neither the manifest nor `workflow/`; all three were switched to the portable `pip install browser-use` / `pip install playwright` commands.
+**Evidence:** The 2026-05-29 pass removed repo-only pointers from `workflow/skills/playbooks/code-comments.md` (search: `Related References`) and `workflow/skills/playbooks/gruff-code-quality.md` (search: `Related References`). On 2026-06-05, `workflow/skills/playbooks/browser-use.md` (search: `browser-use-python`), `workflow/skills/playbooks/page-capture.md` (search: `browser-use-python`), and `workflow/skills/goat-debug/SKILL.md` (search: `Browser evidence detection`) dropped the unshipped `scripts/install-browser-tools.sh` path for portable package commands.
 
 **Prevention:** Keep playbook rules self-contained; reference only installed siblings (other playbooks) or the consumer's instruction files. Move goat-flow-repo-specific commands, scans, and ADR pointers to goat-flow's own instruction files, not the shipped playbook. Internal milestone files under `.goat-flow/plans/` are exempt - they are repo-local. Before declaring a playbook or shipped skill done, grep it for `\.goat-flow/(decisions|lessons|patterns|footguns)|src/cli|scripts/|ADR-|check-(drift|goat-flow)|stats --check|DESIGN_TARGET`, and confirm any `scripts/...` or other repo path it names is listed in `workflow/manifest.json` - otherwise genericize it to a portable command.
 
@@ -83,10 +85,9 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Hook additions and renames cross runtime, dashboard, and audit surfaces
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
-
 **Symptoms:** A hook script can exist and pass its own smoke test while the dashboard registry, installer, manifest, preflight parity, audit facts, agent config templates, installed mirrors, and docs disagree about whether it is installed or togglable.
 
-**Evidence:** The 2026-05-25 guardrails split and `gruff-code-quality` addition touched `src/cli/server/hooks-registry.ts` (search: `deny-dangerous`), `workflow/hooks/` (search: `deny-dangerous-self-test.sh`), `workflow/manifest.json` (search: `patterns-writes.sh`), `workflow/install-goat-flow.sh` (search: `deny-dangerous-self-test.sh`), `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), per-agent config templates under `workflow/hooks/agent-config/`, installed mirrors under `.claude/hooks/`, `.codex/hooks/`, `.github/hooks/`, audit fact extraction in `src/cli/facts/agent/hooks.ts` (search: `LEGACY_GUARDRAIL_HOOK_FILES`), and dashboard/CLI surfaces in `src/dashboard/views/hooks.html` plus `src/cli/hooks-command.ts` (search: `handleHooksCommand`).
+**Evidence:** The 2026-05-25 split touched `src/cli/server/hooks-registry.ts` (search: `deny-dangerous`), the hook self-test, manifest, installer, preflight, agent templates and mirrors, `src/cli/facts/agent/hooks.ts` (search: `LEGACY_GUARDRAIL_HOOK_FILES`), and `src/cli/hooks-command.ts` (search: `handleHooksCommand`).
 
 **Recurrence 2026-05-26:** The `gruff-code-quality` hook rename focused drift run failed because `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `writeHookFixtures`) copied only `patterns-writes.sh` and `deny-dangerous-self-test.sh` into its temporary hook fixture. The live manifest now declares all split guardrails, so the fixture had to copy `patterns-shell.sh`, `patterns-paths.sh`, and `patterns-writes.sh` in lock-step.
 
@@ -95,6 +96,10 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Active footgun Symptoms paragraph drifts after the underlying bug is fixed
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Validate the real citation grammar, including same-sentence chains and root dotfiles, without guessing across sentence boundaries.
+**Trigger phase:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-08-04
 
 **Symptoms:** A footgun is tagged `**Status:** active` and reads as a current trap. The Prevention rules are still good, but the Symptoms paragraph describes a code shape that no longer exists. Search anchors in the Symptoms paragraph resolve to nothing — `grep` on the live tree returns zero hits for the identifier the footgun says to look at. Future agents following the anchor either chase a ghost incident (looking for a regex that's been refactored away) or distrust the entire footgun bucket because one entry is verifiably wrong.
 
@@ -102,10 +107,12 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 
 **Evidence:** Caught by Codex quality report 2026-05-25-2006-codex-jqclh (local gitignored quality history) flagging `.goat-flow/learning-loop/footguns/setup.md` (search: `Codex install migration matcher and post-install validator used different`). The original active entry's Symptoms paragraph named a search anchor for an obsolete matcher, but `rg` returned zero hits in `workflow/install-goat-flow.sh` - the installer was refactored (per the v1.8.0 changelog entry "Codex install: filesystem permissions migrated in place") to use a single `isInvalidNoneKey` predicate across both the migration awk pass and the validator awk pass. The setup footgun is now resolved with current anchors, preserving the prevention rule without sending agents after a removed symbol.
 
+**Recurrence 2026-08-04:** The first evaluator missed chained needles and root dotfiles; naive carry-over then crossed sentence boundaries. The final grammar follows chains only from an explicit same-sentence target, recognizes dotfiles, and ignores fences. Contracts: `test/unit/check-content-quality.test.ts` (search: `validates every chained search needle`), (search: `does not guess a target for an unqualified search anchor`), and (search: `validates root dotfile search anchors`).
+
 **Prevention:**
 1. When you fix a bug that has a footgun entry, in the same PR EITHER (a) rewrite the Symptoms paragraph to describe the principle the fix demonstrates and update the search anchors to point at the current shape, OR (b) move the entry to the file's "Resolved Entries" section with a one-line summary of what was learned. Do not leave an `active` footgun whose Symptoms anchors don't resolve.
 2. When reviewing a footgun bucket, treat zero-hit search anchors as a SEV signal: either the anchor was always wrong (find the right one) or the underlying bug was fixed (rewrite or resolve). A footgun that fails `rg <anchor>` is documentation rot, not a guard.
-3. `stats --check` validates `last_reviewed` dates and bucket size but does not verify that semantic anchors in footgun bodies resolve to real symbols. The check that catches this today is human review — usually a quality report or a downstream agent following the anchor. Until automated, treat persisted footgun findings in quality reports as higher-priority than newly-flagged ones because they survived a prior review pass.
+3. `stats --check` validates literal `(search: ...)` anchors in footguns and lessons, and promotes stale existing-target anchors in pattern entries to blocking findings. `audit --check-content` applies the same literal check to current guidance and accepted ADR evidence. History may explain removed code, but its pointer must still resolve to live proof rather than a moved literal.
 4. The lifecycle is: incident → footgun (active) → fix lands → footgun rewritten or moved to Resolved. Skipping the last step leaves a trap that punishes the most-careful agents (the ones who actually follow search anchors).
 
 ---

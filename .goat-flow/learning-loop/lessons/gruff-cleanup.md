@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-04
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -75,7 +75,7 @@ last_reviewed: 2026-08-03
 
 **Root cause:** The analyzer reported imports as unused even though the symbols were referenced later in large files. I trusted the finding before doing a local symbol search or running the focused test.
 
-**Prevention:** For every gruff `waste.unused-import` finding, run `rg "<symbol>" <file>` before editing. Delete the import only when the import specifier is the sole hit, then run the focused typecheck or test that covers the file. Evidence anchors: `src/cli/cli.ts` (search: `realpathSync(fileURLToPath(import.meta.url))`), `test/integration/dashboard-server-dashboard-terminal-endpoints.test.ts` (search: `TERMINAL_UPLOAD_MAX_BODY_BYTES + 1`), failing output (search: `ReferenceError: rename is not defined`).
+**Prevention:** For every gruff `waste.unused-import` finding, run `rg "<symbol>" <file>` before editing. Delete the import only when the import specifier is the sole hit, then run the focused typecheck or test that covers the file. Evidence anchors: `src/cli/cli.ts` (search: `realpathSync(fileURLToPath(import.meta.url))`) and `test/integration/dashboard-server-dashboard-terminal-endpoints.test.ts` (search: `TERMINAL_UPLOAD_MAX_BODY_BYTES + 1`).
 
 ## Lesson: Check staged deletions after bulk gruff rewrites
 

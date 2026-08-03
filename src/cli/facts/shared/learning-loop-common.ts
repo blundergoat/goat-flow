@@ -36,7 +36,11 @@ export const FILE_REF_REGEX =
 
 /** Matches backtick and double-quoted `(search: ...)` evidence anchors. */
 const SEARCH_ANCHOR_REGEX =
-  /`([^`]+\.[a-zA-Z0-9]{1,10})`\s*\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
+  /`((?:[^`]+\.[a-zA-Z0-9]{1,10}|\.[a-zA-Z0-9_-]+))`\s*\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
+
+/** File tokens and search needles in citation order, including chained needles. */
+const SEARCH_CITATION_TOKEN_REGEX =
+  /`((?:[^`]+\.[a-zA-Z0-9]{1,10}|\.[a-zA-Z0-9_-]+))`|\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
 
 const BARE_EVIDENCE_ANCHOR_LINE_REGEX =
   /(?:^|\s)(?:\*\*)?Evidence anchors?(?:\*\*)?:/i;
@@ -60,6 +64,28 @@ export interface FootgunRefSummary {
   invalidLineRefs: string[];
   totalRefs: number;
   validRefs: number;
+}
+
+/** Reference-validation policy for evidence that may cite an external project. */
+export interface ReferenceValidationOptions {
+  /** Ignore absent target files while still validating literal needles in targets that exist. */
+  ignoreMissingFiles?: boolean;
+}
+
+/** One concrete `(search: ...)` citation after filesystem validation. */
+export interface SearchAnchorEvaluation {
+  filePath: string;
+  needle: string;
+  line: number;
+  status: "valid" | "stale";
+  reason: "missing-file" | "missing-needle" | "gitignored-path" | null;
+  diagnostic: string | null;
+}
+
+interface SearchAnchorCitation {
+  filePath: string;
+  needle: string;
+  line: number;
 }
 
 /**
@@ -451,40 +477,178 @@ function scanSearchAnchors(
   fs: ReadonlyFS,
   cleanedContent: string,
   summary: FootgunRefSummary,
+  options: ReferenceValidationOptions = {},
 ): void {
-  const searchAnchors = cleanedContent.matchAll(
-    new RegExp(SEARCH_ANCHOR_REGEX.source, "g"),
-  );
-  for (const match of searchAnchors) {
-    const anchor = searchAnchorFromMatch(match);
-    if (anchor === null || !isFileRef(anchor.filePath)) continue;
-    if (flagGitignoredEvidenceAnchor(anchor.filePath, summary)) continue;
-    if (!isCheckableForStaleness(anchor.filePath, fs)) continue;
+  for (const anchor of evaluateSearchAnchors(fs, cleanedContent, options)) {
     summary.totalRefs++;
-    if (!fs.exists(anchor.filePath)) {
-      summary.staleRefs.push(
-        `${anchor.filePath} (search: \`${anchor.needle}\`)`,
-      );
-      continue;
-    }
-    const fileContent = fs.readFile(anchor.filePath);
-    if (fileContent === null || !fileContent.includes(anchor.needle)) {
-      summary.staleRefs.push(
-        `${anchor.filePath} (search: \`${anchor.needle}\`)`,
-      );
+    if (anchor.status === "stale") {
+      if (anchor.diagnostic !== null) summary.staleRefs.push(anchor.diagnostic);
       continue;
     }
     summary.validRefs++;
   }
 }
 
-function searchAnchorFromMatch(
-  match: RegExpMatchArray,
-): { filePath: string; needle: string } | null {
-  const filePath = match[1];
-  const rawNeedle = match[2] ?? match[3];
-  if (filePath === undefined || rawNeedle === undefined) return null;
-  return { filePath, needle: rawNeedle.replace(/\\(["\\])/g, "$1") };
+/** Mask struck text without changing line positions used by diagnostics. */
+function maskStrikethroughPreservingLines(content: string): string {
+  return content.replace(/~~[\s\S]*?~~/g, (span) =>
+    span.replace(/[^\r\n]/g, " "),
+  );
+}
+
+/** Return the delimiter character for one Markdown fence line. */
+function markdownFenceCharacter(line: string): "`" | "~" | null {
+  const match = /^\s*(`{3,}|~{3,})/.exec(line);
+  if (!match?.[1]) return null;
+  return match[1][0] as "`" | "~";
+}
+
+/** Advance Markdown fence state; an unlike delimiter does not close the block. */
+function nextMarkdownFence(
+  line: string,
+  activeFence: "`" | "~" | null,
+): { activeFence: "`" | "~" | null; isFenceLine: boolean } {
+  const fence = markdownFenceCharacter(line);
+  if (fence === null) return { activeFence, isFenceLine: false };
+  if (activeFence === null) return { activeFence: fence, isFenceLine: true };
+  if (activeFence === fence) {
+    return { activeFence: null, isFenceLine: true };
+  }
+  return { activeFence, isFenceLine: true };
+}
+
+/** Resolve a file token only when its next token is an adjacent search anchor. */
+function searchableFilePath(
+  line: string,
+  matchIndex: number,
+  token: string,
+  filePath: string,
+): string | null {
+  if (!isFileRef(filePath)) return null;
+  const remainder = line.slice(matchIndex + token.length);
+  if (!/^\s*\(search:/.test(remainder)) return null;
+  return filePath;
+}
+
+/** Extract every direct or same-sentence chained citation from one visible line. */
+function extractLineSearchAnchorCitations(
+  line: string,
+  lineNumber: number,
+): SearchAnchorCitation[] {
+  const citations: SearchAnchorCitation[] = [];
+  let activeFilePath: string | null = null;
+  let previousTokenEnd = 0;
+
+  for (const match of line.matchAll(
+    new RegExp(SEARCH_CITATION_TOKEN_REGEX.source, "g"),
+  )) {
+    const matchIndex = match.index;
+    const tokenEnd = matchIndex + match[0].length;
+    const filePath = match[1];
+    if (filePath !== undefined) {
+      activeFilePath = searchableFilePath(line, matchIndex, match[0], filePath);
+      previousTokenEnd = tokenEnd;
+      continue;
+    }
+
+    const gap = line.slice(previousTokenEnd, matchIndex);
+    if (/[.!?](?:\s|$)/.test(gap)) activeFilePath = null;
+    const rawNeedle = match[2] ?? match[3];
+    if (activeFilePath !== null && rawNeedle !== undefined) {
+      citations.push({
+        filePath: activeFilePath,
+        needle: rawNeedle.replace(/\\(["\\])/g, "$1"),
+        line: lineNumber,
+      });
+    }
+    previousTokenEnd = tokenEnd;
+  }
+  return citations;
+}
+
+/** Extract visible semantic-anchor citations while ignoring fenced examples. */
+function extractSearchAnchorCitations(content: string): SearchAnchorCitation[] {
+  const citations: SearchAnchorCitation[] = [];
+  const lines = maskStrikethroughPreservingLines(content).split(/\r?\n/);
+  let activeFence: "`" | "~" | null = null;
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? "";
+    const fenceState = nextMarkdownFence(line, activeFence);
+    activeFence = fenceState.activeFence;
+    if (fenceState.isFenceLine) continue;
+    if (activeFence !== null) continue;
+    citations.push(...extractLineSearchAnchorCitations(line, index + 1));
+  }
+
+  return citations;
+}
+
+/** Return whether a citation identifies one concrete repository file. */
+function isConcreteSearchAnchorPath(filePath: string): boolean {
+  return isFileRef(filePath) && !/[*?{}<>]|\.\.\./.test(filePath);
+}
+
+/** Build one failed semantic-anchor result without duplicating its evidence. */
+function staleSearchAnchorEvaluation(
+  anchor: SearchAnchorCitation,
+  reason: "missing-file" | "missing-needle" | "gitignored-path",
+  diagnostic: string,
+): SearchAnchorEvaluation {
+  return { ...anchor, status: "stale", reason, diagnostic };
+}
+
+/** Validate one parsed citation, returning null only when policy excludes it. */
+function evaluateSearchAnchor(
+  fs: ReadonlyFS,
+  anchor: SearchAnchorCitation,
+  options: ReferenceValidationOptions,
+): SearchAnchorEvaluation | null {
+  if (!isConcreteSearchAnchorPath(anchor.filePath)) return null;
+  if (isIntentionallyGitignored(anchor.filePath)) {
+    return staleSearchAnchorEvaluation(
+      anchor,
+      "gitignored-path",
+      `${anchor.filePath} (gitignored path used as durable evidence anchor)`,
+    );
+  }
+  if (!isCheckableForStaleness(anchor.filePath, fs)) return null;
+
+  const diagnostic = `${anchor.filePath} (search: \`${anchor.needle}\`)`;
+  if (!fs.exists(anchor.filePath)) {
+    if (options.ignoreMissingFiles === true) return null;
+    return staleSearchAnchorEvaluation(anchor, "missing-file", diagnostic);
+  }
+  const fileContent = fs.readFile(anchor.filePath);
+  if (fileContent === null) {
+    return staleSearchAnchorEvaluation(anchor, "missing-needle", diagnostic);
+  }
+  if (!fileContent.includes(anchor.needle)) {
+    return staleSearchAnchorEvaluation(anchor, "missing-needle", diagnostic);
+  }
+  return { ...anchor, status: "valid", reason: null, diagnostic: null };
+}
+
+/**
+ * Validate visible `(search: ...)` citations against the selected project.
+ *
+ * Callers that accept evidence from external repositories may ignore missing
+ * files while still detecting a moved literal in any target present locally.
+ * Placeholder and glob paths are skipped because they do not identify one
+ * concrete file. Every selected source document, including accepted ADRs, uses
+ * the same literal-resolution contract.
+ */
+export function evaluateSearchAnchors(
+  fs: ReadonlyFS,
+  content: string,
+  options: ReferenceValidationOptions = {},
+): SearchAnchorEvaluation[] {
+  const evaluations: SearchAnchorEvaluation[] = [];
+  for (const anchor of extractSearchAnchorCitations(content)) {
+    const evaluation = evaluateSearchAnchor(fs, anchor, options);
+    if (evaluation !== null) evaluations.push(evaluation);
+  }
+  return evaluations;
 }
 
 /**
@@ -501,6 +665,7 @@ function searchAnchorFromMatch(
 export function summarizeLessonRefs(
   fs: ReadonlyFS,
   content: string,
+  options: ReferenceValidationOptions = {},
 ): FootgunRefSummary {
   const summary: FootgunRefSummary = {
     staleRefs: [],
@@ -519,14 +684,14 @@ export function summarizeLessonRefs(
     summary.totalRefs++;
     if (fs.exists(filePath)) {
       summary.validRefs++;
-    } else {
+    } else if (options.ignoreMissingFiles !== true) {
       summary.staleRefs.push(filePath);
     }
   }
   summary.invalidLineRefs.push(
     ...collectInvalidLessonLineRefs(fs, cleanedContent),
   );
-  scanSearchAnchors(fs, cleanedContent, summary);
+  scanSearchAnchors(fs, cleanedContent, summary, options);
   return summary;
 }
 

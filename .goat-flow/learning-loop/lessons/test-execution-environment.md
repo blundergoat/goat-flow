@@ -1,6 +1,6 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-08-02
+last_reviewed: 2026-08-04
 ---
 
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
@@ -199,7 +199,7 @@ last_reviewed: 2026-08-02
 
 **Recurrence 2026-06-14:** While searching for this lesson, I put the literal Markdown title `` `npx vitest` is not this repo's runner `` inside a double-quoted `rg` pattern. Bash treated the backticked text as command substitution and launched `npx vitest`, reproducing the same wrong-runner failure mode from a read-only search.
 
-**Prevention:** Use `node scripts/run-tests.mjs fast` (or `npm test`) for suite runs and `node --import tsx --test <specific-file.test.ts>` for focused files. Do not use `npx vitest` here. Read `No test suite found` originating from a `_temp/stryker-tmp/sandbox-*` path as a wrong-runner signal, not a product failure. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), `.gitignore` (search: `_temp`).
+**Prevention:** Use `node scripts/run-tests.mjs fast` (or `npm test`) for suite runs and `node --import tsx --test <specific-file.test.ts>` for focused files. Do not use `npx vitest` here. Read `No test suite found` originating from a `_temp/stryker-tmp/sandbox-*` path as a wrong-runner signal, not a product failure. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), and `.gitignore` (search: `_temp`).
 
 ---
 

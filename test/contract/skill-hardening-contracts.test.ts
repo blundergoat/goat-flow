@@ -3184,6 +3184,27 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("keeps goat-debug ADJUSTED disposition countable in its root output", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(
+        skillGuidance,
+        /mark each: CONFIRMED \/ ADJUSTED \/ ELIMINATED \/ UNRESOLVED/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Hypotheses tested:\*\* count \(CONFIRMED \+ ADJUSTED \+ ELIMINATED \+ UNRESOLVED\)/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /CONFIRMED: \[n\] \/ ADJUSTED: \[n\] \/ ELIMINATED: \[n\] \/ UNRESOLVED: \[n\]/u,
+        skillPath,
+      );
+    });
+  });
+
   it("loads one manifest-owned goat-debug diagnostic reference", () => {
     const manifest = JSON.parse(readProjectFile("workflow/manifest.json")) as {
       skills?: { references?: Record<string, string[]> };
@@ -3843,6 +3864,16 @@ describe("skill hardening contracts", () => {
         skillPath,
       );
       assert.match(skillGuidance, /freeze writes/, skillPath);
+    });
+  });
+
+  it("keeps goat-review mutation opt-in aligned with the shared report-only contract", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      assert.match(
+        readProjectFile(skillPath),
+        /MUST NOT edit files unless user separately says to apply, edit, update, fix, or implement/u,
+        skillPath,
+      );
     });
   });
 

@@ -136,7 +136,7 @@ else:
 **Goat-flow application:**
 - Ban `Math.random()` in `src/cli/server/` (where session IDs live) — `randomUUID()` is already the convention (`src/cli/server/terminal.ts` search: `randomUUID`, `src/cli/server/dashboard-routes.ts` search: `randomUUID`). The grep test prevents regression.
 - Ban `console.log` in MCP server code (when added) — see `.goat-flow/learning-loop/footguns/cli.md` (search: `Diagnostic logs to stdout corrupt structured-output modes`).
-- Ban `JSON.stringify` as a `Set<string>` dedupe key in merge functions — see `.goat-flow/learning-loop/footguns/config.md` (search: `JSON.stringify as a dedupe key silently drops function values`).
+- Ban `JSON.stringify` as a `Set<string>` dedupe key in merge functions — see `.goat-flow/learning-loop/footguns/config.md` (search: `as a dedupe key silently drops function values`).
 - Ban bare `setTimeout` / `setInterval` without an associated `clearTimeout` / `clearInterval` in the same file (dashboard server long-running handlers in `src/cli/server/`).
 
 **Shape of the test (TypeScript, Node's built-in test runner):**
@@ -174,6 +174,6 @@ describe("source-grep guardrails", () => {
 
 **Context:** The same agent writes a change and then proposes to "independently verify" it inside the same invocation.
 
-**Approach:** Treat same-context self-verification as evidence gathering, not independent review. Real verification needs a context boundary: a fresh invocation, a different agent, a human, or a deterministic test that can fail the author. Use `/goat-review` or `/goat-qa` as the verification layer after implementation, not a self-verifier phase inside the same skill. Evidence anchor: `.goat-flow/learning-loop/decisions/ADR-005-no-implementation-skill.md` (search: `goat-doer / goat-verifier`).
+**Approach:** Treat same-context self-verification as evidence gathering, not independent review. Real verification needs a context boundary: a fresh invocation, a different agent, a human, or a deterministic test that can fail the author. Use `/goat-review` or `/goat-qa` as the verification layer after implementation, not a self-verifier phase inside the same skill. Evidence anchor: `.goat-flow/learning-loop/decisions/ADR-005-no-implementation-skill.md` (search: `goat-doer + goat-verifier`).
 
 ---

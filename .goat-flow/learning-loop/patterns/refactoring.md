@@ -35,7 +35,7 @@ A canary path — apply to `LocalEnvironment` only first, run mini against a rea
 
 ## Pattern: Put prompt side effects on the CLI side of the boundary
 **Context:** A prompt contract forbids tracked-file writes or unrestricted I/O, but a new feature needs persistence, capture, or report history.
-**Approach:** Keep the prompt read-only or single-path-limited and move extraction, path validation, suffix numbering, schema validation, and writes into CLI code whenever possible. If the prompt must write, pin the path to a gitignored local-state directory and make the exception explicit. Evidence anchor: `src/cli/prompt/compose-quality.ts` (search: `No tracked-file writes`).
+**Approach:** Keep the prompt read-only or single-path-limited and move extraction, path validation, suffix numbering, schema validation, and writes into CLI code whenever possible. If the prompt must write, pin the path to a gitignored local-state directory and make the exception explicit. Evidence anchor: `src/cli/prompt/compose-quality-static-sections.ts` (search: `No tracked-file writes`).
 
 ---
 

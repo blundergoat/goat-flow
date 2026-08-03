@@ -3,6 +3,7 @@
 **Date:** 2026-04-13
 **Status:** Accepted
 **Updated:** 2026-05-18 - removed drift-prone `compose-setup.ts` line-count claim; scanner removal rationale now cites the durable branching simplification.
+**Updated:** 2026-08-04 - refreshed setup-handler semantic anchors after CLI/server decomposition.
 **Supersedes:** Earlier draft that proposed keeping both systems
 
 ## Context
@@ -60,8 +61,8 @@ setup --agent claude
 ## Dependency Analysis
 
 **Former scanProject() call sites:**
-- `src/cli/cli.ts` (search: `composeSetup`) - setup command output now composes from audit + facts
-- `src/cli/server/dashboard-routes.ts` (search: `/api/setup`) - dashboard setup output now composes from audit + facts
+- `src/cli/cli-handlers.ts` (search: `const output = composeSetup`) - setup command output now composes from audit + facts
+- `src/cli/server/dashboard-audit-routes.ts` (search: `if (url.pathname !== "/api/setup")`) - dashboard setup output now composes from audit + facts
 
 **RUBRIC_VERSION dependency:** The last audit→rubric dependency was the version constant. It was removed by deriving the current version from `package.json` through `src/cli/constants.ts`.
 

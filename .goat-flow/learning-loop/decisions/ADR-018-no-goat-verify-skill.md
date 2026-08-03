@@ -4,6 +4,7 @@
 **Date:** 2026-04-18
 **Updated:** 2026-05-18 - evidence citations converted from file-line form to semantic anchors.
 **Updated:** 2026-05-27 - Runtime slot updated per ADR-030; four-agent references now read Claude, Codex, Antigravity, and Copilot.
+**Updated:** 2026-08-04 - refreshed canonical-skill anchors after manifest-backed name derivation landed.
 
 ## Context
 
@@ -25,13 +26,13 @@ All 5 analyses converged on rejecting option 1. Evidence:
   - **ADR-002** (replace preflight with security skill) - rejected "glorified checklist skill" in favour of strengthening real enforcement surfaces.
   - Prior v1.1.0 cleanup already established the relevant pattern: duplicated always-on rules belong in `skill-preamble.md`, not in a separate always-loaded file such as the retired `RULES.md`.
   - **ADR-009** (skill consolidation doctrine) - repo trends toward fewer skills, not more, and new skills must justify their existence.
-- Measured blast radius of a new canonical skill: 3 hardcoded surfaces (`workflow/install-goat-flow.sh` (search: `readarray -t SKILL_NAMES`), `src/cli/constants.ts` (search: `export const SKILL_NAMES`), `workflow/manifest.json` (search: `"canonical": [`)), plus audit-drift test coverage (`test/integration/audit-drift.test.ts` (search: `for (const name of SKILL_NAMES)`)), plus installed-copy parity (`.goat-flow/learning-loop/footguns/skills.md` (search: `punctuation-only edits`) documents real drift incidents that proved parity is not free).
+- Measured blast radius of a new canonical skill: 3 hardcoded surfaces (`workflow/install-goat-flow.sh` (search: `readarray -t SKILL_NAMES`), `src/cli/constants.ts` (search: `export function getSkillNames()`), `workflow/manifest.json` (search: `"canonical": [`)), plus audit-drift test coverage (`test/integration/audit-drift.test.ts` (search: `getSkillNames().reduce`)), plus installed-copy parity (`.goat-flow/learning-loop/footguns/skills.md` (search: `punctuation-only edits`) documents real drift incidents that proved parity is not free).
 
 External pattern mining (superpowers/verification-before-completion, systematic-debugging, BMAD review decomposition, Archon debug/plan, claude-mem make-plan) yielded importable content for existing surfaces, not justification for a new skill. `SuperClaude_Framework/confidence-check` (>=90% numeric gate) was rejected across all 5 analyses as incompatible with goat-flow's evidence-over-hedges culture - a numeric confidence score is itself a hedge forbidden by `AGENTS.md` (search: `Hedged claims`).
 
 ## Decision
 
-1. **No standalone `goat-verify` skill.** Skill count stays at 7. `workflow/manifest.json`, `src/cli/constants.ts`, `workflow/install-goat-flow.sh`, and the canonical-skill drift coverage in `test/integration/audit-drift.test.ts` (search: `for (const name of SKILL_NAMES)`) stay unchanged.
+1. **No standalone `goat-verify` skill.** Skill count stays at 7. `workflow/manifest.json`, `src/cli/constants.ts`, `workflow/install-goat-flow.sh`, and the canonical-skill drift coverage in `test/integration/audit-drift.test.ts` (search: `getSkillNames().reduce`) stay unchanged.
 
 2. **Shared Proof Gate in the preamble.** Add a `## Proof Gate` section to `workflow/skills/reference/skill-preamble.md` (and installed copy `.goat-flow/skill-docs/skill-preamble.md`) after `## Evidence Standard`. The Proof Gate names the positive procedure (Identify → Run fresh → Read → Verify → Cite) that substantiates claims. It is the complement to the 5 hallucination red-flags, which name the violations.
 
@@ -51,7 +52,7 @@ External pattern mining (superpowers/verification-before-completion, systematic-
 
 ## Consequences
 
-- **Blast radius contained.** No canonical-skill-count changes. No edits to `workflow/install-goat-flow.sh`, `src/cli/constants.ts`, `workflow/manifest.json`, or canonical-skill drift coverage in `test/integration/audit-drift.test.ts` (search: `for (const name of SKILL_NAMES)`). The 3 hardest drift surfaces stay untouched.
+- **Blast radius contained.** No canonical-skill-count changes. No edits to `workflow/install-goat-flow.sh`, `src/cli/constants.ts`, `workflow/manifest.json`, or canonical-skill drift coverage in `test/integration/audit-drift.test.ts` (search: `getSkillNames().reduce`). The 3 hardest drift surfaces stay untouched.
 - **Hot/cold path distinction preserved.** Hot path (`AGENTS.md`) remains within its 150-line budget (`.goat-flow/learning-loop/decisions/ADR-008-instruction-budget-constraint.md` (search: `MUST stay under 150 lines`)). Cold-path shared doctrine (`skill-preamble.md`) absorbs the new Proof Gate following the existing shared-preamble pattern, while dispatcher-only routing stays in `/goat`.
 - **Verification discipline strengthens without routing complexity.** Every skill's output moment is governed by the Proof Gate via inheritance plus an explicit one-line reference, while each skill retains domain-specific gate semantics (confidence scales, severity tags, testing gates).
 - **Rollback is trivial.** Revert the preamble Proof Gate section, the one-line references in 7 skills, the goat-debug domain patches, the lesson entry, and this ADR. No persisted state (config, manifest, constants) to unwind. Single `git revert` discharges the change.

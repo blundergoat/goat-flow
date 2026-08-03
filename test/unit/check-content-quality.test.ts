@@ -202,6 +202,23 @@ describe("scanContentQuality: code-block state tracking", () => {
     assert.equal(findings.length, 1, "one finding outside the block");
     assert.equal(findings[0]!.line, expectedOutsideBlockLine);
   });
+
+  it("does not close a backtick fence when a tilde fence appears inside it", () => {
+    const expectedOutsideBlockLine = 5;
+    const text = [
+      "```markdown",
+      "~~~",
+      "follow best practices",
+      "```",
+      "Follow best practices here.",
+    ].join("\n");
+    const findings = scanContentQuality("x.md", text).filter(
+      (finding) => finding.severity === "warning",
+    );
+
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0]?.line, expectedOutsideBlockLine);
+  });
 });
 
 describe("scanContentQuality: restricted mode (learning-loop surfaces)", () => {
@@ -241,6 +258,50 @@ describe("scanContentQuality: restricted mode (learning-loop surfaces)", () => {
     assert.ok(
       findings.some((f) => f.rule === "non-actionable-remember"),
       "non-actionable patterns should still apply in restricted mode",
+    );
+  });
+});
+
+describe("scanContentQuality: unresolved readiness markers", () => {
+  it("flags unresolved markers inside an explicit open-questions section", () => {
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      [
+        "## Open Questions",
+        "- TBD",
+        "- TODO: choose the persistence model",
+        "- ???",
+        "- Answer:",
+      ].join("\n"),
+    ).filter((finding) => finding.rule === "unresolved-content-marker");
+
+    assert.equal(findings.length, 4);
+    assert.ok(
+      findings.every((finding) => finding.severity === "warning"),
+      "every unresolved readiness marker must block a green content result",
+    );
+  });
+
+  it("does not treat ordinary TODO prose, fenced examples, or answered questions as unresolved readiness", () => {
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      [
+        "TODO is valid historical prose outside a readiness section.",
+        "## Open Questions",
+        "- Answer: Use the existing filesystem adapter.",
+        "```markdown",
+        "- TBD",
+        "- Answer:",
+        "```",
+        "## Decision",
+        "The remaining TODO belongs to implementation tracking.",
+      ].join("\n"),
+    );
+
+    assert.equal(
+      findings.filter((finding) => finding.rule === "unresolved-content-marker")
+        .length,
+      0,
     );
   });
 });
@@ -416,6 +477,151 @@ describe("scanContentQuality: stale skill-playbooks path", () => {
 });
 
 describe("runContentQualityChecks: target discovery", () => {
+  it("fails stale semantic anchors in current guidance and accepted ADRs", () => {
+    const glossaryPath = ".goat-flow/glossary.md";
+    const targetPath = "src/cli/current.ts";
+    const decisionsDir = ".goat-flow/learning-loop/decisions/";
+    const decisionPath = `${decisionsDir}ADR-001-history.md`;
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) =>
+          [glossaryPath, targetPath, decisionsDir, decisionPath].includes(path),
+        listDir: (path) =>
+          path === decisionsDir ? ["ADR-001-history.md"] : [],
+        readFile: (path) => {
+          if (path === glossaryPath) {
+            return `Current pointer: \`${targetPath}\` (search: \`retiredSymbol\`).`;
+          }
+          if (path === decisionPath) {
+            return `Historical evidence: \`${targetPath}\` (search: \`retiredHistoricalSymbol\`).`;
+          }
+          if (path === targetPath)
+            return "export const currentSymbol = true;\n";
+          return null;
+        },
+      }),
+    });
+
+    const result = runContentQualityChecks(ctx);
+    const staleAnchors = result.findings.filter(
+      (finding) => finding.rule === "stale-semantic-anchor",
+    );
+
+    assert.equal(staleAnchors.length, 2);
+    assert.deepEqual(
+      staleAnchors.map((finding) => finding.path).sort(),
+      [decisionPath, glossaryPath].sort(),
+    );
+    assert.ok(
+      staleAnchors.some((finding) =>
+        /retiredHistoricalSymbol/u.test(finding.message),
+      ),
+    );
+  });
+
+  it("validates every chained search needle against the preceding target file", () => {
+    const glossaryPath = ".goat-flow/glossary.md";
+    const targetPath = "src/cli/current.ts";
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) => [glossaryPath, targetPath].includes(path),
+        readFile: (path) => {
+          if (path === glossaryPath) {
+            return `Current pointers: \`${targetPath}\` (search: \`currentSymbol\`), (search: \`retiredSibling\`).`;
+          }
+          if (path === targetPath)
+            return "export const currentSymbol = true;\n";
+          return null;
+        },
+      }),
+    });
+
+    const staleAnchors = runContentQualityChecks(ctx).findings.filter(
+      (finding) => finding.rule === "stale-semantic-anchor",
+    );
+
+    assert.equal(staleAnchors.length, 1);
+    assert.match(staleAnchors[0]?.message ?? "", /retiredSibling/u);
+  });
+
+  it("does not guess a target for an unqualified search anchor in a new sentence", () => {
+    const glossaryPath = ".goat-flow/glossary.md";
+    const targetPath = "src/cli/current.ts";
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) => [glossaryPath, targetPath].includes(path),
+        readFile: (path) => {
+          if (path === glossaryPath) {
+            return `Current pointer: \`${targetPath}\` (search: \`currentSymbol\`). Self-test (search: \`separateTargetNeedle\`).`;
+          }
+          if (path === targetPath)
+            return "export const currentSymbol = true;\n";
+          return null;
+        },
+      }),
+    });
+
+    const staleAnchors = runContentQualityChecks(ctx).findings.filter(
+      (finding) => finding.rule === "stale-semantic-anchor",
+    );
+
+    assert.equal(staleAnchors.length, 0);
+  });
+
+  it("validates root dotfile search anchors", () => {
+    const glossaryPath = ".goat-flow/glossary.md";
+    const targetPath = ".gitignore";
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) => [glossaryPath, targetPath].includes(path),
+        readFile: (path) => {
+          if (path === glossaryPath) {
+            return `Ignore policy: \`${targetPath}\` (search: \`missingIgnoreRule\`).`;
+          }
+          if (path === targetPath) return "_temp\nnode_modules\n";
+          return null;
+        },
+      }),
+    });
+
+    const staleAnchors = runContentQualityChecks(ctx).findings.filter(
+      (finding) => finding.rule === "stale-semantic-anchor",
+    );
+
+    assert.equal(staleAnchors.length, 1);
+    assert.match(staleAnchors[0]?.message ?? "", /missingIgnoreRule/u);
+  });
+
+  it("ignores semantic-anchor examples inside fenced code blocks", () => {
+    const glossaryPath = ".goat-flow/glossary.md";
+    const targetPath = "src/cli/current.ts";
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) => [glossaryPath, targetPath].includes(path),
+        readFile: (path) => {
+          if (path === glossaryPath) {
+            return [
+              "```markdown",
+              `\`${targetPath}\` (search: \`exampleOnlyNeedle\`)`,
+              "```",
+            ].join("\n");
+          }
+          if (path === targetPath)
+            return "export const currentSymbol = true;\n";
+          return null;
+        },
+      }),
+    });
+
+    const result = runContentQualityChecks(ctx);
+    assert.equal(
+      result.findings.filter(
+        (finding) => finding.rule === "stale-semantic-anchor",
+      ).length,
+      0,
+    );
+  });
+
   it("scans every registered standalone playbook", () => {
     const registeredPlaybooks = new Set<string>(STANDALONE_PLAYBOOK_FILES);
     const ctx = makeCtx({

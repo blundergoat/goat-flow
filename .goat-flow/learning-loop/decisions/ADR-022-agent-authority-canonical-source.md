@@ -4,6 +4,7 @@
 **Status:** Accepted
 **Updated:** 2026-05-18 - stale file-line citations converted to semantic anchors; runtime tuple wording aligned with the shipped `KNOWN_AGENT_IDS` location.
 **Updated:** 2026-05-27 - Runtime slot updated per ADR-030; the canonical tuple now reads `"claude" | "codex" | "antigravity" | "copilot"`.
+**Updated:** 2026-08-04 - refreshed the quality-schema anchor after parser extraction.
 **Milestone:** M17-12 (quality-report follow-ups)
 
 ## Context
@@ -12,7 +13,7 @@ The `AgentId` union (`"claude" | "codex" | "antigravity" | "copilot"`) is duplic
 
 - `src/cli/types.ts` (search: `export const KNOWN_AGENT_IDS`) - the compile-time tuple and derived union.
 - `src/cli/agents/registry.ts` (search: `export function getKnownAgentIds`) - `getKnownAgentIds()` returns manifest-backed agent ids.
-- `src/cli/quality/schema.ts` (search: `expectEnumValue(raw.agent, "report.agent", KNOWN_AGENT_IDS)`) - runtime validation uses the shared tuple.
+- `src/cli/quality/schema-parser.ts` (search: `expectEnumValue(raw.agent, "report.agent", KNOWN_AGENT_IDS)`) - runtime validation uses the shared tuple.
 - `src/cli/quality/history.ts` (search: `KNOWN_AGENT_IDS.join("|")`) - the quality-history filename regex derives from the shared tuple.
 - `src/cli/prompt/compose-setup.ts` (search: `const SETUP_FILES: Record<AgentId, string>`) - `Record<AgentId, string>` whose keys repeat the same four names under type enforcement.
 - `workflow/manifest.json` - the 4 agent blocks keyed by id.

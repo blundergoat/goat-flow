@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-04
 ---
 
 ## Lesson: Reference-pack wording fixes must check word budget immediately
@@ -11,9 +11,9 @@ last_reviewed: 2026-08-03
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 23
+**Incident count:** 24
 
-**Latest occurrence:** 2026-08-03
+**Latest occurrence:** 2026-08-04
 
 **What happened:** Repeated wording edits and learning captures crossed caps. Unless noted, the gate is `test/contract/skill-hardening-contracts.test.ts`:
 
@@ -29,6 +29,7 @@ last_reviewed: 2026-08-03
 - **2026-08-02 PR #57 CI:** `verification-preflight.md` reached 40,415 bytes and failed the merge build - the round-trip installer fixture runs preflight inside a temp install. Local `stats --check` had flagged it for days as an accepted baseline. Buckets gate the build.
 - **2026-08-03 v1.15 ship hardening:** Unifying goat-critique's meta-audit rubric left every mirrored SKILL.md at exactly 2,500 words, so the focused contract failed until the new pointer was compacted. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `uses one reproducible goat-critique meta-audit rubric`).
 - **2026-08-03 goat-review base clause:** A one-clause scope fix added 23 words to a skill sitting at 2,498/2,500 and simultaneously reworded away a contract-pinned literal, so two contracts failed at once (search: `stops oversized inferred branch scopes before review begins`). Wording edits have two budgets, not one: the word cap AND the exact phrases contracts assert. Measure headroom and grep `test/` for the phrases being reworded BEFORE editing; when headroom is one word, attach the change to an unpinned line and pay for it with a same-line trim.
+- **2026-08-04 goat-review mutation vocabulary:** Synchronizing the five shared mutation verbs pushed the root skill to 2,506 words. The first compaction then removed the exact Spec Drift phrase pinned at `test/contract/skill-hardening-contracts.test.ts` (search: `keeps an unselected optional Spec Drift pass out of review degradation`). Restoring the pinned phrase and compacting unpinned optional-output prose returned the focused run to 3/3 pass; the iteration is recorded in `.goat-flow/logs/sessions/2026-08-04-goat-review-tdd.md`.
 
 **Root cause:** Treated capped prose as tiny.
 

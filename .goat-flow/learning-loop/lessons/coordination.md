@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-08-02
+last_reviewed: 2026-08-04
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -68,8 +68,16 @@ last_reviewed: 2026-08-02
 
 ## Lesson: Phase totals must be derivable from phase breakdowns
 
-**Created:** 2026-05-01
+**Status:** active | **Created:** 2026-05-01
+**Decision changed:** Run the plan arithmetic gate immediately after writing estimates; the headline and every category must be derivable from task-level numbers before implementation starts.
+**Trigger phase:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-08-04
+
 **What happened:** Programme headline stated ~33 weekends (council's estimate). Phase breakdowns summed to ~26. The gap was unexplained - some combination of CF items, overhead, and double-counted shared infrastructure. The headline lost legitimacy when the math didn't add up.
+
+**Recurrence 2026-08-04:** The quality-findings milestone declared 70 minutes as 45 product / 20 proof / 5 other, but its proof tasks summed to 28 minutes. `plans check` rejected the artifact with the category-overrun diagnostic; the estimate was corrected to 78 minutes before implementation continued. Evidence anchor: `src/cli/plans-check.ts` (search: `task estimates`).
+
 **Prevention:** Future programme documents should show effort accounting explicitly: per-skill serial sum (~35.5 weekends), phased estimate (~31 weekends), and a note on why they differ (shared infrastructure counted once in phased estimate, per-consumer in serial). Set the headline to the phased estimate with the accounting visible.
 
 ---
@@ -158,10 +166,12 @@ last_reviewed: 2026-08-02
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Switch the receipt category at the work boundary, not at the milestone boundary; a stale category is a silent data error, not a rounding detail.
 **Trigger phase:** VERIFY
-**Incident count:** 1
-**Latest occurrence:** 2026-08-02
+**Incident count:** 2
+**Latest occurrence:** 2026-08-04
 
 **What happened:** Effort-estimation-timing M02 opened a `product` span and left it open across implementation, a full test-suite run, lint, format, and unused-export checks. The finalized receipt reported 1112 product / 99 proof seconds. The total (1354s) was correct and system-stamped, but the split was badly wrong - most of that "product" time was proof. Nothing flagged it: the receipt was open, finalized cleanly, reconciled against the Actual, and passed strict validation, because the CLI can only stamp the category it was given.
+
+**Recurrence 2026-08-04:** The quality-findings milestone left its first `product` span open through focused content tests, both 327-case hook corpora, the interleaved benchmark, and skill contract runs. The category switched only for final repository verification. The receipt total remains prospective, but its product/proof split is knowingly inaccurate and must be disclosed rather than used for calibration.
 
 **Root cause:** Starting a receipt feels like the whole discipline, so category maintenance gets treated as optional bookkeeping. A single long span is also the path of least resistance - `stop` then `start` is two commands, while doing nothing is zero. The resulting split carries the full authority of a `measured` Actual while being no better than a guess.
 
