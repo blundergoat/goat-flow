@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-03
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -268,7 +268,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **What happened:** While evaluating a GitHub PR, the agent staged scratch files in `/tmp` and ran `cd /tmp` to fetch them. From then on every Bash call was blocked by the PreToolUse guard with `BLOCKED: ... git repository root unavailable`, because the launcher runs `git rev-parse` in the session's persistent cwd and `/tmp` is outside any repo. The agent retried Bash several times, then reached for `dangerouslyDisableSandbox` before concluding it was stuck. The block also rejected the recovering `cd <repo>`, since the guard runs before the command's `cd`.
 
-**Root cause:** Two mistakes. (1) It used `/tmp` as scratch space, moving the persistent shell cwd outside the repo, when a repo-local dir (`.goat-flow/scratchpad/`) would have kept cwd inside the tree. (2) On seeing the same `git repository root unavailable` block on every Bash, it treated each as a one-off and retried or hunted for a bypass instead of recognising a cwd-wedge and asking the user to reset the shell. Trap and fix: `.goat-flow/learning-loop/footguns/hooks.md` (search: `outside any git repo`).
+**Root cause:** Two mistakes. (1) It used `/tmp` as scratch space, moving the persistent shell cwd outside the repo, when a repo-local dir (`.goat-flow/scratchpad/`) would have kept cwd inside the tree. (2) On seeing the same `git repository root unavailable` block on every Bash, it treated each as a one-off and retried or hunted for a bypass instead of recognising a cwd-wedge and asking the user to reset the shell. Trap and fix: `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `outside any git repo`).
 
 **Prevention:**
 1. Keep scratch work inside the repo - use `.goat-flow/scratchpad/` (gitignored), never `cd /tmp`. The persistent Bash cwd must not leave the repo tree while a cwd-relative guard is active.

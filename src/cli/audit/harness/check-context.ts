@@ -477,7 +477,7 @@ const docPathsResolve: HarnessCheck = {
     [
       "docs/harness-audit.md",
       ".goat-flow/learning-loop/footguns/docs-and-crossrefs.md",
-      ".goat-flow/learning-loop/lessons/verification.md",
+      ".goat-flow/learning-loop/lessons/integration-verification.md",
     ],
     "incident",
   ),

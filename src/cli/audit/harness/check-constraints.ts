@@ -234,7 +234,8 @@ const denyBlocksDangerous: HarnessCheck = {
   provenance: constraintsProvenance("integrity", [
     "docs/harness-audit.md",
     ".goat-flow/learning-loop/footguns/auditor.md",
-    ".goat-flow/learning-loop/footguns/hooks.md",
+    ".goat-flow/learning-loop/footguns/deny-shell.md",
+    ".goat-flow/learning-loop/footguns/deny-writes.md",
   ]),
   /** Run the Deny blocks dangerous commands check. */
   run: (ctx) => {
@@ -291,7 +292,7 @@ const denyBlocksPipeToShell: HarnessCheck = {
     [
       "docs/harness-audit.md",
       ".goat-flow/learning-loop/footguns/auditor.md",
-      ".goat-flow/learning-loop/footguns/hooks.md",
+      ".goat-flow/learning-loop/footguns/deny-shell.md",
     ],
     "incident",
   ),

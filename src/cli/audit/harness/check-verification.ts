@@ -198,7 +198,7 @@ const hooksRegistered: HarnessCheck = {
     "integrity",
     [
       "docs/harness-audit.md",
-      ".goat-flow/learning-loop/footguns/hooks.md",
+      ".goat-flow/learning-loop/footguns/hook-installation.md",
       ".goat-flow/learning-loop/footguns/auditor.md",
     ],
     "incident",

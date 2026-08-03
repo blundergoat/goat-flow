@@ -15,6 +15,7 @@ import {
   runContentQualityChecks,
   scanContentQuality,
 } from "../../src/cli/audit/check-content-quality.js";
+import { STANDALONE_PLAYBOOK_FILES } from "../../src/cli/audit/skill-docs-contract.js";
 import { makeCtx, stubFS } from "../fixtures/projects/index.js";
 import { assertExists } from "../helpers/assert-exists.ts";
 
@@ -415,6 +416,27 @@ describe("scanContentQuality: stale skill-playbooks path", () => {
 });
 
 describe("runContentQualityChecks: target discovery", () => {
+  it("scans every registered standalone playbook", () => {
+    const registeredPlaybooks = new Set<string>(STANDALONE_PLAYBOOK_FILES);
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) => registeredPlaybooks.has(path),
+        readFile: (path) =>
+          registeredPlaybooks.has(path) ? "Follow best practices." : null,
+      }),
+    });
+
+    const result = runContentQualityChecks(ctx);
+    const scannedPlaybooks = new Set(
+      result.findings
+        .filter((finding) => finding.rule === "generic-best-practices")
+        .map((finding) => finding.path),
+    );
+
+    assert.equal(result.filesScanned, STANDALONE_PLAYBOOK_FILES.length);
+    assert.deepStrictEqual(scannedPlaybooks, registeredPlaybooks);
+  });
+
   it("flags stale skill-playbooks paths in active instruction surfaces", () => {
     const ctx = makeCtx({
       fs: stubFS({

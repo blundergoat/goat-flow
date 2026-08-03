@@ -266,11 +266,10 @@ function collectBucketFindings(
   if (reviewFinding !== null) findings.push(reviewFinding);
   // Oversized buckets make retrieval noisy, so users are asked to split the category.
   if (bucket.sizeBytes > BUCKET_SIZE_WARN_BYTES) {
-    const bucketSizeKilobytes = Math.round(bucket.sizeBytes / 1024);
     findings.push({
       file: bucket.path,
       rule: "bucket-size",
-      message: `${bucket.path}: ${bucketSizeKilobytes}KB exceeds ${Math.round(BUCKET_SIZE_WARN_BYTES / 1024)}KB threshold; consider splitting into narrower category buckets`,
+      message: `${bucket.path}: ${bucket.sizeBytes} bytes exceeds ${BUCKET_SIZE_WARN_BYTES}-byte threshold; split into narrower category buckets`,
     });
   }
   // Every stale semantic reference gets its own repair row for the operator.

@@ -325,7 +325,7 @@ export const agentDenyMechanism: BuildCheck = {
   scope: "agent",
   provenance: incidentProvenance([
     ".goat-flow/learning-loop/footguns/auditor.md",
-    ".goat-flow/learning-loop/footguns/hooks.md",
+    ".goat-flow/learning-loop/footguns/hook-installation.md",
   ]),
   /** Run the Agent deny mechanism check. */
   run: (ctx) => {

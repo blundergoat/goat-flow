@@ -21,6 +21,7 @@ import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
 import { getSkillNames } from "../constants.js";
 import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
+import { STANDALONE_PLAYBOOK_FILES } from "./skill-docs-contract.js";
 
 /**
  * Regex detector descriptor for one prose-quality rule.
@@ -64,9 +65,7 @@ const STATIC_QUALITY_TARGETS = [
   ".goat-flow/skill-docs/skill-conventions.md",
   // Standalone playbooks (loaded on-demand by skills/agents)
   ".goat-flow/skill-docs/playbooks/README.md",
-  ".goat-flow/skill-docs/playbooks/browser-use.md",
-  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-docs/playbooks/page-capture.md",
+  ...STANDALONE_PLAYBOOK_FILES,
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",

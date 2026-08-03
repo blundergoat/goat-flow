@@ -4,8 +4,8 @@ goat-flow-reference-version: "1.15.0"
 # Goat-review Reasoning Traps
 
 Use this catalog after Pass 2 to challenge how the review reasoned, not as evidence about the target.
-Every live finding still needs current target-project proof. Framework provenance below explains why a
-trap exists; it never substitutes for re-reading the reviewed files.
+Every live finding still needs current target-project proof. The inline goat-flow incident summaries
+explain why a trap exists; they never substitute for re-reading the reviewed files.
 
 ## Evidence-backed goat-flow incidents
 
@@ -18,8 +18,7 @@ can reach the condition.
 passed, and a cited shell function was reachable through a trap registration the bot missed.
 
 **Fix:** Reproduce in the target environment, trace caller/input/trigger and shipped exposure, then
-derive severity. Provenance: `.goat-flow/learning-loop/lessons/review-feedback.md` (search:
-`External code-review bots that re-run verification commands in their own sandbox produce false-positive Critical findings`).
+derive severity. Framework incident: `External code-review bots that re-run verification commands in their own sandbox produce false-positive Critical findings`.
 
 ### Convention from a three-file sample
 
@@ -29,9 +28,7 @@ derive severity. Provenance: `.goat-flow/learning-loop/lessons/review-feedback.m
 search found the check in `check-constraints.ts` and refuted the finding.
 
 **Fix:** Search the full declared directory and consumers. If both competing patterns have more than
-three examples, report no single convention. Provenance:
-`.goat-flow/learning-loop/lessons/review-feedback.md` (search:
-`Cross-critique review catches cold-path drift that single reviews and preflight miss`).
+three examples, report no single convention. Framework incident: `Cross-critique review catches cold-path drift that single reviews and preflight miss`.
 
 ### Regression without a baseline read
 
@@ -41,9 +38,7 @@ three examples, report no single convention. Provenance:
 targets; editing the stale claims would have reintroduced defects.
 
 **Fix:** Re-read current HEAD and, for a regression claim, compare `git show <base>:<file>` with the
-frozen bundle before assigning a verdict. Provenance:
-`.goat-flow/learning-loop/lessons/review-feedback.md` (search:
-`Blindly applying review feedback without verifying findings`).
+frozen bundle before assigning a verdict. Framework incident: `Blindly applying review feedback without verifying findings`.
 
 ## Placeholder trap shapes
 

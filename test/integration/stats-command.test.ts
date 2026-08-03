@@ -16,6 +16,7 @@ import {
   extractLessonsFacts,
 } from "../../src/cli/facts/shared/learning-loop.js";
 import {
+  BUCKET_SIZE_WARN_BYTES,
   buildDecisionsSection,
   buildStatsReport,
   checkStats,
@@ -425,6 +426,26 @@ describe("goat-flow stats --check", () => {
     const verdict = checkStats(report);
     assert.equal(verdict.status, "pass");
     assert.deepEqual(verdict.findings, []);
+  });
+
+  it("reports exact byte operands when a bucket exceeds the size gate", () => {
+    const bucketPrefix =
+      "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\n";
+    const oversizedBucket = `${bucketPrefix}${"x".repeat(BUCKET_SIZE_WARN_BYTES)}`;
+    const report = loadReport({
+      footguns: { "hooks.md": oversizedBucket },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    const finding = verdict.findings.find(
+      (item) => item.rule === "bucket-size",
+    );
+
+    assertExists(finding, "expected an oversized-bucket finding");
+    assert.equal(
+      finding.message,
+      `.goat-flow/learning-loop/footguns/hooks.md: ${Buffer.byteLength(oversizedBucket)} bytes exceeds ${BUCKET_SIZE_WARN_BYTES}-byte threshold; split into narrower category buckets`,
+    );
   });
 
   it("fails when footgun entries do not have exactly one canonical evidence label", () => {

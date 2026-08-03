@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.15.0"
 ---
 # Critique Rubric Examples (Reference Pack)
 
-*Extracted from the goat-critique SKILL.md to stay within the 2500-word skill cap. Canonical rubric definitions remain in SKILL.md; worked examples and context-map details live here.*
+*Extracted from the goat-critique SKILL.md to stay within the 2500-word skill cap. Artifact rubrics remain in SKILL.md; the canonical meta-audit rubric, worked examples, and context maps live here.*
 
 ## Rubric Context Maps
 
@@ -103,7 +103,7 @@ When Step 0 detects a same-artifact critique log within 30 days and differential
 
 ## Meta-audit rubric (Phase 5.5)
 
-The meta-agent scores the draft critique against these 10 points:
+The meta-agent scores the draft critique against these 10 checks. Award 10 only when a check is fully satisfied, otherwise 0; partial credit is forbidden. `Meta-score` is the sum. Name every failed check under `## Auto-Detected Issues`.
 
 1. **Gate-finding match** - Gate value matches highest surviving severity
 2. **Evidence quality per finding** - every finding has Proof attempt + Proof class + Evidence quality fields

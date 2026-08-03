@@ -854,6 +854,11 @@ describe("skill hardening contracts", () => {
           /Placeholder trap shape — input\/output contract only; never evidence/u,
           referencePath,
         );
+        assert.doesNotMatch(
+          reference,
+          /\.goat-flow\/learning-loop\/(?:footguns|lessons|patterns|decisions)\//u,
+          referencePath,
+        );
       },
     );
   });
@@ -2130,7 +2135,7 @@ describe("skill hardening contracts", () => {
     assert.match(publicPlanGuidance, /claim → evidence/u);
 
     const exporterLesson = readMarkdownSection(
-      ".goat-flow/learning-loop/lessons/verification.md",
+      ".goat-flow/learning-loop/lessons/integration-verification.md",
       "Lesson: Milestone plans need exporter-contract verification before handoff",
     );
     assert.match(
@@ -3563,6 +3568,63 @@ describe("skill hardening contracts", () => {
         referencePath,
       );
     });
+  });
+
+  it("uses one reproducible goat-critique meta-audit rubric", () => {
+    const metaAuditChecks = [
+      "Gate-finding match",
+      "Evidence quality per finding",
+      "Rubric coverage completeness",
+      "Rec-changes actionability",
+      "No orphan retractions",
+      "No contradictory findings",
+      "Top-blockers traceability",
+      "Severity calibration internal consistency",
+      "Integration-hooks 1:1 with findings",
+      "Blind-spot-check non-empty",
+    ];
+
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
+      assert.match(
+        synthesis,
+        /10 checks in `references\/rubric-examples\.md`/u,
+        skillPath,
+      );
+      assert.match(synthesis, /Score each 0 or 10/u, skillPath);
+      assert.match(synthesis, /sum is `Meta-score`/u, skillPath);
+      assert.match(synthesis, /no partial credit/u, skillPath);
+      assert.doesNotMatch(
+        synthesis,
+        /unsupported-certainty|missing-objections|decision-clarity/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/rubric-examples.md",
+      ),
+      (referencePath) => {
+        const metaAudit = readMarkdownSection(
+          referencePath,
+          "Meta-audit rubric (Phase 5.5)",
+        );
+        for (const checkName of metaAuditChecks) {
+          assert.ok(
+            metaAudit.includes(checkName),
+            `${referencePath}: ${checkName}`,
+          );
+        }
+        assert.match(
+          metaAudit,
+          /Award 10 only when a check is fully satisfied/u,
+        );
+        assert.match(metaAudit, /partial credit is forbidden/u);
+        assert.match(metaAudit, /`Meta-score` is the sum/u);
+      },
+    );
   });
 
   it("keeps goat-critique lifecycle aligned with its accepted decision and public guidance", () => {
