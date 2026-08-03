@@ -95,6 +95,9 @@ function isValidationWarning(
   // Drifted range notation is as fatal as a drifted estimate: both hide real numbers.
   if (warning === "forecast range not parseable") return true;
   if (!strict) return false;
+  // A summary claims a final total even when no Actual cites it and no clock is open.
+  if (warning === "timing receipt summary requires finalized state")
+    return true;
   return (
     warning.includes("actual effort not parseable") ||
     ((receiptIsClaimed || receiptIsActive) &&

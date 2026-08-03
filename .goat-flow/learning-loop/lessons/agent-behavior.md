@@ -206,7 +206,9 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Recurrence 2026-06-04:** While adding review-derived footguns, `stats --check` caught an evidence anchor whose search text used `file !== "README.md"` even though the real code used `f !== "README.md"`. The entry failed stale-ref validation before closeout. Lesson: not just "avoid line numbers" - exact semantic anchors still need a grep pass after drafting.
 
-**Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against file content - mechanical enforcement that line numbers never had.
+**Recurrence 2026-08-04:** A timing-receipt footgun cited the rendered title of a parameterized test. The title existed in test output but not as literal source, so `stats --check` rejected it. Dynamic fixture values and generated test names are not durable semantic anchors; cite a literal fixture constant, helper, or assertion instead.
+
+**Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
 
 ---
 
