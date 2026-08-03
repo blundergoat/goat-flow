@@ -30,9 +30,12 @@ Project-documented style in instruction files, style guides, and enforced linter
 | Release notes, changelog prose, review and report narrative | Yes |
 | Decision records, README and documentation prose | Yes |
 | Issue and pull-request bodies, commit message bodies | Yes |
+| `ISSUE.md`, milestone narrative, and testing-plan narrative | Yes |
 | Skill files, shared preambles, instruction files, hook output | No |
-| Code blocks, tables, INDEX and catalogue formats | No |
+| Code blocks, fixed schema fields, task/proof checklists, commands, tables, INDEX and catalogue formats | No |
 | Direct quotations, cited titles, and examples of a pattern | No |
+
+**Mixed planning artifacts.** Apply the prose rules to `ISSUE.md` bodies and the Objective, Context, Scope, assumptions, rollback, and testing-rationale prose in milestone or testing-plan output. Leave fixed schema fields, task/proof checklists, commands, tables, and catalogue rows unchanged.
 
 **Why agent-read control text is exempt.** In a skill file, a preamble, or an instruction file, emphasis and repetition are compliance mechanisms rather than style defects. A rule stated three times is stated three times on purpose, because an agent that skips one pass is a real cost while a reader who finds the repetition tedious is not. Editing those files for prose style strips out the redundancy that makes them work. Route genuine problems there to the file's own contract, never to this playbook.
 

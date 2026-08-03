@@ -3774,6 +3774,51 @@ describe("skill hardening contracts", () => {
     });
   });
 
+  it("routes planning narrative through writing style without styling plan mechanics", () => {
+    for (const referencePath of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const engineeringStandards = readMarkdownSection(
+        referencePath,
+        "Engineering Standards",
+      );
+      assert.match(
+        engineeringStandards,
+        /milestone and testing-plan narrative/u,
+        referencePath,
+      );
+      assert.match(
+        engineeringStandards,
+        /fixed schema fields, task\/proof checklists, commands, tables, and catalogues stay exempt/u,
+        referencePath,
+      );
+    }
+
+    for (const playbookPath of [
+      "workflow/skills/playbooks/writing-style.md",
+      ".goat-flow/skill-docs/playbooks/writing-style.md",
+    ]) {
+      const scopeGate = readMarkdownSection(playbookPath, "Scope Gate");
+      assert.match(
+        scopeGate,
+        /`ISSUE\.md`, milestone narrative, and testing-plan narrative\s*\|\s*Yes/u,
+        playbookPath,
+      );
+      assert.match(
+        scopeGate,
+        /fixed schema fields, task\/proof checklists, commands, tables, INDEX and catalogue formats\s*\|\s*No/u,
+        playbookPath,
+      );
+      assert.match(scopeGate, /Mixed planning artifacts/u, playbookPath);
+      assert.match(
+        scopeGate,
+        /Objective, Context, Scope, assumptions, rollback, and testing-rationale prose/u,
+        playbookPath,
+      );
+    }
+  });
+
   it("keeps shared report-only and interrupt freeze contracts installed", () => {
     // Users need the same report-only boundary in source and installed references.
     for (const referencePath of [
