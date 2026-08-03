@@ -21,6 +21,7 @@ import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
 import { getSkillNames } from "../constants.js";
 import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
+import { maskInlineCodeSpansOnLine } from "../rendered-markdown.js";
 import {
   advanceMarkdownFenceState,
   evaluateSearchAnchors,
@@ -293,9 +294,10 @@ function nextReadinessHeadingLevel(
 
 /** Return the unresolved marker carried by one readiness-section line. */
 function unresolvedContentMarker(line: string): string | null {
-  const todoMarker = /\b(?:TBD|TODO)\b/i.exec(line);
+  const markerText = maskInlineCodeSpansOnLine(line);
+  const todoMarker = /\b(?:TBD|TODO)\b/i.exec(markerText);
   if (todoMarker) return todoMarker[0];
-  if (line.includes("???")) return "???";
+  if (markerText.includes("???")) return "???";
 
   const normalized = line
     .trim()

@@ -227,6 +227,23 @@ function withActiveTimingReceipt(body: string): string {
   );
 }
 
+/** Add a derived summary to a non-final receipt for stale-authority fixtures. */
+function withTimingSummary(
+  body: string,
+  state: "active" | "paused" | "incomplete",
+  productSeconds: number,
+): string {
+  const productMinutes = Math.round(productSeconds / 60);
+  return body.replace(
+    `**Receipt state:** ${state}`,
+    [
+      `**Receipt state:** ${state}`,
+      `**Recorded seconds:** ${productSeconds} total (${productSeconds} product / 0 proof / 0 other)`,
+      `**Allocated minutes:** ${productMinutes} total (${productMinutes} product / 0 proof / 0 other)`,
+    ].join("\n"),
+  );
+}
+
 /** Render the UTC stamp a receipt segment carries beside its epoch second. */
 function receiptStamp(epochSeconds: number): string {
   return `${new Date(epochSeconds * 1000).toISOString().replace(/\.\d{3}Z$/u, "Z")} / ${epochSeconds}`;
@@ -1001,6 +1018,64 @@ describe("plans check", () => {
       try {
         const result = runPlansCheck(planPath, "--strict");
         assert.equal(result.status, 0, result.stdout + result.stderr);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  const staleSummaryCases = [
+    {
+      state: "active",
+      body: withTimingSummary(
+        withActiveTimingReceipt(
+          canonicalMilestoneBody({ status: "in-progress" }),
+        ),
+        "active",
+        0,
+      ),
+    },
+    {
+      state: "paused",
+      body: withTimingSummary(
+        withPausedTimingReceipt(
+          canonicalMilestoneBody({ status: "in-progress" }),
+        ),
+        "paused",
+        60,
+      ),
+    },
+    {
+      state: "incomplete",
+      body: withTimingSummary(
+        withActiveTimingReceipt(
+          canonicalMilestoneBody({ status: "in-progress" }),
+        )
+          .replace("**Receipt state:** active", "**Receipt state:** incomplete")
+          .replace(
+            "| _ | _ | open |",
+            `| _ | _ | discarded ${receiptStamp(101)} |`,
+          ),
+        "incomplete",
+        0,
+      ),
+    },
+  ] as const;
+
+  for (const testCase of staleSummaryCases) {
+    it(`strict mode rejects a summary on ${testCase.state} timing receipts`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), `goat-flow-plan-${testCase.state}-summary-`),
+      );
+      const planPath = writeCheckFixture(temporaryRoot, testCase.body);
+
+      try {
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.match(
+          result.stdout,
+          /timing receipt summary requires finalized state/u,
+        );
       } finally {
         rmSync(temporaryRoot, { recursive: true, force: true });
       }

@@ -438,6 +438,9 @@ function collectReceiptStateErrors(receipt: PlanTimingReceipt): string[] {
   if (receipt.state === "finalized" && receipt.summary === undefined) {
     errors.push("finalized timing receipt requires a summary");
   }
+  if (receipt.state !== "finalized" && receipt.summary !== undefined) {
+    errors.push("timing receipt summary requires finalized state");
+  }
   return errors;
 }
 

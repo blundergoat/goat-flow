@@ -9,6 +9,7 @@ interface MarkdownMaskState {
   fenceLength: number;
   inIndentedCode: boolean;
   inHtmlComment: boolean;
+  inlineCodeDelimiterLength: number;
   rawHtmlClosingPattern: RegExp | null;
   rawHtmlUntilBlank: boolean;
   previousRenderedLineWasParagraph: boolean;
@@ -123,7 +124,7 @@ function findClosingBacktickRun(
 function findInlineCodeSpan(
   line: string,
   startIndex: number,
-): { start: number; end: number } | null {
+): { start: number; end: number; delimiterLength: number } | null {
   let openerStart = startIndex;
   while (openerStart < line.length) {
     openerStart = line.indexOf("`", openerStart);
@@ -137,12 +138,29 @@ function findInlineCodeSpan(
     const delimiterLength = openerEnd - openerStart;
     const closerEnd = findClosingBacktickRun(line, openerEnd, delimiterLength);
     if (closerEnd >= 0) {
-      return { start: openerStart, end: closerEnd };
+      return { start: openerStart, end: closerEnd, delimiterLength };
     }
 
     openerStart = openerEnd;
   }
   return null;
+}
+
+/** Mask balanced inline-code spans on one line while retaining source offsets. */
+export function maskInlineCodeSpansOnLine(line: string): string {
+  let cursor = 0;
+  let masked = "";
+  while (cursor < line.length) {
+    const inlineCode = findInlineCodeSpan(line, cursor);
+    if (!inlineCode) {
+      masked += line.slice(cursor);
+      break;
+    }
+    masked += line.slice(cursor, inlineCode.start);
+    masked += maskCharacters(line.slice(inlineCode.start, inlineCode.end));
+    cursor = inlineCode.end;
+  }
+  return masked;
 }
 
 /** Find the next HTML comment opener whose less-than sign is not escaped. */
@@ -164,6 +182,30 @@ const RAW_HTML_BLOCK_TAGS =
   /^(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)$/iu;
 const COMPLETE_HTML_TAG =
   /^ {0,3}(?:<\/[A-Za-z][A-Za-z0-9-]*[\t ]*>|<[A-Za-z][A-Za-z0-9-]*(?:[\t ]+[A-Za-z_:][A-Za-z0-9_.:-]*(?:[\t ]*=[\t ]*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*[\t ]*\/?>)[\t ]*$/u;
+
+/** Return whether a later source line starts a block that ends inline parsing. */
+function interruptsInlineCodeParagraph(line: string): boolean {
+  const comparableLine = line.endsWith("\r") ? line.slice(0, -1) : line;
+  if (comparableLine.trim().length === 0) return true;
+  if (isMarkdownHeading(comparableLine)) return true;
+  if (/^ {0,3}(?:`{3,}|~{3,}|>)/u.test(comparableLine)) return true;
+  if (/^ {0,3}(?:[*+-][\t ]+|\d{1,9}[.)][\t ]+)/u.test(comparableLine)) {
+    return true;
+  }
+  if (/^ {0,3}\[[^\]]+\]:/u.test(comparableLine)) return true;
+  if (/^ {0,3}(?:<!--|<\?|<!\[CDATA\[|<![A-Z])/u.test(comparableLine)) {
+    return true;
+  }
+  if (
+    /^ {0,3}<(?:script|pre|style|textarea)(?:[\t >]|$)/iu.test(comparableLine)
+  ) {
+    return true;
+  }
+  const blockTag = comparableLine.match(
+    /^ {0,3}<\/?([A-Za-z][\w-]*)(?:[\t ]|\/?>|$)/u,
+  )?.[1];
+  return blockTag !== undefined && RAW_HTML_BLOCK_TAGS.test(blockTag);
+}
 
 /** Consume one line when a raw HTML block was opened earlier. */
 function continuesRawHtmlBlock(
@@ -281,9 +323,21 @@ function recordRenderedLine(
 function maskMarkdownSourceLine(
   sourceLine: string,
   state: MarkdownMaskState,
+  inlineCodeSource: string,
 ): string {
+  if (state.inlineCodeDelimiterLength > 0) {
+    return recordRenderedLine(
+      maskHtmlComments(sourceLine, state, inlineCodeSource),
+      true,
+      state,
+    );
+  }
   if (state.inHtmlComment) {
-    return recordRenderedLine(maskHtmlComments(sourceLine, state), true, state);
+    return recordRenderedLine(
+      maskHtmlComments(sourceLine, state, inlineCodeSource),
+      true,
+      state,
+    );
   }
   if (state.fenceCharacter.length > 0) {
     isFencedLine(sourceLine, state);
@@ -304,15 +358,40 @@ function maskMarkdownSourceLine(
     return recordRenderedLine(maskCharacters(sourceLine), false, state);
   }
 
-  return recordRenderedLine(maskHtmlComments(sourceLine, state), true, state);
+  return recordRenderedLine(
+    maskHtmlComments(sourceLine, state, inlineCodeSource),
+    true,
+    state,
+  );
 }
 
 /** Mask HTML comments on one non-fenced line, including multiline comments. */
-function maskHtmlComments(line: string, state: MarkdownMaskState): string {
+function maskHtmlComments(
+  line: string,
+  state: MarkdownMaskState,
+  inlineCodeSource: string,
+): string {
   let cursor = 0;
   let rendered = "";
   // Walk the line so visible prose around a comment retains its original position.
   while (cursor < line.length) {
+    // A code span opened on an earlier line keeps comment-like text visible.
+    if (state.inlineCodeDelimiterLength > 0) {
+      const closerEnd = findClosingBacktickRun(
+        line,
+        cursor,
+        state.inlineCodeDelimiterLength,
+      );
+      if (closerEnd < 0) {
+        rendered += line.slice(cursor);
+        break;
+      }
+      rendered += line.slice(cursor, closerEnd);
+      cursor = closerEnd;
+      state.inlineCodeDelimiterLength = 0;
+      continue;
+    }
+
     // A comment opened on an earlier line hides text until this user-facing example ends.
     if (state.inHtmlComment) {
       const closeIndex = line.indexOf("-->", cursor);
@@ -326,9 +405,18 @@ function maskHtmlComments(line: string, state: MarkdownMaskState): string {
     }
 
     const openIndex = findUnescapedHtmlCommentOpener(line, cursor);
-    const inlineCode = findInlineCodeSpan(line, cursor);
+    const inlineCode = findInlineCodeSpan(inlineCodeSource, cursor);
     // HTML-like text inside a balanced code span is visible code, not a comment.
-    if (inlineCode && (openIndex < 0 || inlineCode.start < openIndex)) {
+    if (
+      inlineCode &&
+      inlineCode.start < line.length &&
+      (openIndex < 0 || inlineCode.start < openIndex)
+    ) {
+      if (inlineCode.end > line.length) {
+        rendered += line.slice(cursor);
+        state.inlineCodeDelimiterLength = inlineCode.delimiterLength;
+        break;
+      }
       rendered += line.slice(cursor, inlineCode.end);
       cursor = inlineCode.end;
       continue;
@@ -360,6 +448,7 @@ export function maskNonRenderedMarkdown(content: string): string {
     fenceLength: 0,
     inIndentedCode: false,
     inHtmlComment: false,
+    inlineCodeDelimiterLength: 0,
     rawHtmlClosingPattern: null,
     rawHtmlUntilBlank: false,
     previousRenderedLineWasParagraph: false,
@@ -370,10 +459,29 @@ export function maskNonRenderedMarkdown(content: string): string {
   const sourceLines = content.match(/[^\n]*(?:\n|$)/gu) ?? [];
   // Process each line so users see validation against rendered report content only.
   return sourceLines
-    .map((segment) => {
+    .map((segment, lineIndex) => {
       const lineHasNewline = segment.endsWith("\n");
       const sourceLine = lineHasNewline ? segment.slice(0, -1) : segment;
-      const visibleLine = maskMarkdownSourceLine(sourceLine, state);
+      let inlineCodeSource = sourceLine;
+      if (sourceLine.includes("`")) {
+        for (
+          let nextLineIndex = lineIndex + 1;
+          nextLineIndex < sourceLines.length;
+          nextLineIndex += 1
+        ) {
+          const nextSegment = sourceLines[nextLineIndex] ?? "";
+          const nextLine = nextSegment.endsWith("\n")
+            ? nextSegment.slice(0, -1)
+            : nextSegment;
+          if (interruptsInlineCodeParagraph(nextLine)) break;
+          inlineCodeSource += `\n${nextLine}`;
+        }
+      }
+      const visibleLine = maskMarkdownSourceLine(
+        sourceLine,
+        state,
+        inlineCodeSource,
+      );
       return lineHasNewline ? `${visibleLine}\n` : visibleLine;
     })
     .join("");

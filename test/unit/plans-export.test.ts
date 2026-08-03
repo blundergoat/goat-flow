@@ -228,6 +228,48 @@ describe("plans export", () => {
     assert.doesNotMatch(masked, /hidden comment/u);
   });
 
+  it("keeps HTML-comment delimiters inside multiline inline code visible", () => {
+    const content = [
+      "Checked the literal `first line",
+      "continued <!-- remains code` token.",
+      "## Live after multiline code",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    assert.equal(masked, content);
+  });
+
+  it("does not carry inline code across an interrupting HTML comment block", () => {
+    const content = [
+      "An unmatched ` delimiter remains literal.",
+      "<!-- hidden block comment",
+      "## Hidden comment heading",
+      "-->",
+      "## Live after comment",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    assert.doesNotMatch(masked, /hidden block|Hidden comment/u);
+    assert.equal(
+      masked.indexOf("## Live after comment"),
+      content.indexOf("## Live after comment"),
+    );
+  });
+
+  it("tracks a new multiline code span after closing one on the same line", () => {
+    const content = [
+      "Checked the `first",
+      "span` and the `second",
+      "span <!-- remains code` token.",
+      "## Live after consecutive spans",
+      "",
+    ].join("\n");
+
+    assert.equal(maskNonRenderedMarkdown(content), content);
+  });
+
   it("keeps backslash-escaped HTML comment openers visible", () => {
     const content = [
       "Checked the visible literal \\<!-- token.",

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Enforces docs/coding-standards/git-commit-message.md on commit subjects.
+# Checks deterministic rules from docs/coding-standards/git-commit-message.md.
 #
 # Why this exists: the subject standard is stated in the hot path (CLAUDE.md
 # "Commit Messages") and in the canonical doc, but the `commit-guidance`
@@ -21,6 +21,7 @@ GRANDFATHER_BASE="${COMMIT_SUBJECT_BASE:-2d106ea07d1b33dae3042059f4cb295e47f151e
 
 TYPES='feat|fix|docs|refactor|test|perf|build|ci|chore|security|revert'
 WEAK_VERBS='enhance|enhances|enhanced|improve|improves|improved|streamline|streamlines|streamlined|clarify|clarifies|clarified|update|updates|updated|tweak|tweaks|tweaked|polish|polishes|polished'
+PAST_TENSE_VERBS='added|changed|created|deleted|documented|fixed|implemented|moved|refactored|removed|renamed|replaced|tested'
 
 if ! git rev-parse --verify --quiet "$GRANDFATHER_BASE" >/dev/null; then
     echo "SKIP: baseline $GRANDFATHER_BASE not present in this checkout"
@@ -34,6 +35,15 @@ fi
 
 violations=0
 checked=0
+head_sha=$(git rev-parse --verify HEAD)
+current_branch="${GITHUB_HEAD_REF:-}"
+if [[ -z "$current_branch" ]]; then
+    current_branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+fi
+required_issue_prefix=""
+if [[ "$current_branch" =~ ^feat/([0-9]+)$ ]]; then
+    required_issue_prefix="#${BASH_REMATCH[1]} "
+fi
 
 report() {
     printf '  %s: %s\n' "$1" "$2"
@@ -47,6 +57,19 @@ while IFS= read -r sha; do
     checked=$((checked + 1))
     subject=$(git log -1 --format='%s' "$sha")
     short="${sha:0:8}"
+
+    # Only HEAD has reliable current-branch provenance. Older commits may have
+    # reached this branch through a merge, so their original prefix remains
+    # syntax-checked without guessing which branch authorized it.
+    if [[ "$sha" == "$head_sha" && -n "$current_branch" ]]; then
+        if [[ -n "$required_issue_prefix" ]]; then
+            if [[ "$subject" != "$required_issue_prefix"* ]]; then
+                report "$short" "HEAD prefix must be ${required_issue_prefix% } on branch $current_branch: $subject"
+            fi
+        elif [[ "$subject" =~ ^(#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+)[[:space:]] ]]; then
+            report "$short" "HEAD prefix is not authorized on branch $current_branch: $subject"
+        fi
+    fi
 
     if [[ "$subject" == *'**'* ]]; then
         report "$short" "subject contains literal '**' markdown emphasis: $subject"
@@ -73,7 +96,9 @@ while IFS= read -r sha; do
     fi
 
     body_text=${stripped#*: }
-    if printf '%s' "$body_text" | grep -qiE "^($WEAK_VERBS)\b"; then
+    if printf '%s' "$body_text" | grep -qiE "^($PAST_TENSE_VERBS)\b"; then
+        report "$short" "subject must lead with an imperative verb: $subject"
+    elif printf '%s' "$body_text" | grep -qiE "^($WEAK_VERBS)\b"; then
         report "$short" "subject leads with a weak verb - name the observable change: $subject"
     fi
 done < <(git rev-list --no-merges "$GRANDFATHER_BASE..HEAD")
@@ -89,5 +114,5 @@ if [[ "$violations" -gt 0 ]]; then
     exit 1
 fi
 
-echo "PASS: $checked commit subject(s) conform to the standard"
+echo "PASS: $checked commit subject(s) satisfy the checked rules"
 exit 0

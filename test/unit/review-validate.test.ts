@@ -218,6 +218,25 @@ What I Didn't Examine: none.
     assert.deepEqual(validateReviewReport(compact, projectRoot).violations, []);
   });
 
+  it("rejects a second decision appended to a compact verdict", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    for (const verdict of [
+      "Ship Verdict: **YES** and **NO**",
+      "Ship Verdict: **YES** - actually **NO**",
+    ]) {
+      const report = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
+${verdict}
+Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
+Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
+What I Didn't Examine: none.
+`;
+      const result = validateReviewReport(report, projectRoot);
+
+      assert.equal(result.status, "fail", verdict);
+      assert.equal(hasViolation(result, "ship-verdict-format"), true, verdict);
+    }
+  });
+
   it("requires the compact clean-review disclosures", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const result = validateReviewReport(
@@ -282,6 +301,20 @@ What I Didn't Examine: none.
   it("keeps proof fields after an escaped HTML comment opener", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = `Checked the visible literal \\<!-- token.
+Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
+Ship Verdict: **YES** - no blocking finding survived Pass 2.
+Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
+Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
+What I Didn't Examine: none.
+`;
+
+    assert.deepEqual(validateReviewReport(report, projectRoot).violations, []);
+  });
+
+  it("keeps compact proof fields after multiline inline code", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const report = `Checked the literal \`first line
+continued <!-- remains code\` token.
 Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.

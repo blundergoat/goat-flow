@@ -319,6 +319,39 @@ describe("scanContentQuality: unresolved readiness markers", () => {
     );
   });
 
+  it("ignores readiness markers that appear only inside inline code", () => {
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      [
+        "## Open Questions",
+        "- Answer: Does the literal `TODO` token remain supported? Yes.",
+        "- Answer: Does the literal `???` token remain supported? Yes.",
+      ].join("\n"),
+    );
+
+    assert.equal(
+      findings.filter((finding) => finding.rule === "unresolved-content-marker")
+        .length,
+      0,
+    );
+  });
+
+  it("still flags a visible readiness marker after inline code", () => {
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      [
+        "## Open Questions",
+        "- Answer: The literal `TODO` token is supported. TODO: decide removal timing.",
+      ].join("\n"),
+    );
+
+    assert.equal(
+      findings.filter((finding) => finding.rule === "unresolved-content-marker")
+        .length,
+      1,
+    );
+  });
+
   it("flags an empty Answer label when the colon is inside strong emphasis", () => {
     const findings = scanContentQuality(
       "docs/proposal.md",
