@@ -15,9 +15,8 @@
 #
 # Exit codes:
 #   0  clean scan, no findings
-#   1  hook cannot run (no git root or work dir) or the scan hit its
-#      wall-clock budget with no findings; stderr explains, the turn continues
-#   2  findings blocked, or the budget was hit after findings were already found
+#   1  hook cannot run (no git root or work dir); stderr explains
+#   2  findings blocked, or the scan hit its wall-clock budget before completion
 #
 # Bash 4+ performance architecture (Windows Git Bash ships fork costs 10-40x
 # Linux, so its optimized scan must not spawn per line or per file):
@@ -470,6 +469,32 @@ fallback_diff_path_within_byte_cap() {
   [ "$changed_file_bytes" -le "$fallback_max_bytes" ]
 }
 
+# Decode one default Git diff destination header into the literal repository path.
+# Git tab-terminates unquoted names containing spaces and C-quotes names with
+# non-ASCII or control bytes; passing either decorated form to filesystem checks
+# silently disables the compatibility scan for that file.
+fallback_decode_diff_path() {
+  local encoded_path="${1#+++ }"
+  FALLBACK_DIFF_PATH=""
+
+  case "$encoded_path" in
+    *$'\t') encoded_path="${encoded_path%$'\t'}" ;;
+  esac
+  case "$encoded_path" in
+    \"*\")
+      encoded_path="${encoded_path#\"}"
+      encoded_path="${encoded_path%\"}"
+      ;;
+  esac
+  case "$encoded_path" in
+    b/*) encoded_path="${encoded_path#b/}" ;;
+  esac
+  [ -n "$encoded_path" ] || return 1
+  # Bash's builtin printf understands Git's octal and escaped-quote notation.
+  printf -v FALLBACK_DIFF_PATH '%b' "$encoded_path" || return 1
+  [ -n "$FALLBACK_DIFF_PATH" ]
+}
+
 # Scans added diff lines while preserving the configured file-size boundary.
 # For example, a staged-only secret is checked against the staged blob size.
 fallback_scan_diff() {
@@ -500,19 +525,14 @@ fallback_scan_diff() {
         changed_file_path=""
         scan_changed_file=0
         ;;
-      '+++ b/'*)
-        changed_file_path="${diff_line#+++ b/}"
-        # Scan this file only when its selected content fits the user's byte cap.
-        if fallback_diff_path_within_byte_cap "$repository_root" "$changed_file_path" "$uses_staged_blob"; then
-          scan_changed_file=1
+      '+++ '*)
+        if fallback_decode_diff_path "$diff_line"; then
+          changed_file_path="$FALLBACK_DIFF_PATH"
         else
-          scan_changed_file=0
+          changed_file_path=""
         fi
-        ;;
-      +++*)
-        changed_file_path="${diff_line#+++ }"
         # Scan this file only when its selected content fits the user's byte cap.
-        if fallback_diff_path_within_byte_cap "$repository_root" "$changed_file_path" "$uses_staged_blob"; then
+        if [ -n "$changed_file_path" ] && fallback_diff_path_within_byte_cap "$repository_root" "$changed_file_path" "$uses_staged_blob"; then
           scan_changed_file=1
         else
           scan_changed_file=0

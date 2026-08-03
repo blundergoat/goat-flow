@@ -944,6 +944,18 @@ describe("post-turn-safety hook", () => {
       });
     });
 
+    for (const path of ["space name.env", "café.env"]) {
+      it(`decodes the Git diff header for ${path} on both paths`, () => {
+        withTempRepo((root) => {
+          writeFile(root, path, "safe=1\n");
+          commitAll(root, `add ${path}`);
+          writeFile(root, path, `OPENAI_API_KEY=${TEST_API_TOKEN}\n`);
+
+          assertHookBlocks(root, new RegExp(`API token in ${path}`, "u"));
+        });
+      });
+    }
+
     it("combines staged and unstaged conflict-marker state on both paths", () => {
       withTempRepo((root) => {
         writeFile(root, "conflict.txt", "safe\n");

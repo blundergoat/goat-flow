@@ -448,6 +448,31 @@ What I Didn't Examine: none.
     );
   });
 
+  it("does not accept indented proof fields immediately after headings", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const indentedProof = validReview()
+      .replace(/^(##+ .+)\n\n/gmu, "$1\n")
+      .split("\n")
+      .map((line) =>
+        /^(?:- |Decision:|Reasoning:|Confidence:)/u.test(line)
+          ? `    ${line}`
+          : line,
+      )
+      .join("\n");
+
+    const result = validateReviewReport(indentedProof, projectRoot);
+
+    assert.equal(result.status, "fail");
+    assert.equal(
+      hasCheck(
+        result.violations as ValidationIssueShape[],
+        "V5",
+        "integrity-format",
+      ),
+      true,
+    );
+  });
+
   it("ignores findings hidden inside multiline HTML comments", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const commentedExample = validReview().replace(
@@ -759,6 +784,44 @@ What I Didn't Examine: none.
         "ship-verdict-contradiction",
       ),
       true,
+    );
+  });
+
+  it("reconciles risk-depth-declined with a partial conclusion and verdict cap", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const overconfident = validReview()
+      .replace(
+        "- Degradation flags: gates-not-run",
+        "- Degradation flags: risk-depth-declined",
+      )
+      .replace("- Conclusion: coverage-degraded", "- Conclusion: confident")
+      .replace("Decision: **PARTIAL**", "Decision: **YES WITH CONDITIONS**");
+    const aboveCap = validReview()
+      .replace("[SHOULD:patch]", "[MAY:patch]")
+      .replace(
+        "- Degradation flags: gates-not-run",
+        "- Degradation flags: risk-depth-declined",
+      )
+      .replace("- Conclusion: coverage-degraded", "- Conclusion: partial")
+      .replace("Decision: **PARTIAL**", "Decision: **YES WITH CONDITIONS**");
+
+    const overconfidentResult = validateReviewReport(
+      overconfident,
+      projectRoot,
+    );
+    const aboveCapResult = validateReviewReport(aboveCap, projectRoot);
+
+    assert.match(
+      overconfidentResult.violations
+        .map((violation) => violation.message)
+        .join("\n"),
+      /risk-depth-declined requires Conclusion: partial/u,
+    );
+    assert.match(
+      aboveCapResult.violations
+        .map((violation) => violation.message)
+        .join("\n"),
+      /Ship Verdict claims YES WITH CONDITIONS.*require PARTIAL/u,
     );
   });
 

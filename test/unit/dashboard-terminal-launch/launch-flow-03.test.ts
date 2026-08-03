@@ -220,7 +220,7 @@ describe("dashboard terminal launch flow", () => {
     const ctx = makeContext({
       sessions: [session],
       _terminalRefs: {
-        "session-loading": {},
+        "session-loading": { retryPrompt: "loading prompt" },
       },
     });
 
@@ -369,6 +369,22 @@ describe("dashboard terminal launch flow", () => {
         },
       },
     ]);
+  });
+
+  it("keeps a rehydrated session when its original retry prompt is unavailable", async () => {
+    const { ctx, helpers, launchCalls, session } = makePreOutputRetryHarness();
+    const refs = ctx._terminalRefs[session.id];
+    if (refs) {
+      delete refs.retryPrompt;
+      delete refs.launchPrompt;
+    }
+    session.loadingShowRetry = true;
+
+    await helpers.dashboardRetryTerminalSession(ctx, session.id);
+
+    assert.deepStrictEqual(ctx.sessions, [session]);
+    assert.deepStrictEqual(launchCalls, []);
+    assert.equal(session.loadingShowRetry, false);
   });
 
   it("carries staged-draft capture through a retried launch", async () => {

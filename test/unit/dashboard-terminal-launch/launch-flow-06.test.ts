@@ -56,6 +56,10 @@ describe("dashboard terminal launch flow", () => {
       ctx._terminalRefs["session-reporting"]?.retryQualityDraftProjectPath,
       "/tmp/example",
     );
+    assert.equal(
+      ctx._terminalRefs["session-reporting"]?.retryPrompt,
+      undefined,
+    );
   });
 
   it("saves reporting capture metadata when detaching from a project", () => {

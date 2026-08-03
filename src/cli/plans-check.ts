@@ -81,12 +81,14 @@ function renderSplit(split: PlanEffortSplit): string {
  * @param warning - one parser warning from the milestone record
  * @param strict - whether strict current-plan validation is selected
  * @param receiptIsClaimed - whether an Actual derives its authority from the receipt
+ * @param receiptIsActive - whether the receipt currently controls an executing clock
  * @returns true when the warning should become a check error
  */
 function isValidationWarning(
   warning: string,
   strict: boolean,
   receiptIsClaimed: boolean,
+  receiptIsActive: boolean,
 ): boolean {
   if (warning.includes("estimate not parseable")) return true;
 
@@ -95,7 +97,8 @@ function isValidationWarning(
   if (!strict) return false;
   return (
     warning.includes("actual effort not parseable") ||
-    (receiptIsClaimed && warning.startsWith("timing receipt")) ||
+    ((receiptIsClaimed || receiptIsActive) &&
+      warning.startsWith("timing receipt")) ||
     /^multiple .+ values supplied$/u.test(warning) ||
     STRICT_STRUCTURAL_WARNINGS.has(warning) ||
     /^conflicting .+ representations$/u.test(warning)
@@ -105,10 +108,10 @@ function isValidationWarning(
 /**
  * Convert fatal parser warnings into source-labelled check errors.
  *
- * A receipt is evidence for a claim, so its shape is only fatal when an Actual
- * claims authority from it. Hand-written receipts predating `plans time` sit
- * beside retrospective Actuals that never cite them; failing the plan on their
- * shape would invalidate finished work over decoration nothing depends on.
+ * A receipt is evidence for a claim or a live clock, so its shape is fatal when
+ * an Actual claims authority from it or its state is active. Hand-written
+ * historical receipts beside retrospective Actuals remain advisory because
+ * neither a measurement claim nor executing workflow depends on them.
  * `measured` Actuals still fail twice over - here and in the reconciliation
  * check that compares their minutes against the receipt allocation.
  *
@@ -121,8 +124,11 @@ function collectWarningErrors(
   strict: boolean,
 ): string[] {
   const receiptIsClaimed = record.effort?.actual?.state === "measured";
+  const receiptIsActive = record.timingReceipt?.state === "active";
   return record.warnings
-    .filter((warning) => isValidationWarning(warning, strict, receiptIsClaimed))
+    .filter((warning) =>
+      isValidationWarning(warning, strict, receiptIsClaimed, receiptIsActive),
+    )
     .map((warning) => `${record.sourceFile}: ${warning}`);
 }
 
@@ -446,12 +452,6 @@ function collectCompleteSnapshotErrors(
       `${record.sourceFile}: complete milestone has open exit criteria`,
     );
   }
-  // A completed milestone cannot still show the user a running plan clock.
-  if (record.timingReceipt?.state === "active") {
-    errors.push(
-      `${record.sourceFile}: complete milestone must not have an active Timing Receipt`,
-    );
-  }
   return errors;
 }
 
@@ -491,6 +491,28 @@ function collectNotStartedSnapshotErrors(
   return errors;
 }
 
+/** Reject a running clock from a lifecycle state that cannot execute work. */
+function collectInactiveReceiptErrors(
+  record: PlanExportRecord,
+  status: string,
+): string[] {
+  if (record.timingReceipt?.state !== "active") return [];
+  return [
+    `${record.sourceFile}: ${status} milestone must not have an active Timing Receipt`,
+  ];
+}
+
+/** Validate the testing gate while retaining its intentionally active timing state. */
+function collectTestingGateErrors(
+  record: PlanExportRecord,
+  openTasks: number,
+): string[] {
+  if (openTasks === 0) return [];
+  return [
+    `${record.sourceFile}: testing-gate milestone has open implementation tasks`,
+  ];
+}
+
 /** Validate one milestone's current lifecycle snapshot without reconstructing history. */
 function collectLifecycleErrors(record: PlanExportRecord): string[] {
   const status = record.status.trim().toLowerCase();
@@ -504,21 +526,26 @@ function collectLifecycleErrors(record: PlanExportRecord): string[] {
 
   const openTasks = countOpenItems(record.tasks);
   const checkedTasks = record.tasks.length - openTasks;
-  if (status === "not-started") {
-    errors.push(...collectNotStartedSnapshotErrors(record, checkedTasks));
+  switch (status) {
+    case "not-started":
+      return collectNotStartedSnapshotErrors(record, checkedTasks);
+    case "in-progress":
+      return errors;
+    case "testing-gate":
+      return collectTestingGateErrors(record, openTasks);
+    case "human-verification-pending":
+      return [
+        ...collectInactiveReceiptErrors(record, status),
+        ...collectHumanPendingErrors(record, openTasks),
+      ];
+    case "complete":
+      return [
+        ...collectInactiveReceiptErrors(record, status),
+        ...collectCompleteSnapshotErrors(record, openTasks),
+      ];
+    default:
+      return collectInactiveReceiptErrors(record, status);
   }
-  if (status === "testing-gate" && openTasks > 0) {
-    errors.push(
-      `${record.sourceFile}: testing-gate milestone has open implementation tasks`,
-    );
-  }
-  if (status === "human-verification-pending") {
-    errors.push(...collectHumanPendingErrors(record, openTasks));
-  }
-  if (status === "complete") {
-    errors.push(...collectCompleteSnapshotErrors(record, openTasks));
-  }
-  return errors;
 }
 
 /**

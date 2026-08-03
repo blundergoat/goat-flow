@@ -1,39 +1,49 @@
 /**
  * Own quality-report persistence when a Claude reporting agent stages a draft (ADR-044).
  * Repeated size/mtime observations protect changing files on WSL2 and network filesystems.
- * Stable outcomes get visible receipts immediately; one root poller sweeps leftovers at shutdown.
+ * Filesystem claims serialize server processes; shutdown touches only claims this process owns.
  */
 import {
-  chmodSync,
   lstatSync,
-  mkdirSync,
   readdirSync,
   readFileSync,
   realpathSync,
   unlinkSync,
-  writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
-import {
-  isQualityPersistencePathIgnored,
-  persistQualityReportText,
-} from "../quality/quality-command.js";
+import { persistQualityReportText } from "../quality/quality-command.js";
 import { recordEvidenceEvent } from "../evidence/envelope.js";
 import type { EvidencePayload } from "../evidence/envelope.js";
-import { redactEvidenceText, scrubDurableText } from "../evidence/redaction.js";
+import { redactEvidenceText } from "../evidence/redaction.js";
+import {
+  acquireQualityDraftClaim,
+  isQualityDraftClaimOwned,
+  qualityDraftNameFromOwnershipMarker,
+  refreshQualityDraftClaim,
+  rejectStaleQualityDraftClaim,
+  releaseQualityDraftClaim,
+} from "./quality-draft-claims.js";
+import type { QualityDraftClaim } from "./quality-draft-claims.js";
+import {
+  assertQualityCaptureReceiptAvailable,
+  hasValidTerminalQualityReceipt,
+  replaceUnsafeQualityReceiptWithRejection,
+  writeQualityCaptureReceipt,
+} from "./quality-draft-receipts.js";
+import type { QualityCaptureReceipt } from "./quality-draft-receipts.js";
+import { ensureQualityDraftStagingDirectory } from "./quality-draft-staging.js";
+
+export { ensureQualityDraftStagingDirectory } from "./quality-draft-staging.js";
 
 /** Draft filenames the poller will process; anything else in staging is ignored. */
 const DRAFT_NAME_PATTERN = /^goat-quality-draft-[A-Za-z0-9_-]{1,64}\.json$/u;
-/** Prefixes used to derive the receipt filename from a draft filename. */
-const DRAFT_NAME_PREFIX = "goat-quality-draft-";
-const RESULT_NAME_PREFIX = "goat-quality-result-";
-/** Exact local directory whose descendants may briefly contain raw quality text. */
-const STAGING_RELATIVE_PATH = ".goat-flow/logs/quality/staging/";
 /** Reject drafts larger than this; a valid report is far smaller. */
 const MAX_DRAFT_BYTES = 2 * 1024 * 1024;
 /** Default poll cadence and required mtime quiet period before processing. */
 const DEFAULT_INTERVAL_MS = 750;
 const DEFAULT_STABLE_MS = 500;
+/** Claims older than this are rejected instead of replayed after an owner crash. */
+const DEFAULT_CLAIM_STALE_MS = 5 * 60 * 1000;
 
 /**
  * Translate shared quality-save failures into capture outcomes the reporting agent can read.
@@ -61,19 +71,24 @@ export interface QualityDraftCaptureOptions {
   intervalMs?: number;
   /** Required mtime quiet period before a draft is read; zero disables the gate. */
   stableMs?: number;
+  /** Claim age after which a crashed owner is rejected; tests use zero for stale fixtures. */
+  claimStaleMs?: number;
 }
 
-/** Live capture handle held by exactly one terminal session. */
+/**
+ * Live capture handle held by exactly one terminal session.
+ * Invariant: each handle releases one root holder, and repeated disposal cannot release a sibling.
+ */
 export interface QualityDraftCapture {
   /** Absolute staging directory this capture watches. */
   stagingDir: string;
   /**
    * Release this session's hold; safe to call more than once. The poller keeps
-   * running - and leftover drafts survive - until every holder on the root has
-   * released, so one session ending cannot delete another's pending draft.
+   * running until every in-process holder releases it. Teardown never removes
+   * unowned shared drafts, so another server process keeps its pending state.
    */
   dispose(): void;
-  /** Process eligible drafts immediately; exposed for tests and shutdown flushes. */
+  /** Process eligible drafts immediately; exposed for deterministic tests. */
   processNow(): Promise<void>;
 }
 
@@ -82,7 +97,7 @@ interface RootCapture {
   stagingDir: string;
   /** Process every currently eligible draft while preserving single-poller ordering. */
   processNow(): Promise<void>;
-  /** Stop polling, finalize regular drafts, and remove unsafe leftovers. */
+  /** Stop polling and clean only claims this process can prove it owns. */
   shutdown(): void;
 }
 
@@ -96,173 +111,6 @@ const rootCaptures = new Map<
   string,
   { capture: RootCapture; holders: number }
 >();
-/** One prospective staging component and its non-following filesystem observation. */
-interface InspectedDraftDirectory {
-  componentPath: string;
-  stats: NonNullable<ReturnType<typeof lstatSync>> | null;
-}
-
-/** Inspect every staging component without creating or following a final symlink. */
-function inspectQualityDraftDirectories(
-  componentPaths: readonly string[],
-): InspectedDraftDirectory[] {
-  return componentPaths.map((componentPath) => {
-    try {
-      return { componentPath, stats: lstatSync(componentPath) };
-    } catch {
-      return { componentPath, stats: null };
-    }
-  });
-}
-
-/** Reject any existing staging component that is not a real directory. */
-function assertQualityDraftDirectories(
-  components: readonly InspectedDraftDirectory[],
-): void {
-  for (const component of components) {
-    if (component.stats !== null && !component.stats.isDirectory()) {
-      throw new Error(
-        `quality capture: ${component.componentPath} must be a real project-local directory.`,
-      );
-    }
-  }
-}
-
-/** Create missing staging components and enforce the private leaf mode. */
-function createQualityDraftDirectories(
-  components: readonly InspectedDraftDirectory[],
-  stagingPath: string,
-): void {
-  for (const component of components) {
-    if (component.stats === null) {
-      mkdirSync(component.componentPath, {
-        mode: component.componentPath === stagingPath ? 0o700 : undefined,
-      });
-    }
-    if (
-      process.platform !== "win32" &&
-      component.componentPath === stagingPath
-    ) {
-      chmodSync(component.componentPath, 0o700);
-      if ((lstatSync(component.componentPath).mode & 0o077) !== 0) {
-        throw new Error(
-          "quality capture: staging directory must be private (0700).",
-        );
-      }
-    }
-  }
-}
-
-/**
- * Create the staging directory for one reporting root, component by component.
- *
- * Mirrors the `quality save` directory walk: each component must be a real
- * local directory (no symlinked or file-shadowed segments), and the staging
- * leaf is created `0700` so the redaction window named in ADR-044 is not
- * widened by group/world reads. Call BEFORE building the Claude permission
- * overlay so the `.goat-flow/logs` write allow exists for fresh targets.
- * Existing components are inspected first; Git must then prove the exact
- * staging directory ignored before any missing component is created.
- *
- * @param projectRoot - report owner project root
- * @returns absolute staging directory path
- */
-export function ensureQualityDraftStagingDirectory(
-  projectRoot: string,
-): string {
-  const components = [
-    join(projectRoot, ".goat-flow"),
-    join(projectRoot, ".goat-flow", "logs"),
-    join(projectRoot, ".goat-flow", "logs", "quality"),
-    join(projectRoot, ".goat-flow", "logs", "quality", "staging"),
-  ];
-  const inspectedComponents = inspectQualityDraftDirectories(components);
-  assertQualityDraftDirectories(inspectedComponents);
-  if (!isQualityPersistencePathIgnored(projectRoot, STAGING_RELATIVE_PATH)) {
-    throw new Error(
-      `quality capture: ${STAGING_RELATIVE_PATH} must be gitignored before capture starts.`,
-    );
-  }
-  createQualityDraftDirectories(
-    inspectedComponents,
-    components[components.length - 1] as string,
-  );
-  return components[components.length - 1] as string;
-}
-
-/** Resolve the receipt paired with one draft filename. */
-function captureReceiptPath(stagingDir: string, draftName: string): string {
-  const resultName =
-    RESULT_NAME_PREFIX + draftName.slice(DRAFT_NAME_PREFIX.length);
-  return join(stagingDir, resultName);
-}
-
-/** Refuse any receipt path that existed before this draft was processed. */
-function assertCaptureReceiptAvailable(
-  stagingDir: string,
-  draftName: string,
-): void {
-  try {
-    lstatSync(captureReceiptPath(stagingDir, draftName));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw new Error("quality capture: cannot inspect receipt destination.");
-  }
-  throw new Error("quality capture: receipt destination already exists.");
-}
-
-/** Write one receipt file beside the processed draft; receipt text is scrubbed. */
-function writeCaptureReceipt(
-  stagingDir: string,
-  draftName: string,
-  body: { ok: true; reportPath: string } | { ok: false; error: string },
-): void {
-  const resultPath = captureReceiptPath(stagingDir, draftName);
-  const serialized = scrubDurableText(`${JSON.stringify(body, null, 2)}\n`);
-  try {
-    writeFileSync(resultPath, serialized, {
-      encoding: "utf8",
-      flag: "wx",
-      mode: 0o600,
-    });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new Error("quality capture: receipt destination already exists.");
-    }
-    throw new Error("quality capture: could not write receipt.");
-  }
-  const stats = lstatSync(resultPath);
-  if (!stats.isFile() || stats.nlink !== 1) {
-    try {
-      unlinkSync(resultPath);
-    } catch {
-      /* the unsafe receipt path is already gone */
-    }
-    throw new Error(
-      "quality capture: receipt must be a single-link regular file.",
-    );
-  }
-}
-
-/** Replace an unsafe pre-existing receipt entry with one fixed rejection receipt. */
-function replacePreexistingReceiptWithRejection(
-  stagingDir: string,
-  draftName: string,
-): boolean {
-  const resultPath = captureReceiptPath(stagingDir, draftName);
-  try {
-    // Unlink removes only the staging entry; symlink and hard-link targets are
-    // never opened or truncated. The exclusive writer still closes the race.
-    unlinkSync(resultPath);
-    writeCaptureReceipt(stagingDir, draftName, {
-      ok: false,
-      error: "quality capture: receipt destination already existed.",
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /** Map persistence failures to bounded diagnostics that cannot quote draft text. */
 function captureRejectionDiagnostic(error: unknown): string {
@@ -299,12 +147,14 @@ interface RootCaptureContext {
   projectRoot: string;
   stagingDir: string;
   stableMs: number;
+  claimStaleMs: number;
 }
 /** Mutable poller state shared by direct calls, timer polls, and finalization. */
 interface RootCaptureState {
   isDisposed: boolean;
   isBusy: boolean;
   observations: Map<string, DraftObservation>;
+  ownedClaims: Map<string, QualityDraftClaim>;
 }
 
 /** Size and mtime pair used to prove one candidate stayed unchanged across polls. */
@@ -342,7 +192,6 @@ function readStableDraft(
   context: RootCaptureContext,
   state: RootCaptureState,
   draftName: string,
-  finalizing: boolean,
 ): StableDraft | null {
   const path = join(context.stagingDir, draftName);
   let stats;
@@ -359,7 +208,7 @@ function readStableDraft(
     return null;
   }
   const observation = { mtimeMs: stats.mtimeMs, size: stats.size };
-  if (!finalizing && context.stableMs > 0) {
+  if (context.stableMs > 0) {
     const previous = state.observations.get(draftName);
     state.observations.set(draftName, observation);
     // A draft still inside its quiet window may be partially written, so leave it for the next poll.
@@ -409,12 +258,18 @@ function reserveCaptureReceipt(
   draftName: string,
 ): boolean {
   try {
-    assertCaptureReceiptAvailable(context.stagingDir, draftName);
+    assertQualityCaptureReceiptAvailable(context.stagingDir, draftName);
     return true;
   } catch {
+    // A completed receipt is another owner's terminal outcome, not a collision
+    // to rewrite. The claimant may remove only the duplicate draft it acquired.
+    if (hasValidTerminalQualityReceipt(context.stagingDir, draftName)) {
+      removeDraft(context.stagingDir, draftName);
+      return false;
+    }
     // A stale or unsafe receipt blocks this run; replace only its staging entry with a rejection.
     removeDraft(context.stagingDir, draftName);
-    const receiptAvailable = replacePreexistingReceiptWithRejection(
+    const receiptAvailable = replaceUnsafeQualityReceiptWithRejection(
       context.stagingDir,
       draftName,
     );
@@ -440,12 +295,12 @@ function reserveCaptureReceipt(
 function writeReceiptOrRecordFallback(
   context: RootCaptureContext,
   draftName: string,
-  receipt: { ok: true; reportPath: string } | { ok: false; error: string },
+  receipt: QualityCaptureReceipt,
   eventType: "quality.persisted" | "quality.rejected",
   fallbackPayload: EvidencePayload,
 ): boolean {
   try {
-    writeCaptureReceipt(context.stagingDir, draftName, receipt);
+    writeQualityCaptureReceipt(context.stagingDir, draftName, receipt);
     return true;
   } catch {
     // The event keeps a bounded outcome when the user cannot receive a durable receipt.
@@ -535,37 +390,140 @@ function recordRejectedDraft(
   });
 }
 
-/**
- * Validate and persist one stable draft with a bounded fallback for every expected failure.
- * The ordered stages stay explicit because receipt reservation must precede durable persistence.
- */
-function processCaptureDraft(
+/** Write the bounded terminal outcome selected by the stale-claim fence. */
+function recordStaleDraftClaimRejection(
   context: RootCaptureContext,
   state: RootCaptureState,
   draftName: string,
-  finalizing: boolean,
 ): void {
-  const draft = readStableDraft(context, state, draftName, finalizing);
-  // Ineligible drafts remain untouched for a later safe poll or final sweep.
-  if (draft === null) return;
-  // A receipt collision has already deleted and rejected this draft.
-  if (!reserveCaptureReceipt(context, draftName)) return;
-  // Oversized input is rejected before its unredacted contents are loaded into memory.
-  if (draft.size > MAX_DRAFT_BYTES) {
-    rejectOversizedDraft(context, draftName);
-    state.observations.delete(draftName);
-    return;
+  const message =
+    "quality capture: stale draft claim rejected to prevent duplicate persistence.";
+  // A prior receipt is already a terminal outcome; reserve handles it without persistence.
+  if (reserveCaptureReceipt(context, draftName)) {
+    removeDraft(context.stagingDir, draftName);
+    const receiptWritten = writeReceiptOrRecordFallback(
+      context,
+      draftName,
+      { ok: false, error: message },
+      "quality.rejected",
+      {
+        draft: draftName,
+        error: "quality capture: stale claim receipt unavailable.",
+      },
+    );
+    if (receiptWritten) {
+      recordCaptureEvent(context, "quality.rejected", {
+        draft: draftName,
+        error: message,
+      });
+    }
   }
+  state.observations.delete(draftName);
+}
 
+/** Acquire the project-wide claim required before reading one stable draft. */
+function acquireDraftClaim(
+  context: RootCaptureContext,
+  state: RootCaptureState,
+  draftName: string,
+): QualityDraftClaim | null {
+  const claim = acquireQualityDraftClaim({
+    stagingDir: context.stagingDir,
+    draftName,
+    staleMs: context.claimStaleMs,
+    rejectStaleDraft: () => {
+      recordStaleDraftClaimRejection(context, state, draftName);
+    },
+  });
+  if (claim === null) return null;
+  state.ownedClaims.set(draftName, claim);
+  return claim;
+}
+
+/** Release only this process's claim and forget its in-memory ownership record. */
+function releaseDraftClaim(
+  state: RootCaptureState,
+  claim: QualityDraftClaim,
+): void {
+  const recorded = state.ownedClaims.get(claim.draftName);
+  if (recorded?.token === claim.token) {
+    state.ownedClaims.delete(claim.draftName);
+  }
+  releaseQualityDraftClaim(claim);
+}
+
+/** Reject only drafts still bound to claims owned by this process during teardown. */
+function rejectOwnedClaimsAtShutdown(
+  context: RootCaptureContext,
+  state: RootCaptureState,
+): void {
+  for (const claim of [...state.ownedClaims.values()]) {
+    if (!isQualityDraftClaimOwned(claim)) {
+      state.ownedClaims.delete(claim.draftName);
+      continue;
+    }
+    const message =
+      "quality capture: owning server stopped before persistence.";
+    if (reserveCaptureReceipt(context, claim.draftName)) {
+      removeDraft(context.stagingDir, claim.draftName);
+      writeReceiptOrRecordFallback(
+        context,
+        claim.draftName,
+        { ok: false, error: message },
+        "quality.rejected",
+        {
+          draft: claim.draftName,
+          error: "quality capture: shutdown receipt unavailable.",
+        },
+      );
+    }
+    releaseDraftClaim(state, claim);
+  }
+}
+
+/** Reject an oversized owned draft only after its lease and receipt remain available. */
+function rejectOwnedOversizedDraft(
+  context: RootCaptureContext,
+  state: RootCaptureState,
+  draftName: string,
+  claim: QualityDraftClaim,
+): void {
+  if (!refreshQualityDraftClaim(claim)) return;
+  if (!reserveCaptureReceipt(context, draftName)) return;
+  rejectOversizedDraft(context, draftName);
+  state.observations.delete(draftName);
+}
+
+/** Read and fence one normal-sized owned draft immediately before persistence. */
+function prepareOwnedDraftText(
+  context: RootCaptureContext,
+  state: RootCaptureState,
+  draftName: string,
+  draft: StableDraft,
+  claim: QualityDraftClaim,
+): string | null {
   let rawText: string;
   try {
     rawText = readFileSync(draft.path, "utf8");
   } catch {
-    // A disappearing or unreadable draft cannot be persisted and may be retried if it reappears.
-    return;
+    return null;
   }
-  if (!draftStillMatches(state, draftName, draft)) return;
+  if (!draftStillMatches(state, draftName, draft)) return null;
+  // Refreshing closes the stale-reaper race immediately before the irreversible write.
+  if (!refreshQualityDraftClaim(claim)) return null;
+  // A terminal receipt created by an earlier owner is preserved. Unsafe receipt
+  // shapes still produce the bounded rejection used by the capture contract.
+  if (!reserveCaptureReceipt(context, draftName)) return null;
+  return rawText;
+}
 
+/** Persist or reject a prepared draft, then retire its stability observation. */
+function persistPreparedDraft(
+  context: RootCaptureContext,
+  state: RootCaptureState,
+  draftName: string,
+  rawText: string,
+): void {
   try {
     const reportPath = persistQualityReportText(
       {
@@ -576,11 +534,49 @@ function processCaptureDraft(
       { CLIError: QualityCaptureError },
     );
     recordPersistedDraft(context, draftName, reportPath);
-    state.observations.delete(draftName);
   } catch (error) {
     // Example: Claude finished malformed JSON; the user needs a rejection receipt without closing.
     recordRejectedDraft(context, draftName, rawText, error);
-    state.observations.delete(draftName);
+  }
+  state.observations.delete(draftName);
+}
+
+/**
+ * Validate and persist one stable draft with a bounded fallback for every expected failure.
+ * The ordered stages stay explicit because receipt reservation must precede durable persistence.
+ */
+function processCaptureDraft(
+  context: RootCaptureContext,
+  state: RootCaptureState,
+  draftName: string,
+): void {
+  const draft = readStableDraft(context, state, draftName);
+  // Ineligible drafts remain untouched for a later safe poll.
+  if (draft === null) return;
+  const claim = acquireDraftClaim(context, state, draftName);
+  // Another process owns the claim or is rejecting an abandoned owner.
+  if (claim === null) return;
+  try {
+    // A pre-claim snapshot may outlive another process's completed write. Recheck
+    // the acquired draft before consulting or changing its receipt destination.
+    if (!draftStillMatches(state, draftName, draft)) return;
+    // Oversized input is rejected before its unredacted contents are loaded into memory.
+    if (draft.size > MAX_DRAFT_BYTES) {
+      rejectOwnedOversizedDraft(context, state, draftName, claim);
+      return;
+    }
+
+    const rawText = prepareOwnedDraftText(
+      context,
+      state,
+      draftName,
+      draft,
+      claim,
+    );
+    if (rawText === null) return;
+    persistPreparedDraft(context, state, draftName, rawText);
+  } finally {
+    releaseDraftClaim(state, claim);
   }
 }
 
@@ -591,7 +587,6 @@ function processCaptureDraft(
 function processCaptureSnapshot(
   context: RootCaptureContext,
   state: RootCaptureState,
-  finalizing = false,
 ): void {
   // A shared root has exactly one active sweep, and shutdown prevents any new persistence.
   if (state.isBusy || state.isDisposed) return;
@@ -612,29 +607,34 @@ function processCaptureSnapshot(
         state.observations.delete(observedName);
       }
     }
+    const orphanedOwnership = new Set(
+      entries
+        .map(qualityDraftNameFromOwnershipMarker)
+        .filter(
+          (draftName): draftName is string =>
+            draftName !== null && !visibleDrafts.has(draftName),
+        ),
+    );
+    // A crash can leave only its owner marker after deleting the draft. Inspect
+    // those markers too so a waiting session eventually receives a terminal receipt.
+    for (const draftName of orphanedOwnership) {
+      rejectStaleQualityDraftClaim({
+        stagingDir: context.stagingDir,
+        draftName,
+        staleMs: context.claimStaleMs,
+        rejectStaleDraft: () => {
+          recordStaleDraftClaimRejection(context, state, draftName);
+        },
+      });
+    }
     // Each visible contract-shaped draft gets one ordered persistence attempt.
     for (const entry of entries) {
       // Unrelated files in staging are user-owned and remain untouched.
       if (!DRAFT_NAME_PATTERN.test(entry)) continue;
-      processCaptureDraft(context, state, entry, finalizing);
+      processCaptureDraft(context, state, entry);
     }
   } finally {
     state.isBusy = false;
-  }
-}
-
-/** Remove every contract-shaped draft with a no-op fallback when the directory read fails. */
-function sweepCaptureDrafts(stagingDir: string): void {
-  let entries: string[];
-  try {
-    entries = readdirSync(stagingDir);
-  } catch {
-    // An unavailable directory has no safely enumerable drafts to delete.
-    return;
-  }
-  // Only unredacted draft names are swept; durable receipts survive teardown.
-  for (const entry of entries) {
-    if (DRAFT_NAME_PATTERN.test(entry)) removeDraft(stagingDir, entry);
   }
 }
 
@@ -643,18 +643,20 @@ function sweepCaptureDrafts(stagingDir: string): void {
  * One root-owned state object is intentional because independent pollers could persist or delete the same draft.
  *
  * @param options - owner root plus optional timing overrides
- * @returns the shared poller; shutdown stops it and sweeps leftover drafts
+ * @returns the shared poller; shutdown stops it without sweeping shared drafts
  */
 function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
   const context: RootCaptureContext = {
     projectRoot: options.projectRoot,
     stagingDir: ensureQualityDraftStagingDirectory(options.projectRoot),
     stableMs: options.stableMs ?? DEFAULT_STABLE_MS,
+    claimStaleMs: options.claimStaleMs ?? DEFAULT_CLAIM_STALE_MS,
   };
   const state: RootCaptureState = {
     isDisposed: false,
     isBusy: false,
     observations: new Map(),
+    ownedClaims: new Map(),
   };
 
   /** Process eligible drafts immediately through the root-owned single-poller state. */
@@ -671,7 +673,7 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
 
   const timer = setInterval(() => {
     void processNow().catch(() => {
-      // A failed sweep uses the next poll as its retry instead of becoming an unhandled rejection.
+      // A failed snapshot uses the next poll as its retry instead of becoming an unhandled rejection.
     });
   }, options.intervalMs ?? DEFAULT_INTERVAL_MS);
   timer.unref();
@@ -679,19 +681,18 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
   return {
     stagingDir: context.stagingDir,
     processNow,
-    /** Stop this root poller once and resolve drafts after their final writer has exited. */
+    /** Stop this process's poller without sweeping another process's shared drafts. */
     shutdown(): void {
-      // Repeated session teardown must not finalize, sweep, or clear the shared timer twice.
+      // Repeated session teardown must not finalize or clear the shared timer twice.
       if (state.isDisposed) return;
       clearInterval(timer);
       try {
-        // No session holder remains, so every regular draft can now be read once
-        // without a quiet-window delay and either persisted or rejected durably.
-        processCaptureSnapshot(context, state, true);
+        // A second dashboard process may still be writing or observing the same
+        // root, so teardown never acquires or deletes an unowned draft.
+        rejectOwnedClaimsAtShutdown(context, state);
       } finally {
         state.isDisposed = true;
         state.observations.clear();
-        sweepCaptureDrafts(context.stagingDir);
       }
     },
   };
@@ -702,12 +703,9 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
  *
  * The staging directory is a property of the project root, not of a session:
  * two dashboard sessions on the same project resolve to the same directory. One
- * poller per root is therefore the only safe arrangement - independent pollers
- * would each sweep the shared directory on teardown (destroying a sibling
- * session's pending draft) and could both persist the same draft, because a
- * draft remains visible until persistence and its receipt complete. Holders are counted, and
- * the last release stops the timer and sweeps, so ADR-044's close-time sweep
- * still runs once no session on the root can be writing a draft.
+ * in-process poller avoids duplicate local work, while filesystem `wx` claims
+ * serialize independent server processes. Holders are counted only to stop the
+ * local timer; teardown never sweeps the project-wide staging directory.
  *
  * Timing overrides come from whichever holder starts the poller; later holders
  * on the same root share that cadence.

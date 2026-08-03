@@ -126,6 +126,41 @@ function evidencePathStats(path: string, displayPath: string): Stats | null {
   }
 }
 
+/** One local event-directory component and the path shown in operator errors. */
+interface EvidenceDirectory {
+  path: string;
+  displayPath: string;
+}
+
+/** Create one missing component; filesystem errors or an unsafe concurrent winner throws. */
+function createMissingEvidenceDirectory(directory: EvidenceDirectory): void {
+  try {
+    mkdirSync(directory.path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  const winner = evidencePathStats(directory.path, directory.displayPath);
+  if (winner === null || !winner.isDirectory()) {
+    throw new Error(
+      `${directory.displayPath} must be a project-local directory.`,
+    );
+  }
+}
+
+/** Verify or create one component; the function throws for redirected or unreadable paths. */
+function ensureEvidenceDirectory(directory: EvidenceDirectory): void {
+  const stats = evidencePathStats(directory.path, directory.displayPath);
+  if (stats === null) {
+    createMissingEvidenceDirectory(directory);
+    return;
+  }
+  if (!stats.isDirectory()) {
+    throw new Error(
+      `${directory.displayPath} must be a project-local directory.`,
+    );
+  }
+}
+
 /**
  * Writes the event-log directory chain one real component at a time while rejecting redirection.
  *
@@ -146,13 +181,7 @@ function ensureSafeEventsLogDirectory(projectRoot: string): string {
     },
   ];
   for (const directory of directories) {
-    const stats = evidencePathStats(directory.path, directory.displayPath);
-    if (stats !== null && !stats.isDirectory()) {
-      throw new Error(
-        `${directory.displayPath} must be a project-local directory.`,
-      );
-    }
-    if (stats === null) mkdirSync(directory.path);
+    ensureEvidenceDirectory(directory);
   }
   return directories.at(-1)?.path ?? eventsLogDir(projectRoot);
 }

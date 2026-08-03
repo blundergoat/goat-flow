@@ -271,15 +271,15 @@ last_reviewed: 2026-08-02
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 7 | **Latest occurrence:** 2026-08-01
+**Decision changed:** Run ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 8 | **Latest occurrence:** 2026-08-03
 
-**What happened:** Focused behavior, type, and test gates repeatedly passed before preflight exposed separate ESLint, Knip, or formatting failures. On 2026-08-01 it found four intentional complexity branches; Knip then exhausted Node's default 4 GB heap twice, while an isolated 8 GB run exited 0 with hints only.
+**What happened:** Focused behavior, type, and test gates repeatedly passed before preflight exposed separate ESLint, Knip, or formatting failures. On 2026-08-01 it found four intentional complexity branches; Knip then exhausted Node's default 4 GB heap twice, while an isolated 8 GB run exited 0 with hints only. On 2026-08-03, child-process concurrency tests passed while the installer round-trip preflight rejected their worker fixture as unused because its path existed only in a runtime string.
 
-**Root cause:** Typecheck and runtime tests do not exercise lint complexity, unused-code/binary policy, or formatting. Running a memory-heavy analyzer beside other gates can also turn a resource limit into a misleading tool failure.
+**Root cause:** Typecheck and runtime tests do not exercise lint complexity, unused-code/binary policy, static fixture reachability, or formatting. A child process launched from a string path can be reachable at runtime but invisible to Knip's dependency graph. Running a memory-heavy analyzer beside other gates can also turn a resource limit into a misleading tool failure.
 
-**Fix and prevention:** After TypeScript changes, run ESLint, Knip, and `npm run format:check` directly before preflight. Fix their exact findings. Run Knip independently; if it alone reaches the default heap and measured host headroom exists, rerun `node --max-old-space-size=8192 node_modules/knip/bin/knip.js` before classifying the crash. Evidence anchors: `knip.json` (search: `ignoreBinaries`), `src/cli/install-invocation.ts` (search: `buildInstallerSpawnSpec`), and `test/unit/hook-registrar.test.ts` (search: `generated Claude launchers`).
+**Fix and prevention:** After TypeScript changes, run ESLint, Knip, and `npm run format:check` directly before preflight. Fix their exact findings. Keep child-process fixture entry points statically discoverable, for example with `fileURLToPath(new URL("../fixtures/worker.ts", import.meta.url))`, rather than hiding the only dependency edge in a path string. Run Knip independently; if it alone reaches the default heap and measured host headroom exists, rerun `node --max-old-space-size=8192 node_modules/knip/bin/knip.js` before classifying the crash. Evidence anchors: `knip.json` (search: `ignoreBinaries`), `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`), and `src/cli/install-invocation.ts` (search: `buildInstallerSpawnSpec`).
 
-**Measured recurrences:** M05/M06b exposed three ESLint errors and two unused exports; M08 one unused export; M17 one complexity error, three impossible conditions, and five unused exports; M23/M24 internal-only exported types; the 1.15 quality-persistence review four complexity errors plus the measured Knip heap limit.
+**Measured recurrences:** M05/M06b exposed three ESLint errors and two unused exports; M08 one unused export; M17 one complexity error, three impossible conditions, and five unused exports; M23/M24 internal-only exported types; the 1.15 quality-persistence review four complexity errors plus the measured Knip heap limit; the release rerun found one dynamically referenced concurrency worker fixture that Knip could not reach.
 
 ---
 

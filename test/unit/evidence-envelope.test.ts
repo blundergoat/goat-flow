@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   existsSync,
   linkSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -27,6 +28,7 @@ import type {
   EvidenceEventKind,
 } from "../../src/cli/evidence/envelope.js";
 import { redactEvidenceText } from "../../src/cli/evidence/redaction.js";
+import { runConcurrentQualityWorkers } from "../helpers/concurrent-quality-workers.js";
 
 /**
  * Hardlink `existingPath` to `linkPath`, or report the test as skipped when the
@@ -264,6 +266,29 @@ describe("EvidenceEnvelope", () => {
         [],
       );
     });
+  });
+
+  it("accepts concurrent event-directory creation only when the winner made a real directory", async () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-evidence-race-"));
+    try {
+      const outcomes = await runConcurrentQualityWorkers(
+        "append-evidence",
+        root,
+      );
+
+      assert.equal(outcomes.length, 2);
+      assert.equal(outcomes[0]?.result.ok, true, JSON.stringify(outcomes[0]));
+      assert.equal(outcomes[1]?.result.ok, true, JSON.stringify(outcomes[1]));
+      const eventsDirectory = lstatSync(
+        join(root, ".goat-flow", "logs", "events"),
+      );
+      assert.equal(eventsDirectory.isDirectory(), true);
+      assert.equal(eventsDirectory.isSymbolicLink(), false);
+      const events = tailEvidenceEvents(root, 10);
+      assert.equal(events.length, 2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("keeps append failures non-fatal", () => {

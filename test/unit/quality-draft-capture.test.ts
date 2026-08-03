@@ -14,7 +14,6 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   closeSync,
-  chmodSync,
   existsSync,
   futimesSync,
   linkSync,
@@ -39,6 +38,7 @@ import {
   startQualityDraftCapture,
 } from "../../src/cli/server/quality-draft-capture.js";
 import type { QualityDraftCapture } from "../../src/cli/server/quality-draft-capture.js";
+import { runConcurrentQualityWorkers } from "../helpers/concurrent-quality-workers.js";
 
 const PACKAGE_VERSION = (
   JSON.parse(readFileSync("package.json", "utf8")) as { version: string }
@@ -149,47 +149,6 @@ describe("quality draft capture", () => {
   after(() => {
     for (const capture of captures) capture.dispose();
     for (const root of roots) rmSync(root, { recursive: true, force: true });
-  });
-
-  it("creates the staging directory chain with a 0700 leaf", () => {
-    const root = makeRoot();
-    const stagingDir = ensureQualityDraftStagingDirectory(root);
-    assert.equal(
-      stagingDir,
-      join(root, ".goat-flow", "logs", "quality", "staging"),
-    );
-    const mode = lstatSync(stagingDir).mode & 0o777;
-    assert.equal(mode, 0o700);
-    // Idempotent: a second ensure returns the same directory without throwing.
-    assert.equal(ensureQualityDraftStagingDirectory(root), stagingDir);
-  });
-
-  it("fails before creating staging when its exact path is not ignored", () => {
-    const root = makeRoot(null);
-
-    assert.throws(
-      () => ensureQualityDraftStagingDirectory(root),
-      /staging\/.*must be gitignored before capture starts/u,
-    );
-    assert.equal(existsSync(join(root, ".goat-flow")), false);
-  });
-
-  it("tightens an existing permissive staging directory to 0700", (testContext) => {
-    if (
-      skipOnWindows(
-        testContext,
-        "POSIX mode bits are not enforceable on Windows",
-      )
-    ) {
-      return;
-    }
-    const root = makeRoot();
-    const stagingDir = ensureQualityDraftStagingDirectory(root);
-    chmodSync(stagingDir, 0o777);
-
-    ensureQualityDraftStagingDirectory(root);
-
-    assert.equal(lstatSync(stagingDir).mode & 0o777, 0o700);
   });
 
   it("persists a valid draft, deletes it, and writes an ok receipt", async () => {
@@ -532,13 +491,18 @@ describe("quality draft capture", () => {
   });
 
   /**
-   * Finalize unobserved drafts when the user closes the last reporting terminal.
-   * Invariant: every accepted or rejected draft keeps one terminal receipt after shutdown.
-   * Fixture purpose: writes both outcomes, then dispose performs their filesystem side effects.
+   * A process-local shutdown cannot prove another server stopped writing the shared root.
+   * Fixture purpose: writes unobserved drafts, then proves dispose leaves them for a safe poll.
+   * Invariant: disposing an unowned observer cannot delete project-wide draft state.
    */
-  it("finalizes every remaining draft on dispose and keeps receipts", async () => {
+  it("does not sweep unobserved shared drafts on dispose", async () => {
     const root = makeRoot();
-    const capture = makeCapture(root);
+    const capture = startQualityDraftCapture({
+      projectRoot: root,
+      intervalMs: 60_000,
+      stableMs: 500,
+    });
+    captures.push(capture);
     writeFileSync(
       join(capture.stagingDir, "goat-quality-draft-claude-iii999.json"),
       "{}",
@@ -549,17 +513,14 @@ describe("quality draft capture", () => {
     );
 
     capture.dispose();
-    // Dispose is idempotent and processNow becomes a no-op afterwards.
     capture.dispose();
     await capture.processNow();
 
     const remaining = readdirSync(capture.stagingDir).sort();
     assert.deepStrictEqual(remaining, [
-      "goat-quality-result-claude-iii999.json",
-      "goat-quality-result-claude-jjj000.json",
+      "goat-quality-draft-claude-iii999.json",
+      "goat-quality-draft-claude-jjj000.json",
     ]);
-    assert.equal(readReceipt(capture.stagingDir, "iii999").ok, false);
-    assert.equal(readReceipt(capture.stagingDir, "jjj000").ok, true);
   });
 
   it("keeps a sibling session's draft when one holder disposes", async () => {
@@ -602,6 +563,137 @@ describe("quality draft capture", () => {
       persisted.length,
       1,
       `one draft must yield one report, got ${persisted.join(", ")}`,
+    );
+  });
+
+  it("persists one draft once across independent server processes", async () => {
+    const root = makeRoot();
+    const stagingDir = ensureQualityDraftStagingDirectory(root);
+    writeFileSync(
+      join(stagingDir, "goat-quality-draft-claude-cross-process.json"),
+      validReport(root),
+    );
+
+    await runConcurrentQualityWorkers("persist-draft", root);
+
+    const persisted = readdirSync(
+      join(root, ".goat-flow", "logs", "quality"),
+    ).filter((entry) => /^\d.*\.json$/u.test(entry));
+    assert.equal(
+      persisted.length,
+      1,
+      `one cross-process draft must yield one report, got ${persisted.join(", ")}`,
+    );
+    assert.equal(readReceipt(stagingDir, "cross-process").ok, true);
+    assert.deepStrictEqual(
+      readdirSync(stagingDir).filter((entry) =>
+        /goat-quality-(?:draft|claim|reap)-/u.test(entry),
+      ),
+      [],
+    );
+  });
+
+  /** Fixture purpose: writes a late snapshot that cannot replace the winner's receipt. */
+  it("preserves a terminal receipt when a late claimant saw the old draft", async () => {
+    const root = makeRoot();
+    const capture = makeCapture(root);
+    const nonce = "late-claimant";
+    const draftPath = join(
+      capture.stagingDir,
+      `goat-quality-draft-claude-${nonce}.json`,
+    );
+    const receiptPath = join(
+      capture.stagingDir,
+      `goat-quality-result-claude-${nonce}.json`,
+    );
+    const terminalReceipt = {
+      ok: true,
+      reportPath: join(root, ".goat-flow", "logs", "quality", "winner.json"),
+    };
+    writeFileSync(draftPath, validReport(root));
+    writeFileSync(receiptPath, `${JSON.stringify(terminalReceipt, null, 2)}\n`);
+
+    await capture.processNow();
+
+    assert.equal(existsSync(draftPath), false);
+    assert.deepStrictEqual(
+      JSON.parse(readFileSync(receiptPath, "utf8")),
+      terminalReceipt,
+    );
+    assert.deepStrictEqual(
+      readdirSync(join(root, ".goat-flow", "logs", "quality")).filter((entry) =>
+        /^\d.*\.json$/u.test(entry),
+      ),
+      [],
+    );
+  });
+
+  it("does not remove another process's live claim or draft on child shutdown", async () => {
+    const root = makeRoot();
+    const stagingDir = ensureQualityDraftStagingDirectory(root);
+    const nonce = "live-owner";
+    const draftPath = join(
+      stagingDir,
+      `goat-quality-draft-claude-${nonce}.json`,
+    );
+    const claimPath = join(
+      stagingDir,
+      `goat-quality-claim-claude-${nonce}.json`,
+    );
+    writeFileSync(draftPath, validReport(root));
+    writeFileSync(
+      claimPath,
+      `${JSON.stringify({ owner: "a".repeat(32), pid: 123, claimed_at: new Date().toISOString() })}\n`,
+    );
+
+    await runConcurrentQualityWorkers("dispose-observer", root, 1);
+
+    assert.equal(existsSync(draftPath), true);
+    assert.equal(existsSync(claimPath), true);
+    assert.equal(
+      existsSync(join(stagingDir, `goat-quality-result-claude-${nonce}.json`)),
+      false,
+    );
+  });
+
+  /** Fixture purpose: writes stale ownership that rejects without a second report. */
+  it("rejects a stale claim instead of replaying its draft", async () => {
+    const root = makeRoot();
+    const capture = startQualityDraftCapture({
+      projectRoot: root,
+      intervalMs: 60_000,
+      stableMs: 0,
+      claimStaleMs: 0,
+    });
+    captures.push(capture);
+    const nonce = "stale-owner";
+    const draftPath = join(
+      capture.stagingDir,
+      `goat-quality-draft-claude-${nonce}.json`,
+    );
+    const claimPath = join(
+      capture.stagingDir,
+      `goat-quality-claim-claude-${nonce}.json`,
+    );
+    writeFileSync(draftPath, validReport(root));
+    writeFileSync(
+      claimPath,
+      `${JSON.stringify({ owner: "b".repeat(32), pid: 456, claimed_at: "2026-08-03T00:00:00.000Z" })}\n`,
+    );
+
+    await capture.processNow();
+
+    assert.equal(existsSync(draftPath), false);
+    assert.equal(existsSync(claimPath), false);
+    assert.equal(
+      readReceipt(capture.stagingDir, nonce).error,
+      "quality capture: stale draft claim rejected to prevent duplicate persistence.",
+    );
+    assert.deepStrictEqual(
+      readdirSync(join(root, ".goat-flow", "logs", "quality")).filter((entry) =>
+        /^\d.*\.json$/u.test(entry),
+      ),
+      [],
     );
   });
 

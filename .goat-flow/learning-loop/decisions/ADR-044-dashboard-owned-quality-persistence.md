@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-07-31
-**Updated:** 2026-08-01
+**Updated:** 2026-08-03
 **Ticket/Context:** `.goat-flow/plans/1.15.0/M06-claude-reporting-session-enforcement.md` (kill-criterion gate)
 
 ## Context
@@ -30,12 +30,16 @@ The enforced reporting session never persists the report. Instead:
    `.goat-flow/logs/quality/staging/goat-quality-draft-<agent>-<nonce>.json`. The `goat-` prefix
    follows the sentinel namespace rule; no stream markers exist in this design, so
    sentinel-position policy does not apply.
-2. The dashboard server owns persistence: it watches the staging directory for the session,
-   parses and strictly accepts each draft in-process, scrubs every accepted string value,
-   revalidates, then uses the same exclusive-create persist path as `quality save` (a shared core in
+2. The dashboard server owns persistence: it watches the project-owned staging directory, then
+   acquires a per-draft filesystem claim with exclusive create before reading report text. A live
+   competing claim is skipped. A stale claim is rejected with a terminal receipt and is never
+   replayed, because the former owner may have persisted before crashing. The claim owner strictly
+   accepts the draft in-process, scrubs every accepted string value, revalidates, then uses the same
+   exclusive-create persist path as `quality save` (a shared core in
    `src/cli/quality/quality-command.ts`), writes the final report into
    `.goat-flow/logs/quality/`, deletes the draft, and records success or rejection as terminal
-   events. A close-time sweep removes orphaned drafts.
+   events. Process shutdown cleans only claims it can prove it owns; it never sweeps the shared
+   staging directory.
 3. The Claude reporting overlay drops the dead saver and source-`--version` Bash allow rules,
    keeps the staging path writable through the existing logs allow, and adds a deny protecting
    finalized `.goat-flow/logs/quality/*.json` reports from agent edits.
@@ -44,9 +48,11 @@ The enforced reporting session never persists the report. Instead:
 
 Accepted residual risk: with this channel an unredacted draft exists briefly on gitignored disk
 before server-side redaction. Mitigations bound the window: the staging directory is created
-`0700`, drafts are processed immediately on appearance, the session-close sweep deletes leftovers,
-the staging path is never inside a tracked directory, and final reports keep `0600`
-exclusive-create semantics. As with ADR-041, this is a declared boundary, not a silent gap.
+`0700`, drafts are processed immediately on appearance, per-draft claims prevent duplicate
+persistence across server processes, stale owners fail closed with rejection receipts, the staging
+path is never inside a tracked directory, and final reports keep `0600` exclusive-create semantics.
+An incomplete unclaimed draft may outlive one server process rather than being deleted by a process
+that cannot prove ownership. As with ADR-041, this is a declared boundary, not a silent gap.
 
 ## Failure Mode Comparison
 

@@ -31,6 +31,16 @@ function dashboardClearTerminalLoadingTimers(
   }
 }
 
+/** Return whether retry can reproduce the original launch, including an intentional empty prompt. */
+function dashboardHasTerminalRetryPrompt(
+  refs: TerminalRefs | undefined,
+): boolean {
+  return (
+    typeof refs?.retryPrompt === "string" ||
+    typeof refs?.launchPrompt === "string"
+  );
+}
+
 /** Move one session through the terminal loading-overlay state machine. */
 function dashboardSetTerminalLoadingPhase(
   ctx: DashboardTerminalContext,
@@ -46,7 +56,9 @@ function dashboardSetTerminalLoadingPhase(
     target.loadingPhase = phase;
     if (phase === "error") {
       target.loadingError = error ?? "Could not start session.";
-      target.loadingShowRetry = true;
+      target.loadingShowRetry = dashboardHasTerminalRetryPrompt(
+        ctx._terminalRefs[sessionId],
+      );
     } else {
       target.loadingError = undefined;
       if (phase === "ready") {
@@ -74,6 +86,9 @@ function dashboardArmTerminalLoadingTimers(
       target.loadingShowSlowHint = true;
     });
   }, TERMINAL_LOADING_SLOW_HINT_MS);
+  // Rehydrated sessions do not retain the original prompt, so retry would
+  // otherwise destroy the live session and relaunch an empty assessment.
+  if (!dashboardHasTerminalRetryPrompt(refs)) return;
   refs.loadingRetryTimer = setTimeout(() => {
     refs.loadingRetryTimer = undefined;
     const current = ctx.sessions.find((s) => s.id === sessionId) ?? fallback;

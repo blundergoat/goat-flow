@@ -93,6 +93,8 @@ last_reviewed: 2026-08-03
 
 **Latest recurrence (2026-08-01):** M03's first RED used heading helpers at the wrong Markdown levels, and a later GREEN assertion treated `same-file` capitalization as semantic. Re-reading the helper contract produced the genuine four-failure RED; matching prose case-insensitively removed the false GREEN failure. Validate assertion machinery before accepting RED, and copy exact source text unless case is intentionally irrelevant.
 
+**Latest recurrence (2026-08-03):** The active Timing Receipt regression correctly failed strict validation, but its new assertion guessed `duplicate segment id M01-S01` instead of copying the parser's emitted `timing receipt segment ids must be unique`. The focused run stopped at 62/63 despite correct product behaviour. Run the reproduction once or inspect the parser warning before pinning diagnostic text; do not invent a more specific contract than the implementation emits.
+
 ---
 
 ## Lesson: Defensive session rechecks can conflict with TypeScript narrowing

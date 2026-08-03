@@ -48,6 +48,7 @@ interface MarkdownSection {
 interface IntegrityResult {
   anchorAuthority: ReviewAnchorAuthority;
   conclusion: ReviewIntegrityConclusion | null;
+  isRiskDepthDeclined: boolean;
   evidenceCounts: EvidenceCountClaim | null;
   refutationsLogged: number;
   isRefutationPersistenceSkipped: boolean;
@@ -787,23 +788,55 @@ function readRefutationClaim(
 }
 
 /** Warn once per degradation flag that is not documented by goat-review. */
-function validateDegradationFlags(
-  fields: IntegrityFieldMap,
+function warnUnknownDegradationFlags(
+  flags: ReadonlySet<string>,
+  line: number,
   warnings: ReviewValidationViolation[],
 ): void {
-  const field = fields.get("Degradation flags");
-  if (!field) return;
-  const flags = field.value.split(",").map((flag) => flag.trim());
   for (const flag of flags) {
     const configuredBase = /^configured-base-unresolved=\S+$/u.test(flag);
     if (KNOWN_DEGRADATION_FLAGS.has(flag) || configuredBase) continue;
     addWarning(
       warnings,
       "degradation-flag-unknown",
-      field.line,
+      line,
       `unknown degradation flag: ${flag || "<empty>"}`,
     );
   }
+}
+
+/** Keep the declared review confidence within the documented declined-depth cap. */
+function validateRiskDepthConclusion(
+  flags: ReadonlySet<string>,
+  fields: IntegrityFieldMap,
+  fallbackLine: number,
+  violations: ReviewValidationViolation[],
+): void {
+  if (
+    flags.has("risk-depth-declined") &&
+    fields.get("Conclusion")?.value !== "partial"
+  ) {
+    addViolation(
+      violations,
+      "integrity-format",
+      fields.get("Conclusion")?.line ?? fallbackLine,
+      "risk-depth-declined requires Conclusion: partial",
+    );
+  }
+}
+
+/** Parse, warn on, and cross-check the report's declared degradation flags. */
+function validateDegradationFlags(
+  fields: IntegrityFieldMap,
+  violations: ReviewValidationViolation[],
+  warnings: ReviewValidationViolation[],
+): Set<string> {
+  const field = fields.get("Degradation flags");
+  if (!field) return new Set();
+  const flags = new Set(field.value.split(",").map((flag) => flag.trim()));
+  warnUnknownDegradationFlags(flags, field.line, warnings);
+  validateRiskDepthConclusion(flags, fields, field.line, violations);
+  return flags;
 }
 
 /** Convert one integrity count while rejecting precision-losing integers. */
@@ -1090,11 +1123,16 @@ function validateFullIntegrity(
     REFUTER_VALUE,
     violations,
   );
-  validateDegradationFlags(fields, warnings);
+  const degradationFlags = validateDegradationFlags(
+    fields,
+    violations,
+    warnings,
+  );
   const scope = readScopeAuthority(fields, violations);
   return {
     ...scope,
     conclusion: readIntegrityConclusion(fields),
+    isRiskDepthDeclined: degradationFlags.has("risk-depth-declined"),
     evidenceCounts: readEvidenceCounts(fields, violations),
     ...readRefutationClaim(fields, violations),
     verdictCounts: readVerdictCounts(fields, violations),
@@ -1145,6 +1183,7 @@ function validateIntegrity(
       anchorAuthority: { kind: "invalid" },
       conclusion: (compactIntegrityMatch[1] ??
         "confident") as ReviewIntegrityConclusion,
+      isRiskDepthDeclined: false,
       evidenceCounts: null,
       refutationsLogged: 0,
       isRefutationPersistenceSkipped: false,
@@ -1166,6 +1205,7 @@ function validateIntegrity(
   return {
     anchorAuthority: { kind: "invalid" },
     conclusion: null,
+    isRiskDepthDeclined: false,
     evidenceCounts: null,
     refutationsLogged: 0,
     isRefutationPersistenceSkipped: false,
@@ -1762,6 +1802,7 @@ function downgradeShipVerdict(
 function expectedShipVerdict(
   definitions: FindingDefinition[],
   conclusion: ReviewIntegrityConclusion | null,
+  isRiskDepthDeclined: boolean,
 ): (typeof SHIP_VERDICT_LADDER)[number] {
   const surfacedFindings = definitions.filter((definition) =>
     SURFACED_FINDING_SECTIONS.has(definition.section),
@@ -1784,6 +1825,14 @@ function expectedShipVerdict(
   // Degraded review coverage moves the visible outcome down exactly one rung.
   if (requiresConfidenceDowngrade) {
     expectedDecision = downgradeShipVerdict(expectedDecision);
+  }
+  // A declined material-risk review can never certify a verdict above PARTIAL.
+  if (
+    isRiskDepthDeclined &&
+    SHIP_VERDICT_LADDER.indexOf(expectedDecision) <
+      SHIP_VERDICT_LADDER.indexOf("PARTIAL")
+  ) {
+    expectedDecision = "PARTIAL";
   }
   return expectedDecision;
 }
@@ -1816,6 +1865,7 @@ function validateShipVerdict(
   const expectedDecision = expectedShipVerdict(
     definitions,
     integrity.conclusion,
+    integrity.isRiskDepthDeclined,
   );
   // Matching severity and confidence produces one deterministic decision.
   if (verdictClaim.decision === expectedDecision) return;

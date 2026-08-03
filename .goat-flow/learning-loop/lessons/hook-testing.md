@@ -125,6 +125,8 @@ last_reviewed: 2026-07-14
 
 **Updated 2026-07-14:** M26's first disposable-target walkthrough repeated the same failure: the live PreToolUse hook rejected an all-in-one managed-setup validation command before any fixture was created. Moving the reviewed steps into `.goat-flow/scratchpad/m26-managed-setup-manual.sh` and invoking that file directly applied the existing prevention without weakening the hook.
 
+**Updated 2026-08-03:** PR-thread verification piped the bundled GitHub comment snapshot directly into an inline Node parser, so the live guard rejected the outer command before the read-only parser ran. Persisting the snapshot under `.goat-flow/logs/review/` and reading it through stdin redirection preserved the same local workflow without an interpreter pipe. The first retry also assumed a `python` shim that this host does not provide; use the interpreter returned by `command -v python3 || command -v python` before invoking a bundled Python workflow.
+
 ---
 
 ## Lesson: Format patched hook test fixtures before full preflight

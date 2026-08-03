@@ -9,6 +9,7 @@ interface MarkdownMaskState {
   fenceLength: number;
   inIndentedCode: boolean;
   inHtmlComment: boolean;
+  previousRenderedLineWasHeading: boolean;
   previousRenderedLineWasBlank: boolean;
 }
 
@@ -57,11 +58,26 @@ function isIndentedCodeLine(line: string, state: MarkdownMaskState): boolean {
 
   // Once an example starts, each indented line stays hidden until visible text resumes.
   if (state.inIndentedCode) return true;
-  // Markdown treats indentation after visible prose as wrapping, such as a task estimate.
-  if (!state.previousRenderedLineWasBlank) return false;
+  // Markdown treats indentation after prose as wrapping, but a heading is a
+  // block boundary and may be followed immediately by an indented code block.
+  if (
+    !state.previousRenderedLineWasBlank &&
+    !state.previousRenderedLineWasHeading
+  ) {
+    return false;
+  }
 
   state.inIndentedCode = true;
   return true;
+}
+
+/** Return whether one visible line is an ATX or setext heading boundary. */
+function isMarkdownHeading(line: string): boolean {
+  const comparableLine = line.endsWith("\r") ? line.slice(0, -1) : line;
+  return (
+    /^ {0,3}#{1,6}(?:[\t ]+|$)/u.test(comparableLine) ||
+    /^ {0,3}(?:=+|-+)[\t ]*$/u.test(comparableLine)
+  );
 }
 
 /** Mask HTML comments on one non-fenced line, including multiline comments. */
@@ -110,6 +126,7 @@ export function maskNonRenderedMarkdown(content: string): string {
     fenceLength: 0,
     inIndentedCode: false,
     inHtmlComment: false,
+    previousRenderedLineWasHeading: false,
     previousRenderedLineWasBlank: true,
   };
   // An empty report has no visible validation fields and keeps an empty source view.
@@ -128,6 +145,8 @@ export function maskNonRenderedMarkdown(content: string): string {
         isFence || isIndentedExample
           ? maskCharacters(sourceLine)
           : maskHtmlComments(sourceLine, state);
+      state.previousRenderedLineWasHeading =
+        !isFence && !isIndentedExample && isMarkdownHeading(visibleLine);
       state.previousRenderedLineWasBlank = visibleLine.trim().length === 0;
       return lineHasNewline ? `${visibleLine}\n` : visibleLine;
     })

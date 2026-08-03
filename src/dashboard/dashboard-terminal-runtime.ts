@@ -649,7 +649,6 @@ async function dashboardReconnectTerminal(
     ctx.rememberSessionTitle(session.id, session.promptLabel);
     ctx.sessions.push(session);
     ctx._terminalRefs[session.id] = {
-      retryPrompt: "",
       retryPromptLabel: session.promptLabel,
       retryPresetId: null,
       retryCwdPath: session.cwd,

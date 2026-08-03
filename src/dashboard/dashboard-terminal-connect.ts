@@ -410,6 +410,12 @@ async function dashboardRetryTerminalSession(
   const session = ctx.sessions.find((s) => s.id === sessionId);
   if (!session) return;
   const refs = ctx._terminalRefs[sessionId];
+  // A server-rehydrated session has no reproducible launch prompt. Keep it
+  // intact instead of deleting it and silently starting an empty retry.
+  if (!dashboardHasTerminalRetryPrompt(refs)) {
+    session.loadingShowRetry = false;
+    return;
+  }
   const prompt = refs?.retryPrompt ?? refs?.launchPrompt ?? "";
   const runner = session.runner;
   const promptLabel = refs?.retryPromptLabel ?? session.promptLabel;
@@ -473,7 +479,6 @@ async function dashboardOpenServerSession(
       if (refs?.cleanup) refs.cleanup();
       ctx._terminalRefs[local.id] = {
         ...ctx._terminalRefs[local.id],
-        retryPrompt: "",
         retryPromptLabel: local.promptLabel,
         retryPresetId: null,
         retryCwdPath: local.cwd,
@@ -519,7 +524,6 @@ async function dashboardOpenServerSession(
   ctx.rememberSessionTitle(session.id, session.promptLabel);
   ctx.sessions.push(session);
   ctx._terminalRefs[session.id] = {
-    retryPrompt: "",
     retryPromptLabel: session.promptLabel,
     retryPresetId: null,
     retryCwdPath: session.cwd,

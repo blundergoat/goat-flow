@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-08-02
+last_reviewed: 2026-08-03
 ---
 
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
@@ -88,7 +88,7 @@ last_reviewed: 2026-08-02
 
 **Safe handling now:**
 1. Before shipping validation for a new artifact, run the checker across *every* existing plan directory, not just the one the feature was built in.
-2. Make the artifact's shape fatal only when a claim depends on it - `src/cli/plans-check.ts` (search: `const receiptIsClaimed`) gates receipt warnings on a `measured` Actual.
+2. Make the artifact's shape fatal only when a claim or live workflow depends on it - `src/cli/plans-check.ts` (search: `const receiptIsActive`) gates receipt warnings on a `measured` Actual or an active clock, while malformed unclaimed historical receipts stay advisory.
 3. Keep the claimed path failing twice over: shape validation plus reconciliation, so relaxing the unclaimed case cannot weaken the claimed one.
 4. Treat "this artifact is decorative here" as a first-class state rather than forcing migration of finished work.
 

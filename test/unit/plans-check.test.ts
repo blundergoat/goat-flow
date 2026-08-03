@@ -928,6 +928,36 @@ describe("plans check", () => {
       expected: /complete milestone must not have an active Timing Receipt/u,
     },
     {
+      name: "human-pending-active-receipt",
+      body: withActiveTimingReceipt(
+        canonicalMilestoneBody({
+          status: "human-verification-pending",
+          isTaskChecked: true,
+          proofLines: [
+            "- [x] Outcome is proven. [automated] (est: 1 min proof)",
+            "- [ ] [human] Approve completion. (est: 1 min proof)",
+          ],
+          includeActual: true,
+        }),
+      ),
+      expected:
+        /human-verification-pending milestone must not have an active Timing Receipt/u,
+    },
+    {
+      name: "blocked-active-receipt",
+      body: withActiveTimingReceipt(
+        canonicalMilestoneBody({ status: "blocked" }),
+      ),
+      expected: /blocked milestone must not have an active Timing Receipt/u,
+    },
+    {
+      name: "abandoned-active-receipt",
+      body: withActiveTimingReceipt(
+        canonicalMilestoneBody({ status: "abandoned" }),
+      ),
+      expected: /abandoned milestone must not have an active Timing Receipt/u,
+    },
+    {
       name: "invalid-status",
       body: canonicalMilestoneBody({ status: "planned" }),
       expected: /unsupported status `planned`/u,
@@ -951,6 +981,55 @@ describe("plans check", () => {
       }
     });
   }
+
+  for (const status of ["in-progress", "testing-gate"] as const) {
+    /** Fixture purpose: writes a valid open segment for each state that executes work. */
+    it(`strict mode allows an active receipt while ${status} is executing`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), `goat-flow-plan-running-${status}-`),
+      );
+      const planPath = writeCheckFixture(
+        temporaryRoot,
+        withActiveTimingReceipt(
+          canonicalMilestoneBody({
+            status,
+            isTaskChecked: status === "testing-gate",
+          }),
+        ),
+      );
+
+      try {
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  /** Fixture purpose: writes duplicate authority so an active clock fails before Actual exists. */
+  it("strict mode rejects parser warnings on an active receipt without a measured Actual", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-active-warning-"),
+    );
+    const active = withActiveTimingReceipt(
+      canonicalMilestoneBody({ status: "in-progress" }),
+    );
+    const duplicateRow = `| M01-S01 | product | ${receiptStamp(100)} | _ | _ | open |`;
+    const duplicatedSegment = active.replace(
+      "## Scope",
+      `${duplicateRow}\n\n## Scope`,
+    );
+    const planPath = writeCheckFixture(temporaryRoot, duplicatedSegment);
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /timing receipt segment ids must be unique/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
 
   // Covers documentation an author pastes in: writes fenced metadata and examples that must not be scored.
   it("strict mode ignores fenced metadata and checklist examples", () => {
