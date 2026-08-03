@@ -497,4 +497,11 @@ describe("preflight Tests-phase progress", () => {
       "expected one helper definition plus first-run and retry call sites",
     );
   });
+
+  it("keeps commit-history validation outside the preflight umbrella", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+
+    assert.doesNotMatch(preflightSource, /check-commit-subjects\.sh/u);
+    assert.doesNotMatch(preflightSource, /Commit Subjects/u);
+  });
 });

@@ -21,7 +21,11 @@ import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
 import { getSkillNames } from "../constants.js";
 import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
-import { evaluateSearchAnchors } from "../facts/shared/learning-loop-common.js";
+import {
+  advanceMarkdownFenceState,
+  evaluateSearchAnchors,
+  type MarkdownFence,
+} from "../facts/shared/learning-loop-common.js";
 import { STANDALONE_PLAYBOOK_FILES } from "./skill-docs-contract.js";
 
 /**
@@ -268,30 +272,6 @@ function shouldScanStaleSkillPlaybooksPath(path: string): boolean {
   return !HISTORICAL_REFERENCE_DIRS.some((dir) => path.startsWith(dir));
 }
 
-/** Markdown fence character, used to close only the delimiter that opened. */
-function fenceCharacter(line: string): "`" | "~" | null {
-  const match = /^\s*(`{3,}|~{3,})/.exec(line);
-  if (!match?.[1]) return null;
-  return match[1][0] as "`" | "~";
-}
-
-interface MarkdownFenceState {
-  active: "`" | "~" | null;
-  isFenceLine: boolean;
-}
-
-/** Advance fenced-block state while keeping unlike fence characters nested. */
-function advanceFenceState(
-  line: string,
-  active: "`" | "~" | null,
-): MarkdownFenceState {
-  const fence = fenceCharacter(line);
-  if (fence === null) return { active, isFenceLine: false };
-  if (active === null) return { active: fence, isFenceLine: true };
-  if (active === fence) return { active: null, isFenceLine: true };
-  return { active, isFenceLine: true };
-}
-
 /** Headings that explicitly advertise unanswered readiness work. */
 const READINESS_SECTION_HEADING =
   /\b(?:open|pending|unresolved)\s+(?:questions?|issues?)\b/i;
@@ -323,10 +303,34 @@ function unresolvedContentMarker(line: string): string | null {
     .replace(/^\|\s*/, "")
     .replace(/\s*\|$/, "")
     .trim();
-  if (/^(?:\*\*)?Answer(?:\*\*)?\s*:\s*$/i.test(normalized)) {
+  if (/^(?:\*\*|__)?Answer(?:\*\*|__)?\s*:\s*(?:\*\*|__)?$/i.test(normalized)) {
     return "empty Answer:";
   }
   return null;
+}
+
+/** Scan only explicit readiness sections, ignoring examples in fenced blocks. */
+function scanUnresolvedReadiness(path: string, text: string): ContentFinding[] {
+  const findings: ContentFinding[] = [];
+  const lines = text.split(/\r?\n/);
+  let activeFence: MarkdownFence | null = null;
+  let readinessHeadingLevel: number | null = null;
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? "";
+    const fenceState = advanceMarkdownFenceState(line, activeFence);
+    activeFence = fenceState.activeFence;
+    if (fenceState.isFenceLine || activeFence !== null) continue;
+    readinessHeadingLevel = nextReadinessHeadingLevel(
+      line,
+      readinessHeadingLevel,
+    );
+    if (readinessHeadingLevel !== null) {
+      applyUnresolvedContentMarker(line, index + 1, path, findings);
+    }
+  }
+
+  return findings;
 }
 
 /** Add one blocking content finding for a marker inside a readiness section. */
@@ -445,26 +449,18 @@ export function scanContentQuality(
 ): ContentFinding[] {
   const findings: ContentFinding[] = [];
   const lines = text.split(/\r?\n/);
-  let activeFence: "`" | "~" | null = null;
-  let readinessHeadingLevel: number | null = null;
+  let activeFence: MarkdownFence | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
-    const fenceState = advanceFenceState(line, activeFence);
-    activeFence = fenceState.active;
-    if (fenceState.isFenceLine) continue;
-    if (activeFence !== null) continue;
-    readinessHeadingLevel = nextReadinessHeadingLevel(
-      line,
-      readinessHeadingLevel,
-    );
+    const fenceState = advanceMarkdownFenceState(line, activeFence);
+    activeFence = fenceState.activeFence;
+    if (fenceState.isFenceLine || activeFence !== null) continue;
     if (line.includes("|") && isTableSeparatorLine(lines[i + 1] ?? "")) {
       continue;
     }
     scanLine(line, i + 1, path, findings, mode);
-    if (readinessHeadingLevel !== null) {
-      applyUnresolvedContentMarker(line, i + 1, path, findings);
-    }
   }
+  findings.push(...scanUnresolvedReadiness(path, text));
   return findings;
 }
 
@@ -482,6 +478,7 @@ function scanSemanticAnchorQuality(
 ): ContentFinding[] {
   return evaluateSearchAnchors(ctx.fs, text, {
     ignoreMissingFiles: true,
+    sourcePath: path,
   })
     .filter(
       (evaluation) =>
@@ -539,6 +536,64 @@ function resolveTargets(ctx: AuditContext): string[] {
   return [...targets];
 }
 
+const LOCAL_MARKDOWN_PREFIXES = [
+  ".antigravitycli/",
+  ".claude/projects/",
+  ".claude/worktrees/",
+  ".gemini/projects/",
+  ".gemini/worktrees/",
+  ".cursor/",
+  ".tools/",
+  "_temp/",
+  "inbox/",
+  "logs/",
+  "out/",
+] as const;
+
+const GOAT_LOCAL_STATE_PREFIXES = [
+  ".goat-flow/logs/",
+  ".goat-flow/plans/",
+  ".goat-flow/scratchpad/",
+] as const;
+
+const COMMITTED_LOCAL_STATE_READMES = new Set([
+  ".goat-flow/logs/critiques/README.md",
+  ".goat-flow/logs/events/README.md",
+  ".goat-flow/logs/quality/README.md",
+  ".goat-flow/logs/review/README.md",
+  ".goat-flow/logs/security/README.md",
+  ".goat-flow/logs/sessions/README.md",
+  ".goat-flow/plans/README.md",
+  ".goat-flow/scratchpad/README.md",
+]);
+
+/** Keep only the stable README anchors committed beneath local-state trees. */
+function isCommittedLocalStateReadme(path: string): boolean {
+  return COMMITTED_LOCAL_STATE_READMES.has(path);
+}
+
+/** Exclude local working artifacts from the repository-wide evidence sweep. */
+function isLocalMarkdownArtifact(path: string): boolean {
+  if (LOCAL_MARKDOWN_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    return true;
+  }
+  if (/^(?:TODO_|docs_).+\.md$/i.test(path)) return true;
+  return GOAT_LOCAL_STATE_PREFIXES.some(
+    (prefix) => path.startsWith(prefix) && !isCommittedLocalStateReadme(path),
+  );
+}
+
+/** Discover Markdown not already covered by the curated prose-quality scans. */
+function resolveAdditionalEvidenceTargets(
+  ctx: AuditContext,
+  scanned: ReadonlySet<string>,
+): string[] {
+  return ctx.fs
+    .glob("**/*.md")
+    .filter((path) => !scanned.has(path) && !isLocalMarkdownArtifact(path))
+    .sort();
+}
+
 /** List `<dir>/*.md` entries, excluding README.md. Used to pick up learning-loop
  *  buckets without resolving hidden or non-markdown files. */
 function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
@@ -564,11 +619,13 @@ export function runContentQualityChecks(ctx: AuditContext): {
   filesScanned: number;
 } {
   const findings: ContentFinding[] = [];
+  const scanned = new Set<string>();
   let filesScanned = 0;
   for (const rel of resolveTargets(ctx)) {
     if (!ctx.fs.exists(rel)) continue;
     const text = ctx.fs.readFile(rel);
     if (text === null) continue;
+    scanned.add(rel);
     filesScanned++;
     findings.push(...scanContentQuality(rel, text, "full"));
     findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
@@ -577,10 +634,19 @@ export function runContentQualityChecks(ctx: AuditContext): {
     for (const rel of listBucketMarkdown(ctx, dir)) {
       const text = ctx.fs.readFile(rel);
       if (text === null) continue;
+      scanned.add(rel);
       filesScanned++;
       findings.push(...scanContentQuality(rel, text, "restricted"));
       findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
     }
+  }
+  for (const rel of resolveAdditionalEvidenceTargets(ctx, scanned)) {
+    const text = ctx.fs.readFile(rel);
+    if (text === null) continue;
+    scanned.add(rel);
+    filesScanned++;
+    findings.push(...scanUnresolvedReadiness(rel, text));
+    findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
   }
   return { findings, filesScanned };
 }

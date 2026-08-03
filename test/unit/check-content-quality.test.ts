@@ -219,6 +219,20 @@ describe("scanContentQuality: code-block state tracking", () => {
     assert.equal(findings.length, 1);
     assert.equal(findings[0]?.line, expectedOutsideBlockLine);
   });
+
+  it("does not close a long fence with a shorter matching delimiter", () => {
+    const text = ["````markdown", "```", "follow best practices", "````"].join(
+      "\n",
+    );
+
+    const findings = scanContentQuality("x.md", text);
+
+    assert.equal(
+      findings.length,
+      0,
+      "a shorter backtick run remains content inside the longer fence",
+    );
+  });
 });
 
 describe("scanContentQuality: restricted mode (learning-loop surfaces)", () => {
@@ -302,6 +316,17 @@ describe("scanContentQuality: unresolved readiness markers", () => {
       findings.filter((finding) => finding.rule === "unresolved-content-marker")
         .length,
       0,
+    );
+  });
+
+  it("flags an empty Answer label when the colon is inside strong emphasis", () => {
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      ["## Open Questions", "- **Answer:**"].join("\n"),
+    );
+
+    assert.ok(
+      findings.some((finding) => finding.rule === "unresolved-content-marker"),
     );
   });
 });
@@ -542,6 +567,109 @@ describe("runContentQualityChecks: target discovery", () => {
 
     assert.equal(staleAnchors.length, 1);
     assert.match(staleAnchors[0]?.message ?? "", /retiredSibling/u);
+  });
+
+  it("validates a direct search citation split across adjacent lines", () => {
+    const glossaryPath = ".goat-flow/glossary.md";
+    const targetPath = "src/cli/current.ts";
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) => [glossaryPath, targetPath].includes(path),
+        readFile: (path) => {
+          if (path === glossaryPath) {
+            return [
+              `Current pointer: \`${targetPath}\``,
+              "(search: `retiredMultilineSymbol`).",
+            ].join("\n");
+          }
+          if (path === targetPath)
+            return "export const currentSymbol = true;\n";
+          return null;
+        },
+      }),
+    });
+
+    const staleAnchors = runContentQualityChecks(ctx).findings.filter(
+      (finding) => finding.rule === "stale-semantic-anchor",
+    );
+
+    assert.equal(staleAnchors.length, 1);
+    assert.match(staleAnchors[0]?.message ?? "", /retiredMultilineSymbol/u);
+  });
+
+  it("resolves skill-local semantic-anchor targets from the citing file", () => {
+    const skillPath = ".agents/skills/goat-review/SKILL.md";
+    const targetPath = ".agents/skills/goat-review/references/examples.md";
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) => [skillPath, targetPath].includes(path),
+        readFile: (path) => {
+          if (path === skillPath) {
+            return "Read `references/examples.md` (search: `retiredSkillAnchor`).";
+          }
+          if (path === targetPath) return "# Examples\n\n## Current Anchor\n";
+          return null;
+        },
+      }),
+    });
+
+    const staleAnchors = runContentQualityChecks(ctx).findings.filter(
+      (finding) => finding.rule === "stale-semantic-anchor",
+    );
+
+    assert.equal(staleAnchors.length, 1);
+    assert.equal(staleAnchors[0]?.path, skillPath);
+    assert.match(staleAnchors[0]?.message ?? "", new RegExp(targetPath));
+  });
+
+  it("runs readiness and semantic checks across discovered Markdown", () => {
+    const publicDoc = "docs/harness-audit.md";
+    const localPlan = ".goat-flow/plans/_done/review/README.md";
+    const customLogReadme = ".goat-flow/logs/custom/README.md";
+    const privateToolDoc = ".tools/report.md";
+    const antigravitySessionDoc = ".antigravitycli/session/report.md";
+    const targetPath = "src/cli/current.ts";
+    const localArtifacts = [
+      localPlan,
+      customLogReadme,
+      privateToolDoc,
+      antigravitySessionDoc,
+    ];
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) =>
+          [publicDoc, ...localArtifacts, targetPath].includes(path),
+        glob: (pattern) =>
+          pattern === "**/*.md" ? [publicDoc, ...localArtifacts] : [],
+        readFile: (path) => {
+          if (path === publicDoc) {
+            return [
+              "## Open Questions",
+              "- **Answer:**",
+              `Evidence: \`${targetPath}\` (search: \`retiredPublicAnchor\`).`,
+            ].join("\n");
+          }
+          if (localArtifacts.includes(path)) {
+            return `\`${targetPath}\` (search: \`ignoredLocalAnchor\`)`;
+          }
+          if (path === targetPath)
+            return "export const currentSymbol = true;\n";
+          return null;
+        },
+      }),
+    });
+
+    const findings = runContentQualityChecks(ctx).findings;
+
+    assert.ok(
+      findings.some((finding) => finding.rule === "unresolved-content-marker"),
+    );
+    assert.ok(
+      findings.some((finding) => finding.rule === "stale-semantic-anchor"),
+    );
+    assert.ok(
+      findings.every((finding) => !localArtifacts.includes(finding.path)),
+    );
   });
 
   it("does not guess a target for an unqualified search anchor in a new sentence", () => {
