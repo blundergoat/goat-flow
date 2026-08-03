@@ -139,7 +139,9 @@ last_reviewed: 2026-08-03
 
 **Recurrence 2026-07-29:** Pins include section adjacency: inserting an `## Effort Estimates` section between the illustrative-scenario label and `## Assumption Tracking` in `goat-plan/references/milestone-examples.md` failed `test/contract/skill-hardening-contracts.test.ts` (search: `scenario label must immediately precede the assumption block`); moving the section above the label fixed it.
 
-**Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine.
+**Recurrence 2026-08-03:** The first GREEN wording for oversized review scope and critique context merging pushed `goat-review` and `goat-critique` from 2495/2494 words to 2592/2531. The focused skill-contract run rejected both before broader verification; budget-neutral rewrites finished at 2498/2495. Evidence anchors: `workflow/skills/goat-review/SKILL.md` (search: `never guess commit windows`), `workflow/skills/goat-critique/SKILL.md` (search: `never replace baseline context`), `test/contract/skill-hardening-contracts.test.ts` (search: `stops oversized inferred branch scopes before review begins`). TDD receipts: `.goat-flow/logs/sessions/2026-08-03-goat-review-tdd.md` and `.goat-flow/logs/sessions/2026-08-03-goat-critique-tdd.md`.
+
+**Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN.
 ---
 
 ## Lesson: Split transient preflight test failures from task regressions

@@ -405,11 +405,7 @@ describe("skill hardening contracts", () => {
         skillPath,
         "Step 0 - Scope, Size, Spec",
       );
-      assert.match(
-        scopeSnapshot,
-        /combined dirty worktree/u,
-        skillPath,
-      );
+      assert.match(scopeSnapshot, /combined dirty worktree/u, skillPath);
       assert.match(scopeSnapshot, /\*\*Source:\*\*[^\n]+worktree/u, skillPath);
       assert.match(
         scopeSnapshot,
@@ -437,11 +433,7 @@ describe("skill hardening contracts", () => {
         /20 files\/3000 lines[\s\S]+stop before Pass 1/u,
         skillPath,
       );
-      assert.match(
-        scope,
-        /never guess commit windows/u,
-        skillPath,
-      );
+      assert.match(scope, /never guess commit windows/u, skillPath);
       assert.match(
         scope,
         /request PR\/base\/head[^\n]+commit\/range[^\n]+worktree[^\n]+area/u,

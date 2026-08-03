@@ -99,9 +99,11 @@ last_reviewed: 2026-08-02
 
 **Recurrences (2026-07-13, 2026-07-18, 2026-07-19, 2026-08-01):** M04/M09 contracts, the skill-quality truncation fixes, M07 setup-truth contracts, M10 scaffold/drift regressions, and the review-validator relationship corpus each reached behavioral GREEN before scoped Prettier rejected touched TypeScript. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`), `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`), and `test/unit/review-validate.test.ts` (search: `structuralValidationCases`).
 
+**Recurrence update (2026-08-03):** The goat-review scope and goat-critique context-map contracts reached focused behavioral GREEN before full preflight rejected the touched contract file on Prettier. Formatting only that file preserved all 130 focused passes. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `stops oversized inferred branch scopes before review begins`).
+
 **Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 7 | **Latest occurrence:** 2026-08-01
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 8 | **Latest occurrence:** 2026-08-03
 
 ---
 
