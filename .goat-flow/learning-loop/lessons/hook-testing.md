@@ -61,7 +61,7 @@ last_reviewed: 2026-07-14
 
 **Root cause:** I treated "did any toggle change?" as the only outcome, but the loop also had side effects that had to run for every hook spec. Short-circuiting preserved the boolean result and lost later generated config entries.
 
-**Prevention:** When refactoring generated-state or drift-render code, separate "apply all mutations" from "did anything change?" helpers. Do not use short-circuiting array methods (`some`, `find`, `every`) when each item may need to mutate the rendered artifact. Add focused drift tests that include at least two enabled optional hooks so skipped later entries fail visibly. Evidence anchors: `src/cli/audit/check-drift.ts` (search: `applyExplicitHookToggles`) and `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `allows Copilot hook config entries for enabled optional hooks`).
+**Prevention:** When refactoring generated-state or drift-render code, separate "apply all mutations" from "did anything change?" helpers. Do not use short-circuiting array methods (`some`, `find`, `every`) when each item may need to mutate the rendered artifact. Add focused drift tests that include at least two enabled optional hooks so skipped later entries fail visibly. Evidence anchors: `src/cli/audit/check-drift-hooks.ts` (search: `applyExplicitHookToggles`) and `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `allows Copilot hook config entries for enabled optional hooks`).
 
 ## Lesson: deny-dangerous self-test missed a whole false-positive class while green
 

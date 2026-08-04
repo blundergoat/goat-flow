@@ -9,9 +9,8 @@
  */
 
 import { parseArgs } from "node:util";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { CLIOptions, AgentId } from "./types.js";
-import { QUALITY_MODES, type QualityMode } from "./quality/schema.js";
 import {
   validAgents,
   validAgentFlags,
@@ -20,14 +19,10 @@ import {
 import { CLIError } from "./cli-error.js";
 import {
   COMMANDS,
-  HOOK_SUBCOMMANDS,
   REMOVED_COMMANDS,
   VALID_FORMATS,
-  type CandidacyInputArg,
   type Command,
   type DiagnosticsSubcommand,
-  type EventsSubcommand,
-  type HookScenario,
   type HookSubcommand,
   type ParsedArgValues,
   type ParsedCLI,
@@ -38,6 +33,15 @@ import {
   type SkillSubcommand,
 } from "./cli-types.js";
 import { parseDiagnosticsPositionals } from "./diagnostics-command-parser.js";
+import {
+  parseCommandPositionals,
+  parseEventsPositionals,
+  parseHookScenarioArg,
+  parseHooksPositionals,
+  parsePlansPositionals,
+  parseQualityModeArg,
+  resolveOutputPath,
+} from "./cli-parser-positionals.js";
 import { buildReviewCLIFields } from "./review-command-parser.js";
 import {
   buildSkillCLIFields,
@@ -97,340 +101,6 @@ function parseAgentArg(value: string | undefined): AgentId | null {
     throw new CLIError(`Invalid agent: ${value}. Use: ${validAgentList()}`, 2);
   }
   return value as AgentId;
-}
-
-/** Parse the quality-history/diff mode filter; throws CLIError for invalid modes. */
-function parseQualityModeArg(value: string | undefined): QualityMode | null {
-  if (!value) return null;
-  if (!QUALITY_MODES.includes(value as QualityMode)) {
-    throw new CLIError(
-      `Invalid quality mode: ${value}. Use: ${QUALITY_MODES.join(", ")}`,
-      2,
-    );
-  }
-  return value as QualityMode;
-}
-
-/** Resolve `--output`, defaulting bare file names into `.goat-flow/` under the target repo. */
-function resolveOutputPath(
-  output: string | undefined,
-  projectRoot: string,
-): string | null {
-  if (!output) return null;
-  return resolve(
-    output.includes("/") || output.includes("\\")
-      ? output
-      : join(projectRoot, ".goat-flow", output),
-  );
-}
-
-/** Parse quality subcommand positionals; throws CLIError for invalid subcommand arity. */
-// eslint-disable-next-line complexity -- intentional because each quality positional error reports in CLI order
-function parseQualityPositionals(
-  positionals: string[],
-  draftFlag: string | null,
-): {
-  qualitySubcommand: QualitySubcommand;
-  projectPath: string;
-  qualityDiffPair: string | null;
-  qualityValidatePath: string | null;
-  candidacyInput: CandidacyInputArg | null;
-} {
-  const [first, second, ...rest] = positionals;
-
-  if (first === "capture") {
-    throw new CLIError(
-      '"quality capture" was removed in v1.2.0. Agents now write reports directly to `.goat-flow/logs/quality/`; no capture step is needed.',
-      2,
-    );
-  }
-
-  if (first === "history") {
-    if (rest.length > 0) {
-      throw new CLIError(
-        "quality history accepts at most one positional project path.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "history",
-      projectPath: second !== undefined ? resolve(second) : resolve("."),
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  }
-
-  if (first === "candidacy") {
-    if (draftFlag !== null) {
-      if (second !== undefined || rest.length > 0) {
-        throw new CLIError(
-          "quality candidacy: pass either --draft <path> OR a description, not both.",
-          2,
-        );
-      }
-      return {
-        qualitySubcommand: "candidacy",
-        projectPath: resolve("."),
-        qualityDiffPair: null,
-        qualityValidatePath: null,
-        candidacyInput: { mode: "draft", value: resolve(draftFlag) },
-      };
-    }
-    const description = [second, ...rest]
-      .filter(
-        (part): part is string => typeof part === "string" && part.length > 0,
-      )
-      .join(" ");
-    if (description.length === 0) {
-      throw new CLIError(
-        "quality candidacy: pass --draft <path> or a description string.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "candidacy",
-      projectPath: resolve("."),
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: { mode: "description", value: description },
-    };
-  }
-
-  if (first === "diff") {
-    if (rest.length > 0) {
-      throw new CLIError(
-        "quality diff accepts at most one positional pair in the form <from-id>:<to-id>.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "diff",
-      projectPath: resolve("."),
-      qualityDiffPair: second ?? null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  }
-
-  if (first === "validate") {
-    if (second === undefined || rest.length > 0) {
-      throw new CLIError(
-        "quality validate requires exactly one positional <path-to-report>.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "validate",
-      projectPath: resolve("."),
-      qualityDiffPair: null,
-      qualityValidatePath: resolve(second),
-      candidacyInput: null,
-    };
-  }
-
-  if (first === "save") {
-    if (second === undefined || rest.length > 0) {
-      throw new CLIError(
-        "quality save requires exactly one positional project path.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "save",
-      projectPath: resolve(second),
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  }
-
-  return {
-    qualitySubcommand: "prompt",
-    projectPath: resolve(first ?? "."),
-    qualityDiffPair: null,
-    qualityValidatePath: null,
-    candidacyInput: null,
-  };
-}
-
-/** Parse events subcommand positionals; throws CLIError for unsupported subcommands or arity. */
-function parseEventsPositionals(positionals: string[]): {
-  eventsSubcommand: EventsSubcommand;
-  projectPath: string;
-} {
-  const [first, second, ...rest] = positionals;
-  if (first !== "tail") {
-    throw new CLIError('events requires subcommand "tail".', 2);
-  }
-  if (rest.length > 0) {
-    throw new CLIError(
-      "events tail accepts at most one positional project path.",
-      2,
-    );
-  }
-  return {
-    eventsSubcommand: "tail",
-    projectPath: resolve(second ?? "."),
-  };
-}
-
-/** Parse hooks subcommand positionals; throws CLIError for unsupported subcommands or arity. */
-function parseHooksPositionals(positionals: string[]): {
-  hookSubcommand: HookSubcommand;
-  hookId: string | null;
-  projectPath: string;
-} {
-  const [first, second, third, ...rest] = positionals;
-  if (!first || !HOOK_SUBCOMMANDS.has(first)) {
-    throw new CLIError(
-      'hooks requires subcommand "list", "enable", "disable", "sync", or "verify".',
-      2,
-    );
-  }
-  const subcommand = first as HookSubcommand;
-  if (subcommand === "enable" || subcommand === "disable")
-    return parseHookTogglePositionals(subcommand, second, third, rest);
-  if (third !== undefined || rest.length > 0) {
-    throw new CLIError(
-      `hooks ${subcommand} accepts at most one project path.`,
-      2,
-    );
-  }
-  return {
-    hookSubcommand: subcommand,
-    hookId: null,
-    projectPath: resolve(second ?? "."),
-  };
-}
-
-/** Parse the one bounded scenario group available to `hooks verify`. */
-function parseHookScenarioArg(
-  subcommand: HookSubcommand | null,
-  value: string | undefined,
-): HookScenario | null {
-  // Other hooks operations do not run runtime scenarios or receive a default group.
-  if (subcommand !== "verify") return null;
-  // Verification must not choose a proof group the user did not explicitly request.
-  if (value === undefined) {
-    throw new CLIError('hooks verify requires --scenario "deny-hook".', 2);
-  }
-  // Unknown groups must fail before the CLI can imply an unimplemented proof ran.
-  if (value !== "deny-hook") {
-    throw new CLIError('--scenario must be "deny-hook".', 2);
-  }
-  return "deny-hook";
-}
-
-/**
- * Parse read-only plan paths or `plans time <action> <milestone-file>`.
- * Throws CLIError when the operation or plan-path arity is invalid.
- */
-function parsePlansPositionals(positionals: string[]): {
-  plansSubcommand: PlansSubcommand;
-  plansTimeAction: PlansTimeAction | null;
-  projectPath: string;
-} {
-  const [subcommand, second, third, ...extraPositionals] = positionals;
-
-  if (subcommand === "time") {
-    return parsePlansTimePositionals(second, third, extraPositionals);
-  }
-
-  return parsePlansReadPositionals(subcommand, second, third, extraPositionals);
-}
-
-/** Parse the action and milestone path owned by `plans time`. */
-function parsePlansTimePositionals(
-  action: string | undefined,
-  milestonePath: string | undefined,
-  extraPositionals: string[],
-): {
-  plansSubcommand: "time";
-  plansTimeAction: PlansTimeAction;
-  projectPath: string;
-} {
-  if (action !== "start" && action !== "stop" && action !== "status") {
-    throw new CLIError(
-      'plans time requires action "start", "stop", or "status".',
-      2,
-    );
-  }
-  if (!milestonePath || extraPositionals.length > 0) {
-    throw new CLIError(
-      `plans time ${action} requires one <milestone-file>.`,
-      2,
-    );
-  }
-  return {
-    plansSubcommand: "time",
-    plansTimeAction: action,
-    projectPath: resolve(milestonePath),
-  };
-}
-
-/** Parse the single plan directory consumed by export and check. */
-function parsePlansReadPositionals(
-  subcommand: string | undefined,
-  planPath: string | undefined,
-  third: string | undefined,
-  extraPositionals: string[],
-): {
-  plansSubcommand: "export" | "check";
-  plansTimeAction: null;
-  projectPath: string;
-} {
-  if (subcommand !== "export" && subcommand !== "check") {
-    throw new CLIError(
-      'plans requires subcommand "export", "check", or "time".',
-      2,
-    );
-  }
-  // Read-only consumers accept exactly one plan directory after their subcommand.
-  if (!planPath || third !== undefined || extraPositionals.length > 0) {
-    throw new CLIError(`plans ${subcommand} requires one <plan-path>.`, 2);
-  }
-  return {
-    plansSubcommand: subcommand,
-    plansTimeAction: null,
-    projectPath: resolve(planPath),
-  };
-}
-
-function parseHookTogglePositionals(
-  subcommand: "enable" | "disable",
-  hookId: string | undefined,
-  projectPath: string | undefined,
-  rest: string[],
-): { hookSubcommand: HookSubcommand; hookId: string; projectPath: string } {
-  if (hookId === undefined || rest.length > 0) {
-    throw new CLIError(
-      `hooks ${subcommand} requires <hook-id> [project-path].`,
-      2,
-    );
-  }
-  return {
-    hookSubcommand: subcommand,
-    hookId,
-    projectPath: resolve(projectPath ?? "."),
-  };
-}
-
-/** Return the project path and quality-specific positionals for a command. */
-function parseCommandPositionals(
-  command: Command,
-  positionals: string[],
-  draftFlag: string | null,
-): ReturnType<typeof parseQualityPositionals> {
-  if (command === "quality")
-    return parseQualityPositionals(positionals, draftFlag);
-  return {
-    qualitySubcommand: "prompt",
-    projectPath: resolve(positionals[0] ?? "."),
-    qualityDiffPair: null,
-    qualityValidatePath: null,
-    candidacyInput: null,
-  };
 }
 
 /** Validate flags shared across commands. */

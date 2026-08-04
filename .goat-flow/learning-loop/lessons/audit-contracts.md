@@ -47,7 +47,7 @@ last_reviewed: 2026-08-01
 
 **Prevention:** When adding fields to `AuditReport` or other shared CLI/dashboard payloads, grep for direct renderer/reader fixture construction and either update every fixture or make consumers default missing additive fields. Evidence anchors: `src/cli/audit/render.ts` (search: `Array.isArray(report.enforcement)`), `test/contract/command-phrases.test.ts` (search: `renderAuditText does not mention scan`).
 
-**Recurrence update (2026-07-31):** M07's first JSON proof queried pass findings on a per-check result, but `toCheckResult` exposes status/details there and aggregates pass findings under the owning concern. Inspect the output mapper before scripting field-level proof. Evidence: `src/cli/audit/audit.ts` (search: `function toCheckResult`).
+**Recurrence update (2026-07-31):** M07's first JSON proof queried pass findings on a per-check result, but `toCheckResult` exposes status/details there and aggregates pass findings under the owning concern. Inspect the output mapper before scripting field-level proof. Evidence: `src/cli/audit/harness-scoring.ts` (search: `function toCheckResult`).
 
 ---
 
