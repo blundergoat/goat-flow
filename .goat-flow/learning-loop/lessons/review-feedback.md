@@ -46,7 +46,7 @@ last_reviewed: 2026-07-19
 
 **Recurrence (2026-07-19):** The goat-qa exhaustive matrix and its Phase 3 headings were contract-tested, but Standard Phase 2 still limited its test-plan mapping and Undertested Risks template to CRITICAL/HIGH, silently dropping MEDIUM High-value gaps at the blocking gate.
 
-**Evidence:** `workflow/skills/goat-qa/SKILL.md` (search: `Exhaustive priority matrix`; `Phase 2 - Gap Analysis`) contained the contradiction; `test/contract/skill-hardening-contracts.test.ts` (search: `carries MEDIUM high-value gaps into goat-qa Standard Phase 2`) now extracts both the phase and output template.
+**Evidence:** `workflow/skills/goat-qa/SKILL.md` (search: `Exhaustive priority matrix`; `Phase 2 - Gap Analysis`) contained the contradiction; `test/contract/skill-hardening-skills-2.test.ts` (search: `carries MEDIUM high-value gaps into goat-qa Standard Phase 2`) now extracts both the phase and output template.
 
 **Name note:** `goat-sbao` was the predecessor of `goat-critique` per ADR-019.
 

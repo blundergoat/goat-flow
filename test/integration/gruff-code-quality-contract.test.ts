@@ -59,12 +59,13 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       result.stdout,
       /For triage: consult \.goat-flow\/skill-docs\/playbooks\/gruff-code-quality\.md/,
     );
-    // The hook drove the `hook` subcommand, not the legacy `analyse` path.
+    // The hook drove the `hook` subcommand, not the legacy `analyse` path. Ranges are not
+    // passed: the hook asks for the whole file and selects scopes itself, because
+    // --changed-ranges makes the analyzer drop every file-scope finding (size, missing
+    // overview, import cycle) and those would then never reach the agent.
     const hookArgs = readFileSync(join(root, "gruff-hook-args.log"), "utf-8");
-    assert.match(
-      hookArgs,
-      /hook --format json --changed-ranges 3-3 src\/sample\.ts/,
-    );
+    assert.match(hookArgs, /hook --format json src\/sample\.ts/);
+    assert.doesNotMatch(hookArgs, /--changed-ranges/);
   });
 
   // Fixture purpose: mutates a committed file to cover the regression where --diff hid edited lines.
@@ -102,10 +103,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
     assert.equal(result.status, 0, result.stderr);
     const hookArgs = readFileSync(join(root, "gruff-hook-args.log"), "utf-8");
-    assert.match(
-      hookArgs,
-      /hook --format json --changed-ranges 3-3 src\/sample\.ts/,
-    );
+    assert.match(hookArgs, /hook --format json src\/sample\.ts/);
     // Single-pass --diff applies new-only to line/symbol too, suppressing
     // pre-existing findings on edited lines (confirmed across all five
     // analyzers). Re-enabling new-only file/project surfacing needs the

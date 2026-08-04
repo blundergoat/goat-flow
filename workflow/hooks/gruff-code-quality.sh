@@ -1250,12 +1250,28 @@ hook_capabilities() {
 # surfaced - no re-filtering by line. file/project-scope findings render without
 # a `:line` because their line is a synthetic anchor, not a code location.
 hook_v1_report() {
-  local output="$1" floor_rank="$2" max="$3"
-  printf '%s' "$output" | jq -c --argjson floor_rank "$floor_rank" --argjson max "$max" '
+  local output="$1" floor_rank="$2" max="$3" ranges="${4:-}"
+  printf '%s' "$output" | jq -c --argjson floor_rank "$floor_rank" --argjson max "$max" --arg ranges "$ranges" '
     def sev_rank($s):
       ($s | tostring | ascii_downcase) as $x
       | if $x == "error" then 3 elif $x == "warning" then 2 else 1 end;
+    def parsed_ranges:
+      $ranges
+      | split(",")
+      | map(select(length > 0) | split("-") | {start: (.[0] | tonumber), end: (.[1] | tonumber)});
+    def in_changed_ranges($line):
+      parsed_ranges as $parsed
+      | ($parsed | length) == 0 or any($parsed[]; $line >= .start and $line <= .end);
+    # A file-scope finding describes the file the agent is editing right now - it is too long,
+    # it has no overview, it sits in an import cycle. Those never overlap a changed line, so
+    # range filtering would hide them forever and let a file grow unbounded while every edit
+    # reports clean. They always surface. Line and symbol findings stay range-filtered so the
+    # agent is not handed pre-existing debt from parts of the file it did not touch.
     [ (.findings // [])[]
+      | select(
+          ((.scope // "line") == "file" or (.scope // "line") == "project")
+          or in_changed_ranges(.line // 0)
+        )
       | { sev: ((.severity // "advisory") | tostring | ascii_downcase),
           rank: sev_rank(.severity // ""),
           file: (.file // .filePath // .path // ""),
@@ -1292,17 +1308,12 @@ process_file_contract() {
   [[ -n "$cr_flag" ]] || cr_flag="--changed-ranges"
   timeout_seconds="$(normalized_timeout_seconds "$binary")"
 
-  # When every line of the file is already in the changed range - a file the agent just
-  # created, or rewrote end to end - range filtering excludes nothing, but it still makes the
-  # analyzer drop `scope=file` findings such as a missing file overview, an over-long file, or
-  # an import cycle. Those anchor to the file rather than to a line, and they are exactly the
-  # review problems a brand-new module is most likely to have. So the flag is omitted in that
-  # case only. A partial edit keeps range-scoping, so the agent is never handed unrelated
-  # pre-existing debt from the rest of the file.
-  local scopes_whole_file=0
-  if [[ -n "$ranges" && "$ranges" == "$(all_file_range "$rel_path")" ]]; then
-    scopes_whole_file=1
-  fi
+  # Ranges are applied by this hook rather than by the analyzer. Passing `--changed-ranges`
+  # makes the analyzer drop every `scope=file` finding - too long, no file overview, import
+  # cycle - because none of them sit on a changed line. That is how a file grows past the size
+  # gate forever while every edit reports clean: the warning is never emitted, not ignored.
+  # Asking for the whole file and filtering here lets file-scope findings through while
+  # line-scope findings stay confined to what the agent actually touched.
 
   # Scope to the changed lines and let the analyzer return the attributable
   # findings. Capture stdout ONLY: the gruff.hook.v1 envelope is JSON on stdout,
@@ -1312,12 +1323,16 @@ process_file_contract() {
   # filters line/symbol findings, hiding pre-existing findings on the very lines
   # the agent edited (confirmed across all five analyzers). See M02 for the
   # scope-specific combined-mode fix that re-enables it.
-  local -a scope_args
-  if [[ "$scopes_whole_file" -eq 1 ]]; then
-    scope_args=()
-  else
-    scope_args=("$cr_flag" "$ranges")
-  fi
+  #
+  # Ranges are applied by this hook rather than by the analyzer, and that is a deliberate
+  # trade. Passing `--changed-ranges` gives symbol-aware scoping, but it also makes the
+  # analyzer drop every `scope=file` finding - over the size gate, no file overview, import
+  # cycle - because none of them sit on a changed line. That is how a file grows past the size
+  # gate indefinitely while every single edit reports clean: the warning is never emitted, so
+  # there is nothing for an agent to ignore. Structural visibility is worth more than symbol
+  # widening, so the whole file is requested and `hook_v1_report` keeps file-scope findings
+  # while confining line and symbol findings to the lines actually edited.
+  local -a scope_args=()
 
   set +e
   if command -v timeout >/dev/null 2>&1; then
@@ -1363,7 +1378,7 @@ process_file_contract() {
   [[ "$max_findings" =~ ^[0-9]+$ && "$max_findings" -ge 1 ]] || max_findings=20
   floor_rank="$(min_severity_rank "$GRUFF_CODE_QUALITY_MIN_SEVERITY")"
 
-  report_json="$(hook_v1_report "$output" "$floor_rank" "$max_findings")"
+  report_json="$(hook_v1_report "$output" "$floor_rank" "$max_findings" "$ranges")"
   [[ -n "$report_json" ]] || report_json='{"total":0,"e":0,"w":0,"a":0,"surfaced":0,"floored":0,"more":0,"lines":[]}'
   suppressed="$(printf '%s' "$output" | jq -r '.suppressed.count // 0' 2>/dev/null || true)"
   [[ "$suppressed" =~ ^[0-9]+$ ]] || suppressed=0

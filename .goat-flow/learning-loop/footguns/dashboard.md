@@ -15,7 +15,7 @@ last_reviewed: 2026-07-26
 **Evidence:**
 - Trigger is a clickable span in the header: `src/dashboard/index.html` (search: `@click="openBrowser()"`), tooltip via `title="Switch project"`.
 - Modal markup behind the trigger: `src/dashboard/index.html` (search: `x-show="showBrowser"`).
-- Handler: `src/dashboard/dashboard-app-data-loading-fragments.ts` (search: `async openBrowser()`) toggles `showBrowser` and calls `browseTo(this.projectPath)`.
+- Handler: `src/dashboard/dashboard-app-hook-setup-fragments.ts` (search: `async openBrowser()`) toggles `showBrowser` and calls `browseTo(this.projectPath)`.
 - Live UI session on 2026-04-18: tester exercising the Add Project flow needed programmatic `showBrowser = true` via Alpine state to reach the modal. They did not notice the header span because the Add Project form shows a text input and no Browse button.
 
 **Why it happens:** Two independent add-project surfaces exist - a text input on the Add Project view, and a filesystem picker triggered from the header's "Switch project" affordance. There is no visible cross-link between the two, and the "Switch project" label does not suggest adding a new project.

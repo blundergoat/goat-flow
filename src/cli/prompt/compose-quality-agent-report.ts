@@ -3,14 +3,14 @@
  *
  * The actual contract text - filename convention, JSON body shape, per-field
  * rules, and the validate-before-confirming step - lives in ONE place:
- * `appendQualityReportContract` in `compose-quality-common.ts`. This module
+ * `appendQualityReportContract` in `compose-quality-contract.ts`. This module
  * keeps the historical `appendAgentReportContract` name for the agent-setup
  * composer and selects the `full` detail level (a user launching
  * `goat-flow quality --agent <id>` gets the fully-explained variant, because
  * agent-setup runs are the ones cold agents follow with no other context).
  */
-import { appendQualityReportContract } from "./compose-quality-common.js";
-import type { ReportContractInput } from "./compose-quality-common.js";
+import { appendQualityReportContract } from "./compose-quality-contract.js";
+import type { ReportContractInput } from "./compose-quality-contract.js";
 
 /**
  * Append the full-detail JSON report contract block to an agent-setup prompt.

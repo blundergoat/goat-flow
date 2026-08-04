@@ -19,7 +19,7 @@ const HOOKS_APP_FRAGMENT_PATH = resolve(
   PROJECT_ROOT,
   "src",
   "dashboard",
-  "dashboard-app-data-loading-fragments.ts",
+  "dashboard-app-hook-setup-fragments.ts",
 );
 
 describe("dashboard Hooks view", () => {

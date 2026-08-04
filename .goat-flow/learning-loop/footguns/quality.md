@@ -12,9 +12,9 @@ last_reviewed: 2026-08-03
 **Why it happens:** `goat-flow quality . --agent <id>` composes a prompt that instructs the agent to send its final JSON report through the bounded `quality save` command. The CLI owns redaction, validation, filename selection, and the write, but the agent must still invoke it. If the agent emits JSON inline, skips the command, or cannot obtain permission, nothing persists. The target directory is gitignored, so there is no git-side hint that the save was skipped.
 
 **Evidence:**
-- `src/cli/prompt/compose-quality-common.ts` (search: `Persist through the bounded saver`) - the prompt requires the bounded saver and forbids a raw fallback.
+- `src/cli/prompt/compose-quality-contract.ts` (search: `Persist through the bounded saver`) - the prompt requires the bounded saver and forbids a raw fallback.
 - `src/cli/quality/quality-command.ts` (search: `handleQualitySaveSubcommand`) - the CLI owns redaction, strict validation, and the project-local write.
-- `src/cli/prompt/compose-quality-common.ts` (search: `Wrote quality report to`) - the prompt requires a single-line confirmation that references the saved filename.
+- `src/cli/prompt/compose-quality-contract.ts` (search: `Wrote quality report to`) - the prompt requires a single-line confirmation that references the saved filename.
 - `src/cli/quality/history-render.ts` (search: `No saved quality history`) - `history` and `diff` only read files that were actually written to disk.
 
 **Prevention:**
@@ -135,7 +135,7 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 
 **Why it happens:** During pre-release work, `node --import tsx src/cli/cli.ts` can generate v1.14.0 instructions while the first `goat-flow` on `PATH` is still the globally installed v1.13.0 package. The old parser treated the unknown `redact` token as an audit target, so `goat-flow redact --output <quality-file>` wrote audit JSON to the quality-report path.
 
-**Evidence:** `src/cli/prompt/compose-quality-common.ts` (search: `Select a compatible saver`) now requires the installed binary to report the current package version and permits the source fallback only from the framework checkout. The 2026-07-17 reproduction resolved `goat-flow` to v1.13.0, printed `Written to /tmp/goat-redact-benign.json`, and exited 1; the source command exited 0 and its redacted quality report passed `quality validate`.
+**Evidence:** `src/cli/prompt/compose-quality-contract.ts` (search: `Select a compatible saver`) now requires the installed binary to report the current package version and permits the source fallback only from the framework checkout. The 2026-07-17 reproduction resolved `goat-flow` to v1.13.0, printed `Written to /tmp/goat-redact-benign.json`, and exited 1; the source command exited 0 and its redacted quality report passed `quality validate`.
 
 **Recurrence 2026-07-17:** Current consumer guidance still used `npx goat-flow`, although the unscoped registry package is deprecated and a clean-directory probe resolved a stale global v1.13.0 binary instead of source v1.14.0. Current command surfaces now name `@blundergoat/goat-flow`; `test/contract/command-phrases.test.ts` (search: `does not let unscoped npx resolve the deprecated package in`) guards the package identity, one named case per command surface. Skill hardening receipt: `.goat-flow/logs/sessions/2026-07-17-goat-tdd.md` (local, gitignored).
 

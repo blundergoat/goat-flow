@@ -147,9 +147,13 @@ if (stale.length === 0) {
 
 let repointed = 0;
 for (const { file, citedPath, needle } of stale) {
-  // Prefer a source file over a test that merely mentions the same string.
+  // Follow the symbol into whichever tree it moved to. A citation that named a test file
+  // must resolve to a test file, and one that named source must resolve to source - matching
+  // the tree keeps a test name from being repointed at an unrelated source file that happens
+  // to contain the same words.
+  const citedTree = citedPath.startsWith("test/") ? "test/" : "src/";
   const candidates = filesContaining(needle).filter(
-    (path) => path !== citedPath && path.startsWith("src/"),
+    (path) => path !== citedPath && path.startsWith(citedTree),
   );
 
   if (candidates.length !== 1) {

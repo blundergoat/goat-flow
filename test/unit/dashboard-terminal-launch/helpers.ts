@@ -44,6 +44,12 @@ const DASHBOARD_APP_SOURCE_PATHS = [
     PROJECT_ROOT,
     "src",
     "dashboard",
+    "dashboard-app-hook-setup-fragments.ts",
+  ),
+  resolve(
+    PROJECT_ROOT,
+    "src",
+    "dashboard",
     "dashboard-app-skill-quality-fragments.ts",
   ),
   resolve(

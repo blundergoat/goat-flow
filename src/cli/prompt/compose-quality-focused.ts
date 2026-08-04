@@ -8,7 +8,6 @@ import type { AgentId } from "../types.js";
 import { getAgentProfile } from "../agents/registry.js";
 import type { QualityMode } from "../quality/schema.js";
 import {
-  appendFocusedReportContract,
   formatLocalDate,
   qualityModeLabel,
   qualityModeTargetScope,
@@ -21,6 +20,7 @@ import {
   type QualityInput,
   type QualityPayload,
 } from "./compose-quality-common.js";
+import { appendFocusedReportContract } from "./compose-quality-contract.js";
 
 /**
  * Return the reporting contract a user receives for one focused quality mode.

@@ -1,6 +1,6 @@
 ---
 category: refactoring
-last_reviewed: 2026-05-27
+last_reviewed: 2026-08-05
 ---
 
 ## Pattern: Hold the file-length line continuously, not in a cleanup pass
@@ -14,6 +14,22 @@ last_reviewed: 2026-05-27
 Three second-order effects make deferral worse than it looks. Doc-comment rules and the size gate pull against each other - adding required documentation pushed one test file from 749 to 753 lines and *created* a size finding. Clearing an entire pillar can lower the reported composite, so a long deferred cleanup shows the score sagging while the codebase improves; judge progress on per-pillar finding counts instead.
 
 Most dangerous: **moving a symbol silently breaks every learning-loop anchor that cites it by path.** Four entries pointed at symbols that still existed but no longer lived where the anchor said. Typecheck and focused tests stayed green throughout - nothing in the compiler can see a Markdown citation - and it surfaced only as `support-bundle` exiting 1 through the `feedback-loop-active` harness check. After any extraction, run `goat-flow stats --check` and re-run `goat-flow index`, and treat a passing typecheck as no evidence at all about artifact references. Evidence anchors: `.goat-flow/learning-loop/lessons/audit-contracts.md` (search: `function toCheckResult`), `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `checkCodexWorkspaceRootExactPaths`).
+
+## Pattern: Extract to a new module without a convenience re-export
+
+**Context:** Splitting a large file and wanting existing consumers to keep importing from the original path.
+
+**Approach:** Point consumers at the module that now owns the symbol. Re-exporting it from the original file to spare that edit creates an import cycle whenever the new module imports anything back - shared types, a helper - and TypeScript compiles a cycle without complaint. Only `design.circular-import` catches it, so a run that skips gruff ships the cycle.
+
+**Evidence (ACTUAL_MEASURED, 2026-08-05):** Hit twice in one session with identical shape. `src/cli/quality/history.ts` re-exported `buildQualityDiff` while `history-diff.ts` imported types back from it; `compose-quality-common.ts` re-exported the contract renderer while `compose-quality-contract.ts` imported formatting helpers back. Typecheck passed both times. The fix in both cases was deleting the re-export and updating the two or three real consumers. Evidence anchors: `src/cli/quality/history-diff.ts` (search: `buildQualityDiff`), `src/cli/prompt/compose-quality-contract.ts` (search: `appendQualityReportContract`).
+
+## Pattern: Resolve every cut boundary before splicing any of them
+
+**Context:** Scripting a multi-block extraction where each block's end marker is the next block's start.
+
+**Approach:** Resolve all boundaries against the untouched file first, then splice bottom-up. Deleting as you iterate erases the marker the next lookup needs, and the failure surfaces as a confusing "not found" for a symbol that is plainly still in the file.
+
+**Evidence (ACTUAL_MEASURED, 2026-08-05):** A five-block extraction from `src/cli/review-validate.ts` aborted on its second cut looking for `parseShipVerdictDecision`, which the first cut had just removed. It failed before writing, so nothing was corrupted - but two runs were spent re-verifying the markers by hand. Pre-resolving the boundaries fixed it in one pass. Related: scripted extraction over-exports by default, so run knip afterwards and un-export everything only used inside its own module.
 
 ## Pattern: Canary-first contract changes (one consumer before all consumers)
 

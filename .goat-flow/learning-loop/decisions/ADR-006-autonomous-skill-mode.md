@@ -30,4 +30,4 @@ The original rule told Hotfix and Small Feature work to skip closing ceremony an
 - Ceremony level guides routing before invocation; it does not weaken an invoked skill.
 - Small File-Write keeps concise artifacts while retaining milestone verification gates.
 - Sub-agent execution does not stall on ordinary interaction gates, but safety-critical human decisions remain explicit.
-- Contract coverage lives in `test/contract/skill-hardening-contracts.test.ts` (search: `records the current ceremony contract in ADR-006`).
+- Contract coverage lives in `test/contract/skill-hardening-shared-1.test.ts` (search: `records the current ceremony contract in ADR-006`).

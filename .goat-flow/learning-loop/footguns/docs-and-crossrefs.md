@@ -183,7 +183,7 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 
 **Why it happens:** Both tools cover curated paths, not arbitrary embedded strings or newly added release surfaces.
 
-**Evidence:** v1.3.2 checks passed with old values in `scripts/profile-dashboard-audit.mjs` (search: `writeSyntheticProject`) and `test/integration/dashboard-server.helpers.ts` (search: `makeDashboardCacheProject`). v1.6.1 checks missed stale frontmatter under `workflow/skills/playbooks/`. v1.15.0 checks missed 1.14.0 plan examples in `README.md`, `docs/cli.md`, and `src/cli/cli.ts` (search: `plans export .goat-flow/plans/1.15.0`), plus two regex-escaped assertions in `test/contract/skill-hardening-contracts.test.ts` (search: `goat-flow-reference-version: "1\.15\.0"`).
+**Evidence:** v1.3.2 checks passed with old values in `scripts/profile-dashboard-audit.mjs` (search: `writeSyntheticProject`) and `test/integration/dashboard-server.helpers.ts` (search: `makeDashboardCacheProject`). v1.6.1 checks missed stale frontmatter under `workflow/skills/playbooks/`. v1.15.0 checks missed 1.14.0 plan examples in `README.md`, `docs/cli.md`, and `src/cli/cli.ts` (search: `plans export .goat-flow/plans/1.15.0`), plus two regex-escaped assertions now split across `test/contract/skill-hardening-review-1.test.ts` (search: `goat-flow-reference-version: "1\.15\.0"`) and `test/contract/skill-hardening-skills-1.test.ts` (search: `goat-flow-reference-version: "1\.15\.0"`).
 
 **Structural anchors:**
 - `scripts/bump-version.sh` (search: `# ── Source files (version string replacement)`) lists the curated surfaces the bump workflow edits.

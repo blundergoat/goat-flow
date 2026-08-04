@@ -33,7 +33,7 @@ last_reviewed: 2026-08-04
 
 **Recurrence 2026-06-14:** A Codex workspace-terminal `bash scripts/preflight-checks.sh` run reached `TESTS` and then stayed silent while `scripts/preflight-checks.sh` captured `npm run test:coverage` output. Process inspection showed the only remaining test workers were `test/integration/gruff-code-quality-contract.test.ts` and `test/integration/gruff-code-quality-smoke.test.ts`, each blocked under `workflow/hooks/gruff-code-quality.sh` at `read_stdin` -> `cat`. The shared gruff test helper still used `spawnSync("bash", [HOOK], { input: JSON.stringify(payload) })`, so it needed the same file-redirection mitigation.
 
-**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only fd or shell redirection instead of `spawnSync(..., { input })`. Capture hook stderr explicitly if the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.test.ts` (search: `runLauncherWithPayload`).
+**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only fd or shell redirection instead of `spawnSync(..., { input })`. Capture hook stderr explicitly if the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runLauncherWithPayload`).
 
 ---
 
