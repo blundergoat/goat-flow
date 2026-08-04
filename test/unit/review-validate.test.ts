@@ -248,13 +248,23 @@ Review Integrity: confident; 1/1 files opened; no degradation flags; validator=v
     const messages = result.violations.map((violation) => violation.message);
 
     assert.equal(result.status, "fail");
-    for (const label of ["Scope", "Zero findings", "What I Didn't Examine"]) {
-      assert.equal(
-        messages.includes(`compact clean review is missing ${label}`),
-        true,
-        JSON.stringify(messages),
-      );
-    }
+
+    // Each disclosure is named separately so a failure says which one the report dropped.
+    assert.equal(
+      messages.includes("compact clean review is missing Scope"),
+      true,
+      JSON.stringify(messages),
+    );
+    assert.equal(
+      messages.includes("compact clean review is missing Zero findings"),
+      true,
+      JSON.stringify(messages),
+    );
+    assert.equal(
+      messages.includes("compact clean review is missing What I Didn't Examine"),
+      true,
+      JSON.stringify(messages),
+    );
   });
 
   it("rejects empty, undefended, or repeated compact disclosures", (testContext) => {

@@ -11,7 +11,7 @@ interface MarkdownMaskState {
   inHtmlComment: boolean;
   inlineCodeDelimiterLength: number;
   rawHtmlClosingPattern: RegExp | null;
-  rawHtmlUntilBlank: boolean;
+  inRawHtmlUntilBlank: boolean;
   previousRenderedLineWasParagraph: boolean;
   previousRenderedLineWasHeading: boolean;
   previousRenderedLineWasBlank: boolean;
@@ -146,7 +146,16 @@ function findInlineCodeSpan(
   return null;
 }
 
-/** Mask balanced inline-code spans on one line while retaining source offsets. */
+/**
+ * Hide backticked examples on one line so a validator reads only the user's real text.
+ * Use when a check scans a single report line and a user has written something like
+ * `Status: done` as an example - without this, that example is read as a live field.
+ *
+ * @param line - one source line as the user typed it; an empty line has no examples to
+ *   hide and comes back unchanged, so the caller sees the same blank line
+ * @returns the line with example text blanked to spaces and every other character kept
+ *   in place, so positions the user sees still line up with the original
+ */
 export function maskInlineCodeSpansOnLine(line: string): string {
   let cursor = 0;
   let masked = "";
@@ -178,9 +187,9 @@ function findUnescapedHtmlCommentOpener(
   return -1;
 }
 
-const RAW_HTML_BLOCK_TAGS =
+const RAW_BLOCK_TAG_NAMES =
   /^(?:address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul)$/iu;
-const COMPLETE_HTML_TAG =
+const COMPLETE_TAG_LINE =
   /^ {0,3}(?:<\/[A-Za-z][A-Za-z0-9-]*[\t ]*>|<[A-Za-z][A-Za-z0-9-]*(?:[\t ]+[A-Za-z_:][A-Za-z0-9_.:-]*(?:[\t ]*=[\t ]*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*[\t ]*\/?>)[\t ]*$/u;
 
 /**
@@ -205,7 +214,7 @@ function startsHtmlLikeBlock(comparableLine: string): boolean {
   const blockTag = comparableLine.match(
     /^ {0,3}<\/?([A-Za-z][\w-]*)(?:[\t ]|\/?>|$)/u,
   )?.[1];
-  return blockTag !== undefined && RAW_HTML_BLOCK_TAGS.test(blockTag);
+  return blockTag !== undefined && RAW_BLOCK_TAG_NAMES.test(blockTag);
 }
 
 /** Return whether a later source line starts a block that ends inline parsing. */
@@ -233,9 +242,9 @@ function continuesRawHtmlBlock(
     return true;
   }
 
-  if (state.rawHtmlUntilBlank) {
+  if (state.inRawHtmlUntilBlank) {
     if (comparableLine.trim().length === 0) {
-      state.rawHtmlUntilBlank = false;
+      state.inRawHtmlUntilBlank = false;
       return false;
     }
     return true;
@@ -292,8 +301,8 @@ function opensBlankTerminatedHtmlBlock(
     /^ {0,3}<\/?([A-Za-z][\w-]*)(?:[\t ]|\/?>|$)/u,
   )?.[1];
   if (!blockTag) return false;
-  if (!RAW_HTML_BLOCK_TAGS.test(blockTag)) return false;
-  state.rawHtmlUntilBlank = true;
+  if (!RAW_BLOCK_TAG_NAMES.test(blockTag)) return false;
+  state.inRawHtmlUntilBlank = true;
   return true;
 }
 
@@ -303,8 +312,8 @@ function opensTypeSevenHtmlBlock(
   state: MarkdownMaskState,
 ): boolean {
   if (state.previousRenderedLineWasParagraph) return false;
-  if (!COMPLETE_HTML_TAG.test(comparableLine)) return false;
-  state.rawHtmlUntilBlank = true;
+  if (!COMPLETE_TAG_LINE.test(comparableLine)) return false;
+  state.inRawHtmlUntilBlank = true;
   return true;
 }
 
@@ -357,7 +366,7 @@ function maskMarkdownSourceLine(
     isFencedLine(sourceLine, state);
     return recordRenderedLine(maskCharacters(sourceLine), false, state);
   }
-  if (state.rawHtmlClosingPattern || state.rawHtmlUntilBlank) {
+  if (state.rawHtmlClosingPattern || state.inRawHtmlUntilBlank) {
     if (isRawHtmlBlockLine(sourceLine, state)) {
       return recordRenderedLine(maskCharacters(sourceLine), false, state);
     }
@@ -501,13 +510,21 @@ function maskHtmlComments(
 }
 
 /**
- * Mask fenced or indented code, raw HTML, and HTML comments without changing layout.
- * Structural Markdown consumers can match this view and safely reuse offsets
- * against the original source without promoting examples into live metadata.
+ * Blank out every example in a report so checks only read what the user actually wrote.
+ * Use before validating any user-authored Markdown - a plan, review, or quality report -
+ * so a fenced sample, an indented snippet, or a commented-out draft is never mistaken for
+ * a real field the user filled in.
  *
- * @param content - Raw Markdown source to mask.
- * @returns The same source with non-structural examples and comments blanked out,
- *   identical in length and line count so caller offsets stay valid.
+ * The scan is line-by-line with a lookahead rather than a simple regex because Markdown
+ * lets a user open a backticked example on one line and close it several lines later, and
+ * because every character must keep its position: callers report problems back to the user
+ * by offset, so replacing examples with same-length spaces is what keeps "line 12, column
+ * 30" pointing at the place the user is actually looking at.
+ *
+ * @param content - the report exactly as the user saved it; empty content has nothing to
+ *   check, so an empty view comes back and the caller reports no findings rather than an error
+ * @returns the same text with examples and comments blanked to spaces, identical in length
+ *   and line count, so any position the caller shows the user still matches their file
  */
 export function maskNonRenderedMarkdown(content: string): string {
   const state: MarkdownMaskState = {
@@ -517,7 +534,7 @@ export function maskNonRenderedMarkdown(content: string): string {
     inHtmlComment: false,
     inlineCodeDelimiterLength: 0,
     rawHtmlClosingPattern: null,
-    rawHtmlUntilBlank: false,
+    inRawHtmlUntilBlank: false,
     previousRenderedLineWasParagraph: false,
     previousRenderedLineWasHeading: false,
     previousRenderedLineWasBlank: true,

@@ -48,9 +48,22 @@ const GRUFF_HOOK_COPY_ENTRIES = [
 
 after(cleanupHookTestDirs);
 
-/** Spawns a candidate jq binary's version command to prove it is executable. */
+/**
+ * Check that a candidate jq binary really runs before the smoke test relies on it.
+ * Use while resolving the optional pinned jq, so a stale path in the developer's environment
+ * shows up as a clear skip rather than a confusing hook failure later on.
+ *
+ * @param path - candidate binary path from the developer's environment or a known install
+ *   location; a path that does not exist just means "not usable here", not an error
+ * @returns true when the binary exists and reports a version; false means the pinned-jq
+ *   proof is skipped rather than reported as though it ran
+ */
 function isExecutableFile(path: string): boolean {
+  // Nothing at that path, so there is no binary to probe.
   if (!existsSync(path)) return false;
+
+  // Fixed `--version` argv with no shell. The path is developer test configuration, never
+  // end-user input, so there is no command-injection surface here.
   const result = spawnSync(path, ["--version"], { encoding: "utf-8" });
   return result.status === 0;
 }
@@ -123,6 +136,9 @@ describe("gruff-code-quality hook", () => {
     jq16.path === null ? { skip: jq16.skipReason } : {},
     () => {
       assert.ok(jq16.path, jq16.skipReason);
+
+      // Fixed `--version` argv with no shell, against a path this test already proved
+      // executable; developer test configuration, never end-user input.
       const version = spawnSync(jq16.path, ["--version"], {
         encoding: "utf-8",
       });

@@ -289,7 +289,11 @@ describe("scanContentQuality: unresolved readiness markers", () => {
       ].join("\n"),
     ).filter((finding) => finding.rule === "unresolved-content-marker");
 
-    assert.equal(findings.length, 4);
+    // One finding per placeholder the author left behind: TBD, the to-do line, ???, and the
+    // bare "Answer:" with nothing after it.
+    const placeholdersLeftInFixture = 4;
+
+    assert.equal(findings.length, placeholdersLeftInFixture);
     assert.ok(
       findings.every((finding) => finding.severity === "warning"),
       "every unresolved readiness marker must block a green content result",

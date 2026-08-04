@@ -3,6 +3,16 @@ category: refactoring
 last_reviewed: 2026-05-27
 ---
 
+## Pattern: Hold the file-length line continuously, not in a cleanup pass
+
+**Context:** A size gate (`size.file-length`, threshold 750 in `.gruff-ts.yaml`) accumulates violations quietly because no single commit crosses it — each edit adds twenty lines to an already-large file and nothing fails. The bill arrives all at once as a cleanup project.
+
+**Approach:** Treat a file nearing the threshold as the trigger to split, at the moment you are already editing it, while you hold the context needed to find the seam. Splitting is cheap then and expensive later: doing it retroactively means re-deriving every dependency, and a seam that looked like one module often turns out to be two once you check which private helpers are used on both sides.
+
+**Evidence (ACTUAL_MEASURED, 2026-08-04):** A goat-flow gruff sweep found 35 files over the 750-line gate totalling ~13,200 lines above threshold, topped by a 5,069-line contract test and a 2,069-line source file. Splitting the first one, `src/cli/facts/shared/learning-loop-common.ts` (836 lines), took roughly 15 tool calls and produced three modules rather than the two originally planned, because `isFileRef`, `isIntentionallyGitignored`, and `isCheckableForStaleness` were each used on both sides of the intended seam and had to become a third shared module. Evidence anchors: `src/cli/facts/shared/reference-paths.ts` (search: `isCheckableForStaleness`), `src/cli/facts/shared/search-anchors.ts` (search: `evaluateSearchAnchors`).
+
+Two second-order effects make deferral worse than it looks. Doc-comment rules and the size gate pull against each other - adding required documentation pushed one test file from 749 to 753 lines and *created* a size finding. And clearing an entire pillar can lower the reported composite, so a long deferred cleanup shows the score sagging while the codebase improves; judge progress on per-pillar finding counts instead.
+
 ## Pattern: Canary-first contract changes (one consumer before all consumers)
 
 **Context:** Changing a contract that has N consumers (every env class, every audit check, every renderer, every agent config) — the change must propagate to every consumer to land. The naive shape is "change all N consumers in one PR" and ship. When a real-world edge case reveals the new contract is wrong, the revert costs the same N-file surface.

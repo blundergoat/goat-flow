@@ -17,7 +17,6 @@ import {
   computeFreshness,
   countMatches,
   findCompetingArtifactSurfaces,
-  isFileRef,
   listMarkdownEntries,
   parseFrontmatterFields,
   parseMarkdownFrontmatter,
@@ -28,6 +27,7 @@ import {
   collectFootgunStructureDiagnostics,
   splitFootgunSections,
 } from "./learning-loop-sections.js";
+import { isFileRef } from "./reference-paths.js";
 
 export {
   computeFreshness,

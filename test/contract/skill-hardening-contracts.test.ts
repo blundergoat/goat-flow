@@ -3654,9 +3654,13 @@ describe("skill hardening contracts", () => {
           /empty C list means no additional project context/iu,
           referencePath,
         );
+        // Rubrics that add no project context of their own, so an agent running them sees
+        // only the fixed baseline split rather than an invented extra reading list.
+        const rubricsWithEmptyContextList = 7;
+
         assert.equal(
           contextMaps.match(/- \*\*C:\*\* \[\]/gu)?.length,
-          7,
+          rubricsWithEmptyContextList,
           referencePath,
         );
       },
@@ -3704,12 +3708,13 @@ describe("skill hardening contracts", () => {
           referencePath,
           "Meta-audit rubric (Phase 5.5)",
         );
-        for (const checkName of metaAuditChecks) {
-          assert.ok(
-            metaAudit.includes(checkName),
-            `${referencePath}: ${checkName}`,
-          );
-        }
+        // Collect every absent check first, so one failure names all of them rather than
+        // stopping at whichever happened to be listed first.
+        const missingMetaAuditChecks = metaAuditChecks.filter(
+          (checkName) => !metaAudit.includes(checkName),
+        );
+
+        assert.deepEqual(missingMetaAuditChecks, [], referencePath);
         assert.match(
           metaAudit,
           /Award 10 only when a check is fully satisfied/u,

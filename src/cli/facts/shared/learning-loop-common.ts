@@ -13,8 +13,15 @@
  * everywhere. ADR-024 governs the line-number-versus-semantic-anchor policy these
  * checks enforce.
  */
-import { posix as pathPosix } from "node:path";
 import type { BucketFreshness, ReadonlyFS } from "../../types.js";
+import {
+  isCheckableForStaleness,
+  isFileRef,
+  isIntentionallyGitignored,
+  SEARCH_ANCHOR_REGEX,
+  type ReferenceValidationOptions,
+} from "./reference-paths.js";
+import { evaluateSearchAnchors } from "./search-anchors.js";
 
 /** Strict YYYY-MM-DD format - rejects full ISO 8601 timestamps in `last_reviewed`. */
 export const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -34,14 +41,6 @@ export const EVIDENCE_PATTERN =
 /** Regex to extract file paths from backtick-wrapped references (with optional line numbers). */
 export const FILE_REF_REGEX =
   /`([^`]+\.[a-zA-Z]{1,10})(?::[0-9]+(?:[-,][0-9]+)*)?`/g;
-
-/** Matches backtick and double-quoted `(search: ...)` evidence anchors. */
-const SEARCH_ANCHOR_REGEX =
-  /`((?:[^`]+\.[a-zA-Z0-9]{1,10}|\.[a-zA-Z0-9_-]+))`\s*\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
-
-/** File tokens and search needles in citation order, including chained needles. */
-const SEARCH_CITATION_TOKEN_REGEX =
-  /`((?:[^`]+\.[a-zA-Z0-9]{1,10}|\.[a-zA-Z0-9_-]+))`|\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
 
 const BARE_EVIDENCE_ANCHOR_LINE_REGEX =
   /(?:^|\s)(?:\*\*)?Evidence anchors?(?:\*\*)?:/i;
@@ -65,92 +64,6 @@ export interface FootgunRefSummary {
   invalidLineRefs: string[];
   totalRefs: number;
   validRefs: number;
-}
-
-/** Reference-validation policy for evidence that may cite an external project. */
-export interface ReferenceValidationOptions {
-  /** Ignore absent target files while still validating literal needles in targets that exist. */
-  ignoreMissingFiles?: boolean;
-  /** Repo-relative document containing the citation, used to resolve skill-local paths. */
-  sourcePath?: string;
-}
-
-/** One concrete `(search: ...)` citation after filesystem validation. */
-export interface SearchAnchorEvaluation {
-  filePath: string;
-  needle: string;
-  line: number;
-  status: "valid" | "stale";
-  reason: "missing-file" | "missing-needle" | "gitignored-path" | null;
-  diagnostic: string | null;
-}
-
-interface SearchAnchorCitation {
-  filePath: string;
-  needle: string;
-  line: number;
-}
-
-/**
- * Decide whether a backtick-wrapped reference names a real file path rather than a
- * URL or hostname (which share the `host:port` shape). Used to gate staleness
- * checks so a `localhost:3000`-style token is never treated as a missing file.
- *
- * @param filePath - candidate reference text with any trailing `:line` already split off
- * @returns true for paths with a slash or a root-level filename extension; false for URLs, hostnames, and bare extensionless names
- */
-export function isFileRef(filePath: string): boolean {
-  // Skip hostname/URL patterns (not file references)
-  if (
-    /^https?:|:\/\//.test(filePath) ||
-    /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(filePath)
-  )
-    return false;
-  // Paths with '/' are clearly file paths
-  if (filePath.includes("/")) return true;
-  // Root-level files with extensions (e.g., AGENTS.md:42) are valid refs
-  // Bare names without extensions (e.g., webpack:123) are ambiguous - skip
-  return /\.[a-zA-Z0-9]+$/.test(filePath);
-}
-
-/** Paths under these dirs are intentionally gitignored per `.goat-flow/plans/.gitignore`
- *  (milestone files + plan subdirs + `.active` marker are local-session state by
- *  design). Narrative mentions of them in lessons/footguns are navigation pointers,
- *  not resolvable artifacts - treating absence as "stale" false-positives on
- *  any clean checkout or CI run, so body-text references are skipped. The two
- *  durable-evidence grammars (`(search: ...)` anchors and `Evidence anchors:` lines)
- *  are the exception: gitignored paths there violate the never-anchor-to-local-state
- *  invariant regardless of local existence and are flagged as
- *  `gitignored path used as durable evidence anchor`. Keep this list short and specific. */
-function isIntentionallyGitignored(filePath: string): boolean {
-  // Anchor files (README.md, .gitignore, .gitkeep) under these trees ARE
-  // committed by design, so they are legitimate durable anchors and stay
-  // subject to normal existence checks.
-  if (/(?:^|\/)(README\.md|\.gitignore|\.gitkeep)$/.test(filePath))
-    return false;
-  return (
-    filePath.startsWith(".goat-flow/plans/") ||
-    filePath.startsWith(".goat-flow/scratchpad/") ||
-    filePath.startsWith(".goat-flow/logs/")
-  );
-}
-
-/** Check whether the file path is checkable for staleness. */
-function isCheckableForStaleness(filePath: string, fs: ReadonlyFS): boolean {
-  if (isIntentionallyGitignored(filePath)) return false;
-  if (filePath.includes("/")) return true;
-  // If it exists at root, it's checkable regardless of extension
-  if (fs.exists(filePath)) return true;
-  // A bare source filename that doesn't exist at the repo root is probably
-  // shorthand for a deeply nested file; skip it to avoid false positives.
-  if (
-    /\.(go|ts|tsx|js|jsx|py|php|rs|java|kt|rb|cs|c|cpp|h|hpp|swift|scala)$/i.test(
-      filePath,
-    )
-  )
-    return false;
-  // Non-source files (AGENTS.md, package.json, etc.) should be at root
-  return true;
 }
 
 /** Normalize a surface path so trailing slashes do not affect comparisons. */
@@ -492,247 +405,6 @@ function scanSearchAnchors(
   }
 }
 
-/** Mask struck text without changing line positions used by diagnostics. */
-function maskStrikethroughPreservingLines(content: string): string {
-  return content.replace(/~~[\s\S]*?~~/g, (span) =>
-    span.replace(/[^\r\n]/g, " "),
-  );
-}
-
-/** One active CommonMark-style fenced code block. */
-export interface MarkdownFence {
-  character: "`" | "~";
-  length: number;
-}
-
-/** Advance Markdown fence state without treating a shorter or unlike run as a close. */
-export function advanceMarkdownFenceState(
-  line: string,
-  activeFence: MarkdownFence | null,
-): { activeFence: MarkdownFence | null; isFenceLine: boolean } {
-  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
-  const run = match?.[1];
-  if (run === undefined) return { activeFence, isFenceLine: false };
-
-  const character = run[0] as "`" | "~";
-  if (activeFence === null) {
-    return {
-      activeFence: { character, length: run.length },
-      isFenceLine: true,
-    };
-  }
-
-  const remainder = match?.[2] ?? "";
-  if (
-    character === activeFence.character &&
-    run.length >= activeFence.length &&
-    /^[ \t]*$/.test(remainder)
-  ) {
-    return { activeFence: null, isFenceLine: true };
-  }
-  return { activeFence, isFenceLine: false };
-}
-
-/** Mask fenced Markdown without shifting the line positions used by diagnostics. */
-function maskMarkdownFencesPreservingLines(content: string): string {
-  const visibleLines: string[] = [];
-  let activeFence: MarkdownFence | null = null;
-
-  for (const line of content.split(/\r?\n/)) {
-    const fenceState = advanceMarkdownFenceState(line, activeFence);
-    activeFence = fenceState.activeFence;
-    visibleLines.push(
-      fenceState.isFenceLine || activeFence !== null
-        ? line.replace(/./g, " ")
-        : line,
-    );
-  }
-
-  return visibleLines.join("\n");
-}
-
-/** Return the one-based line containing a character offset. */
-function lineNumberAtOffset(content: string, offset: number): number {
-  let line = 1;
-  for (let index = 0; index < offset; index++) {
-    if (content[index] === "\n") line++;
-  }
-  return line;
-}
-
-/** Extract direct and same-sentence chained citations from visible Markdown. */
-function extractVisibleSearchAnchorCitations(
-  content: string,
-): SearchAnchorCitation[] {
-  const citations: SearchAnchorCitation[] = [];
-  let activeFilePath: string | null = null;
-  let awaitingDirectSearch = false;
-  let previousTokenEnd = 0;
-
-  for (const match of content.matchAll(
-    new RegExp(SEARCH_CITATION_TOKEN_REGEX.source, "g"),
-  )) {
-    const matchIndex = match.index;
-    const tokenEnd = matchIndex + match[0].length;
-    const filePath = match[1];
-    if (filePath !== undefined) {
-      activeFilePath = isFileRef(filePath) ? filePath : null;
-      awaitingDirectSearch = activeFilePath !== null;
-      previousTokenEnd = tokenEnd;
-      continue;
-    }
-
-    const gap = content.slice(previousTokenEnd, matchIndex);
-    if (awaitingDirectSearch) {
-      if (!/^[ \t]*(?:\n[ \t]*)?$/.test(gap)) activeFilePath = null;
-    } else if (/\n|[.!?](?:\s|$)/.test(gap)) {
-      activeFilePath = null;
-    }
-    const rawNeedle = match[2] ?? match[3];
-    if (activeFilePath !== null && rawNeedle !== undefined) {
-      citations.push({
-        filePath: activeFilePath,
-        needle: rawNeedle.replace(/\\(["\\])/g, "$1"),
-        line: lineNumberAtOffset(content, matchIndex),
-      });
-    }
-    awaitingDirectSearch = false;
-    previousTokenEnd = tokenEnd;
-  }
-  return citations;
-}
-
-/** Extract visible semantic-anchor citations while ignoring fenced examples. */
-function extractSearchAnchorCitations(content: string): SearchAnchorCitation[] {
-  const withoutStrikethrough = maskStrikethroughPreservingLines(content);
-  return extractVisibleSearchAnchorCitations(
-    maskMarkdownFencesPreservingLines(withoutStrikethrough),
-  );
-}
-
-/** Return whether a citation identifies one concrete repository file. */
-function isConcreteSearchAnchorPath(filePath: string): boolean {
-  return isFileRef(filePath) && !/[*?{}<>]|\.\.\./.test(filePath);
-}
-
-/** Build one failed semantic-anchor result without duplicating its evidence. */
-function staleSearchAnchorEvaluation(
-  anchor: SearchAnchorCitation,
-  reason: "missing-file" | "missing-needle" | "gitignored-path",
-  diagnostic: string,
-): SearchAnchorEvaluation {
-  return { ...anchor, status: "stale", reason, diagnostic };
-}
-
-/** Choose a citing-file-relative candidate only for explicit local path forms. */
-function localSearchAnchorCandidate(
-  filePath: string,
-  sourcePath: string,
-): string | null {
-  const skillRoot = /^(.+\/skills\/[^/]+)(?:\/|$)/.exec(sourcePath)?.[1];
-  if (
-    skillRoot !== undefined &&
-    (filePath.startsWith("references/") || filePath === "SKILL.md")
-  ) {
-    return pathPosix.join(skillRoot, filePath);
-  }
-  return filePath.startsWith("./") || filePath.startsWith("../")
-    ? pathPosix.join(pathPosix.dirname(sourcePath), filePath)
-    : null;
-}
-
-/** Reject a relative citation candidate that normalizes outside the project. */
-function isEscapedSearchAnchorPath(path: string): boolean {
-  return pathPosix.isAbsolute(path) || path === ".." || path.startsWith("../");
-}
-
-/** Resolve the skill-relative citation forms used by installed and source skills. */
-function resolveSearchAnchorPath(
-  filePath: string,
-  sourcePath: string | undefined,
-): string {
-  if (sourcePath === undefined) return filePath;
-  const relativeCandidate = localSearchAnchorCandidate(filePath, sourcePath);
-  if (relativeCandidate === null) return filePath;
-
-  const normalized = pathPosix.normalize(relativeCandidate);
-  return isEscapedSearchAnchorPath(normalized) ? filePath : normalized;
-}
-
-/** Validate one parsed citation, returning null only when policy excludes it. */
-function evaluateSearchAnchor(
-  fs: ReadonlyFS,
-  anchor: SearchAnchorCitation,
-  options: ReferenceValidationOptions,
-): SearchAnchorEvaluation | null {
-  if (!isConcreteSearchAnchorPath(anchor.filePath)) return null;
-  const resolvedAnchor = {
-    ...anchor,
-    filePath: resolveSearchAnchorPath(anchor.filePath, options.sourcePath),
-  };
-  if (isIntentionallyGitignored(resolvedAnchor.filePath)) {
-    return staleSearchAnchorEvaluation(
-      resolvedAnchor,
-      "gitignored-path",
-      `${resolvedAnchor.filePath} (gitignored path used as durable evidence anchor)`,
-    );
-  }
-  if (!isCheckableForStaleness(resolvedAnchor.filePath, fs)) return null;
-
-  const diagnostic = `${resolvedAnchor.filePath} (search: \`${resolvedAnchor.needle}\`)`;
-  if (!fs.exists(resolvedAnchor.filePath)) {
-    if (options.ignoreMissingFiles === true) return null;
-    return staleSearchAnchorEvaluation(
-      resolvedAnchor,
-      "missing-file",
-      diagnostic,
-    );
-  }
-  const fileContent = fs.readFile(resolvedAnchor.filePath);
-  if (fileContent === null) {
-    return staleSearchAnchorEvaluation(
-      resolvedAnchor,
-      "missing-needle",
-      diagnostic,
-    );
-  }
-  if (!fileContent.includes(resolvedAnchor.needle)) {
-    return staleSearchAnchorEvaluation(
-      resolvedAnchor,
-      "missing-needle",
-      diagnostic,
-    );
-  }
-  return {
-    ...resolvedAnchor,
-    status: "valid",
-    reason: null,
-    diagnostic: null,
-  };
-}
-
-/**
- * Validate visible `(search: ...)` citations against the selected project.
- *
- * Callers that accept evidence from external repositories may ignore missing
- * files while still detecting a moved literal in any target present locally.
- * Placeholder and glob paths are skipped because they do not identify one
- * concrete file. Every selected source document, including accepted ADRs, uses
- * the same literal-resolution contract.
- */
-export function evaluateSearchAnchors(
-  fs: ReadonlyFS,
-  content: string,
-  options: ReferenceValidationOptions = {},
-): SearchAnchorEvaluation[] {
-  const evaluations: SearchAnchorEvaluation[] = [];
-  for (const anchor of extractSearchAnchorCitations(content)) {
-    const evaluation = evaluateSearchAnchor(fs, anchor, options);
-    if (evaluation !== null) evaluations.push(evaluation);
-  }
-  return evaluations;
-}
-
 /**
  * Validate the file references in one lesson or pattern section, sharing the same
  * staleness and ADR-024 line-reference rules as footguns. Lessons cite full
@@ -741,7 +413,10 @@ export function evaluateSearchAnchors(
  * to a single file.
  *
  * @param fs - read-only filesystem adapter used to resolve and line-count referenced files
- * @param content - the lesson or pattern section's markdown
+ * @param content - the lesson or pattern section's markdown; a section with no references
+ *   is normal and simply produces zero counts
+ * @param options - policy for evidence that may live in another repo; omitted means every
+ *   referenced file must exist locally or it is reported as stale
  * @returns counts plus the stale-path and invalid-line-reference lists; all empty when every reference is valid
  */
 export function summarizeLessonRefs(
@@ -766,7 +441,7 @@ export function summarizeLessonRefs(
     summary.totalRefs++;
     if (fs.exists(filePath)) {
       summary.validRefs++;
-    } else if (options.ignoreMissingFiles !== true) {
+    } else if (options.allowMissingFiles !== true) {
       summary.staleRefs.push(filePath);
     }
   }

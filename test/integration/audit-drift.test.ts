@@ -3,7 +3,7 @@
  * with zero findings and that `checked` equals every manifest-derived comparison users rely on.
  */
 import { loadManifest } from "../../src/cli/manifest/manifest.js";
-import { SHARED_ARTIFACT_MIRRORS } from "../../src/cli/audit/check-artifact-integrity.js";
+import { SHARED_ARTIFACT_MIRRORS } from "../../src/cli/audit/artifact-templates.js";
 import {
   after,
   assert,

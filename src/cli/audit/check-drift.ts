@@ -19,11 +19,11 @@ import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
 import type { AgentId } from "../types.js";
 import type { AgentProfile } from "../manifest/types.js";
 import type { DriftFinding, DriftReport } from "./types.js";
+import { checkArtifactIntegrity } from "./check-artifact-integrity.js";
 import {
-  checkArtifactIntegrity,
   readTemplateText,
   SHARED_ARTIFACT_MIRRORS,
-} from "./check-artifact-integrity.js";
+} from "./artifact-templates.js";
 
 const KNOWN_AGENT_IDS = new Set(["claude", "codex", "antigravity", "copilot"]);
 const USER_OWNED_SKILL_MARKER = "user-owned";

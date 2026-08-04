@@ -23,7 +23,16 @@ const QUALITY_IGNORE_RULES = [
   "",
 ].join("\n");
 
-/** Create one disposable project whose local quality paths are safely ignored. */
+/**
+ * Create one disposable project whose local quality paths are safely ignored.
+ * Use as the starting point for each recovery case, so a case never touches the developer's
+ * real project or leaves stray quality artifacts behind in it.
+ *
+ * Side effects: creates a new temporary directory on disk, runs `git init` inside it, and
+ * writes a `.gitignore` there. The caller owns that directory and removes it when done.
+ *
+ * @returns absolute path of the fresh project root the case should work in
+ */
 function makeRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "goat-quality-orphan-"));
   execFileSync("git", ["-C", root, "init", "--quiet"]);
@@ -47,6 +56,8 @@ describe("quality draft orphan recovery", () => {
    * stale owner marker and removes the complete disposable project afterward.
    */
   it("rejects an orphaned stale claim when its draft is already gone", async () => {
+    // Builds the state a user is left in when their quality capture died mid-write: the draft
+    // is already gone, but the ownership marker it wrote is still sitting in staging.
     const root = makeRoot();
     const capture = startQualityDraftCapture({
       projectRoot: root,
@@ -59,11 +70,16 @@ describe("quality draft orphan recovery", () => {
       capture.stagingDir,
       `goat-quality-claim-claude-${nonce}.json`,
     );
+    // The marker a dead capture left behind: a real owner id and pid, with a claim timestamp
+    // old enough that the zero lease treats it as long expired.
+    const staleOwnerMarker = {
+      owner: "c".repeat(32),
+      pid: 789,
+      claimed_at: "2026-08-03T00:00:00.000Z",
+    };
+
     try {
-      writeFileSync(
-        claimPath,
-        `${JSON.stringify({ owner: "c".repeat(32), pid: 789, claimed_at: "2026-08-03T00:00:00.000Z" })}\n`,
-      );
+      writeFileSync(claimPath, `${JSON.stringify(staleOwnerMarker)}\n`);
       // A zero lease means immediate expiry even when filesystem timestamp
       // precision places the new marker fractionally ahead of Date.now().
       const futureMtime = new Date(Date.now() + 60_000);
@@ -93,6 +109,8 @@ describe("quality draft orphan recovery", () => {
    * marker, confirms no receipt, and removes the complete disposable project.
    */
   it("keeps an orphaned live claim while its receipt is still pending", async () => {
+    // Builds the state a user is in mid-capture: their run holds the claim and simply has not
+    // written a draft yet, so the sweep must leave it alone rather than reclaim it from them.
     const root = makeRoot();
     const capture = startQualityDraftCapture({
       projectRoot: root,
@@ -104,11 +122,16 @@ describe("quality draft orphan recovery", () => {
       capture.stagingDir,
       `goat-quality-claim-claude-${nonce}.json`,
     );
+    // The marker a still-running capture holds: claimed just now, so the sweep must leave it
+    // alone rather than reclaim work the user's run is still doing.
+    const liveOwnerMarker = {
+      owner: "d".repeat(32),
+      pid: 790,
+      claimed_at: new Date().toISOString(),
+    };
+
     try {
-      writeFileSync(
-        claimPath,
-        `${JSON.stringify({ owner: "d".repeat(32), pid: 790, claimed_at: new Date().toISOString() })}\n`,
-      );
+      writeFileSync(claimPath, `${JSON.stringify(liveOwnerMarker)}\n`);
 
       await capture.processNow();
 

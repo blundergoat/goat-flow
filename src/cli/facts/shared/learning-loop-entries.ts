@@ -300,7 +300,7 @@ function extractLessonLikeEntries(
         // Patterns may cite external projects. Missing external files are not
         // local drift, but a literal needle in a target that exists here is.
         defaultEntryKind === "pattern"
-          ? { ignoreMissingFiles: true }
+          ? { allowMissingFiles: true }
           : undefined,
       );
       learningEntries.push({

@@ -316,6 +316,8 @@ describe("plans time", () => {
   });
 
   it("allocates a new segment after the highest existing suffix", () => {
+    // Builds a milestone a user has already timed against, so starting the clock again has to
+    // open a fresh row rather than reuse or overwrite the work they logged earlier.
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
     const { milestonePath } = writeTimingFixture(temporaryRoot);
 
@@ -351,6 +353,8 @@ describe("plans time", () => {
   });
 
   it("rejects timing table rows with extra cells", () => {
+    // Builds the state a user creates by hand-editing their timing table and leaving a stray
+    // extra column, so the malformed row is refused instead of being read as real minutes.
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
     const { milestonePath } = writeTimingFixture(temporaryRoot);
 

@@ -26,7 +26,7 @@ import {
   advanceMarkdownFenceState,
   evaluateSearchAnchors,
   type MarkdownFence,
-} from "../facts/shared/learning-loop-common.js";
+} from "../facts/shared/search-anchors.js";
 import { STANDALONE_PLAYBOOK_FILES } from "./skill-docs-contract.js";
 
 /**
@@ -292,11 +292,27 @@ function nextReadinessHeadingLevel(
   return currentLevel;
 }
 
-/** Return the unresolved marker carried by one readiness-section line. */
+/**
+ * Find the placeholder a user left behind in a readiness answer, if there is one.
+ * Use when checking a readiness section, so an unfinished-answer marker - a to-do note,
+ * "???", or a bare "Answer:" - is raised back to the author instead of shipping as though
+ * it were a real answer.
+ *
+ * Backticked text is masked out of the line before matching, so an author who writes about
+ * such markers as an example is not accused of leaving one behind.
+ *
+ * @param line - one line from a readiness section, exactly as the author wrote it
+ * @returns the marker text to show the author; `null` means the line is properly filled in
+ *   and nothing is reported for it
+ */
 function unresolvedContentMarker(line: string): string | null {
   const markerText = maskInlineCodeSpansOnLine(line);
   const todoMarker = /\b(?:TBD|TODO)\b/i.exec(markerText);
+
+  // The author parked the answer with a to-do marker, so name it back to them.
   if (todoMarker) return todoMarker[0];
+
+  // "???" is the other placeholder authors leave when they mean to come back to it.
   if (markerText.includes("???")) return "???";
 
   const normalized = line
@@ -479,7 +495,7 @@ function scanSemanticAnchorQuality(
   text: string,
 ): ContentFinding[] {
   return evaluateSearchAnchors(ctx.fs, text, {
-    ignoreMissingFiles: true,
+    allowMissingFiles: true,
     sourcePath: path,
   })
     .filter(
