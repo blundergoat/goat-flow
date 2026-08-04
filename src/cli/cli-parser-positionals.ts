@@ -326,7 +326,7 @@ export function parsePlansPositionals(positionals: string[]): {
  * @returns the parsed timing action and resolved milestone path
  * @throws CLIError when the action is unknown or extra arguments were supplied
  */
-export function parsePlansTimePositionals(
+function parsePlansTimePositionals(
   action: string | undefined,
   milestonePath: string | undefined,
   extraPositionals: string[],
@@ -355,7 +355,7 @@ export function parsePlansTimePositionals(
 }
 
 /** Parse the single plan directory consumed by export and check. */
-export function parsePlansReadPositionals(
+function parsePlansReadPositionals(
   subcommand: string | undefined,
   planPath: string | undefined,
   third: string | undefined,
@@ -382,7 +382,7 @@ export function parsePlansReadPositionals(
   };
 }
 
-export function parseHookTogglePositionals(
+function parseHookTogglePositionals(
   subcommand: "enable" | "disable",
   hookId: string | undefined,
   projectPath: string | undefined,

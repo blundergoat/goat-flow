@@ -8,6 +8,7 @@
  * shape. A user who hand-edited their config into something unexpected should see a precise
  * drift finding, not a crash midway through their audit.
  */
+import type { AgentId } from "../types.js";
 
 /** Known agent identifiers goat-flow can compare installed artifacts for. */
 const KNOWN_AGENT_IDS = new Set(["claude", "codex", "antigravity", "copilot"]);
@@ -33,8 +34,6 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  * @param value - agent name from manifest or config; an empty or unknown name never matches
  * @returns true when the name is a supported agent whose artifacts can be compared
  */
-export function isAgentId(
-  value: string,
-): value is import("../types.js").AgentId {
+export function isAgentId(value: string): value is AgentId {
   return KNOWN_AGENT_IDS.has(value);
 }
