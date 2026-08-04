@@ -157,7 +157,7 @@ last_reviewed: 2026-08-04
 4. Do not carry an inflated plan's estimates into calibration. Untagged retrospective Actuals are excluded for exactly this reason.
 5. Suspect the method, not the milestone, when a whole plan misses one direction by an order of magnitude.
 
-**Evidence anchors:** `src/cli/plans-check.ts` (search: `function readCalibrationSample`) computes ratios from raw receipt seconds; `workflow/skills/goat-plan/SKILL.md` (search: `Effort estimate (agent-time)`) already requires counted units and forbids wall-clock intuition - this lesson is measured evidence that the rule is load-bearing rather than stylistic.
+**Evidence anchors:** `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) computes ratios from raw receipt seconds; `workflow/skills/goat-plan/SKILL.md` (search: `Effort estimate (agent-time)`) already requires counted units and forbids wall-clock intuition - this lesson is measured evidence that the rule is load-bearing rather than stylistic.
 
 ---
 
