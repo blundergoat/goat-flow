@@ -258,4 +258,3 @@ export function checkResourceReferences(templateRoot: string): DriftFinding[] {
   }
   return findings;
 }
-

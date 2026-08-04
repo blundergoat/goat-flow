@@ -261,7 +261,9 @@ Review Integrity: confident; 1/1 files opened; no degradation flags; validator=v
       JSON.stringify(messages),
     );
     assert.equal(
-      messages.includes("compact clean review is missing What I Didn't Examine"),
+      messages.includes(
+        "compact clean review is missing What I Didn't Examine",
+      ),
       true,
       JSON.stringify(messages),
     );
