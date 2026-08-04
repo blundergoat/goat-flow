@@ -218,6 +218,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── prettier.sh                  = formatting wrapper
 ├── prettier-check.sh            = formatting check wrapper
 ├── profile-dashboard-audit.mjs  = dashboard audit cache/fresh profiling helper
+├── repoint-moved-anchors.mjs    = repoints learning-loop/ADR anchors after a symbol moves file
 ├── run-cli.sh                   = local CLI wrapper
 ├── setup-initial.sh             = initial repo scaffolding helper
 ├── start-dev.sh                 = local dashboard dev wrapper

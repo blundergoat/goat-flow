@@ -9,7 +9,7 @@
 
 M06 requires dashboard-launched Claude reporting sessions to be mechanically prevented from
 editing tracked target files while still producing durable quality reports. The enforcement
-overlay built by `src/cli/server/terminal.ts` (search: `buildClaudeReportingSettings`) proves out
+overlay built by `src/cli/server/terminal-reporting-profile.ts` (search: `buildClaudeReportingSettings`) proves out
 for reads and file-tool writes, but measured probes on Claude Code 2.1.220 (2026-07-31, recorded
 in M06 blocked evidence) show that no settings allow-rule form matches the multi-line
 quoted-heredoc `quality save` Bash invocation: exact rules, a mid-pattern wildcard, and the

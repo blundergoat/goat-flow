@@ -130,7 +130,7 @@ last_reviewed: 2026-08-04
 - `src/cli/facts/agent/settings.ts` (search: `isCodexDenyMode`) - audit fact extraction recognizes both legacy `none` and current `deny` entries; `src/cli/audit/check-agent-codex.ts` (search: `checkCodexWorkspaceRootExactPaths`) - audit fails when Codex config lists absent exact workspace-root paths.
 - Runtime capture 2026-06-04: `codex sandbox --permissions-profile goat-flow -C /home/devgoat/projects/goat-flow pwd` failed with `bwrap: execvp .../vendor/x86_64-unknown-linux-musl/bin/codex: No such file or directory`; same command succeeded when the profile was supplied as `permissions.goat-flow={extends=":workspace", filesystem={... "blocked/**"="deny"}}`.
 - 2026-05-19 startup failure showed repeated `':project_roots' is not recognized by this version of Codex and will be ignored` warnings; a binary probe that day found `:workspace_roots` (and no `:project_roots`) in Codex 0.131.0's embedded schema.
-- `src/cli/server/terminal.ts` (search: `sharedProtectedPaths`) now admits a reporting write root only when it exists and has the same protected-file layout across all selected roots; `isGitIgnoredPath` separately gates build-directory candidates.
+- `src/cli/server/terminal-reporting-profile.ts` (search: `sharedProtectedPaths`) now admits a reporting write root only when it exists and has the same protected-file layout across all selected roots; `isGitIgnoredPath` separately gates build-directory candidates.
 - Runtime capture 2026-07-26 on Codex 0.145.0: the pre-fix generated profile failed allowed report/build writes because an absent exact local-state rule prevented bwrap startup; after layout filtering, allowed writes exited 0 while tracked overwrite/rename/delete probes exited 1.
 
 **Prevention:**

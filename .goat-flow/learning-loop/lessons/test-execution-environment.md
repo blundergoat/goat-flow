@@ -220,7 +220,7 @@ last_reviewed: 2026-08-04
 **Prevention:**
 1. Always include a positive-control row an existing rule provably allows (for the reporting overlay: `node --import tsx src/cli/cli.ts --version`). Control executes + target denied = valid negative verdict; control denied = void probe, report a harness fault, not a matcher verdict.
 2. Keep `env -i HOME="$HOME" PATH="$PATH" TERM=xterm SHELL=/bin/bash` as cheap hygiene for nested CLI probes, but do not treat env stripping or init-event marker greps as proof in either direction.
-3. The real launch environment is a dashboard server spawn, not an interactive session; mirror the flag set in `src/cli/server/terminal.ts` (search: `CLAUDE_REPORTING_ARGS`) when reproducing it.
+3. The real launch environment is a dashboard server spawn, not an interactive session; mirror the flag set in `src/cli/server/terminal-spawn.ts` (search: `CLAUDE_REPORTING_ARGS`) when reproducing it.
 
 **Outcome (2026-07-31):** With the control proven (`goat-flow v1.14.0` executed under dontAsk), the heredoc row's denial became a valid measurement: the trailing `:*` prefix form does not match multi-line quoted-heredoc Bash commands on Claude Code 2.1.220.
 

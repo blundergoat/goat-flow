@@ -236,7 +236,7 @@ last_reviewed: 2026-07-26
 **Symptoms:** A write-enabled Codex session launched from the Workspace terminal fails `bash scripts/preflight-checks.sh` when it inherits the default restricted sandbox, while a reporting-only session can modify tracked files if it inherits the blanket `danger-full-access` override. The first failure shape looks like product regressions: child-process-heavy tests fail, registry DNS is unavailable, and nested npm spawns report `EPERM`.
 
 **Evidence:**
-- `src/cli/server/terminal.ts` (search: `CODEX_DASHBOARD_ARGS`) keeps ordinary write-enabled Codex sessions on `--sandbox danger-full-access`; `buildCodexReportingProfile` supplies the restricted reporting alternative.
+- `src/cli/server/terminal-spawn.ts` (search: `CODEX_DASHBOARD_ARGS`) keeps ordinary write-enabled Codex sessions on `--sandbox danger-full-access`; `buildCodexReportingProfile` supplies the restricted reporting alternative.
 - `src/dashboard/dashboard-terminal-paste.ts` (search: `dashboardTerminalAccessMode`) maps prompt and role intent to `workspace` or `reporting`, while retry/reconnect state preserves that decision.
 - `test/smoke/dashboard-endpoints.test.ts` (search: `preflight-capable sandbox`) pins the POSIX and Windows Codex launch shapes.
 - `test/unit/terminal-spawn.test.ts` (search: `restricted permission profile`) pins reporting profile construction and Git-proven ignored-directory admission.
