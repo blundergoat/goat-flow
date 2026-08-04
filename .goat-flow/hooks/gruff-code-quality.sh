@@ -924,6 +924,7 @@ run_gruff_json() {
   local help="$3"
   local file_path="$4"
   local ranges="$5"
+  local scope="${6:-symbol}"
   local args timeout_seconds
   args=(analyse)
   if [[ "$help" == *"--format"* ]]; then
@@ -932,7 +933,7 @@ run_gruff_json() {
       args+=(--fail-on none)
     fi
     if supports_native_changed_regions "$help"; then
-      args+=(--no-baseline --changed-ranges "$ranges" --changed-scope symbol)
+      args+=(--no-baseline --changed-ranges "$ranges" --changed-scope "$scope")
     fi
   elif [[ "$help" == *"-format"* ]]; then
     args+=(-format json)
@@ -1165,6 +1166,45 @@ ignored_descriptor() {
   ' 2>/dev/null || true
 }
 
+# Translate rule families into the specific thing a reviewer will be missing, so an agent
+# fixes the underlying gap instead of inserting marker words to clear the finding. The
+# wording deliberately mirrors code-comments.md, which is the standard these rules approximate.
+print_reviewability_guidance() {
+  local report="$1"
+  local surfaced_lines
+  surfaced_lines="$(printf '%s' "$report" | jq -r '.lines[]?' 2>/dev/null || true)"
+  [[ -n "$surfaced_lines" ]] || return 0
+
+  local shown_docs=0 shown_naming=0 shown_structure=0 line
+  while IFS= read -r line; do
+    case "$line" in
+      *" docs."*)
+        [[ "$shown_docs" -eq 1 ]] || {
+          shown_docs=1
+          printf 'gruff-code-quality: docs findings want a real contract, not a marker word - say what it does, when a reader reaches it, and what null/empty means for them (code-comments.md tiers 1 and 4).\n'
+        }
+        ;;
+    esac
+    case "$line" in
+      *" naming."*)
+        [[ "$shown_naming" -eq 1 ]] || {
+          shown_naming=1
+          printf 'gruff-code-quality: naming findings want the words a reader already knows, not internal mechanics - a better name often removes the need for the comment too (code-comments.md tier 2).\n'
+        }
+        ;;
+    esac
+    case "$line" in
+      *" size."*|*" design.circular-import"*)
+        [[ "$shown_structure" -eq 1 ]] || {
+          shown_structure=1
+          printf 'gruff-code-quality: structural findings are review cost - split along the concern a reader follows, then re-run `goat-flow stats --check`, because moving a symbol breaks learning-loop anchors that no compiler can see.\n'
+        }
+        ;;
+    esac
+  done <<<"$surfaced_lines"
+  return 0
+}
+
 print_scope_header() {
   local binary="$1"
   local rel_path="$2"
@@ -1252,6 +1292,18 @@ process_file_contract() {
   [[ -n "$cr_flag" ]] || cr_flag="--changed-ranges"
   timeout_seconds="$(normalized_timeout_seconds "$binary")"
 
+  # When every line of the file is already in the changed range - a file the agent just
+  # created, or rewrote end to end - range filtering excludes nothing, but it still makes the
+  # analyzer drop `scope=file` findings such as a missing file overview, an over-long file, or
+  # an import cycle. Those anchor to the file rather than to a line, and they are exactly the
+  # review problems a brand-new module is most likely to have. So the flag is omitted in that
+  # case only. A partial edit keeps range-scoping, so the agent is never handed unrelated
+  # pre-existing debt from the rest of the file.
+  local scopes_whole_file=0
+  if [[ -n "$ranges" && "$ranges" == "$(all_file_range "$rel_path")" ]]; then
+    scopes_whole_file=1
+  fi
+
   # Scope to the changed lines and let the analyzer return the attributable
   # findings. Capture stdout ONLY: the gruff.hook.v1 envelope is JSON on stdout,
   # and any analyzer/git diagnostics on stderr (e.g. "path not in HEAD") would
@@ -1260,11 +1312,18 @@ process_file_contract() {
   # filters line/symbol findings, hiding pre-existing findings on the very lines
   # the agent edited (confirmed across all five analyzers). See M02 for the
   # scope-specific combined-mode fix that re-enables it.
+  local -a scope_args
+  if [[ "$scopes_whole_file" -eq 1 ]]; then
+    scope_args=()
+  else
+    scope_args=("$cr_flag" "$ranges")
+  fi
+
   set +e
   if command -v timeout >/dev/null 2>&1; then
-    output="$(timeout "$timeout_seconds" "$binary_path" hook --format json "$cr_flag" "$ranges" "$rel_path" 2>/dev/null)"
+    output="$(timeout "$timeout_seconds" "$binary_path" hook --format json "${scope_args[@]}" "$rel_path" 2>/dev/null)"
   else
-    output="$("$binary_path" hook --format json "$cr_flag" "$ranges" "$rel_path" 2>/dev/null)"
+    output="$("$binary_path" hook --format json "${scope_args[@]}" "$rel_path" 2>/dev/null)"
   fi
   status=$?
   set -e
@@ -1332,6 +1391,7 @@ process_file_contract() {
     printf 'gruff-code-quality: suppressed %s finding(s) outside the changed scope\n' "$suppressed"
   fi
   if [[ "$surfaced" -gt 0 ]]; then
+    print_reviewability_guidance "$report_json"
     printf '%s\n' "$FOOTER"
   fi
   return 0
@@ -1347,7 +1407,7 @@ process_file() {
   local binary_env binary_override config_error
   local config_binary config_key resolved_binary
   local ranges help output status suppressed ignored_desc uses_native_regions
-  local max_findings floor_rank report_json scope_fields
+  local max_findings floor_rank report_json scope_fields changed_scope
   local total err warn adv surfaced floored more
 
   [[ -n "$file_path" ]] || return 0
@@ -1422,8 +1482,16 @@ process_file() {
     uses_native_regions=1
   fi
 
+  # Same rule as the contract path: when the changed range already covers the whole file,
+  # `symbol` scope only serves to hide findings that belong to no symbol - a missing file
+  # overview, an over-long file - so widen to `file` scope for that case alone.
+  changed_scope="symbol"
+  if [[ -n "$ranges" && "$ranges" == "$(all_file_range "$abs_path")" ]]; then
+    changed_scope="file"
+  fi
+
   set +e
-  output="$(run_gruff_json "$binary_path" "$binary" "$help" "$rel_path" "$ranges")"
+  output="$(run_gruff_json "$binary_path" "$binary" "$help" "$rel_path" "$ranges" "$changed_scope")"
   status=$?
   set -e
 
@@ -1508,8 +1576,40 @@ process_file() {
     printf 'gruff-code-quality: suppressed %s pre-existing finding(s) outside changed lines\n' "$suppressed"
   fi
   if [[ "$surfaced" -gt 0 ]]; then
+    print_reviewability_guidance "$report_json"
     printf '%s\n' "$FOOTER"
   fi
+  return 0
+}
+
+# Confirm once per session that the hook actually ran and which analyzer answered.
+#
+# Every failure path here is deliberately soft - missing jq, missing binary, missing config,
+# timeout - so an agent that never sees output cannot tell "your code is clean" from "the
+# hook has been dead all session". One line on the first run makes silence afterwards mean
+# something. The marker lives under the gitignored logs tree and is keyed by pid so it
+# neither pollutes the repo nor persists past this session.
+announce_liveness() {
+  local root="$1"
+  local sample_path="$2"
+  local marker_dir="$root/.goat-flow/logs/events"
+  local marker="$marker_dir/.gruff-hook-alive.$PPID"
+  [[ -e "$marker" ]] && return 0
+  mkdir -p "$marker_dir" 2>/dev/null || return 0
+  : >"$marker" 2>/dev/null || return 0
+
+  local binary binary_path
+  binary="$(variant_for_path "$sample_path" 2>/dev/null || true)"
+  [[ -n "$binary" ]] || return 0
+  binary_path="$(discover_binary "$root" "$binary" 2>/dev/null || true)"
+  if [[ -z "$binary_path" ]]; then
+    printf 'gruff-code-quality: active, but no %s binary resolved - findings will NOT be reported this session.\n' "$binary" >&2
+    return 0
+  fi
+  # stderr, not stdout: stdout is reserved for findings, and several contracts require the
+  # hook to stay completely silent there when it has nothing to report. Operational
+  # diagnostics already go to stderr, so this joins them.
+  printf 'gruff-code-quality: active (%s); from here, no output for an edit means no findings on the changed lines.\n' "$binary" >&2
   return 0
 }
 
@@ -1544,6 +1644,8 @@ main() {
     allow_cached_fallback=1
   fi
   [[ "${#file_paths[@]}" -gt 0 ]] || exit 0
+
+  announce_liveness "$root" "${file_paths[0]}"
 
   for file_path in "${file_paths[@]}"; do
     process_file "$payload" "$root" "$file_path" "${#file_paths[@]}" "$allow_cached_fallback"

@@ -120,7 +120,7 @@ last_reviewed: 2026-08-03
 **Root cause:** Interpreted verification as "run the pipeline" instead of "read what changed." Tests only cover what they test.
 **Fix:** Added removed-pattern check to preflight. "Double check" should include: (1) run pipeline, (2) grep removed patterns, (3) read 3-5 changed files for content accuracy.
 
-**Recurrence (2026-08-03):** Focused review-validator tests reported 48 passes, but the subsequent scoped-diff read found that `\S.+` required two characters where the declared compact-field contract required only non-empty text. The implementation returned to `in-progress`, changed the quantifier to `\S.*`, and reran the focused suite before the testing gate. Evidence anchors: `src/cli/review-validate.ts` (search: `COMPACT_CLEAN_REVIEW_FIELDS`) and `test/unit/review-validate.test.ts` (search: `rejects empty, undefended, or repeated compact disclosures`).
+**Recurrence (2026-08-03):** Focused review-validator tests reported 48 passes, but the subsequent scoped-diff read found that `\S.+` required two characters where the declared compact-field contract required only non-empty text. The implementation returned to `in-progress`, changed the quantifier to `\S.*`, and reran the focused suite before the testing gate. Evidence anchors: `src/cli/review-validate-common.ts` (search: `COMPACT_CLEAN_REVIEW_FIELDS`) and `test/unit/review-validate.test.ts` (search: `rejects empty, undefended, or repeated compact disclosures`).
 
 ---
 
@@ -137,7 +137,7 @@ last_reviewed: 2026-08-03
 
 **Recurrence (2026-07-13):** M07 ownership fixtures passed focused manifest tests, but full preflight found three packaged-mode `ManifestJson` fixtures that omitted the new required `file_ownership` contract. It also caught ESLint complexity and Knip exports outside the focused commands. After a manifest schema change, grep every `ManifestJson` fixture and run the full static/test gate, not only the new validator suite. Evidence anchors: `test/unit/packaged-install.test.ts` (search: `file_ownership`), `src/cli/manifest/manifest-json.ts` (search: `OWNERSHIP_EVIDENCE_FINDERS`).
 
-**Recurrence (2026-08-03):** Compact-review, config, and version regressions reported 75 passing focused tests, but repository preflight still failed because `validateIntegrity` exceeded the ESLint complexity limit and three touched TypeScript files were not Prettier-clean. The compact branch moved to `validateCompactIntegrity`, and only the three reported files were formatted before rerunning the focused and full gates. Evidence anchors: `src/cli/review-validate.ts` (search: `function validateCompactIntegrity`) and `scripts/preflight-checks.sh` (search: `TypeScript`).
+**Recurrence (2026-08-03):** Compact-review, config, and version regressions reported 75 passing focused tests, but repository preflight still failed because `validateIntegrity` exceeded the ESLint complexity limit and three touched TypeScript files were not Prettier-clean. The compact branch moved to `validateCompactIntegrity`, and only the three reported files were formatted before rerunning the focused and full gates. Evidence anchors: `src/cli/review-validate-integrity.ts` (search: `function validateCompactIntegrity`) and `scripts/preflight-checks.sh` (search: `TypeScript`).
 
 ---
 
