@@ -76,6 +76,38 @@ function renderSplit(split: PlanEffortSplit): string {
 }
 
 /**
+ * Decide which warnings are fatal once strict mode is already established.
+ *
+ * Split out of {@link isValidationWarning} so each function stays inside the
+ * project complexity budget; callers should reach the strict rules through
+ * that entry point rather than calling this directly. Receipt-shape warnings
+ * stay advisory unless a claim or a live clock depends on the receipt, so a
+ * hand-written historical receipt beside a retrospective Actual passes here.
+ *
+ * @param warning - one parser warning from the milestone record
+ * @param receiptIsClaimed - whether an Actual derives its authority from the receipt
+ * @param receiptIsActive - whether the receipt currently controls an executing clock
+ * @returns true when the warning should become a check error under strict mode
+ */
+function isStrictValidationWarning(
+  warning: string,
+  receiptIsClaimed: boolean,
+  receiptIsActive: boolean,
+): boolean {
+  // A summary claims a final total even when no Actual cites it and no clock is open.
+  if (warning === "timing receipt summary requires finalized state")
+    return true;
+  return (
+    warning.includes("actual effort not parseable") ||
+    ((receiptIsClaimed || receiptIsActive) &&
+      warning.startsWith("timing receipt")) ||
+    /^multiple .+ values supplied$/u.test(warning) ||
+    STRICT_STRUCTURAL_WARNINGS.has(warning) ||
+    /^conflicting .+ representations$/u.test(warning)
+  );
+}
+
+/**
  * Decide which parser warnings are fatal under the selected compatibility mode.
  *
  * @param warning - one parser warning from the milestone record
@@ -95,17 +127,7 @@ function isValidationWarning(
   // Drifted range notation is as fatal as a drifted estimate: both hide real numbers.
   if (warning === "forecast range not parseable") return true;
   if (!strict) return false;
-  // A summary claims a final total even when no Actual cites it and no clock is open.
-  if (warning === "timing receipt summary requires finalized state")
-    return true;
-  return (
-    warning.includes("actual effort not parseable") ||
-    ((receiptIsClaimed || receiptIsActive) &&
-      warning.startsWith("timing receipt")) ||
-    /^multiple .+ values supplied$/u.test(warning) ||
-    STRICT_STRUCTURAL_WARNINGS.has(warning) ||
-    /^conflicting .+ representations$/u.test(warning)
-  );
+  return isStrictValidationWarning(warning, receiptIsClaimed, receiptIsActive);
 }
 
 /**

@@ -5,7 +5,7 @@
  * The fixtures execute harmless child processes and never run the repository test suite.
  */
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,11 +23,6 @@ const PREFLIGHT_RUNNER_PATH = join(
   PROJECT_ROOT,
   "scripts",
   "preflight-command-runner.mjs",
-);
-const COMMIT_SUBJECT_SCRIPT_PATH = join(
-  PROJECT_ROOT,
-  "scripts",
-  "check-commit-subjects.sh",
 );
 const CHILD_FAILURE_STATUS = 7;
 const fixtureProcessIds = new Set<number>();
@@ -54,54 +49,6 @@ interface PreflightRunnerFixture {
   progressLabel?: string;
   shouldExposeProgress?: boolean;
   parentStopAfterFile?: string;
-}
-
-/** Build disposable commit history and run the standalone subject gate against it. */
-function runCommitSubjectGate(branch: string, subjects: string[]) {
-  const repositoryPath = mkdtempSync(
-    join(tmpdir(), "goat-flow-commit-subjects-"),
-  );
-  fixtureTemporaryDirectories.add(repositoryPath);
-  const gitEnvironment = {
-    ...process.env,
-    GIT_AUTHOR_EMAIL: "subject-gate@example.invalid",
-    GIT_AUTHOR_NAME: "Subject Gate",
-    GIT_COMMITTER_EMAIL: "subject-gate@example.invalid",
-    GIT_COMMITTER_NAME: "Subject Gate",
-  };
-  const runGit = (arguments_: string[], input?: string): string => {
-    const result = spawnSync("git", arguments_, {
-      cwd: repositoryPath,
-      encoding: "utf-8",
-      env: gitEnvironment,
-      input,
-    });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    return result.stdout.trim();
-  };
-
-  runGit(["init", "--quiet"]);
-  const tree = runGit(["mktree"], "");
-  const baseline = runGit(
-    ["commit-tree", tree],
-    "chore(repo): establish baseline\n",
-  );
-  let head = baseline;
-  for (const subject of subjects) {
-    head = runGit(["commit-tree", tree, "-p", head], `${subject}\n`);
-  }
-  runGit(["update-ref", `refs/heads/${branch}`, head]);
-  runGit(["symbolic-ref", "HEAD", `refs/heads/${branch}`]);
-
-  return spawnSync("bash", [COMMIT_SUBJECT_SCRIPT_PATH], {
-    cwd: repositoryPath,
-    encoding: "utf-8",
-    env: {
-      ...gitEnvironment,
-      COMMIT_SUBJECT_BASE: baseline,
-      GITHUB_HEAD_REF: "",
-    },
-  });
 }
 
 /**
@@ -549,66 +496,5 @@ describe("preflight Tests-phase progress", () => {
       3,
       "expected one helper definition plus first-run and retry call sites",
     );
-  });
-
-  it("keeps commit-history validation outside the preflight umbrella", () => {
-    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
-
-    assert.doesNotMatch(preflightSource, /check-commit-subjects\.sh/u);
-    assert.doesNotMatch(preflightSource, /Commit Subjects/u);
-  });
-});
-
-describe("standalone commit-subject gate", () => {
-  for (const prefix of ["#123", "ABC-123"]) {
-    it(`rejects ${prefix} on a non-feature branch`, () => {
-      const result = runCommitSubjectGate("main", [
-        `${prefix} fix(cli): add parser guard`,
-      ]);
-
-      assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.match(
-        result.stdout,
-        /HEAD prefix is not authorized on branch main/u,
-      );
-    });
-  }
-
-  it("accepts the issue prefix derived from a feature branch", () => {
-    const result = runCommitSubjectGate("feat/123", [
-      "#123 fix(cli): add parser guard",
-    ]);
-
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-  });
-
-  it("rejects a feature-branch issue prefix with the wrong number", () => {
-    const result = runCommitSubjectGate("feat/124", [
-      "#123 fix(cli): add parser guard",
-    ]);
-
-    assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(
-      result.stdout,
-      /HEAD prefix must be #124 on branch feat\/124/u,
-    );
-  });
-
-  it("rejects a clear past-tense subject", () => {
-    const result = runCommitSubjectGate("main", [
-      "fix(cli): added parser guard",
-    ]);
-
-    assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(result.stdout, /subject must lead with an imperative verb/u);
-  });
-
-  it("does not infer the current branch for older prefixed commits", () => {
-    const result = runCommitSubjectGate("main", [
-      "#777 fix(cli): add historical guard",
-      "fix(cli): add current guard",
-    ]);
-
-    assert.equal(result.status, 0, result.stdout + result.stderr);
   });
 });

@@ -203,7 +203,6 @@ scripts/                         = development, release, test, and maintenance s
 ├── run-tests.mjs                = Node test runner used by npm test scripts
 ├── build-dashboard-assets.mjs   = copies dashboard assets/views/vendor files into dist
 ├── bump-version.sh              = version sync across package/config/skills/docs
-├── check-commit-subjects.sh     = commit-subject standard gate (conventional, ≤72, one scope)
 ├── check-instruction-parity.mjs = instruction-file section/order parity
 ├── check-markdown-links.sh      = markdown link resolver
 ├── check-package-readme-links.mjs = npm-pack README link check

@@ -6,6 +6,8 @@ last_reviewed: 2026-08-04
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
 
 **Status:** active | **Created:** 2026-06-13
+**Trigger phase:** VERIFY
+**Incident count:** 4 | **Latest occurrence:** 2026-08-04
 
 **What happened:** During the M02b review, `grep -rl "plan-checkbox-guard" .goat-flow --include="*.md"` returned nothing even though `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` and ADR-038 matched when grepped directly. `type grep` showed the Claude Code session shell defines `grep` as a function that execs the claude binary as `ugrep -G --ignore-files --hidden -I ...`, and `--ignore-files` applies `.gitignore`-style ignore files during recursion - so sweeps that descend into ignored trees (`.goat-flow/plans/`, `.goat-flow/logs/`) silently return clean.
 
@@ -13,9 +15,11 @@ last_reviewed: 2026-08-04
 
 **Recurrence 2026-07-03:** During the 1.13.0 plan review, recursive greps for stale roadmap tokens (`1.9.2`, `GEMINI`, `1.13.0/M`) over `.goat-flow/plans/` returned zero hits, and the reviewer concluded the stale classes were "phantom" - even though the reviewed plans themselves warned to use `rg -uuu`. The tell that finally exposed it: a pattern KNOWN to exist (the literal `1.9.2` inside a plan file read moments earlier) also returned zero. `find .goat-flow/plans -name '*.md' | xargs grep -l` then found 25+ live files per class. The false conclusion survived several verification rounds because every zero-hit result looked like a clean answer, not a broken tool.
 
+**Recurrence 2026-08-04:** After deleting a commit-subject gate script from `scripts/` and pruning its references, a recursive sweep for its filename and helper symbols returned nothing and was reported to the user as "zero residual references". The wrapper had skipped `.goat-flow/logs/` and `.goat-flow/plans/`, where 17 references survived. The tell surfaced only by luck on an unrelated task: a sweep for `executed=[0-9]` missed `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `mode=smoke, executed=`) moments after that exact line had been read from the file - the known-positive control from Prevention, hit by accident rather than by discipline. Removal-completeness claims are the highest-risk use of this tool, because a false clean and a real clean are the same empty output.
+
 **Root cause:** I treated recursive `grep` output as filesystem truth. In this environment it is gitignore-filtered, which can false-clean a verification sweep exactly where stale or historical content lives.
 
-**Prevention:** For verification sweeps that must include gitignored content, use `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with `command grep`. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
+**Prevention:** For verification sweeps that must include gitignored content, use `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with `command grep`. When the question is "is this consistent in what ships" rather than "does this string exist on disk", prefer `git grep` - it searches tracked files by construction, so local logs, plans, and scratch artifacts cannot mask a real residue or manufacture a false one. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
 
 ---
 

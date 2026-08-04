@@ -183,16 +183,17 @@ const RAW_HTML_BLOCK_TAGS =
 const COMPLETE_HTML_TAG =
   /^ {0,3}(?:<\/[A-Za-z][A-Za-z0-9-]*[\t ]*>|<[A-Za-z][A-Za-z0-9-]*(?:[\t ]+[A-Za-z_:][A-Za-z0-9_.:-]*(?:[\t ]*=[\t ]*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*[\t ]*\/?>)[\t ]*$/u;
 
-/** Return whether a later source line starts a block that ends inline parsing. */
-function interruptsInlineCodeParagraph(line: string): boolean {
-  const comparableLine = line.endsWith("\r") ? line.slice(0, -1) : line;
-  if (comparableLine.trim().length === 0) return true;
-  if (isMarkdownHeading(comparableLine)) return true;
-  if (/^ {0,3}(?:`{3,}|~{3,}|>)/u.test(comparableLine)) return true;
-  if (/^ {0,3}(?:[*+-][\t ]+|\d{1,9}[.)][\t ]+)/u.test(comparableLine)) {
-    return true;
-  }
-  if (/^ {0,3}\[[^\]]+\]:/u.test(comparableLine)) return true;
+/**
+ * Return whether a line opens raw HTML, a comment, or another HTML-like block.
+ *
+ * Split out of {@link interruptsInlineCodeParagraph} so each function stays
+ * inside the project complexity budget. Expects the carriage return already
+ * trimmed, since the caller compares against `\n`-normalised text.
+ *
+ * @param comparableLine - one source line with any trailing `\r` removed
+ * @returns true when the line starts an HTML-like block
+ */
+function startsHtmlLikeBlock(comparableLine: string): boolean {
   if (/^ {0,3}(?:<!--|<\?|<!\[CDATA\[|<![A-Z])/u.test(comparableLine)) {
     return true;
   }
@@ -205,6 +206,19 @@ function interruptsInlineCodeParagraph(line: string): boolean {
     /^ {0,3}<\/?([A-Za-z][\w-]*)(?:[\t ]|\/?>|$)/u,
   )?.[1];
   return blockTag !== undefined && RAW_HTML_BLOCK_TAGS.test(blockTag);
+}
+
+/** Return whether a later source line starts a block that ends inline parsing. */
+function interruptsInlineCodeParagraph(line: string): boolean {
+  const comparableLine = line.endsWith("\r") ? line.slice(0, -1) : line;
+  if (comparableLine.trim().length === 0) return true;
+  if (isMarkdownHeading(comparableLine)) return true;
+  if (/^ {0,3}(?:`{3,}|~{3,}|>)/u.test(comparableLine)) return true;
+  if (/^ {0,3}(?:[*+-][\t ]+|\d{1,9}[.)][\t ]+)/u.test(comparableLine)) {
+    return true;
+  }
+  if (/^ {0,3}\[[^\]]+\]:/u.test(comparableLine)) return true;
+  return startsHtmlLikeBlock(comparableLine);
 }
 
 /** Consume one line when a raw HTML block was opened earlier. */
@@ -365,6 +379,81 @@ function maskMarkdownSourceLine(
   );
 }
 
+/**
+ * Consume the part of a line still covered by a span an earlier line opened.
+ *
+ * Split out of {@link maskHtmlComments} so each function stays inside the
+ * project complexity budget. Mutates `state` when the open span closes on this
+ * line, so call it once per cursor position and honour the returned cursor
+ * rather than recomputing one. Returns null when nothing is open, which is the
+ * signal for the caller to scan this line from scratch.
+ *
+ * @param line - the source line being masked
+ * @param cursor - offset into `line` where masking resumes
+ * @param state - mask state carried across lines; updated when a span closes
+ * @returns the text to append, the next cursor, and whether the line is
+ *   exhausted; null when no span was open
+ */
+function consumeOpenMarkdownSpan(
+  line: string,
+  cursor: number,
+  state: MarkdownMaskState,
+): { text: string; nextCursor: number; stop: boolean } | null {
+  // A code span opened on an earlier line keeps comment-like text visible.
+  if (state.inlineCodeDelimiterLength > 0) {
+    const closerEnd = findClosingBacktickRun(
+      line,
+      cursor,
+      state.inlineCodeDelimiterLength,
+    );
+    if (closerEnd < 0) {
+      return { text: line.slice(cursor), nextCursor: line.length, stop: true };
+    }
+    state.inlineCodeDelimiterLength = 0;
+    return {
+      text: line.slice(cursor, closerEnd),
+      nextCursor: closerEnd,
+      stop: false,
+    };
+  }
+
+  // A comment opened on an earlier line hides text until this user-facing example ends.
+  if (state.inHtmlComment) {
+    const closeIndex = line.indexOf("-->", cursor);
+    const commentEnd = closeIndex < 0 ? line.length : closeIndex + 3;
+    const text = maskCharacters(line.slice(cursor, commentEnd));
+    // Without a close marker, the rest of this source line remains non-rendered.
+    if (closeIndex < 0) {
+      return { text, nextCursor: commentEnd, stop: true };
+    }
+    state.inHtmlComment = false;
+    return { text, nextCursor: commentEnd, stop: false };
+  }
+
+  return null;
+}
+
+/**
+ * Return whether a code span starts before the next comment opener on a line.
+ *
+ * Split out of {@link maskHtmlComments} so each function stays inside the
+ * project complexity budget. A span starting at or past `lineLength` began on a
+ * later line of the same paragraph, so it cannot mask anything here.
+ *
+ * @param inlineCode - the next balanced span found in the paragraph source
+ * @param openIndex - offset of the next unescaped `<!--`, or -1 when none
+ * @param lineLength - length of the single line being masked
+ * @returns true when the span, not the comment opener, comes first
+ */
+function codeSpanPrecedesCommentOpener(
+  inlineCode: { start: number },
+  openIndex: number,
+  lineLength: number,
+): boolean {
+  if (inlineCode.start >= lineLength) return false;
+  return openIndex < 0 || inlineCode.start < openIndex;
+}
+
 /** Mask HTML comments on one non-fenced line, including multiline comments. */
 function maskHtmlComments(
   line: string,
@@ -375,32 +464,11 @@ function maskHtmlComments(
   let rendered = "";
   // Walk the line so visible prose around a comment retains its original position.
   while (cursor < line.length) {
-    // A code span opened on an earlier line keeps comment-like text visible.
-    if (state.inlineCodeDelimiterLength > 0) {
-      const closerEnd = findClosingBacktickRun(
-        line,
-        cursor,
-        state.inlineCodeDelimiterLength,
-      );
-      if (closerEnd < 0) {
-        rendered += line.slice(cursor);
-        break;
-      }
-      rendered += line.slice(cursor, closerEnd);
-      cursor = closerEnd;
-      state.inlineCodeDelimiterLength = 0;
-      continue;
-    }
-
-    // A comment opened on an earlier line hides text until this user-facing example ends.
-    if (state.inHtmlComment) {
-      const closeIndex = line.indexOf("-->", cursor);
-      const commentEnd = closeIndex < 0 ? line.length : closeIndex + 3;
-      rendered += maskCharacters(line.slice(cursor, commentEnd));
-      cursor = commentEnd;
-      // Without a close marker, the rest of this source line remains non-rendered.
-      if (closeIndex < 0) break;
-      state.inHtmlComment = false;
+    const resumed = consumeOpenMarkdownSpan(line, cursor, state);
+    if (resumed) {
+      rendered += resumed.text;
+      cursor = resumed.nextCursor;
+      if (resumed.stop) break;
       continue;
     }
 
@@ -409,8 +477,7 @@ function maskHtmlComments(
     // HTML-like text inside a balanced code span is visible code, not a comment.
     if (
       inlineCode &&
-      inlineCode.start < line.length &&
-      (openIndex < 0 || inlineCode.start < openIndex)
+      codeSpanPrecedesCommentOpener(inlineCode, openIndex, line.length)
     ) {
       if (inlineCode.end > line.length) {
         rendered += line.slice(cursor);
