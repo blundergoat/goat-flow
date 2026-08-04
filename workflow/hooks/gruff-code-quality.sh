@@ -1300,12 +1300,10 @@ hook_v1_report() {
 # as the legacy path. Findings never set a non-zero exit.
 process_file_contract() {
   local binary_path="$1" binary="$2" rel_path="$3" ranges="$4" caps="$5"
-  local cr_flag output status timeout_seconds report_json suppressed
+  local output status timeout_seconds report_json suppressed
   local config_error ignored_match scope_fields
   local max_findings floor_rank total err warn adv surfaced floored more
 
-  cr_flag="$(printf '%s' "$caps" | jq -r '.flags.changedRanges // "--changed-ranges"' 2>/dev/null || true)"
-  [[ -n "$cr_flag" ]] || cr_flag="--changed-ranges"
   timeout_seconds="$(normalized_timeout_seconds "$binary")"
 
   # Ranges are applied by this hook rather than by the analyzer. Passing `--changed-ranges`
@@ -1331,14 +1329,14 @@ process_file_contract() {
   # gate indefinitely while every single edit reports clean: the warning is never emitted, so
   # there is nothing for an agent to ignore. Structural visibility is worth more than symbol
   # widening, so the whole file is requested and `hook_v1_report` keeps file-scope findings
-  # while confining line and symbol findings to the lines actually edited.
-  local -a scope_args=()
-
+  # while confining line and symbol findings to the lines actually edited. The call is direct
+  # rather than through an argument array: an empty array expanded with "${arr[@]}" is an
+  # unbound-variable error on the stock macOS Bash 3.2 this hook must run on.
   set +e
   if command -v timeout >/dev/null 2>&1; then
-    output="$(timeout "$timeout_seconds" "$binary_path" hook --format json "${scope_args[@]}" "$rel_path" 2>/dev/null)"
+    output="$(timeout "$timeout_seconds" "$binary_path" hook --format json "$rel_path" 2>/dev/null)"
   else
-    output="$("$binary_path" hook --format json "${scope_args[@]}" "$rel_path" 2>/dev/null)"
+    output="$("$binary_path" hook --format json "$rel_path" 2>/dev/null)"
   fi
   status=$?
   set -e
@@ -1611,6 +1609,17 @@ announce_liveness() {
   local marker="$marker_dir/.gruff-hook-alive.$PPID"
   [[ -e "$marker" ]] && return 0
   mkdir -p "$marker_dir" 2>/dev/null || return 0
+
+  # Markers are keyed by session pid, so ended sessions would otherwise leave one file each
+  # forever. Prune markers whose owning process is gone before writing this session's.
+  local stale_marker stale_pid
+  for stale_marker in "$marker_dir"/.gruff-hook-alive.*; do
+    [[ -e "$stale_marker" ]] || continue
+    stale_pid="${stale_marker##*.}"
+    [[ "$stale_pid" =~ ^[0-9]+$ ]] || continue
+    kill -0 "$stale_pid" 2>/dev/null || rm -f "$stale_marker" 2>/dev/null
+  done
+
   : >"$marker" 2>/dev/null || return 0
 
   local binary binary_path
