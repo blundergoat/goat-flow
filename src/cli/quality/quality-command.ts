@@ -111,8 +111,9 @@ async function handleQualityDiffSubcommand(
   options: ParsedCLI,
   deps: QualityCommandDeps,
 ): Promise<void> {
-  const { buildQualityDiff, loadQualityHistory, renderQualityDiffText } =
+  const { loadQualityHistory, renderQualityDiffText } =
     await import("./history.js");
+  const { buildQualityDiff } = await import("./history-diff.js");
 
   const history = loadQualityHistory(options.projectPath);
   for (const warning of history.warnings) {

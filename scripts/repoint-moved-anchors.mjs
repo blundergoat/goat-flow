@@ -18,9 +18,20 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 /**
- * Ask the CLI which anchors are currently stale.
+ * Ask the learning-loop gate which citations no longer resolve.
+ * Runs the real `stats --check` rather than re-implementing its rules, so this tool and CI
+ * can never disagree about which anchors are broken.
+ *
+ * Side effects: spawns the CLI as a child process and reads the repository from disk. It
+ * writes nothing, so a run that finds problems still leaves the tree untouched.
+ *
+ * Invariant: the returned shape mirrors the gate's own message format. If that message
+ * wording changes, the regex below stops matching and this silently reports zero stale
+ * anchors - so the parse must stay pinned to the gate rather than re-derived.
  *
  * @returns stale-ref findings as {file, citedPath, needle}; empty means nothing to repoint
+ * @throws when the CLI cannot run at all. A non-zero exit carrying a report is normal - that
+ *   is exactly the "there are findings" case - and is read rather than treated as failure.
  */
 function readStaleAnchors() {
   let raw;
@@ -55,7 +66,16 @@ function readStaleAnchors() {
  * Decision records are checked here rather than by `stats --check`, so a split that moves a
  * symbol cited by an ADR is invisible to the other gate.
  *
- * @returns stale semantic-anchor findings as {file, citedPath, needle}
+ * Side effects: spawns the CLI as a child process and reads the repository from disk; writes
+ * nothing itself.
+ *
+ * Invariant: parsing depends on the audit's exact finding wording. A change there degrades
+ * this to reporting nothing rather than erroring, so the two must be kept in step.
+ *
+ * @returns stale semantic-anchor findings as {file, citedPath, needle}; empty means every
+ *   decision record still cites code that exists where it says
+ * @throws when the CLI cannot run at all; a non-zero exit carrying a report is the expected
+ *   "findings exist" case and is read instead
  */
 function readStaleSemanticAnchors() {
   let raw;
@@ -93,10 +113,15 @@ function readStaleSemanticAnchors() {
 }
 
 /**
- * Find the tracked files that now contain a cited literal.
+ * Find the files that now contain a cited literal, so a moved symbol can be followed.
+ *
+ * Side effects: shells out to `git grep` and reads the working tree; writes nothing.
  *
  * @param needle - the exact text the anchor cited
- * @returns matching tracked paths; empty means the symbol is gone rather than moved
+ * @returns matching paths; empty means the symbol was deleted rather than moved, which is
+ *   reported for a human instead of repointed
+ * @throws never - `git grep` exits non-zero when nothing matches, which is a real answer
+ *   here and is converted into an empty result
  */
 function filesContaining(needle) {
   try {
@@ -135,13 +160,13 @@ for (const { file, citedPath, needle } of stale) {
   }
 
   const from = `\`${citedPath}\` (search: \`${needle}\`)`;
-  const to = `\`${candidates[0]}\` (search: \`${needle}\`)`;
+  const repointedCitation = `\`${candidates[0]}\` (search: \`${needle}\`)`;
   const text = readFileSync(file, "utf-8");
   if (!text.includes(from)) {
     console.log(`MANUAL  ${file}: could not match citation text for ${needle}`);
     continue;
   }
-  writeFileSync(file, text.replace(from, to));
+  writeFileSync(file, text.replace(from, repointedCitation));
   console.log(`OK      ${citedPath} -> ${candidates[0]}  (${needle})`);
   repointed += 1;
 }

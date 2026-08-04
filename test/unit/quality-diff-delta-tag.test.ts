@@ -11,7 +11,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildQualityDiff } from "../../src/cli/quality/history.js";
+import { buildQualityDiff } from "../../src/cli/quality/history-diff.js";
 import type { QualityHistoryEntry } from "../../src/cli/quality/history.js";
 import { renderQualityDiffText } from "../../src/cli/quality/history-render.js";
 import type {
