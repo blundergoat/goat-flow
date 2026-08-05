@@ -353,6 +353,7 @@ describe("buildTerminalSpawnSpec", () => {
     assert.match(shellCommand, /GOAT_CODEX_REPORTING_PROFILE/);
     assert.match(shellCommand, /default_permissions/);
     assert.match(profile, /extends=":read-only"/);
+    assert.match(profile, /filesystem=\{glob_scan_max_depth=3,/);
     assert.ok(profile.includes(`${JSON.stringify(process.cwd())}=true`));
     assert.match(profile, /"\.goat-flow\/logs"="write"/);
     assert.match(profile, /"\.goat-flow\/logs\/quality\/README\.md"="read"/);

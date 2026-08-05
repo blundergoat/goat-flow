@@ -444,7 +444,7 @@ export function buildCodexReportingProfile(
     `description=${tomlString("Reporting-only project access with local artifact writes.")}`,
     `extends=${tomlString(":read-only")}`,
     `workspace_roots=${tomlInlineTable(workspaceRoots)}`,
-    `filesystem={${tomlString(":workspace_roots")}=${tomlInlineTable(filesystemRules)},${tomlString(":tmpdir")}="write",${tomlString(":slash_tmp")}="write"}`,
+    `filesystem={glob_scan_max_depth=3,${tomlString(":workspace_roots")}=${tomlInlineTable(filesystemRules)},${tomlString(":tmpdir")}="write",${tomlString(":slash_tmp")}="write"}`,
     "network={enabled=true}",
   ].join(",");
   return `permissions.${CODEX_REPORTING_PROFILE_NAME}={${profile}}`;
