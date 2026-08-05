@@ -51,6 +51,11 @@ const AUDIT_STATUS_PRECEDENCE_RULE =
   "Set `audit_status` from this run's live grounding audit outcome (`pass` or `fail`); use `unavailable` only when no live audit completed this run.";
 const HARNESS_SCORE_INTERPRETATION =
   "Harness scores describe deterministic check coverage; reconcile declared `limits` and accepted ADRs before proposing new gates or score changes.";
+const SAVER_VERSION_CLASSIFICATION =
+  "Executable version checks select a compatible report saver; they are not findings or score inputs.";
+const PATH_SKEW_CLASSIFICATION = "do not report or score that PATH-only skew";
+const VERSION_FINDING_AUTHORITY =
+  "Raise version findings only when repository-owned declarations or managed target artifacts disagree.";
 const FAST_CACHE_AUDIT_PLACEHOLDER =
   'The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.';
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -206,6 +211,9 @@ function assertStagedDraftContract(surface: string, prompt: string): void {
     prompt.includes("**Persist through the dashboard.**"),
     `${surface}: missing dashboard persistence section`,
   );
+  assert.ok(prompt.includes(SAVER_VERSION_CLASSIFICATION), surface);
+  assert.ok(prompt.includes(PATH_SKEW_CLASSIFICATION), surface);
+  assert.ok(prompt.includes(VERSION_FINDING_AUTHORITY), surface);
   assert.ok(
     prompt.includes(
       "/tmp/example-project/.goat-flow/logs/quality/staging/goat-quality-draft-claude-<nonce>.json",
@@ -263,6 +271,13 @@ describe("quality report contract: CLI surfaces", () => {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
       assert.ok(prompt.includes(AUDIT_STATUS_PRECEDENCE_RULE), qualityMode);
       assert.ok(prompt.includes(HARNESS_SCORE_INTERPRETATION), qualityMode);
+    });
+
+    it(`classifies pre-release PATH skew as saver compatibility in ${qualityMode} mode`, () => {
+      const prompt = composeQuality(makeInput(qualityMode)).prompt;
+      assert.ok(prompt.includes(SAVER_VERSION_CLASSIFICATION), qualityMode);
+      assert.ok(prompt.includes(PATH_SKEW_CLASSIFICATION), qualityMode);
+      assert.ok(prompt.includes(VERSION_FINDING_AUTHORITY), qualityMode);
     });
   }
 
@@ -491,5 +506,11 @@ describe("quality report contract: dashboard mirror", () => {
 
   it("dashboard prompt source mirrors the required fields and enums", () => {
     assertCarriesContract("dashboard", dashboardSource);
+  });
+
+  it("dashboard prompt source keeps pre-release PATH skew out of findings", () => {
+    assert.ok(dashboardSource.includes(SAVER_VERSION_CLASSIFICATION));
+    assert.ok(dashboardSource.includes(PATH_SKEW_CLASSIFICATION));
+    assert.ok(dashboardSource.includes(VERSION_FINDING_AUTHORITY));
   });
 });

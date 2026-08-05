@@ -126,6 +126,10 @@ export function appendQualityReportContract(
     "**Assessment rule:** Harness scores describe deterministic check coverage; reconcile declared `limits` and accepted ADRs before proposing new gates or score changes.",
   );
   lines.push("");
+  lines.push(
+    "**Version-skew calibration:** Executable version checks select a compatible report saver; they are not findings or score inputs. Before publication, the framework checkout may be newer than the bare `goat-flow` on `PATH`; use the matching source CLI and do not report or score that PATH-only skew. Raise version findings only when repository-owned declarations or managed target artifacts disagree.",
+  );
+  lines.push("");
   lines.push("**JSON body shape:**");
   lines.push("");
   lines.push("```json");
@@ -260,6 +264,9 @@ export function appendQualityReportContract(
   lines.push("");
   lines.push(
     `**Select a compatible saver.** Run \`goat-flow --version\`; it must print \`goat-flow v${getPackageVersion()}\`. If that matching CLI lacks \`quality save\`, use the source fallback only from the goat-flow framework checkout after \`node --import tsx src/cli/cli.ts --version\` prints the same version.`,
+  );
+  lines.push(
+    "If the PATH executable is missing or does not match, do not use it. In the framework checkout, use the source fallback after its version matches the report version.",
   );
   lines.push(
     "Minify the completed report object to one JSON line between the quoted delimiters. Multi-line heredoc bodies can be mistaken for chained shell commands by safety hooks.",
