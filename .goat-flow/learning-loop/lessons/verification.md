@@ -19,14 +19,31 @@ last_reviewed: 2026-08-05
 
 ## Lesson: Permission wildcards must stay separate from escaped literal paths
 
-**Status:** active | **Created:** 2026-08-05
+**Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
 **Decision changed:** Build permission patterns by escaping the literal directory first, then append deliberate wildcard grammar and assert the serialized rule. | **Trigger phase:** ACT
 
 **What happened:** While denying Claude reporting-agent writes to server-owned quality result and claim receipts, the first implementation passed each wildcard-bearing filename through `claudePermissionPath`. The focused terminal-profile test failed because that helper correctly escaped `*` as a literal path character, so the deny rule matched no receipt family.
 
+**Recurrence 2026-08-05:** The corrected wildcard construction still enumerated only result and claim markers. Full branch review of the adjacent quality-claim implementation found the separate `goat-quality-reap-*` server-owned fence, which the reporting agent could still edit. The permission inventory now names result, claim, and reaper families together.
+
 **Root cause:** I used a literal-path escaping helper to encode a permission pattern. The directory and the wildcard suffix have different grammars even though they appear in one rule string.
 
 **Prevention:** Pass only literal filesystem components through path escaping. Append reviewed permission wildcards afterward, then assert every server-owned filename family in the serialized deny rules. Evidence anchors: `src/cli/server/terminal-reporting-profile.ts` (search: `stagingServerFileDenies`), `test/unit/terminal-spawn.test.ts` (search: `launches Claude reporting sessions with a restrictive settings overlay`).
+
+---
+
+## Lesson: Input/output alias guards must compare resolved filesystem paths
+
+**Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
+**Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** VERIFY
+
+**What happened:** Full branch review reproduced `plans export --format json --output <source milestone> --force` exiting 0 and replacing the milestone with generated JSON. The first guard compared `resolve()` strings and blocked that direct spelling.
+
+**Recurrence 2026-08-05:** A follow-up reproduction selected the plan through a directory symlink while naming the same source through its real path. The lexical guard again exited 0 and changed the source. The correction compares `realpathSync` results for existing sources and destinations before any export write.
+
+**Root cause:** I treated normalized path strings as filesystem identity. A symlink gives one file multiple normalized absolute names, so lexical equality cannot prove that input and output are distinct.
+
+**Prevention:** For commands that read source files and later honor `--force`, canonicalize existing source and destination paths before collision checks, while retaining separate symlink and hardlink write guards. Re-run the destructive reproduction through a second path spelling before accepting the fix. Evidence anchors: `src/cli/plans-export-output.ts` (search: `assertOutputPathsDoNotAliasSources`), `test/unit/plans-export-writes.test.ts` (search: `refuses forced JSON output that aliases a source through the selected plan path`).
 
 ---
 
@@ -154,7 +171,7 @@ last_reviewed: 2026-08-05
 ## Lesson: New validators must run against the live repo before closeout
 
 **Status:** active | **Created:** 2026-04-29
-**Incident count:** 3 | **Latest occurrence:** 2026-08-03
+**Incident count:** 5 | **Latest occurrence:** 2026-08-05
 
 **What happened:** M06 added decision-file validation and the fixture tests passed, but the first live `node --import tsx src/cli/cli.ts stats . --check` run failed against existing ADR files and one stale lesson reference.
 
@@ -165,6 +182,10 @@ last_reviewed: 2026-08-05
 **Recurrence (2026-07-13):** M07 ownership fixtures passed focused manifest tests, but full preflight found three packaged-mode `ManifestJson` fixtures that omitted the new required `file_ownership` contract. It also caught ESLint complexity and Knip exports outside the focused commands. After a manifest schema change, grep every `ManifestJson` fixture and run the full static/test gate, not only the new validator suite. Evidence anchors: `test/unit/packaged-install.test.ts` (search: `file_ownership`), `src/cli/manifest/manifest-json.ts` (search: `OWNERSHIP_EVIDENCE_FINDERS`).
 
 **Recurrence (2026-08-03):** Compact-review, config, and version regressions reported 75 passing focused tests, but repository preflight still failed because `validateIntegrity` exceeded the ESLint complexity limit and three touched TypeScript files were not Prettier-clean. The compact branch moved to `validateCompactIntegrity`, and only the three reported files were formatted before rerunning the focused and full gates. Evidence anchors: `src/cli/review-validate-integrity.ts` (search: `function validateCompactIntegrity`) and `scripts/preflight-checks.sh` (search: `TypeScript`).
+
+**Recurrence (2026-08-05):** Focused validator suites passed before direct ESLint found three touched functions above the complexity ceiling. After extracting the parsing helpers, the full formatter still rejected the new Setext regression layout, and the live content audit found two stale semantic anchors in the learning-loop edits. The work returned to implementation after each failure and reran the failed gate before continuing. Evidence anchors: `src/cli/audit/check-content-quality.ts` (search: `parseAtxHeading`), `test/unit/check-content-quality.test.ts` (search: `closes readiness before scanning a setext heading title`), and `scripts/preflight-checks.sh` (search: `TypeScript`).
+
+**Recurrence (2026-08-05):** The first final goat-review draft summarized adjudication totals in its Review Integrity evidence and verdict fields, but the live `review validate` command correctly rejected those counts because only one current finding was visible. It also rejected `source=PR#57` because the canonical authority grammar requires `source=PR #57`. The report returned to drafting with visible-finding counts and the canonical scope spelling before delivery. Evidence anchors: `src/cli/review-validate-integrity.ts` (search: `Counts are cross-checked against the findings actually present`) and `src/cli/review-validate-common.ts` (search: `export const SCOPE_SNAPSHOT`).
 
 ---
 
