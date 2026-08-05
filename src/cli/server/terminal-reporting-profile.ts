@@ -27,6 +27,13 @@ const REPORTING_LOCAL_STATE_PATHS = [
   ".goat-flow/plans",
 ] as const;
 
+/** Staging control files written by the dashboard server, never by the reporting agent. */
+const QUALITY_STAGING_SERVER_FILES = [
+  "goat-quality-result-*.json",
+  "goat-quality-claim-*.json",
+  "goat-quality-reap-*.json",
+] as const;
+
 /** Build and dependency directories never treated as durable reporting anchors. */
 const REPORTING_IGNORED_PATH_CANDIDATES = [
   ".claude/worktrees",
@@ -336,6 +343,14 @@ export function buildClaudeReportingSettings(
     (rootPath) =>
       `Edit(${claudePermissionPath(join(rootPath, ".goat-flow/logs/quality"))}/*.json)`,
   );
+  const stagingServerFileDenies = rootPaths.flatMap((rootPath) =>
+    QUALITY_STAGING_SERVER_FILES.map((receiptPattern) => {
+      const stagingPath = claudePermissionPath(
+        join(rootPath, ".goat-flow/logs/quality/staging"),
+      );
+      return `Edit(${stagingPath}/${receiptPattern})`;
+    }),
+  );
   const projectSecretDenies = rootPaths.flatMap((rootPath) =>
     REPORTING_SECRET_DENIES.flatMap((pattern) => {
       const absolutePattern = `${claudePermissionPath(rootPath)}/${pattern}`;
@@ -355,6 +370,7 @@ export function buildClaudeReportingSettings(
   const deny = [
     ...protectedWriteDenies,
     ...finalizedReportDenies,
+    ...stagingServerFileDenies,
     ...projectSecretDenies,
     ...homeSecretDenies,
     ...configuredCredentialDenies,

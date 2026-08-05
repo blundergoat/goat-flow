@@ -10,6 +10,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -453,6 +454,53 @@ describe("quality save", () => {
       assert.equal(lstatSync(join(projectRoot, ".goat-flow")).isFile(), true);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: replaces a checked ancestor during a save and proves no report escapes.
+   * Filesystem side effects: mutates paths only inside the two temporary fixture roots.
+   */
+  it("fails closed when a first-save race replaces an existing ancestor", () => {
+    const projectRoot = makeIgnoredQualityRoot();
+    const outsideRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-quality-outside-"),
+    );
+    mkdirSync(join(projectRoot, ".goat-flow"));
+    let hasSwappedAncestor = false;
+    const unsafeSaveDependencies = {
+      CLIError,
+      /** Renames the checked ancestor, writes a symlink, then creates the requested child. */
+      createReportDirectory(directoryPath: string): void {
+        if (!hasSwappedAncestor) {
+          hasSwappedAncestor = true;
+          renameSync(
+            join(projectRoot, ".goat-flow"),
+            join(projectRoot, ".goat-flow-original"),
+          );
+          symlinkSync(outsideRoot, join(projectRoot, ".goat-flow"), "dir");
+        }
+        mkdirSync(directoryPath);
+      },
+    };
+
+    try {
+      assert.throws(
+        () =>
+          persistQualityReportText(
+            {
+              projectPath: projectRoot,
+              rawText: JSON.stringify(currentQualityReport(projectRoot)),
+              sourceLabel: "ancestor-swap draft",
+            },
+            unsafeSaveDependencies,
+          ),
+        /must be a real project-local directory/u,
+      );
+      assert.deepEqual(readdirSync(join(outsideRoot, "logs", "quality")), []);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
     }
   });
 });

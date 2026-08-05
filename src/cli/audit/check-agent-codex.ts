@@ -125,7 +125,16 @@ function checkCodexHooksEnabled(ctx: AuditContext): AuditFailure | null {
  * @returns whether the pattern is exact and should exist in the checkout
  */
 function isCodexExactWorkspaceRootPath(pattern: string): boolean {
-  return pattern !== "." && !pattern.includes("*") && !pattern.endsWith("/**");
+  if (
+    pattern.length === 0 ||
+    pattern === "." ||
+    pattern.includes("*") ||
+    pattern.endsWith("/**")
+  ) {
+    return false;
+  }
+  if (/^(?:[A-Za-z]:[\\/]|[\\/])/u.test(pattern)) return false;
+  return !pattern.split(/[\\/]/u).includes("..");
 }
 
 /**

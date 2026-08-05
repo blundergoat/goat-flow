@@ -166,6 +166,73 @@ describe("plans export: CLI previews and protected writes", () => {
   });
 
   /**
+   * Fixture purpose: prove force never converts a source milestone into its generated export.
+   * Process/filesystem side effects: spawns the CLI and reads one unchanged temp source file.
+   */
+  it("refuses forced Markdown output that aliases a source milestone", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-source-alias-"),
+    );
+    const planPath = join(temporaryRoot, "1.15.0");
+    const sourcePath = join(planPath, "M42-portable-plan.md");
+    writePlanFixture(planPath, completeMilestoneBody());
+    const sourceBefore = readFileSync(sourcePath, "utf-8");
+
+    try {
+      const result = runPlansExport(
+        planPath,
+        "--format",
+        "markdown",
+        "--output",
+        planPath,
+        "--force",
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /would overwrite source milestone/iu);
+      assert.equal(readFileSync(sourcePath, "utf-8"), sourceBefore);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: mirror source protection for the single-file JSON export path.
+   * Process/filesystem side effects: spawns the CLI and reads one unchanged temp source file.
+   */
+  it("refuses forced JSON output that aliases a source through the selected plan path", (testContext) => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-json-source-alias-"),
+    );
+    const planPath = join(temporaryRoot, "1.15.0");
+    const selectedPlanPath = join(temporaryRoot, "selected-plan");
+    const sourcePath = join(planPath, "M42-portable-plan.md");
+    writePlanFixture(planPath, completeMilestoneBody());
+    if (!symlinkOrSkip(testContext, planPath, selectedPlanPath)) {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+      return;
+    }
+    const sourceBefore = readFileSync(sourcePath, "utf-8");
+
+    try {
+      const result = runPlansExport(
+        selectedPlanPath,
+        "--format",
+        "json",
+        "--output",
+        sourcePath,
+        "--force",
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /would overwrite source milestone/iu);
+      assert.equal(readFileSync(sourcePath, "utf-8"), sourceBefore);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
    * Fixture purpose: prove two source names cannot silently overwrite one generated Markdown file.
    * Process/filesystem side effects: spawns the CLI and writes only temporary source milestones.
    */

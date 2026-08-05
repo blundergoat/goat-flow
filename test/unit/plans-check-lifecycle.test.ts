@@ -314,8 +314,11 @@ describe("plans check: lifecycle states and timing receipts", () => {
     }
   });
 
-  // Covers a milestone waiting on human review: writes it and expects only [human] proof left open.
-  it("strict mode allows only human-owned proof to remain open at the pending gate", () => {
+  /**
+   * Fixture purpose: contrasts a leading ownership marker with the same token embedded in prose.
+   * Filesystem/process side effects: writes one temporary plan and spawns two completed CLI checks.
+   */
+  it("recognizes human ownership only from a leading proof marker", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-human-pending-"),
     );
@@ -333,9 +336,25 @@ describe("plans check: lifecycle states and timing receipts", () => {
     );
 
     try {
-      const result = runPlansCheck(planPath, "--strict");
-      assert.equal(result.status, 0, result.stdout + result.stderr);
-      assert.doesNotMatch(result.stdout, /error:/u);
+      const validResult = runPlansCheck(planPath, "--strict");
+      assert.equal(validResult.status, 0, validResult.stderr);
+      assert.doesNotMatch(validResult.stdout, /error:/u);
+
+      writeCheckFixture(
+        temporaryRoot,
+        canonicalMilestoneBody({
+          status: "human-verification-pending",
+          isTaskChecked: true,
+          proofLines: [
+            "- [x] Outcome is proven. [automated] (est: 1 min proof)",
+            "- [ ] Explain the literal [human] marker. [automated] (est: 1 min proof)",
+          ],
+          includeActual: true,
+        }),
+      );
+      const invalidResult = runPlansCheck(planPath, "--strict");
+      assert.equal(invalidResult.status, 1, invalidResult.stderr);
+      assert.match(invalidResult.stdout, /executor proof item remains open/u);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

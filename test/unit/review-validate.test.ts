@@ -6,7 +6,6 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
 import { validateReviewReport } from "../../src/cli/review-validate.js";
 import {
   createReviewedProject,
@@ -51,6 +50,64 @@ What I Didn't Examine: none.
       assert.equal(result.status, "fail", verdict);
       assert.equal(hasViolation(result, "ship-verdict-format"), true, verdict);
     }
+  });
+
+  it("rejects reports that mix compact and full verdict or integrity forms", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const mixedVerdict = validReview().replace(
+      "## TL;DR",
+      "Ship Verdict: **YES** - compact duplicate.\n\n## TL;DR",
+    );
+    const mixedIntegrity = validReview().replace(
+      "## TL;DR",
+      "Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.\n\n## TL;DR",
+    );
+
+    assert.equal(
+      hasViolation(
+        validateReviewReport(mixedVerdict, projectRoot),
+        "ship-verdict-format",
+      ),
+      true,
+    );
+    assert.equal(
+      hasViolation(
+        validateReviewReport(mixedIntegrity, projectRoot),
+        "integrity-format",
+      ),
+      true,
+    );
+  });
+
+  it("rejects compact proof fields contained in multiline inline code", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const report = `\`Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
+Ship Verdict: **YES** - no blocking finding survived Pass 2.
+Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
+Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
+What I Didn't Examine: none.\`
+`;
+    const result = validateReviewReport(report, projectRoot);
+
+    assert.equal(result.status, "fail");
+    assert.equal(hasViolation(result, "integrity-format"), true);
+    assert.equal(hasViolation(result, "ship-verdict-format"), true);
+  });
+
+  it("keeps a contradictory verdict visible after an invalid fence opener", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const report = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line.
+Ship Verdict: **YES** - no blocking finding survived Pass 2.
+Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
+Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
+What I Didn't Examine: none.
+\`\`\`markdown\`invalid
+Ship Verdict: **NO**
+`;
+    const result = validateReviewReport(report, projectRoot);
+
+    assert.equal(result.status, "fail");
+    assert.equal(hasViolation(result, "ship-verdict-format"), true);
   });
 
   it("requires the compact clean-review disclosures", (testContext) => {

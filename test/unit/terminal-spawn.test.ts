@@ -187,6 +187,27 @@ describe("buildTerminalSpawnSpec", () => {
     );
     assert.ok(
       settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/staging\/goat-quality-result-\*\.json\)/u.test(
+          rule,
+        ),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/staging\/goat-quality-claim-\*\.json\)/u.test(
+          rule,
+        ),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/staging\/goat-quality-reap-\*\.json\)/u.test(
+          rule,
+        ),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
         /Read\(\/\/.*\/\*\*\/\.env\)/.test(rule),
       ),
     );

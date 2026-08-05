@@ -578,11 +578,9 @@ export function handlePlansExportCommand(options: ParsedCLI): void {
     throw new CLIError("plans export supports --format markdown or json.", 2);
   }
 
-  let records: PlanExportRecord[];
+  let loadedRecords: PlanExportRecord[];
   try {
-    records = loadPlanExportRecords(options.projectPath).map(
-      redactPlanExportRecord,
-    );
+    loadedRecords = loadPlanExportRecords(options.projectPath);
   } catch (error) {
     // Example: a user selected a stale plan path or a milestone without a title.
     if (error instanceof PlansExportInputError) {
@@ -590,6 +588,8 @@ export function handlePlansExportCommand(options: ParsedCLI): void {
     }
     throw error;
   }
+  const sourceFiles = loadedRecords.map((record) => record.sourceFile);
+  const records = loadedRecords.map(redactPlanExportRecord);
 
   const isJson = options.format === "json";
   const renderedPreview = isJson
@@ -605,8 +605,20 @@ export function handlePlansExportCommand(options: ParsedCLI): void {
   let writtenPaths: string[];
   try {
     writtenPaths = isJson
-      ? writeJsonExport(records, options.output, options.shouldForce)
-      : writeMarkdownExports(records, options.output, options.shouldForce);
+      ? writeJsonExport(
+          records,
+          options.output,
+          options.shouldForce,
+          options.projectPath,
+          sourceFiles,
+        )
+      : writeMarkdownExports(
+          records,
+          options.output,
+          options.shouldForce,
+          options.projectPath,
+          sourceFiles,
+        );
   } catch (error) {
     // Example: a prior export exists and the user did not authorize regeneration.
     if (error instanceof PlansExportInputError) {

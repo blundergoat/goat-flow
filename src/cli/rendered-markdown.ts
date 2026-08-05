@@ -22,9 +22,22 @@ function maskCharacters(content: string): string {
   return content.replace(/[^\r\n]/gu, " ");
 }
 
+/** Remove the carriage return from one CRLF-derived source line. */
+function comparableMarkdownLine(line: string): string {
+  return line.endsWith("\r") ? line.slice(0, -1) : line;
+}
+
+/** Return whether a backtick opener carries an info string CommonMark rejects. */
+function hasInvalidBacktickFenceInfo(
+  opening: string,
+  infoString: string,
+): boolean {
+  return opening[0] === "`" && infoString.includes("`");
+}
+
 /** Return whether one raw line opens or closes a fenced code block. */
 function isFencedLine(line: string, state: MarkdownMaskState): boolean {
-  const comparableLine = line.endsWith("\r") ? line.slice(0, -1) : line;
+  const comparableLine = comparableMarkdownLine(line);
   // An open fence keeps every example line hidden until its matching close marker.
   if (state.fenceCharacter.length > 0) {
     const closingPattern = new RegExp(
@@ -39,9 +52,15 @@ function isFencedLine(line: string, state: MarkdownMaskState): boolean {
     return true;
   }
 
-  const opening = comparableLine.match(/^ {0,3}(`{3,}|~{3,})/u)?.[1];
+  const openingMatch = comparableLine.match(/^ {0,3}(`{3,}|~{3,})(.*)$/u);
+  const opening = openingMatch?.[1];
   // A normal user-facing line leaves fenced-block state unchanged.
   if (!opening) return false;
+  // Backticks are forbidden in a backtick fence's info string. The line stays
+  // visible Markdown instead of opening a block that masks later evidence.
+  if (hasInvalidBacktickFenceInfo(opening, openingMatch[2] ?? "")) {
+    return false;
+  }
   state.fenceCharacter = opening[0] ?? "";
   state.fenceLength = opening.length;
   return true;
@@ -416,11 +435,15 @@ function consumeOpenMarkdownSpan(
       state.inlineCodeDelimiterLength,
     );
     if (closerEnd < 0) {
-      return { text: line.slice(cursor), nextCursor: line.length, stop: true };
+      return {
+        text: maskCharacters(line.slice(cursor)),
+        nextCursor: line.length,
+        stop: true,
+      };
     }
     state.inlineCodeDelimiterLength = 0;
     return {
-      text: line.slice(cursor, closerEnd),
+      text: maskCharacters(line.slice(cursor, closerEnd)),
       nextCursor: closerEnd,
       stop: false,
     };
@@ -489,7 +512,8 @@ function maskHtmlComments(
       codeSpanPrecedesCommentOpener(inlineCode, openIndex, line.length)
     ) {
       if (inlineCode.end > line.length) {
-        rendered += line.slice(cursor);
+        rendered += line.slice(cursor, inlineCode.start);
+        rendered += maskCharacters(line.slice(inlineCode.start));
         state.inlineCodeDelimiterLength = inlineCode.delimiterLength;
         break;
       }

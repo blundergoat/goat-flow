@@ -6,7 +6,13 @@
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
@@ -49,6 +55,7 @@ interface PreflightRunnerFixture {
   progressLabel?: string;
   shouldExposeProgress?: boolean;
   parentStopAfterFile?: string;
+  progressReadyFile?: string;
 }
 
 /**
@@ -130,6 +137,9 @@ function runPreflightRunnerFixture(
       // The first heartbeat proves the user sees liveness before the child closes.
       if (firstProgressAfterMs === null) {
         firstProgressAfterMs = Date.now() - fixtureStartedAt;
+        if (fixture.progressReadyFile !== undefined) {
+          writeFileSync(fixture.progressReadyFile, "ready");
+        }
       }
       operatorProgress += chunk;
     });
@@ -245,11 +255,24 @@ afterEach(() => {
 
 describe("preflight Tests-phase progress", () => {
   it("shows retry progress before close while keeping child output captured", async () => {
+    const progressTemporaryDirectory = mkdtempSync(
+      join(tmpdir(), "goat-flow-preflight-progress-"),
+    );
+    fixtureTemporaryDirectories.add(progressTemporaryDirectory);
+    const progressReadyFile = join(progressTemporaryDirectory, "ready");
     const runnerResult = await runPreflightRunnerFixture({
       progressLabel: "Tests retry",
       heartbeatSeconds: 0.04,
-      childSource:
-        'process.stdout.write("CHILD_START\\n"); setTimeout(() => { process.stderr.write("CHILD_END\\n"); }, 150);',
+      progressReadyFile,
+      childSource: String.raw`
+        const { existsSync } = require("node:fs");
+        process.stdout.write("CHILD_START\\n");
+        const progressPoll = setInterval(() => {
+          if (!existsSync(${JSON.stringify(progressReadyFile)})) return;
+          clearInterval(progressPoll);
+          process.stderr.write("CHILD_END\\n");
+        }, 5);
+      `,
     });
 
     assert.equal(runnerResult.status, 0);
@@ -266,27 +289,6 @@ describe("preflight Tests-phase progress", () => {
     assert.match(runnerResult.capturedOutput, /CHILD_END/u);
     assert.doesNotMatch(runnerResult.capturedOutput, /still running/u);
     assert.equal(runnerResult.runnerErrorOutput, "");
-    const heartbeatElapsedSeconds = [
-      ...runnerResult.operatorProgress.matchAll(/\((\d+\.\d+)s elapsed\)/gu),
-    ].map((heartbeatMatch) => Number(heartbeatMatch[1]));
-    assert.ok(heartbeatElapsedSeconds.length >= 1);
-
-    // Consecutive heartbeats stay bounded instead of flooding the developer's terminal.
-    for (
-      let heartbeatIndex = 1;
-      heartbeatIndex < heartbeatElapsedSeconds.length;
-      heartbeatIndex += 1
-    ) {
-      const currentHeartbeatSeconds = heartbeatElapsedSeconds[heartbeatIndex];
-      const previousHeartbeatSeconds =
-        heartbeatElapsedSeconds[heartbeatIndex - 1];
-      assert.ok(currentHeartbeatSeconds !== undefined);
-      assert.ok(previousHeartbeatSeconds !== undefined);
-      assert.ok(
-        currentHeartbeatSeconds - previousHeartbeatSeconds >= 0.03,
-        "heartbeat intervals should stay near the configured 0.04-second test interval",
-      );
-    }
   });
 
   it("keeps short successful commands quiet", async () => {

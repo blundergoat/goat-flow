@@ -16,6 +16,7 @@ import {
   scanContentQuality,
 } from "../../src/cli/audit/check-content-quality.js";
 import { STANDALONE_PLAYBOOK_FILES } from "../../src/cli/audit/skill-docs-contract.js";
+import { evaluateSearchAnchors } from "../../src/cli/facts/shared/search-anchors.js";
 import { makeCtx, stubFS } from "../fixtures/projects/index.js";
 import { assertExists } from "../helpers/assert-exists.ts";
 
@@ -323,6 +324,64 @@ describe("scanContentQuality: unresolved readiness markers", () => {
     );
   });
 
+  it("recognizes a setext open-questions heading", () => {
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      ["Open Questions", "--------------", "- TODO: choose storage"].join("\n"),
+    );
+
+    assert.equal(
+      findings.filter((finding) => finding.rule === "unresolved-content-marker")
+        .length,
+      1,
+    );
+  });
+
+  it("closes readiness before scanning a setext heading title", () => {
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      ["## Open Questions", "Resolved TODO", "-------------", "All done"].join(
+        "\n",
+      ),
+    );
+
+    assert.equal(
+      findings.filter((finding) => finding.rule === "unresolved-content-marker")
+        .length,
+      0,
+    );
+  });
+
+  it("ignores readiness headings hidden inside HTML comments", () => {
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      ["<!--", "## Open Questions", "-->", "- TODO: ordinary task"].join("\n"),
+    );
+
+    assert.equal(
+      findings.filter((finding) => finding.rule === "unresolved-content-marker")
+        .length,
+      0,
+    );
+  });
+
+  it("keeps content visible after an invalid backtick fence opener", () => {
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      [
+        "```markdown`invalid",
+        "## Open Questions",
+        "- TODO: choose storage",
+      ].join("\n"),
+    );
+
+    assert.equal(
+      findings.filter((finding) => finding.rule === "unresolved-content-marker")
+        .length,
+      1,
+    );
+  });
+
   it("ignores readiness markers that appear only inside inline code", () => {
     const findings = scanContentQuality(
       "docs/proposal.md",
@@ -365,6 +424,35 @@ describe("scanContentQuality: unresolved readiness markers", () => {
     assert.ok(
       findings.some((finding) => finding.rule === "unresolved-content-marker"),
     );
+  });
+});
+
+describe("semantic anchor path boundaries", () => {
+  it("does not inspect absolute or parent-traversal citation paths", () => {
+    const inspectedPaths: string[] = [];
+    const fs = stubFS({
+      exists: (path) => {
+        inspectedPaths.push(path);
+        return true;
+      },
+      readFile: (path) => {
+        inspectedPaths.push(path);
+        return "needle";
+      },
+    });
+
+    const evaluations = evaluateSearchAnchors(
+      fs,
+      [
+        "`../../outside.txt` (search: `needle`)",
+        "`/tmp/outside.txt` (search: `needle`)",
+        "`..\\\\outside.txt` (search: `needle`)",
+        "`C:\\\\outside.txt` (search: `needle`)",
+      ].join("\n"),
+    );
+
+    assert.deepEqual(evaluations, []);
+    assert.deepEqual(inspectedPaths, []);
   });
 });
 

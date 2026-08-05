@@ -9,7 +9,9 @@ import {
   chmodSync,
   existsSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -111,6 +113,45 @@ describe("quality draft staging", () => {
       /must be a real project-local directory/u,
     );
     assert.equal(existsSync(join(outside, "logs")), false);
+  });
+
+  /**
+   * Fixture purpose: swaps a checked ancestor during descendant creation and expects rejection.
+   * Filesystem side effects: mutates paths only inside the two temporary fixture roots.
+   */
+  it("rejects an ancestor replaced while a missing descendant is created", (testContext) => {
+    if (
+      skipOnWindows(
+        testContext,
+        "Directory symlink fixtures require Windows Developer Mode",
+      )
+    ) {
+      return;
+    }
+    const root = makeRoot();
+    const outside = mkdtempSync(join(tmpdir(), "goat-quality-outside-"));
+    roots.push(outside);
+    mkdirSync(join(root, ".goat-flow"));
+    let hasSwappedAncestor = false;
+
+    assert.throws(
+      () =>
+        ensureQualityDraftStagingDirectory(root, {
+          /** Renames the checked ancestor, writes a symlink, then creates the requested child. */
+          createDraftDirectory(directoryPath, options): void {
+            if (!hasSwappedAncestor) {
+              hasSwappedAncestor = true;
+              renameSync(
+                join(root, ".goat-flow"),
+                join(root, ".goat-flow-original"),
+              );
+              symlinkSync(outside, join(root, ".goat-flow"), "dir");
+            }
+            mkdirSync(directoryPath, options);
+          },
+        }),
+      /must be a real project-local directory/u,
+    );
   });
 
   it("tightens an existing permissive staging directory to 0700", (testContext) => {

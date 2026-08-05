@@ -1124,7 +1124,7 @@ gate_scannable_files() {
   local path line size i count total_lines
 
   for path in "$@"; do
-    if [ ! -f "$path" ] || [ ! -r "$path" ]; then
+    if [ ! -f "$path" ] || [ ! -r "$path" ] || [ -L "$path" ]; then
       continue
     fi
     if [[ "$path" == *$'\n'* ]]; then

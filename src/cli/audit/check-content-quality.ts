@@ -21,7 +21,10 @@ import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
 import { getSkillNames } from "../constants.js";
 import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
-import { maskInlineCodeSpansOnLine } from "../rendered-markdown.js";
+import {
+  maskInlineCodeSpansOnLine,
+  maskNonRenderedMarkdown,
+} from "../rendered-markdown.js";
 import {
   advanceMarkdownFenceState,
   evaluateSearchAnchors,
@@ -277,18 +280,42 @@ function shouldScanStaleSkillPlaybooksPath(path: string): boolean {
 const READINESS_SECTION_HEADING =
   /\b(?:open|pending|unresolved)\s+(?:questions?|issues?)\b/i;
 
+/** One rendered Markdown heading that can open or close a readiness section. */
+interface ReadinessHeading {
+  level: number;
+  text: string;
+}
+
+/** Parse one hash-prefixed Markdown heading; ordinary lines return null. */
+function parseAtxHeading(line: string): ReadinessHeading | null {
+  const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+  if (!match?.[1]) return null;
+  if (match[2] === undefined) return null;
+  return { level: match[1].length, text: match[2] };
+}
+
+/** Parse one setext underline with its preceding visible heading text. */
+function parseSetextHeading(
+  line: string,
+  previousLine: string,
+): ReadinessHeading | null {
+  const underline = /^ {0,3}(=+|-+)[\t ]*$/.exec(line)?.[1];
+  if (!underline) return null;
+  const text = previousLine.trim();
+  if (text.length === 0) return null;
+  return { level: underline[0] === "=" ? 1 : 2, text };
+}
+
 /** Track whether the current Markdown position belongs to a readiness section. */
 function nextReadinessHeadingLevel(
   line: string,
+  nextLine: string,
   currentLevel: number | null,
 ): number | null {
-  const headingMatch = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
-  if (!headingMatch?.[1] || headingMatch[2] === undefined) {
-    return currentLevel;
-  }
-  const headingLevel = headingMatch[1].length;
-  if (READINESS_SECTION_HEADING.test(headingMatch[2])) return headingLevel;
-  if (currentLevel !== null && headingLevel <= currentLevel) return null;
+  const heading = parseAtxHeading(line) ?? parseSetextHeading(nextLine, line);
+  if (heading === null) return currentLevel;
+  if (READINESS_SECTION_HEADING.test(heading.text)) return heading.level;
+  if (currentLevel !== null && heading.level <= currentLevel) return null;
   return currentLevel;
 }
 
@@ -330,17 +357,16 @@ function unresolvedContentMarker(line: string): string | null {
 /** Scan only explicit readiness sections, ignoring examples in fenced blocks. */
 function scanUnresolvedReadiness(path: string, text: string): ContentFinding[] {
   const findings: ContentFinding[] = [];
-  const lines = text.split(/\r?\n/);
-  let activeFence: MarkdownFence | null = null;
+  // Reuse the rendered Markdown view so commented-out headings and fenced
+  // examples cannot change which later lines count as readiness answers.
+  const lines = maskNonRenderedMarkdown(text).split(/\r?\n/);
   let readinessHeadingLevel: number | null = null;
 
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index] ?? "";
-    const fenceState = advanceMarkdownFenceState(line, activeFence);
-    activeFence = fenceState.activeFence;
-    if (fenceState.isFenceLine || activeFence !== null) continue;
     readinessHeadingLevel = nextReadinessHeadingLevel(
       line,
+      lines[index + 1] ?? "",
       readinessHeadingLevel,
     );
     if (readinessHeadingLevel !== null) {

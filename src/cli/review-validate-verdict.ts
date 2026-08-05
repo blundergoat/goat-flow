@@ -84,8 +84,19 @@ function readShipVerdictClaim(
 ): ShipVerdictClaim | null {
   const fullVerdictSections = readSections(lines, "Ship Verdict");
   const fullVerdictSection = fullVerdictSections.at(0);
+  const compactVerdictLines = lines
+    .map((text, lineIndex) => ({ line: lineIndex + 1, text }))
+    .filter(({ text }) => /^\s*Ship Verdict:/u.test(text));
   // Full reports show the decision beneath a dedicated heading.
   if (fullVerdictSection) {
+    for (const compactVerdict of compactVerdictLines) {
+      addViolation(
+        violations,
+        "ship-verdict-format",
+        compactVerdict.line,
+        "Ship Verdict cannot mix compact and full forms",
+      );
+    }
     return readFullShipVerdictClaim(
       fullVerdictSection,
       fullVerdictSections.slice(1),
@@ -93,9 +104,6 @@ function readShipVerdictClaim(
     );
   }
 
-  const compactVerdictLines = lines
-    .map((text, lineIndex) => ({ line: lineIndex + 1, text }))
-    .filter(({ text }) => /^\s*Ship Verdict:/u.test(text));
   const compactVerdictLine = compactVerdictLines.at(0);
   // Even a clean compact review needs one visible outcome for the user.
   if (!compactVerdictLine) {

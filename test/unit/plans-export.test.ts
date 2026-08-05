@@ -7,7 +7,6 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { join } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { maskNonRenderedMarkdown } from "../../src/cli/rendered-markdown.js";
 
@@ -113,7 +112,7 @@ describe("plans export: source masking", () => {
     assert.doesNotMatch(masked, /hidden comment/u);
   });
 
-  it("keeps HTML-comment delimiters inside multiline inline code visible", () => {
+  it("masks multiline inline code without opening an HTML comment", () => {
     const content = [
       "Checked the literal `first line",
       "continued <!-- remains code` token.",
@@ -122,7 +121,12 @@ describe("plans export: source masking", () => {
     ].join("\n");
     const masked = maskNonRenderedMarkdown(content);
 
-    assert.equal(masked, content);
+    assert.equal(masked.length, content.length);
+    assert.doesNotMatch(masked, /first line|remains code/u);
+    assert.equal(
+      masked.indexOf("## Live after multiline code"),
+      content.indexOf("## Live after multiline code"),
+    );
   });
 
   it("does not carry inline code across an interrupting HTML comment block", () => {
@@ -152,7 +156,28 @@ describe("plans export: source masking", () => {
       "",
     ].join("\n");
 
-    assert.equal(maskNonRenderedMarkdown(content), content);
+    const masked = maskNonRenderedMarkdown(content);
+
+    assert.equal(masked.length, content.length);
+    assert.doesNotMatch(masked, /first|second|remains code/u);
+    assert.equal(
+      masked.indexOf("## Live after consecutive spans"),
+      content.indexOf("## Live after consecutive spans"),
+    );
+  });
+
+  it("does not open a backtick fence whose info string contains a backtick", () => {
+    const content = [
+      "```markdown`invalid",
+      "## Live after invalid fence",
+      "",
+    ].join("\n");
+    const masked = maskNonRenderedMarkdown(content);
+
+    assert.equal(
+      masked.indexOf("## Live after invalid fence"),
+      content.indexOf("## Live after invalid fence"),
+    );
   });
 
   it("keeps backslash-escaped HTML comment openers visible", () => {

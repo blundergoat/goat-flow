@@ -17,6 +17,19 @@ last_reviewed: 2026-08-05
 
 ---
 
+## Lesson: Permission wildcards must stay separate from escaped literal paths
+
+**Status:** active | **Created:** 2026-08-05
+**Decision changed:** Build permission patterns by escaping the literal directory first, then append deliberate wildcard grammar and assert the serialized rule. | **Trigger phase:** ACT
+
+**What happened:** While denying Claude reporting-agent writes to server-owned quality result and claim receipts, the first implementation passed each wildcard-bearing filename through `claudePermissionPath`. The focused terminal-profile test failed because that helper correctly escaped `*` as a literal path character, so the deny rule matched no receipt family.
+
+**Root cause:** I used a literal-path escaping helper to encode a permission pattern. The directory and the wildcard suffix have different grammars even though they appear in one rule string.
+
+**Prevention:** Pass only literal filesystem components through path escaping. Append reviewed permission wildcards afterward, then assert every server-owned filename family in the serialized deny rules. Evidence anchors: `src/cli/server/terminal-reporting-profile.ts` (search: `stagingServerFileDenies`), `test/unit/terminal-spawn.test.ts` (search: `launches Claude reporting sessions with a restrictive settings overlay`).
+
+---
+
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
 
 **Status:** active | **Created:** 2026-05-15 | **Merged during:** M11 learning-loop consolidation

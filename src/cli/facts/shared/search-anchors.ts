@@ -57,6 +57,24 @@ function maskStrikethroughPreservingLines(content: string): string {
   );
 }
 
+/** Return whether a backtick opener carries an info string CommonMark rejects. */
+function hasInvalidBacktickFenceInfo(run: string, remainder: string): boolean {
+  return run[0] === "`" && remainder.includes("`");
+}
+
+/** Return whether one fence marker closes the active Markdown example. */
+function closesMarkdownFence(
+  run: string,
+  remainder: string,
+  activeFence: MarkdownFence,
+): boolean {
+  return (
+    run[0] === activeFence.character &&
+    run.length >= activeFence.length &&
+    /^[ \t]*$/.test(remainder)
+  );
+}
+
 /**
  * Track whether we are inside a fenced example while reading a user's entry line by line.
  * Use when scanning entry text for citations, so an example the user opened with ``` keeps
@@ -77,19 +95,20 @@ export function advanceMarkdownFenceState(
   if (run === undefined) return { activeFence, isFenceLine: false };
 
   const character = run[0] as "`" | "~";
+  const remainder = match?.[2] ?? "";
   if (activeFence === null) {
+    // CommonMark rejects backticks in a backtick fence's info string. Treating
+    // this as a fence would hide the visible content that follows it.
+    if (hasInvalidBacktickFenceInfo(run, remainder)) {
+      return { activeFence: null, isFenceLine: false };
+    }
     return {
       activeFence: { character, length: run.length },
       isFenceLine: true,
     };
   }
 
-  const remainder = match?.[2] ?? "";
-  if (
-    character === activeFence.character &&
-    run.length >= activeFence.length &&
-    /^[ \t]*$/.test(remainder)
-  ) {
+  if (closesMarkdownFence(run, remainder, activeFence)) {
     return { activeFence: null, isFenceLine: true };
   }
   return { activeFence, isFenceLine: false };
@@ -205,20 +224,24 @@ function localSearchAnchorCandidate(
 
 /** Reject a relative citation candidate that normalizes outside the project. */
 function isEscapedSearchAnchorPath(path: string): boolean {
-  return pathPosix.isAbsolute(path) || path === ".." || path.startsWith("../");
+  return (
+    pathPosix.isAbsolute(path) ||
+    /^(?:[A-Za-z]:[\\/]|\\\\)/u.test(path) ||
+    path.split(/[\\/]/u).includes("..")
+  );
 }
 
 /** Resolve the skill-relative citation forms used by installed and source skills. */
 function resolveSearchAnchorPath(
   filePath: string,
   sourcePath: string | undefined,
-): string {
-  if (sourcePath === undefined) return filePath;
-  const relativeCandidate = localSearchAnchorCandidate(filePath, sourcePath);
-  if (relativeCandidate === null) return filePath;
-
-  const normalized = pathPosix.normalize(relativeCandidate);
-  return isEscapedSearchAnchorPath(normalized) ? filePath : normalized;
+): string | null {
+  const relativeCandidate =
+    sourcePath === undefined
+      ? null
+      : localSearchAnchorCandidate(filePath, sourcePath);
+  const normalized = pathPosix.normalize(relativeCandidate ?? filePath);
+  return isEscapedSearchAnchorPath(normalized) ? null : normalized;
 }
 
 /** Validate one parsed citation, returning null only when policy excludes it. */
@@ -228,9 +251,16 @@ function evaluateSearchAnchor(
   options: ReferenceValidationOptions,
 ): SearchAnchorEvaluation | null {
   if (!isConcreteSearchAnchorPath(anchor.filePath)) return null;
+  const resolvedPath = resolveSearchAnchorPath(
+    anchor.filePath,
+    options.sourcePath,
+  );
+  // Evidence citations may never make the target filesystem inspect outside
+  // the selected project, even when the raw path has a source-relative form.
+  if (resolvedPath === null) return null;
   const resolvedAnchor = {
     ...anchor,
-    filePath: resolveSearchAnchorPath(anchor.filePath, options.sourcePath),
+    filePath: resolvedPath,
   };
   if (isIntentionallyGitignored(resolvedAnchor.filePath)) {
     return staleSearchAnchorEvaluation(

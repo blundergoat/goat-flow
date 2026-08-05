@@ -345,6 +345,7 @@ describe("codex settings feature flags", () => {
 
   it("fails agent-settings when Codex permission profile names absent exact paths", () => {
     const check = BUILD_CHECKS.find((c) => c.id === "agent-settings")!;
+    const inspectedPaths: string[] = [];
     const ctx = makeCtx({
       agentFilter: "codex",
       agents: [
@@ -355,11 +356,16 @@ describe("codex settings feature flags", () => {
             codexWorkspaceRootsTable([
               ...CODEX_WORKSPACE_ROOT_ENTRIES,
               '".env.example" = "read"',
+              '"../../outside.txt" = "read"',
+              '"/tmp/outside.txt" = "read"',
             ]).replace(/^":workspace_roots" = /u, ""),
         }),
       ],
       fs: stubFS({
-        exists: (path) => path === ".codex/config.toml",
+        exists: (path) => {
+          inspectedPaths.push(path);
+          return path === ".codex/config.toml";
+        },
       }),
     });
     const result = check.run(ctx);
@@ -367,6 +373,10 @@ describe("codex settings feature flags", () => {
     assertExists(result);
     assert.match(result.message, /exact workspace-root paths/);
     assert.match(result.message, /\.env\.example/);
+    assert.deepEqual(
+      inspectedPaths.filter((path) => path.includes("outside.txt")),
+      [],
+    );
   });
 });
 

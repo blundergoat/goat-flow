@@ -13,6 +13,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  realpathSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -297,18 +298,50 @@ function assertUniqueOutputPaths(outputPaths: string[]): void {
   );
 }
 
+/** Reject any existing destination that resolves to one of the source milestones. */
+function assertOutputPathsDoNotAliasSources(
+  outputPaths: string[],
+  sourceFiles: readonly string[],
+  sourceDirectory: string,
+): void {
+  const sourcePaths = new Set(
+    sourceFiles.map((sourceFile) =>
+      realpathSync(resolve(sourceDirectory, sourceFile)),
+    ),
+  );
+  const aliasedPath = outputPaths.find((outputPath) => {
+    try {
+      return sourcePaths.has(realpathSync(outputPath));
+    } catch (error) {
+      // An absent destination cannot alias an existing source; every other lookup failure is unsafe.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw new PlansExportInputError(
+        `Cannot inspect export output ${outputPath} for source aliasing.`,
+      );
+    }
+  });
+  if (!aliasedPath) return;
+  throw new PlansExportInputError(
+    `Export --output would overwrite source milestone ${aliasedPath}. Choose a separate export destination.`,
+  );
+}
+
 /**
  * Write one Markdown file per milestone after every destination passes collision checks.
  *
  * @param records - milestones to write, already redacted
  * @param outputDirectory - directory the user passed to `--output`
  * @param shouldForce - whether the user opted into overwriting files that already exist
+ * @param sourceDirectory - selected plan directory whose milestones must remain read-only
+ * @param sourceFiles - original unredacted milestone names used only for overwrite protection
  * @returns the paths written, so the caller can report them back to the user
  */
 export function writeMarkdownExports(
   records: PlanExportRecord[],
   outputDirectory: string,
   shouldForce: boolean,
+  sourceDirectory: string,
+  sourceFiles: readonly string[],
 ): string[] {
   // No existing ancestor may redirect output outside the requested logical tree.
   assertRealDirectoryPathOrAbsent(outputDirectory, "Markdown --output");
@@ -316,6 +349,7 @@ export function writeMarkdownExports(
     join(outputDirectory, markdownExportFilename(record.sourceFile)),
   );
   assertUniqueOutputPaths(outputPaths);
+  assertOutputPathsDoNotAliasSources(outputPaths, sourceFiles, sourceDirectory);
   assertOutputPathsAvailable(outputPaths, shouldForce);
   assertWritableDestinations(outputPaths);
   mkdirSync(outputDirectory, { recursive: true });
@@ -337,12 +371,16 @@ export function writeMarkdownExports(
  * @param records - milestones to serialise, already redacted
  * @param outputPath - file the user passed to `--output`
  * @param shouldForce - whether the user opted into overwriting an existing file
+ * @param sourceDirectory - selected plan directory whose milestones must remain read-only
+ * @param sourceFiles - original unredacted milestone names used only for overwrite protection
  * @returns the path written, so the caller can report it back to the user
  */
 export function writeJsonExport(
   records: PlanExportRecord[],
   outputPath: string,
   shouldForce: boolean,
+  sourceDirectory: string,
+  sourceFiles: readonly string[],
 ): string[] {
   if (existsSync(outputPath) && statSync(outputPath).isDirectory()) {
     throw new PlansExportInputError(
@@ -350,6 +388,11 @@ export function writeJsonExport(
     );
   }
   assertRealDirectoryPathOrAbsent(dirname(outputPath), "JSON --output parent");
+  assertOutputPathsDoNotAliasSources(
+    [outputPath],
+    sourceFiles,
+    sourceDirectory,
+  );
   assertOutputPathsAvailable([outputPath], shouldForce);
   assertWritableDestinations([outputPath]);
   mkdirSync(dirname(outputPath), { recursive: true });

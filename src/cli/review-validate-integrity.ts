@@ -692,6 +692,17 @@ export function validateIntegrity(
   const fullSection = fullSections.at(0);
   // A full receipt is authoritative whenever the user includes its H2 section.
   if (fullSection) {
+    const compactIntegrityLines = lines
+      .map((text, lineIndex) => ({ line: lineIndex + 1, text }))
+      .filter(({ text }) => /^\s*Review Integrity:/u.test(text));
+    for (const compactIntegrity of compactIntegrityLines) {
+      addViolation(
+        violations,
+        "integrity-format",
+        compactIntegrity.line,
+        "Review Integrity cannot mix compact and full forms",
+      );
+    }
     // Repeated receipts would let a report present conflicting validation state.
     for (const duplicate of fullSections.slice(1)) {
       addViolation(

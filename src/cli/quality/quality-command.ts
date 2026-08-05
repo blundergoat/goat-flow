@@ -310,6 +310,25 @@ function createMissingQualitySaveDirectory(
   }
 }
 
+/** Revalidate every report-directory component after concurrent creation finishes. */
+function assertCurrentQualitySaveDirectories(
+  components: Array<{ path: string; display: string }>,
+  deps: QualityPersistenceDeps,
+): void {
+  for (const component of components) {
+    const currentStats = qualitySaveDirectoryStats(
+      component.path,
+      component.display,
+      deps,
+    );
+    if (currentStats !== null && currentStats.isDirectory()) continue;
+    throw new deps.CLIError(
+      `quality save: ${component.display} must be a real project-local directory.`,
+      2,
+    );
+  }
+}
+
 /**
  * Validate the ignored report destination, then create and recheck its directory chain.
  * Use immediately before a user's accepted report is written.
@@ -358,6 +377,10 @@ function ensureQualitySaveDirectory(
       createMissingQualitySaveDirectory(component, deps);
     }
   }
+  // A creator can replace an ancestor that was present in the initial snapshot
+  // while a missing descendant is being made. Recheck the whole chain before
+  // the exclusive report write is allowed to use it.
+  assertCurrentQualitySaveDirectories(components, deps);
   return (
     components.at(-1)?.path ??
     join(projectRoot, ".goat-flow", "logs", "quality")

@@ -18,6 +18,11 @@ interface InspectedDraftDirectory {
   stats: NonNullable<ReturnType<typeof lstatSync>> | null;
 }
 
+/** Filesystem seam used to reproduce concurrent directory replacement in tests. */
+interface QualityDraftStagingDeps {
+  createDraftDirectory?: (path: string, options?: { mode?: number }) => unknown;
+}
+
 /** Inspect components without creating them; unreadable paths fail before any write. */
 function inspectQualityDraftDirectories(
   componentPaths: readonly string[],
@@ -53,12 +58,14 @@ function assertQualityDraftDirectories(
 function createMissingQualityDraftDirectory(
   component: InspectedDraftDirectory,
   stagingPath: string,
+  deps: QualityDraftStagingDeps,
 ): void {
   if (component.stats !== null) return;
+  const createDraftDirectory = deps.createDraftDirectory ?? mkdirSync;
+  const options =
+    component.componentPath === stagingPath ? { mode: 0o700 } : undefined;
   try {
-    mkdirSync(component.componentPath, {
-      mode: component.componentPath === stagingPath ? 0o700 : undefined,
-    });
+    createDraftDirectory(component.componentPath, options);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     const winner = lstatSync(component.componentPath);
@@ -72,11 +79,14 @@ function createMissingQualityDraftDirectory(
 
 /** Recheck one component after creation; the function throws for missing or redirected winners. */
 function assertCurrentQualityDraftDirectory(componentPath: string): void {
-  if (!lstatSync(componentPath).isDirectory()) {
-    throw new Error(
-      `quality capture: ${componentPath} must be a real project-local directory.`,
-    );
+  try {
+    if (lstatSync(componentPath).isDirectory()) return;
+  } catch {
+    // Missing and unreadable components fail through the same local-path contract.
   }
+  throw new Error(
+    `quality capture: ${componentPath} must be a real project-local directory.`,
+  );
 }
 
 /** Keep the POSIX staging leaf private; a mode that remains permissive aborts capture. */
@@ -97,9 +107,10 @@ function enforcePrivateQualityStagingDirectory(
 function createQualityDraftDirectories(
   components: readonly InspectedDraftDirectory[],
   stagingPath: string,
+  deps: QualityDraftStagingDeps,
 ): void {
   for (const component of components) {
-    createMissingQualityDraftDirectory(component, stagingPath);
+    createMissingQualityDraftDirectory(component, stagingPath, deps);
     assertCurrentQualityDraftDirectory(component.componentPath);
     enforcePrivateQualityStagingDirectory(component.componentPath, stagingPath);
   }
@@ -111,10 +122,12 @@ function createQualityDraftDirectories(
  * Unsafe, unreadable, or non-ignored paths throw before capture starts.
  *
  * @param projectRoot - report owner project; empty or missing roots cannot pass Git ignore proof
+ * @param deps - optional directory creator used to reproduce concurrent replacement in tests
  * @returns absolute private staging directory; never a symlink after the final recheck
  */
 export function ensureQualityDraftStagingDirectory(
   projectRoot: string,
+  deps: QualityDraftStagingDeps = {},
 ): string {
   const components = [
     join(projectRoot, ".goat-flow"),
@@ -130,6 +143,11 @@ export function ensureQualityDraftStagingDirectory(
     );
   }
   const stagingPath = components[components.length - 1] as string;
-  createQualityDraftDirectories(inspectedComponents, stagingPath);
+  createQualityDraftDirectories(inspectedComponents, stagingPath, deps);
+  // Earlier components can be replaced while a later descendant is created.
+  // Revalidate the complete chain immediately before the caller uses staging.
+  for (const componentPath of components) {
+    assertCurrentQualityDraftDirectory(componentPath);
+  }
   return stagingPath;
 }

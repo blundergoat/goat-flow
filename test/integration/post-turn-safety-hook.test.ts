@@ -6,6 +6,8 @@
  * scanner behaves as asserted, not a reimplementation of it.
  */
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
@@ -185,6 +187,23 @@ describe("post-turn-safety hook: secret and marker detection", () => {
 
       assertHookBlocks(root, /AWS access key/u);
     });
+  });
+
+  it("does not follow untracked symlinks outside the repository", () => {
+    const outsideRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-post-turn-symlink-"),
+    );
+    try {
+      const outsideFile = join(outsideRoot, "outside.txt");
+      writeFileSync(outsideFile, `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`);
+      withTempRepo((root) => {
+        symlinkSync(outsideFile, join(root, "untracked-link.txt"));
+
+        assertHookAllows(root);
+      });
+    } finally {
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
   });
 
   it("blocks private key blocks in tracked diffs", () => {

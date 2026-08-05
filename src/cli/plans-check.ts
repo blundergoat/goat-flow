@@ -406,7 +406,7 @@ function countOpenItems(
 function isHumanOwnedItem(
   item: PlanExportRecord["testingGateItems"][number],
 ): boolean {
-  return /\[human\]/iu.test(item.text);
+  return /^\s*\[human\](?:\s|$)/iu.test(item.text);
 }
 
 /** Validate the executor-owned snapshot before a human receives the milestone. */
