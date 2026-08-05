@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.15.0"
 ---
 # Writing Style
 
-Use this when producing or editing prose a person will read: release notes, changelog entries, review and report narrative, decision records, README and documentation prose, issue and pull-request bodies, commit message bodies. It names common reader-cost patterns in generated prose and the cases where those same shapes are correct and must be left alone.
+Use this when producing or editing prose a person will read: release notes, changelog entries, review and report narrative, decision records, learning-loop entry bodies (footguns, lessons, patterns, decisions), README and documentation prose, issue and pull-request bodies, commit message bodies. It names common reader-cost patterns in generated prose and the cases where those same shapes are correct and must be left alone.
 
 Sibling playbooks own their formats. `changelog.md` owns changelog structure and `release-notes.md` owns per-release narrative shape; this playbook owns how the sentences inside them read.
 
@@ -31,6 +31,7 @@ Resolve conflicts in this order: verified facts and safety; the user's task, aud
 | Decision records, README and documentation prose | Yes |
 | Issue and pull-request bodies, commit message bodies | Yes |
 | `ISSUE.md`, milestone narrative, and testing-plan narrative | Yes |
+| Learning-loop entry bodies (footguns, lessons, patterns, decisions) | Yes - body prose only |
 | Comments and replies addressed to a person | Correctness and residue only |
 | Skill files, playbooks and other agent-read references, shared preambles, instruction files, hook output | No |
 | Code blocks, fixed schema fields, task/proof checklists, commands, approved requirements and acceptance/proof/verification/exit criteria, tables, INDEX and catalogue formats | No |
@@ -43,6 +44,8 @@ If an exempt control surface conflicts with a source of truth, report the discre
 **Replies are deliberately narrow.** Apply only the correctness pass and residue checks. The social-meaning guard and Colleague check constrain even those edits; no other style rule applies.
 
 **Why agent-read control text is exempt.** In a skill file, playbook, preamble, or instruction file, emphasis and repetition are compliance mechanisms rather than style defects. A rule stated three times is stated three times on purpose, because an agent that skips one pass is a real cost while a reader who finds the repetition tedious is not. Editing those files for prose style strips out the redundancy that makes them work. Route genuine problems there to the file's own contract, never to this playbook.
+
+**Why learning-loop entry bodies are in scope.** Footgun, lesson, pattern, and decision entries are retrieved by agents but verified by people, who read them in review, re-check them for staleness, and edit them alongside agents - so the narrative body follows the prose rules. The retrieval machinery stays exempt as fixed schema: frontmatter, schema lines (`**Status:**`, `**Created:**`, `**Evidence:**`), semantic anchors, and generated INDEX files.
 
 **Why tables, code, and catalogues are exempt.** Parallel structure is the point in all three. A table with varied row shapes is a worse table.
 
@@ -72,7 +75,7 @@ Unknown provenance starts conservative. Use the lightest effective edit, and ask
 Choose the register from the artifact, reader, and supplied voice before applying generic rules. Neutral and conventional are valid voices; do not decorate them for distinctiveness.
 
 - Documentation and decisions stay plain and precise about ownership, evidence, and uncertainty.
-- Reports and reviews keep necessary terminology, hedging, citations, and causal relationships.
+- Reports and reviews keep necessary terminology, hedging, citations, and causal relationships; learning-loop entry bodies share this register.
 - Release and changelog prose follows its sibling playbook, states user impact, and keeps caveats.
 - Issues and pull requests lead with the decision, behaviour, or action when useful for scanning.
 

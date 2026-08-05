@@ -113,3 +113,21 @@ Write a body when the subject alone does not explain the decision. Common cases:
 
 The body should explain why the change exists and name the real affected surfaces. Do not restate
 the diff mechanically.
+
+Body prose carries the same discipline as subjects:
+
+- Open with the reason or constraint, not an announcement: no "This commit", "This change",
+  "This PR".
+- The weak-verb rule applies to bodies too: name what changed and why, not that something changed.
+- Match claims to evidence: no "significantly improves robustness" padding, no hedging verified
+  facts with "should", and no claiming checks passed unless they ran.
+- One fact per bullet. Cut bullets that restate the subject or the diff.
+
+```
+BAD:  This commit significantly improves installer reliability by enhancing path handling
+      and making various robustness improvements.
+
+GOOD: The installer failed on paths with spaces because `$TARGET` was unquoted.
+      - quote all path expansions in the hook installer
+      - add a regression test using a spaced tmpdir
+```

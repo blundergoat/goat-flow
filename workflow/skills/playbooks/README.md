@@ -9,7 +9,7 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 
 ## How agents should use this directory
 
-1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, code comments, or prose and writing style), check this index for a matching playbook.
+1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, code comments, or prose and writing style), check this index for a matching playbook. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, or a learning-loop entry body.
 2. Open the playbook. If it has an **Availability Check** section, run the exact `command -v <tool>` or equivalent it specifies before falling back.
 3. Only after the availability check fails AND the playbook's fallback path also fails, declare the capability unavailable.
 
@@ -28,7 +28,7 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 | [`changelog.md`](./changelog.md) | Writing or editing `CHANGELOG.md`: Keep a Changelog categories, SemVer alignment, breaking-change markers and migration paths, write-at-commit vs write-at-release cadence, version-surface sync | n/a (changelog discipline) |
 | [`release-notes.md`](./release-notes.md) | Writing a per-release narrative for end users (GitHub release body, blog post, email, in-app banner, social): theme identification, user-impact lens, inverted-pyramid structure, multi-surface consistency. Derives from `changelog.md` | n/a (release-notes discipline) |
 | [`skill-playbook-authoring-sync.md`](./skill-playbook-authoring-sync.md) | Adding or materially editing a built-in playbook while keeping source/install mirrors, discovery, audit registration, and manifest ownership aligned | n/a (playbook-authoring discipline) |
-| [`writing-style.md`](./writing-style.md) | Writing or editing prose a person reads (release notes, changelog entries, review narrative, decision records, docs, issue and PR bodies, comments and replies): correctness and meaning preservation, register- and source-aware editing, contextual diagnostics, structure audit, and misapplication guards. Exempts agent-read control text, plan mechanics, tables, and code | n/a (prose-style discipline) |
+| [`writing-style.md`](./writing-style.md) | Writing or editing prose a person reads (release notes, changelog entries, review narrative, decision records, learning-loop entry bodies, docs, issue and PR bodies, comments and replies): correctness and meaning preservation, register- and source-aware editing, contextual diagnostics, structure audit, and misapplication guards. Exempts agent-read control text, plan mechanics, tables, and code | n/a (prose-style discipline) |
 
 ## Adding a new playbook
 

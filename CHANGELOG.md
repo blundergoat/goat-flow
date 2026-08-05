@@ -2,46 +2,46 @@
 
 ## v1.15.0 - 2026-08-03
 
-- **Windows post-turn scans finish in under a second** - In a recorded 25-file benchmark, batched Git and pure Bash cut scans from 4m22.109s to 0.655s on Git Bash and from 6.465s to 0.027s on Linux.
-- **Stop scans fail closed through the Bash 3 compatibility path** - The 60-second `GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS` budget blocks incomplete scans; the compatibility scanner decodes spaced and non-ASCII Git paths before applying diff caps and matches the optimized scanner's credential and expression decisions. Claude allows 90 seconds, and `goat-flow hooks sync` repairs drifted registrations.
-- **Review validation and workflow guidance agree** - `review validate` preserves wrapped checklists, ignores standalone and indented code examples, rejects impossible coverage or verdicts, and caps a declined risk-depth review at `PARTIAL`; plan, QA, review, glossary, footgun, and `plan.time` guidance match every mirror.
-- **Plan effort estimates are checkable** - Milestones split estimate/Actual time across implementation, proof, and administration. Strict mode rejects underived current plans or completed milestones without structured Actuals; legacy plans remain valid and ~70/20/10 stays advisory.
-- **Plan evidence fails closed** - Previews redact forecast and Actual rationale; timing rejects empty finalization, duplicate authority, overlaps, backward Starts, and concurrent editor changes while preserving rollback evidence and user files.
-- **`plans check --strict` validates lifecycle and dependencies** - Every milestone needs core sections; missing, duplicate, self, cyclic, or lifecycle-conflicting state fails. Only `[human]` proof may remain at human review, while default mode supports legacy plans.
-- **Plan exports include proof and stop conditions** - `plans export` maps canonical and legacy proof headings, exports kill criteria as `stopMarkdown`, omits optional-field noise, and reports competing sections deterministically.
-- **goat-plan budgets the smallest complete result** - Agent time excludes human waiting, archetypes are optional, spikes require named uncertainty, and every milestone carries an outcome, tasks, proof, exit, and stop condition.
-- **Milestone timing uses durable receipts** - `plans time start|stop|status` records UTC and epoch spans, permits one open span, marks discarded or reversed-clock spans incomplete, and rejects linked paths. `plans check --strict` permits active receipts only during `in-progress` or `testing-gate`; clocks must stop before human review or terminal states, and measured Actuals require a finalized, reconciled receipt.
-- **Actuals declare provenance** - `measured` requires a reconciled final receipt; `retrospective`, `unavailable`, and `incomplete` avoid invented precision. Untagged legacy values remain retrospective despite prose claims.
-- **Forecast calibration stays optional** - `likely` must match the headline estimate; complete measured milestones supply raw-time ratios, median, and bounds. Fewer than three samples read `uncalibrated`, and point estimates need no migration.
-- **Unclaimed legacy receipts stay advisory** - Retrospective Actuals tolerate older hand-written receipt shapes; measured Actuals and active clocks require valid receipt shape, and measured Actuals also require reconciliation.
-- **goat-debug verifies the reported bug** - D4 reruns the original reproduction, requires cleanup of approved D1 diagnostics, preserves user-owned diagnostics, and does not accept D1.5's reduced case alone.
-- **goat-debug docs match behavior** - The Diagnose flowchart includes D1.5 minimization and both approvals, removes `HIGH = reproduced`, and aligns the dashboard `Fix Bug` preset.
-- **Commit guidance gets a clearer filename** - Fresh installs use `git-commit-message.md`; existing `git-commit.md` remains valid, and goat-flow prefers the new file when both exist. See ADR-043.
-- **Dashboard terminals preserve access mode** - Non-writing, unclassified, and investigator launches use `reporting`; write-enabled and direct sessions use `workspace`. The API defaults omissions to `workspace`, retries preserve the resolved mode, and rehydrated sessions hide Retry when the original prompt cannot be recovered.
-- **Codex reporting sessions enforce read-only tracking** - A native profile reads project roots and network, writes only local artifacts and Git-proven ignored builds, keeps tracked files read-only, denies secrets and escalation, while Antigravity and Copilot retain prompt/hook guards.
-- **Claude reporting sessions enforce read-only tracking** - A session overlay denies tracked edits and unapproved writes, permits reads and gitignored reporting paths, and stops rather than falling back when unsupported.
-- **`quality save` owns report destinations** - `quality save <project>` redacts and validates one stdin report, chooses a gitignored filename, and rejects caller-selected outputs or raw staging.
-- **Claude assessments persist without write-capable shell access** - Claude writes one draft; the dashboard validates, saves, deletes, and receipts it while finalized reports stay read-only. See ADR-044.
-- **Report capture fails closed through recovery** - Raw drafts live briefly in private staging before server redaction. Invalid, wrong-owner, or oversized drafts are deleted and receipted immediately; atomic per-draft claims prevent duplicate persistence across dashboard processes, stale claims fail closed, concurrent directory creation rejects redirected winners, and completed receipts are never replaced by late claimants.
-- **QA templates load on demand** - `/goat-qa` keeps analysis and gates hot, loading mirrored Standard or Audit templates only for rendering.
-- **Skill checks name their evidence** - Preflight labels wording checks as static, stops claiming `/goat-qa` implements the optional finding schema, and verifies progressive QA references through mirror and manifest contracts.
-- **Runtime boundaries cover the shipped surface** - Instructions protect dashboard server runtime, the code map includes managed setup and deny enforcement, and learning records cover access modes plus multi-root permissions.
-- **Cross-harness prompts require approval** - Launching `claude -p`, `codex exec`, `agy`, `copilot`, or the current harness CLI as a subprocess for a prompt is an instruction-level Ask First boundary; availability probes and native sub-agents remain unrestricted. See ADR-042.
-- **Shared references load as documented** - Router tables and the playbook index say `skill-conventions.md` loads only at full depth and never through `/goat`.
-- **Setup guidance includes the prose-style trigger** - goat-flow's shipped instruction files and selected-agent setup guidance include `prose style`; customized multi-agent instruction files must be updated individually without replacing local wording.
-- **goat-* prose edits preserve meaning and plan controls** - The shared writing-style playbook verifies source facts before style, protects status, requirements, uncertainty, human-authored passages and replies, and leaves approved milestone criteria and control repetition unchanged.
-- **Orientation docs cover the dashboard** - The code map accounts for every CLI-server and dashboard module; architecture describes roughly 20 TypeScript modules rather than only HTML and views.
-- **Evidence anchors resolve** - The glossary points to the live quality command; the deny footgun records `hooks verify` as shipped in 1.14.0 while external-runtime proof remains unbuilt.
-- **Content audits validate durable evidence across Markdown** - Semantic anchors resolve multiline and skill-local citations, CommonMark fence lengths keep examples excluded, unresolved emphasized answers fail readiness sections, and known local work-artifact roots stay outside the repository sweep.
-- **Deny hooks distinguish report data from shell commands** - Quoted heredocs for `quality save` and `redact` are treated as data to avoid false blocks; unrelated goat-flow subcommands and shell-piped heredocs remain inspectable.
-- **Deny policy modules share one parsed command context** - Each command segment is tokenized once before destructive, secret, and repository checks instead of repeating the same parse in every policy module.
-- **Review and debug dispositions stay coherent** - Review accepts explicit apply/edit/update/fix/implement authorization, while debug hypotheses and integrity totals include `ADJUSTED` alongside confirmed, eliminated, and unresolved outcomes.
-- **Version-skew audits fail safely** - An older CLI reports that the project is newer and suppresses template-relative agent, drift, and content findings; hook sync refuses to overwrite newer hooks, and configured release versions require numeric `X.Y.Z` form.
-- **`scripts/gruff-ts.sh` produces parseable output** - It runs the bundled binary from repo root for banner-free, config-aware JSON; no arguments prints `summary`, arguments pass through, and analyzer exits propagate as 1 for findings or 2 for diagnostics. A missing binary is a wrapper error with exit 1.
-- **gruff-ts findings clear without weaker rules** - Naming, documentation, and test fixes remove false findings and hidden skips; config only excludes generated logs and recognizes `capture`, `retry`, and `plans` boolean prefixes.
-- **Test fixtures explain purpose and effects** - Plain-English comments address gruff-ts documentation findings across the affected suites and make fixture intent visible without opening implementation files.
-- **Contract failures name their surface** - Contract loops register cases by file or rule, so TAP identifies drift; formerly looped cases register separately without reducing their behavioral scope.
-- **Multi-step sweeps use named helpers** - Five sweeps cover review anchors, plan timing, terminal races, audit limits, and Quality modes; failures name the missing heading, concern, or format instead of a raw index.
+- **Windows post-turn scans finish in under a second** - Batched scans take 0.655s on Git Bash and 0.027s on Linux for 25 files.
+- **Stop scans fail closed through Bash 3** - A 60-second budget blocks incomplete scans; path decoding and hook sync remain safe.
+- **Review validation matches workflow guidance** - Wrapped lists and code examples parse correctly; degraded reviews cannot overstate verdicts.
+- **Plan effort estimates are checkable** - Strict mode requires derived estimates and structured Actuals; ~70/20/10 remains advisory.
+- **Plan evidence fails closed** - Timing rejects invalid or conflicting receipts while previews redact rationale and preserve user files.
+- **Strict plan checks validate lifecycle and dependencies** - Missing sections, bad dependencies, and invalid human-review states fail.
+- **Plan exports include proof and stop conditions** - Exports normalize proof headings, kill criteria, and competing sections.
+- **goat-plan budgets the smallest complete result** - Milestones require outcomes, tasks, proof, exits, and stop conditions.
+- **Milestone timing uses durable receipts** - UTC spans track open and invalid clocks; strict checks require reconciled final Actuals.
+- **Actuals declare provenance** - Measured values require final receipts; retrospective, unavailable, and incomplete avoid invented precision.
+- **Forecast calibration stays optional** - Three measured milestones enable ratio bounds; smaller samples remain uncalibrated.
+- **Unclaimed legacy receipts stay advisory** - Only measured Actuals and active clocks require valid, reconciled receipt shapes.
+- **goat-debug verifies the reported bug** - D4 reruns the original reproduction and cleans approved diagnostics without deleting user files.
+- **goat-debug docs match behavior** - Guidance includes D1.5 minimization, both approvals, and the dashboard Fix Bug flow.
+- **Commit guidance gets a clearer filename** - New installs use `git-commit-message.md`; the legacy filename remains valid. See ADR-043.
+- **Dashboard terminals preserve access mode** - Reporting and workspace modes survive defaults, retries, and session rehydration.
+- **Codex reporting sessions enforce read-only tracking** - Profiles allow reads and ignored outputs while denying tracked edits and secrets.
+- **Claude reporting sessions enforce read-only tracking** - Session overlays allow approved reads and ignored paths but deny tracked edits.
+- **`quality save` owns report destinations** - It redacts and validates stdin, selects an ignored filename, and rejects caller outputs.
+- **Claude assessments persist without writable shells** - The dashboard validates drafts; finalized reports stay read-only. See ADR-044.
+- **Report capture fails closed through recovery** - Private staging, atomic claims, and receipts prevent unsafe duplicate persistence.
+- **QA templates load on demand** - `/goat-qa` loads Standard or Audit templates only when rendering.
+- **Skill checks name their evidence** - Preflight labels static checks accurately and verifies progressive QA mirrors and manifest references.
+- **Runtime boundaries cover the shipped surface** - Instructions, maps, and learning records cover server, setup, hooks, and multi-root access.
+- **Cross-harness prompts require approval** - Agent CLI prompts are Ask First; probes and native sub-agents remain unrestricted. See ADR-042.
+- **Shared references load as documented** - `skill-conventions.md` loads only at full depth, never through `/goat`.
+- **Setup guidance includes the prose-style trigger** - Shipped instructions include `prose style`; customized agent files keep local wording.
+- **goat-* prose edits preserve meaning and plan controls** - Style edits protect facts, status, uncertainty, human prose, and approved milestones.
+- **Orientation docs cover the dashboard** - Code maps cover CLI-server and dashboard modules; architecture reflects the TypeScript surface.
+- **Evidence anchors resolve** - The glossary targets the live quality command; deny-hook evidence distinguishes shipped and unbuilt proof.
+- **Content audits validate durable Markdown evidence** - Anchors, fences, readiness answers, and excluded work roots are checked correctly.
+- **Deny hooks separate report data from commands** - Quoted save/redact heredocs avoid false blocks while executable heredocs remain inspected.
+- **Deny policies share one parsed command context** - Destructive, secret, and repository checks reuse one tokenized command segment.
+- **Review and debug dispositions stay coherent** - Explicit fix authorization is accepted; integrity totals include `ADJUSTED`.
+- **Version-skew audits fail safely** - Older CLIs suppress unsafe relative findings; hook sync rejects newer hooks and malformed versions.
+- **`scripts/gruff-ts.sh` emits parseable output** - The wrapper runs from repo root, forwards arguments, and preserves analyzer exit classes.
+- **gruff-ts findings clear without weaker rules** - Code and test fixes remove false findings; config excludes only generated logs.
+- **Test fixtures explain purpose and effects** - Plain-English comments make fixture intent visible without reading implementation files.
+- **Contract failures name their surface** - File- and rule-named TAP cases expose drift without reducing behavioral coverage.
+- **Multi-step sweeps use named helpers** - Review, timing, terminal, audit, and quality sweeps report the missing concern or format.
 
 ## v1.14.0 - 2026-07-19
 

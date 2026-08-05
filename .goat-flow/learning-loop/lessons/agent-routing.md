@@ -1,6 +1,6 @@
 ---
 category: agent-routing
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: Bare task paths are context, not implementation approval
@@ -60,15 +60,22 @@ The user's point: "if it wasn't for that we wouldn't have found the better name.
 
 **Created:** 2026-04-14
 
+**Incident count:** 2
+
+**Latest occurrence:** 2026-08-06
+
 **What happened:** User asked to list all audit checks in config.yaml. Simple task. Instead of writing it once correctly, the agent: (1) added preflight checks the user never asked for, (2) used wrong section names that didn't match the dashboard, (3) put it in config.yaml as comments, (4) tried to move it into an existing doc instead of the requested new file, (5) entered plan mode for a follow-up dashboard task where the user had already given the exact spec, (6) wrote a memory file while still in plan mode. A task that should have been one turn took 5-10 turns and multiple corrections.
 
-**Root cause:** The agent treated a clear directive as ambiguous. The user said "add all the checks" - the agent added checks the user didn't ask for (preflight). The user pasted an exact 3-section dashboard mockup - the agent entered plan mode instead of implementing. Each time the user corrected, the agent made a different wrong assumption instead of asking or doing exactly what was said.
+On 2026-08-06, the user asked for each changelog bullet to be at most 150 characters. The agent wrapped unchanged text across multiple lines, satisfying a physical-line check while missing the requested reading limit.
+
+**Root cause:** The agent treated a clear directive as ambiguous. The user said "add all the checks" - the agent added checks the user didn't ask for (preflight). The user pasted an exact 3-section dashboard mockup - the agent entered plan mode instead of implementing. Each time the user corrected, the agent made a different wrong assumption instead of asking or doing exactly what was said. In the changelog incident, it treated a semantic-unit limit (each bullet) as a physical-line limit.
 
 **Prevention:**
 1. When the user gives a clear spec, implement it literally. Don't add scope. Don't reinterpret.
 2. A detailed mockup IS the plan. Don't enter plan mode when the user already told you what to build.
 3. If you're unsure what the user wants, ask one question. Don't guess across multiple turns.
 4. Never edit files in plan mode (except the plan file).
+5. Apply numeric limits to the named unit. "Each bullet at most 150 characters" means the complete bullet, on one line unless wrapping is explicitly requested.
 
 ---
 

@@ -63,6 +63,7 @@ Theme names must help a user decide whether to read further. Good: "Windows inst
 - Lead with effect, then add mechanism only when it helps trust or action.
 - Use plain English and short sentences.
 - Prefer bullets over paragraphs.
+- One physical line per bullet, 150 characters max; split or cut instead of hard-wrapping.
 - Say "Fixed duplicate search results", not "Refactored search reconciliation".
 - Say "Search results now load 3x faster", not "Improved performance".
 - Do not use "excited to announce", "game-changing", "powerful", or other launch-copy.
@@ -125,6 +126,7 @@ Before publishing:
 8. Version, date, and install/update location are present.
 9. A reader can decide whether to upgrade without reading commit history.
 10. The compression pass ran.
+11. Every bullet is one physical line within the 150-character cap.
 
 ## Troubleshooting
 

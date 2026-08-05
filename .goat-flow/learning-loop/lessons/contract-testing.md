@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-08-04
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: Reference-pack wording fixes must check word budget immediately
@@ -11,9 +11,9 @@ last_reviewed: 2026-08-04
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 24
+**Incident count:** 26
 
-**Latest occurrence:** 2026-08-04
+**Latest occurrence:** 2026-08-06
 
 **What happened:** Repeated wording edits and learning captures crossed caps. Unless noted, the gate is `test/contract/skill-hardening-contracts.test.ts`:
 
@@ -30,6 +30,7 @@ last_reviewed: 2026-08-04
 - **2026-08-03 v1.15 ship hardening:** Unifying goat-critique's meta-audit rubric left every mirrored SKILL.md at exactly 2,500 words, so the focused contract failed until the new pointer was compacted. Evidence anchor: `test/contract/skill-hardening-skills-2.test.ts` (search: `uses one reproducible goat-critique meta-audit rubric`).
 - **2026-08-03 goat-review base clause:** A one-clause scope fix added 23 words to a skill sitting at 2,498/2,500 and simultaneously reworded away a contract-pinned literal, so two contracts failed at once (search: `stops oversized inferred branch scopes before review begins`). Wording edits have two budgets, not one: the word cap AND the exact phrases contracts assert. Measure headroom and grep `test/` for the phrases being reworded BEFORE editing; when headroom is one word, attach the change to an unpinned line and pay for it with a same-line trim.
 - **2026-08-04 goat-review mutation vocabulary:** Synchronizing the five shared mutation verbs pushed the root skill to 2,506 words. The first compaction then removed the exact Spec Drift phrase pinned at `test/contract/skill-hardening-review-3.test.ts` (search: `keeps an unselected optional Spec Drift pass out of review degradation`). Restoring the pinned phrase and compacting unpinned optional-output prose returned the focused run to 3/3 pass; the iteration is recorded in `.goat-flow/logs/sessions/2026-08-04-goat-review-tdd.md`.
+- **2026-08-06 writing-style scope extension:** Adding a learning-loop Scope Gate row plus a Why paragraph pushed `writing-style.md` to 3,026 words; the fix trimmed the just-added paragraph, never pre-existing load-bearing text (search: `progressive reference packs stay within the 3000-word cap per file`). A same-day review-pass register edit then broke the pinned literal `Reports and reviews` because the pin grep ran before Stage A but not before the follow-up edit (search: `keeps writing-style edits truth-preserving and source-aware`); restoring the literal and attaching the addition as an unpinned clause returned both focused contracts to green.
 
 **Root cause:** Treated capped prose as tiny.
 
