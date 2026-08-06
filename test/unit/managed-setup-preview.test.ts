@@ -186,9 +186,7 @@ describe("managed setup prerequisites", () => {
       installerLaunch,
     );
 
-    // A selected Bash would make this fixture invalid instead of proving the user's blocker.
-    if (installerLaunch.ok) assert.fail("Expected missing Windows Bash");
-
+    assert.ok(!installerLaunch.ok, "Expected missing Windows Bash");
     assert.equal(blocked.verdict, "blocked");
     assert.equal(
       blocked.limits.includes(

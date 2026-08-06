@@ -378,14 +378,20 @@ describe("preflight Tests-phase progress", () => {
     assert.equal(await waitForFixtureProcessExit(workerProcessId), true);
   });
 
-  // A developer still gets a bounded timeout result when a test helper escapes and keeps output open.
+  // A developer still gets a bounded stop result when a test helper escapes and keeps output open.
   it(
     "returns after escalation when an escaped descendant retains the capture pipe",
     { skip: process.platform === "win32" },
     async () => {
+      const escapedPipeTemporaryDirectory = mkdtempSync(
+        join(tmpdir(), "goat-flow-preflight-escaped-pipe-"),
+      );
+      fixtureTemporaryDirectories.add(escapedPipeTemporaryDirectory);
+      const escapedPipeReadyFile = join(escapedPipeTemporaryDirectory, "ready");
       // This fixture reproduces a helper that escapes the test group while retaining its output.
       const escapedPipeFixtureSource = String.raw`
         const { spawn } = require("node:child_process");
+        const { writeFileSync } = require("node:fs");
         process.on("SIGTERM", () => {});
         const escapedOutputHolder = spawn(
           process.execPath,
@@ -395,11 +401,13 @@ describe("preflight Tests-phase progress", () => {
         process.stdout.write(
           "ESCAPED_OUTPUT_HOLDER_PID=" + escapedOutputHolder.pid + "\\n",
         );
+        writeFileSync(${JSON.stringify(escapedPipeReadyFile)}, "ready");
         setInterval(() => {}, 1000);
       `;
       const runnerResult = await runPreflightRunnerFixture({
-        timeoutSeconds: 0.1,
+        timeoutSeconds: 3,
         heartbeatSeconds: 0,
+        parentStopAfterFile: escapedPipeReadyFile,
         childSource: escapedPipeFixtureSource,
       });
       fixtureProcessId(
@@ -407,7 +415,7 @@ describe("preflight Tests-phase progress", () => {
         "ESCAPED_OUTPUT_HOLDER_PID",
       );
 
-      assert.equal(runnerResult.status, 124);
+      assert.equal(runnerResult.status, 143);
       assert.ok(
         runnerResult.closedAfterMs < 2_000,
         `runner returned after ${runnerResult.closedAfterMs}ms instead of its bounded cleanup window`,

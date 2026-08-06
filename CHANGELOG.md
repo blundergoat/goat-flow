@@ -3,6 +3,7 @@
 ## v1.15.0 - 2026-08-06
 
 - **Native Windows setup finds Git Bash and previews the real admission result** - Install discovery probes Git's standard machine and per-user locations when PATH exposes only the WSL shim, and `--dry-run` reports the same blocked prerequisite as a real install. Managed hook registrations now launch through Node and a shared Bash resolver, so they use the discovered Windows-compatible shell instead of bare `bash`.
+- **Preflight cleanup proof waits for observable readiness** - The escaped-output regression triggers process-group escalation only after its detached fixture exists, removing a 100 ms CI startup race without changing production timeout behavior.
 - **Windows post-turn scans finish in under a second** - Batched scans take 0.655s on Git Bash and 0.027s on Linux for 25 files.
 - **Stop scans fail closed through Bash 3** - A 60-second budget blocks incomplete scans; path decoding and hook sync remain safe.
 - **Review validation matches workflow guidance** - Wrapped lists and code examples parse correctly; degraded reviews cannot overstate verdicts.
