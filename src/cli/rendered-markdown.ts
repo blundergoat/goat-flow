@@ -594,3 +594,30 @@ export function maskNonRenderedMarkdown(content: string): string {
     })
     .join("");
 }
+
+/**
+ * Read every visible Markdown field value in source order.
+ * Use when a CLI action must ignore examples and decide whether the user's live field is unique.
+ *
+ * @param content - Markdown exactly as the user saved it; empty means no field is available
+ * @param fieldLabel - label shown in the milestone; empty means there is no field to match
+ * @returns trimmed visible values; empty means the field is absent from rendered Markdown
+ */
+export function readRenderedMarkdownFieldValues(
+  content: string,
+  fieldLabel: string,
+): string[] {
+  // Without a label, the CLI cannot identify a user-facing field safely.
+  if (fieldLabel.trim().length === 0) return [];
+
+  const escapedFieldLabel = fieldLabel.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const fieldPattern = new RegExp(
+    `^(?:\\*\\*${escapedFieldLabel}:\\*\\*|${escapedFieldLabel}:)[\\t ]*(.*?)[\\t ]*$`,
+    "gimu",
+  );
+  // A visible field with no value stays empty so the caller can explain what the user must fill in.
+  return Array.from(
+    maskNonRenderedMarkdown(content).matchAll(fieldPattern),
+    (fieldMatch) => fieldMatch[1]?.trim() ?? "",
+  );
+}

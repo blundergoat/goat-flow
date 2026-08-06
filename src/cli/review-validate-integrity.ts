@@ -254,8 +254,31 @@ function validateDegradationFlags(
   warnings: ReviewValidationViolation[],
 ): Set<string> {
   const field = fields.get("Degradation flags");
+  // A missing row is already explained by the required-field check shown to the reviewer.
   if (!field) return new Set();
-  const flags = new Set(field.value.split(",").map((flag) => flag.trim()));
+  const listedFlags = field.value.split(",").map((flag) => flag.trim());
+  const flags = new Set(listedFlags);
+
+  // An empty list item leaves the reviewer unable to tell which degradation was intended.
+  if (listedFlags.some((flag) => flag.length === 0)) {
+    addViolation(
+      violations,
+      "integrity-format",
+      field.line,
+      "Degradation flags must not contain an empty list item",
+    );
+  }
+
+  // "none" is the reader-facing claim that no degradation occurred, so another flag contradicts it.
+  if (flags.has("none") && listedFlags.some((flag) => flag !== "none")) {
+    addViolation(
+      violations,
+      "integrity-format",
+      field.line,
+      'Degradation flags cannot combine "none" with another flag',
+    );
+  }
+
   warnUnknownDegradationFlags(flags, field.line, warnings);
   validateRiskDepthConclusion(flags, fields, field.line, violations);
   return flags;

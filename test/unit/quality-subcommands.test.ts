@@ -1,5 +1,7 @@
 /**
- * Unit tests for quality CLI subcommand parsing.
+ * Verifies quality CLI parsing and bounded report persistence.
+ * Users reach these paths when they request, save, or inspect a quality run.
+ * The tests keep invalid input out of history without hiding recoverable legacy reports.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -36,10 +38,18 @@ import {
 import type { ParsedCLI } from "../../src/cli/cli-types.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
+import { parseQualityReport } from "../../src/cli/quality/schema.js";
 
 const CLI_USAGE_EXIT_CODE = 2;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 const QUALITY_REPORT_TOKEN_FIXTURE = `ghp_${"abcdefghijklmnopqrstuvwxyz"}`;
+
+/** Impossible formatted dates that current quality reports must reject. */
+const INVALID_CURRENT_RUN_DATES = [
+  "2026-02-29",
+  "2026-04-31",
+  "2026-13-01",
+] as const;
 
 /** Build one current report accepted by the strict quality schema. */
 function currentQualityReport(
@@ -245,6 +255,51 @@ describe("quality subcommand parsing", () => {
       () => parseCLIArgs(["audit", ".", "--all"]),
       /only valid for the quality command/i,
     );
+  });
+});
+
+describe("quality report run dates", () => {
+  /** A real leap day remains available to users saving a current quality report. */
+  it("accepts a real leap day in a current report", () => {
+    const projectRoot = resolve("quality-date-fixture");
+    const leapDayReport = parseQualityReport({
+      ...currentQualityReport(projectRoot),
+      run_date: "2028-02-29",
+    });
+    assert.equal(leapDayReport.ok, true);
+  });
+
+  // Each impossible date gets a named failure before it can enter current history.
+  for (const invalidRunDate of INVALID_CURRENT_RUN_DATES) {
+    /** The schema error tells the user to repair the calendar date before saving. */
+    it(`rejects current run date ${invalidRunDate}`, () => {
+      const projectRoot = resolve("quality-date-fixture");
+      const invalidReport = parseQualityReport({
+        ...currentQualityReport(projectRoot),
+        run_date: invalidRunDate,
+      });
+      assert.deepEqual(invalidReport, {
+        ok: false,
+        error: "report.run_date must be a real calendar date in YYYY-MM-DD",
+      });
+    });
+  }
+
+  /** Legacy history stays readable even when an old producer emitted an impossible formatted date. */
+  it("loads a legacy impossible date without admitting it as a current report", () => {
+    const projectRoot = resolve("quality-legacy-date-fixture");
+    const impossibleDateReport = {
+      ...currentQualityReport(projectRoot),
+      run_date: "2026-02-30",
+    };
+
+    assert.equal(
+      parseQualityReport(impossibleDateReport, {
+        requireCurrentFields: false,
+      }).ok,
+      true,
+    );
+    assert.equal(parseQualityReport(impossibleDateReport).ok, false);
   });
 });
 

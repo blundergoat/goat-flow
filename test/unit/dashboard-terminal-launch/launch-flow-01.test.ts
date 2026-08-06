@@ -221,7 +221,7 @@ describe("dashboard terminal launch flow", () => {
       targetPath: "/tmp/selected-target",
       accessMode: "reporting",
       captureQualityDrafts: true,
-      qualityDraftProjectPath: "/tmp/controlling-goat-flow",
+      qualityReportProjectPath: "/tmp/controlling-goat-flow",
     });
 
     assert.deepStrictEqual(createBodies, [
@@ -232,7 +232,7 @@ describe("dashboard terminal launch flow", () => {
         runner: "claude",
         accessMode: "reporting",
         captureQualityDrafts: true,
-        qualityDraftProjectPath: "/tmp/controlling-goat-flow",
+        qualityReportProjectPath: "/tmp/controlling-goat-flow",
       },
     ]);
   });

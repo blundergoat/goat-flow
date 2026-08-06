@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-08-02
+last_reviewed: 2026-08-07
 ---
 
 ## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
@@ -123,7 +123,7 @@ last_reviewed: 2026-08-02
 **Status:** active | **Created:** 2026-04-27
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-08-02
+**Incident count:** 7 | **Latest occurrence:** 2026-08-07
 
 **What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
 
@@ -137,7 +137,13 @@ last_reviewed: 2026-08-02
 
 **Recurrence 2026-08-02 (plans time):** The first end-to-end timing fixture declared one minute of other work in its headline while its counted task, proof, and plan/admin entries contained zero other minutes. Timing finalization succeeded, but the live strict check correctly failed on the unrelated accounting mismatch before the event-deletion assertion could prove receipt authority. Aligning the fixture headline with its counted `1 product / 1 proof / 0 other` baseline restored the intended proof. Evidence anchor: `test/unit/plans-time.test.ts` (search: `function writeTimingFixture`).
 
-**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+**Recurrence 2026-08-07:** A dashboard-reader regression added a Codex session to prove report ownership without Claude draft capture, but the VM fixture registered only Claude. `readServerSessionInfo` correctly rejected the unknown runner before reading the owner, and optional chaining made the assertion resemble a missing-field bug. Registering Codex in both injected runner collections let the test reach the intended contract. Evidence anchor: `test/unit/dashboard-readers.test.ts` (search: `preserves report ownership with and without Claude draft capture`).
+
+**Recurrence 2026-08-07 (plans time):** Replacing the timing test's inline milestone body with the shared canonical builder invalidated the editor-save substitution. The no-op replacement made the expected concurrent-edit error disappear. Anchoring the edit to text the shared builder emits and asserting that the replacement changed the fixture restored the intended proof. Evidence anchor: `test/unit/plans-time.test.ts` (search: `preserves an in-place user edit detected before atomic replacement`).
+
+**Recurrence 2026-08-07 (quality history):** The first impossible-date streak fixture placed `2026-02-30` beside a June report. The existing 30-day cutoff already broke continuity, so the test passed without proving that an impossible date cannot bridge a streak. Moving the surrounding dates within 30 days made the pre-fix test fail on JavaScript's calendar normalization and isolated the new rule. Evidence anchor: `test/unit/quality-diff-delta-tag.test.ts` (search: `an invalid legacy date`).
+
+**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
 ---
 

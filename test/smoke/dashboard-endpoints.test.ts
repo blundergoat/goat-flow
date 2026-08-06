@@ -48,7 +48,7 @@ interface TestTerminalSession {
   runner: "claude";
   accessMode: "workspace" | "reporting";
   captureQualityDrafts: boolean;
-  qualityDraftProjectPath: string | null;
+  qualityReportProjectPath: string | null;
   lastInputAt: number;
   pty: TestPty | null;
   ws: TerminalWebSocket | null;
@@ -165,7 +165,7 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
     runner: "claude",
     accessMode: "workspace",
     captureQualityDrafts: false,
-    qualityDraftProjectPath: null,
+    qualityReportProjectPath: null,
     lastInputAt: 0,
     pty,
     ws: null,
@@ -446,6 +446,34 @@ describe("terminal exports", () => {
     }
   });
 
+  it("cancels deferred prompt delivery when a reporting runner exits early", async () => {
+    const timers = enableTerminalMockTimers();
+    const manager = makeManager();
+    const internals = managerInternals(manager);
+    const spawned = makeSpawnedPty();
+    internals.runnerPaths.set("claude", "/usr/local/bin/claude");
+    internals.nodePtyModule = { spawn: () => spawned.pty };
+    internals.nodePtyAvailable = true;
+
+    try {
+      const created = await manager.create(
+        "run the quality report",
+        PROJECT_ROOT,
+        "claude",
+        { accessMode: "reporting" },
+      );
+      // For example, a user can close the runner before its launch prompt delay expires.
+      spawned.emitExit();
+      timers.tick(5000);
+
+      assert.deepStrictEqual(spawned.writes, []);
+      assert.equal(manager.get(created.id)?.status, "terminated");
+    } finally {
+      manager.shutdown();
+      timers.reset();
+    }
+  });
+
   it("releases quality capture only after PTY termination begins", async () => {
     const manager = makeManager();
     const internals = managerInternals(manager);
@@ -504,19 +532,19 @@ describe("terminal exports", () => {
     assert.equal(payload.includes("GOAT_PROMPT"), false);
   });
 
-  it("projects reporting capture intent into reconnectable session metadata", () => {
+  it("projects report ownership independently of Claude draft capture", () => {
     const manager = makeManager();
     const { session } = makeSession({
       accessMode: "reporting",
-      captureQualityDrafts: true,
-      qualityDraftProjectPath: "/tmp/project",
+      captureQualityDrafts: false,
+      qualityReportProjectPath: "/tmp/project",
     });
     managerInternals(manager).sessions.set(session.id, session);
 
     const projected = manager.list()[0];
 
-    assert.equal(projected?.captureQualityDrafts, true);
-    assert.equal(projected?.qualityDraftProjectPath, "/tmp/project");
+    assert.equal(projected?.captureQualityDrafts, false);
+    assert.equal(projected?.qualityReportProjectPath, "/tmp/project");
   });
 
   it("replays detached output exactly once when a browser reconnects", () => {

@@ -426,9 +426,9 @@ async function dashboardRetryTerminalSession(
   // Rehydrated sessions may have no launch ref, so retry falls back to their server-backed intent.
   const captureQualityDrafts =
     refs?.retryCaptureQualityDrafts ?? session.captureQualityDrafts;
-  // A null owner means the original session had no staged-report receipt channel.
-  const qualityDraftProjectPath =
-    refs?.retryQualityDraftProjectPath ?? session.qualityDraftProjectPath;
+  // A null owner means the original launch did not choose a mode-specific quality destination.
+  const qualityReportProjectPath =
+    refs?.retryQualityReportProjectPath ?? session.qualityReportProjectPath;
 
   dashboardClearTerminalLoadingTimers(ctx, sessionId);
   if (refs?.cleanup) refs.cleanup();
@@ -446,7 +446,7 @@ async function dashboardRetryTerminalSession(
     targetPath,
     accessMode,
     captureQualityDrafts,
-    ...(qualityDraftProjectPath ? { qualityDraftProjectPath } : {}),
+    ...(qualityReportProjectPath ? { qualityReportProjectPath } : {}),
   });
 }
 
@@ -469,7 +469,7 @@ async function dashboardOpenServerSession(
   if (local) {
     local.accessMode = serverSession.accessMode;
     local.captureQualityDrafts = serverSession.captureQualityDrafts;
-    local.qualityDraftProjectPath = serverSession.qualityDraftProjectPath;
+    local.qualityReportProjectPath = serverSession.qualityReportProjectPath;
     ctx.activeSessionId = local.id;
     ctx.activeView = "workspace";
     ctx.workspacePanel = "terminal";
@@ -485,7 +485,7 @@ async function dashboardOpenServerSession(
         retryTargetPath: local.targetPath,
         retryAccessMode: local.accessMode,
         retryCaptureQualityDrafts: local.captureQualityDrafts,
-        retryQualityDraftProjectPath: local.qualityDraftProjectPath,
+        retryQualityReportProjectPath: local.qualityReportProjectPath,
       };
       dashboardArmTerminalLoadingTimers(ctx, local.id, local);
       const self = ctx as DashboardTerminalContext &
@@ -508,7 +508,7 @@ async function dashboardOpenServerSession(
     targetPath: serverSession.targetPath,
     accessMode: serverSession.accessMode,
     captureQualityDrafts: serverSession.captureQualityDrafts,
-    qualityDraftProjectPath: serverSession.qualityDraftProjectPath,
+    qualityReportProjectPath: serverSession.qualityReportProjectPath,
     startTime: new Date(serverSession.createdAt).getTime(),
     lastInputTime: serverSession.lastInputAt || Date.now(),
     connected: false,
@@ -530,7 +530,7 @@ async function dashboardOpenServerSession(
     retryTargetPath: session.targetPath,
     retryAccessMode: session.accessMode,
     retryCaptureQualityDrafts: session.captureQualityDrafts,
-    retryQualityDraftProjectPath: session.qualityDraftProjectPath,
+    retryQualityReportProjectPath: session.qualityReportProjectPath,
   };
   dashboardArmTerminalLoadingTimers(ctx, session.id, session);
   ctx.activeSessionId = session.id;

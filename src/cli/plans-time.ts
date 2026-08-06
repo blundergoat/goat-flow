@@ -1,6 +1,7 @@
 /**
  * Prospective timing for goat-plan milestones. The milestone-local receipt is the validation authority;
  * evidence-envelope events are best-effort transition diagnostics and are never read back here.
+ * Users start, pause, recover, and finalize timing inside the milestone they selected.
  */
 import { randomUUID } from "node:crypto";
 import {
@@ -36,7 +37,10 @@ import {
   type PlanTimingReceiptState,
   type PlanTimingSegment,
 } from "./plans-time-receipt.js";
-import { maskNonRenderedMarkdown } from "./rendered-markdown.js";
+import {
+  maskNonRenderedMarkdown,
+  readRenderedMarkdownFieldValues,
+} from "./rendered-markdown.js";
 
 /** Stable CLI errors that tell users how to recover without echoing milestone content. */
 const TIMING_ERROR = {
@@ -335,12 +339,15 @@ function writeActualField(content: string, actualLine: string): string {
 }
 
 /**
- * Replace one milestone only when neither an editor save nor path swap changed what the user selected.
- * The temporary file stays adjacent so the successful replacement remains atomic for dashboard readers.
- * @param initialContext - verified milestone identity captured before reading the user's file
- * @param milestoneContentAtRead - exact content the timing transition was calculated from
- * @param updatedMilestoneContent - receipt and Actual content ready for atomic replacement
- * @param beforeMilestoneReplacement - test-only editor-save simulation; omitted during normal CLI use
+ * Atomically replace one milestone after checking that a normal editor did not save a newer version.
+ * The identity/content recheck covers cooperative local edits, not a hostile actor swapping an ancestor
+ * after that final check; the adjacent temporary file keeps successful dashboard reads all-or-nothing.
+ *
+ * @param initialContext - verified milestone identity captured before reading; never null after path admission
+ * @param milestoneContentAtRead - exact content used for the transition; empty means the user selected an empty milestone
+ * @param updatedMilestoneContent - generated receipt and Actual content; never empty after a valid transition
+ * @param beforeMilestoneReplacement - test-only editor-save simulation; omitted in the user-facing CLI flow
+ * @returns nothing; success replaces the milestone, while an error leaves the user's selected file unchanged
  */
 function writeMilestoneAtomically(
   initialContext: PlanFileContext,
@@ -372,9 +379,11 @@ function writeMilestoneAtomically(
     // Atomic and in-place editor saves both mean the user's newer file must win.
     if (destinationIdentityChanged || destinationContentChanged)
       throw new CLIError(TIMING_ERROR.concurrentEdit, 2);
+    // This cooperative check does not pin ancestor handles against a hostile swap before rename.
     renameSync(tempPath, initialContext.milestonePath);
   } catch (error) {
     // Example: the user saves in another editor, or the disk rejects the temporary write.
+    // A null descriptor means the temporary file was already closed before this failure.
     if (descriptor !== null) closeSync(descriptor);
     // A failed transition must not leave a hidden temporary file beside the user's milestone.
     if (existsSync(tempPath)) unlinkSync(tempPath);
@@ -648,9 +657,33 @@ export function applyPlanTimeTransition(
 ): PlanTimeCommandResult {
   const context = resolvePlanFileContext(milestoneInputPath);
   const content = readFileSync(context.milestonePath, "utf-8");
+
+  // Start is available only while the milestone shows one active execution state to the user.
+  if (transition.action === "start") {
+    const milestoneStatuses = readRenderedMarkdownFieldValues(
+      content,
+      "Status",
+    );
+    // Missing, competing, empty, or inactive values leave no trustworthy execution state.
+    const hasOneActiveMilestoneStatus =
+      milestoneStatuses.length === 1 &&
+      ["in-progress", "testing-gate"].includes(
+        milestoneStatuses[0]?.toLowerCase() ?? "",
+      );
+    // Without one active state, no new clock starts; later receipt recovery remains available.
+    if (!hasOneActiveMilestoneStatus) {
+      throw new CLIError(
+        "Timing Start requires exactly one rendered Status field set to `in-progress` or `testing-gate`.",
+        2,
+      );
+    }
+  }
+
   const receipt = readReceipt(content);
 
+  // Status lets the author inspect existing evidence without changing the milestone or its clock.
   if (transition.action === "status") {
+    // Without recorded work, there is no receipt state for the command to show.
     if (receipt.segments.length === 0) {
       throw new CLIError("Milestone has no Timing Receipt yet.", 2);
     }
@@ -679,6 +712,7 @@ export function applyPlanTimeTransition(
     transition,
     transitioned.receipt,
   );
+  // Finalize or discard updates the Actual line the author reads beside the estimate.
   if (actualLine) nextContent = writeActualField(nextContent, actualLine);
   writeMilestoneAtomically(
     context,

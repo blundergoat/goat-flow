@@ -1197,7 +1197,7 @@ print_reviewability_guidance() {
       *" size."*|*" design.circular-import"*)
         [[ "$shown_structure" -eq 1 ]] || {
           shown_structure=1
-          printf 'gruff-code-quality: structural findings are review cost - split along the concern a reader follows, then re-run `goat-flow stats --check`, because moving a symbol breaks learning-loop anchors that no compiler can see.\n'
+          printf "gruff-code-quality: structural findings are review cost - split along the concern a reader follows, then re-run \`goat-flow stats --check\`, because moving a symbol breaks learning-loop anchors that no compiler can see.\n"
         }
         ;;
     esac

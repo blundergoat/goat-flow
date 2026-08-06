@@ -123,7 +123,7 @@ describe("decodeTerminalCreateBody", () => {
     assert.equal(assertDecodeError(result).path, "body.accessMode");
   });
 
-  it("treats staged-draft capture as opt-in and typed", () => {
+  it("types report ownership separately from Claude draft capture", () => {
     // Absent means an ordinary launch: no staging tree in the selected target.
     const absent = decodeTerminalCreateBody(
       JSON.stringify({ accessMode: "reporting" }),
@@ -131,19 +131,19 @@ describe("decodeTerminalCreateBody", () => {
     );
     const absentValue = assertDecodeOk(absent);
     assert.equal(absentValue.captureQualityDrafts, false);
-    assert.equal(absentValue.qualityDraftProjectPath, "");
+    assert.equal(absentValue.qualityReportProjectPath, "");
 
     const requested = decodeTerminalCreateBody(
       JSON.stringify({
         accessMode: "reporting",
         captureQualityDrafts: true,
-        qualityDraftProjectPath: "/tmp/report-owner",
+        qualityReportProjectPath: "/tmp/report-owner",
       }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
     const requestedValue = assertDecodeOk(requested);
     assert.equal(requestedValue.captureQualityDrafts, true);
-    assert.equal(requestedValue.qualityDraftProjectPath, "/tmp/report-owner");
+    assert.equal(requestedValue.qualityReportProjectPath, "/tmp/report-owner");
 
     const missingOwner = decodeTerminalCreateBody(
       JSON.stringify({
@@ -155,16 +155,41 @@ describe("decodeTerminalCreateBody", () => {
     );
     assert.equal(
       assertDecodeError(missingOwner).path,
-      "body.qualityDraftProjectPath",
+      "body.qualityReportProjectPath",
     );
 
-    const ownerWithoutCapture = decodeTerminalCreateBody(
-      JSON.stringify({ qualityDraftProjectPath: "/tmp/report-owner" }),
+    const codexOwner = decodeTerminalCreateBody(
+      JSON.stringify({
+        runner: "codex",
+        accessMode: "reporting",
+        qualityReportProjectPath: "/tmp/report-owner",
+      }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    const codexOwnerValue = assertDecodeOk(codexOwner);
+    assert.equal(codexOwnerValue.captureQualityDrafts, false);
+    assert.equal(codexOwnerValue.qualityReportProjectPath, "/tmp/report-owner");
+
+    const ownerOutsideReporting = decodeTerminalCreateBody(
+      JSON.stringify({ qualityReportProjectPath: "/tmp/report-owner" }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
     assert.equal(
-      assertDecodeError(ownerWithoutCapture).path,
-      "body.qualityDraftProjectPath",
+      assertDecodeError(ownerOutsideReporting).path,
+      "body.qualityReportProjectPath",
+    );
+
+    const unsupportedRunnerOwner = decodeTerminalCreateBody(
+      JSON.stringify({
+        runner: "copilot",
+        accessMode: "reporting",
+        qualityReportProjectPath: "/tmp/report-owner",
+      }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(
+      assertDecodeError(unsupportedRunnerOwner).path,
+      "body.qualityReportProjectPath",
     );
 
     const invalid = decodeTerminalCreateBody(
@@ -178,13 +203,13 @@ describe("decodeTerminalCreateBody", () => {
         runner: "claude",
         accessMode: "reporting",
         captureQualityDrafts: true,
-        qualityDraftProjectPath: 42,
+        qualityReportProjectPath: 42,
       }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
     assert.equal(
       assertDecodeError(invalidOwner).path,
-      "body.qualityDraftProjectPath",
+      "body.qualityReportProjectPath",
     );
 
     for (const invalidCombination of [
@@ -195,7 +220,7 @@ describe("decodeTerminalCreateBody", () => {
         JSON.stringify({
           ...invalidCombination,
           captureQualityDrafts: true,
-          qualityDraftProjectPath: "/tmp/report-owner",
+          qualityReportProjectPath: "/tmp/report-owner",
         }),
         { validRunners: RUNNERS, defaultRunner: "claude" },
       );

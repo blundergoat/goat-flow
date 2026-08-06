@@ -317,7 +317,7 @@ interface DashboardTerminalLaunchOptions {
   targetPath?: string | null;
   accessMode?: TerminalAccessMode;
   captureQualityDrafts?: boolean;
-  qualityDraftProjectPath?: string | null;
+  qualityReportProjectPath?: string | null;
 }
 
 /**
@@ -400,7 +400,7 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         targetPath = null,
         accessMode = "workspace",
         captureQualityDrafts = false,
-        qualityDraftProjectPath = null,
+        qualityReportProjectPath = null,
       }: DashboardTerminalLaunchOptions = {},
     ) {
       await dashboardLaunchInTerminal(this, prompt, runner, {
@@ -410,7 +410,7 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         targetPath,
         accessMode,
         captureQualityDrafts,
-        qualityDraftProjectPath,
+        qualityReportProjectPath,
       });
     },
   };

@@ -23,6 +23,7 @@ import {
   type QualityDiffResult,
   type QualityHistoryEntry,
 } from "./history.js";
+import { isRealCalendarDate } from "./schema-parser.js";
 
 /**
  * Rank a finding severity for user-facing sort order.
@@ -45,9 +46,13 @@ function severityRank(severity: SavedQualityFinding["severity"]): number {
  *
  * @param newerDate - newer run date in YYYY-MM-DD; empty/invalid values produce an invalid date gap
  * @param olderDate - older run date in YYYY-MM-DD; empty/invalid values produce an invalid date gap
- * @returns rounded day gap; large gaps break stuck-finding continuity
+ * @returns whole-day gap, or `null` when either date cannot prove continuity
  */
-function daysBetween(newerDate: string, olderDate: string): number {
+function daysBetween(newerDate: string, olderDate: string): number | null {
+  // Invalid legacy dates stay loadable but cannot make a finding look continuously stuck.
+  if (!isRealCalendarDate(newerDate) || !isRealCalendarDate(olderDate)) {
+    return null;
+  }
   const newer = new Date(`${newerDate}T00:00:00Z`);
   const older = new Date(`${olderDate}T00:00:00Z`);
   return Math.round((newer.getTime() - older.getTime()) / 86_400_000);
@@ -120,9 +125,12 @@ function countConsecutivePresence(
     if (entry === undefined) break;
     // Long gaps mean the user should not treat this as continuous unresolved work.
     if (previousEntry !== undefined) {
-      if (
-        daysBetween(previousEntry.report.run_date, entry.report.run_date) > 30
-      ) {
+      const dayGap = daysBetween(
+        previousEntry.report.run_date,
+        entry.report.run_date,
+      );
+      // Invalid, reversed, or stale dates cannot prove consecutive unresolved work.
+      if (dayGap === null || dayGap < 0 || dayGap > 30) {
         break;
       }
     }

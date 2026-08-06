@@ -388,6 +388,31 @@ describe("review output validation: ledger, sections, and verdict", () => {
     );
   });
 
+  it("rejects empty or contradictory degradation flag lists", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const emptyFlag = validReview().replace(
+      "- Degradation flags: gates-not-run",
+      "- Degradation flags: gates-not-run,",
+    );
+    const contradictoryNone = validReview().replace(
+      "- Degradation flags: gates-not-run",
+      "- Degradation flags: none, gates-not-run",
+    );
+
+    assert.match(
+      validateReviewReport(emptyFlag, projectRoot)
+        .violations.map((violation) => violation.message)
+        .join("\n"),
+      /must not contain an empty list item/u,
+    );
+    assert.match(
+      validateReviewReport(contradictoryNone, projectRoot)
+        .violations.map((violation) => violation.message)
+        .join("\n"),
+      /cannot combine "none" with another flag/u,
+    );
+  });
+
   it("warns for conditional Top 5 and empty optional-section defects", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const prematureTopFive = validateReviewReport(

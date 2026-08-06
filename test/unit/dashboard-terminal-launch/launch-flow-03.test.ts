@@ -392,7 +392,7 @@ describe("dashboard terminal launch flow", () => {
     const refs = ctx._terminalRefs["session-error"];
     if (refs) {
       refs.retryCaptureQualityDrafts = true;
-      refs.retryQualityDraftProjectPath = "/tmp/report-owner";
+      refs.retryQualityReportProjectPath = "/tmp/report-owner";
     }
 
     await helpers.dashboardRetryTerminalSession(ctx, "session-error");
@@ -407,9 +407,9 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(
       (
         launchCalls[0]?.options as {
-          qualityDraftProjectPath?: string | null;
+          qualityReportProjectPath?: string | null;
         }
-      )?.qualityDraftProjectPath,
+      )?.qualityReportProjectPath,
       "/tmp/report-owner",
     );
   });
@@ -417,7 +417,7 @@ describe("dashboard terminal launch flow", () => {
   it("falls back to rehydrated session capture metadata when retry refs are absent", async () => {
     const { ctx, helpers, launchCalls, session } = makePreOutputRetryHarness();
     session.captureQualityDrafts = true;
-    session.qualityDraftProjectPath = "/tmp/report-owner";
+    session.qualityReportProjectPath = "/tmp/report-owner";
 
     await helpers.dashboardRetryTerminalSession(ctx, "session-error");
 
@@ -429,9 +429,9 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(
       (
         launchCalls[0]?.options as {
-          qualityDraftProjectPath?: string | null;
+          qualityReportProjectPath?: string | null;
         }
-      )?.qualityDraftProjectPath,
+      )?.qualityReportProjectPath,
       "/tmp/report-owner",
     );
   });

@@ -19,7 +19,7 @@ interface TerminalCreateBody {
   runner: Runner;
   accessMode: TerminalAccessMode;
   captureQualityDrafts: boolean;
-  qualityDraftProjectPath: string;
+  qualityReportProjectPath: string;
 }
 
 /** Dashboard project-list state after omitted optional collections use their state-file fallbacks. */
@@ -159,7 +159,7 @@ function decodeStringArrayField(
  */
 function decodeOptionalStringField(
   raw: Record<string, unknown>,
-  key: "prompt" | "projectPath" | "targetPath" | "qualityDraftProjectPath",
+  key: "prompt" | "projectPath" | "targetPath" | "qualityReportProjectPath",
 ): DecodeResult<string> {
   // Missing optional terminal fields mean "use the route default" instead of blocking launch.
   if (!Object.hasOwn(raw, key)) {
@@ -284,27 +284,37 @@ export function decodeTerminalCreateBody(
     );
   }
 
-  const qualityDraftProjectPath = decodeOptionalStringField(
+  const qualityReportProjectPath = decodeOptionalStringField(
     raw,
-    "qualityDraftProjectPath",
+    "qualityReportProjectPath",
   );
-  if (!qualityDraftProjectPath.ok) return qualityDraftProjectPath;
-  if (
-    captureQualityDrafts.value &&
-    qualityDraftProjectPath.value.trim().length === 0
-  ) {
+  // A non-string owner cannot be matched safely to the projects visible in the launch.
+  if (!qualityReportProjectPath.ok) return qualityReportProjectPath;
+  const hasQualityReportOwner =
+    qualityReportProjectPath.value.trim().length > 0;
+  // Claude draft capture needs one owner so its receipt cannot land in an inferred project.
+  if (captureQualityDrafts.value && !hasQualityReportOwner) {
     return err(
-      "body.qualityDraftProjectPath",
+      "body.qualityReportProjectPath",
       "is required when staged-draft capture is enabled",
     );
   }
+  // Report ownership only has meaning in the read-mostly reporting mode shown by Quality.
+  if (hasQualityReportOwner && accessMode.value !== "reporting") {
+    return err(
+      "body.qualityReportProjectPath",
+      "is supported only for reporting sessions",
+    );
+  }
+  // Other runners have no enforceable report-owner channel, so accepting one would overstate isolation.
   if (
-    !captureQualityDrafts.value &&
-    qualityDraftProjectPath.value.trim().length > 0
+    hasQualityReportOwner &&
+    runner.value !== "claude" &&
+    runner.value !== "codex"
   ) {
     return err(
-      "body.qualityDraftProjectPath",
-      "requires staged-draft capture to be enabled",
+      "body.qualityReportProjectPath",
+      "is supported only for Claude or Codex reporting sessions",
     );
   }
 
@@ -317,7 +327,7 @@ export function decodeTerminalCreateBody(
       runner: runner.value,
       accessMode: accessMode.value,
       captureQualityDrafts: captureQualityDrafts.value,
-      qualityDraftProjectPath: qualityDraftProjectPath.value,
+      qualityReportProjectPath: qualityReportProjectPath.value,
     },
   };
 }

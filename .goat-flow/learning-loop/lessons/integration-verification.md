@@ -1,6 +1,6 @@
 ---
 category: integration-verification
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-07
 ---
 
 ## Lesson: Manifest canonical vs stale_names misclassification silently broke skill installs
@@ -171,7 +171,7 @@ A third incident added a Claude/reporting-only relationship ahead of the owner r
 
 **Root cause:** I treated omitted/defaulted fields as harmless while testing one relationship, even though an earlier relationship could legitimately reject the same payload first.
 
-**Fix and prevention:** Add omission RED tests before implementation. Required values must fail when absent; optional transport metadata must be omitted rather than converted to a new sentinel value. In each relationship test, make every preceding prerequisite explicit and valid so the assertion proves the intended error path. Cover enabled-with-owner, enabled-without-owner, disabled-with-owner, wrong-runner/mode, and retry payload presence/absence. Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`), `src/cli/server/decoders.ts` (search: `is supported only for Claude reporting sessions`), `src/dashboard/dashboard-terminal-connect.ts` (search: `qualityDraftProjectPath ?`), and `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts` (search: `carries staged-draft capture through a retried launch`).
+**Fix and prevention:** Add omission RED tests before implementation. Required values must fail when absent; optional transport metadata must be omitted rather than converted to a new sentinel value. In each relationship test, make every preceding prerequisite explicit and valid so the assertion proves the intended error path. Cover capture enabled with and without an owner, owner present with and without capture for each supported runner and mode, wrong-runner/mode, and retry payload presence/absence. Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`), `src/cli/server/decoders.ts` (search: `is supported only for Claude reporting sessions`), `src/dashboard/dashboard-terminal-connect.ts` (search: `qualityReportProjectPath ?`), and `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts` (search: `carries staged-draft capture through a retried launch`).
 
 ---
 

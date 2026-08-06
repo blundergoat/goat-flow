@@ -72,8 +72,8 @@ interface TerminalSession {
   accessMode: TerminalAccessMode;
   /** Whether retry/reconnect must restore the dashboard-owned quality receipt channel. */
   captureQualityDrafts: boolean;
-  /** Validated report-owner root, or null when this session has no staged report capture. */
-  qualityDraftProjectPath: string | null;
+  /** Validated mode-selected report owner, or null when this launch did not declare one. */
+  qualityReportProjectPath: string | null;
   lastInputAt: number;
   pty: IPty | null;
   ws: WebSocket | null;
@@ -156,7 +156,7 @@ class TerminalManager {
       targetPath?: string;
       accessMode?: TerminalAccessMode;
       captureQualityDrafts?: boolean;
-      qualityDraftProjectPath?: string;
+      qualityReportProjectPath?: string;
     } = {},
   ): Promise<CreateResponse> {
     const activeSessions = Array.from(this.sessions.values()).filter(
@@ -184,7 +184,7 @@ class TerminalManager {
       runner,
       accessMode: options.accessMode ?? "workspace",
       captureQualityDrafts: false,
-      qualityDraftProjectPath: null,
+      qualityReportProjectPath: null,
       lastInputAt: Date.now(),
       pty: null,
       ws: null,
@@ -232,7 +232,7 @@ class TerminalManager {
       targetPath?: string;
       accessMode?: TerminalAccessMode;
       captureQualityDrafts?: boolean;
-      qualityDraftProjectPath?: string;
+      qualityReportProjectPath?: string;
     },
   ): Promise<CreateResponse> {
     const { id, runner } = session;
@@ -249,27 +249,27 @@ class TerminalManager {
     const validatedTarget = validateProjectPath(
       options.targetPath || validatedCwd,
     );
-    const validatedQualityDraftProject = options.qualityDraftProjectPath
-      ? validateProjectPath(options.qualityDraftProjectPath)
+    const validatedQualityReportProject = options.qualityReportProjectPath
+      ? validateProjectPath(options.qualityReportProjectPath)
       : null;
-    // A missing owner means this launch has no report receipt channel to restore later.
-    const canonicalQualityDraftProject =
-      validatedQualityDraftProject === null
+    // A missing owner means this launch has no mode-specific report destination to restore later.
+    const canonicalQualityReportProject =
+      validatedQualityReportProject === null
         ? null
-        : realpathSync(validatedQualityDraftProject);
+        : realpathSync(validatedQualityReportProject);
+    let qualityReportProjectPath: string | null = null;
     // A supplied owner must remain one of the projects the user deliberately launched.
-    if (canonicalQualityDraftProject !== null) {
-      const allowedOwners = new Set(
-        [validatedCwd, validatedTarget].map((rootPath) =>
-          realpathSync(rootPath),
-        ),
+    if (canonicalQualityReportProject !== null) {
+      const allowedReportOwner = [validatedCwd, validatedTarget].find(
+        (rootPath) => realpathSync(rootPath) === canonicalQualityReportProject,
       );
-      // A different owner could redirect a reporting draft into an unrelated project.
-      if (!allowedOwners.has(canonicalQualityDraftProject)) {
+      // A different owner could redirect a quality report into an unrelated project.
+      if (!allowedReportOwner) {
         throw new Error(
-          "Quality draft report owner must match the terminal workspace or selected target.",
+          "Quality report owner must match the terminal workspace or selected target.",
         );
       }
+      qualityReportProjectPath = allowedReportOwner;
     }
     // Staging must exist BEFORE the permission overlay is built below so a
     // fresh target still receives its `.goat-flow/logs` write allow. Failure
@@ -279,10 +279,10 @@ class TerminalManager {
       runner,
       session.accessMode,
       options.captureQualityDrafts === true,
-      canonicalQualityDraftProject,
+      qualityReportProjectPath,
     );
     session.captureQualityDrafts = reportingCaptureRoots.length > 0;
-    session.qualityDraftProjectPath = reportingCaptureRoots[0] ?? null;
+    session.qualityReportProjectPath = qualityReportProjectPath;
     // Each capture root must exist before Claude receives permission to write its one draft.
     for (const captureRoot of reportingCaptureRoots) {
       ensureQualityDraftStagingDirectory(captureRoot);
@@ -299,6 +299,7 @@ class TerminalManager {
         accessMode: session.accessMode,
         projectPath: validatedCwd,
         targetPath: validatedTarget,
+        ...(qualityReportProjectPath ? { qualityReportProjectPath } : {}),
       },
     );
 
@@ -731,7 +732,7 @@ class TerminalManager {
       runner: session.runner,
       accessMode: session.accessMode,
       captureQualityDrafts: session.captureQualityDrafts,
-      qualityDraftProjectPath: session.qualityDraftProjectPath,
+      qualityReportProjectPath: session.qualityReportProjectPath,
       lastInputAt: session.lastInputAt,
     };
   }

@@ -445,7 +445,7 @@ async function dashboardLaunchPreset(
     targetPath?: string | null;
     accessMode?: TerminalAccessMode;
     captureQualityDrafts?: boolean;
-    qualityDraftProjectPath?: string | null;
+    qualityReportProjectPath?: string | null;
   } = {},
 ): Promise<void> {
   // A launch is already in progress, so ignore duplicate button clicks.
@@ -494,7 +494,7 @@ async function dashboardLaunchPreset(
     targetPath: options.targetPath ?? ctx.projectPath,
     accessMode,
     captureQualityDrafts: options.captureQualityDrafts === true,
-    qualityDraftProjectPath: options.qualityDraftProjectPath ?? null,
+    qualityReportProjectPath: options.qualityReportProjectPath ?? null,
   });
 }
 
@@ -551,7 +551,7 @@ function dashboardDetachTerminal(
       targetPath: s.targetPath,
       accessMode: s.accessMode,
       captureQualityDrafts: s.captureQualityDrafts,
-      qualityDraftProjectPath: s.qualityDraftProjectPath,
+      qualityReportProjectPath: s.qualityReportProjectPath,
     }));
   if (toSave.length > 0) {
     ctx._projectSessions[savePath] = toSave;
@@ -622,8 +622,8 @@ async function dashboardReconnectTerminal(
     const reconnectCaptureQualityDrafts =
       alive.captureQualityDrafts || saved.captureQualityDrafts;
     // Prefer the backend's validated owner; a missing legacy value falls back to the saved launch owner.
-    const reconnectQualityDraftProjectPath =
-      alive.qualityDraftProjectPath ?? saved.qualityDraftProjectPath;
+    const reconnectQualityReportProjectPath =
+      alive.qualityReportProjectPath ?? saved.qualityReportProjectPath;
     const session: LocalSession = {
       id: saved.sessionId,
       runner: saved.agent,
@@ -633,7 +633,7 @@ async function dashboardReconnectTerminal(
       targetPath: alive.targetPath || saved.targetPath || alive.projectPath,
       accessMode: alive.accessMode,
       captureQualityDrafts: reconnectCaptureQualityDrafts,
-      qualityDraftProjectPath: reconnectQualityDraftProjectPath,
+      qualityReportProjectPath: reconnectQualityReportProjectPath,
       startTime: saved.startTime,
       lastInputTime: alive.lastInputAt,
       connected: false,
@@ -655,7 +655,7 @@ async function dashboardReconnectTerminal(
       retryTargetPath: session.targetPath,
       retryAccessMode: session.accessMode,
       retryCaptureQualityDrafts: session.captureQualityDrafts,
-      retryQualityDraftProjectPath: session.qualityDraftProjectPath,
+      retryQualityReportProjectPath: session.qualityReportProjectPath,
     };
     dashboardArmTerminalLoadingTimers(ctx, session.id, session);
   }
@@ -687,7 +687,7 @@ async function dashboardLaunchInTerminal(
     targetPath = null,
     accessMode = "workspace",
     captureQualityDrafts = false,
-    qualityDraftProjectPath = null,
+    qualityReportProjectPath = null,
   }: {
     promptLabel?: string | null;
     presetId?: string | null;
@@ -695,7 +695,7 @@ async function dashboardLaunchInTerminal(
     targetPath?: string | null;
     accessMode?: TerminalAccessMode;
     captureQualityDrafts?: boolean;
-    qualityDraftProjectPath?: string | null;
+    qualityReportProjectPath?: string | null;
   } = {},
 ): Promise<void> {
   if (
@@ -731,7 +731,7 @@ async function dashboardLaunchInTerminal(
         runner,
         accessMode,
         captureQualityDrafts,
-        ...(qualityDraftProjectPath ? { qualityDraftProjectPath } : {}),
+        ...(qualityReportProjectPath ? { qualityReportProjectPath } : {}),
       }),
     });
     const payload = readRecord(await res.json(), "Terminal create response");
@@ -751,7 +751,7 @@ async function dashboardLaunchInTerminal(
       targetPath: selectedTargetPath,
       accessMode,
       captureQualityDrafts,
-      qualityDraftProjectPath,
+      qualityReportProjectPath,
       startTime: Date.now(),
       lastInputTime: Date.now(),
       connected: false,
@@ -777,7 +777,7 @@ async function dashboardLaunchInTerminal(
       // Retry must reopen with capture too, or the retried report has nowhere
       // to persist and the agent waits on a receipt that never arrives.
       retryCaptureQualityDrafts: captureQualityDrafts,
-      retryQualityDraftProjectPath: qualityDraftProjectPath,
+      retryQualityReportProjectPath: qualityReportProjectPath,
     };
     dashboardArmTerminalLoadingTimers(ctx, session.id, session);
     ctx.activeSessionId = session.id;

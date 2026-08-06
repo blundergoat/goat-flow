@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-07
 ---
 
 ## Lesson: Agent cited gitignored content as evidence in committed docs
@@ -78,3 +78,20 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Root cause:** A multi-pattern grep piped through `head` answers "what appears early", not "does X appear at all". The absence conclusion was drawn from a presence-oriented, truncated probe.
 
 **Prevention:** Before claiming a pattern is absent from a file or repo, rerun the exact single pattern with no `head`/`tail` truncation (or `grep -c`). Treat any `| head` output as a sample, never as evidence of absence. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
+
+---
+
+## Lesson: A learning-loop entry's evidence lines are claims, not proof
+
+**Status:** active | **Created:** 2026-08-07
+
+**What happened:** While prioritising work, I cited `footguns/auditor.md` to assert that `goat-flow audit` executes an untrusted checkout's hook launcher by default, and that the dashboard was already safe on `"static"`. A cross-harness review disputed both. Re-verification proved the footgun's dashboard evidence line was wrong and had been since the day it was written - `dashboard-audit-routes.ts` requests `"full"` for per-agent audits, and the `"static"` in that file belongs to the setup path. I had also dropped the `--agent` qualifier the footgun's own Trap text carried, overstating the reach to "any audit". The wrong fact had already propagated into the milestone written to fix the bug.
+
+**Root cause:** I treated a bucket entry as verified truth because it was tagged `ACTUAL_MEASURED`. That tag records what the author believed they measured, not a re-run. Two distinct failures followed: restating a claim more broadly than its source said (dropping `--agent`), and forwarding a second-hand claim about a surface I never opened (the dashboard call site).
+
+**Prevention:**
+1. Before restating a learning-loop claim in a plan, report, or recommendation, open the cited call site. The entry gives you the anchor to check, not the answer.
+2. Prove *reach* by running the command, not by reading the gate. `audit .` reports `Agent deny mechanism: skipped`; `audit . --agent claude` reports `pass`. One command settled what two code-reading passes got wrong.
+3. Never widen a source's qualifier. If the entry says `--agent <id>`, the restatement says `--agent <id>`.
+4. When an entry is found wrong, correct the entry in place with the dating evidence, and grep for what inherited it - a wrong fact in the loop tends to be copied into the milestone that cites it.
+5. `ACTUAL_MEASURED` means "the author measured something once". Date it against the code: `git log -L <lines>:<file>` showed the disputed line predated the entry by two weeks, which is what proved it wrong-on-arrival rather than a regression.

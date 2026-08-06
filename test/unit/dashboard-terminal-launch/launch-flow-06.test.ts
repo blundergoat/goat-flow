@@ -42,18 +42,18 @@ describe("dashboard terminal launch flow", () => {
       targetPath: "/tmp/example",
       accessMode: "reporting",
       captureQualityDrafts: true,
-      qualityDraftProjectPath: "/tmp/example",
+      qualityReportProjectPath: "/tmp/example",
       lastInputAt: Date.now(),
     });
 
     assert.equal(ctx.sessions[0]?.captureQualityDrafts, true);
-    assert.equal(ctx.sessions[0]?.qualityDraftProjectPath, "/tmp/example");
+    assert.equal(ctx.sessions[0]?.qualityReportProjectPath, "/tmp/example");
     assert.equal(
       ctx._terminalRefs["session-reporting"]?.retryCaptureQualityDrafts,
       true,
     );
     assert.equal(
-      ctx._terminalRefs["session-reporting"]?.retryQualityDraftProjectPath,
+      ctx._terminalRefs["session-reporting"]?.retryQualityReportProjectPath,
       "/tmp/example",
     );
     assert.equal(
@@ -70,7 +70,7 @@ describe("dashboard terminal launch flow", () => {
       id: "session-detached-report",
       accessMode: "reporting",
       captureQualityDrafts: true,
-      qualityDraftProjectPath: "/tmp/example",
+      qualityReportProjectPath: "/tmp/example",
     });
     const ctx = makeContext({
       activeSessionId: session.id,
@@ -82,7 +82,7 @@ describe("dashboard terminal launch flow", () => {
 
     const saved = ctx._projectSessions["/tmp/example"]?.[0];
     assert.equal(saved?.captureQualityDrafts, true);
-    assert.equal(saved?.qualityDraftProjectPath, "/tmp/example");
+    assert.equal(saved?.qualityReportProjectPath, "/tmp/example");
   });
 
   /**
@@ -100,7 +100,7 @@ describe("dashboard terminal launch flow", () => {
       targetPath: "/tmp/example",
       accessMode: "reporting",
       captureQualityDrafts: true,
-      qualityDraftProjectPath: "/tmp/example",
+      qualityReportProjectPath: "/tmp/example",
       lastInputAt: Date.now(),
     };
     const helpers = loadHelpers(
@@ -121,7 +121,7 @@ describe("dashboard terminal launch flow", () => {
             targetPath: "/tmp/example",
             accessMode: "reporting",
             captureQualityDrafts: true,
-            qualityDraftProjectPath: "/tmp/example",
+            qualityReportProjectPath: "/tmp/example",
           },
         ],
       },
@@ -130,7 +130,7 @@ describe("dashboard terminal launch flow", () => {
 
     assert.equal(await helpers.dashboardReconnectTerminal(ctx), true);
     assert.equal(ctx.sessions[0]?.captureQualityDrafts, true);
-    assert.equal(ctx.sessions[0]?.qualityDraftProjectPath, "/tmp/example");
+    assert.equal(ctx.sessions[0]?.qualityReportProjectPath, "/tmp/example");
     assert.equal(
       ctx._terminalRefs[serverSession.id]?.retryCaptureQualityDrafts,
       true,
@@ -151,14 +151,14 @@ describe("dashboard terminal launch flow", () => {
       id: "session-recent-report",
       accessMode: "reporting",
       captureQualityDrafts: true,
-      qualityDraftProjectPath: "/tmp/example",
+      qualityReportProjectPath: "/tmp/example",
     });
 
     helpers.dashboardRememberRecentSession(ctx, session);
 
     assert.equal(ctx.recentTerminalSessions[0]?.captureQualityDrafts, true);
     assert.equal(
-      ctx.recentTerminalSessions[0]?.qualityDraftProjectPath,
+      ctx.recentTerminalSessions[0]?.qualityReportProjectPath,
       "/tmp/example",
     );
   });

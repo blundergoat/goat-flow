@@ -329,8 +329,8 @@ interface ServerSessionInfo {
   accessMode: TerminalAccessMode;
   /** Whether retry/reconnect must restore dashboard-owned quality draft capture. */
   captureQualityDrafts: boolean;
-  /** Report-owner project, or null when the session has no staged capture channel. */
-  qualityDraftProjectPath: string | null;
+  /** Mode-selected report owner, or null when the launch did not declare one. */
+  qualityReportProjectPath: string | null;
   lastInputAt: number;
   age?: number | undefined;
   idleDuration?: number | undefined;
@@ -353,7 +353,8 @@ interface LocalSession
   targetPath: string;
   accessMode: TerminalAccessMode;
   captureQualityDrafts: boolean;
-  qualityDraftProjectPath: string | null;
+  /** Owner retained across retries so Codex and Claude keep the same quality destination. */
+  qualityReportProjectPath: string | null;
   startTime: number;
   lastInputTime: number;
   outputTail?: string;
@@ -387,7 +388,7 @@ interface TerminalRefs {
   retryTargetPath?: string | null;
   retryAccessMode?: TerminalAccessMode;
   retryCaptureQualityDrafts?: boolean;
-  retryQualityDraftProjectPath?: string | null;
+  retryQualityReportProjectPath?: string | null;
   loadingSlowTimer?: ReturnType<typeof setTimeout> | undefined;
   loadingRetryTimer?: ReturnType<typeof setTimeout> | undefined;
   launchPromptFallbackTimer?: ReturnType<typeof setTimeout> | undefined;
@@ -405,7 +406,8 @@ interface SavedSession {
   targetPath: string;
   accessMode: TerminalAccessMode;
   captureQualityDrafts: boolean;
-  qualityDraftProjectPath: string | null;
+  /** Owner retained while the user switches projects; null means no quality owner was declared. */
+  qualityReportProjectPath: string | null;
 }
 
 // ---------------------------------------------------------------------------

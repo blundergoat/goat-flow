@@ -3,18 +3,32 @@
  * warn, and how effort lines, timing receipts, and forecast ranges survive the round trip.
  * Runs the real CLI and parser against written fixtures, so failures read as the author's
  * terminal output rather than as internals.
+ * Lifecycle cases also prove those visible fields govern whether milestone timing can start.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseMilestoneMarkdown } from "../../src/cli/plans-export.js";
+import { applyPlanTimeTransition } from "../../src/cli/plans-time.js";
 import {
   completeMilestoneBody,
   writePlanFixture,
   runPlansExport,
 } from "./plans-export.helpers.js";
+
+/** Visible lifecycle variants that must refuse a new user timing session. */
+const TIMING_START_REJECTION_CASES = [
+  ["a missing", []],
+  ["a duplicate", ["in-progress", "testing-gate"]],
+  ["an unknown", ["reviewing"]],
+  ["a not-started", ["not-started"]],
+  ["a human-wait", ["human-verification-pending"]],
+  ["a blocked", ["blocked"]],
+  ["an abandoned", ["abandoned"]],
+  ["a complete", ["complete"]],
+] as const;
 
 describe("plans export: milestone parsing", () => {
   // A complete plan keeps every gate and checkbox future issue adapters need.
@@ -473,6 +487,11 @@ describe("plans export: milestone parsing", () => {
     });
   });
 
+  /**
+   * Fixture purpose: a finalized receipt must survive both export formats.
+   * Both previews use one fixture because format choice must not change timing authority.
+   * Filesystem side effects: writes one temporary plan and reads CLI previews.
+   */
   it("preserves finalized timing receipts in JSON and Markdown exports", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-receipt-"),
@@ -565,6 +584,11 @@ describe("plans export: milestone parsing", () => {
     );
   });
 
+  /**
+   * Fixture purpose: an optional forecast must survive both export formats.
+   * Both previews use one fixture because format choice must not change the user's forecast.
+   * Filesystem side effects: writes one temporary plan and reads CLI previews.
+   */
   it("preserves optional forecast ranges in JSON and Markdown exports", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));
     const planPath = join(temporaryRoot, "1.15.0");
@@ -654,4 +678,51 @@ describe("plans export: milestone parsing", () => {
         error.message.includes("top-level title"),
     );
   });
+});
+
+describe("plans time: rendered lifecycle admission", () => {
+  // Each case names the lifecycle problem the author must resolve before starting new work.
+  for (const [caseName, milestoneStatuses] of TIMING_START_REJECTION_CASES) {
+    /**
+     * Fixture purpose: lifecycle drift must not start a clock or rewrite the user's milestone.
+     * Filesystem side effects: writes and re-reads one temporary milestone for each status case.
+     */
+    it(`rejects Start with ${caseName} milestone status`, () => {
+      const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
+      const planPath = join(
+        temporaryRoot,
+        "target",
+        ".goat-flow",
+        "plans",
+        "status-admission",
+      );
+      const sourceFile = "M01-status-admission.md";
+      const milestonePath = join(planPath, sourceFile);
+      // Each supplied token becomes a live field, including duplicates a merge may leave.
+      const milestoneBody = [
+        "# M01: Status admission",
+        ...milestoneStatuses.map((status) => `**Status:** ${status}`),
+      ].join("\n");
+      writePlanFixture(planPath, milestoneBody, sourceFile);
+      const milestoneBeforeStart = readFileSync(milestonePath, "utf-8");
+
+      try {
+        assert.throws(
+          () =>
+            applyPlanTimeTransition(
+              milestonePath,
+              { action: "start", category: "product" },
+              100,
+            ),
+          /exactly one rendered Status field set to `in-progress` or `testing-gate`/u,
+        );
+        assert.equal(
+          readFileSync(milestonePath, "utf-8"),
+          milestoneBeforeStart,
+        );
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
 });

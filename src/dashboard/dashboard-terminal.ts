@@ -95,7 +95,7 @@ interface DashboardTerminalContext extends Record<
       targetPath?: string | null;
       accessMode?: TerminalAccessMode;
       captureQualityDrafts?: boolean;
-      qualityDraftProjectPath?: string | null;
+      qualityReportProjectPath?: string | null;
     },
   ): Promise<void>;
   /** Load xterm assets once before a browser terminal attaches. */
@@ -182,7 +182,7 @@ function dashboardRememberRecentSession(
     runner: session.runner,
     accessMode: session.accessMode,
     captureQualityDrafts: session.captureQualityDrafts,
-    qualityDraftProjectPath: session.qualityDraftProjectPath,
+    qualityReportProjectPath: session.qualityReportProjectPath,
     lastInputAt: session.lastInputTime,
     age: Math.max(0, Math.floor((Date.now() - session.startTime) / 1000)),
     projectName: ctx.displayNameFor(session.projectPath),

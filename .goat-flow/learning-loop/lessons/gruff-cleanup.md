@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-07
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -95,7 +95,7 @@ last_reviewed: 2026-08-06
 
 **Status:** active | **Created:** 2026-05-31
 
-**Incident count:** 4 | **Latest occurrence:** 2026-08-03
+**Incident count:** 5 | **Latest occurrence:** 2026-08-07
 
 **What happened:** During the gruff naming cleanup, the full `npm test` run reached the installer round-trip fixture and failed its temp-repo preflight because local style gates still had issues: ESLint flagged a non-null assertion in `src/cli/cli-parser.ts`, and Prettier found an unformatted modified contract test.
 
@@ -106,6 +106,8 @@ last_reviewed: 2026-08-06
 **Recurrence 2026-08-03 (M03):** The reporting-capture race fix launched focused tests and gruff alongside Prettier before confirming formatting. The behavior tests passed, but Prettier rejected `src/cli/quality/quality-command.ts`, gruff found four missing side-effect comments, and the corrected style pass then caught an unbound-method signature. Running the cheap style checks first would have kept the proof run clean.
 
 **Same-day recurrence:** M02 correctly ran cheap gates before broad tests, and Prettier caught the newly edited `plans-time.ts` before the timing suites. Formatting first prevented a later preflight or round-trip failure; the proof sequence stopped, formatted the file, and re-ran the exact check before continuing.
+
+**Recurrence 2026-08-07:** R2's degradation-list behavior and focused tests passed, but the release-wide format gate later rejected the modified verdict test. Formatting that file and rerunning the same gate cleared the failure before full tests or preflight. Evidence anchor: `test/unit/review-validate-verdict.test.ts` (search: `rejects empty or contradictory degradation flag lists`).
 
 **Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`), `src/cli/plans-time.ts` (search: `beforeMilestoneReplacement`).
 

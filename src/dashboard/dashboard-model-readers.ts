@@ -210,10 +210,9 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
   const accessMode = readTerminalAccessMode(rawSession.accessMode);
   // Legacy sessions omit capture metadata, which means the UI has no receipt channel to restore.
   const captureQualityDrafts = rawSession.captureQualityDrafts === true;
-  // An empty owner remains null so retry fails visibly instead of targeting an invented project.
-  const qualityDraftProjectPath = captureQualityDrafts
-    ? readString(rawSession.qualityDraftProjectPath) || null
-    : null;
+  // An empty owner remains null so retry never invents which visible project should receive a report.
+  const qualityReportProjectPath =
+    readString(rawSession.qualityReportProjectPath) || null;
   if (
     !id ||
     !status ||
@@ -235,7 +234,7 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
     runner,
     accessMode,
     captureQualityDrafts,
-    qualityDraftProjectPath,
+    qualityReportProjectPath,
     lastInputAt: rawSession.lastInputAt,
     age: readOptionalSessionMetric(rawSession.age),
     idleDuration: readOptionalSessionMetric(rawSession.idleDuration),

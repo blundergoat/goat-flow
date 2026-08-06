@@ -67,7 +67,7 @@ interface DecodedTerminalCreate {
   runner: Runner;
   accessMode: TerminalAccessMode;
   captureQualityDrafts: boolean;
-  qualityDraftProjectPath: string;
+  qualityReportProjectPath: string;
 }
 
 /**
@@ -161,7 +161,7 @@ export function createDashboardTerminalHandlers(
       runner,
       accessMode,
       captureQualityDrafts,
-      qualityDraftProjectPath,
+      qualityReportProjectPath,
     } = decoded;
     const result = await manager.create(
       prompt,
@@ -171,7 +171,7 @@ export function createDashboardTerminalHandlers(
         targetPath: targetPath || projectPath || absDefault,
         accessMode,
         captureQualityDrafts,
-        qualityDraftProjectPath,
+        qualityReportProjectPath,
       },
     );
     const session = manager.get(result.id);

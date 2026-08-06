@@ -108,6 +108,15 @@ type SetupPromptContext = Record<string, unknown> & {
 };
 
 type SetupPromptHelpers = {
+  /** Return the four Quality cards whose owner mapping the browser test verifies. */
+  dashboardQualityModes(
+    _qualityContext: SetupPromptContext,
+  ): Array<{ id: string }>;
+  /** Return the report destination the selected Quality card presents to the user. */
+  dashboardQualityReportProjectPath(
+    _qualityContext: SetupPromptContext,
+    mode: { id: string },
+  ): string;
   dashboardGenerateSetupPromptForAgent(
     ctx: SetupPromptContext,
     targetAgent: string,
@@ -204,6 +213,10 @@ function loadSetupPromptHelpers(
   const context = createContext({
     setTimeout,
     clearTimeout,
+    window: {
+      __GOAT_FLOW_DEFAULT_PATH__: "/tmp/controlling-goat-flow",
+      __GOAT_FLOW_VERSION__: "1.15.0",
+    },
     dashboardFetch: (url: string) =>
       new Promise((resolve) => {
         pendingResponses.push({
@@ -261,6 +274,35 @@ function makeSetupPromptContext(
     generateQualityHistory: async () => {},
   };
 }
+
+it("maps all four quality modes to their user-visible report owner", () => {
+  const helpers = loadSetupPromptHelpers([]);
+  const context = makeSetupPromptContext();
+  const ownerByMode = Object.fromEntries(
+    helpers
+      .dashboardQualityModes(context)
+      .map((mode) => [
+        mode.id,
+        helpers.dashboardQualityReportProjectPath(context, mode),
+      ]),
+  );
+
+  assert.deepStrictEqual(ownerByMode, {
+    "agent-setup": "/tmp/example-project",
+    process: "/tmp/controlling-goat-flow",
+    harness: "/tmp/example-project",
+    skills: "/tmp/controlling-goat-flow",
+  });
+});
+
+it("forwards the selected quality report owner to Claude and Codex", () => {
+  const qualityView = readFileSync(QUALITY_VIEW_PATH, "utf-8");
+
+  assert.match(
+    qualityView,
+    /qualityReportProjectPath: \(activeRunner === 'claude' \|\| activeRunner === 'codex'\) \? qualityReportProjectPath\(\) : null/u,
+  );
+});
 
 /** Build one concern score fixture with the Home summary fields populated. */
 function concern(

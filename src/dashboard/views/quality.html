@@ -592,7 +592,7 @@
               "
             >
               <button
-                @click="launchPreset(activeRunner === 'claude' ? qualityResult.launchPrompt : qualityResult.prompt, activeRunner, qualityLaunchLabel(), { cwdPath: selectedQualityModeId === 'agent-setup' ? projectPath : (window.__GOAT_FLOW_DEFAULT_PATH__ || '.'), captureQualityDrafts: activeRunner === 'claude', qualityDraftProjectPath: activeRunner === 'claude' ? qualityReportProjectPath() : null }); activeView = 'workspace'"
+                @click="launchPreset(activeRunner === 'claude' ? qualityResult.launchPrompt : qualityResult.prompt, activeRunner, qualityLaunchLabel(), { cwdPath: selectedQualityModeId === 'agent-setup' ? projectPath : (window.__GOAT_FLOW_DEFAULT_PATH__ || '.'), captureQualityDrafts: activeRunner === 'claude', qualityReportProjectPath: (activeRunner === 'claude' || activeRunner === 'codex') ? qualityReportProjectPath() : null }); activeView = 'workspace'"
                 :disabled="launching || serverSessions.length >= 10"
                 :title="serverSessions.length >= 10 ? 'Session limit reached (10/10). End one to launch another.' : 'Launch in a new Runner session.'"
                 class="gf-btn-terminal-cta"

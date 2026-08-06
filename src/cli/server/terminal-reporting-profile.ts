@@ -27,6 +27,12 @@ const REPORTING_LOCAL_STATE_PATHS = [
   ".goat-flow/plans",
 ] as const;
 
+/** Local-state trees whose relative Codex rules may apply to every readable project root. */
+const CODEX_SHARED_LOCAL_STATE_PATHS = [
+  ".goat-flow/scratchpad",
+  ".goat-flow/plans",
+] as const;
+
 /** Staging control files written by the dashboard server, never by the reporting agent. */
 const QUALITY_STAGING_SERVER_FILES = [
   "goat-quality-result-*.json",
@@ -390,22 +396,29 @@ export function buildClaudeReportingSettings(
 
 /**
  * Build the one-invocation Codex permission profile used by reporting sessions.
- * The project roots stay readable, known goat-flow local state plus Git-proven
- * ignored build paths become writable, tracked files inside those paths are
- * carved back to read, and secret paths retain the installed profile's denies.
+ * Project roots stay readable, while only the mode-selected owner receives log writes.
+ * Shared local/build paths remain writable when every root proves the same safe layout,
+ * tracked anchors return to read-only, and project secret paths stay denied.
  *
- * @param projectPath - project the user launched the terminal from
- * @param targetPath - project the report is being written about; an empty value contributes
- *   no extra readable root
- * @returns the TOML profile override passed to Codex for this one session
+ * @param projectPath - project the user launched from; empty is invalid at the terminal boundary
+ * @param targetPath - project being assessed; empty contributes no second readable root
+ * @param qualityReportProjectPath - mode-selected report owner; omitted uses the launch project
+ * @returns non-empty TOML profile override passed to Codex for this one reporting session
  */
 export function buildCodexReportingProfile(
   projectPath: string,
   targetPath: string,
+  qualityReportProjectPath: string = projectPath,
 ): string {
   const rootPaths = Array.from(
     new Set([projectPath, targetPath].filter((path) => path.length > 0)),
   );
+  // A quality owner outside the two visible projects could redirect report writes off-screen.
+  if (!rootPaths.includes(qualityReportProjectPath)) {
+    throw new Error(
+      "Quality report owner must match the terminal workspace or selected target.",
+    );
+  }
   const workspaceRoots = rootPaths.map((path) => [path, true] as const);
   const ignoredWritableCandidates = REPORTING_IGNORED_PATH_CANDIDATES.filter(
     (relativePath) =>
@@ -413,7 +426,7 @@ export function buildCodexReportingProfile(
       rootPaths.every((rootPath) => isGitIgnoredPath(rootPath, relativePath)),
   );
   const candidateWritablePaths = [
-    ...REPORTING_LOCAL_STATE_PATHS.filter((relativePath) =>
+    ...CODEX_SHARED_LOCAL_STATE_PATHS.filter((relativePath) =>
       isSharedDirectory(rootPaths, relativePath),
     ),
     ...ignoredWritableCandidates,
@@ -434,17 +447,45 @@ export function buildCodexReportingProfile(
       ),
     ),
   );
+  const reportLogRelativePath = ".goat-flow/logs";
+  const reportOwnerFilesystemRules: Array<readonly [string, string]> = [];
+  // Existing owner logs can receive this run's report without granting the other project writes.
+  if (isSharedDirectory([qualityReportProjectPath], reportLogRelativePath)) {
+    reportOwnerFilesystemRules.push([
+      join(qualityReportProjectPath, reportLogRelativePath),
+      "write",
+    ]);
+    // Tracked log anchors remain read-only even inside the owner's writable local-state tree.
+    for (const protectedPath of protectedPathsForCandidate(
+      qualityReportProjectPath,
+      reportLogRelativePath,
+    )) {
+      reportOwnerFilesystemRules.push([
+        join(qualityReportProjectPath, protectedPath),
+        "read",
+      ]);
+    }
+  }
   const filesystemRules: Array<readonly [string, string]> = [
     [".", "read"],
     ...writablePaths.map((path) => [path, "write"] as const),
     ...committedAnchors.map((path) => [path, "read"] as const),
     ...REPORTING_SECRET_DENIES.map((path) => [path, "deny"] as const),
   ];
+  const reportOwnerFilesystemEntries = reportOwnerFilesystemRules
+    .map(
+      ([path, permission]) => `${tomlString(path)}=${tomlString(permission)}`,
+    )
+    .join(",");
+  const reportOwnerFilesystemPrefix =
+    reportOwnerFilesystemEntries.length > 0
+      ? `${reportOwnerFilesystemEntries},`
+      : "";
   const profile = [
     `description=${tomlString("Reporting-only project access with local artifact writes.")}`,
     `extends=${tomlString(":read-only")}`,
     `workspace_roots=${tomlInlineTable(workspaceRoots)}`,
-    `filesystem={glob_scan_max_depth=3,${tomlString(":workspace_roots")}=${tomlInlineTable(filesystemRules)},${tomlString(":tmpdir")}="write",${tomlString(":slash_tmp")}="write"}`,
+    `filesystem={glob_scan_max_depth=3,${tomlString(":workspace_roots")}=${tomlInlineTable(filesystemRules)},${reportOwnerFilesystemPrefix}${tomlString(":tmpdir")}="write",${tomlString(":slash_tmp")}="write"}`,
     "network={enabled=true}",
   ].join(",");
   return `permissions.${CODEX_REPORTING_PROFILE_NAME}={${profile}}`;

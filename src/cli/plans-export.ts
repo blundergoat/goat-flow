@@ -11,7 +11,10 @@ import { CLIError } from "./cli-error.js";
 import { PlansExportInputError } from "./plans-export-input-error.js";
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
-import { maskNonRenderedMarkdown } from "./rendered-markdown.js";
+import {
+  maskNonRenderedMarkdown,
+  readRenderedMarkdownFieldValues,
+} from "./rendered-markdown.js";
 import {
   parseEffortLineValue,
   readPlanAdminEstimate,
@@ -74,26 +77,29 @@ interface MarkdownSection {
   body: string;
 }
 
-/** Read one live bold or plain field and report competing copies. */
+/**
+ * Read the first visible milestone field and report competing copies.
+ * Use while exporting the plan so users see ambiguity instead of a silently chosen value.
+ *
+ * @param content - milestone Markdown; empty means every requested field is absent
+ * @param label - field name shown to the user; empty means no field can be selected
+ * @param warnings - export warnings to extend; absent means duplicate details are not requested
+ * @returns the first trimmed value; empty means the milestone has no usable field value
+ */
 function readMilestoneField(
   content: string,
   label: string,
   warnings?: string[],
 ): string {
-  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  const matches = Array.from(
-    maskNonRenderedMarkdown(content).matchAll(
-      new RegExp(
-        `^(?:\\*\\*${escapedLabel}:\\*\\*|${escapedLabel}:)\\s*(.+)$`,
-        "gimu",
-      ),
-    ),
-  );
-  if (matches.length > 1 && warnings) {
+  const fieldValues = readRenderedMarkdownFieldValues(content, label);
+  // Competing visible values make the export ambiguous, so the user gets a warning.
+  if (fieldValues.length > 1 && warnings) {
     const warning = `multiple ${label} values supplied`;
+    // Repeated parser paths should not repeat the same warning in the exported plan.
     if (!warnings.includes(warning)) warnings.push(warning);
   }
-  return matches.at(0)?.[1]?.trim() ?? "";
+  // A missing or empty first field stays empty so existing missing-field guidance remains authoritative.
+  return fieldValues.at(0) ?? "";
 }
 
 /** Split level-two sections while preserving nested headings and user-authored Markdown. */

@@ -82,7 +82,7 @@ type LaunchOptions = {
   targetPath?: string | null;
   accessMode?: "workspace" | "reporting";
   captureQualityDrafts?: boolean;
-  qualityDraftProjectPath?: string | null;
+  qualityReportProjectPath?: string | null;
 };
 
 type LaunchContext = Record<"launching", boolean> & {
@@ -118,7 +118,7 @@ type LaunchContext = Record<"launching", boolean> & {
       retryTargetPath?: string | null;
       retryAccessMode?: "workspace" | "reporting";
       retryCaptureQualityDrafts?: boolean;
-      retryQualityDraftProjectPath?: string | null;
+      retryQualityReportProjectPath?: string | null;
       loadingSlowTimer?: ReturnType<typeof setTimeout>;
       loadingRetryTimer?: ReturnType<typeof setTimeout>;
       launchPromptFallbackTimer?: ReturnType<typeof setTimeout>;
@@ -210,7 +210,7 @@ type TestTerminalSession = Record<string, unknown> & {
   presetId: string | null;
   accessMode?: "workspace" | "reporting";
   captureQualityDrafts: boolean;
-  qualityDraftProjectPath: string | null;
+  qualityReportProjectPath: string | null;
 };
 
 type TerminalSendHarness = {
@@ -625,7 +625,7 @@ function makeTerminalSession(
     presetId: null,
     accessMode: "workspace",
     captureQualityDrafts: false,
-    qualityDraftProjectPath: null,
+    qualityReportProjectPath: null,
     ...overrides,
   };
 }

@@ -314,7 +314,7 @@ Plan-level drift beyond 15 percentage points produces an advisory with exit 0. R
 
 System-stamp active-work spans into one milestone's `## Timing Receipt`. The CLI supplies UTC and epoch seconds; the agent supplies only the category. Because the receipt lives inside the milestone file, it survives log purges and moves with the plan.
 
-An active receipt is valid only while the milestone status is `in-progress` or `testing-gate`. Stop or finalize the clock before changing status to `human-verification-pending`, `blocked`, `abandoned`, or `complete`; strict validation rejects active human-wait and terminal snapshots so those waits cannot inflate measured Actual time.
+`plans time start` requires exactly one rendered `Status:` field set to `in-progress` or `testing-gate`; fenced and commented examples do not count. Status, stop, finalize, and discard recovery remain available after lifecycle drift. Stop or finalize the clock before changing status to `human-verification-pending`, `blocked`, `abandoned`, or `complete`; strict validation rejects active human-wait and terminal snapshots so those waits cannot inflate measured Actual time.
 
 ```bash
 goat-flow plans time start .goat-flow/plans/<active>/M01-example.md --category product

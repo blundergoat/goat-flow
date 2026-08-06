@@ -29,7 +29,7 @@ type HelperContext = {
   readServerSessionInfo: (_value: unknown) =>
     | (Record<string, unknown> & {
         captureQualityDrafts: boolean;
-        qualityDraftProjectPath: string | null;
+        qualityReportProjectPath: string | null;
       })
     | null;
   readInjectedSupportedAgents: () => SupportedAgent[];
@@ -395,9 +395,12 @@ function readPlansViewTaskState(): ReturnType<HelperContext["readTaskState"]> {
 }
 
 describe("dashboard payload readers", () => {
-  it("preserves reporting capture metadata from backend session records", () => {
-    const helpers = loadHelpers();
-    const session = helpers.readServerSessionInfo({
+  it("preserves report ownership with and without Claude draft capture", () => {
+    const helpers = loadHelpers({
+      __GOAT_FLOW_RUNNER_IDS__: ["claude", "codex"],
+      __GOAT_FLOW_AGENTS__: [supportedAgent("claude"), supportedAgent("codex")],
+    });
+    const claudeSession = helpers.readServerSessionInfo({
       id: "session-reporting",
       status: "active",
       runner: "claude",
@@ -407,12 +410,27 @@ describe("dashboard payload readers", () => {
       targetPath: "/tmp/example",
       accessMode: "reporting",
       captureQualityDrafts: true,
-      qualityDraftProjectPath: "/tmp/example",
+      qualityReportProjectPath: "/tmp/example",
+      lastInputAt: 1,
+    });
+    const codexSession = helpers.readServerSessionInfo({
+      id: "session-codex-reporting",
+      status: "active",
+      runner: "codex",
+      createdAt: "2026-08-03T00:00:00.000Z",
+      projectPath: "/tmp/target",
+      cwd: "/tmp/controller",
+      targetPath: "/tmp/target",
+      accessMode: "reporting",
+      captureQualityDrafts: false,
+      qualityReportProjectPath: "/tmp/target",
       lastInputAt: 1,
     });
 
-    assert.equal(session?.captureQualityDrafts, true);
-    assert.equal(session?.qualityDraftProjectPath, "/tmp/example");
+    assert.equal(claudeSession?.captureQualityDrafts, true);
+    assert.equal(claudeSession?.qualityReportProjectPath, "/tmp/example");
+    assert.equal(codexSession?.captureQualityDrafts, false);
+    assert.equal(codexSession?.qualityReportProjectPath, "/tmp/target");
   });
 
   it("narrows supported agents from injected runner metadata", () => {

@@ -187,13 +187,23 @@ function dashboardQualityShellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+/**
+ * Select the project that owns the active quality mode's saved report.
+ * Use for both prompt text and runner permissions so the UI shows and enforces one destination.
+ *
+ * @param ctx - Quality view state; an empty project path means target selection has not finished
+ * @param mode - selected quality mode; never null after the user chooses a Quality card
+ * @returns controlling workspace for process/skills, otherwise the selected target; never empty in a launch
+ */
 function dashboardQualityReportProjectPath(
   ctx: DashboardSetupQualityContext,
   mode: QualityModeOption,
 ): string {
+  // Framework modes save beside the framework evidence the user asked to assess.
   if (mode.id === "process" || mode.id === "skills") {
     return dashboardQualityControllingWorkspace();
   }
+  // Target modes save beside the selected project's setup or harness evidence.
   return ctx.projectPath;
 }
 

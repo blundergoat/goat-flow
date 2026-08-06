@@ -332,6 +332,38 @@ describe("buildTerminalSpawnSpec", () => {
     assert.equal(spec.env.GOAT_CLAUDE_REPORTING_SETTINGS, undefined);
   });
 
+  it("closes reporting shells after the runner exits on Windows and POSIX", () => {
+    const posixSpec = buildTerminalSpawnSpec(
+      "claude",
+      "/usr/local/bin/claude",
+      "run the quality report",
+      { SHELL: "/bin/bash" },
+      "linux",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+    const windowsSpec = buildTerminalSpawnSpec(
+      "claude",
+      "C:\\Users\\dev\\AppData\\Roaming\\npm\\claude.cmd",
+      "run the quality report",
+      {},
+      "win32",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+
+    assert.doesNotMatch(posixSpec.args.join("\n"), /exec "\$SHELL" -i/u);
+    assert.equal(windowsSpec.args.includes("-NoExit"), false);
+    assert.match(posixSpec.args.join("\n"), /unset GOAT_RUNNER/u);
+    assert.match(windowsSpec.args.join("\n"), /Remove-Item Env:GOAT_RUNNER/u);
+  });
+
   it("launches Codex reporting sessions with a restricted permission profile", () => {
     const spec = buildTerminalSpawnSpec(
       "codex",
@@ -355,9 +387,37 @@ describe("buildTerminalSpawnSpec", () => {
     assert.match(profile, /extends=":read-only"/);
     assert.match(profile, /filesystem=\{glob_scan_max_depth=3,/);
     assert.ok(profile.includes(`${JSON.stringify(process.cwd())}=true`));
-    assert.match(profile, /"\.goat-flow\/logs"="write"/);
-    assert.match(profile, /"\.goat-flow\/logs\/quality\/README\.md"="read"/);
+    assert.ok(
+      profile.includes(
+        `${JSON.stringify(join(process.cwd(), ".goat-flow/logs"))}="write"`,
+      ),
+    );
+    assert.ok(
+      profile.includes(
+        `${JSON.stringify(join(process.cwd(), ".goat-flow/logs/quality/README.md"))}="read"`,
+      ),
+    );
     assert.match(profile, /"\*\*\/\.env"="deny"/);
+  });
+
+  it("rejects a Codex report owner outside the two projects shown to the user", () => {
+    assert.throws(
+      () =>
+        buildTerminalSpawnSpec(
+          "codex",
+          "/usr/local/bin/codex",
+          "",
+          { SHELL: "/bin/bash" },
+          "linux",
+          {
+            accessMode: "reporting",
+            projectPath: process.cwd(),
+            targetPath: process.cwd(),
+            qualityReportProjectPath: "/tmp/unrelated-report-owner",
+          },
+        ),
+      /Quality report owner must match/u,
+    );
   });
 
   // Covers build-directory writes: granted only when Git proves the directory is ignored.
@@ -396,8 +456,8 @@ describe("buildTerminalSpawnSpec", () => {
     }
   });
 
-  // Covers shared write roots whose protected layouts differ: the fixture writes each and expects omission.
-  it("omits shared write roots when their protected layouts differ", () => {
+  // Covers all quality modes with asymmetric tracked log anchors in the controller and target.
+  it("grants Codex log writes only to each quality mode's report owner", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-profile-"));
     const controllerPath = join(tempRoot, "controller");
     const targetPath = join(tempRoot, "target");
@@ -423,22 +483,51 @@ describe("buildTerminalSpawnSpec", () => {
         ".goat-flow/logs/quality/custom.md",
       ]);
 
-      const spec = buildTerminalSpawnSpec(
-        "codex",
-        "/usr/local/bin/codex",
-        "",
-        { SHELL: "/bin/bash" },
-        "linux",
-        {
-          accessMode: "reporting",
-          projectPath: controllerPath,
-          targetPath,
-        },
-      );
+      const ownerByQualityMode = [
+        ["process", controllerPath],
+        ["skills", controllerPath],
+        ["agent-setup", targetPath],
+        ["harness", targetPath],
+      ] as const;
+      // Every mode must grant exactly the owner the Quality UI presents to the user.
+      for (const [
+        qualityMode,
+        qualityReportProjectPath,
+      ] of ownerByQualityMode) {
+        const spec = buildTerminalSpawnSpec(
+          "codex",
+          "/usr/local/bin/codex",
+          "",
+          { SHELL: "/bin/bash" },
+          "linux",
+          {
+            accessMode: "reporting",
+            projectPath: controllerPath,
+            targetPath,
+            qualityReportProjectPath,
+          },
+        );
+        const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
+        const otherProjectPath =
+          qualityReportProjectPath === controllerPath
+            ? targetPath
+            : controllerPath;
 
-      const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
-      assert.doesNotMatch(profile, /"\.goat-flow\/logs"="write"/);
-      assert.match(profile, /"dist"="write"/);
+        assert.ok(
+          profile.includes(
+            `${JSON.stringify(join(qualityReportProjectPath, ".goat-flow/logs"))}="write"`,
+          ),
+          `${qualityMode} must grant its report owner`,
+        );
+        assert.equal(
+          profile.includes(
+            `${JSON.stringify(join(otherProjectPath, ".goat-flow/logs"))}="write"`,
+          ),
+          false,
+          `${qualityMode} must not grant the other project`,
+        );
+        assert.match(profile, /"dist"="write"/);
+      }
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }
@@ -491,9 +580,11 @@ describe("buildTerminalSpawnSpec", () => {
             targetPath: projectPath,
           },
         );
-        assert.doesNotMatch(
-          codexSpec.env.GOAT_CODEX_REPORTING_PROFILE ?? "",
-          /"\.goat-flow\/logs"="write"/u,
+        assert.equal(
+          (codexSpec.env.GOAT_CODEX_REPORTING_PROFILE ?? "").includes(
+            `${JSON.stringify(join(projectPath, ".goat-flow/logs"))}="write"`,
+          ),
+          false,
         );
       } finally {
         rmSync(tempRoot, { recursive: true, force: true });

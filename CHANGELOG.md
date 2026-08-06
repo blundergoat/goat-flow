@@ -1,14 +1,19 @@
 # Changelog
 
-## v1.15.0 - 2026-08-06
+## v1.15.0 - 2026-08-07
 
-- **Native Windows setup finds Git Bash and previews the real admission result** - Install discovery probes Git's standard machine and per-user locations when PATH exposes only the WSL shim, and `--dry-run` reports the same blocked prerequisite as a real install. Managed hook registrations now launch through Node and a shared Bash resolver, so they use the discovered Windows-compatible shell instead of bare `bash`.
-- **Preflight cleanup proof waits for observable readiness** - The escaped-output regression triggers process-group escalation only after its detached fixture exists, removing a 100 ms CI startup race without changing production timeout behavior.
+- **Windows install discovery finds Git Bash** - Standard machine and per-user Git paths work when PATH exposes only the WSL shim.
+- **Install previews use real Windows admission** - `--dry-run` reports the same missing-Bash blocker as a real install.
+- **Managed hooks use the resolved Windows shell** - Node launches discovered Git Bash instead of relying on bare `bash`.
+- **Preflight cleanup waits for observable readiness** - Its escaped-output fixture signals readiness before escalation, removing the CI race.
 - **Windows post-turn scans finish in under a second** - Batched scans take 0.655s on Git Bash and 0.027s on Linux for 25 files.
 - **Stop scans fail closed through Bash 3** - A 60-second budget blocks incomplete scans; path decoding and hook sync remain safe.
 - **Review validation matches workflow guidance** - Wrapped lists and code examples parse correctly; degraded reviews cannot overstate verdicts.
+- **Review degradation lists stay unambiguous** - Validation rejects empty entries and `none` combined with a real degradation flag.
 - **Plan effort estimates are checkable** - Strict mode requires derived estimates and structured Actuals; ~70/20/10 remains advisory.
 - **Plan evidence fails closed** - Timing rejects invalid or conflicting receipts while previews redact rationale and preserve user files.
+- **Plan timing states its concurrency boundary** - The atomic-write contract distinguishes ordinary editor saves from hostile ancestor mutation.
+- **Milestone timing starts only during active work** - Start requires one rendered `in-progress` or `testing-gate` status; recovery stays available.
 - **Strict plan checks validate lifecycle and dependencies** - Missing sections, bad dependencies, and invalid human-review states fail.
 - **Plan exports include proof and stop conditions** - Exports normalize proof headings, kill criteria, and competing sections.
 - **goat-plan budgets the smallest complete result** - Milestones require outcomes, tasks, proof, exits, and stop conditions.
@@ -20,9 +25,12 @@
 - **goat-debug docs match behavior** - Guidance includes D1.5 minimization, both approvals, and the dashboard Fix Bug flow.
 - **Commit guidance gets a clearer filename** - New installs use `git-commit-message.md`; the legacy filename remains valid. See ADR-043.
 - **Dashboard terminals preserve access mode** - Reporting and workspace modes survive defaults, retries, and session rehydration.
+- **Reporting terminals close with their runner** - POSIX and Windows expose no fallback shell; delayed prompts cancel after early exits.
 - **Codex reporting sessions enforce read-only tracking** - Profiles allow reads and ignored outputs while denying tracked edits and secrets.
+- **Codex quality reports follow workflow ownership** - Process/skills write only in the controller; agent-setup/harness write only in the target.
 - **Claude reporting sessions enforce read-only tracking** - Session overlays allow approved reads and ignored paths but deny tracked edits.
 - **`quality save` owns report destinations** - It redacts and validates stdin, selects an ignored filename, and rejects caller outputs.
+- **Quality dates reject impossible current runs** - New reports require real calendar days; invalid legacy dates load but cannot extend streaks.
 - **Claude assessments persist without writable shells** - The dashboard validates drafts; finalized reports stay read-only. See ADR-044.
 - **Report capture fails closed through recovery** - Private staging, atomic claims, and receipts prevent unsafe duplicate persistence.
 - **QA templates load on demand** - `/goat-qa` loads Standard or Audit templates only when rendering.

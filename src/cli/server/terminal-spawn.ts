@@ -28,7 +28,7 @@ interface TerminalSpawnContext {
 /** Maximum characters written to the PTY in one go when pasting a prompt. */
 export const INITIAL_PROMPT_CHUNK_SIZE = 2048;
 
-/** Shell, arguments, environment, and deferred input needed to launch a runner in a durable PTY. */
+/** Shell, arguments, environment, and deferred input needed to launch one user-visible runner PTY. */
 export interface TerminalSpawnSpec {
   shell: string;
   args: string[];
@@ -41,6 +41,7 @@ export interface TerminalSpawnOptions {
   accessMode?: TerminalAccessMode;
   projectPath?: string;
   targetPath?: string;
+  qualityReportProjectPath?: string;
 }
 
 const WINDOWS_RUNNER_EXTENSION_PRIORITY = [
@@ -166,12 +167,15 @@ function terminalSpawnContext(
     ...environment,
     GOAT_RUNNER: cliPath,
   };
+  // Codex receives the quality mode's explicit owner so report writes reach the project shown in the UI.
   if (runner === "codex" && accessMode === "reporting") {
     env.GOAT_CODEX_REPORTING_PROFILE = buildCodexReportingProfile(
       projectPath,
       targetPath,
+      options.qualityReportProjectPath ?? projectPath,
     );
   }
+  // Claude reporting uses its separate settings overlay and dashboard-owned draft capture.
   if (runner === "claude" && accessMode === "reporting") {
     env.GOAT_CLAUDE_REPORTING_SETTINGS = buildClaudeReportingSettings(
       projectPath,
@@ -183,15 +187,16 @@ function terminalSpawnContext(
 }
 
 /**
- * Build the PTY shell invocation that keeps a usable terminal open per OS.
+ * Build the PTY shell invocation for the selected dashboard mode.
+ * Workspace runners return users to a shell; restricted reporting runners close when their task ends.
  *
  * @param runner Runner identity used for runner-specific launch flags.
  * @param cliPath Absolute runner binary path to launch inside the shell.
- * @param prompt Optional launch prompt delivered through PTY input after startup.
- * @param environment Environment snapshot merged into the spawned process.
+ * @param prompt Optional launch prompt delivered through PTY input after startup; empty means the user starts manually.
+ * @param environment Environment snapshot merged into the spawned process; an empty object gives the runner no inherited variables.
  * @param platform Platform selector used by tests and cross-platform launch planning.
- * @param options Access mode plus validated controller/target roots for reporting profiles.
- * @returns Spawn details plus deferred initial input; callers own the actual PTY spawn.
+ * @param options Access mode plus validated controller/target roots; omitted values select a normal workspace session.
+ * @returns Spawn details plus deferred input; `initialInput: null` means no prompt waits to be sent.
  */
 export function buildTerminalSpawnSpec(
   runner: Runner,
@@ -210,12 +215,13 @@ export function buildTerminalSpawnSpec(
   );
   const initialInput = hasPrompt ? formatInitialPromptInput(prompt) : null;
 
+  // Windows reporting closes with its runner, while a normal workspace keeps PowerShell available.
   if (platform === "win32") {
     return {
       shell: WINDOWS_TERMINAL_SHELL,
       args: [
         "-NoLogo",
-        "-NoExit",
+        ...(accessMode === "workspace" ? ["-NoExit"] : []),
         "-Command",
         `try { ${terminalRunnerCommand(runner, platform, accessMode)} } finally { ${WINDOWS_PROMPT_ENV_CLEANUP} }`,
       ],
@@ -226,7 +232,11 @@ export function buildTerminalSpawnSpec(
 
   const configuredShell = environment.SHELL;
   const shell = configuredShell?.length ? configuredShell : "/bin/bash";
-  const shellCmd = `${terminalRunnerCommand(runner, platform, accessMode)}; ${POSIX_PROMPT_ENV_CLEANUP}; exec "$SHELL" -i`;
+  const runnerCommand = terminalRunnerCommand(runner, platform, accessMode);
+  const shellCmd =
+    accessMode === "reporting"
+      ? `${runnerCommand}; ${POSIX_PROMPT_ENV_CLEANUP}`
+      : `${runnerCommand}; ${POSIX_PROMPT_ENV_CLEANUP}; exec "$SHELL" -i`;
 
   return {
     shell,

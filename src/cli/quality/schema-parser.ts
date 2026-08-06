@@ -42,6 +42,43 @@ import {
 } from "./schema-expectations.js";
 
 /**
+ * Confirm a formatted run date names a real Gregorian calendar day.
+ * Use for new report admission and when legacy history tries to prove consecutive runs.
+ * It reads no files and changes no report state.
+ *
+ * @param runDate - `YYYY-MM-DD` text from a report; empty or malformed values are not real dates
+ * @returns true for a real day; false means reject a new report or break legacy streak continuity
+ */
+export function isRealCalendarDate(runDate: string): boolean {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(runDate);
+  // Without three formatted parts, the user has not supplied a comparable calendar date.
+  if (!dateMatch) return false;
+
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+  const februaryDays =
+    year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  const daysPerMonth = [
+    31,
+    februaryDays,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
+  // An out-of-range month has no valid maximum day for the report to claim.
+  const maximumDay = daysPerMonth[month - 1] ?? 0;
+  return year > 0 && day > 0 && day <= maximumDay;
+}
+
+/**
  * Parse the setup-score group shown in quality summaries.
  * Use when an agent report is loaded so setup totals match the four visible setup axes.
  *
@@ -464,6 +501,16 @@ function parseReportInternal(
   // The date must sort predictably in history lists and comparisons.
   if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate.value)) {
     return { ok: false, error: "report.run_date must be YYYY-MM-DD" };
+  }
+  // Newly saved reports must name a real day; legacy history stays readable under format-only rules.
+  if (
+    options.requireCurrentFields === true &&
+    !isRealCalendarDate(runDate.value)
+  ) {
+    return {
+      ok: false,
+      error: "report.run_date must be a real calendar date in YYYY-MM-DD",
+    };
   }
   const auditStatus = expectEnumValue(
     raw.audit_status,

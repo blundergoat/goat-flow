@@ -49,8 +49,8 @@ export interface SessionInfo {
   accessMode: TerminalAccessMode;
   /** True when this reporting session owns the dashboard's staged-report receipt channel. */
   captureQualityDrafts: boolean;
-  /** Canonical report-owner project, or null when the user did not request staged capture. */
-  qualityDraftProjectPath: string | null;
+  /** Mode-selected report owner, or null when the launch did not declare one. */
+  qualityReportProjectPath: string | null;
   /** Epoch milliseconds of last user input (for idle duration calculation) */
   lastInputAt: number;
 }
