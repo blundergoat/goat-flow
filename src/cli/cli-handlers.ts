@@ -27,9 +27,9 @@ import {
 } from "./install-invocation.js";
 import {
   buildManagedSetupPreview,
+  managedSetupPreviewForInstallerLaunch,
   managedSetupAdmissionFailure,
   recordManagedInstallAfterVerification,
-  withManagedSetupPrerequisiteFailure,
 } from "./managed-setup-preview.js";
 import {
   emitManagedSetupDryRun,
@@ -429,12 +429,7 @@ async function handleInstallCommand(options: ParsedCLI): Promise<void> {
   if (options.shouldDryRun) {
     emitManagedSetupDryRun(
       options,
-      installerLaunch.ok
-        ? installPreview
-        : withManagedSetupPrerequisiteFailure(
-            installPreview,
-            installerLaunch.error,
-          ),
+      managedSetupPreviewForInstallerLaunch(installPreview, installerLaunch),
     );
     return;
   }

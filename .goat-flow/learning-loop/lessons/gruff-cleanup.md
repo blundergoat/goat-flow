@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-04
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -39,6 +39,8 @@ last_reviewed: 2026-08-04
 
 **What happened:** During M01 gruff cleanup, extracting `src/cli/facts/fs.ts` cache helpers added comments that said "read errors cache and return null", "stat errors cache and return false", and "readdir errors cache and return []". Humans could infer the behavior, but `gruff-ts` still reported `docs.missing-error-behavior-doc` until the comments used the installed rule vocabulary: `swallows ... fallback`.
 
+**Recurrence update (2026-08-06):** New Windows Bash discovery comments said lookup errors returned no choices, but the rule stayed open until the text explicitly said the process errors `recover` to fallback discovery. The targeted report then cleared all three error-behavior findings.
+
 **Root cause:** I wrote comments that described the behavior semantically but did not satisfy the analyzer's marker vocabulary for error recovery.
 
 **Prevention:** When `docs.missing-error-behavior-doc` survives a comment pass, read the installed rule vocabulary and use accepted recovery words such as `swallows`, `fallback`, or `recover` when truthful. Evidence anchors: `src/cli/facts/fs.ts` (search: `swallows read errors as a cached null fallback`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
@@ -69,9 +71,11 @@ last_reviewed: 2026-08-04
 
 **Status:** active | **Created:** 2026-05-31
 
-**Incident count:** 2 | **Latest occurrence:** 2026-08-03
+**Incident count:** 3 | **Latest occurrence:** 2026-08-06
 
 **What happened:** During the gruff findings cleanup, I treated `waste.unused-import` findings as safe mechanical removals. Removing `realpathSync` / `fileURLToPath` from `src/cli/cli.ts` broke `npm run typecheck`, and removing `rename` / `TERMINAL_UPLOAD_MAX_BODY_BYTES` from `test/integration/dashboard-server.test.ts` broke the focused dashboard-server test.
+
+**Recurrence update (2026-08-06):** The analyzer reported `relative`, `resolve`, and `fileURLToPath` unused in both `run-with-bash.mjs` mirrors even though direct searches found executable references. The imports stayed, and Node syntax plus focused launcher tests remained green.
 
 **Root cause:** The analyzer reported imports as unused even though the symbols were referenced later in large files. I trusted the finding before doing a local symbol search or running the focused test.
 

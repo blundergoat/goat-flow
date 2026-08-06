@@ -14,6 +14,10 @@ import {
   readManagedInstallBaseline,
   writeManagedInstallState,
 } from "./managed-setup-state.js";
+import type {
+  InstallerInvocation,
+  InstallerInvocationError,
+} from "./install-invocation.js";
 import type { AgentId } from "./types.js";
 
 export {
@@ -96,23 +100,26 @@ export interface ManagedSetupPreview {
 }
 
 /**
- * Show a launch prerequisite in the same preview users inspect before installation.
- * Use when managed files are safe but starting the real installer would fail.
+ * Merge installer launch admission into the managed preview shown to users.
+ * Use so dry-run and real install consume the same platform prerequisite result.
  *
- * @param installPreview - current file actions; an empty file list still receives the launch blocker
- * @param prerequisiteFailure - actionable launch error; empty text would leave users without remediation
- * @returns blocked copy for the UI; the original preview stays unchanged for other admission checks
+ * @param installPreview - current file actions; an empty list still receives a launch blocker
+ * @param installerLaunch - selected Bash or actionable error; never null after discovery
+ * @returns original ready preview or blocked copy; never null and never mutates the input
  */
-export function withManagedSetupPrerequisiteFailure(
+export function managedSetupPreviewForInstallerLaunch(
   installPreview: ManagedSetupPreview,
-  prerequisiteFailure: string,
+  installerLaunch: InstallerInvocation | InstallerInvocationError,
 ): ManagedSetupPreview {
+  // A runnable Bash leaves the managed-file verdict exactly as the user saw it.
+  if (installerLaunch.ok) return installPreview;
+
   return {
     ...installPreview,
     verdict: "blocked",
     limits: [
       ...installPreview.limits,
-      `Install prerequisite failed: ${prerequisiteFailure}`,
+      `Install prerequisite failed: ${installerLaunch.error}`,
     ],
   };
 }

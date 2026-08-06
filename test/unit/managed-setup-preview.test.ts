@@ -19,11 +19,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { buildInstallerInvocation } from "../../src/cli/install-invocation.js";
 import {
   buildManagedSetupPreview,
   classifyManagedSetupFile,
+  managedSetupPreviewForInstallerLaunch,
   managedInstallStatePath,
-  withManagedSetupPrerequisiteFailure,
   writeManagedInstallState,
   type ManagedSetupFileState,
   type ManagedSetupPreview,
@@ -171,14 +172,28 @@ describe("managed setup prerequisites", () => {
       limits: [],
       files: [],
     };
-    const failure =
-      "Install requires a Windows-compatible Bash, but none was found.";
+    const installerLaunch = buildInstallerInvocation({
+      scriptPath: "C:\\package\\workflow\\install-goat-flow.sh",
+      projectPath: "C:\\Users\\Example\\project",
+      agent: "claude",
+      installerFlags: [],
+      platform: "win32",
+      windowsBashCandidates: [],
+    });
 
-    const blocked = withManagedSetupPrerequisiteFailure(preview, failure);
+    const blocked = managedSetupPreviewForInstallerLaunch(
+      preview,
+      installerLaunch,
+    );
+
+    // A selected Bash would make this fixture invalid instead of proving the user's blocker.
+    if (installerLaunch.ok) assert.fail("Expected missing Windows Bash");
 
     assert.equal(blocked.verdict, "blocked");
     assert.equal(
-      blocked.limits.includes(`Install prerequisite failed: ${failure}`),
+      blocked.limits.includes(
+        `Install prerequisite failed: ${installerLaunch.error}`,
+      ),
       true,
     );
     assert.equal(preview.verdict, "ready");

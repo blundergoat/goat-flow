@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-03
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -77,6 +77,8 @@ last_reviewed: 2026-08-03
 **Status:** active | **Created:** 2026-05-30
 
 **What happened:** During the M00 gruff docs continuation, the first internal-helper comment batch cleared `docs.missing-internal-function-doc` but left the full snapshot at only 175 findings down because gruff then reported `docs.missing-side-effect-doc` on helpers that write fixture files or spawn tools. Retuning those comments to explicitly say `Writes` or `Spawns` moved the full snapshot to `summary error=0 warning=121 advisory=598 total=719` and both doc clusters to zero.
+
+**Recurrence update (2026-08-06):** Windows discovery described its purpose and fallback but did not explicitly name the `where.exe` process side effect. Adding that concrete process action cleared the three targeted side-effect findings.
 
 **Root cause:** I wrote purpose comments for side-effecting helpers but did not include analyzer-recognised side-effect language. For gruff-ts docs rules, a human-useful purpose sentence is not enough when the helper mutates filesystem state or runs a subprocess.
 
