@@ -15,6 +15,7 @@ import { load } from "js-yaml";
 import type { ReadonlyFS } from "../types.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
+import { buildAgentHookCommand } from "../server/agent-hook-writer.js";
 import type { AgentId } from "../types.js";
 import type { AgentProfile } from "../manifest/types.js";
 import type { DriftFinding } from "./types.js";
@@ -47,24 +48,40 @@ function hookEventKey(agentId: AgentId, spec: HookSpec): string {
   return spec.event;
 }
 
-/** Resolve a hook command path the same way installed agent configs store it. */
-function hookCommandPath(agent: AgentProfile, script: string): string {
-  if (!agent.hooks_dir) return script;
-  return pathPosix.join(agent.hooks_dir, script);
-}
-
-/** Build the optional Copilot hook entry that drift comparison expects when a toggle is enabled. */
+/**
+ * Build the Copilot hook entry audit expects when the user enables a toggle.
+ * Use to compare the installed command with the same portable launcher setup writes.
+ *
+ * @param agent - Copilot profile; an empty hook folder uses the managed default.
+ * @param spec - Hook being compared; missing timeout uses the agent's 30-second default.
+ * @returns Expected Copilot command entry; never null for a registered hook.
+ */
 function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
-  const path = hookCommandPath(agent, spec.primaryScript);
+  // Older profiles may omit the hook folder, so audit uses setup's managed location.
+  const hooksDirectory = agent.hooks_dir ?? ".goat-flow/hooks";
+  const crossPlatformCommand = buildAgentHookCommand(
+    "copilot",
+    hooksDirectory,
+    spec,
+  );
+  // A missing registry timeout means Copilot's documented default remains expected.
+  const timeoutSeconds = spec.timeoutSec ?? 30;
   return {
     type: "command",
-    bash: path,
-    powershell: `if (Get-Command bash -ErrorAction SilentlyContinue) { bash ${path} } else { Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run ${path} on Windows."}' }`,
-    timeoutSec: spec.timeoutSec ?? 30,
+    bash: crossPlatformCommand,
+    powershell: crossPlatformCommand,
+    timeoutSec: timeoutSeconds,
   };
 }
 
-/** Detect a command entry that directly launches one managed hook script. */
+/**
+ * Detect whether one agent command directly starts the selected managed hook.
+ * Use during drift checks so unrelated user hooks remain untouched and unreported.
+ *
+ * @param entry - Parsed config value; null, arrays, and primitives cannot be commands.
+ * @param spec - Managed hook to find; an empty script list cannot match.
+ * @returns True for a direct managed command; false for unrelated or empty values.
+ */
 function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   // Non-object JSON cannot represent a runnable hook command.
   if (!isRecord(entry)) return false;
@@ -73,7 +90,9 @@ function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
   ].join("\n");
-  return spec.scriptFiles.some((script) => commands.includes(script));
+  return spec.scriptFiles.some(
+    (script) => script !== "run-with-bash.mjs" && commands.includes(script),
+  );
 }
 
 /** Detect managed hook entries by script reference so drift repair preserves unrelated hooks. */

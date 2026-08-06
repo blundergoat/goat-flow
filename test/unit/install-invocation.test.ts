@@ -10,10 +10,43 @@ import {
   buildInstallerInvocation,
   buildInstallerSpawnSpec,
   buildWindowsBashMissingMessage,
+  discoverWindowsBashCandidates,
   isWslBashPath,
   pickWindowsBashPath,
   toBashPath,
 } from "../../src/cli/install-invocation.js";
+
+describe("discoverWindowsBashCandidates", () => {
+  /** Proves setup can find the default Git Bash even when PATH offers only WSL. */
+  it("finds a default Git for Windows install when PATH exposes only WSL", () => {
+    const defaultGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+    const candidates = discoverWindowsBashCandidates({
+      environment: { ProgramFiles: "C:\\Program Files" },
+      pathExists: (candidate) => candidate === defaultGitBash,
+      runWhere: (executable) =>
+        executable === "bash" ? ["C:\\Windows\\System32\\bash.exe"] : [],
+    });
+
+    assert.deepEqual(candidates, [
+      "C:\\Windows\\System32\\bash.exe",
+      defaultGitBash,
+    ]);
+    assert.equal(pickWindowsBashPath(candidates), defaultGitBash);
+  });
+
+  /** Proves a visible git.exe can lead setup to its sibling Bash executable. */
+  it("derives Git Bash from a git.exe in Git for Windows cmd", () => {
+    const derivedGitBash = "C:\\Tools\\Git\\bin\\bash.exe";
+    const candidates = discoverWindowsBashCandidates({
+      environment: {},
+      pathExists: (candidate) => candidate === derivedGitBash,
+      runWhere: (executable) =>
+        executable === "git" ? ["C:\\Tools\\Git\\cmd\\git.exe"] : [],
+    });
+
+    assert.deepEqual(candidates, [derivedGitBash]);
+  });
+});
 
 describe("toBashPath", () => {
   it("leaves POSIX paths unchanged", () => {

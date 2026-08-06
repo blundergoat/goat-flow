@@ -95,6 +95,28 @@ export interface ManagedSetupPreview {
   files: ManagedSetupPreviewFile[];
 }
 
+/**
+ * Show a launch prerequisite in the same preview users inspect before installation.
+ * Use when managed files are safe but starting the real installer would fail.
+ *
+ * @param installPreview - current file actions; an empty file list still receives the launch blocker
+ * @param prerequisiteFailure - actionable launch error; empty text would leave users without remediation
+ * @returns blocked copy for the UI; the original preview stays unchanged for other admission checks
+ */
+export function withManagedSetupPrerequisiteFailure(
+  installPreview: ManagedSetupPreview,
+  prerequisiteFailure: string,
+): ManagedSetupPreview {
+  return {
+    ...installPreview,
+    verdict: "blocked",
+    limits: [
+      ...installPreview.limits,
+      `Install prerequisite failed: ${prerequisiteFailure}`,
+    ],
+  };
+}
+
 /** One exact-copy destination and its manifest-controlled package source. */
 interface ManagedTemplateDefinition {
   path: string;

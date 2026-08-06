@@ -29,6 +29,7 @@ import {
   buildManagedSetupPreview,
   managedSetupAdmissionFailure,
   recordManagedInstallAfterVerification,
+  withManagedSetupPrerequisiteFailure,
 } from "./managed-setup-preview.js";
 import {
   emitManagedSetupDryRun,
@@ -407,61 +408,75 @@ function emitCommitGuidanceInstallResult(projectPath: string): void {
 /**
  * Run a managed preview or deterministic install after the user chooses an agent.
  * Use for install or setup dry-run/apply; it throws CLI errors or preserves a non-zero child exit.
+ *
+ * @param options - parsed user choices; a missing agent is rejected before preview or installation
+ * @returns completion after preview or install; no value means output and exit state already describe the result
  */
 async function handleInstallCommand(options: ParsedCLI): Promise<void> {
   const selectedAgent = validateManagedSetupRequest(options);
-  const managedPreview = buildManagedSetupPreview(
+  const installPreview = buildManagedSetupPreview(
     options.projectPath,
     selectedAgent,
   );
-  // A dry-run reports the exact managed-template result and exits before installer side effects.
-  if (options.shouldDryRun) {
-    emitManagedSetupDryRun(options, managedPreview);
-    return;
-  }
-
-  const admissionFailure = managedSetupAdmissionFailure(
-    managedPreview,
-    options.shouldForce,
-  );
-  // A conflict report is returned before Bash starts, so the user's target remains unchanged.
-  if (admissionFailure !== null) throw new CLIError(admissionFailure, 1);
-
-  const invocation = buildInstallerInvocation({
+  const installerLaunch = buildInstallerInvocation({
     scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
     projectPath: options.projectPath,
     agent: selectedAgent,
     installerFlags: collectInstallerFlags(options, selectedAgent),
     platform: process.platform,
   });
+  // A dry-run reports the exact managed-template result and exits before installer side effects.
+  if (options.shouldDryRun) {
+    emitManagedSetupDryRun(
+      options,
+      installerLaunch.ok
+        ? installPreview
+        : withManagedSetupPrerequisiteFailure(
+            installPreview,
+            installerLaunch.error,
+          ),
+    );
+    return;
+  }
+
+  const overwriteBlocker = managedSetupAdmissionFailure(
+    installPreview,
+    options.shouldForce,
+  );
+  // A conflict report is returned before Bash starts, so the user's target remains unchanged.
+  if (overwriteBlocker !== null) throw new CLIError(overwriteBlocker, 1);
+
   // Invalid launch arguments stop before Bash can change the selected target.
-  if (!invocation.ok) {
-    throw new CLIError(invocation.error, 1);
+  if (!installerLaunch.ok) {
+    throw new CLIError(installerLaunch.error, 1);
   }
 
   const { spawnInheritedSync } = await import("./server/safe-exec.js");
-  const spawnSpec = buildInstallerSpawnSpec(invocation);
-  const result = spawnInheritedSync({
-    command: spawnSpec.command,
-    args: spawnSpec.args,
+  const installerProcess = buildInstallerSpawnSpec(installerLaunch);
+  const installResult = spawnInheritedSync({
+    command: installerProcess.command,
+    args: installerProcess.args,
     allowedBasenames: ["bash", "bash.exe"],
-    env: spawnSpec.env,
+    env: installerProcess.env,
   });
   // A spawn failure means the installer never started, so users receive the operating-system error.
-  if (result.error) {
+  if (installResult.error) {
     throw new CLIError(
-      `Could not run installer with ${spawnSpec.command}: ${result.error.message}`,
+      `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
       1,
     );
   }
   // A signal means installation ended mid-flow and cannot be recorded as a verified baseline.
-  if (result.signal) {
-    throw new CLIError(`Installer terminated by signal ${result.signal}`, 1);
+  if (installResult.signal) {
+    throw new CLIError(
+      `Installer terminated by signal ${installResult.signal}`,
+      1,
+    );
   }
   // A non-zero or missing child status is preserved as failure instead of running post-install writes.
-  if (result.status !== 0) {
+  if (installResult.status !== 0) {
     // Missing numeric status still maps to exit 1 so scripts never mistake it for success.
-    process.exitCode = result.status ?? 1;
+    process.exitCode = installResult.status ?? 1;
     return;
   }
 

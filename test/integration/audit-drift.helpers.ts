@@ -27,6 +27,8 @@ import {
   getInstalledSkillRoots,
   getSkillFiles,
 } from "../../src/cli/manifest/manifest.js";
+import { buildAgentHookCommand } from "../../src/cli/server/agent-hook-writer.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 export const INSTALL_FIXTURE_SKILL = "skill-with-references";
@@ -53,13 +55,21 @@ const SHARED_PLAYBOOK_FILENAMES = [
   "writing-style.md",
 ] as const;
 export const HOOK_STUB = "#!/usr/bin/env bash\n# deny hook stub\n";
+export const HOOK_LAUNCHER_STUB =
+  "// goat-flow-hook-version: 1.15.0\n// hook launcher stub\n";
 export const COPILOT_HOOK_CONFIG_STUB =
   '{\n  "version": 1,\n  "hooks": { "preToolUse": [] }\n}\n';
+const COPILOT_GRUFF_SPEC = getHookSpec("gruff-code-quality");
+assert.ok(COPILOT_GRUFF_SPEC);
+const COPILOT_GRUFF_COMMAND = buildAgentHookCommand(
+  "copilot",
+  ".goat-flow/hooks",
+  COPILOT_GRUFF_SPEC,
+);
 export const COPILOT_GRUFF_HOOK_ENTRY = {
   type: "command",
-  bash: ".goat-flow/hooks/gruff-code-quality.sh",
-  powershell:
-    'if (Get-Command bash -ErrorAction SilentlyContinue) { bash .goat-flow/hooks/gruff-code-quality.sh } else { Write-Output \'{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run .goat-flow/hooks/gruff-code-quality.sh on Windows."}\' }',
+  bash: COPILOT_GRUFF_COMMAND,
+  powershell: COPILOT_GRUFF_COMMAND,
   timeoutSec: 90,
 };
 
@@ -246,6 +256,10 @@ export function writeHookFixtures(root: string): void {
     join(root, "workflow", "hooks", "post-turn-safety.sh"),
     HOOK_STUB,
   );
+  writeFileSync(
+    join(root, "workflow", "hooks", "run-with-bash.mjs"),
+    HOOK_LAUNCHER_STUB,
+  );
   // Canonical policy modules represent the hook package future users receive.
   for (const hookLibFile of [
     "patterns-shell.sh",
@@ -284,6 +298,10 @@ export function writeHookFixtures(root: string): void {
   writeFileSync(
     join(root, ".goat-flow", "hooks", "post-turn-safety.sh"),
     HOOK_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
+    HOOK_LAUNCHER_STUB,
   );
   writeFileSync(
     join(root, "workflow", "hooks", "agent-config", "copilot-hooks.json"),

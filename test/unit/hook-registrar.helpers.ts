@@ -32,6 +32,7 @@ export const CLAUDE_DANGEROUS_PAYLOAD =
 
 export const GENERATED_AGENT_SURFACES = [
   ".claude/settings.json",
+  ".goat-flow/hooks/run-with-bash.mjs",
   ".goat-flow/hooks/deny-dangerous.sh",
   ".codex/hooks.json",
   ".goat-flow/hooks/deny-dangerous.sh",

@@ -1,45 +1,35 @@
 /**
- * Cross-platform invocation helpers for the bundled Bash installer.
- *
- * `handleInstallCommand` shells out to `workflow/install-goat-flow.sh` via
- * `spawnSync("bash", ...)`. On native Windows two things go wrong with the
- * naive call:
- *
- *   1. `getTemplatePath()` and `resolve(".")` return backslash paths. When
- *      Bash receives them as argv, the backslashes act as shell escapes and
- *      collapse the path (e.g. `C:\Users\...\install.sh` -> `CUsers...`).
- *   2. `bash` on a stock Windows host resolves to `System32\bash.exe` (WSL)
- *      or the `WindowsApps\bash.exe` proxy first, which does not accept
- *      Windows-shaped paths and is slow to boot from PowerShell.
- *
- * This module owns the platform-gated argument shape and the Bash selection
- * policy. POSIX behavior is intentionally byte-for-byte unchanged.
+ * Builds the Bash command used after a user previews or starts installation.
+ * Use this boundary so native Windows selects Git Bash instead of the WSL shim
+ * while macOS, Linux, and WSL keep their existing installer command.
+ * Failed discovery becomes actionable admission feedback before files change.
  */
 
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { delimiter, dirname, win32 } from "node:path";
 
-/** Successful invocation spec. */
+/** Successful Bash choice and arguments used to start the user's install. */
 export interface InstallerInvocation {
   ok: true;
   bashCommand: string;
   args: string[];
 }
 
-/** Spawn-ready command, argv, and environment for the selected installer Bash. */
+/** Spawn-ready process details used after setup admission succeeds. */
 export interface InstallerSpawnSpec {
   command: string;
   args: string[];
   env: NodeJS.ProcessEnv;
 }
 
-/** Failure with a CLI-ready error message. */
+/** Actionable blocker shown when setup cannot start on the user's host. */
 export interface InstallerInvocationError {
   ok: false;
   error: string;
 }
 
-/** Inputs needed to build the installer call. */
+/** User choices and host details needed to prepare one installer launch. */
 export interface InstallerInvocationParams {
   scriptPath: string;
   projectPath: string;
@@ -54,24 +44,28 @@ export interface InstallerInvocationParams {
 }
 
 /**
- * Build the (bash, argv) pair that `spawnSync` should use.
+ * Supplies Windows discovery inputs without depending on a test machine's PATH.
+ * Use in platform-independent tests; omitted fields use the user's real machine.
+ */
+export interface WindowsBashDiscoveryOptions {
+  environment?: NodeJS.ProcessEnv;
+  pathExists?: (candidate: string) => boolean;
+  runWhere?: (executable: "bash" | "git") => readonly string[];
+}
+
+/**
+ * Build the Bash command used after the user approves an install preview.
+ * Use for both dry-run admission and real execution so they report the same blockers.
  *
- * Linux/macOS/WSL (`platform` other than `"win32"`): returns the raw inputs
- * with `bash` as the command. The shape matches the historical call so POSIX
- * users see no behavioural change.
- *
- * Native Windows (`platform === "win32"`): forward-slash-normalises the script
- * and project paths so Git Bash / MSYS2 receive a valid path, and picks a
- * non-WSL `bash.exe` from the supplied candidates.
- *
- * @param params Installer script, target project, agent, flags, and platform-specific Bash candidates.
- * @returns Spawn-ready Bash command and argv, or a CLI-ready error when Windows has no usable Bash.
+ * @param params - Install choices; empty paths or agent values become installer validation errors.
+ * @returns Runnable command, or an actionable Windows blocker; never null.
  */
 export function buildInstallerInvocation(
   params: InstallerInvocationParams,
 ): InstallerInvocation | InstallerInvocationError {
   const installerFlags = [...params.installerFlags];
 
+  // macOS, Linux, and WSL users keep the Bash command already selected by their shell.
   if (params.platform !== "win32") {
     return {
       ok: true,
@@ -86,19 +80,21 @@ export function buildInstallerInvocation(
     };
   }
 
-  const candidates =
+  // Tests may provide candidates; normal Windows setup discovers the user's installed Bash options.
+  const windowsBashCandidates =
     params.windowsBashCandidates ?? discoverWindowsBashCandidates();
-  const selected = pickWindowsBashPath(candidates);
-  if (!selected) {
+  const selectedBashPath = pickWindowsBashPath(windowsBashCandidates);
+  // No native Bash means both preview and install must stop with the same remediation.
+  if (!selectedBashPath) {
     return {
       ok: false,
-      error: buildWindowsBashMissingMessage(candidates),
+      error: buildWindowsBashMissingMessage(windowsBashCandidates),
     };
   }
 
   return {
     ok: true,
-    bashCommand: selected,
+    bashCommand: selectedBashPath,
     args: [
       toBashPath(params.scriptPath),
       toBashPath(params.projectPath),
@@ -110,11 +106,12 @@ export function buildInstallerInvocation(
 }
 
 /**
- * Build the exact spawn command for a successful installer invocation.
+ * Build the process details used to start an admitted installer.
+ * Use immediately before execution so Git Bash also wins child PATH lookup.
  *
- * @param invocation Selected Bash command and installer argv.
- * @param baseEnv Environment to inherit; tests may pass a fixed object.
- * @returns Command, argv, and PATH-adjusted environment for `spawnSync`.
+ * @param invocation - Selected Bash and arguments; never empty after admission.
+ * @param baseEnv - Environment to inherit; empty PATH is valid for restricted hosts.
+ * @returns Command, arguments, and PATH-adjusted environment; never null.
  */
 export function buildInstallerSpawnSpec(
   invocation: InstallerInvocation,
@@ -128,27 +125,31 @@ export function buildInstallerSpawnSpec(
 }
 
 /**
- * Convert a Windows path to a form Bash will not shell-escape.
+ * Convert a path to the slash form Bash accepts on every supported host.
+ * Use for installer arguments; POSIX paths stay byte-identical for users.
  *
- * Drive-letter:  `C:\Users\me` -> `C:/Users/me`
- * UNC share:    `\\srv\share\x` -> `//srv/share/x`
- *
- * POSIX paths contain no backslashes so the operation is a no-op for them,
- * which matters because tests assert that POSIX inputs are byte-identical.
- *
- * @param shellPath Path argument that will be passed to Bash.
- * @returns The same path with Windows backslashes converted to forward slashes.
+ * @param shellPath - Path passed to Bash; empty remains empty for downstream validation.
+ * @returns Same path with Windows separators normalized; never null.
  */
 export function toBashPath(shellPath: string): string {
   return shellPath.replace(/\\/g, "/");
 }
 
-/** Build installer spawn env; selected Windows Bash paths get PATH precedence without a dynamic command. */
+/**
+ * Build the environment for the selected installer Bash.
+ * Use so Git Bash child commands resolve from the same installation the user previewed.
+ *
+ * @param bashCommand - Selected executable; empty is invalid before this method runs.
+ * @param baseEnv - User environment; missing PATH is treated as an empty suffix.
+ * @returns Environment passed to the installer; never null.
+ */
 function installerSpawnEnv(
   bashCommand: string,
   baseEnv: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
+  // POSIX shells already resolve the intended Bash and need no PATH rewrite.
   if (bashCommand === "bash") return baseEnv;
+  // A restricted host may omit PATH; Git Bash's own folder still becomes usable.
   const existingPath = baseEnv.PATH ?? "";
   return {
     ...baseEnv,
@@ -156,8 +157,15 @@ function installerSpawnEnv(
   };
 }
 
-/** Return dirname using Windows semantics for Windows-shaped Bash executable paths. */
+/**
+ * Find the folder containing the selected Bash executable.
+ * Use Windows path rules only when the user's selected command is Windows-shaped.
+ *
+ * @param bashCommand - Selected Bash path; empty produces the current-directory dirname.
+ * @returns Containing directory used for PATH precedence; never null.
+ */
 function bashCommandDir(bashCommand: string): string {
+  // Drive-letter and backslash paths need Windows semantics even on a test host.
   if (/^[A-Za-z]:[\\/]/.test(bashCommand) || bashCommand.includes("\\")) {
     return win32.dirname(bashCommand);
   }
@@ -165,38 +173,38 @@ function bashCommandDir(bashCommand: string): string {
 }
 
 /**
- * Pick the first Windows `bash.exe` that is not one of the known WSL shims.
+ * Pick the first native Windows Bash path in the user's discovery order.
+ * Use a WSL denylist so Git Bash, MSYS2, Cygwin, Scoop, and Chocolatey remain valid.
  *
- * We reject by path rather than allowlist Git Bash because users may install
- * MSYS2, Cygwin, Scoop, or Chocolatey distributions whose paths are not
- * predictable. The two known-bad locations both belong to WSL:
- *
- *  - `C:\Windows\System32\bash.exe` (Windows Subsystem for Linux launcher)
- *  - `%LOCALAPPDATA%\Microsoft\WindowsApps\bash.exe` (Store-managed WSL proxy)
- *
- * @param candidates Raw `where bash` output lines or test-injected candidate paths.
- * @returns First non-WSL Bash path, or null when every candidate is unusable.
+ * @param candidates - Discovered paths; blank entries do not represent an installation.
+ * @returns First non-WSL path, or null when setup must show a Bash blocker.
  */
 export function pickWindowsBashPath(
   candidates: readonly string[],
 ): string | null {
-  const cleaned = Array.from(
+  // Trim and deduplicate results so one install is not presented repeatedly.
+  const cleanedCandidatePaths = Array.from(
     new Set(
       candidates
         .map((candidate) => candidate.trim())
         .filter((candidate) => candidate.length > 0),
     ),
   );
-  if (cleaned.length === 0) return null;
-  const accepted = cleaned.filter((candidate) => !isWslBashPath(candidate));
-  return accepted[0] ?? null;
+  // No non-empty choices means the user has no Bash executable setup can inspect.
+  if (cleanedCandidatePaths.length === 0) return null;
+  const nativeBashPaths = cleanedCandidatePaths.filter(
+    (candidate) => !isWslBashPath(candidate),
+  );
+  // An empty native list means every discovered executable would enter WSL.
+  return nativeBashPaths[0] ?? null;
 }
 
 /**
- * True if the candidate path matches a known WSL launcher location.
+ * Identify a Windows Bash path that would enter WSL instead of native Git Bash.
+ * Use before admitting an install that passes Windows-shaped paths.
  *
- * @param candidate Bash executable path from discovery.
- * @returns Whether the candidate is a WSL launcher that rejects Windows-shaped installer paths.
+ * @param candidate - Discovered Bash path; empty is treated as non-WSL and filtered elsewhere.
+ * @returns True when the path is a known WSL launcher; never null.
  */
 export function isWslBashPath(candidate: string): boolean {
   const normalised = candidate.replace(/\//g, "\\").toLowerCase();
@@ -206,39 +214,161 @@ export function isWslBashPath(candidate: string): boolean {
   );
 }
 
-/** Probe `where bash` for candidate paths; reads PATH and swallows command failures as no candidates. */
-function discoverWindowsBashCandidates(): string[] {
+/**
+ * Ask Windows PATH for one executable while preparing an install or hook launch.
+ * A missing command, timeout, or lookup error returns no choices instead of crashing the UI flow.
+ * Side effect: starts `where.exe`; all process errors recover to standard-location discovery.
+ *
+ * @param executable - Bash or Git requested by setup; an empty value is impossible by type
+ * @returns matching executable paths in PATH order; empty means setup must try standard locations
+ */
+function whereWindowsExecutable(executable: "bash" | "git"): string[] {
   try {
-    const output = execFileSync("where", ["bash"], {
+    const windowsPathOutput = execFileSync("where", [executable], {
       encoding: "utf-8",
       timeout: 5000,
     });
-    return output
+    // Empty output means PATH offered no usable choice, so standard install locations are tried next.
+    return windowsPathOutput
       .split(/\r?\n/)
-      .map((candidate) => candidate.trim())
-      .filter((candidate) => candidate.length > 0);
+      .map((executablePath) => executablePath.trim())
+      .filter((executablePath) => executablePath.length > 0);
   } catch {
+    // For example, a restricted PowerShell session may hide `where`; setup continues with known Git paths.
     return [];
   }
 }
 
 /**
- * Render the actionable error when no usable Bash is found on Windows.
+ * Find Git Bash beside a Git executable already visible to the user.
+ * Use when `bash` itself is hidden from PATH; `null` sends discovery to other install locations.
  *
- * @param candidates Rejected Bash paths from discovery, if any.
- * @returns Multi-line CLI error that explains the Git Bash and WSL fallback options.
+ * @param gitExecutablePath - Git path reported by Windows; empty input produces no adjacent Bash path
+ * @returns adjacent Bash executable, or `null` when Git is not in a recognized `cmd` or `bin` folder
+ */
+function bashBesideWindowsGit(gitExecutablePath: string): string | null {
+  const gitExecutableDirectory = win32.dirname(gitExecutablePath.trim());
+  const gitDirectoryName = win32.basename(gitExecutableDirectory).toLowerCase();
+  // Git already lives in `bin`, so Bash is available beside the executable the user runs.
+  if (gitDirectoryName === "bin") {
+    return win32.join(gitExecutableDirectory, "bash.exe");
+  }
+  // Git for Windows exposes `cmd/git.exe`, while its compatible Bash lives in the sibling `bin` folder.
+  if (gitDirectoryName === "cmd") {
+    return win32.join(win32.dirname(gitExecutableDirectory), "bin", "bash.exe");
+  }
+  // An unfamiliar Git layout cannot safely identify Bash, so discovery keeps looking.
+  return null;
+}
+
+/**
+ * List standard Git Bash locations the installer can offer when PATH is incomplete.
+ * Missing environment folders are normal and simply contribute no candidate for that install scope.
+ *
+ * @param environment - Windows folders visible to setup; empty means only the machine-wide default is tried
+ * @returns possible Git Bash paths; entries may not exist and are checked before users rely on them
+ */
+function standardWindowsGitBashLocations(
+  environment: NodeJS.ProcessEnv,
+): string[] {
+  const standardInstallLocations: string[] = [];
+  // A machine-wide Git install is the normal choice offered to all Windows users.
+  if (environment.ProgramFiles) {
+    standardInstallLocations.push(
+      win32.join(environment.ProgramFiles, "Git", "bin", "bash.exe"),
+    );
+  }
+  // Some 64-bit shells expose ProgramW6432 instead of ProgramFiles.
+  if (environment.ProgramW6432) {
+    standardInstallLocations.push(
+      win32.join(environment.ProgramW6432, "Git", "bin", "bash.exe"),
+    );
+  }
+  // A 32-bit Git installation remains valid when that is what the user installed.
+  if (environment["ProgramFiles(x86)"]) {
+    standardInstallLocations.push(
+      win32.join(environment["ProgramFiles(x86)"], "Git", "bin", "bash.exe"),
+    );
+  }
+  // Per-user Git installs work without administrator access and live under LocalAppData.
+  if (environment.LOCALAPPDATA) {
+    standardInstallLocations.push(
+      win32.join(
+        environment.LOCALAPPDATA,
+        "Programs",
+        "Git",
+        "bin",
+        "bash.exe",
+      ),
+    );
+  }
+  // A stripped environment can still use Git for Windows at its documented machine-wide default.
+  standardInstallLocations.push("C:\\Program Files\\Git\\bin\\bash.exe");
+  return standardInstallLocations;
+}
+
+/**
+ * Find Windows-compatible Bash choices before setup reports whether installation can run.
+ * PATH choices keep user preference; adjacent and standard Git installs rescue machines
+ * where Windows exposes only the WSL shim.
+ *
+ * @param options - optional test inputs; empty uses the user's environment, filesystem, and PATH
+ * @returns Bash paths in preference order; empty means setup must show a blocked admission result
+ */
+export function discoverWindowsBashCandidates(
+  options: WindowsBashDiscoveryOptions = {},
+): string[] {
+  // No test environment was supplied, so discovery reflects the Windows session the user launched.
+  const environment = options.environment ?? process.env;
+  // Production checks the real filesystem; tests may describe a Windows layout on another host.
+  const pathExists = options.pathExists ?? existsSync;
+  // Production asks Windows PATH; tests can provide deterministic Bash and Git results.
+  const runWhere = options.runWhere ?? whereWindowsExecutable;
+  const pathBashCandidates = [...runWhere("bash")];
+  // Only recognized Git layouts can offer a trustworthy adjacent Bash executable.
+  const gitDerivedBashCandidates = runWhere("git")
+    .map(bashBesideWindowsGit)
+    .filter((bashPath): bashPath is string => bashPath !== null);
+  // Standard paths are offered only when the corresponding executable exists for this user.
+  const existingStandardInstallCandidates =
+    standardWindowsGitBashLocations(environment).filter(pathExists);
+  const discoveredBashCandidates = [
+    ...pathBashCandidates,
+    ...gitDerivedBashCandidates.filter(pathExists),
+    ...existingStandardInstallCandidates,
+  ];
+  // Case-insensitive deduplication keeps the preview stable when Windows reports the same install twice.
+  return Array.from(
+    new Map(
+      discoveredBashCandidates.map((bashPath) => [
+        bashPath.toLowerCase(),
+        bashPath,
+      ]),
+    ).values(),
+  );
+}
+
+/**
+ * Render the blocker shown when Windows setup cannot find native Bash.
+ * Use in dry-run and real install output so both give identical remediation.
+ *
+ * @param candidates - Rejected paths; empty means discovery found nothing to list.
+ * @returns Multi-line Git Bash and WSL remediation message; never empty.
  */
 export function buildWindowsBashMissingMessage(
   candidates: readonly string[],
 ): string {
+  // Blank discovery output is omitted because it gives the user no path to diagnose.
   const rejected = candidates
     .map((candidate) => candidate.trim())
     .filter((candidate) => candidate.length > 0);
   const lines = [
     "Install requires a Windows-compatible Bash, but none was found.",
   ];
+  // Rejected paths explain when Windows found only launchers that enter WSL.
   if (rejected.length > 0) {
     lines.push("Detected candidates (all rejected as WSL launchers):");
+    // Each path gives the user one concrete PATH entry to remove or reprioritize.
     for (const candidate of rejected) {
       lines.push(`  - ${candidate}`);
     }

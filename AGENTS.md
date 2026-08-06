@@ -1,4 +1,4 @@
-# AGENTS.md - v1.15.0 (2026-08-03)
+# AGENTS.md - v1.15.0 (2026-08-06)
 Documentation framework for AI coding agent workflows. Markdown docs + Bash validation scripts + TypeScript CLI/dashboard.
 
 goat-flow is a harness - guardrails, memory, and workflows for AI coding agents. Five concerns drive every design decision: **Context** (what you read), **Constraints** (what you may never do), **Verification** (how work is checked), **Recovery** (how state survives failure), **Feedback loop** (how mistakes become permanent fixes).
@@ -51,7 +51,7 @@ npm test
 bash scripts/preflight-checks.sh
 ```
 
-Situational: `bump-version.sh <ver>` (release), `test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `bash .goat-flow/hooks/deny-dangerous.sh --self-test=full` (hook check; full workflow: `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`).
+Situational: `bash scripts/bump-version.sh <ver>` (release), `npm run test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `bash .goat-flow/hooks/deny-dangerous.sh --self-test=full` (hook check; full workflow: `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 

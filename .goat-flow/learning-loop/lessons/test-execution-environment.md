@@ -1,13 +1,14 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-08-04
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
 
 **Status:** active | **Created:** 2026-06-13
 **Trigger phase:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-08-04
+**Incident count:** 5 | **Latest occurrence:** 2026-08-06
+**Decision changed:** Recursive ripgrep searches over gitignored plan or log trees must use `--no-ignore` or `-uuu` and a known-positive control before a zero-match result is accepted.
 
 **What happened:** During the M02b review, `grep -rl "plan-checkbox-guard" .goat-flow --include="*.md"` returned nothing even though `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` and ADR-038 matched when grepped directly. `type grep` showed the Claude Code session shell defines `grep` as a function that execs the claude binary as `ugrep -G --ignore-files --hidden -I ...`, and `--ignore-files` applies `.gitignore`-style ignore files during recursion - so sweeps that descend into ignored trees (`.goat-flow/plans/`, `.goat-flow/logs/`) silently return clean.
 
@@ -17,9 +18,11 @@ last_reviewed: 2026-08-04
 
 **Recurrence 2026-08-04:** After deleting a commit-subject gate script from `scripts/` and pruning its references, a recursive sweep for its filename and helper symbols returned nothing and was reported to the user as "zero residual references". The wrapper had skipped `.goat-flow/logs/` and `.goat-flow/plans/`, where 17 references survived. The tell surfaced only by luck on an unrelated task: a sweep for `executed=[0-9]` missed `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `mode=smoke, executed=`) moments after that exact line had been read from the file - the known-positive control from Prevention, hit by accident rather than by discipline. Removal-completeness claims are the highest-risk use of this tool, because a false clean and a real clean are the same empty output.
 
+**Recurrence 2026-08-06:** During a 12-directory roadmap shift, `rg --hidden` reported zero old-version matches under `.goat-flow/plans/`, and the in-progress audit treated that as a clean result. Reading a renamed milestone directly exposed multiple `1.16.0` references; rerunning with `rg --no-ignore --hidden` found 14 matches for that version and the remaining roadmap references. Evidence anchors: `.goat-flow/plans/.gitignore` (search: `*`), `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`).
+
 **Root cause:** I treated recursive `grep` output as filesystem truth. In this environment it is gitignore-filtered, which can false-clean a verification sweep exactly where stale or historical content lives.
 
-**Prevention:** For verification sweeps that must include gitignored content, use `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with `command grep`. When the question is "is this consistent in what ships" rather than "does this string exist on disk", prefer `git grep` - it searches tracked files by construction, so local logs, plans, and scratch artifacts cannot mask a real residue or manufacture a false one. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
+**Prevention:** For verification sweeps that must include gitignored content, use `rg --no-ignore` / `rg -uuu`, `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with an ignore-bypassing search. When the question is "is this consistent in what ships" rather than "does this string exist on disk", prefer `git grep` - it searches tracked files by construction, so local logs, plans, and scratch artifacts cannot mask a real residue or manufacture a false one. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
 
 ---
 

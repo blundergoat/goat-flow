@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-07-14
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -193,7 +193,7 @@ last_reviewed: 2026-07-14
 
 **Root cause:** I assumed the Claude-style hook command string was safe for Codex too. The audit parser only needed to see the hook script path, but the runtime needed a command shape Codex can execute directly.
 
-**Updated 2026-06-09:** This lesson is narrowed, not a blanket ban on all shell substitution. Current Codex docs say hook commands run with the session cwd and repo-local hooks should resolve from the git root; bare `.goat-flow/hooks/...` commands fail from nested cwd. The current safe Codex shape is a `bash -c` wrapper that resolves `git rev-parse --show-toplevel`, checks `$root/.goat-flow/hooks/<script>`, `cd`s to `$root`, and then invokes `bash "$root/.goat-flow/hooks/<script>"`. Do not copy Claude-only `$CLAUDE_PROJECT_DIR` fallback into Codex unless Codex documents an equivalent project-root variable. Evidence anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `git rev-parse --show-toplevel`), `.codex/hooks.json` (search: `git rev-parse --show-toplevel`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `direct configured command is replayed from nested cwd`).
+**Updated 2026-08-06:** This lesson is narrowed, not a blanket ban on all shell substitution. Codex hook commands run with the session cwd, so bare `.goat-flow/hooks/...` paths fail from nested directories. The current safe shape is a Node bootstrap that resolves the active git root, loads `run-with-bash.mjs`, passes the selected hook as an argument, and starts the launcher with the resolved root as cwd. Codex deliberately receives no `$CLAUDE_PROJECT_DIR` fallback. Evidence anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `run-with-bash.mjs`), `.codex/hooks.json` (search: `run-with-bash.mjs`), and `test/unit/hook-registrar.test.ts` (search: `generated Codex launchers resolve the active root`).
 
 ## Lesson: Configured hook smoke must verify the registered guard path
 

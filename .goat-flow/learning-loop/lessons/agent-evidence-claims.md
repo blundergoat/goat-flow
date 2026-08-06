@@ -1,11 +1,12 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: Agent cited gitignored content as evidence in committed docs
 
 **Created:** 2026-05-11
+**Decision changed:** Before citing a local file as durable evidence, verify that Git tracks it or cite the committed detector/source that supports the claim.
 
 **What happened:** A 2026-05-11 documentation audit found four committed surfaces citing paths under `.goat-flow/scratchpad/` (gitignored by design) as authoritative evidence:
 
@@ -31,6 +32,8 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Recurrence (2026-07-16):** Pre-1.14.0 quality report `2026-07-16-1018-codex-vwcaf` found five new `.goat-flow/scratchpad/related/` citations in `lessons/coordination.md`, `patterns/external-lessons.md`, and `patterns/refactoring.md`. Fix: cite upstream provenance (repo + PR + path + search anchor), writing the upstream path as plain prose - the stale-ref scanner (`src/cli/facts/shared/learning-loop-common.ts`, search: `isCheckableForStaleness`) resolves backticked slash-containing paths locally and fails `feedback-loop-active` when unresolved.
 
 **Recurrence update (2026-07-17):** `.goat-flow/plans/**` and one quality-report path were cited as durable evidence in seven lessons and four footguns; three anchored plan files were already deleted. All replaced with committed anchors or plain prose. The prevention is now structural: `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`) fails evidence-grammar refs to gitignored paths; committed anchor files (README.md, .gitignore, .gitkeep) exempt.
+
+**Recurrence update (2026-08-06):** While recording an ignored-search failure from a roadmap shift, the new recurrence cited the renamed gitignored milestone as durable evidence. `stats --check` failed with `stale-ref` and the diagnostic `gitignored path used as durable evidence anchor`. The fix removed the local-plan citation and kept committed anchors for the ignore rule and detector. Evidence: `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`).
 
 ---
 

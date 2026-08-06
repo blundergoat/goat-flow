@@ -1147,6 +1147,7 @@ const fs = require("node:fs");
 
 const [dst, src, agent] = process.argv.slice(2);
 const managedScripts = [
+  "run-with-bash.mjs",
   "deny-dangerous.sh",
   "gruff-code-quality.sh",
   "post-turn-safety.sh",
@@ -1253,56 +1254,143 @@ function configuredHookEnabled(hookId) {
   return defaultEnabled.has(hookId);
 }
 
-function hookUnavailableCommand(script) {
-  if (script === "gruff-code-quality.sh") {
-    return "{ printf '\\''gruff-code-quality: hook unavailable: git repository root or hook script unavailable; skipped.\\n'\\'' >&2; exit 0; }";
+/**
+ * Choose the unavailable-hook response understood by the user's agent host.
+ * Use while writing config so a launcher failure cannot masquerade as success.
+ *
+ * @param {string} hookResponseMode - Agent protocol; empty or unknown fails closed.
+ * @returns {string} Node response source; never empty because every hook needs an outcome.
+ */
+function unavailableHookResponseProgram(hookResponseMode) {
+  // Antigravity expects deny JSON on stdout and treats that response as handled.
+  if (hookResponseMode === "antigravity") {
+    return "const reportUnavailable=()=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: git repository root unavailable.'})+lineBreak);process.exit(0);};";
   }
-  if (script === "post-turn-safety.sh") {
-    return "{ printf '\\''post-turn-safety: hook unavailable: git repository root or hook script unavailable.\\n'\\'' >&2; exit 2; }";
+  // Copilot expects permission-decision fields when the policy hook cannot start.
+  if (hookResponseMode === "copilot") {
+    return "const reportUnavailable=()=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: git repository root unavailable.'})+lineBreak);process.exit(0);};";
   }
-  return agent === "antigravity"
-    ? "{ printf '\\''{\"decision\":\"deny\",\"reason\":\"Policy hook unavailable: git repository root unavailable.\"}\\n'\\''; exit 0; }"
-    : "{ printf '\\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\\'' >&2; exit 2; }";
+  // Optional Gruff feedback fails soft so a missing shell never blocks the user's edit.
+  if (hookResponseMode === "gruff") {
+    return "const reportUnavailable=()=>{process.stderr.write('gruff-code-quality: hook unavailable: git repository root or hook launcher unavailable; skipped.'+lineBreak);process.exit(0);};";
+  }
+  // Post-turn safety cannot claim a completed scan when its launcher never started.
+  if (hookResponseMode === "post-turn") {
+    return "const reportUnavailable=()=>{process.stderr.write('post-turn-safety: hook unavailable: git repository root or hook launcher unavailable.'+lineBreak);process.exit(2);};";
+  }
+  // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
+  return "const reportUnavailable=()=>{process.stderr.write('BLOCKED: Policy hook unavailable: git repository root unavailable.'+lineBreak);process.exit(2);};";
 }
 
-function rootResolvingCommand(script) {
-  const unavailable =
-    hookUnavailableCommand(script);
-  const claudeRootFallback =
-    agent === "codex"
-      ? ""
-      : `; [ -f "$root/.goat-flow/hooks/${script}" ] || root="\${CLAUDE_PROJECT_DIR:-}"`;
-  return `bash -c 'root="$(git rev-parse --show-toplevel 2>/dev/null || true)"${claudeRootFallback}; [ -f "$root/.goat-flow/hooks/${script}" ] || ${unavailable}; cd "$root" || ${unavailable}; bash "$root/.goat-flow/hooks/${script}"'`;
+/**
+ * Build shell-neutral Node source that finds the user's project and Bash launcher.
+ * Use in generated config so PowerShell, cmd, and POSIX shells share one path.
+ *
+ * @param {string} hookResponseMode - Agent response protocol; empty uses fail-closed policy behavior.
+ * @returns {string} Portable `node -e` source; never empty for an enabled hook.
+ */
+function hookLaunchBootstrap(hookResponseMode) {
+  const unavailableResponseProgram = unavailableHookResponseProgram(hookResponseMode);
+  return [
+    "const childProcess=require('node:child_process');",
+    "const filesystem=require('node:fs');",
+    "const path=require('node:path');",
+    "const hookScriptPath=process.argv[1];",
+    "const responseMode=process.argv[2];",
+    "const rootEnvironmentName=process.argv[3];",
+    "const lineBreak=String.fromCharCode(10);",
+    unavailableResponseProgram,
+    "const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});",
+    "let projectRoot=gitRootLookup.status===0?gitRootLookup.stdout.trim():'';",
+    "let bashLauncherPath=projectRoot?path.join(projectRoot,'.goat-flow','hooks','run-with-bash.mjs'):'';",
+    "/* A user may leave the repo, so supported hosts can recover the project originally selected. */",
+    "if((!bashLauncherPath||!filesystem.existsSync(bashLauncherPath))&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){projectRoot=process.env[rootEnvironmentName];bashLauncherPath=path.join(projectRoot,'.goat-flow','hooks','run-with-bash.mjs');}",
+    "/* Missing managed launch code means the host must not report an unchecked hook as successful. */",
+    "if(!bashLauncherPath||!filesystem.existsSync(bashLauncherPath))reportUnavailable();",
+    "const hookResult=childProcess.spawnSync(process.execPath,[bashLauncherPath,hookScriptPath,responseMode],{cwd:projectRoot,stdio:'inherit'});",
+    "/* A startup error or absent status means the user's hook never produced a trustworthy result. */",
+    "if(hookResult.error||!Number.isInteger(hookResult.status))reportUnavailable();",
+    "process.exit(hookResult.status);",
+  ].join("");
 }
 
+/**
+ * Select the response protocol the user's agent understands for one hook.
+ * Use while writing config; unknown combinations use fail-closed policy behavior.
+ *
+ * @param {string} hookScriptName - Hook being registered; empty falls back to policy behavior.
+ * @returns {string} Response mode consumed by the launcher; never empty.
+ */
+function hookLaunchMode(hookScriptName) {
+  // Gruff is optional feedback, so unavailable execution is shown as a non-blocking skip.
+  if (hookScriptName === "gruff-code-quality.sh") return "gruff";
+  // Post-turn safety returns a failed scan rather than an agent permission payload.
+  if (hookScriptName === "post-turn-safety.sh") return "post-turn";
+  // Antigravity requires its decision JSON shape for command admission.
+  if (agent === "antigravity") return "antigravity";
+  // Copilot requires permission-decision fields in its pre-tool response.
+  if (agent === "copilot") return "copilot";
+  // Claude and Codex consume the standard fail-closed policy exit.
+  return "policy";
+}
+
+/**
+ * Build the portable hook command written into the user's selected agent config.
+ * Use for every managed hook so config never relies on bare `bash` resolution.
+ *
+ * @param {string} hookScriptName - Managed script to launch; empty would create an invalid path.
+ * @returns {string} Shell-neutral Node command; never empty for an enabled hook.
+ */
+function rootResolvingCommand(hookScriptName) {
+  // Codex has no supported project-root environment, so it stays fail-closed outside Git.
+  const rootEnvironmentName = agent === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
+  const hookResponseMode = hookLaunchMode(hookScriptName);
+  return [
+    "node",
+    "-e",
+    JSON.stringify(hookLaunchBootstrap(hookResponseMode)),
+    JSON.stringify(`.goat-flow/hooks/${hookScriptName}`),
+    JSON.stringify(hookResponseMode),
+    JSON.stringify(rootEnvironmentName),
+  ].join(" ");
+}
+
+/**
+ * Build optional Gruff entries in the selected agent's public config shape.
+ * Use only when the user enables edit-time quality feedback.
+ *
+ * @returns {object[]} Agent-specific entries; never empty for a supported agent.
+ */
 function gruffHookEntries() {
-  const script = "gruff-code-quality.sh";
+  const hookScriptName = "gruff-code-quality.sh";
+  // Codex receives matcher groups through its native hook schema.
   if (agent === "codex") {
     return ["Edit", "Write"].map((matcher) => ({
       matcher,
       hooks: [
         {
           type: "command",
-          command: rootResolvingCommand(script),
+          command: rootResolvingCommand(hookScriptName),
           statusMessage: "gruff code quality",
         },
       ],
     }));
   }
+  // Copilot requires one command for Bash and PowerShell plus its timeout field name.
   if (agent === "copilot") {
-    const path = ".goat-flow/hooks/gruff-code-quality.sh";
+    const crossPlatformCommand = rootResolvingCommand(hookScriptName);
     return [
       {
         type: "command",
-        bash: path,
-        powershell: `if (Get-Command bash -ErrorAction SilentlyContinue) { bash ${path} } else { Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run ${path} on Windows."}' }`,
+        bash: crossPlatformCommand,
+        powershell: crossPlatformCommand,
         timeoutSec: 90,
       },
     ];
   }
   return ["Edit", "Write"].map((matcher) => ({
     matcher,
-    hooks: [{ type: "command", command: rootResolvingCommand(script), timeout: 90 }],
+    hooks: [{ type: "command", command: rootResolvingCommand(hookScriptName), timeout: 90 }],
   }));
 }
 
@@ -2324,6 +2412,7 @@ fi
 # ==========================================================================
 if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-with-bash.mjs" "$HOOKS_DIR/run-with-bash.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh" "system-owned" "755"
@@ -2562,17 +2651,16 @@ if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/deny-dangerous.sh" ]
   echo "⚠ Settings file was preserved (not overwritten)."
   echo "  The central guardrail hooks in $HOOKS_DIR were installed but may not be"
   echo "  registered in $SETTINGS_DST. Verify your settings file includes"
-  echo "  root-resolving PreToolUse hook entries that invoke .goat-flow/hooks/deny-dangerous.sh."
+  echo "  root-resolving PreToolUse hook entries that invoke .goat-flow/hooks/run-with-bash.mjs."
   if [[ "$AGENT" == "claude" ]]; then
     echo ""
-    echo "  For Claude, add this to $SETTINGS_DST under \"hooks\":{\"PreToolUse\":[...]}:"
-    # shellcheck disable=SC2016,SC1003 # literal JSON snippet preserves nested shell quoting for copy/paste guidance.
-    printf '%s\n' '    {"matcher":"Bash","hooks":[{"type":"command","command":"bash -c '\''root=\"$(git rev-parse --show-toplevel 2>/dev/null || true)\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || root=\"${CLAUDE_PROJECT_DIR:-}\"; [ -f \"$root/.goat-flow/hooks/deny-dangerous.sh\" ] || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; cd \"$root\" || { printf '\''\\'\'''\''BLOCKED: Policy hook unavailable: git repository root unavailable.\\n'\''\\'\'''\'' >&2; exit 2; }; bash \"$root/.goat-flow/hooks/deny-dangerous.sh\"'\''"}]}'
+    echo "  For Claude, reconcile $SETTINGS_DST, then run:"
+    echo "    npx @blundergoat/goat-flow@$VERSION hooks sync"
   elif [[ "$AGENT" == "codex" ]]; then
     echo ""
     echo "  For Codex, sync hooks or mirror workflow/hooks/agent-config/codex-hooks.json."
     echo "  Do not restore a direct .goat-flow/hooks/deny-dangerous.sh command; Codex hooks"
-    echo "  run from the session cwd and need the git-root wrapper."
+    echo "  run from the session cwd and need the Node git-root launcher."
   fi
   echo ""
 fi

@@ -23,6 +23,7 @@ import {
   buildManagedSetupPreview,
   classifyManagedSetupFile,
   managedInstallStatePath,
+  withManagedSetupPrerequisiteFailure,
   writeManagedInstallState,
   type ManagedSetupFileState,
   type ManagedSetupPreview,
@@ -154,6 +155,33 @@ describe("managed setup classification", () => {
     } finally {
       rmSync(projectPath, { recursive: true, force: true });
     }
+  });
+});
+
+describe("managed setup prerequisites", () => {
+  /** Contract: preview and install share the blocker while the input stays unchanged. */
+  it("blocks dry-run with the same launch failure the real install would report", () => {
+    const preview: ManagedSetupPreview = {
+      schemaVersion: "goat-flow.managed-setup-preview.v1",
+      coverage: "managed-template-files",
+      agent: "claude",
+      goatFlowVersion: "1.15.0",
+      baselineStatus: "missing",
+      verdict: "ready",
+      limits: [],
+      files: [],
+    };
+    const failure =
+      "Install requires a Windows-compatible Bash, but none was found.";
+
+    const blocked = withManagedSetupPrerequisiteFailure(preview, failure);
+
+    assert.equal(blocked.verdict, "blocked");
+    assert.equal(
+      blocked.limits.includes(`Install prerequisite failed: ${failure}`),
+      true,
+    );
+    assert.equal(preview.verdict, "ready");
   });
 });
 

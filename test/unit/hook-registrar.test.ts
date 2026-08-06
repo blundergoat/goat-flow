@@ -24,6 +24,10 @@ import {
   isValidHookIdShape,
   listHookSpecs,
 } from "../../src/cli/server/hooks-registry.js";
+import {
+  discoverWindowsBashCandidates as discoverHookWindowsBashCandidates,
+  pickWindowsBashPath as pickHookWindowsBashPath,
+} from "../../workflow/hooks/run-with-bash.mjs";
 
 import {
   HOOK_IDENTIFIER,
@@ -43,6 +47,19 @@ import {
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: launchers and installation", () => {
+  /** Proves installed hooks can find default Git Bash when PATH exposes only WSL. */
+  it("finds default Git Bash for hooks when PATH exposes only the WSL shim", () => {
+    const defaultGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+    const candidates = discoverHookWindowsBashCandidates({
+      environment: { ProgramFiles: "C:\\Program Files" },
+      pathExists: (candidate: string) => candidate === defaultGitBash,
+      runWhere: (executable: string) =>
+        executable === "bash" ? ["C:\\Windows\\System32\\bash.exe"] : [],
+    });
+
+    assert.equal(pickHookWindowsBashPath(candidates), defaultGitBash);
+  });
+
   it("refuses to overwrite a hook stamped newer than the running CLI", () => {
     withTempProject((root) => {
       const hookDir = join(root, ".goat-flow", "hooks");
@@ -208,7 +225,8 @@ describe("hook registrar: launchers and installation", () => {
 
       const mainLauncher = installClaudeDenyHook(main);
       commitAll(main, "install central hooks");
-      assert.match(mainLauncher, /git rev-parse --show-toplevel/u);
+      assert.match(mainLauncher, /run-with-bash\.mjs/u);
+      assert.match(mainLauncher, /--show-toplevel/u);
       assert.doesNotMatch(mainLauncher, /git-common-dir/u);
       runGit(main, [
         "worktree",
@@ -235,7 +253,8 @@ describe("hook registrar: launchers and installation", () => {
       runGit(subSource, ["init", "-q"]);
       writeFileSync(join(subSource, "README.md"), "# submodule\n");
       const sourceLauncher = installClaudeDenyHook(subSource);
-      assert.match(sourceLauncher, /git rev-parse --show-toplevel/u);
+      assert.match(sourceLauncher, /run-with-bash\.mjs/u);
+      assert.match(sourceLauncher, /--show-toplevel/u);
       assert.doesNotMatch(sourceLauncher, /git-common-dir/u);
       commitAll(subSource, "initial submodule with central hooks");
 
@@ -308,8 +327,8 @@ describe("hook registrar: launchers and installation", () => {
       applyHookState(HOOK_IDENTIFIER, true, root);
 
       const launcher = readCodexDenyLauncher(root);
-      assert.match(launcher, /git rev-parse --show-toplevel/u);
-      assert.match(launcher, /cd "\$root"/u);
+      assert.match(launcher, /run-with-bash\.mjs/u);
+      assert.match(launcher, /--show-toplevel/u);
       assert.doesNotMatch(launcher, /CLAUDE_PROJECT_DIR/u);
       assert.doesNotMatch(launcher, /^\.goat-flow\/hooks/u);
 

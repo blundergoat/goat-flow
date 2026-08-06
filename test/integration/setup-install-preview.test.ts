@@ -18,6 +18,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { dispatchCommand } from "../../src/cli/cli-handlers.js";
+import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { getTemplatePath } from "../../src/cli/paths.js";
 import { makeTempProject, runCliInstaller } from "./setup-install.helpers.js";
 
@@ -42,6 +44,91 @@ function symlinkDirectoryOrSkip(
 }
 
 describe("managed setup preview", () => {
+  /** Contract: Windows preview and install share one Bash blocker before target writes. */
+  it("blocks Windows dry-run and install with the same missing-Bash result", async (testContext) => {
+    const projectPath = makeTempProject();
+    const reportDirectory = makeTempProject();
+    const reportPath = join(reportDirectory, "windows-preview.json");
+    const originalPlatform = Object.getOwnPropertyDescriptor(
+      process,
+      "platform",
+    );
+    const originalExitCode = process.exitCode;
+    const originalPath = process.env.PATH;
+    assert.ok(originalPlatform);
+    testContext.mock.method(console, "error", () => undefined);
+    // Native Windows CI may have Git Bash installed; unit discovery tests cover that host directly.
+    if (originalPlatform.value === "win32") {
+      testContext.skip(
+        "POSIX-only simulation of a Windows host without Git Bash",
+      );
+      return;
+    }
+
+    try {
+      Object.defineProperty(process, "platform", {
+        ...originalPlatform,
+        value: "win32",
+      });
+      // An empty PATH reproduces the reported user state without finding a host Bash by accident.
+      process.env.PATH = "";
+      process.exitCode = undefined;
+      await dispatchCommand(
+        parseCLIArgs([
+          "install",
+          projectPath,
+          "--agent",
+          "claude",
+          "--dry-run",
+          "--format",
+          "json",
+          "--output",
+          reportPath,
+        ]),
+      );
+
+      const report = JSON.parse(readFileSync(reportPath, "utf-8")) as {
+        verdict: string;
+        limits: string[];
+      };
+      assert.equal(process.exitCode, 1);
+      assert.equal(report.verdict, "blocked");
+      const prerequisitePrefix = "Install prerequisite failed: ";
+      const prerequisiteLimit = report.limits.find((limit) =>
+        limit.startsWith(prerequisitePrefix),
+      );
+      assert.ok(prerequisiteLimit);
+      const dryRunFailure = prerequisiteLimit.slice(prerequisitePrefix.length);
+      assert.match(
+        dryRunFailure,
+        /Windows-compatible Bash, but none was found/u,
+      );
+
+      // Clearing the preview exit lets the real path expose its own matching CLI error.
+      process.exitCode = undefined;
+      await assert.rejects(
+        dispatchCommand(
+          parseCLIArgs(["install", projectPath, "--agent", "claude"]),
+        ),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.equal(error.message, dryRunFailure);
+          return true;
+        },
+      );
+      assert.deepEqual(readdirSync(projectPath), []);
+    } finally {
+      Object.defineProperty(process, "platform", originalPlatform);
+      process.exitCode = originalExitCode;
+      // A missing original PATH stays missing instead of becoming the string "undefined".
+      if (originalPath === undefined) {
+        delete process.env.PATH;
+      } else {
+        process.env.PATH = originalPath;
+      }
+    }
+  });
+
   it("reports a fresh target without writing any project files", () => {
     const projectPath = makeTempProject();
     const result = runCliInstaller(
