@@ -30,6 +30,9 @@ export function appendRules(lines: string[]): void {
     "- **Negative verification is mandatory.** Before reporting any finding, try to disprove it. Re-read the cited file. Check if surrounding context resolves it. Only report findings that survive disproval.",
   );
   lines.push(
+    "- **Standards bind their audience.** Before reporting that the framework violates its own stated standard, identify who the standard binds (agent output, human workflow, or CI) and check the decisions INDEX for an accepted ADR that already resolves the tension. A human-workflow convention does not by itself prove a framework self-violation; identify the agent-facing mechanism or quality gate that makes it relevant.",
+  );
+  lines.push(
     '- **Evidence-based only.** No fabricated line numbers - say "approximate" or cite file without a line number. No padding, no softened findings.',
   );
   lines.push(
@@ -67,6 +70,9 @@ export function appendDesignNotes(lines: string[]): void {
   lines.push(
     "- `toolchain` and `ask_first` fields in `config.yaml` were removed from the base setup in v1.1.0 (see ADR-014). A lean config.yaml with version and skills is correct - not a gap; legacy `agents:` entries are ignored.",
   );
+  lines.push(
+    "- Goat-flow coding agents are prohibited from running `git commit` or `git push`; shipped deny hooks enforce that workflow. A commit that breaks an instruction-file drafting convention is not, by itself, a `framework_flaw` or self-violation. Establish agent authorship or an agent-facing mechanism that caused the violation before reporting it.",
+  );
   lines.push("");
 }
 
@@ -96,7 +102,7 @@ export function appendSkillTesting(lines: string[]): void {
   lines.push("Either approach is acceptable. State which you used.");
   lines.push("");
   lines.push(
-    "1. **`/goat`** (dispatcher) - send 3 different reporting-only requests. Does routing work? Does the Planning Route handle briefs without pushing toward committed-file changes or implementation? Does it route critique requests to `/goat-critique` and planning questions to `/goat-plan` appropriately?",
+    "1. **`/goat`** (dispatcher) - Option A: trace how the route map would handle 3 representative reporting-only requests. Option B: send those requests through the live runtime when available. Does routing work? Does the Planning Route handle briefs without pushing toward committed-file changes or implementation? Does it route critique requests to `/goat-critique` and planning questions to `/goat-plan` appropriately?",
   );
   lines.push(
     "2. **`/goat-debug`** - investigate a real module or risky pattern in this codebase",
@@ -211,7 +217,7 @@ function appendRatingBands(lines: string[]): void {
   lines.push("### Rating bands");
   lines.push("Use exact 25 / 20 / 15 / 10 / 5 / 0 increments only:");
   lines.push(
-    "- Setup / Accuracy: 25 = all fact-checked claims verify; 20 = 1-2 minor drift points; 15 = one hot-path factual error; 10 = multiple hot-path errors; 5 = instruction file materially misstates the project; 0 = fabricated or wrong project.",
+    "- Setup / Accuracy: 25 = all fact-checked claims verify; 20 = 1-2 minor drift points; 15 = one hot-path factual error; 10 = multiple hot-path errors; 5 = instruction file materially misstates the project; 0 = fabricated or wrong project. A hot-path factual error is a claim an agent would act on and fail (wrong command, wrong path, wrong count); a minor drift point is a stale-but-harmless description.",
   );
   lines.push(
     "- Setup / Relevance: 25 = content is project-specific and directly useful; 20 = mostly adapted with small boilerplate residue; 15 = meaningful generic carry-over; 10 = mostly boilerplate; 5 = barely adapted; 0 = generic template noise.",

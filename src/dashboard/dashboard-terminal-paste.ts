@@ -409,9 +409,15 @@ function dashboardTerminalAccessMode(
 /**
  * Build the target and write-authority context appended to a user's launch prompt.
  * Use the resolved backend access mode so dynamic and overridden launches receive matching guidance.
+ *
+ * @param dashboardContext - selected dashboard project; its path is present after launch validation
+ * @param runner - terminal runner the user chose; always present for a launchable session
+ * @param preset - selected preset; null means a custom prompt with no route-specific guidance
+ * @param accessMode - backend-enforced mode shown to the user; never empty after access resolution
+ * @returns launch guidance appended to the prompt; never empty for a valid terminal launch
  */
 function dashboardGlobalLaunchContext(
-  ctx: DashboardTerminalContext,
+  dashboardContext: DashboardTerminalContext,
   runner: RunnerId,
   preset: Preset | null,
   accessMode: TerminalAccessMode,
@@ -419,32 +425,37 @@ function dashboardGlobalLaunchContext(
   const controllingWorkspace = dashboardControllingWorkspace();
   // Custom prompts have no preset text, so route-specific guidance stays empty.
   const presetPrompt = preset?.prompt.trim() ?? "";
-  // Launched prompts may suggest learning-loop follow-up, but automatic
-  // durable lesson/footgun/pattern/decision writes require opted-in CLI capture.
-  const writeLine =
+  // A denied reporting probe becomes a visible evidence gap instead of a retry or guessed result.
+  const reportingProbeFallback =
+    "If a requested runtime probe (bash/npm/node) is denied or unavailable, record the literal denial or unavailability, continue with available read-only evidence, state what was not verified, and do not retry, bypass the profile, or infer a result.";
+  // Workspace users see the approval rule; reporting users see their runner's actual enforcement.
+  const writeAccessGuidance =
     accessMode === "workspace"
       ? "Write behavior: this preset may write only after the prompt or user explicitly approves it."
       : runner === "codex"
-        ? "Write behavior: this terminal is reporting-only. Local report/build artifacts may be written, but the Codex permission profile blocks tracked project writes; start a write-enabled preset or manual session for implementation."
+        ? `Write behavior: this terminal is reporting-only. Local report/build artifacts may be written, but the Codex permission profile blocks tracked project writes; start a write-enabled preset or manual session for implementation. ${reportingProbeFallback}`
         : runner === "claude"
-          ? "Write behavior: this terminal is reporting-only. Local report artifacts may be written, but the Claude permission overlay blocks tracked project writes; start a write-enabled preset or manual session for implementation."
-          : "Write behavior: this terminal is reporting-only. Do not write tracked project files; this runner relies on prompt and hook guardrails rather than a native filesystem profile.";
-  const routeLine =
+          ? `Write behavior: this terminal is reporting-only. Local report artifacts may be written, but the Claude permission overlay blocks tracked project writes; start a write-enabled preset or manual session for implementation. ${reportingProbeFallback}`
+          : `Write behavior: this terminal is reporting-only. Do not write tracked project files; this runner relies on prompt and hook guardrails rather than a native filesystem profile. ${reportingProbeFallback}`;
+  // Goat Plan and Critique presets show the extra ownership rule users need for that route.
+  const routeGuidance =
     preset?.route === "goat-plan" && /^\/goat-plan\b/.test(presetPrompt)
       ? "goat-plan global mode: honor Step 0 modes; analysis/path-only stay read-only, while File-Write modes may create target .goat-flow/plans when this preset allows writes or the prompt explicitly requests files."
       : preset?.route === "goat-critique" &&
           /^\/goat-critique\b/.test(presetPrompt)
         ? "goat-critique global mode: keep gitignored critique logs/artifacts in the controlling workspace; do not write goat-flow logs in the selected target unless the user explicitly makes that target the controlling workspace."
         : "";
+  // Custom and unrelated presets need no extra route line in the launch prompt.
+  const routeGuidanceLines = routeGuidance ? [`- ${routeGuidance}`] : [];
   return [
     "GOAT Flow target context:",
     `- Controlling workspace for goat skills/reference files: ${controllingWorkspace}`,
-    `- Selected target project for code evidence: ${ctx.projectPath}`,
+    `- Selected target project for code evidence: ${dashboardContext.projectPath}`,
     `- Runner: ${runner}`,
     "- Target projects do not need goat-flow installed; missing target .goat-flow, skills, hooks, or stale goat-flow files are normal unless this preset audits goat-flow installation.",
-    `- Use target-scoped commands such as git -C ${dashboardShellQuote(ctx.projectPath)} status when inspecting the selected target.`,
-    `- ${writeLine}`,
-    ...(routeLine ? [`- ${routeLine}`] : []),
+    `- Use target-scoped commands such as git -C ${dashboardShellQuote(dashboardContext.projectPath)} status when inspecting the selected target.`,
+    `- ${writeAccessGuidance}`,
+    ...routeGuidanceLines,
   ].join("\n");
 }
 

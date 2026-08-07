@@ -31,6 +31,10 @@
 - **Claude reporting sessions enforce read-only tracking** - Session overlays allow approved reads and ignored paths but deny tracked edits.
 - **`quality save` owns report destinations** - It redacts and validates stdin, selects an ignored filename, and rejects caller outputs.
 - **Quality dates reject impossible current runs** - New reports require real calendar days; invalid legacy dates load but cannot extend streaks.
+- **Quality findings require relevant evidence** - Assessors check who a standard binds, ADRs, agent authorship, and actionable factual errors.
+- **Prior quality findings are re-tested** - Unavailable probes are disclosed without carrying unverified claims forward or claiming they were fixed.
+- **Locked quality reviews degrade honestly** - Denied probes are recorded; reviewers continue with read-only evidence instead of guessing.
+- **Staged quality reports fail closed** - Reviewers pre-check draft and receipt names, disclose residual ambiguity, and survive write-locked modes.
 - **Claude assessments persist without writable shells** - The dashboard validates drafts; finalized reports stay read-only. See ADR-044.
 - **Report capture fails closed through recovery** - Private staging, atomic claims, and receipts prevent unsafe duplicate persistence.
 - **QA templates load on demand** - `/goat-qa` loads Standard or Audit templates only when rendering.

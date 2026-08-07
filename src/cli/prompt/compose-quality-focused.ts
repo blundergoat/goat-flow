@@ -22,6 +22,9 @@ import {
 } from "./compose-quality-common.js";
 import { appendFocusedReportContract } from "./compose-quality-contract.js";
 
+const FOCUSED_DENIED_GROUNDING_GUIDANCE =
+  'If a grounding command is denied by the session\'s permission profile or unavailable, record the literal denial or unavailability, do not retry it or work around the profile, and never infer a result. Continue with available read-only evidence, label the evidence limit, and list the command in "What was not verified". Keep `audit_status` at `unavailable` unless a live audit completed this run; when only source reading supports a finding, use `evidence_method: "static-analysis"`.';
+
 /**
  * Return the reporting contract a user receives for one focused quality mode.
  * Use before shared audit and report sections are added to the final prompt.
@@ -36,7 +39,7 @@ function focusedQualityModePrompt(
 ): string {
   // Process reviewers need controlling-workspace commands and framework-wide evidence.
   if (mode === "process") {
-    const agentAuditCmd = agent
+    const agentAuditCommand = agent
       ? `node --import tsx src/cli/cli.ts audit . --agent ${agent} --harness --check-drift --format json`
       : "node --import tsx src/cli/cli.ts audit . --check-drift --format json";
     return [
@@ -44,7 +47,7 @@ function focusedQualityModePrompt(
       "",
       "Assess the goat-flow framework process in the controlling workspace: instruction files, .goat-flow/config.yaml, .goat-flow/architecture.md, .goat-flow/code-map.md, .goat-flow/skill-docs/, .goat-flow/skill-docs/playbooks/, workflow/setup/, workflow/manifest.json, installed skill mirrors, hooks, quality prompt modes, and validation scripts.",
       "",
-      `Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts stats . --check; ${agentAuditCmd}; node --import tsx src/cli/cli.ts audit . --check-content --format json; bash scripts/preflight-checks.sh. Command output wins over prose.`,
+      `Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts stats . --check; ${agentAuditCommand}; node --import tsx src/cli/cli.ts audit . --check-content --format json; bash scripts/preflight-checks.sh. Command output wins over prose. ${FOCUSED_DENIED_GROUNDING_GUIDANCE}`,
       "",
       "Use INDEX-first retrieval for .goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md. Do not broad-load those directories.",
       "",
@@ -67,12 +70,13 @@ function focusedQualityModePrompt(
     ].join("\n");
   }
 
+  // Harness reviewers need selected-target probes plus the same honest fallback as process reviews.
   return [
     "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write normal gitignored reporting/local-state artifacts if the runner requires them. In this contract, gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes; do not report them as read-only violations.",
     "",
     "Assess whether the selected target project's agent harness is actually usable, not only structurally present. Focus on context loading, constraint safety, verification evidence, recovery paths, feedback-loop durability, and whether instructions distinguish the controlling goat-flow workspace from the selected target.",
     "",
-    "Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts audit . --harness --format json from the controlling workspace when applicable; node --import tsx src/cli/cli.ts stats . --check when the selected target is a goat-flow installation. Command output wins over prose.",
+    `Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts audit . --harness --format json from the controlling workspace when applicable; node --import tsx src/cli/cli.ts stats . --check when the selected target is a goat-flow installation. Command output wins over prose. ${FOCUSED_DENIED_GROUNDING_GUIDANCE}`,
     "",
     "Read next: target instruction files, local agent settings/hooks, .goat-flow/config.yaml when present, .goat-flow/skill-docs/ and .goat-flow/skill-docs/playbooks/ when present, controlling-workspace harness code under src/cli/audit/harness/, and any dashboard terminal/runner context text that affects selected-target execution.",
     "",

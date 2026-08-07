@@ -16,6 +16,9 @@ import {
   makeTerminalSession,
 } from "./helpers.js";
 
+const REPORTING_PROBE_FALLBACK =
+  /If a requested runtime probe \(bash\/npm\/node\) is denied or unavailable/u;
+
 /** Build two live sessions so send-routing assertions can prove only the requested tab receives input. */
 function makeRequestedSessionRoutingHarness(): {
   helpers: ReturnType<typeof loadHelpers>;
@@ -117,9 +120,11 @@ describe("dashboard terminal launch flow", () => {
       /this preset may write only after the prompt or user explicitly approves it/u,
     );
     assert.doesNotMatch(String(launches[0]?.prompt), /reporting-only/u);
+    assert.doesNotMatch(String(launches[0]?.prompt), REPORTING_PROBE_FALLBACK);
   });
 
-  it("describes native Claude enforcement only for reporting Claude launches", async () => {
+  // Every reporting runner shows the same recovery path while naming its real write enforcement.
+  it("describes enforcement and denied-probe fallback for every reporting runner", async () => {
     const helpers = loadHelpers(
       async () => ({ json: async () => ({}) }) as Response,
       { setTimeout, clearTimeout, setInterval, clearInterval },
@@ -148,6 +153,9 @@ describe("dashboard terminal launch flow", () => {
       "Review",
       { accessMode: "reporting" },
     );
+    await helpers.dashboardLaunchPreset(ctx, "review", "codex", "Review", {
+      accessMode: "reporting",
+    });
 
     assert.match(String(launches[0]?.prompt), /Claude permission overlay/u);
     assert.doesNotMatch(
@@ -155,6 +163,10 @@ describe("dashboard terminal launch flow", () => {
       /prompt and hook guardrails/u,
     );
     assert.match(String(launches[1]?.prompt), /prompt and hook guardrails/u);
+    assert.match(String(launches[2]?.prompt), /Codex permission profile/u);
+    assert.match(String(launches[0]?.prompt), REPORTING_PROBE_FALLBACK);
+    assert.match(String(launches[1]?.prompt), REPORTING_PROBE_FALLBACK);
+    assert.match(String(launches[2]?.prompt), REPORTING_PROBE_FALLBACK);
   });
 
   it("keeps controlling cwd and selected target separate in terminal create payloads", async () => {

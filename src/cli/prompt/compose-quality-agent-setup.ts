@@ -228,6 +228,14 @@ function appendAuditAndPrior(
   }
 }
 
+/**
+ * Add the Step 0 probes and the fallback a reviewer sees when a session denies them.
+ * Use at assessment start so unavailable runtime evidence becomes an explicit verification gap.
+ *
+ * @param lines - prompt lines built so far; empty means this section starts the rendered assessment
+ * @param ctx - resolved session context; a null deny-hook path means no on-disk hook probe is offered
+ * @returns nothing; the supplied prompt lines receive the grounding and reading sections
+ */
 function appendGroundingAndReadNext(
   lines: string[],
   ctx: AgentSetupPromptContext,
@@ -269,6 +277,10 @@ function appendGroundingAndReadNext(
     "cat .goat-flow/config.yaml                        # minimal valid config: version and skills; legacy agents is ignored; line-limits/toolchain are optional calibration only",
   );
   lines.push("```");
+  lines.push("");
+  lines.push(
+    '**Degraded grounding protocol:** If a command above is denied by the session\'s permission profile or unavailable, record the literal denial, do NOT infer pass or fail from it, and do not retry it verbatim or work around the profile. Fall back to static analysis (`evidence_method: "static-analysis"`), keep `audit_status` at `unavailable` unless a live audit completed this run, and list every unexecuted command in "What You Did Not Verify".',
+  );
   lines.push("");
   appendReadNext(lines, ctx);
 }
@@ -527,7 +539,7 @@ function appendOutputFormat(
   lines.push("### Findings");
   lines.push("Ordered by severity. For each:");
   lines.push(
-    "- Severity: `BLOCKER` (prevents work or creates safety risk), `MAJOR` (framework violates its own stated standards or a documented quality gate fails), or `MINOR` (suboptimal but not actively harmful)",
+    "- Severity: `BLOCKER` (prevents work or creates safety risk), `MAJOR` (framework violates a standard that binds the surface being assessed - agent-facing instructions, skills, hooks - or a documented quality gate fails; human-workflow conventions are out of scope unless they corrupt agent behavior), or `MINOR` (suboptimal but not actively harmful)",
   );
   lines.push(
     "- Type: `setup_quality`, `skill_flaw`, `contradiction`, `false_path`, `content_quality`, or `framework_flaw`",

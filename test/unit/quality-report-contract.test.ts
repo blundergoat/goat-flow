@@ -62,6 +62,16 @@ const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 const QUALITY_MODES = ["agent-setup", "process", "harness", "skills"] as const;
 const FOCUSED_QUALITY_MODES = ["process", "harness", "skills"] as const;
 const STAGED_DRAFT_MODES = ["skills", "harness", "agent-setup"] as const;
+/** Validity rubric shown only in the full agent-setup assessment. */
+const AGENT_SETUP_ONLY_VALIDITY_GUIDANCE = [
+  "Standards bind their audience",
+  "Establish agent authorship or an agent-facing mechanism",
+  "framework violates a standard that binds the surface being assessed",
+  "A hot-path factual error is a claim an agent would act on and fail",
+] as const;
+/** Prior-claim warning shown only when a user supplied a same-mode report. */
+const PRIOR_REPORT_REVALIDATION_GUIDANCE =
+  "A prior finding is a claim to re-test, not a fact";
 const DRIFT_EVIDENCE = [
   ".agents/skills/goat/SKILL.md",
   "installed dispatcher differs",
@@ -74,6 +84,19 @@ const FORBIDDEN_STAGED_DRAFT_TEXT = [
   "**Filename format:**",
   "The saver derives",
   ".goat-flow/logs/quality/<filename>.json",
+] as const;
+
+/** Dashboard-only safety guidance that must not leak into a user's bounded-saver prompt. */
+const STAGED_DRAFT_SAFETY_GUIDANCE = [
+  "exactly 32 lowercase hexadecimal characters",
+  "collision avoidance",
+  "not proof of randomness",
+  "available read-only file or glob tool (not Bash)",
+  "neither the draft path nor the receipt path below exists",
+  "persist-skipped: collision-precheck-unavailable",
+  "does not prove that a later receipt belongs to this draft",
+  "If a session mode change blocks the staging write itself",
+  "persist-skipped: <reason>",
 ] as const;
 
 /** Extract the executable report-write block from a composed prompt. */
@@ -100,6 +123,52 @@ function makeInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
     priorReport: null,
     qualityMode,
     runDate: "2026-07-03",
+  };
+}
+
+/**
+ * Build one saved report so each quality mode can exercise its prior-context branch.
+ * Use when a user has history, while empty findings keep individual claims out of the fixture.
+ *
+ * @param qualityMode - mode whose prior history is loaded; never empty in the supported-mode matrix
+ * @returns complete prior entry; empty findings means the prompt lists no individual prior claims
+ */
+function makePriorQualityReport(
+  qualityMode: (typeof QUALITY_MODES)[number],
+): NonNullable<QualityInput["priorReport"]> {
+  return {
+    id: "2026-07-01-0900-claude-abc12",
+    path: "/tmp/example-project/.goat-flow/logs/quality/2026-07-01-0900-claude-abc12.json",
+    date: "2026-07-01",
+    time: "0900",
+    agent: "claude",
+    randomId: "abc12",
+    report: {
+      report_kind: "goat-flow-quality-report",
+      goat_flow_version: "1.15.0",
+      agent: "claude",
+      project_path: "/tmp/example-project",
+      run_date: "2026-07-01",
+      audit_status: "unavailable",
+      quality_mode: qualityMode,
+      scores: {
+        setup: {
+          total: 60,
+          accuracy: 15,
+          relevance: 15,
+          completeness: 15,
+          friction: 15,
+        },
+        system: {
+          total: 55,
+          usefulness: 15,
+          signal_to_noise: 15,
+          adaptability: 15,
+          learnability: 10,
+        },
+      },
+      findings: [],
+    },
   };
 }
 
@@ -205,7 +274,14 @@ function assertCarriesAuditEvidence(
   }
 }
 
-/** Assert the dashboard persistence variant omits every unreachable bounded-saver instruction. */
+/**
+ * Verify the dashboard-only save guidance a reviewer gets after launch.
+ * Use for staged quality modes so collision or mode failures stay honest before server persistence.
+ *
+ * @param surface - assertion label shown on failure; empty would only hide which quality mode failed
+ * @param prompt - rendered reviewer instructions; empty makes every required guidance assertion fail
+ * @returns nothing; an assertion failure stops the test before users receive incomplete save guidance
+ */
 function assertStagedDraftContract(surface: string, prompt: string): void {
   assert.ok(
     prompt.includes("**Persist through the dashboard.**"),
@@ -230,6 +306,13 @@ function assertStagedDraftContract(surface: string, prompt: string): void {
     prompt.includes("persist-skipped: capture-unavailable"),
     `${surface}: missing capture-unavailable sentinel`,
   );
+  // Every staged-only safety rule must reach the reviewer before they try to save the report.
+  for (const safetyGuidance of STAGED_DRAFT_SAFETY_GUIDANCE) {
+    assert.ok(
+      prompt.includes(safetyGuidance),
+      `${surface}: missing staged-draft safety guidance: ${safetyGuidance}`,
+    );
+  }
   // An enforced dashboard session cannot run Bash persistence, so no bounded-saver path may survive.
   assert.equal(
     prompt.includes("quality save"),
@@ -254,6 +337,50 @@ describe("quality report contract: CLI surfaces", () => {
   it("agent-setup prompt carries the full contract", () => {
     const payload = composeQuality(makeInput("agent-setup"));
     assertCarriesContract("agent-setup", payload.prompt);
+  });
+
+  it("agent-setup prompt defines finding-validity and accuracy guardrails", () => {
+    const prompt = composeQuality(makeInput("agent-setup")).prompt;
+    for (const phrase of AGENT_SETUP_ONLY_VALIDITY_GUIDANCE) {
+      assert.ok(
+        prompt.includes(phrase),
+        `missing finding-validity phrase: ${phrase}`,
+      );
+    }
+    for (const severity of ["`BLOCKER`", "`MAJOR`", "`MINOR`"]) {
+      assert.ok(
+        prompt.includes(severity),
+        `missing severity vocabulary: ${severity}`,
+      );
+    }
+  });
+
+  // Reviewers with denied probes still receive an honest evidence path in every relevant mode.
+  it("defines degraded grounding without weakening the skills fallback", () => {
+    const agentSetupPrompt = composeQuality(makeInput("agent-setup")).prompt;
+    const processPrompt = composeQuality(makeInput("process")).prompt;
+    const harnessPrompt = composeQuality(makeInput("harness")).prompt;
+    const skillsPrompt = composeQuality(makeInput("skills")).prompt;
+    const focusedDenialRule =
+      "record the literal denial or unavailability, do not retry it or work around the profile, and never infer a result";
+
+    assert.ok(agentSetupPrompt.includes("Degraded grounding protocol"));
+    assert.ok(agentSetupPrompt.includes('evidence_method: "static-analysis"'));
+    assert.ok(
+      agentSetupPrompt.includes(
+        "Option A: trace how the route map would handle 3 representative reporting-only requests. Option B: send those requests through the live runtime when available.",
+      ),
+    );
+    assert.ok(processPrompt.includes(focusedDenialRule));
+    assert.ok(harnessPrompt.includes(focusedDenialRule));
+    assert.ok(processPrompt.includes('evidence_method: "static-analysis"'));
+    assert.ok(harnessPrompt.includes('evidence_method: "static-analysis"'));
+    assert.ok(
+      skillsPrompt.includes(
+        "Method rule: prefer live skill invocation only when the runner supports it safely. If live invocation or delegated/sub-agent calls are unavailable, perform a file-grounded protocol run against SKILL.md and label the evidence limit. Never imply a dry run is bulletproof TDD evidence.",
+      ),
+    );
+    assert.equal(skillsPrompt.includes(focusedDenialRule), false);
   });
 
   it("focused (harness) prompt carries the full contract", () => {
@@ -449,29 +576,95 @@ describe("quality report contract: CLI surfaces", () => {
     });
   }
 
-  it("prior-report runs demand delta_tag; fresh runs forbid it", () => {
+  it("prior-report runs re-test claims while fresh runs keep the no-prior contract", () => {
     const fresh = composeQuality(makeInput("agent-setup")).prompt;
     assert.match(fresh, /`delta_tag` must be `null` or omitted/);
+    assert.ok(
+      fresh.includes(
+        "For the final JSON block in this run, omit `delta_tag` or set it to `null` for every finding.",
+      ),
+    );
+    assert.equal(
+      fresh.includes("materially matches a prior finding by type/file/line"),
+      false,
+    );
     // Minimal-but-complete history entry: the prior-context section reads
     // report.findings/scores/run_date, not just the id.
-    const priorReport = {
-      id: "2026-07-01-0900-claude-abc12",
-      report: {
-        run_date: "2026-07-01",
-        scores: {
-          setup: { total: 60 },
-          system: { total: 55 },
-        },
-        findings: [],
-      },
-    } as never;
+    const priorReport = makePriorQualityReport("agent-setup");
     const withPrior = composeQuality({
       ...makeInput("agent-setup"),
       priorReport,
     }).prompt;
     assert.match(withPrior, /`delta_tag` is REQUIRED on every current finding/);
     assert.match(withPrior, /2026-07-01-0900-claude-abc12/);
+    assert.ok(
+      withPrior.includes(
+        "A prior finding is a claim to re-test, not a fact. Validate its premise",
+      ),
+    );
+    assert.ok(withPrior.includes("a prior severity is not evidence"));
+    assert.ok(
+      withPrior.includes(
+        "materially matches a prior finding by type/file/line",
+      ),
+    );
+    assert.ok(
+      withPrior.includes(
+        "do not carry the unverified claim into the current findings array solely to keep it visible",
+      ),
+    );
+    assert.ok(withPrior.includes("`What You Did Not Verify`"));
+    assert.ok(withPrior.includes("literal denied or unavailable probe"));
+    assert.ok(withPrior.includes("omission is not verified resolution"));
+    assert.ok(
+      withPrior.includes("absent from the later report, not proven fixed"),
+    );
+    assert.equal(
+      withPrior.includes(
+        "For the final JSON block in this run, omit `delta_tag` or set it to `null` for every finding.",
+      ),
+      false,
+    );
   });
+});
+
+describe("quality report contract: cross-variant boundaries", () => {
+  // Focused users should not inherit the longer agent-setup validity rubric.
+  for (const qualityMode of FOCUSED_QUALITY_MODES) {
+    it(`keeps agent-setup-only validity guidance out of ${qualityMode} mode`, () => {
+      const prompt = composeQuality(makeInput(qualityMode)).prompt;
+      const leakedValidityGuidance = AGENT_SETUP_ONLY_VALIDITY_GUIDANCE.find(
+        (guidance) => prompt.includes(guidance),
+      );
+      assert.equal(
+        leakedValidityGuidance,
+        undefined,
+        `${qualityMode}: leaked ${leakedValidityGuidance}`,
+      );
+    });
+  }
+
+  // Every mode should switch prior-claim guidance only when the user has comparable history.
+  for (const qualityMode of QUALITY_MODES) {
+    it(`switches ${qualityMode} prior revalidation guidance with same-mode history`, () => {
+      const promptWithoutPriorReport = composeQuality(
+        makeInput(qualityMode),
+      ).prompt;
+      const promptWithPriorReport = composeQuality({
+        ...makeInput(qualityMode),
+        priorReport: makePriorQualityReport(qualityMode),
+      }).prompt;
+
+      assert.equal(
+        promptWithoutPriorReport.includes(PRIOR_REPORT_REVALIDATION_GUIDANCE),
+        false,
+      );
+      assert.ok(
+        promptWithPriorReport.includes(PRIOR_REPORT_REVALIDATION_GUIDANCE),
+        `${qualityMode}: missing prior-report revalidation guidance`,
+      );
+    });
+  }
 });
 
 describe("quality report contract: staged-draft persistence variant", () => {
@@ -491,6 +684,14 @@ describe("quality report contract: staged-draft persistence variant", () => {
     assert.ok(prompt.includes("**Persist through the bounded saver.**"));
     assert.equal(prompt.includes("**Persist through the dashboard.**"), false);
   });
+
+  // Each staged-only rule gets a named failure when it leaks into the bounded-saver experience.
+  for (const safetyGuidance of STAGED_DRAFT_SAFETY_GUIDANCE) {
+    it(`keeps bounded-saver prompts free of staged-only guidance: ${safetyGuidance}`, () => {
+      const prompt = composeQuality(makeInput("skills")).prompt;
+      assert.equal(prompt.includes(safetyGuidance), false, safetyGuidance);
+    });
+  }
 });
 
 describe("quality report contract: dashboard mirror", () => {

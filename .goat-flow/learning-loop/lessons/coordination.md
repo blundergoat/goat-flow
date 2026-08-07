@@ -191,3 +191,21 @@ last_reviewed: 2026-08-07
 5. Prefer under-claiming: the total is the trustworthy part of a mis-tagged receipt, so say so explicitly.
 
 **Evidence anchors:** `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) performs the category change; `src/cli/plans-check.ts` (search: `function collectMeasuredActualErrors`) reconciles Actual against the receipt but cannot detect a mis-tagged category. Related: `.goat-flow/learning-loop/lessons/coordination.md` (search: `## Lesson: Actual time must come from prospective active-time segments`) covers the prior failure of never starting a receipt at all.
+
+---
+
+## Lesson: Milestone task sections contain estimated work, not evidence notes
+
+**Status:** active | **Created:** 2026-08-07
+**Decision changed:** Put audit notes in Context and command output in Actual evidence; reserve Tasks for estimated implementation checkboxes.
+**Trigger phase:** VERIFY
+**Incident count:** 1
+**Latest occurrence:** 2026-08-07
+
+**What happened:** M05 recorded a completed test-audit result as another checkbox under `## Tasks`. Strict plan validation counted it as implementation work, then reported one missing `(est: ...)` entry and a 15/20-minute product mismatch.
+
+**Root cause:** The task section was treated as a convenient narrative checklist. Its checkboxes are machine-readable work records that feed estimate coverage and category totals.
+
+**Prevention:** Keep `## Tasks` to estimated work items. Put discoveries in `## Context` and literal gate output in `## Actual evidence` so proof does not alter effort accounting.
+
+**Evidence anchor:** `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task-section checkbox into an estimate-bearing record; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.

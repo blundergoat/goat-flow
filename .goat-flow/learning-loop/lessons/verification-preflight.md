@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-04
+last_reviewed: 2026-08-07
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -99,13 +99,11 @@ last_reviewed: 2026-08-04
 
 **Recurrences (2026-07-13, 2026-07-18, 2026-07-19, 2026-08-01):** M04/M09 contracts, the skill-quality truncation fixes, M07 setup-truth contracts, M10 scaffold/drift regressions, and the review-validator relationship corpus each reached behavioral GREEN before scoped Prettier rejected touched TypeScript. Evidence anchors: `test/contract/skill-hardening-shared-3.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`), `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`), and `test/unit/review-validate-verdict.test.ts` (search: `structuralValidationCases`).
 
-**Recurrence update (2026-08-03):** The goat-review scope and goat-critique context-map contracts reached focused behavioral GREEN before full preflight rejected the touched contract file on Prettier. Formatting only that file preserved all 130 focused passes. Evidence anchor: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`).
-
-**Same-day recurrence:** The writing-style hybrid added contract anchors and reached 158 focused passes before scoped Prettier rejected the touched contract file. Formatting that file alone and rerunning the bundle preserved all 158 passes. Evidence anchor: `test/contract/skill-hardening-shared-2.test.ts` (search: `Neutral and conventional are valid voices`).
+**Recurrences (2026-08-03, 2026-08-07):** Review/critique, writing-style, and M01 reached focused GREEN before Prettier rejected tests. M02-M05 ran the formatter first; it caught prompt and launch-test formatting before proof. Evidence anchors: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), and `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`).
 
 **Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 9 | **Latest occurrence:** 2026-08-03
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 10 | **Latest occurrence:** 2026-08-07
 
 ---
 
@@ -144,6 +142,8 @@ last_reviewed: 2026-08-04
 **Recurrence update (2026-07-13):** M20 hit Prettier on three files, ESLint on tests outside its project, and Knip on four internal type exports. Correction used formatting, scoped source lint/tests, and private types. Evidence: `test/unit/context-report.test.ts` (search: `static context report`).
 
 **Recurrence update (2026-07-31):** M05/M06 caught four scope mismatches: ESLint complexity, a Node directory target, a probe without `PATH`, and stale smoke expectations after terminal env cleanup. Fixes extracted a helper, targeted `*.test.ts` (91/91), reused `process.env`, and aligned the smoke contract (20/20). Evidence: `src/cli/audit/check-factual-claims.ts` and `test/smoke/dashboard-endpoints.test.ts` (search: `GOAT_CLAUDE_REPORTING_SETTINGS`).
+
+**Recurrence update (2026-08-07):** An EXIT-trap cleanup made the executor reject M05's `test:fast` wrapper before npm ran. Retaining the printed `mktemp` log produced `1580` pass / `0` fail. Gate wrappers no longer bundle destructive cleanup.
 
 **Prevention:** Use the repo's supported scopes for final gates (`npx eslint src/cli src/dashboard`, `npm run format:check`, `npx knip --no-progress`). Run full `npm test` alone or capture it to a log before starting parallel expensive checks. When Knip reports configuration hints after a dependency starts being used for real, remove the temporary ignore entry instead of carrying it forward. For performance sanity tests that run in the default fast suite and preflight coverage suite, keep fixtures representative and prefer same-process relative budgets over fixed local-run ceilings. Evidence anchors: `package.json` (search: `test:fast`), `knip.json` (search: `ignoreDependencies`).
 
