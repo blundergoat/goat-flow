@@ -27,6 +27,56 @@ import {
 } from "./helpers.js";
 import type { AgentFacts } from "../../src.js";
 
+const FULL_CONCERN_SCORE = 100;
+const MASKED_VALIDATION_SCORE = 75;
+
+/**
+ * Confirm every concern heading appears in the rendered audit before slicing by offset.
+ * Use ahead of any section comparison: a heading the renderer dropped would otherwise slice
+ * an empty range and let the real assertions pass on nothing.
+ *
+ * @param headingOffsets - label to found-at offset; -1 means that heading never rendered,
+ *   which is the case that would silently hollow out the checks that follow
+ */
+function assertConcernHeadingsRendered(
+  headingOffsets: Record<string, number>,
+): void {
+  // Named per heading so a failure says which one vanished, not just which offset.
+  for (const [headingLabel, offset] of Object.entries(headingOffsets)) {
+    assert.ok(offset >= 0, `missing concern heading in audit: ${headingLabel}`);
+  }
+}
+
+/**
+ * Confirm each evidence limit renders inside its own concern block in both formats.
+ * Use to prove a user reading one concern sees its limits there, rather than the limit
+ * merely existing somewhere else in the report.
+ *
+ * @param evidenceLimits - limits the concern reported; empty means the concern had none
+ *   and the check passes vacuously, which the caller's fixture avoids
+ * @param terminalSection - terminal output sliced to this concern
+ * @param markdownSection - Markdown output sliced to this concern
+ * @param concernLabel - concern name reported on failure
+ */
+function assertLimitsRenderInsideConcern(
+  evidenceLimits: readonly string[],
+  terminalSection: string,
+  markdownSection: string,
+  concernLabel: string,
+): void {
+  // Each format keeps a limit inside its owning concern rather than merely somewhere in the report.
+  for (const evidenceLimit of evidenceLimits) {
+    assert.ok(
+      terminalSection.includes(`Limit: ${evidenceLimit}`),
+      `${concernLabel} terminal output must carry limit: ${evidenceLimit}`,
+    );
+    assert.ok(
+      markdownSection.includes(`*Limit:* ${evidenceLimit}`),
+      `${concernLabel} Markdown output must carry limit: ${evidenceLimit}`,
+    );
+  }
+}
+
 describe("Audit scoring model", () => {
   it("acknowledge silences exactly the listed id, not other advisories", () => {
     // Craft a scenario where two advisory checks fail and acknowledge only one.
@@ -326,8 +376,8 @@ describe("Audit scoring model", () => {
           ...baseFacts.shared,
           gitCommitInstructions: {
             exists: true,
-            path: "docs/coding-standards/git-commit.md",
-            requiredPath: "docs/coding-standards/git-commit.md",
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
             misplacedPaths: [],
           },
         },
@@ -387,8 +437,8 @@ describe("Audit scoring model", () => {
           ...baseFacts.shared,
           gitCommitInstructions: {
             exists: true,
-            path: "docs/coding-standards/git-commit.md",
-            requiredPath: "docs/coding-standards/git-commit.md",
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
             misplacedPaths: [],
           },
         },
@@ -422,7 +472,7 @@ describe("Audit scoring model", () => {
       ["structural", "structural", "structural", "structural"],
     );
     assert.equal(concerns.verification.status, "pass");
-    assert.equal(concerns.verification.score, 100);
+    assert.equal(concerns.verification.score, FULL_CONCERN_SCORE);
     assert.equal(concerns.verification.metrics, 1);
     assert.ok(
       concerns.verification.limits.includes(
@@ -460,8 +510,8 @@ describe("Audit scoring model", () => {
           ...baseFacts.shared,
           gitCommitInstructions: {
             exists: true,
-            path: "docs/coding-standards/git-commit.md",
-            requiredPath: "docs/coding-standards/git-commit.md",
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
             misplacedPaths: [],
           },
         },
@@ -479,7 +529,7 @@ describe("Audit scoring model", () => {
 
     assert.equal(metric.status, "pass");
     assert.equal(concerns.verification.status, "pass");
-    assert.equal(concerns.verification.score, 100);
+    assert.equal(concerns.verification.score, FULL_CONCERN_SCORE);
     assert.ok(
       concerns.verification.findings.some((finding) =>
         finding.includes("post-turn safety guard installed"),
@@ -534,8 +584,8 @@ describe("Audit scoring model", () => {
           ...baseFacts.shared,
           gitCommitInstructions: {
             exists: true,
-            path: "docs/coding-standards/git-commit.md",
-            requiredPath: "docs/coding-standards/git-commit.md",
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
             misplacedPaths: [],
           },
         },
@@ -555,7 +605,7 @@ describe("Audit scoring model", () => {
     assert.equal(metric.displayStatus, "warn");
     assert.equal(metric.impact, "score-only");
     assert.equal(concerns.verification.status, "pass");
-    assert.equal(concerns.verification.score, 75);
+    assert.equal(concerns.verification.score, MASKED_VALIDATION_SCORE);
     assert.ok(
       concerns.verification.limits.some((limit) =>
         limit.includes("always exits 0"),
@@ -579,7 +629,7 @@ describe("Audit scoring model", () => {
     );
 
     assert.equal(concerns.recovery.status, "pass");
-    assert.equal(concerns.recovery.score, 100);
+    assert.equal(concerns.recovery.score, FULL_CONCERN_SCORE);
     assert.deepEqual(
       recoveryChecks.map((check) => check.evidenceKind),
       ["structural", "structural"],
@@ -670,19 +720,14 @@ describe("Audit scoring model", () => {
     const markdownRecoveryStart = markdownOutput.indexOf("### Recovery:");
     const markdownFeedbackStart = markdownOutput.indexOf("### Feedback Loop:");
 
-    for (const index of [
-      terminalVerificationStart,
-      terminalRecoveryStart,
-      terminalFeedbackStart,
-      markdownVerificationStart,
-      markdownRecoveryStart,
-      markdownFeedbackStart,
-    ]) {
-      assert.ok(
-        index >= 0,
-        `missing concern heading in rendered audit: ${index}`,
-      );
-    }
+    assertConcernHeadingsRendered({
+      "terminal Verification": terminalVerificationStart,
+      "terminal Recovery": terminalRecoveryStart,
+      "terminal Feedback Loop": terminalFeedbackStart,
+      "markdown Verification": markdownVerificationStart,
+      "markdown Recovery": markdownRecoveryStart,
+      "markdown Feedback Loop": markdownFeedbackStart,
+    });
 
     const terminalVerification = terminalOutput.slice(
       terminalVerificationStart,
@@ -701,15 +746,18 @@ describe("Audit scoring model", () => {
       markdownFeedbackStart,
     );
 
-    // Each format keeps a limit inside its owning concern rather than merely somewhere in the report.
-    for (const evidenceLimit of report.concerns.verification.limits) {
-      assert.ok(terminalVerification.includes(`Limit: ${evidenceLimit}`));
-      assert.ok(markdownVerification.includes(`*Limit:* ${evidenceLimit}`));
-    }
-    for (const evidenceLimit of report.concerns.recovery.limits) {
-      assert.ok(terminalRecovery.includes(`Limit: ${evidenceLimit}`));
-      assert.ok(markdownRecovery.includes(`*Limit:* ${evidenceLimit}`));
-    }
+    assertLimitsRenderInsideConcern(
+      report.concerns.verification.limits,
+      terminalVerification,
+      markdownVerification,
+      "Verification",
+    );
+    assertLimitsRenderInsideConcern(
+      report.concerns.recovery.limits,
+      terminalRecovery,
+      markdownRecovery,
+      "Recovery",
+    );
   });
 });
 

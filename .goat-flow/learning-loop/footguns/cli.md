@@ -1,19 +1,18 @@
 ---
 category: cli
-last_reviewed: 2026-05-25
+last_reviewed: 2026-08-07
 ---
 
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
 
 **Status:** active | **Created:** 2026-05-11 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Windows users see `C:\Users\thatm\...` style backslash paths in setup prompts, audit `evidence` fields, quality `QUALITY_DIR` Bash snippets, skill scaffold output, glob results, and the `getCliCommand()` re-run hint. When an agent reads the prompt and runs `mkdir -p "C:\Users\..."` inside a Bash subshell, the backslashes act as escape characters and the command fails. Tests written with POSIX-shape assertions also fail (string-equality on `.endsWith(".claude/skills/...")` etc.). A full-suite run on 2026-05-11 had 25 failures all rooted here.
+**Symptoms:** Windows users see `C:\Users\developer\...` style backslash paths in setup prompts, audit `evidence` fields, skill scaffold output, glob results, and the `getCliCommand()` re-run hint. When an agent reads the prompt and runs a host-native path inside a Bash subshell, the backslashes can act as escape characters and the command fails. Tests written with POSIX-shape assertions also fail (string-equality on `.endsWith(".claude/skills/...")` etc.). A full-suite run on 2026-05-11 had 25 failures all rooted here.
 
 **Why it happens:** `path.join`, `path.resolve`, and `path.relative` from `node:path` use OS-native separators on Windows. Every place a path is composed for *user-visible* output (prompts, audit findings, JSON payloads, dashboard strings) inherits that shape. The same path is fine for `node:fs` operations (which accept either separator), so the bug is invisible until output is rendered.
 
 **Evidence:**
 - `src/cli/install-invocation.ts` (search: `toBashPath`) - forward-slashes installer argv on win32.
-- `src/cli/prompt/compose-quality-common.ts` (search: `toShellProjectPath`) - posix.join + forward-slash for `QUALITY_DIR` Bash snippets (moved here from `compose-quality-agent-report.ts` when the report contract was centralised in 1.13.0).
 - `src/cli/prompt/compose-setup.ts` (search: `displayTemplatePath`) - forward-slashes packaged-template references; fixes 6 `composeSetup routing` tests.
 - `src/cli/paths.ts` (search: `getCliCommand`) - forward-slashes the `node dist/cli/cli.js` re-run hint.
 - `src/cli/audit/check-agent-deny-runtime.ts` (search: `evidencePath`) - forward-slashes 3 audit-evidence emission sites.
@@ -25,7 +24,7 @@ last_reviewed: 2026-05-25
 1. Treat every emission of a `path.*` result into a string as a candidate for `.replace(/\\/g, "/")`. The boundaries that need this: prompt text, audit findings, JSON output, dashboard URLs/labels, log messages, shell snippets the user or agent will execute.
 2. `fs` operations can stay native (Node accepts both). The rule is about *display*, not *use*.
 3. For path *composition* (joining a host-native projectPath with a POSIX sub-path), prefer `path.posix.join(projectPath, sub).replace(/\\/g, "/")` to avoid `path.resolve`'s drive-letter prepending on Windows.
-4. Test stubs that pattern-match on path strings must normalize incoming paths the same way (`test/unit/audit-command.test.ts` `stubFS` is the canonical example).
+4. Test stubs that pattern-match on path strings must normalize incoming paths the same way (`test/unit/audit-command/helpers.ts` (search: `export function stubFS`) is the canonical example).
 5. CI lacks a Windows job, so this class of bug ships silently. Until that's added, any path-emission change must be probed on a Windows host before release.
 
 ---
@@ -74,3 +73,106 @@ last_reviewed: 2026-05-25
 3. Subprocesses spawned by goat-flow (hooks, git, install scripts) must have their stdout / stderr captured separately. Never merge a subprocess's stdout into the parent's stdout when the parent is in structured-output mode.
 4. Contract test pattern: for every structured-output CLI mode, write a test that exercises a code path KNOWN to log (e.g., cache miss, telemetry init, version check). Assert that the captured stdout parses cleanly as the expected format. If logging would corrupt it, the test fails.
 5. For MCP specifically: stdout is the protocol channel. Treat any `console.log` / `process.stdout.write` outside the MCP framing as a bug. Enforce with a source-grep guardrail (see `.goat-flow/learning-loop/patterns/verification.md` search: `Source-grep guardrail`) banning `console.log` in MCP server source files.
+
+---
+
+## Footgun: Strict validation of a new evidence artifact retroactively fails finished plans
+
+**Status:** active | **Created:** 2026-08-02 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Gate an evidence artifact's shape on whether something claims authority from it, not on its mere presence.
+**Trigger phase:** VERIFY
+**Incident count:** 4 | **Latest occurrence:** 2026-08-04
+
+**Symptoms:** A milestone that passed strict validation for weeks starts failing after an unrelated release. The errors name an artifact the milestone does not depend on - here, five `timing receipt ... inconsistent` errors on a `complete` goat-debug-improve milestone whose Actual is `retrospective` and cites no receipt at all. Separately, a seven-cell timing row was silently skipped and a receipt containing `S01` plus `S03` allocated `S03` again because the writer used row count as identity authority. In a later change, the receipt parser correctly diagnosed a summary on an active receipt, but strict checking first exited 0 because the new message did not begin with the classifier's `timing receipt` prefix. After that prefix was corrected, paused and incomplete receipts still exited 0 because general receipt warnings become fatal only for a live clock or claimed Actual. Each failure surfaced late because parser behavior was not verified through every policy-owning consumer state.
+
+**Why it happens:** `src/cli/plans-time-receipt.ts` (search: `export function parseTimingReceiptMarkdown`) defines a receipt grammar requiring a `State` column and a `**Receipt state:**` header. Hand-written receipts predating the CLI used a free-text `Work` column instead. `src/cli/plans-check.ts` (search: `function isValidationWarning`) classifies receipt diagnostics with `warning.startsWith("timing receipt")`; message text is therefore part of the routing contract, not presentation alone. That classifier previously promoted every matching warning to a strict error regardless of whether any Actual cited the receipt. On the live workflow path, `readTimingDataColumns` treated a table-shaped wrong-width row as unrelated prose, and `nextSegmentId` derived identity from `segments.length` instead of the highest canonical suffix.
+
+**Safe handling now:**
+1. Before shipping validation for a new artifact, run the checker across *every* existing plan directory, not just the one the feature was built in.
+2. Make the artifact's shape fatal only when a claim or live workflow depends on it - `src/cli/plans-check.ts` (search: `const receiptIsActive`) gates receipt warnings on a `measured` Actual or an active clock, while malformed unclaimed historical receipts stay advisory.
+3. Keep the claimed path failing twice over: shape validation plus reconciliation, so relaxing the unclaimed case cannot weaken the claimed one.
+4. Treat "this artifact is decorative here" as a first-class state rather than forcing migration of finished work.
+5. Once a receipt is live or claimed, reject every table-shaped row that does not match the canonical width and allocate new identifiers after the highest canonical suffix, not after the row count. Regression anchors: `test/unit/plans-time.test.ts` (search: `rejects timing table rows with extra cells`) and (search: `allocates a new segment after the highest existing suffix`).
+6. When adding a parser warning, inspect every consumer that classifies warning text and verify the public command path across each relevant receipt state. Keep receipt diagnostics under the stable `timing receipt` prefix until routing uses structured codes, and promote inherently invalid authority such as a non-final summary independently of the live-or-claimed compatibility exception. Regression anchor: `test/unit/plans-check-lifecycle.test.ts` (search: `const staleSummaryCases`).
+
+---
+
+## Footgun: Markdown proof gates can promote hidden examples into authority
+
+**Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Validate structural evidence against rendered Markdown semantics and exact documented field values, then pair every exclusion fixture with a visible-content control.
+**Trigger phase:** VERIFY
+**Incident count:** 7 | **Latest occurrence:** 2026-08-07
+
+**Symptoms:** A review report containing every required field inside a raw `<pre>` block passed validation. A balanced inline-code span containing the literal `<!--` token, and later a visible backslash-escaped `\<!--` opener, entered comment state and hid subsequent fields. The first multiline fix still lost state when one continuation line closed a code span and opened another, so a comment marker on the following line hid the rest of the report. A complete custom tag such as `<x-review>` also opened a blank-terminated raw HTML block under CommonMark type 7, but the masker left its hidden fields authoritative. Four source spaces after a blank line under `- context` were later mistaken for top-level indented code, suppressing a visible `TODO` list continuation. Separately, the compact Review Integrity grammar accepted `risk-depth-declined` in its degradation slot while returning `isRiskDepthDeclined: false`, so a degraded review could claim a stronger conclusion and verdict.
+
+**Why it happens:** `src/cli/rendered-markdown.ts` (search: `export function maskNonRenderedMarkdown`) is a source-aligned Markdown masker rather than a complete Markdown parser; every omitted exclusion form can accidentally grant hidden examples structural authority or suppress visible evidence. `src/cli/review-validate-common.ts` (search: `const COMPACT_INTEGRITY`) compounded that risk by accepting any non-empty degradation text even though the documented compact form permits only `no degradation flags`.
+
+**Safe handling now:**
+1. Add paired regressions for every Markdown exclusion change: hidden headings and fields must stay hidden, while visible structure immediately after the construct must retain its original offset. Include complete custom tags that open CommonMark type-7 blocks and a control proving they do not interrupt a paragraph.
+2. Treat comment markers inside balanced inline-code spans and backslash-escaped openers as visible code, but keep real comments masked. Carry delimiter state across source lines, including a continuation line that closes one span and opens another. Test odd and even backslash parity so the exception cannot swallow comments. Evidence anchors: `test/unit/plans-export.test.ts` (search: `keeps backslash-escaped HTML comment openers visible`) and (search: `tracks a new multiline code span after closing one on the same line`).
+3. Compare indentation relative to the active list marker before classifying an indented leaf block. Pair the four-space visible continuation with a six-space nested-code control. Evidence anchor: `test/unit/plans-export.test.ts` (search: `preserves visible list continuations while masking nested list code`).
+4. Match compact proof receipts to their canonical documented values. Do not accept arbitrary text and then hardcode the corresponding semantic state.
+5. Re-run both the shared masker tests and the consuming proof-gate tests. Evidence anchors: `test/unit/plans-export.test.ts` (search: `masks type-7 custom-tag blocks without hiding later visible structure`) and `test/unit/review-validate.test.ts` (search: `rejects structural review evidence inside a type-7 HTML block`).
+
+---
+
+
+---
+
+## Footgun: Re-homing a milestone breaks the machine-parsed `Depends on` field
+
+**Status:** active | **Created:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Cross-train dependency pointers go in a separate `**Dependency note:**` line, never in `**Depends on:**`.
+**Trigger phase:** VERIFY
+
+**Symptoms:** Moving a milestone between plan directories and repointing the trains that referenced it makes `plans check <dir> --strict` exit 1 with `dependencies must be \`none\` or comma-separated local milestone IDs`. Measured 2026-08-07 while pulling `1.21.0/M05` and `1.30.0/M09` into `1.16.0`: 1.21.0 was strict-clean beforehand and the only two failures were the two dependency lines just edited. The natural edit - replacing `M05` with the moved file's path, or appending a parenthetical explaining the move - is exactly what breaks it.
+
+**Why it happens:** `src/cli/plans-check-structure.ts` (search: `function readDependencies`) accepts only the literal `none` or `/^M\d+(?:\s*,\s*M\d+)*$/`. It is a dependency-graph input, not prose - cycle detection walks it. Anything human-readable in that field, including a path, a parenthetical rationale, or `and shipped ...`, fails the regex and the milestone contributes no edges to the graph. Two adjacent gates fire from the same edit: declaring `**Effort estimate:**` on an older-format milestone obliges an `(est: ...)` entry on every task and testing-gate item that reconciles to the split, and adding a `## Scope ...` heading beside an existing `## Scope Discipline` trips `conflicting scope representations`.
+
+**Safe handling now:**
+1. Keep `**Depends on:**` machine-parseable (`none` or local `Mnn` IDs only). Put the moved-from path, rationale, and cross-train ordering in a following `**Dependency note:**` line.
+2. Re-run `plans check --strict` on the destination *and* every source train after a move. A source train that was clean is the regression signal; a train already failing for unrelated reasons (1.30.0 lacks effort estimates throughout) needs an error-count comparison, not a pass/fail read.
+3. Leave a pull-forward note at the top of the source `ISSUE.md`/`README.md` - the established convention - so surviving bare `Mnn` labels in that train still resolve.
+4. Adding an effort estimate to an older Archetype-format milestone is not a one-line edit; budget for per-task and per-testing-gate `(est: ...)` entries that sum to the declared split.
+
+---
+
+## Resolved Entries
+
+## Footgun: Zero-duration filesystem leases can look live at the clock boundary
+
+**Status:** resolved | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Handle a zero-duration lease as an explicit immediate-expiry state instead of deriving it from wall-clock subtraction.
+**Trigger phase:** VERIFY
+
+**Symptoms:** Identical CI runs at the same commit disagree on `rejects an orphaned stale claim when its draft is already gone`. The failing run keeps the claim marker and produces no rejection receipt, while a parallel run passes. A local 10,000-sample probe observed 93 freshly written marker timestamps ahead of `Date.now()`, with the most negative delta at about -0.6 ms.
+
+**Why it happened:** `src/cli/server/quality-draft-claims.ts` (search: `function staleClaimSnapshot`) previously classified every lease with `Date.now() - snapshot.mtimeMs >= staleMs`. Node's clock is integer milliseconds, while filesystem modification times can retain fractional precision or be rounded ahead. For the test/recovery contract `staleMs: 0`, a just-created marker can therefore appear live even though zero means immediate expiry.
+
+**Resolved by:** `src/cli/server/quality-draft-claims.ts` (search: `if (staleMs <= 0) return snapshot`) now bypasses timestamp arithmetic for non-positive leases. `test/unit/quality-draft-orphan-recovery.test.ts` (search: `rejects an orphaned stale claim when its draft is already gone`) forces a future marker mtime and verifies immediate expiry.
+
+**Safe handling now:**
+1. Treat non-positive lease durations as immediate expiry before doing timestamp arithmetic; keep positive leases on the normal age comparison.
+2. Keep the deterministic future-mtime regression so clock precision cannot make the test intermittent again.
+3. When testing time boundaries, force the boundary condition rather than depending on scheduler delay or filesystem timestamp rounding to reproduce it.
+
+---
+
+## Footgun: Structured Actual cannot represent uninstrumented time
+
+**Status:** resolved | **Created:** 2026-08-02 | **Evidence:** OBSERVED
+**Decision changed:** Instrument timing before work; if timing is missing, declare the honest state instead of manufacturing precision.
+**Trigger phase:** VERIFY
+
+**Symptoms:** A completed or `human-verification-pending` milestone had to contain a numeric Actual total and product/proof/other split even when no clock was started. `_`, `unknown`, or an explanation without a number failed strict validation. An agent under completion pressure could therefore turn task estimates into a precise-looking Actual value with no elapsed-time evidence.
+
+**Why it happened:** `src/cli/plans-check.ts` (search: `function collectActualErrors`) made numeric Actual mandatory at the human gate. `src/cli/plans-effort.ts` (search: `ACTUAL_PATTERN`) accepted only numeric minutes and an optional numeric split, with no measurement-provenance or unknown state.
+
+**Resolved by:** `src/cli/plans-effort.ts` (search: `ACTUAL_UNKNOWN_STATE_PATTERN`) now parses four Actual states - `measured`, `retrospective`, `unavailable`, `incomplete`. `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) system-stamps UTC/epoch spans into a `## Timing Receipt` inside the milestone, and `measured` requires a finalized internally consistent receipt. Untagged legacy numerics classify as `retrospective` rather than silently becoming measured. Verified 2026-08-02: a `complete` milestone carrying `Actual: unavailable: no clock was started for this milestone` passes `plans check --strict` at exit 0.
+
+**Safe handling now:**
+1. `goat-flow plans time start <milestone-file> --category <product|proof|other>` before work; `stop` before every human wait; `stop --finalize` at the gate.
+2. Let the receipt supply raw seconds; the rounded structured Actual is derived, never hand-written.
+3. If prospective timing was missed, declare `unavailable:` or `incomplete:` with a reason - never back-calculate from planned estimates.
+4. Treat estimate accuracy and Actual accuracy as separate claims.

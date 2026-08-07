@@ -1,6 +1,50 @@
 ---
 category: verification
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-07
+---
+
+## Lesson: I edited a dead code path because I assumed one implementation
+
+**Status:** active | **Created:** 2026-08-05
+**Decision changed:** Before changing behaviour in a script with capability detection, prove which branch actually executes for the installed tool.
+**Trigger phase:** ACT
+
+**What happened:** Fixing the gruff hook's file-scope blind spot, I changed the `--changed-scope` flag in `run_gruff_json` and the behaviour did not move. The hook has two paths: a legacy `analyse` path and a `gruff.hook.v1` contract path selected when the analyzer advertises the contract. gruff-ts 0.4.0 advertises it, so `process_file_contract` runs and my edit was in code that never executes.
+
+**Root cause:** I found one plausible implementation, matched it to the symptom, and edited it without checking whether it was the live branch. The file was long enough that the second path was well past where I stopped reading.
+
+**Prevention:** When a script branches on capability detection, run the detection first and confirm which branch is taken before editing - here, `gruff-ts hook --capabilities` answers it in one command. A behaviour change that produces no observable difference is evidence of a dead edit, not of a stubborn bug; re-check the branch before adding more changes on top. Evidence anchors: `.goat-flow/hooks/gruff-code-quality.sh` (search: `supports_native_changed_regions`), `.goat-flow/hooks/gruff-code-quality.sh` (search: `process_file_contract`).
+
+---
+
+## Lesson: Permission wildcards must stay separate from escaped literal paths
+
+**Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
+**Decision changed:** Build permission patterns by escaping the literal directory first, then append deliberate wildcard grammar and assert the serialized rule. | **Trigger phase:** ACT
+
+**What happened:** While denying Claude reporting-agent writes to server-owned quality result and claim receipts, the first implementation passed each wildcard-bearing filename through `claudePermissionPath`. The focused terminal-profile test failed because that helper correctly escaped `*` as a literal path character, so the deny rule matched no receipt family.
+
+**Recurrence 2026-08-05:** The corrected wildcard construction still enumerated only result and claim markers. Full branch review of the adjacent quality-claim implementation found the separate `goat-quality-reap-*` server-owned fence, which the reporting agent could still edit. The permission inventory now names result, claim, and reaper families together.
+
+**Root cause:** I used a literal-path escaping helper to encode a permission pattern. The directory and the wildcard suffix have different grammars even though they appear in one rule string.
+
+**Prevention:** Pass only literal filesystem components through path escaping. Append reviewed permission wildcards afterward, then assert every server-owned filename family in the serialized deny rules. Evidence anchors: `src/cli/server/terminal-reporting-profile.ts` (search: `stagingServerFileDenies`), `test/unit/terminal-spawn.test.ts` (search: `launches Claude reporting sessions with a restrictive settings overlay`).
+
+---
+
+## Lesson: Input/output alias guards must compare resolved filesystem paths
+
+**Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
+**Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** VERIFY
+
+**What happened:** Full branch review reproduced `plans export --format json --output <source milestone> --force` exiting 0 and replacing the milestone with generated JSON. The first guard compared `resolve()` strings and blocked that direct spelling.
+
+**Recurrence 2026-08-05:** A follow-up reproduction selected the plan through a directory symlink while naming the same source through its real path. The lexical guard again exited 0 and changed the source. The correction compares `realpathSync` results for existing sources and destinations before any export write.
+
+**Root cause:** I treated normalized path strings as filesystem identity. A symlink gives one file multiple normalized absolute names, so lexical equality cannot prove that input and output are distinct.
+
+**Prevention:** For commands that read source files and later honor `--force`, canonicalize existing source and destination paths before collision checks, while retaining separate symlink and hardlink write guards. Re-run the destructive reproduction through a second path spelling before accepting the fix. Evidence anchors: `src/cli/plans-export-output.ts` (search: `assertOutputPathsDoNotAliasSources`), `test/unit/plans-export-writes.test.ts` (search: `refuses forced JSON output that aliases a source through the selected plan path`).
+
 ---
 
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
@@ -15,55 +59,19 @@ last_reviewed: 2026-07-19
 
 ---
 
-## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
-
-**Status:** active | **Created:** 2026-05-25
-
-**What happened:** During gruff docs cleanup, comments in `src/cli/server/decoders.ts` made sense to a maintainer but still failed `docs.magic-threshold-without-rationale`, `docs.missing-error-behavior-doc`, and `docs.missing-why-for-complex-code`. In the same cleanup, renaming dashboard terminal paste metadata passed focused tests but left stale ambient and VM-test helper shapes caught by `npm run typecheck`.
-
-**Root cause:** I treated human-readable comments and a local rename as complete before checking the analyzer vocabulary and parallel type surfaces.
-
-**Prevention:** For gruff-driven comment work, read `code-comments.md`, patch one file or cohesive cluster, then rerun `npx gruff-ts analyse <path>`. If a rename replaces a comment, grep the old identifier and run `npm run typecheck`. Evidence anchors: `src/cli/server/decoders.ts` (search: `Parse a JSON request body without throwing`), `src/cli/server/decoders.ts` (search: `This stays explicit because`), `src/dashboard/globals.d.ts` (search: `shouldDelaySubmit`), `.goat-flow/learning-loop/patterns/workflow.md` (search: `Gruff docs cleanup is a tight analyzer loop`).
-
-## Lesson: Gruff hook compatibility probes need real configs and wrapper PATH
-
-**Status:** active | **Created:** 2026-05-28
-
-**What happened:** While verifying `workflow/hooks/gruff-code-quality.sh` against `/home/devgoat/projects/gruff-workspace/gruff-go`, `gruff-php`, `gruff-py`, and `gruff-rs`, the first hook-shaped probes failed or produced no output for reasons unrelated to JSON compatibility. Placeholder `.gruff-*.yaml` files such as `rules: {}` were invalid or too incomplete for several analyzers, and the Rust probe replaced `PATH` with only gruff binary directories plus `/usr/bin:/bin`, hiding `cargo` from `gruff-rs/bin/gruff-rs`.
-
-**Root cause:** I treated sibling gruff CLIs as interchangeable binaries but skipped two runtime surfaces that are part of the hook contract: schema-bearing project config files and wrapper-script dependencies inherited from the caller's normal `PATH`.
-
-**Prevention:** When testing `gruff-code-quality.sh` against sibling gruff implementations, copy or reference each project's real `.gruff-*.yaml`, preserve the normal `PATH` while prefixing local gruff binaries, and run both checks: direct `analyse --format json` schema probes and hook-shaped probes with changed ranges. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `discover_binary`), `test/integration/gruff-code-quality-smoke.test.ts` (search: `changed line finding`).
-
-## Lesson: Gruff doc comments can expose hidden complexity warnings
-
-**Status:** active | **Created:** 2026-05-30
-
-**What happened:** Adding a maintainer comment to `src/dashboard/app.ts` `_uploadTerminalImages` cleared a docs finding but exposed new `complexity.npath` and `design.god-function` warnings. The helper extraction then passed TypeScript but failed preflight ESLint on an unnecessary assertion.
-
-**Root cause:** I checked only the targeted docs rule and assumed a comment-only patch could not change broader warning or lint counts.
-
-**Prevention:** After a large gruff docs batch, run `npx gruff-ts analyse --format json --fail-on none` and compare warning count, then run the lint/preflight gate for any helper extraction. Do not remove a useful comment just to hide a surfaced warning. Evidence anchors: `src/dashboard/app.ts` (search: `encodeTerminalUploadFiles`), `src/dashboard/app.ts` (search: `showTerminalUploadResult`).
-
-## Lesson: docs.missing-internal-function-doc must not be silenced; baseline the residue
-
-**Status:** active | **Created:** 2026-05-29
-
-**What happened:** Gruff-ts reported 337 `docs.missing-internal-function-doc` findings across 73 files. Adding boilerplate JSDoc to every short helper would satisfy the rule but violate the repo's "rewrite/rename before comment" doctrine.
-
-**Root cause:** Two correct rules collide: gruff rules must not be disabled, but comments must only explain non-obvious WHY. This rule had no tuning options, leaving only fix, rename, or baseline.
-
-**Prevention:** Triage `docs.missing-internal-function-doc` with the gruff-code-quality playbook. Add comments only when they meet the contract bar; otherwise rename or baseline with rationale. Revisit when gruff-ts gains threshold/name-match tuning. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Doc comments are mandatory under that playbook`), `scripts/preflight-checks.sh` (search: `Gruff Policy`).
-
 ## Lesson: RegExp constructor assertions need a real escape helper
 
 **Status:** active | **Created:** 2026-05-28
+
+**Incident count:** 2 | **Latest occurrence:** 2026-08-01
 
 **What happened:** While adding a hook smoke test for extension-based gruff binary selection, the first assertion escaped path separators for a `RegExp` constructor with `replaceAll("/", "\\\\/")`. The hook output used the expected slash-separated PHP fixture path, but the generated regex expected an extra backslash and the focused test failed.
 
 **Root cause:** I treated slash escaping for regex literals and `RegExp` constructor strings as the same problem. In constructor strings, `/` is not a delimiter and does not need escaping; only regex metacharacters do.
 
-**Prevention:** When asserting dynamic paths or rule IDs through `new RegExp(...)`, use a small `escapeRegex` helper for regex metacharacters instead of ad hoc slash replacement. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `function escapeRegex`) and `test/integration/gruff-code-quality-smoke.test.ts` (search: `selects the gruff binary from the edited file extension`).
+**Recurrence (2026-08-01):** An M04 contract built a dynamic `RegExp` with a template literal that also contained escaped Markdown backticks. The TypeScript transform failed before any behavioural test ran. String concatenation produced the intended pattern and exposed the genuine three-failure RED.
+
+**Prevention:** When asserting dynamic paths or rule IDs through `new RegExp(...)`, use a small `escapeRegex` helper for regex metacharacters instead of ad hoc slash replacement. If the pattern includes Markdown backticks, avoid nesting them in a template literal; concatenate the literal delimiters around the dynamic value. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `function escapeRegex`), `test/integration/gruff-code-quality-smoke.test.ts` (search: `selects the gruff binary from the edited file extension`), and `test/contract/skill-hardening-review-2.test.ts` (search: `conditionalSection`).
 
 ## Lesson: Harness fixture counts must match the reported unit
 
@@ -89,13 +97,15 @@ last_reviewed: 2026-07-19
 
 ## Lesson: Header-only edits leave bodies contradicting the new scope
 
-**Status:** active | **Created:** 2026-05-16
+**Status:** active | **Created:** 2026-05-16 | **Incident count:** 2 | **Latest occurrence:** 2026-08-07
 
 **What happened:** I updated status/dependency headers across several milestone files and reframed M11, but left body sections, deferred items, field names, and one filename contradicting the new scope. Review caught doc-only milestones still requiring code helpers, stale dependencies, an old `confidence` field, and an abandoned filename.
 
 **Root cause:** I treated the header as the scope change. In planning docs, status/dependency/framing changes ripple through Scope Discipline, Tasks, Exit Criteria, Testing Gate, Deferred, filenames, and schema field names.
 
-**Prevention:** After a milestone scope change, re-read the whole file, grep old-scope keywords, check the filename, and scan for doctrine violations such as `confidence` or file-line evidence. In closeout, list what changed in each touched milestone so reviewers can target the same surfaces. Evidence anchor: `.goat-flow/skill-docs/skill-conventions.md` (search: `Task Tracking`).
+**Recurrence 2026-08-07:** The first usage-insights plan set passed strict plan validation, but a cold-start reread found semantic contradictions the validator cannot see: M08 required a nonexistent quality `proof_class` field, M06 left a placeholder response mode and an under-scoped live sync command, M11 could race M07 on the same instruction files, and M10 assumed persistent markers were necessary after current Claude documentation added skill-scoped hook cleanup. The corrected milestones now cite the live schema and platform contract, use runnable fixture commands, and encode shared-file dependencies.
+
+**Prevention:** After adding or changing a milestone, re-read the whole file, grep old-scope keywords, check the filename, compare every named field with its live schema, resolve shared write paths into dependency headers, and require every command to be literal or name the task that creates it. Re-verify time-sensitive platform premises against current primary documentation and the installed version. Run structural plan validation last; it proves shape and arithmetic, not semantic executability. In closeout, list what changed in each touched milestone so reviewers can target the same surfaces. Evidence anchors: `.goat-flow/skill-docs/skill-conventions.md` (search: `Task Tracking`), `src/cli/quality/schema-types.ts` (search: `QUALITY_EVIDENCE_METHODS`), and `workflow/skills/reference/skill-preamble.md` (search: `Report-Only Skill Contract`). External platform evidence: [Claude Code hooks reference](https://code.claude.com/docs/en/hooks) (search: `Hooks in skills and agents`).
 
 ---
 
@@ -121,9 +131,17 @@ last_reviewed: 2026-07-19
 
 **Root cause:** I changed the contract and obvious test without grepping every encoded form of the old behavior.
 
-**Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; update them with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-contracts.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
+**Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; include install/round-trip suites when generated config shape changes. Update those assertions with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
 
-**Latest recurrence (2026-07-19):** A path-safe evidence diagnostic replaced raw OS errors, but the adjacent non-fatal assertion still accepted only the old error forms; the first focused GREEN run stopped at 117/118.
+**Recurrence (2026-07-19):** A path-safe evidence diagnostic replaced raw OS errors, but the adjacent non-fatal assertion still accepted only the old error forms; the first focused GREEN run stopped at 117/118.
+
+**Latest recurrence (2026-07-29):** A newly authored contract regex pinned capitalized `Honor \`Depends on\`` from memory after an edit earlier in the same session had folded it to lowercase `honor`; the first full run failed the new test. Grep current file text before encoding an assertion, even for text written earlier the same session.
+
+**Latest recurrence (2026-08-01):** M03's first RED used heading helpers at the wrong Markdown levels, and a later GREEN assertion treated `same-file` capitalization as semantic. Re-reading the helper contract produced the genuine four-failure RED; matching prose case-insensitively removed the false GREEN failure. Validate assertion machinery before accepting RED, and copy exact source text unless case is intentionally irrelevant.
+
+**Latest recurrence (2026-08-03):** The active Timing Receipt regression correctly failed strict validation, but its new assertion guessed `duplicate segment id M01-S01` instead of copying the parser's emitted `timing receipt segment ids must be unique`. The focused run stopped at 62/63 despite correct product behaviour. Run the reproduction once or inspect the parser warning before pinning diagnostic text; do not invent a more specific contract than the implementation emits.
+
+**Latest recurrence (2026-08-06):** Replacing Copilot's `Get-Command bash` fallback with the shared Node launcher cleared the focused registrar and drift suites, but the full installer matrix still required the retired PowerShell marker in two cases. The corrected assertion now requires `run-with-bash.mjs` and rejects `Get-Command bash`. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `must use the managed Bash resolver`) and `src/cli/server/agent-hook-writer.ts` (search: `powershell: crossPlatformCommand`).
 
 ---
 
@@ -142,16 +160,22 @@ last_reviewed: 2026-07-19
 ## Lesson: "Double check" means read the files, not re-run the tests
 
 **Status:** active | **Created:** 2026-03-22
+**Decision changed:** A double-check includes strict artifact validation and a source-diff read after focused tests.
+**Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-03
 
 **What happened:** User asked to "double check" multiple times. Each time, re-ran typecheck + tests + scan. Never caught stale shape references, documentation inconsistencies, or content quality issues that three external agents found immediately by reading the actual files.
 **Root cause:** Interpreted verification as "run the pipeline" instead of "read what changed." Tests only cover what they test.
 **Fix:** Added removed-pattern check to preflight. "Double check" should include: (1) run pipeline, (2) grep removed patterns, (3) read 3-5 changed files for content accuracy.
+
+**Recurrence (2026-08-03):** Focused review-validator tests reported 48 passes, but the subsequent scoped-diff read found that `\S.+` required two characters where the declared compact-field contract required only non-empty text. The implementation returned to `in-progress`, changed the quantifier to `\S.*`, and reran the focused suite before the testing gate. Evidence anchors: `src/cli/review-validate-common.ts` (search: `COMPACT_CLEAN_REVIEW_FIELDS`) and `test/unit/review-validate.test.ts` (search: `rejects empty, undefended, or repeated compact disclosures`).
 
 ---
 
 ## Lesson: New validators must run against the live repo before closeout
 
 **Status:** active | **Created:** 2026-04-29
+**Incident count:** 5 | **Latest occurrence:** 2026-08-05
 
 **What happened:** M06 added decision-file validation and the fixture tests passed, but the first live `node --import tsx src/cli/cli.ts stats . --check` run failed against existing ADR files and one stale lesson reference.
 
@@ -160,6 +184,12 @@ last_reviewed: 2026-07-19
 **Fix:** After adding any validator that scans a project-wide artifact directory, run it against the live repository before the milestone gate and budget time for the live cleanup it exposes.
 
 **Recurrence (2026-07-13):** M07 ownership fixtures passed focused manifest tests, but full preflight found three packaged-mode `ManifestJson` fixtures that omitted the new required `file_ownership` contract. It also caught ESLint complexity and Knip exports outside the focused commands. After a manifest schema change, grep every `ManifestJson` fixture and run the full static/test gate, not only the new validator suite. Evidence anchors: `test/unit/packaged-install.test.ts` (search: `file_ownership`), `src/cli/manifest/manifest-json.ts` (search: `OWNERSHIP_EVIDENCE_FINDERS`).
+
+**Recurrence (2026-08-03):** Compact-review, config, and version regressions reported 75 passing focused tests, but repository preflight still failed because `validateIntegrity` exceeded the ESLint complexity limit and three touched TypeScript files were not Prettier-clean. The compact branch moved to `validateCompactIntegrity`, and only the three reported files were formatted before rerunning the focused and full gates. Evidence anchors: `src/cli/review-validate-integrity.ts` (search: `function validateCompactIntegrity`) and `scripts/preflight-checks.sh` (search: `TypeScript`).
+
+**Recurrence (2026-08-05):** Focused validator suites passed before direct ESLint found three touched functions above the complexity ceiling. After extracting the parsing helpers, the full formatter still rejected the new Setext regression layout, and the live content audit found two stale semantic anchors in the learning-loop edits. The work returned to implementation after each failure and reran the failed gate before continuing. Evidence anchors: `src/cli/audit/check-content-quality.ts` (search: `parseAtxHeading`), `test/unit/check-content-quality.test.ts` (search: `closes readiness before scanning a setext heading title`), and `scripts/preflight-checks.sh` (search: `TypeScript`).
+
+**Recurrence (2026-08-05):** The first final goat-review draft summarized adjudication totals in its Review Integrity evidence and verdict fields, but the live `review validate` command correctly rejected those counts because only one current finding was visible. It also rejected `source=PR#57` because the canonical authority grammar requires `source=PR #57`. The report returned to drafting with visible-finding counts and the canonical scope spelling before delivery. Evidence anchors: `src/cli/review-validate-integrity.ts` (search: `Counts are cross-checked against the findings actually present`) and `src/cli/review-validate-common.ts` (search: `export const SCOPE_SNAPSHOT`).
 
 ---
 
@@ -173,7 +203,9 @@ last_reviewed: 2026-07-19
 
 **Why stronger rules haven't worked:** Each recurrence added a stronger prevention rule. M1: "tick immediately." M29: "FIRST action must be editing the milestone file." M32: "before doing anything else." All failed because documentation-level enforcement does not work for this pattern - the forcing function competes with whatever the agent wants to do next, and loses.
 
-**Status:** Unresolved. Needs mechanical enforcement (hook or gate), not more rules.
+**Mechanical enforcement was tried and withdrawn (do not re-propose it blind).** ADR-038 (search: `Plan Checkbox Guard`) shipped `plan-checkbox-guard.sh` as a Claude-only Stop hook in v1.12.0 - exactly the "hook or gate" this lesson asks for. ADR-039 (search: `Remove Plan Checkbox Guard`) removed it one day later in v1.12.1: the reminder cost default Stop surface, dashboard hook list, installer/config schema, manifest, and audit fixtures, while non-Claude Stop delivery stayed unverified and stale registrations could keep invoking a deleted script. ADR-039 also explicitly rejected swapping in a replacement reminder immediately, because that "risks rebuilding the same plan-state heuristics under a new name" - a replacement needs its own plan.
+
+**Status:** Unresolved, and deliberately so. The gap is real but the obvious fix has already been paid for once and reverted. Any new proposal must start from ADR-039's rejection list and show what it does differently - not restate "needs a hook."
 
 ---
 
@@ -183,7 +215,7 @@ last_reviewed: 2026-07-19
 
 **What happened:** Tightened `2.4.3` to parse the Router Table directly, but the first extractor used a multiline regex with `$` in the lookahead. In JavaScript regexes, `$` under `/m` matches end-of-line, so the match stopped after the `## Router Table` heading and never included the rows below it. The new regression also referenced an undefined fixture constant, so the first focused test run broke twice before the real logic was verified.
 **Root cause:** Reached for a compact heading regex instead of reusing the repo’s line-based section parsing style, then wrote a regression that depended on a fixture helper that did not exist in that file.
-**Recurrence:** A goat-review regression read the `## Constraints` section with `readMarkdownSection`, but that helper treated a `## Constraints` heading inside the skill's fenced output template as the next real section. The test therefore reported a missing rule after the production fix was already present. Reading the full skill document exposed the false failure. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps an unselected optional Spec Drift pass out of review degradation`) and local TDD receipt `.goat-flow/logs/sessions/2026-07-18-goat-review-tdd.md`.
+**Recurrence:** A goat-review regression read the `## Constraints` section with `readMarkdownSection`, but that helper treated a `## Constraints` heading inside the skill's fenced output template as the next real section. The test therefore reported a missing rule after the production fix was already present. Reading the full skill document exposed the false failure. Evidence anchor: `test/contract/skill-hardening-review-3.test.ts` (search: `keeps an unselected optional Spec Drift pass out of review degradation`).
 
 **Fix:** For markdown section extraction, prefer a line-based parser that tracks fenced-code state over multiline heading regexes with `$`. When the invariant is file-wide, assert against the full document instead of a section helper. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
 
@@ -213,179 +245,3 @@ last_reviewed: 2026-07-19
 3. Session logs already use unique filenames - extend this pattern to footgun/lesson entries when multi-agent mode is detected
 
 ---
-
-## Lesson: Manifest canonical vs stale_names misclassification silently broke skill installs
-
-**Status:** active | **Created:** 2026-04-16
-
-**What happened:** `workflow/manifest.json` and `src/cli/constants.ts` both listed only `"goat"` as canonical even though the installer and repo shipped seven skills. Audit, dashboard, and setup therefore reported "1/1 installed" while six functional skills were missing from a consumer install.
-
-**Root cause:** A contract test proved two sources agreed, but both sources were wrong in the same direction; neither was checked against ground truth on disk or the installer list.
-
-**Prevention:** Agreement tests need a ground-truth leg. For skill counts, validate manifest/constants against actual skill directories or installer inputs, not only against each other. Evidence anchors: `workflow/install-goat-flow.sh` (search: `for skill in`), `workflow/manifest.json` (search: `canonical`), `src/cli/constants.ts` (search: `getSkillNames`).
-
----
-
-## Lesson: Redundant context files survive architecture changes because nobody measures token cost
-
-**Status:** active | **Created:** 2026-04-16
-
-**What happened:** RULES.md (432 words, 6 sections) loaded on every `/goat` dispatch was almost entirely duplicated from CLAUDE.md and skill-preamble.md. A coding agent critique flagged it: "432 words of token budget consumed for ~30 words of unique signal." The file had existed since the mono-skill dispatcher model. When the architecture split into 7 skills with a shared preamble, the preamble absorbed the same rules but nobody deleted RULES.md. Then an audit check was added requiring it, an install script clause was added to copy it, and a template was created for it - each reinforcing the file's perceived necessity.
-
-**Root cause:** No step in the setup or review process measures whether a shared-context file provides net-new information. Files that are "loaded on every invocation" are never challenged on token cost. Once a file exists and is wired into audit checks, it becomes self-justifying: the audit requires it, so it must be needed.
-
-**Fix:** Deleted RULES.md. Moved 2 unique lines to skill-preamble.md. Removed audit check and install script special-case.
-
-**Prevention:** When reviewing shared-context files (anything loaded on every turn or every skill invocation), compare section-by-section against other loaded files. If >80% duplicates existing loaded content, merge the unique lines and delete the file. Architecture changes that add new shared surfaces (like skill-preamble.md) should include a cleanup pass of older surfaces they subsume.
-
----
-
-## Lesson: Dashboard API reviews need invalid-path assertions, not just happy-path shape checks
-
-**Status:** active | **Created:** 2026-04-16
-
-**What happened:** The new dashboard HTTP integration suite initially focused on successful responses and basic endpoint reachability. When an explicit negative-path test for `GET /api/audit?path=/does/not/exist` was added, the route returned `200` with an audit-shaped payload instead of a JSON error. The same risk applied to setup, critique, and stack-detection routes because they accepted a `path` string but did not first verify that it existed and was a directory.
-
-**Root cause:** The dashboard server delegated path handling to downstream helpers and implicitly trusted them to reject bad inputs. That made the contract look healthy in happy-path tests while a false-success path remained live. The original tests asserted status enums and endpoint availability, but not that invalid inputs failed loudly.
-
-**Fix:** Added a shared `requireProjectDirectory()` guard in `src/cli/server/dashboard.ts` and used it before audit, setup, critique, and stack-detection work. Expanded `test/integration/dashboard-server.test.ts` to cover invalid audit and browse paths, plus stronger JSON/content-shape assertions across the API.
-
-**Prevention:**
-1. For every dashboard route that accepts a filesystem path, add at least one invalid-path test alongside the happy path.
-2. Treat `fetch().json()` shape assertions as necessary but insufficient - contract tests also need status-code assertions for malformed or nonexistent inputs.
-3. When a route wraps shared project helpers, validate the path at the HTTP boundary instead of assuming downstream code will reject it consistently.
-
----
-
-## Lesson: New dashboard assets must work in both built and source-run server paths
-
-**Status:** active | **Created:** 2026-04-20
-
-**What happened:** Moving the dashboard preset catalog into `src/dashboard/preset-prompts.json` compiled cleanly and updated the production build copy step, but the first focused verification run failed every dashboard-server integration test. `serveDashboard()` immediately tried to read `dist/dashboard/preset-prompts.json`, and the source-run test harness starts the server from `src/cli/server/dashboard.ts` without guaranteeing that newly added static files already exist under `dist/`.
-
-**Root cause:** Verified the TypeScript surface but missed the dashboard server's dual runtime shape. The server can be exercised from built artifacts and from source-driven test runs. The new JSON asset was only wired for the built path, so verification exposed a runtime assumption that typecheck could not see.
-
-**Fix:** Keep the production copy step in `package.json`, but make the dashboard server prefer `dist/dashboard/preset-prompts.json` and fall back to `src/dashboard/preset-prompts.json` when the built copy is absent. Re-run the focused dashboard + manifest tests after the fallback lands.
-
-**Prevention:**
-1. After introducing a new dashboard static asset, verify both the build script path and the source-run server/test path.
-2. Treat `npm run typecheck` as schema coverage only; any new file-loading path still needs a runtime test.
-3. When the dashboard server reads shipped assets during startup, prefer a controlled fallback instead of assuming `dist/` is always populated in local verification flows.
-
----
-
-## Lesson: Shared runtime helpers must be re-owned explicitly during server splits
-
-**Status:** active | **Created:** 2026-04-20
-
-**What happened:** Extracting the dashboard terminal concern into `src/cli/server/dashboard-terminal.ts` compiled most of the new code, but the first verification run still failed `npm run typecheck`. `src/cli/server/dashboard.ts` still called the old shared `getWSS()` for dev-mode live reload even though terminal WebSocket ownership had moved into the new module, and the new terminal upgrade helper left one stale `Socket` type annotation even though Node's HTTP upgrade callback supplies a `Duplex`.
-
-**Root cause:** The refactor moved the obvious terminal route bodies first but left one cross-cutting shared helper assumption behind. The old shape had one lazily created WebSocket server serving both live reload and terminal attach flows, so splitting one concern requires explicitly deciding who owns the remaining live-reload server and updating the upgrade-socket types at the same time.
-
-**Fix:** Give live reload its own local `getLiveReloadWSS()` in `dashboard.ts`, keep the terminal module responsible only for terminal upgrades, and align the helper signature with the actual HTTP upgrade socket type (`Duplex`). Re-run `npm run typecheck` before trusting the focused dashboard integration suite.
-
-**Prevention:**
-1. When splitting server concerns that previously shared one lazy resource (`getWSS`, caches, singleton managers), make ownership explicit for every remaining caller before declaring the extraction done.
-2. For Node HTTP upgrade handlers, verify the callback parameter types against the real server API during the extraction instead of copying a narrower type from a local helper.
-
----
-
-## Lesson: Repeated doc claims need grep verification after the first patch
-
-**Status:** active | **Created:** 2026-04-21
-
-**What happened:** A small doc-only fix changed one `Sessions rail (cap=7)` claim to `cap=10`, but the first patch missed a second occurrence later in the same release note and briefly introduced a copy-edit typo in `CHANGELOG.md` while applying the correction.
-**Root cause:** Treated the first matching line as the whole problem instead of verifying all repeated claims for that concept across the touched docs before closing the edit.
-**Fix:** After a doc truthfulness fix, run a focused `rg` for both the old phrase and the corrected concept across every touched doc before claiming the update is complete.
-
-**Prevention:**
-1. For duplicated release-note bullets or summary sections, assume the same claim may appear more than once and verify with `rg`, not by eyeballing one section.
-2. After any doc-only patch, read the exact changed hunk or `git diff` once before closeout to catch accidental copy-edit regressions.
-
----
-
-## Lesson: Copilot instruction line caps count trailing newlines
-
-**Status:** active | **Created:** 2026-04-25
-
-**What happened:** A v1.3.0 version-bump pass added one Essential Commands line to `.github/copilot-instructions.md`. `wc -l` reported 120 lines, but `npm test` still failed the Copilot contract because the test counts `readFileSync(...).split(/\r?\n/)`, so a trailing newline makes a 120-line file count as 121 entries.
-
-**Root cause:** I checked the human line count after the failure instead of reading the contract's counting helper first. The repository's enforced ceiling is the test helper, not `wc -l`.
-
-**Prevention:**
-1. When touching `.github/copilot-instructions.md`, keep `wc -l` below the configured target or run the instruction-line-count gate in `bash scripts/preflight-checks.sh` before broader verification.
-2. For line-budget failures, read the exact line-count implementation before deciding how many lines need to be trimmed. Evidence anchor: `scripts/preflight-checks.sh` (search: `line_target`).
-
----
-
-## Lesson: Runtime hook messages must stay paired with agent-config templates
-
-**Status:** active | **Created:** 2026-04-27
-
-**What happened:** Updated `.github/hooks/hooks.json` to improve the PowerShell fallback message, then the first `bash scripts/preflight-checks.sh` run failed `Agent Config Parity` because `workflow/hooks/agent-config/copilot-hooks.json` still contained the old string.
-
-**Root cause:** Treated the installed Copilot hook config as the only file needing the UX copy change. The workflow template is the parity source for installed agent configs, so any installed hook-message change needs the template change in the same patch.
-
-**Prevention:** When changing `.github/hooks/hooks.json`, grep `workflow/hooks/agent-config/` for the same hook payload and update the matching template before the first preflight run. Evidence anchor: `scripts/preflight-checks.sh` (search: `Agent Config Parity`).
-
----
-
-## Lesson: Quality diff compares saved report IDs, not report file paths
-
-**Status:** active | **Created:** 2026-07-12
-
-**What happened:** During final quality-report verification, I passed two JSON file paths to `quality diff`. The CLI exited 2 because an explicit comparison is one colon-delimited `<from-id>:<to-id>` argument; selecting the latest same-agent reports with `--agent codex --mode agent-setup` then completed successfully.
-
-**Root cause:** I inferred a conventional two-path diff interface instead of reading the command contract before the auxiliary close-out check.
-
-**Prevention:** Run `goat-flow quality diff --agent <id> --mode <mode>` for the latest matching pair, or pass one `<from-id>:<to-id>` argument as documented in `docs/cli.md` (search: `quality diff [<from-id>:<to-id>]`). Do not pass report filesystem paths.
-
----
-
-## Lesson: New subcommands need parser headroom before the first GREEN refactor
-
-**Status:** active | **Created:** 2026-07-13
-
-**What happened:** The first M02 `skill doctor` implementation passed its behavioral suite (`20 passed`, `0 failed`) but failed the whole-file quality gate. `parseSkillPositionals` and `validateSkillFlags` exceeded ESLint complexity limits, the first doctor collector had two more complexity failures, and adding one branch pushed `cli-parser.ts` and `cli-handlers.ts` above the 750-line gruff threshold. The final preflight later caught an unnecessary `renderSkillDoctorMarkdown` export and a bare backticked filename in `docs/cli.md` (search: `Canonical workflow source`) that focused tests, ESLint, typecheck, Prettier, and targeted gruff did not cover.
-
-**Root cause:** I treated a behavioral GREEN as permission to finish the command inside two already-large shared modules. The tests proved output behavior, but they did not measure whether the new subcommand left the parser and dispatch surfaces easy to verify. Importing doctor helpers back into the parser would also have violated the existing lazy-import pattern by loading audit and manifest dependencies for unrelated commands.
-
-**Fix:** Extract lightweight positional/flag rules into `src/cli/skill-command-parser.ts` (search: `parseSkillPositionals`), keep doctor runtime imports behind `src/cli/cli-handlers.ts` (search: `handleSkillCommand`), and split collection decisions inside `src/cli/skill-doctor.ts` (search: `inspectFrontmatterFields`). Whole-file ESLint, typecheck, and targeted gruff then passed without suppressions or threshold changes.
-
-**Recurrence update (2026-07-18):** M02 informational-flag behavior reached 61/61 focused tests and typecheck exited 0 before whole-file ESLint rejected `parseCLIArgs` at complexity 12. Moving the branch into a helper fixed complexity, but targeted gruff then exposed growth beyond the already-marginal file-length threshold. Rewinding duplicate namespace parsing brought `src/cli/cli-parser.ts` (search: `selectCommandPositionals`) to zero targeted gruff findings without a suppression or new module.
-
-**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-07-18
-
-**Prevention:**
-1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
-2. Keep parser modules dependency-light. A diagnostic subcommand may lazy-load audit/manifest code after dispatch, but argv parsing must not import that runtime.
-3. Before the human gate, run Knip and path-integrity through full preflight; focused TypeScript and analyzer checks do not prove the command's public exports or documentation references are clean.
-3. After behavioral GREEN, run whole-file ESLint, typecheck, and gruff before documentation or task completion; the verification unit is the changed file set, not only the new test cases.
-
----
-
-## Lesson: Required CLI choices need omission tests
-
-**Status:** active | **Created:** 2026-07-13
-**Decision changed:** Test valid, invalid, and omitted forms for every required CLI choice; omission must not silently select a default. | **Trigger phase:** VERIFY
-**Incident count:** 1 | **Latest occurrence:** 2026-07-13
-
-**What happened:** M17's plan and handler required `--scenario deny-hook`, but the parser returned that value when the flag was absent. Positive, invalid-value, and live explicit-command checks all passed, so only a final omission probe exposed the false choice.
-
-**Root cause:** I treated the sole current scenario as a harmless default even though explicit user selection was part of the command's safety contract.
-
-**Fix and prevention:** Add an omission RED test before implementation and make the parser exit 2 when the required value is absent. Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`) and `test/unit/hooks-runtime-evidence.test.ts` (search: `requires an explicit hook verification scenario group`).
-
----
-
-## Lesson: Milestone plans need exporter-contract verification before handoff
-
-**Status:** active | **Created:** 2026-07-17  
-**Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient. | **Trigger phase:** VERIFY  
-**Incident count:** 1 | **Latest occurrence:** 2026-07-17
-
-**What happened:** The 1.15.0 milestone files looked structurally complete and passed a custom heading/count check, but the first `plans export` preview warned that all 11 records lacked portable objectives and boundary notes. The files used a level-two `Objective` section instead of the exporter's bold `Objective` field, omitted `Boundary Notes`, and initially placed CAO incident gates in peer sections that the exporter would not include in task bodies.
-
-**Root cause:** I validated the authoring layout I had produced instead of the repository's consumer contract. A Markdown reader could infer the intended fields, while `parseMilestoneMarkdown` intentionally recognizes a narrower portable schema.
-
-**Fix and prevention:** Use `**Objective:**`, `## Scope`, `## Boundary Notes`, `## Tasks`, `## Testing Gate`, and `## Exit criteria` for portable milestones. Put task subgroups under level-three headings so they remain inside `Tasks`. Before handoff, run `node dist/cli/cli.js plans export <plan-path> --format json` and require every record to have zero warnings; when shell policy rejects a pipe into an interpreter, import `parseMilestoneMarkdown` directly in a read-only local verification script. Evidence anchors: `src/cli/plans-export.ts` (search: `addMissingFieldWarning`) and `src/cli/plans-export.ts` (search: `readMilestoneSection`).

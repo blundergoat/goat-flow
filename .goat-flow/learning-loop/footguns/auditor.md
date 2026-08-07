@@ -1,18 +1,18 @@
 ---
 category: auditor
-last_reviewed: 2026-07-18
+last_reviewed: 2026-08-07
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
 
-**Status:** active | **Created:** 2026-04-05 | **Updated:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-04-05 | **Updated:** 2026-07-26 | **Evidence:** ACTUAL_MEASURED
 
 The selected-agent audit validates hook syntax, self-test behavior, registration, and a runtime-shaped blocked Bash payload through the registered hook path. It still does not prove that the external agent runtime itself delivered the hook payload for a real Bash tool invocation. A hook that passes every local check can still fail at the provider/runtime boundary if the agent ignores the configured hook event or changes its payload contract.
 
 **Residual scope** (after the selected-agent guardrail check started invoking the hook's `--self-test` and a runtime-shaped blocked payload):
 
 1. Hook registration cross-check (file exists ↔ registered in settings). The `deny-hook-registered` check in `harness/check-constraints.ts` covers this, and the selected-agent guardrail check now exercises the registered hook path with a runtime-shaped payload. Neither launches the external agent binary to prove provider-side delivery.
-2. A dedicated `goat-flow verify` command for full external-runtime hook smoke-test is not yet built.
+2. `goat-flow hooks verify --agent <id> --scenario deny-hook` shipped in 1.14.0 and closes only the checkout-local half: it drives the fixed deny scenarios through the managed hook and returns a per-scenario verdict at `evidenceLevel: managed-hook-classifier`. Its evidence budget explicitly forbids an external-agent delivery claim, so a smoke-test that launches the real agent binary and proves the provider delivered the hook event is still not built. Do not read this item as "no verify surface exists".
 3. Static fact extraction can drift from the deny hook when hook regexes are generalized. On 2026-04-27, `detectBashDenyCoversSecrets` still expected older `/.ssh/` and `/.aws/` regex text after the hook moved to relative/home-root normalization, causing a false harness failure until the detector and unit coverage were updated.
 
 **Evidence:**
@@ -21,21 +21,25 @@ The selected-agent audit validates hook syntax, self-test behavior, registration
 - `src/cli/audit/check-agent-deny-runtime.ts` (search: `checkHookRuntimeSmoke`) - sends a runtime-shaped structured Bash payload through the registered deny hook path and expects a deny result for `git push origin main`. This is local hook execution, not proof that the external agent binary delivered the hook event.
 - `src/cli/facts/agent/hooks.ts` (search: `detectBashDenyCoversSecrets`) - derives the harness secret-coverage fact from static markers in the hook file; it must stay aligned with `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`).
 - `test/unit/audit-command/hook-facts.test.ts` (search: `detects current deny hook secret coverage from generalized path matcher`) - regression coverage for the static detector against the canonical hook template.
+- `src/cli/hooks-command.ts` (search: `handleHookVerification`) - the 1.14.0 `hooks verify` entry point; requires `--agent` and the fixed `deny-hook` scenario group and exits 1 when any scenario lacks matching recorded proof.
+- `src/cli/hooks-runtime-evidence.ts` (search: `verifyManagedDenyHook`) - runs every fixed deny scenario against the managed script and returns the local-evidence report. Confirmed 2026-07-26: three scenarios (secret read, repository push, read-only control) all `pass`, all local.
 
 ---
 
 ## Footgun: The deny-mechanism runtime smoke executes the target checkout's own hook command
 
-**Status:** active | **Created:** 2026-06-14 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-06-14 | **Corrected:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
 
-**Trap:** The runtime evidence level of the agent deny-mechanism audit does not only run goat-flow's own managed script - it executes the *target project's* configured launcher string through `bash -c`. `src/cli/audit/check-agent-deny-runtime.ts` (search: `runConfiguredHookCommandSmoke`, `pipeSmokePayloadTo(configured.command)`) pipes a blocked payload into `configured.command` taken verbatim from the checkout's `.claude/settings.json` / `.codex/hooks.json` / `.agents/hooks.json`. So `goat-flow audit --agent <id>` against a checkout you do not control is arbitrary-shell-execution-on-audit: a hostile or compromised hook config that merely wraps the managed script in other shell still runs that shell before the smoke can classify anything. This is deliberate (it validates the real `$root` resolution and `cd` glue, which a sanitized re-invocation would skip), but the exec surface is easy to widen by accident.
+**Trap:** The runtime evidence level of the agent deny-mechanism audit does not only run goat-flow's own managed script - it executes the *target project's* configured launcher string through `bash -c`. `src/cli/audit/check-agent-deny-runtime.ts` (search: `runConfiguredHookCommandSmoke`, `pipeSmokePayloadTo(configured.command)`) pipes a blocked payload into `configured.command` taken verbatim from the checkout's `.claude/settings.json` / `.codex/hooks.json` / `.agents/hooks.json`. So `goat-flow audit --agent <id>` without `--untrusted-target` against a checkout you do not control is arbitrary-shell-execution-on-audit: a hostile or compromised hook config that merely wraps the managed script in other shell still runs that shell before the smoke can classify anything. This is deliberate (it validates the real `$root` resolution and `cd` glue, which a sanitized re-invocation would skip), but the exec surface is easy to widen by accident.
 
 **Evidence:**
 - `src/cli/audit/check-agent-deny-runtime.ts` (search: `runConfiguredHookCommandSmoke`) - the comment above the `spawnSync` documents the trusted-target-only intent; runtime runs when `denyMechanismEvidenceLevel` is `"full"` or unset.
-- `src/cli/cli-handlers.ts` (search: `options.isTargetUntrusted`) - `--untrusted-target` maps to `denyMechanismEvidenceLevel: "static"` so a CLI audit can skip execution; `src/cli/server/dashboard-audit-routes.ts` (search: `denyMechanismEvidenceLevel`) already audits selected targets at `"static"` for the same reason.
+- `src/cli/cli-handlers.ts` (search: `options.isTargetUntrusted`) - `--untrusted-target` maps to `denyMechanismEvidenceLevel: "static"` so a CLI audit can skip execution.
+- **Dashboard mitigation, 2026-08-07.** The correction committed at 07:09 accurately recorded that `buildDashboardAuditReport` then selected `"full"`; commit `19046c08` changed that branch to `"static"` at 17:06 the same day. Current `src/cli/server/dashboard-audit-routes.ts` (search: `agentFilter === null ? "present-only" : "static"`) leaves runtime proof to an explicit CLI audit. `test/integration/dashboard-audit-api.test.ts` (search: `does not execute selected-project hook launcher in /api/audit`) installs a marker-writing launcher and proves the selected-agent dashboard endpoint does not run it.
+- **Reach, measured 2026-08-07.** Only a *selected-agent CLI audit using full/default evidence* executes. `src/cli/audit/audit.ts` (search: `function isAggregateAgentSkip`) skips agent-scope checks when no `--agent` is given, and `check-agent-deny-mechanism.ts` (search: `scope: "agent"`) declares no aggregate support. Measured on this repo: `audit .` reports `Agent deny mechanism: skipped`; `audit . --agent claude` reports `pass`. Do not restate this trap as "any `goat-flow audit` executes target code" - it needs `--agent` without the static opt-out. The dashboard per-agent route does not qualify because it requests static evidence.
 - Inverse concern (audit proving too *little*, not too much): the "Audit does not prove end-to-end deny enforcement at runtime" footgun above. Side-effect cousin: [internal-run-isolation.md](internal-run-isolation.md).
 
-**Prevention:** Keep an execution opt-out reachable and keep the dashboard / arbitrary-selected-target path on `"static"`. Never make runtime smoke the unconditional default for a surface that can audit untrusted checkouts. Treat any change to the default evidence level as a security decision - and note it can also flip a CI audit gate, because runtime smoke catches launcher / `$root` failures that static checks do not. Do not "harden" this by parsing the launcher and running only the managed script: that reintroduces the stale-path / broken-glue blind spot the full-command smoke exists to catch (see [hooks.md](hooks.md) search: `Hook command strings can fail before guard code starts`).
+**Prevention:** Keep an execution opt-out reachable. Preserve the dashboard invariant that passive selected-project requests stop at static evidence; runtime proof belongs to a deliberate CLI audit against a trusted checkout. Never make runtime smoke the unconditional default for a surface that can audit untrusted checkouts. Before citing a surface as `"static"` or `"full"`, re-read the call site and its route-level test. Treat any change to the default evidence level as a security decision - and note it can also flip a CI audit gate, because runtime smoke catches launcher / `$root` failures that static checks do not. Do not "harden" this by parsing the launcher and running only the managed script: that reintroduces the stale-path / broken-glue blind spot the full-command smoke exists to catch (see [hooks.md](hooks.md) search: `Hook command strings can fail before guard code starts`).
 
 ---
 
@@ -125,6 +129,33 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 - `test/integration/setup-quality-lifecycle.test.ts` (search: `consumer setup to quality-report lifecycle`) proves a newly installed consumer reaches a passing selected-agent harness before any incident entries exist.
 
 **Prevention:** Do not interpret a general-purpose diagnostic field as an error flag. Classify each documented diagnostic state at the consuming boundary, and keep a fresh-install fixture beside malformed-metadata coverage.
+
+---
+
+## Footgun: Version checks that test inequality without direction prescribe a downgrade
+
+**Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Any version comparison that drives user-facing remediation or a file write must branch on direction, not on `!==`.
+**Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-03
+**hallucination-risk:** high
+
+**Symptoms:** A globally installed `goat-flow` v1.14.0 audited a v1.15.0 checkout and returned `"overall": {"status": "fail"}` with exit 1 on a target the matching source CLI passes cleanly. It emitted `Config version 1.15.0 does not match current 1.14.0` with remediation pointing at 1.14.0, plus `deny-dangerous.sh is goat-flow-hook-version 1.15.0 but the current release is 1.14.0` telling the user to run `hooks sync` from the older release. Roughly 45 further drift findings ("templates differ", "stale installed shared artifact") were artifacts of the version gap, not target defects.
+
+**Why it happens:** `AUDIT_VERSION` is the running CLI's own package version, so an older CLI treats itself as the reference. A bare `version !== AUDIT_VERSION` cannot distinguish "project is behind" from "project is ahead", and the remediation string interpolates `AUDIT_VERSION` either way. The template-comparison sections diff the target against the bundle inside that older CLI, so every newer file reads as drift.
+
+**Why it matters:** `hooks sync` is not advisory. `src/cli/server/hook-registrar.ts` (search: `export function syncHookStates`) documents that it rewrites installed hook files, and `copyHookScripts` writes `hookScriptContent(script)` from the running CLI's bundle. Following the older CLI's advice replaces current deny/safety hooks with stale copies - a silent downgrade of the guardrail layer.
+
+**Evidence:**
+- `src/cli/version-compare.ts` (search: `projectIsAheadOfCli`) - direction test now shared by the audit and the hook writer.
+- `src/cli/audit/check-goat-flow.ts` (search: `is newer than this CLI`) - config and hook checks branch before prescribing remediation.
+- `src/cli/audit/check-agent-common.ts` (search: `targetUsesNewerGoatFlow`) - one validated target-version gate now suppresses older-template skill, guardrail, drift, and content checks.
+- `src/cli/server/hook-registrar.ts` (search: `Refusing to overwrite`) - `copyHookScripts` throws rather than downgrading a newer-stamped hook.
+- `test/unit/version-compare.test.ts` (search: `flags the CLI as the stale side when the project is newer`) - locks the direction contract, including that `1.10.0` sorts above `1.9.0`.
+- `test/integration/audit-quality.test.ts` (search: `reports version skew without older-template agent or drift findings`) - simulates a newer installed config, skills, and hooks against the current CLI and pins the user-visible audit result.
+- `test/unit/hook-registrar.test.ts` (search: `refuses to overwrite a hook stamped newer than the running CLI`) - proves the write boundary preserves the newer hook byte-for-byte.
+
+**Prevention:** Never drive remediation or a write from version inequality alone. Compare direction first; when the local tool is older, say so and stop, rather than proposing to bring the target back to the tool's version. Skew guards belong at the write boundary too, not only in the message.
 
 ---
 

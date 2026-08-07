@@ -264,8 +264,6 @@ is_gh_write_operation() {
 # Quoted search text stays evidence; real repository or GitHub write stages are refused.
 check_repository_segment() {
   local developer_command="$1"
-  local policy_depth="${2:-0}"
-  prepare_segment_context "$developer_command" "$policy_depth" || return $?
   developer_command="$CMD_TRIMMED"
 
   # A plain read-only command gives the developer evidence without changing project state.

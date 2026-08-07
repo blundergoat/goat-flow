@@ -23,8 +23,10 @@ import {
   cloneQualityConfig,
   DEFAULT_QUALITY_CONFIG,
 } from "./helpers.js";
-import { composeArtifactQualityPrompt } from "../../../src/cli/prompt/compose-quality.js";
-import { composeArtifactContent } from "../../../src/cli/quality/skill-quality-content.js";
+import {
+  composeArtifactContent,
+  composeArtifactQualityPrompt,
+} from "../../src.js";
 
 describe("artifact composition", () => {
   it("keeps the primary skill ahead of shared context when composition truncates", () => {

@@ -1,130 +1,39 @@
 /**
- * Integration tests for the universal post-turn safety hook.
- *
- * The hook must work in an arbitrary Git repository with no project-specific
- * toolchain configuration. These tests execute the shipped Bash script against
- * temporary repos instead of mocking the scanner.
+ * What the hook must block and must allow in changed content: real-looking tokens in every
+ * assignment shape, placeholders that stay permitted, and the source-file carve-outs that
+ * keep ordinary code from tripping credential guessing.
+ * Every case runs the real hook against a real git repository, so a pass means the shipped
+ * scanner behaves as asserted, not a reimplementation of it.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 
-const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
-const HOOK_PATH = resolve(PROJECT_ROOT, "workflow/hooks/post-turn-safety.sh");
-const TEST_AWS_ACCESS_KEY = `AKIA${"1234567890ABCDEF"}`;
-const TEST_GITHUB_TOKEN = `ghp_${"abcdefghijklmnopqrsttestuvwxyzABCD"}`;
-const TEST_NPM_TOKEN = `npm_${"123456789012345678901234567890123456"}`;
-const TEST_SLACK_TOKEN = `xoxb-${"1234567890-1234567890-abcdef"}`;
-const TEST_API_TOKEN = `sk-${"12345678901234567890123456789012"}`;
-const TEST_CLIENT_SECRET = ["7Hk9Lm2Qr8Tv5Wx1Zb4Nc6", "Df"].join("");
-const TEST_INI_PASSWORD = ["S3cr3tP4ssw0rd", "X"].join("");
-const TEST_PRIVATE_KEY_HEADER = ["-----BEGIN", "OPENSSH PRIVATE KEY-----"].join(
-  " ",
-);
-const TEST_RSA_PRIVATE_KEY_HEADER = ["-----BEGIN", "RSA PRIVATE KEY-----"].join(
-  " ",
-);
-const TEST_RSA_PRIVATE_KEY_FOOTER = ["-----END", "RSA PRIVATE KEY-----"].join(
-  " ",
-);
+import {
+  TEST_AWS_ACCESS_KEY,
+  TEST_GITHUB_TOKEN,
+  TEST_NPM_TOKEN,
+  TEST_SLACK_TOKEN,
+  TEST_API_TOKEN,
+  withTempRepo,
+  writeFile,
+  commitAll,
+  assertHookAllows,
+  assertHookBlocks,
+  TEST_CLIENT_SECRET,
+  TEST_INI_PASSWORD,
+  TEST_PRIVATE_KEY_HEADER,
+  TEST_RSA_PRIVATE_KEY_HEADER,
+  TEST_RSA_PRIVATE_KEY_FOOTER,
+  TEST_RSA_PRIVATE_KEY_BODY,
+  TEST_JWT_TOKEN,
+  TEST_DOCUMENTED_AWS_PLACEHOLDER,
+  TEST_DOCUMENTED_SLACK_PLACEHOLDER,
+} from "./post-turn-safety-hook.helpers.js";
 
-function withTempRepo(fn: (root: string) => void): void {
-  const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-safety-"));
-  try {
-    runGit(root, ["init", "-q"]);
-    writeFile(root, "README.md", "# fixture\n");
-    commitAll(root, "initial");
-    fn(root);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-function withUnbornTempRepo(fn: (root: string) => void): void {
-  const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-safety-"));
-  try {
-    runGit(root, ["init", "-q"]);
-    fn(root);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-}
-
-function writeFile(root: string, path: string, content: string | Buffer): void {
-  const target = join(root, path);
-  mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, content);
-}
-
-function runGit(root: string, args: string[]): string {
-  const result = spawnSync("git", args, {
-    cwd: root,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  assert.equal(
-    result.status,
-    0,
-    `git ${args.join(" ")} failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
-  );
-  return result.stdout.trim();
-}
-
-function commitAll(root: string, message: string): void {
-  runGit(root, ["add", "."]);
-  runGit(root, [
-    "-c",
-    "user.name=goat-flow-test",
-    "-c",
-    "user.email=goat-flow-test@example.invalid",
-    "commit",
-    "-m",
-    message,
-  ]);
-}
-
-function runHook(root: string): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", [HOOK_PATH], {
-    cwd: root,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-}
-
-function assertHookAllows(root: string): void {
-  const result = runHook(root);
-  assert.equal(
-    result.status,
-    0,
-    `hook should allow fixture\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
-  );
-}
-
-function assertHookBlocks(
-  root: string,
-  expectedPattern: RegExp,
-): ReturnType<typeof spawnSync> {
-  const result = runHook(root);
-  assert.equal(
-    result.status,
-    2,
-    `hook should block fixture\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
-  );
-  assert.match(result.stderr, expectedPattern);
-  assert.doesNotMatch(result.stderr, /validation/u);
-  return result;
-}
-
-describe("post-turn-safety hook", () => {
+describe("post-turn-safety hook: secret and marker detection", () => {
   describe("must-block fixtures", () => {
     const fixtures = [
       {
@@ -175,7 +84,7 @@ describe("post-turn-safety hook", () => {
         path: "private.pem",
         content: [
           TEST_RSA_PRIVATE_KEY_HEADER,
-          "MIIEpAIBAAKCAQEA1234567890abcdef",
+          TEST_RSA_PRIVATE_KEY_BODY,
           TEST_RSA_PRIVATE_KEY_FOOTER,
           "",
         ].join("\n"),
@@ -278,6 +187,23 @@ describe("post-turn-safety hook", () => {
 
       assertHookBlocks(root, /AWS access key/u);
     });
+  });
+
+  it("does not follow untracked symlinks outside the repository", () => {
+    const outsideRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-post-turn-symlink-"),
+    );
+    try {
+      const outsideFile = join(outsideRoot, "outside.txt");
+      writeFileSync(outsideFile, `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`);
+      withTempRepo((root) => {
+        symlinkSync(outsideFile, join(root, "untracked-link.txt"));
+
+        assertHookAllows(root);
+      });
+    } finally {
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
   });
 
   it("blocks private key blocks in tracked diffs", () => {
@@ -439,7 +365,7 @@ describe("post-turn-safety hook", () => {
           'CLIENT_SECRETS="Zx9AbCdEf123456"',
           'DB_PASSWORDS="dbPasswordValue123"',
           "auth_token = 8f3c1a9b7e2d4f60aa11",
-          "bearer_token = eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
+          `bearer_token = ${TEST_JWT_TOKEN}`,
           "",
         ].join("\n"),
       );
@@ -583,123 +509,13 @@ describe("post-turn-safety hook", () => {
         root,
         "docs.md",
         [
-          "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE",
-          "SLACK_BOT_TOKEN=xoxb-test-1234567890-1234567890",
+          `AWS_ACCESS_KEY_ID=${TEST_DOCUMENTED_AWS_PLACEHOLDER}`,
+          `SLACK_BOT_TOKEN=${TEST_DOCUMENTED_SLACK_PLACEHOLDER}`,
           "",
         ].join("\n"),
       );
 
       assertHookAllows(root);
     });
-  });
-
-  it("detects new hazards added to files that were already dirty", () => {
-    withTempRepo((root) => {
-      writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
-      const firstPass = runHook(root);
-      assert.equal(firstPass.status, 0, firstPass.stderr);
-      writeFile(
-        root,
-        "settings.env",
-        `API_KEY=your_api_key_here\nAWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`,
-      );
-
-      assertHookBlocks(root, /AWS access key/u);
-    });
-  });
-
-  it("blocks staged-only secrets when the worktree copy is restored", () => {
-    withTempRepo((root) => {
-      writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
-      commitAll(root, "add placeholder settings");
-      writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
-      runGit(root, ["add", "settings.env"]);
-      runGit(root, ["restore", "--worktree", "--source=HEAD", "settings.env"]);
-
-      assertHookBlocks(root, /API token/u);
-    });
-  });
-
-  it("blocks staged-only secrets before the first commit", () => {
-    withUnbornTempRepo((root) => {
-      writeFile(root, "config.env", `API_KEY=${TEST_API_TOKEN}\n`);
-      runGit(root, ["add", "config.env"]);
-      writeFile(root, "config.env", "API_KEY=your_api_key_here\n");
-
-      assertHookBlocks(root, /API token/u);
-    });
-  });
-
-  it("allows ignored env files that are not staged", () => {
-    withTempRepo((root) => {
-      writeFile(root, ".gitignore", ".env\n");
-      commitAll(root, "ignore local env");
-      writeFile(root, ".env", `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`);
-
-      assertHookAllows(root);
-    });
-  });
-
-  it("blocks ignored env files once they are force-staged", () => {
-    withTempRepo((root) => {
-      writeFile(root, ".gitignore", ".env\n");
-      commitAll(root, "ignore local env");
-      writeFile(root, ".env", `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`);
-      runGit(root, ["add", "-f", ".env"]);
-
-      assertHookBlocks(root, /AWS access key/u);
-    });
-  });
-
-  it("does not block unchanged committed content", () => {
-    withTempRepo((root) => {
-      writeFile(
-        root,
-        "legacy.env",
-        `AWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`,
-      );
-      commitAll(root, "legacy committed content");
-
-      assertHookAllows(root);
-    });
-  });
-
-  it("skips binary content and oversized files", () => {
-    withTempRepo((root) => {
-      writeFile(
-        root,
-        "binary.dat",
-        Buffer.from([0, 1, 2, ...Buffer.from(TEST_AWS_ACCESS_KEY)]),
-      );
-      writeFile(
-        root,
-        "large.txt",
-        `${"a".repeat(1024 * 1024 + 1)}\n${TEST_AWS_ACCESS_KEY}\n`,
-      );
-
-      assertHookAllows(root);
-    });
-  });
-
-  it("allows rename and delete-only changes without content findings", () => {
-    withTempRepo((root) => {
-      writeFile(root, "old.txt", "safe\n");
-      writeFile(root, "delete-me.txt", "safe\n");
-      commitAll(root, "add files");
-      runGit(root, ["mv", "old.txt", "new.txt"]);
-      rmSync(join(root, "delete-me.txt"));
-
-      assertHookAllows(root);
-    });
-  });
-
-  it("the installed mirror matches the workflow hook source", () => {
-    assert.equal(
-      readFileSync(
-        resolve(PROJECT_ROOT, ".goat-flow/hooks/post-turn-safety.sh"),
-        "utf8",
-      ),
-      readFileSync(HOOK_PATH, "utf8"),
-    );
   });
 });

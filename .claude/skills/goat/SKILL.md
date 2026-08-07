@@ -1,7 +1,7 @@
 ---
 name: goat
 description: "Use when you describe an outcome and need the right goat-* workflow chosen for you."
-goat-flow-skill-version: "1.14.0"
+goat-flow-skill-version: "1.15.0"
 ---
 # /goat
 
@@ -28,17 +28,19 @@ Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
 1. **UNDERSTAND (inferred only)** - classify intent; split multiple intents; ask only if order matters.
    - **Simple-fact fast path:** for one factual question, answer directly after UNDERSTAND; skip GATHER and the Route Snapshot.
 2. **GATHER (inferred skill or direct-execution routing only)** - before routing, check:
-   - Ask-first boundaries: scan the active instruction file's Ask First boundaries for named files; if none are named, record `target-files=unknown`
+   - Ask-first boundaries: compare request-named files with active instruction boundaries; no matching request file -> `target-files=unknown`
    - Routed skills own learning-loop retrieval; do not pre-read their learning-loop indexes in the dispatcher
    - Direct execution only: run the shared preamble's INDEX-first retrieval before emitting the Route Snapshot
    - If the boundary scan or direct-execution retrieval fails, note `gather-degraded` and route anyway
-   - Do not emit the preamble's `Relevant prior learnings` line - that belongs to the routed skill's Step 0
+   - Only direct-execution snapshots include the retrieval result
 3. **ROUTE (inferred skill or direct-execution only)** - dispatch using the map. Emit a Route Snapshot:
 
 ```
 Intent: <classified user intent>
 Route: </goat-* skill or direct path>
+Depth: <routing depth>
 Rationale: <verified routing rule and boundary state>
+Relevant prior learnings: <direct route: matches | none | retrieval miss; routed skill: omit>
 ```
 
 ## Route Map
@@ -46,7 +48,7 @@ Rationale: <verified routing rule and boundary state>
 | Intent | Route |
 |--------|-------|
 | Bug, failure, unexpected behaviour; verify a fix | `/goat-debug` |
-| Browser-visible issue | Browser evidence first; `/goat-debug` Investigate if diagnosis needed |
+| Browser-visible issue | Browser evidence first; then `/goat-debug` (Diagnose mode) |
 | Understand, explain, explore unfamiliar code | `/goat-debug` (Investigate mode) |
 | GOAT Flow setup/process/harness/skills quality assessment | `goat-flow quality` CLI/dashboard prompt flow (no goat skill wrapper) |
 | Code quality review, area audit, diff check | `/goat-review` |

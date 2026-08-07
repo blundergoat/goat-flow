@@ -44,6 +44,12 @@ const DASHBOARD_APP_SOURCE_PATHS = [
     PROJECT_ROOT,
     "src",
     "dashboard",
+    "dashboard-app-hook-setup-fragments.ts",
+  ),
+  resolve(
+    PROJECT_ROOT,
+    "src",
+    "dashboard",
     "dashboard-app-skill-quality-fragments.ts",
   ),
   resolve(
@@ -74,6 +80,9 @@ type LaunchOptions = {
   presetId?: string | null;
   cwdPath?: string | null;
   targetPath?: string | null;
+  accessMode?: "workspace" | "reporting";
+  captureQualityDrafts?: boolean;
+  qualityReportProjectPath?: string | null;
 };
 
 type LaunchContext = Record<"launching", boolean> & {
@@ -107,6 +116,9 @@ type LaunchContext = Record<"launching", boolean> & {
       retryPresetId?: string | null;
       retryCwdPath?: string | null;
       retryTargetPath?: string | null;
+      retryAccessMode?: "workspace" | "reporting";
+      retryCaptureQualityDrafts?: boolean;
+      retryQualityReportProjectPath?: string | null;
       loadingSlowTimer?: ReturnType<typeof setTimeout>;
       loadingRetryTimer?: ReturnType<typeof setTimeout>;
       launchPromptFallbackTimer?: ReturnType<typeof setTimeout>;
@@ -114,6 +126,8 @@ type LaunchContext = Record<"launching", boolean> & {
       launchPromptOutputSeen?: boolean;
     }
   >;
+  _projectSessions: Record<string, Array<Record<string, unknown>>>;
+  _projectActiveSession: Record<string, string>;
   showMaxSessionsModal: boolean;
   /**
    * Keeps runner-specific prompt rewriting injectable so payload tests can opt
@@ -194,6 +208,9 @@ type TestTerminalSession = Record<string, unknown> & {
   loadingShowRetry: boolean;
   age: string;
   presetId: string | null;
+  accessMode?: "workspace" | "reporting";
+  captureQualityDrafts: boolean;
+  qualityReportProjectPath: string | null;
 };
 
 type TerminalSendHarness = {
@@ -216,6 +233,18 @@ type HelperContext = {
   TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS: number;
   TERMINAL_PASTE_SUBMIT_RETRY_CADENCE_MS: number;
   TERMINAL_PASTE_SUBMIT_MAX_RETRIES: number;
+  dashboardTerminalAccessMode(
+    preset: { mayWriteFiles?: boolean } | null,
+    userRole: string,
+  ): "workspace" | "reporting";
+  /** Resolve a preset/custom prompt and launch it with explicit access overrides. */
+  dashboardLaunchPreset(
+    ctx: LaunchContext,
+    prompt: string,
+    runner?: string,
+    label?: string,
+    options?: LaunchOptions,
+  ): Promise<void>;
   /**
    * Sends text through an existing terminal WebSocket, including bracketed-paste
    * and delayed-submit behaviour.
@@ -250,6 +279,15 @@ type HelperContext = {
     ctx: LaunchContext,
     serverSession: Record<string, unknown>,
   ): Promise<void>;
+  /** Reconnect every saved browser session that the backend still reports active. */
+  dashboardReconnectTerminal(ctx: LaunchContext): Promise<boolean>;
+  /** Save browser session metadata before detaching from the current project. */
+  dashboardDetachTerminal(ctx: LaunchContext, projectPath?: string): void;
+  /** Project one ended local session into the recent-session rail. */
+  dashboardRememberRecentSession(
+    ctx: LaunchContext,
+    session: TestTerminalSession,
+  ): void;
   /**
    * Ends a local session and records the recent-session fallback title.
    */
@@ -444,10 +482,15 @@ globalThis.__helpers = {
   TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS,
   TERMINAL_PASTE_SUBMIT_RETRY_CADENCE_MS,
   TERMINAL_PASTE_SUBMIT_MAX_RETRIES,
+  dashboardTerminalAccessMode,
+  dashboardLaunchPreset,
   dashboardSendToTerminalSession,
   dashboardLaunchInTerminal,
   dashboardConnectTerminal,
   dashboardOpenServerSession,
+  dashboardReconnectTerminal,
+  dashboardDetachTerminal,
+  dashboardRememberRecentSession,
   dashboardEndSession,
   dashboardOutputLooksAwaitingInput,
   dashboardOutputLooksReadyForLaunchPrompt,
@@ -489,6 +532,8 @@ function makeContext(
     launching: false,
     activeSessionId: null,
     _terminalRefs: {},
+    _projectSessions: {},
+    _projectActiveSession: {},
     showMaxSessionsModal: false,
     // Default contexts assert raw payloads, so prompt adaptation is opt-in per test.
     adaptPrompt(prompt: string): string {
@@ -578,6 +623,9 @@ function makeTerminalSession(
     loadingShowRetry: false,
     age: "0s",
     presetId: null,
+    accessMode: "workspace",
+    captureQualityDrafts: false,
+    qualityReportProjectPath: null,
     ...overrides,
   };
 }

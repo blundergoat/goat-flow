@@ -21,6 +21,16 @@ import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
 import { getSkillNames } from "../constants.js";
 import { getInstalledSkillRoots, getSkillFiles } from "../manifest/manifest.js";
+import {
+  maskInlineCodeSpansOnLine,
+  maskNonRenderedMarkdown,
+} from "../rendered-markdown.js";
+import {
+  advanceMarkdownFenceState,
+  evaluateSearchAnchors,
+  type MarkdownFence,
+} from "../facts/shared/search-anchors.js";
+import { STANDALONE_PLAYBOOK_FILES } from "./skill-docs-contract.js";
 
 /**
  * Regex detector descriptor for one prose-quality rule.
@@ -64,9 +74,7 @@ const STATIC_QUALITY_TARGETS = [
   ".goat-flow/skill-docs/skill-conventions.md",
   // Standalone playbooks (loaded on-demand by skills/agents)
   ".goat-flow/skill-docs/playbooks/README.md",
-  ".goat-flow/skill-docs/playbooks/browser-use.md",
-  ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
-  ".goat-flow/skill-docs/playbooks/page-capture.md",
+  ...STANDALONE_PLAYBOOK_FILES,
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
@@ -268,9 +276,138 @@ function shouldScanStaleSkillPlaybooksPath(path: string): boolean {
   return !HISTORICAL_REFERENCE_DIRS.some((dir) => path.startsWith(dir));
 }
 
-/** One iteration of code-block state: toggled on fence lines, guards all matchers. */
-function isFenceLine(line: string): boolean {
-  return /^\s*```/.test(line);
+/** Headings that explicitly advertise unanswered readiness work. */
+const READINESS_SECTION_HEADING =
+  /\b(?:open|pending|unresolved)\s+(?:questions?|issues?)\b/i;
+
+/** One rendered Markdown heading that can open or close a readiness section. */
+interface ReadinessHeading {
+  level: number;
+  text: string;
+}
+
+/**
+ * Read one `#`-style heading the way a reader sees it rendered.
+ * Used while scanning a document for readiness sections, so an author's "Open Questions" heading is
+ * recognised whether or not they left a few spaces in front of it. Pure inspection: it reads the line
+ * and writes nothing, so re-running an audit never changes the document.
+ *
+ * @param line - one line of the document being audited
+ * @returns the heading level and visible text, or null when this line is ordinary prose and the audit
+ *   simply moves on
+ */
+function parseAtxHeading(line: string): ReadinessHeading | null {
+  // Up to three leading spaces still render as a heading, so an indented "## Open Questions" the
+  // author sees on screen must be scanned rather than skipped as plain text.
+  const match = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+  // Not a heading line at all, so there is no section boundary here.
+  if (!match?.[1]) return null;
+  // Hash marks with no text after them, which readers see as an empty heading.
+  if (match[2] === undefined) return null;
+  return { level: match[1].length, text: match[2] };
+}
+
+/** Parse one setext underline with its preceding visible heading text. */
+function parseSetextHeading(
+  line: string,
+  previousLine: string,
+): ReadinessHeading | null {
+  const underline = /^ {0,3}(=+|-+)[\t ]*$/.exec(line)?.[1];
+  if (!underline) return null;
+  const text = previousLine.trim();
+  if (text.length === 0) return null;
+  return { level: underline[0] === "=" ? 1 : 2, text };
+}
+
+/** Track whether the current Markdown position belongs to a readiness section. */
+function nextReadinessHeadingLevel(
+  line: string,
+  nextLine: string,
+  currentLevel: number | null,
+): number | null {
+  const heading = parseAtxHeading(line) ?? parseSetextHeading(nextLine, line);
+  if (heading === null) return currentLevel;
+  if (READINESS_SECTION_HEADING.test(heading.text)) return heading.level;
+  if (currentLevel !== null && heading.level <= currentLevel) return null;
+  return currentLevel;
+}
+
+/**
+ * Find the placeholder a user left behind in a readiness answer, if there is one.
+ * Use when checking a readiness section, so an unfinished-answer marker - a to-do note,
+ * "???", or a bare "Answer:" - is raised back to the author instead of shipping as though
+ * it were a real answer.
+ *
+ * Backticked text is masked out of the line before matching, so an author who writes about
+ * such markers as an example is not accused of leaving one behind.
+ *
+ * @param line - one line from a readiness section, exactly as the author wrote it
+ * @returns the marker text to show the author; `null` means the line is properly filled in
+ *   and nothing is reported for it
+ */
+function unresolvedContentMarker(line: string): string | null {
+  const markerText = maskInlineCodeSpansOnLine(line);
+  const todoMarker = /\b(?:TBD|TODO)\b/i.exec(markerText);
+
+  // The author parked the answer with a to-do marker, so name it back to them.
+  if (todoMarker) return todoMarker[0];
+
+  // "???" is the other placeholder authors leave when they mean to come back to it.
+  if (markerText.includes("???")) return "???";
+
+  const normalized = line
+    .trim()
+    .replace(/^[-*+]\s+/, "")
+    .replace(/^\|\s*/, "")
+    .replace(/\s*\|$/, "")
+    .trim();
+  if (/^(?:\*\*|__)?Answer(?:\*\*|__)?\s*:\s*(?:\*\*|__)?$/i.test(normalized)) {
+    return "empty Answer:";
+  }
+  return null;
+}
+
+/** Scan only explicit readiness sections, ignoring examples in fenced blocks. */
+function scanUnresolvedReadiness(path: string, text: string): ContentFinding[] {
+  const findings: ContentFinding[] = [];
+  // Reuse the rendered Markdown view so commented-out headings and fenced
+  // examples cannot change which later lines count as readiness answers.
+  const lines = maskNonRenderedMarkdown(text).split(/\r?\n/);
+  let readinessHeadingLevel: number | null = null;
+
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? "";
+    readinessHeadingLevel = nextReadinessHeadingLevel(
+      line,
+      lines[index + 1] ?? "",
+      readinessHeadingLevel,
+    );
+    if (readinessHeadingLevel !== null) {
+      applyUnresolvedContentMarker(line, index + 1, path, findings);
+    }
+  }
+
+  return findings;
+}
+
+/** Add one blocking content finding for a marker inside a readiness section. */
+function applyUnresolvedContentMarker(
+  line: string,
+  lineNumber: number,
+  path: string,
+  findings: ContentFinding[],
+): void {
+  const marker = unresolvedContentMarker(line);
+  if (marker === null) return;
+  findings.push({
+    severity: "warning",
+    rule: "unresolved-content-marker",
+    path,
+    line: lineNumber,
+    message: `Unresolved readiness marker "${marker}" remains in an open, pending, or unresolved questions section.`,
+    suggestion:
+      "Answer the question, remove the marker, or move genuine implementation work to the task tracker.",
+  });
 }
 
 /** Detect a Markdown table separator row, e.g. `| --- | :---: | ---: |`.
@@ -369,20 +506,50 @@ export function scanContentQuality(
 ): ContentFinding[] {
   const findings: ContentFinding[] = [];
   const lines = text.split(/\r?\n/);
-  let inCodeBlock = false;
+  let activeFence: MarkdownFence | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? "";
-    if (isFenceLine(line)) {
-      inCodeBlock = !inCodeBlock;
-      continue;
-    }
-    if (inCodeBlock) continue;
+    const fenceState = advanceMarkdownFenceState(line, activeFence);
+    activeFence = fenceState.activeFence;
+    if (fenceState.isFenceLine || activeFence !== null) continue;
     if (line.includes("|") && isTableSeparatorLine(lines[i + 1] ?? "")) {
       continue;
     }
     scanLine(line, i + 1, path, findings, mode);
   }
+  findings.push(...scanUnresolvedReadiness(path, text));
   return findings;
+}
+
+/**
+ * Find moved literal anchors on current guidance surfaces.
+ *
+ * Missing files remain owned by path-integrity checks. Existing targets with
+ * missing needles are unambiguous drift, including accepted ADR evidence: a
+ * historical decision still needs a grep-resolvable pointer to its live proof.
+ */
+function scanSemanticAnchorQuality(
+  ctx: AuditContext,
+  path: string,
+  text: string,
+): ContentFinding[] {
+  return evaluateSearchAnchors(ctx.fs, text, {
+    allowMissingFiles: true,
+    sourcePath: path,
+  })
+    .filter(
+      (evaluation) =>
+        evaluation.status === "stale" && evaluation.reason === "missing-needle",
+    )
+    .map((evaluation) => ({
+      severity: "warning" as const,
+      rule: "stale-semantic-anchor",
+      path,
+      line: evaluation.line,
+      message: `Semantic anchor "${evaluation.needle}" no longer appears in ${evaluation.filePath}.`,
+      suggestion:
+        "Update the cited path or literal needle to a current grep-resolvable anchor.",
+    }));
 }
 
 /**
@@ -426,6 +593,64 @@ function resolveTargets(ctx: AuditContext): string[] {
   return [...targets];
 }
 
+const LOCAL_MARKDOWN_PREFIXES = [
+  ".antigravitycli/",
+  ".claude/projects/",
+  ".claude/worktrees/",
+  ".gemini/projects/",
+  ".gemini/worktrees/",
+  ".cursor/",
+  ".tools/",
+  "_temp/",
+  "inbox/",
+  "logs/",
+  "out/",
+] as const;
+
+const GOAT_LOCAL_STATE_PREFIXES = [
+  ".goat-flow/logs/",
+  ".goat-flow/plans/",
+  ".goat-flow/scratchpad/",
+] as const;
+
+const COMMITTED_LOCAL_STATE_READMES = new Set([
+  ".goat-flow/logs/critiques/README.md",
+  ".goat-flow/logs/events/README.md",
+  ".goat-flow/logs/quality/README.md",
+  ".goat-flow/logs/review/README.md",
+  ".goat-flow/logs/security/README.md",
+  ".goat-flow/logs/sessions/README.md",
+  ".goat-flow/plans/README.md",
+  ".goat-flow/scratchpad/README.md",
+]);
+
+/** Keep only the stable README anchors committed beneath local-state trees. */
+function isCommittedLocalStateReadme(path: string): boolean {
+  return COMMITTED_LOCAL_STATE_READMES.has(path);
+}
+
+/** Exclude local working artifacts from the repository-wide evidence sweep. */
+function isLocalMarkdownArtifact(path: string): boolean {
+  if (LOCAL_MARKDOWN_PREFIXES.some((prefix) => path.startsWith(prefix))) {
+    return true;
+  }
+  if (/^(?:TODO_|docs_).+\.md$/i.test(path)) return true;
+  return GOAT_LOCAL_STATE_PREFIXES.some(
+    (prefix) => path.startsWith(prefix) && !isCommittedLocalStateReadme(path),
+  );
+}
+
+/** Discover Markdown not already covered by the curated prose-quality scans. */
+function resolveAdditionalEvidenceTargets(
+  ctx: AuditContext,
+  scanned: ReadonlySet<string>,
+): string[] {
+  return ctx.fs
+    .glob("**/*.md")
+    .filter((path) => !scanned.has(path) && !isLocalMarkdownArtifact(path))
+    .sort();
+}
+
 /** List `<dir>/*.md` entries, excluding README.md. Used to pick up learning-loop
  *  buckets without resolving hidden or non-markdown files. */
 function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
@@ -451,21 +676,34 @@ export function runContentQualityChecks(ctx: AuditContext): {
   filesScanned: number;
 } {
   const findings: ContentFinding[] = [];
+  const scanned = new Set<string>();
   let filesScanned = 0;
   for (const rel of resolveTargets(ctx)) {
     if (!ctx.fs.exists(rel)) continue;
     const text = ctx.fs.readFile(rel);
     if (text === null) continue;
+    scanned.add(rel);
     filesScanned++;
     findings.push(...scanContentQuality(rel, text, "full"));
+    findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
   }
   for (const dir of LEARNING_LOOP_DIRS) {
     for (const rel of listBucketMarkdown(ctx, dir)) {
       const text = ctx.fs.readFile(rel);
       if (text === null) continue;
+      scanned.add(rel);
       filesScanned++;
       findings.push(...scanContentQuality(rel, text, "restricted"));
+      findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
     }
+  }
+  for (const rel of resolveAdditionalEvidenceTargets(ctx, scanned)) {
+    const text = ctx.fs.readFile(rel);
+    if (text === null) continue;
+    scanned.add(rel);
+    filesScanned++;
+    findings.push(...scanUnresolvedReadiness(rel, text));
+    findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
   }
   return { findings, filesScanned };
 }

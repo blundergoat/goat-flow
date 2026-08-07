@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.14.0"
+goat-flow-reference-version: "1.15.0"
 ---
 # Changelog
 
@@ -61,6 +61,8 @@ Themed-narrative changelogs are allowed when the repo already uses them; keep th
 - Lead with the user-visible change, not the implementation.
 - Use active voice and plain English.
 - Default to one sentence per bullet.
+- One physical line per bullet, 150 characters max; never hard-wrap a bullet onto continuation lines.
+- Over the cap: cut words first. If a break's migration detail will not fit, move it to its own sub-bullet, also capped.
 - Name the affected product surface: command, endpoint, config key, UI view, runtime, package, API, installer.
 - Skip internal refactors, tests, CI, and style-only changes unless they alter user behavior or release safety.
 - Do not write "various fixes", "improvements", "cleanup", or "see git log".
@@ -129,6 +131,7 @@ Before merging or tagging:
 8. Version surfaces agree.
 9. Keep-a-Changelog `Unreleased` is empty after release.
 10. The compression pass ran.
+11. Every bullet is one physical line within the 150-character cap.
 
 ## Troubleshooting
 
@@ -139,6 +142,7 @@ Before merging or tagging:
 ## Related References
 
 - [`release-notes.md`](./release-notes.md) - user-facing announcement derived from the changelog.
+- [`writing-style.md`](./writing-style.md) - prose style for the entry text itself, once the category and version are settled.
 - [keepachangelog.com](https://keepachangelog.com)
 - [semver.org](https://semver.org)
 - Project instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) may declare project-specific changelog policy.

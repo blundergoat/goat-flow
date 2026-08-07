@@ -1,0 +1,246 @@
+{
+  "schemaVersion": "gruff.analysis.v2",
+  "analyzer": "@blundergoat/gruff-ts",
+  "reviewedAt": "2026-08-07",
+  "minimumAnalysedFiles": 449,
+  "entries": [
+    {
+      "stableIdentity": "19af30392f9d5c19",
+      "ruleId": "size.file-length",
+      "file": "test/integration/stats-command.test.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 915,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "27839c15fa244820",
+      "ruleId": "size.file-length",
+      "file": "test/integration/skill-author.test.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 937,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "2aaaf5cdd9c3392e",
+      "ruleId": "size.file-length",
+      "file": "src/cli/server/decoders.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 763,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "4348d703d920ab92",
+      "ruleId": "size.file-length",
+      "file": "src/cli/cli-handlers.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 760,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "4ec96770e888823a",
+      "ruleId": "size.file-length",
+      "file": "test/integration/setup-install-migrations.test.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 910,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "56c1a648b8246713",
+      "ruleId": "size.file-length",
+      "file": "test/unit/check-content-quality.test.ts",
+      "rationale": "Reviewed oversized file; grew by one M03 CommonMark-indentation regression, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 1044,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "5ce20d87025f069a",
+      "ruleId": "size.file-length",
+      "file": "test/integration/gruff-code-quality-smoke.test.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 807,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "65bc9756c0c61b37",
+      "ruleId": "security.process-exec",
+      "file": "test/integration/gruff-code-quality-smoke.test.ts",
+      "rationale": "Hook smoke test spawns the managed quality hook via argv spawnSync with shell disabled.",
+      "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "member",
+          "shellEnabled": false
+        },
+        {
+          "callName": "spawnSync",
+          "argumentSource": "parameter",
+          "shellEnabled": false
+        }
+      ]
+    },
+    {
+      "stableIdentity": "82a5bf7cdbc808b7",
+      "ruleId": "size.file-length",
+      "file": "src/cli/skill-doctor.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 760,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "91c655695d5b2801",
+      "ruleId": "security.process-exec",
+      "file": "test/helpers/concurrent-quality-workers.ts",
+      "rationale": "Concurrency test helper forks a Node worker script via argv with shell disabled.",
+      "occurrences": [
+        {
+          "callName": "fork",
+          "argumentSource": "parameter",
+          "shellEnabled": false
+        }
+      ]
+    },
+    {
+      "stableIdentity": "946e85ebc33abfc1",
+      "ruleId": "security.process-exec",
+      "file": "workflow/hooks/run-with-bash.mjs",
+      "rationale": "Hook launcher spawns Bash via argv with shell: false by design; surfaced when the M03 nested-template refactor let the analyzer parse this file correctly.",
+      "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "parameter",
+          "shellEnabled": false
+        }
+      ]
+    },
+    {
+      "stableIdentity": "a128961f5c7af1f7",
+      "ruleId": "size.file-length",
+      "file": "src/cli/plans-time.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 793,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "bbcbddc09feecc19",
+      "ruleId": "size.file-length",
+      "file": "test/unit/audit-command/scoring-model.test.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 831,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "bc5416e46df7f2c9",
+      "ruleId": "security.process-exec",
+      "file": "scripts/preflight-command-runner.mjs",
+      "rationale": "Preflight command runner spawns configured check commands via argv with shell disabled.",
+      "occurrences": [
+        {
+          "callName": "spawn",
+          "argumentSource": "member",
+          "shellEnabled": false
+        }
+      ]
+    },
+    {
+      "stableIdentity": "ccb95482ec301757",
+      "ruleId": "security.process-exec",
+      "file": "scripts/check-gruff-warning-ratchet.mjs",
+      "rationale": "Ratchet checker invokes the repo-local analyzer via argv with shell: false; introduced and reviewed with this gate.",
+      "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "parameter",
+          "shellEnabled": false
+        }
+      ]
+    },
+    {
+      "stableIdentity": "d5629f0d960671e6",
+      "ruleId": "size.file-length",
+      "file": "test/unit/dashboard-terminal-launch/helpers.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 753,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "e7723a1cb2519df0",
+      "ruleId": "size.file-length",
+      "file": "src/dashboard/dashboard-terminal-runtime.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 819,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "ecbbf586390a47ee",
+      "ruleId": "size.file-length",
+      "file": "src/cli/server/dashboard-reporting.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 755,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "fb156add7406974b",
+      "ruleId": "size.file-length",
+      "file": "test/unit/dashboard-home.test.ts",
+      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 815,
+          "threshold": 750
+        }
+      ]
+    }
+  ]
+}

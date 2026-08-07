@@ -24,12 +24,21 @@ import {
 } from "./audit-provenance.js";
 import { buildProjectStructure } from "./audit-structure.js";
 import { agentSummary, setupSummary } from "./audit-summaries.js";
+import { targetUsesNewerGoatFlow } from "./check-agent-common.js";
+import {
+  addStructuralAssuranceLimits,
+  addUniqueConcernLimit,
+  applyCheckToConcern,
+  classifyCheckImpact,
+  emptyConcern,
+  skippedHarnessCheck,
+  toCheckResult,
+} from "./harness-scoring.js";
 import type {
   AuditContext,
   AuditConcern,
   AuditConcernKey,
   AuditFactProfile,
-  AuditFailure,
   AuditReport,
   AuditScope,
   AuditScopeName,
@@ -37,7 +46,6 @@ import type {
   CheckResult,
   ContentReport,
   HarnessCheck,
-  HarnessCheckResult,
 } from "./types.js";
 
 export { createAuditFactsView } from "./audit-facts-view.js";
@@ -117,220 +125,6 @@ function buildScope(
     checks,
     failures,
     summary,
-  };
-}
-
-/** Return the dashboard display status and audit impact for one check result. */
-function classifyCheckImpact(
-  status: CheckResult["status"],
-  type: CheckResult["type"],
-  acknowledged = false,
-): Pick<CheckResult, "displayStatus" | "impact"> {
-  if (status === "skipped") return { displayStatus: "skipped", impact: "none" };
-  if (status === "pass") {
-    return {
-      displayStatus: type === "metric" ? "info" : "pass",
-      impact: "none",
-    };
-  }
-  if (type === "metric" || acknowledged) {
-    return { displayStatus: "warn", impact: "score-only" };
-  }
-  return { displayStatus: "fail", impact: "scope-fail" };
-}
-
-/** Attach evidence text that explains whether a failing harness check gates status. */
-function explainHarnessFailure(
-  check: HarnessCheck,
-  failure: AuditFailure | undefined,
-  acknowledged: boolean,
-): AuditFailure | undefined {
-  if (!failure) return undefined;
-  if (check.type === "metric") {
-    return {
-      ...failure,
-      evidence:
-        "Metric (score-only; lowers the concern score but does not fail audit status).",
-    };
-  }
-  if (check.type !== "advisory") return failure;
-  return {
-    ...failure,
-    evidence: acknowledged
-      ? `Advisory (acknowledged via harness.acknowledge: [${check.id}]). Best practice, not install drift.`
-      : `Advisory (best practice, not install drift). Silence with harness.acknowledge: [${check.id}] in .goat-flow/config.yaml, or fix to reach pass.`,
-  };
-}
-
-/** Convert a harness check + its result into a CheckResult for the scope. */
-function toCheckResult(
-  check: HarnessCheck,
-  result: HarnessCheckResult,
-  acknowledged: boolean,
-): CheckResult {
-  const baseFailure =
-    result.status === "fail"
-      ? {
-          check: check.name,
-          message:
-            result.recommendations[0] ?? result.findings[0] ?? "Check failed",
-          howToFix: result.howToFix?.[0],
-        }
-      : undefined;
-
-  const failure = explainHarnessFailure(check, baseFailure, acknowledged);
-  const impact = classifyCheckImpact(result.status, check.type, acknowledged);
-
-  return {
-    id: check.id,
-    name: check.name,
-    status: result.status,
-    ...impact,
-    ...(result.displayStatus ? { displayStatus: result.displayStatus } : {}),
-    provenance: labelEvidencePathBases(check.provenance),
-    failure,
-    type: check.type,
-    acknowledged: acknowledged || undefined,
-    evidenceKind: check.evidenceKind,
-    assurance: result.assurance,
-    details: result.details,
-  };
-}
-
-/** Create an empty AuditConcern with zeroed counters. */
-function emptyConcern(): AuditConcern {
-  return {
-    status: "pass",
-    score: 0,
-    findings: [],
-    limits: [],
-    recommendations: [],
-    howToFix: [],
-    integrityPass: 0,
-    integrityFail: 0,
-    advisoryPass: 0,
-    advisoryFail: 0,
-    advisoryAcknowledged: 0,
-    metrics: 0,
-  };
-}
-
-const PROJECT_VALIDATION_EXECUTION_LIMIT =
-  "This audit inspected verification guidance and hook configuration; it did not execute project build, test, lint, typecheck, or format commands.";
-const RECOVERY_RESUMABILITY_LIMIT =
-  "Recovery storage is available, but this audit did not validate the current objective, completed work, last verification, next action, or end-to-end resumability.";
-
-/** Add a caveat once so users do not see repeated limits from overlapping checks. */
-function addUniqueConcernLimit(concern: AuditConcern, limit: string): void {
-  // A repeated caveat adds noise without giving the user stronger evidence.
-  if (concern.limits.includes(limit)) return;
-  concern.limits.push(limit);
-}
-
-/** Explain what perfect structural scores still did not prove for the audit reader. */
-function addStructuralAssuranceLimits(
-  concerns: Record<AuditConcernKey, AuditConcern>,
-): void {
-  addUniqueConcernLimit(
-    concerns.verification,
-    PROJECT_VALIDATION_EXECUTION_LIMIT,
-  );
-
-  // Passing recovery checks prove storage exists, not that a user can resume the latest work.
-  if (concerns.recovery.status === "pass") {
-    addUniqueConcernLimit(concerns.recovery, RECOVERY_RESUMABILITY_LIMIT);
-  }
-}
-
-/** Copy user actions from a failed check into the concern summary shown after the audit. */
-function addRemediation(
-  concern: AuditConcern,
-  result: HarnessCheckResult,
-): void {
-  concern.recommendations.push(...result.recommendations);
-  // Checks without a concrete repair leave the user with guidance instead of an invented command.
-  if (result.howToFix) concern.howToFix.push(...result.howToFix);
-}
-
-/** Apply one score-only signal without turning a structurally valid concern into a failure. */
-function applyMetricCheck(
-  concern: AuditConcern,
-  result: HarnessCheckResult,
-): void {
-  concern.metrics++;
-  // A passing metric needs no score caveat or remediation in the user-facing result.
-  if (result.status !== "fail") return;
-  addUniqueConcernLimit(
-    concern,
-    `Score-only metric failed: ${result.findings.join("; ")}`,
-  );
-  addRemediation(concern, result);
-}
-
-/** Count whether one required setup check passed for the concern the user is viewing. */
-function applyIntegrityCheck(
-  concern: AuditConcern,
-  result: HarnessCheckResult,
-): void {
-  // A required pass raises completeness; a failure keeps the missing setup visible.
-  if (result.status === "pass") concern.integrityPass++;
-  else concern.integrityFail++;
-}
-
-/** Count an optional recommendation while respecting an explicit user acknowledgement. */
-function applyAdvisoryCheck(
-  concern: AuditConcern,
-  result: HarnessCheckResult,
-  acknowledged: boolean,
-): void {
-  // Passing advice is complete; acknowledged gaps remain visible without failing the audit.
-  if (result.status === "pass") concern.advisoryPass++;
-  else if (acknowledged) concern.advisoryAcknowledged++;
-  else concern.advisoryFail++;
-}
-
-/** Apply a single check result to its concern per the typed scoring model. */
-function applyCheckToConcern(
-  concern: AuditConcern,
-  check: HarnessCheck,
-  result: HarnessCheckResult,
-  acknowledged: boolean,
-): void {
-  concern.findings.push(...result.findings);
-  // Check-specific caveats stay visible once, even when checks report the same limitation.
-  if (result.limits) {
-    // Each distinct caveat gives the audit reader one additional evidence boundary.
-    for (const limit of result.limits) addUniqueConcernLimit(concern, limit);
-  }
-  // Metrics affect the displayed score without turning the concern into a hard failure.
-  if (check.type === "metric") {
-    applyMetricCheck(concern, result);
-    return;
-  }
-  // Integrity checks represent required setup; advisories can be acknowledged explicitly.
-  if (check.type === "integrity") {
-    applyIntegrityCheck(concern, result);
-  } else {
-    applyAdvisoryCheck(concern, result, acknowledged);
-  }
-  // Unacknowledged failures stop a user from treating the concern as configured correctly.
-  if (result.status === "fail" && !acknowledged) {
-    concern.status = "fail";
-    addRemediation(concern, result);
-  }
-}
-
-/** Render a harness check that is intentionally not applicable to this context. */
-function skippedHarnessCheck(check: HarnessCheck): CheckResult {
-  const impact = classifyCheckImpact("skipped", check.type);
-  return {
-    id: check.id,
-    name: check.name,
-    status: "skipped",
-    ...impact,
-    provenance: labelEvidencePathBases(check.provenance),
-    type: check.type,
-    evidenceKind: check.evidenceKind,
   };
 }
 
@@ -643,6 +437,9 @@ function shouldRunDriftCheck(
   ctx: AuditContext,
   options: AuditOptions,
 ): boolean {
+  // A stale CLI cannot produce a trustworthy template comparison; the
+  // config-version check already reports the skew as the actionable failure.
+  if (targetUsesNewerGoatFlow(ctx)) return false;
   if (options.checkDrift === true) return true;
   return options.shouldRunAutoDrift !== false && shouldAutoRunDrift(ctx);
 }
@@ -678,6 +475,9 @@ function computeContentWithProfile(
   profileScope: string,
 ): ContentReport | null {
   if (!options.checkContent) return null;
+  // Same stale-CLI reasoning as drift: newer cold-path content would be linted
+  // against rules this release does not carry yet.
+  if (targetUsesNewerGoatFlow(ctx)) return null;
   return span(options.profile, `${profileScope} content checks`, () =>
     computeContent(ctx),
   );

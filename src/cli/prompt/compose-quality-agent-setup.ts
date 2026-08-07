@@ -123,7 +123,7 @@ function appendIntroAndContext(
   );
   lines.push("");
   lines.push(
-    "REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Do NOT use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. `dist/`, `node_modules/`, `.claude/worktrees/`, `.goat-flow/logs/**`, `.goat-flow/scratchpad/**`, `.goat-flow/plans/**`) are fine - they don't change the repo's committed state and do not count as writes for this assessment contract. This prompt also instructs you to write your final JSON report to `.goat-flow/logs/quality/<filename>.json`.",
+    `REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Do NOT use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. \`dist/\`, \`node_modules/\`, \`.claude/worktrees/\`, \`.goat-flow/logs/**\`, \`.goat-flow/scratchpad/**\`, \`.goat-flow/plans/**\`) are fine - they don't change the repo's committed state and do not count as writes for this assessment contract. ${ctx.input.persistence === "staged-draft" ? "Hand the final JSON report to the dashboard only through the staging contract below." : "Write the final JSON report to `.goat-flow/logs/quality/<filename>.json` as instructed below."}`,
   );
   lines.push("");
   appendRules(lines);
@@ -174,7 +174,7 @@ function appendGoatFlowOverview(
     "4. **Learning loop** (`.goat-flow/`) - config, architecture doc, footguns, lessons, decisions, session logs.",
   );
   lines.push(
-    "5. **Shared meta references** (under `.goat-flow/skill-docs/`) - skill-preamble.md (loaded every skill invocation), skill-conventions.md (loaded on full-depth). **Standalone playbooks** (under `.goat-flow/skill-docs/playbooks/`) - README.md index; browser-use.md and page-capture.md for browser evidence capture; observability.md for instrumentation; code-comments.md for commenting discipline; gruff-code-quality.md for gruff analyzer triage and fix verification across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py; hook-policy-testing.md for deny-hook policy, mirror, and agent-registration verification; changelog.md for CHANGELOG.md discipline; release-notes.md for per-release narrative discipline (derives from changelog); skill-playbook-authoring-sync.md for built-in playbook enrollment and verification. **Skill-authoring methodology** lives under `.goat-flow/skill-docs/skill-quality-testing/`: README.md index plus tdd-iteration.md, adversarial-framing.md, and deployment.md (full-depth authoring methodology split per ADR-023; load the topical file matching your skill type).",
+    "5. **Shared meta references** (under `.goat-flow/skill-docs/`) - skill-preamble.md (loaded every skill invocation), skill-conventions.md (loaded on full-depth). **Standalone playbooks** (under `.goat-flow/skill-docs/playbooks/`) - README.md index; browser-use.md and page-capture.md for browser evidence capture; observability.md for instrumentation; code-comments.md for commenting discipline; gruff-code-quality.md for gruff analyzer triage and fix verification across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py; hook-policy-testing.md for deny-hook policy, mirror, and agent-registration verification; changelog.md for CHANGELOG.md discipline; release-notes.md for per-release narrative discipline (derives from changelog); skill-playbook-authoring-sync.md for built-in playbook enrollment and verification; writing-style.md for prose style in human-read artifacts including learning-loop entry bodies (agent-read control text is explicitly exempt). **Skill-authoring methodology** lives under `.goat-flow/skill-docs/skill-quality-testing/`: README.md index plus tdd-iteration.md, adversarial-framing.md, and deployment.md (full-depth authoring methodology split per ADR-023; load the topical file matching your skill type).",
   );
   lines.push("");
   lines.push(
@@ -228,6 +228,14 @@ function appendAuditAndPrior(
   }
 }
 
+/**
+ * Add the Step 0 probes and the fallback a reviewer sees when a session denies them.
+ * Use at assessment start so unavailable runtime evidence becomes an explicit verification gap.
+ *
+ * @param lines - prompt lines built so far; empty means this section starts the rendered assessment
+ * @param ctx - resolved session context; a null deny-hook path means no on-disk hook probe is offered
+ * @returns nothing; the supplied prompt lines receive the grounding and reading sections
+ */
 function appendGroundingAndReadNext(
   lines: string[],
   ctx: AgentSetupPromptContext,
@@ -269,6 +277,10 @@ function appendGroundingAndReadNext(
     "cat .goat-flow/config.yaml                        # minimal valid config: version and skills; legacy agents is ignored; line-limits/toolchain are optional calibration only",
   );
   lines.push("```");
+  lines.push("");
+  lines.push(
+    '**Degraded grounding protocol:** If a command above is denied by the session\'s permission profile or unavailable, record the literal denial, do NOT infer pass or fail from it, and do not retry it verbatim or work around the profile. Fall back to static analysis (`evidence_method: "static-analysis"`), keep `audit_status` at `unavailable` unless a live audit completed this run, and list every unexecuted command in "What You Did Not Verify".',
+  );
   lines.push("");
   appendReadNext(lines, ctx);
 }
@@ -484,7 +496,7 @@ function appendContradictions(
     "- Any skill that references `workflow/` paths - those are framework-internal and don't exist in target projects",
   );
   lines.push(
-    '- Any stale references to removed concepts: root-level "playbooks/" (not `.goat-flow/skill-docs/playbooks/`), "coding-standards" as a generated setup pack (not `docs/coding-standards/git-commit.md`), "shapes", old skill names, removed legacy task-state surfaces, old execution loop steps (CLASSIFY, LOG as separate steps)',
+    '- Any stale references to removed concepts: root-level "playbooks/" (not `.goat-flow/skill-docs/playbooks/`), "coding-standards" as a generated setup pack (not `docs/coding-standards/git-commit-message.md`), "shapes", old skill names, removed legacy task-state surfaces, old execution loop steps (CLASSIFY, LOG as separate steps)',
   );
   lines.push(
     "- Does the instruction file execution loop match the skill-preamble's description?",
@@ -527,7 +539,7 @@ function appendOutputFormat(
   lines.push("### Findings");
   lines.push("Ordered by severity. For each:");
   lines.push(
-    "- Severity: `BLOCKER` (prevents work or creates safety risk), `MAJOR` (framework violates its own stated standards or a documented quality gate fails), or `MINOR` (suboptimal but not actively harmful)",
+    "- Severity: `BLOCKER` (prevents work or creates safety risk), `MAJOR` (framework violates a standard that binds the surface being assessed - agent-facing instructions, skills, hooks - or a documented quality gate fails; human-workflow conventions are out of scope unless they corrupt agent behavior), or `MINOR` (suboptimal but not actively harmful)",
   );
   lines.push(
     "- Type: `setup_quality`, `skill_flaw`, `contradiction`, `false_path`, `content_quality`, or `framework_flaw`",
@@ -564,6 +576,7 @@ export function composeAgentSetupQuality(
     qualityMode,
     priorReport: ctx.priorReport,
     runDate: ctx.runDate,
+    persistence: ctx.input.persistence,
   });
   appendClosing(lines);
 

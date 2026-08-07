@@ -76,11 +76,13 @@ function buildDashboardAuditReport(
       {
         agentFilter,
         harness: includeHarness,
-        // Summary cards only need to know whether the deny mechanism is
-        // installed. Explicit per-agent audits and quality flows still run the
-        // slower runtime self-test.
+        // Opening a page must never run code from the project the user selected. Home cards only
+        // need to show whether a deny hook is installed, and clicking one agent still stops at
+        // static evidence, so the card reads "limited" instead of claiming proof it did not gather.
+        // Real runtime proof is a deliberate CLI audit the user chooses to run against a checkout
+        // they trust; picking a folder in the dashboard is not that choice.
         denyMechanismEvidenceLevel:
-          agentFilter === null ? "present-only" : "full",
+          agentFilter === null ? "present-only" : "static",
         factProfile: auditFactProfile,
         profile: profiler,
       },

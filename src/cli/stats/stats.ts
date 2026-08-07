@@ -266,11 +266,10 @@ function collectBucketFindings(
   if (reviewFinding !== null) findings.push(reviewFinding);
   // Oversized buckets make retrieval noisy, so users are asked to split the category.
   if (bucket.sizeBytes > BUCKET_SIZE_WARN_BYTES) {
-    const bucketSizeKilobytes = Math.round(bucket.sizeBytes / 1024);
     findings.push({
       file: bucket.path,
       rule: "bucket-size",
-      message: `${bucket.path}: ${bucketSizeKilobytes}KB exceeds ${Math.round(BUCKET_SIZE_WARN_BYTES / 1024)}KB threshold; consider splitting into narrower category buckets`,
+      message: `${bucket.path}: ${bucket.sizeBytes} bytes exceeds ${BUCKET_SIZE_WARN_BYTES}-byte threshold; split into narrower category buckets`,
     });
   }
   // Every stale semantic reference gets its own repair row for the operator.
@@ -472,6 +471,30 @@ function collectMemoryQualityWarnings(
     });
 }
 
+/**
+ * Promote stale current-project evidence in pattern entries to blocking stats findings.
+ *
+ * Pattern extraction ignores absent external-project targets, so the remaining
+ * stale references are concrete local files whose literal anchors moved. Footgun
+ * and lesson references are already emitted through their bucket sections.
+ */
+function collectPatternReferenceFindings(
+  learningLoopEntries: LearningLoopEntryFact[],
+): StatsFinding[] {
+  const findings: StatsFinding[] = [];
+  for (const entry of learningLoopEntries) {
+    if (entry.kind !== "pattern") continue;
+    for (const staleReference of entry.staleRefs) {
+      findings.push({
+        file: entry.sourcePath,
+        rule: "stale-ref",
+        message: `${entry.sourcePath}: stale file ref ${staleReference}`,
+      });
+    }
+  }
+  return findings;
+}
+
 const ADR_FILENAME = /^ADR-\d{3}-[a-z0-9-]+\.md$/;
 const ROUTING_HINT =
   "Wrong home -> right home: implementation TODOs and scoped work plans belong in .goat-flow/plans/; recurring hazards with evidence belong in .goat-flow/learning-loop/footguns/; reusable takeaways belong in .goat-flow/learning-loop/lessons/; temporary notes belong in .goat-flow/scratchpad/; backlog requests belong in Linear/GitHub issues.";
@@ -637,10 +660,14 @@ export function checkStats(report: StatsCheckInput): StatsCheckReport {
   const indexFindings = report.indexes
     ? collectIndexFindings(report.indexes)
     : [];
+  const learningLoopEntries = report.learningLoopEntries ?? [];
+  const patternReferenceFindings =
+    collectPatternReferenceFindings(learningLoopEntries);
   // Hard integrity defects combine into the blocking list that controls the user's exit status.
   const findings = [
     ...collectFindings(report.footguns),
     ...collectFindings(report.lessons),
+    ...patternReferenceFindings,
     ...decisionFindings,
     ...indexFindings,
   ];
@@ -651,7 +678,6 @@ export function checkStats(report: StatsCheckInput): StatsCheckReport {
     ? collectIndexWarnings(report.indexes)
     : [];
   // Older direct callers may omit entry facts, so users still get legacy checks instead of a crash.
-  const learningLoopEntries = report.learningLoopEntries ?? [];
   // Advisory states combine separately so cleanup guidance never changes a passing exit status.
   const warnings = [
     ...collectWarnings(report.footguns),

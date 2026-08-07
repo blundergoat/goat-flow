@@ -46,21 +46,21 @@ async function attemptLiveReload(
   headers: Record<string, string>,
 ): Promise<"opened" | "rejected"> {
   const { WebSocket } = await import("ws");
-  return await new Promise<"opened" | "rejected">((resolvePromise) => {
+  return await new Promise<"opened" | "rejected">((resolveOutcome) => {
     const ws: WsWebSocket = new WebSocket(`${wsBase}/ws/livereload`, {
       headers,
     });
-    let settled = false;
+    let hasSettled = false;
     /** Resolve once and null out listeners so a later event can't double-settle. */
     const settle = (outcome: "opened" | "rejected"): void => {
-      if (settled) return;
-      settled = true;
+      if (hasSettled) return;
+      hasSettled = true;
       try {
         ws.close();
       } catch {
         /* already closed */
       }
-      resolvePromise(outcome);
+      resolveOutcome(outcome);
     };
     // A reached open state means the upgrade was accepted - the failure we guard against.
     ws.once("open", () => settle("opened"));

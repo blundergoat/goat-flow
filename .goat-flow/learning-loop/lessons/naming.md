@@ -1,6 +1,6 @@
 ---
 category: naming
-last_reviewed: 2026-07-17
+last_reviewed: 2026-08-04
 ---
 
 ## Lesson: Boundary payload names are not placeholder debt
@@ -59,4 +59,8 @@ last_reviewed: 2026-07-17
 
 **Root cause:** I treated the rename as a simple local cleanup and relied on source typecheck before running the touched test. The old identifier was still valid JavaScript syntax, so only executing the test surfaced the missed references.
 
-**Prevention:** After renaming identifiers inside test files, run a focused test for the touched file before the full suite, and grep the local block for the old identifier when it is not too generic. Evidence anchors: `test/unit/audit-command/json-contract.test.ts` (search: `has correct shape for harness mode`), failing output (search: `ReferenceError: c is not defined`).
+**Prevention:** After renaming identifiers inside test files, run a focused test for the touched file before the full suite, and grep the local block for the old identifier when it is not too generic. Evidence anchor: `test/unit/audit-command/json-contract.test.ts` (search: `has correct shape for harness mode`).
+
+**Recurrence 2026-08-02:** A gruff `test-quality.loop-in-test` cleanup renamed fixture tables (`LOCAL_STATE_README_PAIRS`→`LOCAL_STATE_README_ENTRIES`) and split looped assertions into per-case `it()` names. Typecheck, the touched focused tests, and gruff were all green, but `npm test` failed one unrelated test: `diagnostics bundle` exited 1 because the harness `feedback_loop` concern dropped to 50. `stats --check` named the real cause - two learning-loop entries carried `(search: ...)` anchors pointing at the old constant and the old test name. The rename sweep is not finished when the code is green; the loop indexes code by those exact strings.
+
+**Prevention:** After any rename or test-name change, run `node --import tsx src/cli/cli.ts stats --check` alongside the focused tests. A green typecheck plus green touched tests cannot see a stale learning-loop anchor, and the failure surfaces far away - as an audit concern score inside an unrelated diagnostics test. Evidence anchors: `.goat-flow/learning-loop/footguns/quality.md` (search: `does not let unscoped npx resolve the deprecated package in`), `.goat-flow/learning-loop/lessons/gruff-cleanup.md` (search: `LOCAL_STATE_README_ENTRIES`).

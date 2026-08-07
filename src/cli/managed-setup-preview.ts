@@ -14,6 +14,10 @@ import {
   readManagedInstallBaseline,
   writeManagedInstallState,
 } from "./managed-setup-state.js";
+import type {
+  InstallerInvocation,
+  InstallerInvocationError,
+} from "./install-invocation.js";
 import type { AgentId } from "./types.js";
 
 export {
@@ -93,6 +97,31 @@ export interface ManagedSetupPreview {
   verdict: ManagedSetupVerdict;
   limits: string[];
   files: ManagedSetupPreviewFile[];
+}
+
+/**
+ * Merge installer launch admission into the managed preview shown to users.
+ * Use so dry-run and real install consume the same platform prerequisite result.
+ *
+ * @param installPreview - current file actions; an empty list still receives a launch blocker
+ * @param installerLaunch - selected Bash or actionable error; never null after discovery
+ * @returns original ready preview or blocked copy; never null and never mutates the input
+ */
+export function managedSetupPreviewForInstallerLaunch(
+  installPreview: ManagedSetupPreview,
+  installerLaunch: InstallerInvocation | InstallerInvocationError,
+): ManagedSetupPreview {
+  // A runnable Bash leaves the managed-file verdict exactly as the user saw it.
+  if (installerLaunch.ok) return installPreview;
+
+  return {
+    ...installPreview,
+    verdict: "blocked",
+    limits: [
+      ...installPreview.limits,
+      `Install prerequisite failed: ${installerLaunch.error}`,
+    ],
+  };
 }
 
 /** One exact-copy destination and its manifest-controlled package source. */

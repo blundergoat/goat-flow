@@ -32,7 +32,7 @@ const HOOKS: HookSpec[] = [
       "Block risky shell operations, direct secret-path access, repository writes, and GitHub write operations through one PreToolUse dispatcher.",
     event: "PreToolUse",
     matcher: "Bash",
-    scriptFiles: ["deny-dangerous.sh"],
+    scriptFiles: ["run-with-bash.mjs", "deny-dangerous.sh"],
     primaryScript: "deny-dangerous.sh",
     togglable: true,
     defaultEnabled: true,
@@ -45,7 +45,7 @@ const HOOKS: HookSpec[] = [
       "Run gruff-* on each edited file and surface findings on changed lines inline.",
     event: "PostToolUse",
     matcher: "Edit|Write",
-    scriptFiles: ["gruff-code-quality.sh"],
+    scriptFiles: ["run-with-bash.mjs", "gruff-code-quality.sh"],
     primaryScript: "gruff-code-quality.sh",
     togglable: true,
     defaultEnabled: false,
@@ -65,12 +65,15 @@ const HOOKS: HookSpec[] = [
       "Scan changed content after an agent turn for built-in safety hazards such as obvious secrets, private keys, and merge conflict markers.",
     event: "Stop",
     matcher: "",
-    scriptFiles: ["post-turn-safety.sh"],
+    scriptFiles: ["run-with-bash.mjs", "post-turn-safety.sh"],
     primaryScript: "post-turn-safety.sh",
     togglable: true,
     defaultEnabled: true,
     requiresConfirmDialog: false,
-    timeoutSec: 60,
+    // Above the script's internal 60s scan budget so its own
+    // "scan incomplete" diagnostic prints before the runner kills the
+    // wrapper; a silent mid-scan kill would mean unreported partial coverage.
+    timeoutSec: 90,
     unsupportedAgents: {
       copilot: "Copilot has no project-local post-turn hook event.",
       codex:

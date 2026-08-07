@@ -14,6 +14,14 @@
  * checks enforce.
  */
 import type { BucketFreshness, ReadonlyFS } from "../../types.js";
+import {
+  isCheckableForStaleness,
+  isFileRef,
+  isIntentionallyGitignored,
+  SEARCH_ANCHOR_REGEX,
+  type ReferenceValidationOptions,
+} from "./reference-paths.js";
+import { evaluateSearchAnchors } from "./search-anchors.js";
 
 /** Strict YYYY-MM-DD format - rejects full ISO 8601 timestamps in `last_reviewed`. */
 export const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -33,10 +41,6 @@ export const EVIDENCE_PATTERN =
 /** Regex to extract file paths from backtick-wrapped references (with optional line numbers). */
 export const FILE_REF_REGEX =
   /`([^`]+\.[a-zA-Z]{1,10})(?::[0-9]+(?:[-,][0-9]+)*)?`/g;
-
-/** Matches backtick and double-quoted `(search: ...)` evidence anchors. */
-const SEARCH_ANCHOR_REGEX =
-  /`([^`]+\.[a-zA-Z0-9]{1,10})`\s*\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
 
 const BARE_EVIDENCE_ANCHOR_LINE_REGEX =
   /(?:^|\s)(?:\*\*)?Evidence anchors?(?:\*\*)?:/i;
@@ -60,68 +64,6 @@ export interface FootgunRefSummary {
   invalidLineRefs: string[];
   totalRefs: number;
   validRefs: number;
-}
-
-/**
- * Decide whether a backtick-wrapped reference names a real file path rather than a
- * URL or hostname (which share the `host:port` shape). Used to gate staleness
- * checks so a `localhost:3000`-style token is never treated as a missing file.
- *
- * @param filePath - candidate reference text with any trailing `:line` already split off
- * @returns true for paths with a slash or a root-level filename extension; false for URLs, hostnames, and bare extensionless names
- */
-export function isFileRef(filePath: string): boolean {
-  // Skip hostname/URL patterns (not file references)
-  if (
-    /^https?:|:\/\//.test(filePath) ||
-    /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(filePath)
-  )
-    return false;
-  // Paths with '/' are clearly file paths
-  if (filePath.includes("/")) return true;
-  // Root-level files with extensions (e.g., AGENTS.md:42) are valid refs
-  // Bare names without extensions (e.g., webpack:123) are ambiguous - skip
-  return /\.[a-zA-Z0-9]+$/.test(filePath);
-}
-
-/** Paths under these dirs are intentionally gitignored per `.goat-flow/plans/.gitignore`
- *  (milestone files + plan subdirs + `.active` marker are local-session state by
- *  design). Narrative mentions of them in lessons/footguns are navigation pointers,
- *  not resolvable artifacts - treating absence as "stale" false-positives on
- *  any clean checkout or CI run, so body-text references are skipped. The two
- *  durable-evidence grammars (`(search: ...)` anchors and `Evidence anchors:` lines)
- *  are the exception: gitignored paths there violate the never-anchor-to-local-state
- *  invariant regardless of local existence and are flagged as
- *  `gitignored path used as durable evidence anchor`. Keep this list short and specific. */
-function isIntentionallyGitignored(filePath: string): boolean {
-  // Anchor files (README.md, .gitignore, .gitkeep) under these trees ARE
-  // committed by design, so they are legitimate durable anchors and stay
-  // subject to normal existence checks.
-  if (/(?:^|\/)(README\.md|\.gitignore|\.gitkeep)$/.test(filePath))
-    return false;
-  return (
-    filePath.startsWith(".goat-flow/plans/") ||
-    filePath.startsWith(".goat-flow/scratchpad/") ||
-    filePath.startsWith(".goat-flow/logs/")
-  );
-}
-
-/** Check whether the file path is checkable for staleness. */
-function isCheckableForStaleness(filePath: string, fs: ReadonlyFS): boolean {
-  if (isIntentionallyGitignored(filePath)) return false;
-  if (filePath.includes("/")) return true;
-  // If it exists at root, it's checkable regardless of extension
-  if (fs.exists(filePath)) return true;
-  // A bare source filename that doesn't exist at the repo root is probably
-  // shorthand for a deeply nested file; skip it to avoid false positives.
-  if (
-    /\.(go|ts|tsx|js|jsx|py|php|rs|java|kt|rb|cs|c|cpp|h|hpp|swift|scala)$/i.test(
-      filePath,
-    )
-  )
-    return false;
-  // Non-source files (AGENTS.md, package.json, etc.) should be at root
-  return true;
 }
 
 /** Normalize a surface path so trailing slashes do not affect comparisons. */
@@ -451,40 +393,16 @@ function scanSearchAnchors(
   fs: ReadonlyFS,
   cleanedContent: string,
   summary: FootgunRefSummary,
+  options: ReferenceValidationOptions = {},
 ): void {
-  const searchAnchors = cleanedContent.matchAll(
-    new RegExp(SEARCH_ANCHOR_REGEX.source, "g"),
-  );
-  for (const match of searchAnchors) {
-    const anchor = searchAnchorFromMatch(match);
-    if (anchor === null || !isFileRef(anchor.filePath)) continue;
-    if (flagGitignoredEvidenceAnchor(anchor.filePath, summary)) continue;
-    if (!isCheckableForStaleness(anchor.filePath, fs)) continue;
+  for (const anchor of evaluateSearchAnchors(fs, cleanedContent, options)) {
     summary.totalRefs++;
-    if (!fs.exists(anchor.filePath)) {
-      summary.staleRefs.push(
-        `${anchor.filePath} (search: \`${anchor.needle}\`)`,
-      );
-      continue;
-    }
-    const fileContent = fs.readFile(anchor.filePath);
-    if (fileContent === null || !fileContent.includes(anchor.needle)) {
-      summary.staleRefs.push(
-        `${anchor.filePath} (search: \`${anchor.needle}\`)`,
-      );
+    if (anchor.status === "stale") {
+      if (anchor.diagnostic !== null) summary.staleRefs.push(anchor.diagnostic);
       continue;
     }
     summary.validRefs++;
   }
-}
-
-function searchAnchorFromMatch(
-  match: RegExpMatchArray,
-): { filePath: string; needle: string } | null {
-  const filePath = match[1];
-  const rawNeedle = match[2] ?? match[3];
-  if (filePath === undefined || rawNeedle === undefined) return null;
-  return { filePath, needle: rawNeedle.replace(/\\(["\\])/g, "$1") };
 }
 
 /**
@@ -495,12 +413,16 @@ function searchAnchorFromMatch(
  * to a single file.
  *
  * @param fs - read-only filesystem adapter used to resolve and line-count referenced files
- * @param content - the lesson or pattern section's markdown
+ * @param content - the lesson or pattern section's markdown; a section with no references
+ *   is normal and simply produces zero counts
+ * @param options - policy for evidence that may live in another repo; omitted means every
+ *   referenced file must exist locally or it is reported as stale
  * @returns counts plus the stale-path and invalid-line-reference lists; all empty when every reference is valid
  */
 export function summarizeLessonRefs(
   fs: ReadonlyFS,
   content: string,
+  options: ReferenceValidationOptions = {},
 ): FootgunRefSummary {
   const summary: FootgunRefSummary = {
     staleRefs: [],
@@ -519,14 +441,14 @@ export function summarizeLessonRefs(
     summary.totalRefs++;
     if (fs.exists(filePath)) {
       summary.validRefs++;
-    } else {
+    } else if (options.allowMissingFiles !== true) {
       summary.staleRefs.push(filePath);
     }
   }
   summary.invalidLineRefs.push(
     ...collectInvalidLessonLineRefs(fs, cleanedContent),
   );
-  scanSearchAnchors(fs, cleanedContent, summary);
+  scanSearchAnchors(fs, cleanedContent, summary, options);
   return summary;
 }
 

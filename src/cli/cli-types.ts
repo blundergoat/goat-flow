@@ -26,11 +26,21 @@ export type Command =
   | "diagnostics"
   | "index"
   | "redact"
+  | "review"
   | "plans"
   | "skill";
 
-/** Local plan operations; export previews or writes portable milestone bodies. */
-export type PlansSubcommand = "export";
+/** Local plan operations: portable reads plus explicit milestone timing transitions. */
+export type PlansSubcommand = "export" | "check" | "time";
+
+/** Explicit lifecycle actions under `plans time`. */
+export type PlansTimeAction = "start" | "stop" | "status";
+
+/** Categories stamped on timing spans and reconciled into structured Actuals. */
+export type PlansTimeCategory = "product" | "proof" | "other";
+
+/** Deterministic checks for drafted goat-review Markdown. */
+export type ReviewSubcommand = "validate";
 
 /** Read-only diagnostics views an operator can run without changing the selected project. */
 export type DiagnosticsSubcommand =
@@ -67,12 +77,13 @@ export type HookScenario = "deny-hook";
 
 /**
  * The mutually exclusive modes of the `quality` command. `prompt` (the default when no subcommand
- * positional is given) emits an assessment prompt; `history`/`diff` read prior runs; `validate`
- * schema-checks a written report; `candidacy` scores a skill/playbook idea. The parser maps the
- * first positional to one of these, and dispatch routes on the chosen member.
+ * positional is given) emits an assessment prompt; `history`/`diff` read prior runs; `save`
+ * redacts, validates, and persists an in-memory report; `validate` schema-checks a written report;
+ * `candidacy` scores a skill/playbook idea. The parser maps the first positional to one of these,
+ * and dispatch routes on the chosen member.
  */
 export type QualitySubcommand =
-  "prompt" | "history" | "diff" | "validate" | "candidacy";
+  "prompt" | "history" | "diff" | "save" | "validate" | "candidacy";
 
 /**
  * One resolved input to `quality candidacy`, distinguishing the two ways a caller can supply it.
@@ -104,13 +115,12 @@ export const COMMANDS: Command[] = [
   "diagnostics",
   "index",
   "redact",
+  "review",
   "plans",
   "skill",
 ];
 
 export const REMOVED_COMMANDS: Record<string, string> = {
-  review:
-    '"review" was removed in v1.1.0. Use "audit --harness" for deterministic harness scoring or "quality" for agent-driven assessment.',
   critique:
     '"critique" was removed in v1.1.0. Use "quality" for agent-driven assessment.',
   fix: '"fix" was removed in v1.1.0. Use "audit" or "quality" to identify issues, then apply fixes directly.',
@@ -157,7 +167,14 @@ export interface ParsedCLI extends CLIOptions {
   hookSubcommand: HookSubcommand | null;
   hookId: string | null;
   hookScenario: HookScenario | null;
+  reviewSubcommand: ReviewSubcommand | null;
+  reviewValidatePath: string | null;
   plansSubcommand: PlansSubcommand | null;
+  plansStrict: boolean;
+  plansTimeAction: PlansTimeAction | null;
+  plansTimeCategory: PlansTimeCategory | null;
+  plansTimeFinalize: boolean;
+  plansTimeDiscardOpen: boolean;
   diagnosticsSubcommand: DiagnosticsSubcommand | null;
   includeAll: boolean;
 }

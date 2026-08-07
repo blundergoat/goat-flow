@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-04
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -46,37 +46,6 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 ---
 
-## Lesson: Agent cited gitignored content as evidence in committed docs
-
-**Created:** 2026-05-11
-
-**What happened:** A 2026-05-11 documentation audit found four committed surfaces citing paths under `.goat-flow/scratchpad/` (gitignored by design) as authoritative evidence:
-
-- `docs/dashboard.md` (Design ethos) cited `.goat-flow/scratchpad/skills-example-prime/frontend-design/SKILL.md` as the source of the anti-convergence checklist.
-- `.goat-flow/skill-docs/skill-quality-testing/README.md` cited `.goat-flow/scratchpad/skills-example-prime/mysql/SKILL.md` and `.goat-flow/scratchpad/skills-example-prime/valyu/SKILL.md` for two authoring patterns; its verification-claim table credited "the prime corpus's verification-before-completion checklist."
-- `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` cited `.goat-flow/scratchpad/skills-example-prime/writing-skills/SKILL.md` as "Empirical evidence (sourced verbatim from ...)" with a `(search: ...)` anchor.
-- `workflow/skills/reference/skill-preamble.md` allowed Excuse/Reality table additions to derive from "this repo or the prime corpus".
-
-The same surfaces also leaked third-party / competitor skill names (MySQL, Valyu, the writing-skills prime pack, an external frontend-design skill) into goat-flow's committed docs plus an env-var example (`VALYU_API_KEY`).
-
-**Root cause:** When seeding pattern docs from external material temporarily staged under `.goat-flow/scratchpad/`, the authoring agent kept the verbatim citations instead of (a) committing the source material first, (b) restating the principle without the citation, or (c) marking the section guidance-only. It treated the scratchpad path as cite-able because it lives inside `.goat-flow/`, missing that the whole `scratchpad/` subtree is gitignored. Naming the external skills (MySQL, Valyu, frontend-design) compounded it: the agent imported provider vocabulary with the structural pattern.
-
-**Why it matters:** (1) **Broken evidence chain.** A cloned checkout cannot follow the cited path or its `(search: "...")` anchor; the Evidence Standard (`workflow/skills/reference/skill-preamble.md`, search: `Re-read each cited file`) requires citations anyone can re-read. (2) **Competitor/third-party leakage.** Naming external skills in committed docs implies goat-flow ships, endorses, or derives from those vendors' work, and pins generic patterns to one provider.
-
-**Prevention:**
-1. **Never cite a `.goat-flow/scratchpad/`, `.goat-flow/plans/`, `.goat-flow/logs/sessions/`, `.goat-flow/logs/quality/`, or `.goat-flow/logs/critiques/` path from a committed file** - those subtrees are gitignored except anchor files (`README.md`, `.gitignore`, `.gitkeep`). Promote source material to a committed location (`lessons/`, `footguns/`, `decisions/`, or a `workflow/` file) before citing it.
-2. **Strip third-party / competitor skill or vendor names** from generic guidance. State the pattern provider-neutrally ("a domain skill", "a vendor-SDK skill", "an external frontend-design reference") and use placeholders (`<VENDOR>_API_KEY`, not `VALYU_API_KEY`).
-3. **Apply the same rule to test files and code comments** - fixtures and inline comments shape contributor authoring habits.
-4. **When auditing docs, grep both classes:** `rg -n "\.goat-flow/(scratchpad|tasks|logs)/" --glob '*.md' --glob '*.ts'` for gitignored citations, plus a project-specific list of competitor names for vendor leakage. Add to `docs-and-crossrefs` footgun resolution rounds when found.
-
-Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `Round 4 (2026-05-11`) record the surfaces fixed.
-
-**Recurrence (2026-07-16):** Pre-1.14.0 quality report `2026-07-16-1018-codex-vwcaf` found five new `.goat-flow/scratchpad/related/` citations in `lessons/coordination.md`, `patterns/external-lessons.md`, and `patterns/refactoring.md`. Fix: cite upstream provenance (repo + PR + path + search anchor), writing the upstream path as plain prose - the stale-ref scanner (`src/cli/facts/shared/learning-loop-common.ts`, search: `isCheckableForStaleness`) resolves backticked slash-containing paths locally and fails `feedback-loop-active` when unresolved.
-
-**Recurrence update (2026-07-17):** `.goat-flow/plans/**` and one quality-report path were cited as durable evidence in seven lessons and four footguns; three anchored plan files were already deleted. All replaced with committed anchors or plain prose. The prevention is now structural: `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`) fails evidence-grammar refs to gitignored paths; committed anchor files (README.md, .gitignore, .gitkeep) exempt.
-
----
-
 ## Lesson: Agent ignored explicit "next step" command in pasted output
 
 **Created:** 2026-05-01
@@ -101,7 +70,7 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Why it matters:** Commit messages are what a future maintainer reads in `git log`, `git bisect`, or a CHANGELOG pass. Subjects built from *enhance/improve/streamline/clarify* force readers to open the diff, and back-to-back synonym churn is the tell that the agent reworded instead of described.
 
-**Prevention:** `docs/coding-standards/git-commit.md` - the canonical commit guide, summarised in the auto-read instruction files under `## Commit Messages` - bans the weak-verb list, prescribes concrete verbs, requires a body for multi-axis or non-obvious subjects, and shows bad→good rewrites from the actual recent log. The gold-standard `4e0ec5d` body is the inline body template (search: "speed up home audit load on Windows" in `docs/coding-standards/git-commit.md`).
+**Prevention:** `docs/coding-standards/git-commit-message.md` - the preferred commit guide, summarised in the auto-read instruction files under `## Commit Messages` - bans the weak-verb list, prescribes concrete verbs, requires a body for multi-axis or non-obvious subjects, and shows bad→good rewrites from the actual recent log. The gold-standard `4e0ec5d` body is the inline body template (search: "speed up home audit load on Windows" in `docs/coding-standards/git-commit-message.md`).
 
 ## Lesson: Retrieval terms must name the concrete failure class
 
@@ -183,7 +152,7 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Repeat incident 2026-07-13:** While building an ignored rollback patch, `: >` and `truncate -s 0` were both blocked as destructive truncation. After two blocked variants, the workflow rewound: verify the destination is absent, create it from the first `diff`, then append later diffs. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the shipped guard that produced the block.
 
-**Recurrence update 2026-07-16:** A read-only source search embedded a destructive-command literal in the search expression, so the deny hook rejected the entire command before `rg` ran. The corrected search used semantic terms such as `destructive` and `truncate` instead of replaying an executable-looking command. Evidence: `.goat-flow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the matching guard; this entry (search: `When deny hook blocks a command, use the unblocked equivalent`) records the recovery.
+**Recurrence update 2026-07-16:** A read-only source search embedded a destructive-command literal in the search expression, so the deny hook rejected the entire command before `rg` ran. The corrected search used semantic terms such as `destructive` and `truncate` instead of replaying an executable-looking command. Evidence: `.goat-flow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the matching guard; `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `When deny hook blocks a command, use the unblocked equivalent`) records the recovery.
 
 **Recurrence 2026-07-19:** A `node -e` dry-run summarizer embedded `child_process`, so the hook blocked it before execution. Piping the direct CLI output to `jq` produced the same assertion without a shell-execution wrapper. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 
@@ -215,28 +184,6 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 ---
 
----
-
-## Lesson: Structural audit pass does not mean the project is correct
-
-**Created:** 2026-03-31
-
-**What happened:** goat-flow once scored 100% on its own scanner system (removed per ADR-013) while `preflight-checks.sh` failed with 8 errors. The scanner checked structural presence (files exist, have right headings); preflight checked functional correctness (commands work, paths resolve, versions match).
-
-**Prevention:** Don't treat a structural audit/check pass as a quality gate for the whole project. Use structural checks for what they cover and preflight/targeted verification for functional correctness; when they disagree, investigate.
-
----
-
-## Lesson: Single-source-of-truth claims need a cold-path review pass
-
-**Created:** 2026-04-18
-
-**What happened:** M12 moved agent support metadata into `workflow/manifest.json`, but a follow-up code review still found residual parallel authority surfaces: Codex got a fictional `post_turn: "Stop"` event in the manifest, the dashboard frontend narrowed injected agent ids back to `claude | codex | gemini`, and unknown `.goat-flow/config.yaml` `agents:` ids only warned so audit status stayed green.
-
-**Prevention:** When claiming "single writable authority", run a cold-path pass searching for hardcoded enums, literal allowlists, and docs/templates restating the same contract. The migration is not complete until manifest, installer, config validation, audit failures, and frontend payload readers all agree on one authority.
-
----
-
 ## Lesson: Sanitizing shell variable capture breaks `set -u` when variable is scoped inside a conditional
 
 **Created:** 2026-04-21
@@ -259,7 +206,9 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Recurrence 2026-06-04:** While adding review-derived footguns, `stats --check` caught an evidence anchor whose search text used `file !== "README.md"` even though the real code used `f !== "README.md"`. The entry failed stale-ref validation before closeout. Lesson: not just "avoid line numbers" - exact semantic anchors still need a grep pass after drafting.
 
-**Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against file content - mechanical enforcement that line numbers never had.
+**Recurrence 2026-08-04:** A timing-receipt footgun cited the rendered title of a parameterized test. The title existed in test output but not as literal source, so `stats --check` rejected it. Dynamic fixture values and generated test names are not durable semantic anchors; cite a literal fixture constant, helper, or assertion instead.
+
+**Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
 
 ---
 
@@ -272,18 +221,6 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Root cause:** The agent preserved a backward-compatibility shape without proving any installed project still needed the per-skill file. That weakened the migration: one canonical reference existed, but stale compatibility files could keep attracting edits or references.
 
 **Prevention:** When moving guidance into `.goat-flow/skill-docs/`, grep every old path, remove redundant local copies unless an explicit compatibility requirement exists, and update manifest/install references in the same pass. Compatibility copies are a conscious exception.
-
----
-
-## Lesson: Verify agent capabilities against official docs, not assumptions
-
-**Status:** active | **Created:** 2026-04-15 | **Merged during:** M11 learning-loop consolidation
-
-**What happened:** Codex was assumed to lack PreToolUse hook support, so its profile left the hook field empty and a parallel Starlark execpolicy workaround was built. Later doc/runtime checks showed Codex did support hooks, making copied guardrail scripts dead code until registration was fixed.
-
-**Root cause:** A stale platform assumption propagated through templates, install scripts, fact extraction, and setup guides without re-checking against primary docs or the binary.
-
-**Prevention:** When a profile field says an agent "can't" do something, verify against current product docs and runtime evidence before building workarounds. For Codex permission grammar, anchors are `workflow/hooks/agent-config/codex.toml` (search: `hooks = true`), `.goat-flow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), and `src/cli/facts/agent/settings.ts` (search: `collectCodexWorkspaceRootEntries`).
 
 ---
 
@@ -303,13 +240,13 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Status:** active | **Created:** 2026-04-08 | **Merged during:** M11 learning-loop consolidation
 
-**What happened:** Multiple incidents shared the same shape: the agent skipped an AI testing gate after completing milestone tasks, treated an AI gate's "14/14 checks passed" as proof real-world setup worked, skipped session/learning-loop closure steps, or offered to commit after completing work.
+**What happened:** Multiple incidents shared the same shape: the agent skipped an AI testing gate after completing milestone tasks, treated an AI gate's "14/14 checks passed" as proof real-world setup worked, skipped session/learning-loop closure steps, or offered to commit after completing work. On 2026-08-01, M03 was promoted before strict validation caught a human proof row with no estimate, then an estimate outside the declared split.
 
 **Root cause:** Closing rules fire after the primary work feels done, so attention shifts to reporting instead of executing the gate.
 
 **Recurrence update 2026-05-30:** After completing the deny-dangerous hook consolidation, the user asked "whats next". The agent responded with `git add` / `git commit` sequences and a PR follow-up path, even though the user had not asked to commit, stage, push, or open a PR. No commit was executed, but the answer still steered the user into a write workflow as the default next action. The current rule is stronger and unambiguous: `AGENTS.md` (search: `Coding agents never run`) reserves commits and pushes for the user.
 
-**Prevention:** Make closing gates part of the deliverable, not an optional afterword. After completing milestone tasks, run the named testing gate before summary. Report what was done and stop; do not make commits, pushes, PRs, staging commands, or follow-on Git write workflows the default next action. Coding agents never run `git commit` or `git push`, even when asked; hand those operations back to the user. If asked "what's next" after verified work, default to non-mutating options: review the diff, inspect a file, or wait for the requested handoff. Providing a suggested commit message is allowed only when asked for one.
+**Prevention:** Make closing gates part of the deliverable, not an optional afterword. After completing milestone tasks, run the named testing gate and strict plan validation before lifecycle promotion. Report what was done and stop; do not make commits, pushes, PRs, staging commands, or follow-on Git write workflows the default next action. Coding agents never run `git commit` or `git push`, even when asked; hand those operations back to the user. If asked "what's next" after verified work, default to non-mutating options: review the diff, inspect a file, or wait for the requested handoff. Providing a suggested commit message is allowed only when asked for one.
 
 ---
 
@@ -333,22 +270,8 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **What happened:** While evaluating a GitHub PR, the agent staged scratch files in `/tmp` and ran `cd /tmp` to fetch them. From then on every Bash call was blocked by the PreToolUse guard with `BLOCKED: ... git repository root unavailable`, because the launcher runs `git rev-parse` in the session's persistent cwd and `/tmp` is outside any repo. The agent retried Bash several times, then reached for `dangerouslyDisableSandbox` before concluding it was stuck. The block also rejected the recovering `cd <repo>`, since the guard runs before the command's `cd`.
 
-**Root cause:** Two mistakes. (1) It used `/tmp` as scratch space, moving the persistent shell cwd outside the repo, when a repo-local dir (`.goat-flow/scratchpad/`) would have kept cwd inside the tree. (2) On seeing the same `git repository root unavailable` block on every Bash, it treated each as a one-off and retried or hunted for a bypass instead of recognising a cwd-wedge and asking the user to reset the shell. Trap and fix: `.goat-flow/learning-loop/footguns/hooks.md` (search: `outside any git repo`).
+**Root cause:** Two mistakes. (1) It used `/tmp` as scratch space, moving the persistent shell cwd outside the repo, when a repo-local dir (`.goat-flow/scratchpad/`) would have kept cwd inside the tree. (2) On seeing the same `git repository root unavailable` block on every Bash, it treated each as a one-off and retried or hunted for a bypass instead of recognising a cwd-wedge and asking the user to reset the shell. Trap and fix: `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `outside any git repo`).
 
 **Prevention:**
 1. Keep scratch work inside the repo - use `.goat-flow/scratchpad/` (gitignored), never `cd /tmp`. The persistent Bash cwd must not leave the repo tree while a cwd-relative guard is active.
 2. A repeated `git repository root unavailable` (or `Guard cannot start`) block on every Bash means the shell cwd is outside the repo. Do not retry or disable the guard - ask the user to type `!cd <repo>` to reset the persisted cwd, and keep working through Read/Edit/Write meanwhile.
-
----
-
-## Lesson: Absence claims need untruncated searches
-
-**Created:** 2026-07-03
-
-**What happened:** While assessing loop coverage, `grep -n "stats\|quality\|audit\|index" scripts/preflight-checks.sh | head -20` showed no `stats` hit, and the analysis claimed `stats --check` ran in no local gate. The `head -20` had truncated the match list; preflight's Learning-Loop Schema section already ran `node dist/cli/cli.js stats . --check`. The user's "double check" instruction exposed the false absence claim before it shaped the fix.
-
-**Root cause:** A multi-pattern grep piped through `head` answers "what appears early", not "does X appear at all". The absence conclusion was drawn from a presence-oriented, truncated probe.
-
-**Prevention:** Before claiming a pattern is absent from a file or repo, rerun the exact single pattern with no `head`/`tail` truncation (or `grep -c`). Treat any `| head` output as a sample, never as evidence of absence. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
-
----

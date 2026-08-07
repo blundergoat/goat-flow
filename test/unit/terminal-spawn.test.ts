@@ -3,6 +3,16 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import {
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 
 import {
   buildTerminalSpawnSpec,
@@ -94,5 +104,504 @@ describe("buildTerminalSpawnSpec", () => {
 
     assert.equal(spec.initialInput, null);
     assert.equal(spec.env.GOAT_PROMPT, undefined);
+  });
+
+  it("launches Claude reporting sessions with a restrictive settings overlay", () => {
+    const spec = buildTerminalSpawnSpec(
+      "claude",
+      "/usr/local/bin/claude",
+      "",
+      { SHELL: "/bin/bash" },
+      "linux",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+
+    const shellCommand = spec.args.join("\n");
+    const rawSettings = spec.env.GOAT_CLAUDE_REPORTING_SETTINGS ?? "";
+    assert.match(shellCommand, /--setting-sources=/);
+    assert.match(shellCommand, /--settings "\$GOAT_CLAUDE_REPORTING_SETTINGS"/);
+    assert.match(shellCommand, /--permission-mode dontAsk/);
+    assert.doesNotMatch(shellCommand, /\|\|/);
+    assert.ok(rawSettings.length > 0);
+
+    const settings = JSON.parse(rawSettings) as {
+      permissions: {
+        defaultMode: string;
+        disableBypassPermissionsMode: string;
+        additionalDirectories: string[];
+        allow: string[];
+        deny: string[];
+      };
+    };
+    assert.equal(settings.permissions.defaultMode, "dontAsk");
+    assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
+    assert.deepStrictEqual(settings.permissions.additionalDirectories, []);
+    assert.equal(settings.permissions.allow.includes("Read"), false);
+    assert.equal(settings.permissions.allow.includes("Glob"), false);
+    assert.equal(settings.permissions.allow.includes("Grep"), false);
+    assert.equal(
+      settings.permissions.allow.filter((rule) => rule.startsWith("Read("))
+        .length,
+      1,
+    );
+    assert.match(
+      settings.permissions.allow.find((rule) => rule.startsWith("Read(")) ?? "",
+      /^Read\(\/\/.+\/\*\*\)$/u,
+    );
+    // ADR-044: persistence is dashboard-owned, so NO saver or source-CLI Bash
+    // rules remain.
+    assert.deepStrictEqual(
+      settings.permissions.allow.filter((rule) => rule.startsWith("Bash")),
+      [],
+    );
+    assert.equal(
+      settings.permissions.allow.some(
+        (rule) =>
+          rule === "Bash" ||
+          rule === "Bash(*)" ||
+          /Bash\((?:node|goat-flow) \*\)/u.test(rule) ||
+          /quality save/u.test(rule),
+      ),
+      false,
+    );
+    assert.ok(
+      settings.permissions.allow.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/\*\*\)/.test(rule),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/README\.md\)/.test(rule),
+      ),
+    );
+    // Finalized reports are server-written; the single-level `*.json` deny
+    // must protect them while leaving the staging/ subdirectory writable.
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/\*\.json\)/.test(rule),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/staging\/goat-quality-result-\*\.json\)/u.test(
+          rule,
+        ),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/staging\/goat-quality-claim-\*\.json\)/u.test(
+          rule,
+        ),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Edit\(\/\/.*\/\.goat-flow\/logs\/quality\/staging\/goat-quality-reap-\*\.json\)/u.test(
+          rule,
+        ),
+      ),
+    );
+    assert.ok(
+      settings.permissions.deny.some((rule) =>
+        /Read\(\/\/.*\/\*\*\/\.env\)/.test(rule),
+      ),
+    );
+    assert.ok(settings.permissions.deny.includes("Read(~/.ssh/**)"));
+    assert.ok(
+      settings.permissions.deny.includes("Read(~/.claude/.credentials.json)"),
+    );
+
+    const windowsSpec = buildTerminalSpawnSpec(
+      "claude",
+      "C:\\Users\\dev\\AppData\\Roaming\\npm\\claude.cmd",
+      "",
+      {},
+      "win32",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+    const windowsCommand = windowsSpec.args.join("\n");
+    assert.match(windowsCommand, /--setting-sources=/);
+    assert.match(
+      windowsCommand,
+      /--settings \$env:GOAT_CLAUDE_REPORTING_SETTINGS/,
+    );
+    assert.match(windowsCommand, /--permission-mode dontAsk/);
+    assert.match(
+      windowsCommand,
+      /Remove-Item Env:GOAT_CLAUDE_REPORTING_SETTINGS/,
+    );
+  });
+
+  // Fixture writes and removes a parenthesized project because `)` must remain rule content.
+  it("preserves parenthesized project paths in Claude permission rules", () => {
+    const parenthesizedProjectPath = mkdtempSync(
+      join(tmpdir(), "goat-terminal-my (old) app-"),
+    );
+    try {
+      const spec = buildTerminalSpawnSpec(
+        "claude",
+        "/usr/local/bin/claude",
+        "",
+        { SHELL: "/bin/bash" },
+        "linux",
+        {
+          accessMode: "reporting",
+          projectPath: parenthesizedProjectPath,
+          targetPath: parenthesizedProjectPath,
+        },
+      );
+      const settings = JSON.parse(
+        spec.env.GOAT_CLAUDE_REPORTING_SETTINGS ?? "",
+      ) as { permissions: { allow: string[]; deny: string[] } };
+      const permissionPath = `//${parenthesizedProjectPath.replace(/^\/+/, "")}`;
+
+      assert.ok(
+        settings.permissions.allow.includes(`Read(${permissionPath}/**)`),
+      );
+      assert.ok(
+        settings.permissions.deny.includes(`Read(${permissionPath}/**/.env)`),
+      );
+    } finally {
+      rmSync(parenthesizedProjectPath, { recursive: true, force: true });
+    }
+  });
+
+  // Covers credentials under the active Claude config directory: the fixture writes them and expects denial.
+  it("denies credentials under the active Claude config directory", () => {
+    const tempRoot = mkdtempSync(
+      join(tmpdir(), "goat-terminal-claude-config-"),
+    );
+    const configDirectory = join(tempRoot, "claude-config");
+    try {
+      mkdirSync(configDirectory);
+      const spec = buildTerminalSpawnSpec(
+        "claude",
+        "/usr/local/bin/claude",
+        "",
+        {
+          SHELL: "/bin/bash",
+          CLAUDE_CONFIG_DIR: configDirectory,
+        },
+        "linux",
+        {
+          accessMode: "reporting",
+          projectPath: process.cwd(),
+          targetPath: process.cwd(),
+        },
+      );
+
+      const settings = JSON.parse(
+        spec.env.GOAT_CLAUDE_REPORTING_SETTINGS ?? "",
+      ) as { permissions: { deny: string[] } };
+      assert.ok(
+        settings.permissions.deny.some((rule) =>
+          /^Read\(\/\/.*\/claude-config\/\.credentials\.json\)$/u.test(rule),
+        ),
+      );
+      assert.ok(
+        settings.permissions.deny.some((rule) =>
+          /^Edit\(\/\/.*\/claude-config\/\.credentials\.json\)$/u.test(rule),
+        ),
+      );
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps ordinary Claude terminals free of reporting restrictions", () => {
+    const spec = buildTerminalSpawnSpec(
+      "claude",
+      "/usr/local/bin/claude",
+      "",
+      { SHELL: "/bin/bash" },
+      "linux",
+    );
+
+    const shellCommand = spec.args.join("\n");
+    assert.doesNotMatch(shellCommand, /--setting-sources/);
+    assert.doesNotMatch(shellCommand, /--permission-mode dontAsk/);
+    assert.equal(spec.env.GOAT_CLAUDE_REPORTING_SETTINGS, undefined);
+  });
+
+  it("closes reporting shells after the runner exits on Windows and POSIX", () => {
+    const posixSpec = buildTerminalSpawnSpec(
+      "claude",
+      "/usr/local/bin/claude",
+      "run the quality report",
+      { SHELL: "/bin/bash" },
+      "linux",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+    const windowsSpec = buildTerminalSpawnSpec(
+      "claude",
+      "C:\\Users\\dev\\AppData\\Roaming\\npm\\claude.cmd",
+      "run the quality report",
+      {},
+      "win32",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+
+    assert.doesNotMatch(posixSpec.args.join("\n"), /exec "\$SHELL" -i/u);
+    assert.equal(windowsSpec.args.includes("-NoExit"), false);
+    assert.match(posixSpec.args.join("\n"), /unset GOAT_RUNNER/u);
+    assert.match(windowsSpec.args.join("\n"), /Remove-Item Env:GOAT_RUNNER/u);
+  });
+
+  it("launches Codex reporting sessions with a restricted permission profile", () => {
+    const spec = buildTerminalSpawnSpec(
+      "codex",
+      "/usr/local/bin/codex",
+      "",
+      { SHELL: "/bin/bash" },
+      "linux",
+      {
+        accessMode: "reporting",
+        projectPath: process.cwd(),
+        targetPath: process.cwd(),
+      },
+    );
+
+    const shellCommand = spec.args.join("\n");
+    const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
+    assert.doesNotMatch(shellCommand, /--sandbox danger-full-access/);
+    assert.match(shellCommand, /--ask-for-approval never/);
+    assert.match(shellCommand, /GOAT_CODEX_REPORTING_PROFILE/);
+    assert.match(shellCommand, /default_permissions/);
+    assert.match(profile, /extends=":read-only"/);
+    assert.match(profile, /filesystem=\{glob_scan_max_depth=3,/);
+    assert.ok(profile.includes(`${JSON.stringify(process.cwd())}=true`));
+    assert.ok(
+      profile.includes(
+        `${JSON.stringify(join(process.cwd(), ".goat-flow/logs"))}="write"`,
+      ),
+    );
+    assert.ok(
+      profile.includes(
+        `${JSON.stringify(join(process.cwd(), ".goat-flow/logs/quality/README.md"))}="read"`,
+      ),
+    );
+    assert.match(profile, /"\*\*\/\.env"="deny"/);
+  });
+
+  it("rejects a Codex report owner outside the two projects shown to the user", () => {
+    assert.throws(
+      () =>
+        buildTerminalSpawnSpec(
+          "codex",
+          "/usr/local/bin/codex",
+          "",
+          { SHELL: "/bin/bash" },
+          "linux",
+          {
+            accessMode: "reporting",
+            projectPath: process.cwd(),
+            targetPath: process.cwd(),
+            qualityReportProjectPath: "/tmp/unrelated-report-owner",
+          },
+        ),
+      /Quality report owner must match/u,
+    );
+  });
+
+  // Covers build-directory writes: granted only when Git proves the directory is ignored.
+  it("grants build-directory writes only when Git proves they are ignored", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-ignored-root-"));
+    try {
+      mkdirSync(join(tempRoot, "dist"), { recursive: true });
+      mkdirSync(join(tempRoot, ".goat-flow", "plans"), { recursive: true });
+      writeFileSync(
+        join(tempRoot, ".goat-flow", "plans", "README.md"),
+        "# Plans\n",
+      );
+      writeFileSync(join(tempRoot, ".gitignore"), "dist/\n");
+      execFileSync("git", ["-C", tempRoot, "init", "--quiet"]);
+      execFileSync("git", ["-C", tempRoot, "add", ".gitignore"]);
+
+      const spec = buildTerminalSpawnSpec(
+        "codex",
+        "/usr/local/bin/codex",
+        "",
+        { SHELL: "/bin/bash" },
+        "linux",
+        {
+          accessMode: "reporting",
+          projectPath: tempRoot,
+          targetPath: tempRoot,
+        },
+      );
+
+      const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
+      assert.match(profile, /"dist"="write"/);
+      assert.doesNotMatch(profile, /"build"="write"/);
+      assert.match(profile, /"\.goat-flow\/plans\/README\.md"="read"/);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Covers all quality modes when the target owner has not created its local log tree yet.
+  it("grants Codex log writes only to each quality mode's report owner", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-profile-"));
+    const controllerPath = join(tempRoot, "controller");
+    const targetPath = join(tempRoot, "target");
+    try {
+      mkdirSync(join(controllerPath, ".goat-flow/logs/quality"), {
+        recursive: true,
+      });
+      for (const rootPath of [controllerPath, targetPath]) {
+        mkdirSync(join(rootPath, "dist"), { recursive: true });
+        writeFileSync(join(rootPath, ".gitignore"), "dist/\n");
+        writeFileSync(join(rootPath, "dist/local.txt"), "ignored\n");
+        execFileSync("git", ["-C", rootPath, "init", "--quiet"]);
+        execFileSync("git", ["-C", rootPath, "add", ".gitignore"]);
+      }
+      writeFileSync(
+        join(controllerPath, ".goat-flow/logs/quality/custom.md"),
+        "tracked\n",
+      );
+      execFileSync("git", [
+        "-C",
+        controllerPath,
+        "add",
+        ".goat-flow/logs/quality/custom.md",
+      ]);
+
+      const ownerByQualityMode = [
+        ["process", controllerPath],
+        ["skills", controllerPath],
+        ["agent-setup", targetPath],
+        ["harness", targetPath],
+      ] as const;
+      // Every mode must grant exactly the owner the Quality UI presents to the user.
+      for (const [
+        qualityMode,
+        qualityReportProjectPath,
+      ] of ownerByQualityMode) {
+        const spec = buildTerminalSpawnSpec(
+          "codex",
+          "/usr/local/bin/codex",
+          "",
+          { SHELL: "/bin/bash" },
+          "linux",
+          {
+            accessMode: "reporting",
+            projectPath: controllerPath,
+            targetPath,
+            qualityReportProjectPath,
+          },
+        );
+        const profile = spec.env.GOAT_CODEX_REPORTING_PROFILE ?? "";
+        const otherProjectPath =
+          qualityReportProjectPath === controllerPath
+            ? targetPath
+            : controllerPath;
+
+        assert.ok(
+          profile.includes(
+            `${JSON.stringify(join(qualityReportProjectPath, ".goat-flow/logs"))}="write"`,
+          ),
+          `${qualityMode} must grant its report owner`,
+        );
+        assert.equal(
+          profile.includes(
+            `${JSON.stringify(join(otherProjectPath, ".goat-flow/logs"))}="write"`,
+          ),
+          false,
+          `${qualityMode} must not grant the other project`,
+        );
+        assert.match(profile, /"dist"="write"/);
+      }
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it(
+    "omits write roots whose parent symlink escapes the project",
+    { skip: process.platform === "win32" },
+    () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-symlink-"));
+      const projectPath = join(tempRoot, "project");
+      const outsidePath = join(tempRoot, "outside");
+      try {
+        mkdirSync(projectPath);
+        mkdirSync(join(outsidePath, "logs"), { recursive: true });
+        symlinkSync(outsidePath, join(projectPath, ".goat-flow"), "dir");
+
+        const claudeSpec = buildTerminalSpawnSpec(
+          "claude",
+          "/usr/local/bin/claude",
+          "",
+          { SHELL: "/bin/bash" },
+          "linux",
+          {
+            accessMode: "reporting",
+            projectPath,
+            targetPath: projectPath,
+          },
+        );
+        const claudeSettings = JSON.parse(
+          claudeSpec.env.GOAT_CLAUDE_REPORTING_SETTINGS ?? "",
+        ) as { permissions: { allow: string[] } };
+        assert.equal(
+          claudeSettings.permissions.allow.some(
+            (rule) =>
+              rule.startsWith("Edit(") && rule.includes(".goat-flow/logs"),
+          ),
+          false,
+        );
+
+        const codexSpec = buildTerminalSpawnSpec(
+          "codex",
+          "/usr/local/bin/codex",
+          "",
+          { SHELL: "/bin/bash" },
+          "linux",
+          {
+            accessMode: "reporting",
+            projectPath,
+            targetPath: projectPath,
+          },
+        );
+        assert.equal(
+          (codexSpec.env.GOAT_CODEX_REPORTING_PROFILE ?? "").includes(
+            `${JSON.stringify(join(projectPath, ".goat-flow/logs"))}="write"`,
+          ),
+          false,
+        );
+      } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("keeps ordinary Codex terminals on the write-enabled dashboard profile", () => {
+    const spec = buildTerminalSpawnSpec(
+      "codex",
+      "/usr/local/bin/codex",
+      "",
+      { SHELL: "/bin/bash" },
+      "linux",
+    );
+
+    assert.match(spec.args.join("\n"), /--sandbox danger-full-access/);
+    assert.equal(spec.env.GOAT_CODEX_REPORTING_PROFILE, undefined);
   });
 });

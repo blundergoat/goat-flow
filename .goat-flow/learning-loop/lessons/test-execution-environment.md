@@ -1,11 +1,14 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-07-17
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
 
 **Status:** active | **Created:** 2026-06-13
+**Trigger phase:** VERIFY
+**Incident count:** 5 | **Latest occurrence:** 2026-08-06
+**Decision changed:** Recursive ripgrep searches over gitignored plan or log trees must use `--no-ignore` or `-uuu` and a known-positive control before a zero-match result is accepted.
 
 **What happened:** During the M02b review, `grep -rl "plan-checkbox-guard" .goat-flow --include="*.md"` returned nothing even though `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` and ADR-038 matched when grepped directly. `type grep` showed the Claude Code session shell defines `grep` as a function that execs the claude binary as `ugrep -G --ignore-files --hidden -I ...`, and `--ignore-files` applies `.gitignore`-style ignore files during recursion - so sweeps that descend into ignored trees (`.goat-flow/plans/`, `.goat-flow/logs/`) silently return clean.
 
@@ -13,9 +16,13 @@ last_reviewed: 2026-07-17
 
 **Recurrence 2026-07-03:** During the 1.13.0 plan review, recursive greps for stale roadmap tokens (`1.9.2`, `GEMINI`, `1.13.0/M`) over `.goat-flow/plans/` returned zero hits, and the reviewer concluded the stale classes were "phantom" - even though the reviewed plans themselves warned to use `rg -uuu`. The tell that finally exposed it: a pattern KNOWN to exist (the literal `1.9.2` inside a plan file read moments earlier) also returned zero. `find .goat-flow/plans -name '*.md' | xargs grep -l` then found 25+ live files per class. The false conclusion survived several verification rounds because every zero-hit result looked like a clean answer, not a broken tool.
 
+**Recurrence 2026-08-04:** After deleting a commit-subject gate script from `scripts/` and pruning its references, a recursive sweep for its filename and helper symbols returned nothing and was reported to the user as "zero residual references". The wrapper had skipped `.goat-flow/logs/` and `.goat-flow/plans/`, where 17 references survived. The tell surfaced only by luck on an unrelated task: a sweep for `executed=[0-9]` missed `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `mode=smoke, executed=`) moments after that exact line had been read from the file - the known-positive control from Prevention, hit by accident rather than by discipline. Removal-completeness claims are the highest-risk use of this tool, because a false clean and a real clean are the same empty output.
+
+**Recurrence 2026-08-06:** During a 12-directory roadmap shift, `rg --hidden` reported zero old-version matches under `.goat-flow/plans/`, and the in-progress audit treated that as a clean result. Reading a renamed milestone directly exposed multiple `1.16.0` references; rerunning with `rg --no-ignore --hidden` found 14 matches for that version and the remaining roadmap references. Evidence anchors: `.goat-flow/plans/.gitignore` (search: `*`), `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`).
+
 **Root cause:** I treated recursive `grep` output as filesystem truth. In this environment it is gitignore-filtered, which can false-clean a verification sweep exactly where stale or historical content lives.
 
-**Prevention:** For verification sweeps that must include gitignored content, use `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with `command grep`. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
+**Prevention:** For verification sweeps that must include gitignored content, use `rg --no-ignore` / `rg -uuu`, `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with an ignore-bypassing search. When the question is "is this consistent in what ships" rather than "does this string exist on disk", prefer `git grep` - it searches tracked files by construction, so local logs, plans, and scratch artifacts cannot mask a real residue or manufacture a false one. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
 
 ---
 
@@ -29,7 +36,7 @@ last_reviewed: 2026-07-17
 
 **Recurrence 2026-06-14:** A Codex workspace-terminal `bash scripts/preflight-checks.sh` run reached `TESTS` and then stayed silent while `scripts/preflight-checks.sh` captured `npm run test:coverage` output. Process inspection showed the only remaining test workers were `test/integration/gruff-code-quality-contract.test.ts` and `test/integration/gruff-code-quality-smoke.test.ts`, each blocked under `workflow/hooks/gruff-code-quality.sh` at `read_stdin` -> `cat`. The shared gruff test helper still used `spawnSync("bash", [HOOK], { input: JSON.stringify(payload) })`, so it needed the same file-redirection mitigation.
 
-**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only fd or shell redirection instead of `spawnSync(..., { input })`. Capture hook stderr explicitly if the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.test.ts` (search: `runLauncherWithPayload`).
+**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only fd or shell redirection instead of `spawnSync(..., { input })`. Capture hook stderr explicitly if the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runLauncherWithPayload`).
 
 ---
 
@@ -45,31 +52,23 @@ last_reviewed: 2026-07-17
 
 ---
 
-## Lesson: Test runners need CI-runtime reproduction when local Node is newer
-
-**Status:** active | **Created:** 2026-06-07
-
-**What happened:** PR #48 local verification ran on Node 22 and passed the programmatic `node:test` runner path. GitHub Actions ran Node 20.20.2 and failed every `.ts` test with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts"` because the programmatic runner's `execArgv: ["--import", "tsx"]` path did not behave like the CLI preload path on the supported minimum Node version.
-
-**Root cause:** The package advertised `node >=20.11.0`, but the first implementation was verified only on a newer local runtime. A green local `npm test` did not prove the CI-supported runtime could load TypeScript tests.
-
-**Prevention:** When changing test infrastructure, reproduce the package's minimum supported Node path or the exact CI runner before treating local test output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. Evidence anchor: `scripts/run-tests.mjs` (search: `--import`).
-
----
-
 ## Lesson: Real-timer terminal smoke tests need isolated verification
 
 **Status:** active | **Created:** 2026-05-30
 
-**Decision changed:** Process-lifecycle tests wait for an observable ready state before sending termination signals; elapsed time alone is never readiness. | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-07-17
+**Decision changed:** Process-lifecycle tests wait for an observable ready state before sending termination signals; elapsed time alone is never readiness. | **Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-08-06
 
 **What happened:** During `docs.missing-internal-function-doc` cleanup, a combined focused command that grouped the dashboard smoke test with heavier unit suites failed `uses the fallback deadline when runner output keeps updating`: `spawned.writes` was still `[]` at the 5600ms assertion. The touched code was comment-only. Rerunning `node --import tsx --test test/smoke/dashboard-endpoints.test.ts` immediately afterward passed with `# pass 15` / `# fail 0`; the two edited unit files also passed in isolated runs.
 
 **Recurrence 2026-07-17:** PR #56 CI run `29530759253` failed `cleans the child process group before returning a parent termination` after 255ms. The test sent SIGTERM 200ms after launching an intermediate Node runner, before its nested fixture emitted either PID marker. My first correction tried to wait for those markers on the runner's stdout, but the production runner intentionally buffers child output until close; exact Node 20 verification then failed `124 !== 143`. The corrected fixture uses an out-of-band readiness file created only after both processes exist.
 
+**Recurrence 2026-08-05:** PR #57 CI run `30947991560` failed `shows retry progress before close while keeping child output captured` because the test compared two-decimal elapsed labels and required each displayed interval to be at least 0.03 seconds. CPU contention reproduced the failure even though progress remained bounded and visible. The correction makes the child remain alive until the fixture observes the first progress event through an out-of-band readiness file; it asserts the lifecycle contract without treating rounded display cadence as scheduler evidence.
+
+**Recurrence 2026-08-06:** PR #57 pull-request run `31097377526` failed `returns after escalation when an escaped descendant retains the capture pipe` because its 100 ms timeout fired before the Node fixture wrote the detached child's PID. The push run for the same commit passed. The corrected fixture signals parent cleanup only after an out-of-band ready file proves the escaped child exists, while the production deadline remains unchanged.
+
 **Root cause:** Real-timer tests treated scheduler time as proof that an asynchronous process or terminal had reached the state their assertions required. Heavy concurrent work can delay that state independently of the timer, and buffered output cannot serve as a live readiness signal.
 
-**Prevention:** Isolate real-timer smoke tests from heavy suites. For process lifecycle tests, synchronize on an observable ready state through a channel whose contract is live at that point; do not sleep for an assumed startup window or wait on output that is documented to flush only at close. Reproduce failures on the CI-supported Node runtime before treating a newer local runtime as disproof. Evidence anchors: `test/smoke/dashboard-endpoints.test.ts` (search: `uses the fallback deadline when runner output keeps updating`), `test/integration/preflight-progress.test.ts` (search: `parentStopAfterFile`), `scripts/preflight-command-runner.mjs` (search: `capturedOutputChunks`).
+**Prevention:** Isolate real-timer smoke tests from heavy suites. For process lifecycle tests, synchronize on an observable ready state through a channel whose contract is live at that point; do not sleep for an assumed startup window or wait on output that is documented to flush only at close. Reproduce failures on the CI-supported Node runtime before treating a newer local runtime as disproof. Evidence anchors: `test/smoke/dashboard-endpoints.test.ts` (search: `uses the fallback deadline when runner output keeps updating`), `test/integration/preflight-progress.test.ts` (search: `progressReadyFile`), `scripts/preflight-command-runner.mjs` (search: `capturedOutputChunks`).
 
 ---
 
@@ -87,59 +86,11 @@ last_reviewed: 2026-07-17
 
 **Recurrence 2026-05-28:** A fake-timer fix added `TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS = 1500` and the built bundle contained it, but live WebSocket probing still showed bracketed paste followed by xterm DA response `\x1b[?1;2c` and then no Enter. The missing test variable was xterm's own protocol replies through `term.onData`: they were forwarded like keystrokes and cleared the pending fallback timer. Future terminal-submit tests must model the actual browser input stream, not just helper timers. Evidence anchors: `src/dashboard/dashboard-terminal.ts` (search: `dashboardTerminalDataLooksProtocolResponse`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `keeps Claude no-marker fallback armed across xterm protocol replies`).
 
----
+**Recurrence 2026-07-31:** A live Claude file-tool probe proved that `.goat-flow/logs/quality/` was writable, but the real generated quality prompt still failed because its redaction-and-validation Bash block was denied under `dontAsk`. The surrogate tested directory permission, not the complete persistence contract. The replacement moves persistence behind `quality save`, and the focused contract now exercises its exact heredoc command through the deny hook. Evidence anchors: `src/cli/quality/quality-command.ts` (search: `handleQualitySaveSubcommand`), `test/unit/quality-report-contract.test.ts` (search: `sends a realistic 60-field report block through the actual deny hook`).
 
-## Lesson: `node --import <abs-path>` on Windows needs a file:// URL
+**Recurrence 2026-07-31 (prompt envelope):** The first bounded-saver retry generated a quality prompt through the CLI's default JSON output, then passed the complete `{ prompt, auditSummary }` envelope to Claude instead of the raw prompt. Claude still found the embedded instructions, but the run did not reproduce the dashboard payload shape and could not close the live boundary. Evidence anchor: `src/cli/quality/quality-command.ts` (search: `if (options.format === "json")`).
 
-**Status:** active | **Created:** 2026-05-11
-
-**What happened:** Two `runCLI` test helpers (`test/unit/quality-command.test.ts`, `test/integration/quality-history-diff.test.ts`) passed `join(PROJECT_ROOT, "node_modules", "tsx", "dist", "loader.mjs")` to `spawnSync(process.execPath, ["--import", TSX_LOADER_PATH, ...])`. On Windows the path is `D:\dev-lab\...\loader.mjs`. Node's ESM loader rejected it with `ERR_UNSUPPORTED_ESM_URL_SCHEME: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. On Windows, absolute paths must be valid file:// URLs. Received protocol 'd:'.` Every test that shelled out via the helper failed with exit 1 - looked like CLI bugs, was actually the spawn shape. 25-test full-suite failure baseline on 2026-05-11 included these as 7-8 of the original count.
-
-**Root cause:** Node's `--import` flag goes through the ESM loader, which parses the value as a URL. Drive-letter `D:` looks like a scheme. POSIX absolute paths happen to be valid `file://` -less URLs on Linux/macOS so the bug never surfaces there.
-
-**Fix:** Convert the loader path via `pathToFileURL(...).href` before passing to `--import`:
-```ts
-import { pathToFileURL } from "node:url";
-const TSX_LOADER_URL = pathToFileURL(
-  join(PROJECT_ROOT, "node_modules", "tsx", "dist", "loader.mjs"),
-).href;
-spawnSync(process.execPath, ["--import", TSX_LOADER_URL, CLI_PATH, ...args], ...);
-```
-
-**Prevention:**
-1. Any test that spawns Node with `--import`, `--loader`, or `--experimental-loader` and passes an absolute path must convert it via `pathToFileURL` first.
-2. Same rule applies to dynamic `import()` of absolute paths in production code on Windows. `import("D:\\...\\foo.js")` will throw; `import(pathToFileURL("D:\\...\\foo.js").href)` works.
-3. Treat `ERR_UNSUPPORTED_ESM_URL_SCHEME` as a likely Windows path-shape issue, not an actual code bug, until the file:// conversion is verified.
-
----
-
-## Lesson: Windows test runs require explicit EPERM handling for symlink fixtures
-
-**Status:** active | **Created:** 2026-05-11
-
-**What happened:** Three tests (`main-module guard via symlink`, `skips symlink entries in skill walk roots`, `rejects upload paths that escape through symlinked components`) call `fs.symlinkSync()` to build fixtures. On Windows without Developer Mode (or admin rights), `symlinkSync` throws `EPERM: operation not permitted`. The tests failed because they treated the fixture setup as guaranteed; the production code under test is correct on all platforms, but the test harness can't reach it.
-
-**Root cause:** Windows blocks unprivileged symlink creation by default. Test fixtures need to be defensive about platform capabilities. Plain `assert.fail`-on-error is wrong because the test infrastructure - not the code under test - is unreachable.
-
-**Fix:** Wrap `symlinkSync` in a helper that catches `EPERM` and calls `t.skip(...)`:
-```ts
-function symlinkOrSkip(t: TestContext, target: string, link: string): boolean {
-  try { symlinkSync(target, link); return true; }
-  catch (err) {
-    if (err instanceof Error && (err as NodeJS.ErrnoException).code === "EPERM") {
-      t.skip("Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)");
-      return false;
-    }
-    throw err;
-  }
-}
-```
-Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`) and bails early when the helper returns false. Evidence: `test/integration/main-guard.test.ts` (search: `symlinkOrSkip`), `test/unit/skill-quality/helpers.ts` (search: `symlinkOrSkip`), `test/unit/terminal-uploads.test.ts` (search: `symlinkOrSkip`).
-
-**Prevention:**
-1. Any new test that calls `symlinkSync`, `linkSync`, or any privileged fs op must guard against `EPERM` with a `t.skip(...)`.
-2. The skip message must name the platform constraint so a reader knows why coverage dropped, not just that it dropped.
-3. Don't try to detect "is Windows" via `process.platform` - the privilege depends on Developer Mode / admin context, not the OS. Always try-and-catch.
+**Prevention update:** When a prompt-generated workflow crosses tool and permission boundaries, reproduce the exact generated command and payload through the real runner. Use `--format text` or parse `.prompt` deliberately, then assert the payload shape before launch. A file-tool write, parser unit, permission-rule probe, or escaped JSON envelope proves only its own layer.
 
 ---
 
@@ -183,19 +134,17 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 ---
 
-## Lesson: Focused TypeScript tests in this repo need the `tsx` loader
+## Lesson: Focused TypeScript tests need verified paths and the `tsx` loader
 
-**Status:** active | **Created:** 2026-04-29
+**Status:** active | **Created:** 2026-04-29 | **Incident count:** 2 | **Latest occurrence:** 2026-08-01
 
-**What happened:** The first focused verification run used `node --test test/smoke/dashboard-endpoints.test.ts` and failed with `ERR_MODULE_NOT_FOUND` while resolving the source module at `src/cli/server/terminal.ts`. The code change was not the problem; the test file imports source modules using `.js` specifiers that are resolved correctly when the repo's TypeScript loader is active.
+**What happened:** `node --test test/smoke/dashboard-endpoints.test.ts` failed resolving source `.js` specifiers because the focused command omitted this repo's `tsx` loader.
 
-**Root cause:** I ran the focused suite outside the repo's declared test invocation path. `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`) makes `tsx` part of the contract for source-mode tests, so plain `node --test` is a verification mistake here, not reliable failure evidence.
+**Root cause:** I guessed a focused invocation instead of resolving the path and runner contract first.
 
-**Fix:** Re-run focused TypeScript tests with `node --import tsx --test <file>` before treating missing-module output as a real regression.
+**Recurrence 2026-08-01:** I derived nonexistent `test/unit/preflight-command-runner.test.mjs` from the source name. `rg --files | rg 'preflight|command-runner'` found `test/integration/preflight-progress.test.ts`; the corrected command passed all nine cases.
 
-**Prevention:**
-1. When a focused repo test imports `src/**/*.js` from the source tree, check `package.json` for the required loader before running it directly.
-2. Treat a plain-Node `ERR_MODULE_NOT_FOUND` on source `.js` specifiers as a likely invocation-path problem until the `tsx`-loaded run fails too.
+**Prevention:** Resolve focused paths with `rg --files`, then use `node --import tsx --test <specific-file.test.ts>` as declared by `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`). A missing target or plain-Node source-resolution error is invocation failure until that resolved command also fails.
 
 ---
 
@@ -220,20 +169,6 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 **Root cause:** The installer verified the Python modules and direct Playwright launch path, but not the generated `browser-use` wrapper and daemon launch path. In this root container, browser-use's Docker detection returned false, so it omitted Chrome's no-sandbox flags and Chrome exited before CDP came up. `browser-use close` also removed session metadata while leaving the daemon/browser process alive in this environment.
 
 **Prevention:** Browser tooling installers must run a real wrapper-level smoke: `command -v browser-use`, `browser-use open` against a localhost-served page, a DOM/title read, and session cleanup. For root-run wrappers, set `IN_DOCKER=true` before `browser_use.config` imports so Chrome gets no-sandbox flags. Snapshot and reap browser-use daemon PIDs around `close`, because PID files may disappear before the process exits. Evidence anchors: `scripts/install-browser-tools.sh` (search: `browser-use uses IN_DOCKER`), `scripts/install-browser-tools.sh` (search: `Verifying browser-use CLI launches`), `scripts/install-browser-tools.sh` (search: `browser_use_kill_pid`).
-
----
-
-## Lesson: Shared npm build scripts must avoid shell builtins on Windows
-
-**Status:** active | **Created:** 2026-04-29
-
-**What happened:** `npm run dashboard` failed on Windows during `build:dashboard` with `The syntax of the command is incorrect.` even though Git's Unix tools were available on `PATH`. Reproducing the subcommand under `cmd.exe` showed `mkdir -p dist/dashboard` failing before the later copy steps ran.
-
-**Root cause:** npm uses `cmd.exe` by default on Windows when `script-shell` is unset. Mixed shell chains are only partially portable in that setup: external GNU helpers such as `rm`, `cp`, and `chmod` may resolve from Git for Windows, but `cmd` still intercepts builtins like `mkdir` and applies Windows syntax rules.
-
-**Prevention:** For shared npm scripts that create, remove, copy, discover, or glob files, prefer `node:fs` or an explicit cross-platform helper instead of raw `rm -rf`, `mkdir -p`, `cp`, `chmod`, shell command substitution, or shell-expanded globs in `package.json`. Evidence anchors: `package.json` (search: `require('node:fs').rmSync`), reproduction command `cmd /d /c "mkdir -p dist/dashboard"` -> `The syntax of the command is incorrect.`
-
-**Updated 2026-06-07:** Windows preflight exposed the same portability class in test scripts: `npm run test:fast` failed before the suite started because `cmd.exe` parsed the Bash-only `$(find ... | sort)` expression as a Windows command, producing `'sort)' is not recognized as an internal or external command`. The fix moved test discovery into `scripts/run-tests.mjs` (search: `filesForMode`) and changed `package.json` (search: `node scripts/run-tests.mjs fast`) so `test:fast`, `test:coverage`, `test:slow`, and `test:performance` no longer depend on npm's shell.
 
 ---
 
@@ -275,4 +210,40 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 **Recurrence 2026-06-14:** While searching for this lesson, I put the literal Markdown title `` `npx vitest` is not this repo's runner `` inside a double-quoted `rg` pattern. Bash treated the backticked text as command substitution and launched `npx vitest`, reproducing the same wrong-runner failure mode from a read-only search.
 
-**Prevention:** Use `node scripts/run-tests.mjs fast` (or `npm test`) for suite runs and `node --import tsx --test <specific-file.test.ts>` for focused files. Do not use `npx vitest` here. Read `No test suite found` originating from a `_temp/stryker-tmp/sandbox-*` path as a wrong-runner signal, not a product failure. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), `.gitignore` (search: `_temp`).
+**Prevention:** Use `node scripts/run-tests.mjs fast` (or `npm test`) for suite runs and `node --import tsx --test <specific-file.test.ts>` for focused files. Do not use `npx vitest` here. Read `No test suite found` originating from a `_temp/stryker-tmp/sandbox-*` path as a wrong-runner signal, not a product failure. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), and `.gitignore` (search: `_temp`).
+
+---
+
+## Lesson: Nested Claude permission probes inherit the host session's profile without full env isolation
+
+**Status:** active | **Created:** 2026-07-31
+**Decision changed:** Before reading any nested `claude -p` permission result as ground truth, prove the child ran with a clean local profile and include a positive-control row that an existing rule provably allows.
+**Trigger phase:** VERIFY
+
+**What happened:** The approved M06 probe of the trailing `:*` heredoc matcher (`Bash(node --import tsx src/cli/cli.ts quality save '<PROJECT_ROOT>' <<'JSON':*)`) launched `claude -p --setting-sources= --settings <overlay-json> --permission-mode dontAsk` from inside an interactive Claude Code session with no positive-control row. Both probe rows returned the generic dontAsk denial, which cannot distinguish "rule did not match" from "overlay never consulted" - so the run produced no verdict, and reading it as "trailing form disqualified" would have activated M06's kill criterion on unproven evidence. I initially attributed the ambiguity to host-session contamination because the child's init event showed cloud-looking markers (`Workflow`/`CronCreate` in the tool roster, claude.ai slash commands, the host memory path, `"model":"claude-opus-5[1m]"`, `"apiKeySource":"none"`) and the environment carried surviving `CLAUDE_CODE_*` variables.
+
+**Root cause:** No positive control. The corrected rerun under `env -i HOME PATH TERM SHELL` displayed the SAME init markers while its control row executed - proving those markers reflect this machine's logged-in CLI state, not session attachment, and that init-roster inspection is not a contamination test. The only discriminator that converts a denial into evidence is a control row an existing rule provably allows.
+
+**Prevention:**
+1. Always include a positive-control row an existing rule provably allows (for the reporting overlay: `node --import tsx src/cli/cli.ts --version`). Control executes + target denied = valid negative verdict; control denied = void probe, report a harness fault, not a matcher verdict.
+2. Keep `env -i HOME="$HOME" PATH="$PATH" TERM=xterm SHELL=/bin/bash` as cheap hygiene for nested CLI probes, but do not treat env stripping or init-event marker greps as proof in either direction.
+3. The real launch environment is a dashboard server spawn, not an interactive session; mirror the flag set in `src/cli/server/terminal-spawn.ts` (search: `CLAUDE_REPORTING_ARGS`) when reproducing it.
+
+**Outcome (2026-07-31):** With the control proven (`goat-flow v1.14.0` executed under dontAsk), the heredoc row's denial became a valid measurement: the trailing `:*` prefix form does not match multi-line quoted-heredoc Bash commands on Claude Code 2.1.220.
+
+---
+
+## Lesson: Reproducing a server route means reusing its inputs, not just its composer
+
+**Status:** active | **Created:** 2026-07-31
+**Decision changed:** When driving an end-to-end run that stands in for an HTTP route, build the payload from the route's own input helpers; if any are stubbed, name which conclusions the run can and cannot support BEFORE spending the run.
+**Trigger phase:** ACT
+
+**What happened:** The M06 end-to-end runs called the real `composeQuality` with `auditReport: null` and `priorReport: null`, while `/api/quality` passes `runAudit(...)`, `findLatestQualityReport(...)`, and `extractSharedFacts(...)`. Both approved cross-harness runs were spent before this surfaced. The persisted reports carried `audit_status: "unavailable"` and `prior_report_id: null`, so the agent was never asked to mark findings `persisted`; `quality diff` then reported `persisted: 0` with `resolved: 2` and `resolved: 5`, numbers that look like remediation success but are pure artifacts of missing prior linkage. The skills score drop (`setupDelta -10`, `systemDelta -15`) was equally uninterpretable. M06's persistence conclusion survived only because the staged-draft prompt section does not read audit or prior context - that was luck of layout, not design.
+
+**Root cause:** I treated "calls the real composer" as equivalent to "reproduces the route". Passing `null` for optional context compiled, ran, and produced a plausible prompt, so nothing failed loudly - the degradation was visible only in two fields of the output report. Optional-but-populated inputs are the easiest fidelity gap to miss because the stub is a valid value.
+
+**Prevention:**
+1. Before a costly reproduction run, diff your call site against the real caller argument by argument (here: `src/cli/server/dashboard-quality-routes.ts`, search: `composeQuality`). Every argument the real caller populates and yours stubs is a fidelity gap to declare or close.
+2. Assert route-fidelity in the run's own output check: a report with `audit_status: "unavailable"` or `prior_report_id: null` when history exists means the prompt was degraded, and any diff computed from it is not resolution evidence.
+3. Scope the conclusion to the layer actually exercised. A stubbed input invalidates conclusions that read it and leaves untouched those that do not - state which is which rather than reporting one verdict for the whole run.

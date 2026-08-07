@@ -154,3 +154,22 @@ jobs:
 
           if [ "$fail" -eq 1 ]; then exit 1; fi
           echo "All skill templates at version $skill_version"
+
+  # Reviewed Gruff warning-debt ratchet (scripts/check-gruff-warning-ratchet.mjs
+  # against scripts/gruff-warning-baseline.json). Runs in a dedicated job
+  # because the analyzer package requires Node 22 while build-test-lint
+  # intentionally keeps Node 20 compatibility coverage.
+  gruff-warning-ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: "npm"
+      - name: Install
+        run: npm ci
+      - name: Build package binary
+        run: npm run build
+      - name: Gruff warning ratchet
+        run: node scripts/check-gruff-warning-ratchet.mjs

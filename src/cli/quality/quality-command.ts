@@ -1,17 +1,27 @@
 /**
- * Dispatch layer for the `goat-flow quality` command and its subcommands (history, diff,
- * candidacy, validate, and the default prompt builder). Each subcommand is a focused async
- * handler; the public entry point only routes by `options.qualitySubcommand`.
- *
- * Heavy modules (history, candidacy, audit, prompt composition) are dynamically imported inside
- * each handler so the CLI startup path stays lean and only loads what a given invocation needs.
- * All filesystem and process behaviour is injected through QualityCommandDeps so the handlers
- * stay testable; this module performs no I/O of its own beyond reading files the user pointed at.
+ * Route `goat-flow quality` requests from the CLI or dashboard to focused handlers.
+ * Use when a user builds, compares, validates, or saves a quality report for one project.
+ * Heavy features load on demand so simple commands stay quick and focused.
+ * The shared save path validates, scrubs, revalidates, and exclusively writes local reports.
+ * Injected output, errors, and directory creation keep user-visible edge cases testable.
  */
-import { basename } from "node:path";
+import { randomBytes } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import {
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, join, resolve } from "node:path";
 import type { AgentId } from "../types.js";
 import type { CandidacyResult } from "./candidacy.js";
 import type { ParsedCLI } from "../cli-types.js";
+import { scrubDurableText } from "../evidence/redaction.js";
+import { getPackageVersion } from "../paths.js";
+import { parseQualityReport } from "./schema.js";
 
 type CLIErrorConstructor = new (message: string, exitCode: number) => Error;
 
@@ -29,6 +39,14 @@ export interface QualityCommandDeps {
   validAgents(): AgentId[];
   /** Writes the rendered command output to the destination chosen by `options` (stdout or file). */
   writeOutput(options: ParsedCLI, rendered: string): void;
+}
+
+/**
+ * Dependencies needed by the one CLI/dashboard report persistence path.
+ * Production uses the real directory creator; tests can reproduce two users saving at once.
+ */
+interface QualityPersistenceDeps extends Pick<QualityCommandDeps, "CLIError"> {
+  createReportDirectory?: (directoryPath: string) => void;
 }
 
 async function handleQualityHistorySubcommand(
@@ -93,8 +111,9 @@ async function handleQualityDiffSubcommand(
   options: ParsedCLI,
   deps: QualityCommandDeps,
 ): Promise<void> {
-  const { buildQualityDiff, loadQualityHistory, renderQualityDiffText } =
+  const { loadQualityHistory, renderQualityDiffText } =
     await import("./history.js");
+  const { buildQualityDiff } = await import("./history-diff.js");
 
   const history = loadQualityHistory(options.projectPath);
   for (const warning of history.warnings) {
@@ -163,9 +182,10 @@ async function handleQualityCandidacySubcommand(
     lines.push("");
     lines.push("Next steps:");
     for (const step of result.nextSteps) {
-      lines.push(
-        `  - ${step.action}${step.template ? ` (template: ${step.template})` : ""}`,
-      );
+      const templateSuffix = step.template
+        ? ` (template: ${step.template})`
+        : "";
+      lines.push(`  - ${step.action}${templateSuffix}`);
     }
   }
   deps.writeOutput(options, lines.join("\n"));
@@ -182,7 +202,6 @@ async function handleQualityValidateSubcommand(
     );
   }
   const { readFileSync, existsSync } = await import("node:fs");
-  const { parseQualityReport } = await import("./schema.js");
   const path = options.qualityValidatePath;
   if (!existsSync(path)) {
     throw new deps.CLIError(`quality validate: file not found: ${path}`, 2);
@@ -204,6 +223,380 @@ async function handleQualityValidateSubcommand(
     );
   }
   deps.writeOutput(options, `OK ${path}`);
+}
+
+/**
+ * Ask Git whether one exact prospective local report path is ignored.
+ *
+ * @param projectRoot - Repository root the `git check-ignore` query runs in.
+ * @param relativePath - Prospective report path, relative to `projectRoot`.
+ * @returns True when Git reports the path as ignored, so writing it keeps local
+ *   quality state out of version control.
+ */
+export function isQualityPersistencePathIgnored(
+  projectRoot: string,
+  relativePath: string,
+): boolean {
+  try {
+    execFileSync(
+      "git",
+      ["-C", projectRoot, "check-ignore", "--quiet", "--", relativePath],
+      { stdio: "ignore", timeout: 5000 },
+    );
+    return true;
+  } catch {
+    // Non-repositories, unavailable Git, and ordinary unignored paths all fail closed.
+    return false;
+  }
+}
+
+/** Format the local timestamp used by collision-resistant quality report filenames. */
+function qualitySaveTimestamp(date: Date = new Date()): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}-${hour}${minute}`;
+}
+
+/**
+ * Inspect one prospective report directory without following a redirecting final component.
+ * A null result means the user's first save still needs to create this directory.
+ */
+function qualitySaveDirectoryStats(
+  path: string,
+  displayPath: string,
+  deps: Pick<QualityCommandDeps, "CLIError">,
+) {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new deps.CLIError(
+      `quality save: cannot inspect ${displayPath} before writing.`,
+      2,
+    );
+  }
+}
+
+/**
+ * Create one missing report directory and accept EEXIST only when another save made a real folder.
+ * Use during first save so concurrent users can continue without accepting files or symlinks.
+ */
+function createMissingQualitySaveDirectory(
+  component: { path: string; display: string },
+  deps: QualityPersistenceDeps,
+): void {
+  // Production creates the folder directly; tests can pause at the same user-visible race point.
+  const createReportDirectory = deps.createReportDirectory ?? mkdirSync;
+  try {
+    createReportDirectory(component.path);
+  } catch (error) {
+    // Example: another dashboard session created this same first-save folder milliseconds earlier.
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  const currentStats = qualitySaveDirectoryStats(
+    component.path,
+    component.display,
+    deps,
+  );
+  // A concurrent creator is safe only when the user still has a real local directory.
+  if (currentStats === null || !currentStats.isDirectory()) {
+    throw new deps.CLIError(
+      `quality save: ${component.display} must be a real project-local directory.`,
+      2,
+    );
+  }
+}
+
+/** Revalidate every report-directory component after concurrent creation finishes. */
+function assertCurrentQualitySaveDirectories(
+  components: Array<{ path: string; display: string }>,
+  deps: QualityPersistenceDeps,
+): void {
+  for (const component of components) {
+    const currentStats = qualitySaveDirectoryStats(
+      component.path,
+      component.display,
+      deps,
+    );
+    if (currentStats !== null && currentStats.isDirectory()) continue;
+    throw new deps.CLIError(
+      `quality save: ${component.display} must be a real project-local directory.`,
+      2,
+    );
+  }
+}
+
+/**
+ * Validate the ignored report destination, then create and recheck its directory chain.
+ * Use immediately before a user's accepted report is written.
+ */
+function ensureQualitySaveDirectory(
+  projectRoot: string,
+  relativeReportPath: string,
+  deps: QualityPersistenceDeps,
+): string {
+  const components = [
+    { path: join(projectRoot, ".goat-flow"), display: ".goat-flow" },
+    {
+      path: join(projectRoot, ".goat-flow", "logs"),
+      display: ".goat-flow/logs",
+    },
+    {
+      path: join(projectRoot, ".goat-flow", "logs", "quality"),
+      display: ".goat-flow/logs/quality",
+    },
+  ];
+  const inspectedComponents = components.map((component) => ({
+    ...component,
+    stats: qualitySaveDirectoryStats(component.path, component.display, deps),
+  }));
+  // Existing folders must stay local; for example, a symlink must never redirect a user's report.
+  for (const component of inspectedComponents) {
+    // Missing components are created after Git proves the destination stays local.
+    if (component.stats !== null && !component.stats.isDirectory()) {
+      throw new deps.CLIError(
+        `quality save: ${component.display} must be a real project-local directory.`,
+        2,
+      );
+    }
+  }
+  // Unignored output could appear in a commit, so fail before creating any report folders.
+  if (!isQualityPersistencePathIgnored(projectRoot, relativeReportPath)) {
+    throw new deps.CLIError(
+      `quality save: ${relativeReportPath} must be gitignored before writing.`,
+      2,
+    );
+  }
+  // Create only components absent in the initial snapshot, rechecking each concurrent result.
+  for (const component of inspectedComponents) {
+    // A null observation means this user's first save still needs the directory.
+    if (component.stats === null) {
+      createMissingQualitySaveDirectory(component, deps);
+    }
+  }
+  // A creator can replace an ancestor that was present in the initial snapshot
+  // while a missing descendant is being made. Recheck the whole chain before
+  // the exclusive report write is allowed to use it.
+  assertCurrentQualitySaveDirectories(components, deps);
+  return (
+    components.at(-1)?.path ??
+    join(projectRoot, ".goat-flow", "logs", "quality")
+  );
+}
+
+/** Write one validated report with exclusive-create semantics and return its path. */
+function writeQualityReport(
+  projectRoot: string,
+  agent: AgentId,
+  serializedReport: string,
+  deps: QualityPersistenceDeps,
+): string {
+  const timestamp = qualitySaveTimestamp();
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const suffix = randomBytes(4).toString("hex").slice(0, 5);
+    const reportName = `${timestamp}-${agent}-${suffix}.json`;
+    const relativeReportPath = `.goat-flow/logs/quality/${reportName}`;
+    const qualityDirectory = ensureQualitySaveDirectory(
+      projectRoot,
+      relativeReportPath,
+      deps,
+    );
+    const reportPath = join(qualityDirectory, reportName);
+    try {
+      writeFileSync(reportPath, serializedReport, {
+        encoding: "utf8",
+        flag: "wx",
+        mode: 0o600,
+      });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+      throw new deps.CLIError(
+        "quality save: could not persist the validated report.",
+        2,
+      );
+    }
+    const stats = lstatSync(reportPath);
+    if (!stats.isFile() || stats.nlink !== 1) {
+      throw new deps.CLIError(
+        "quality save: persisted report is not a single-link regular file.",
+        2,
+      );
+    }
+    return reportPath;
+  }
+  throw new deps.CLIError(
+    "quality save: could not allocate a unique report filename.",
+    2,
+  );
+}
+
+/** Resolve the selected project to a real directory, or reject with the save contract's message. */
+function resolveSelectedProjectRoot(
+  projectPath: string,
+  deps: Pick<QualityCommandDeps, "CLIError">,
+): string {
+  try {
+    if (!statSync(projectPath).isDirectory()) throw new Error();
+    return realpathSync(projectPath);
+  } catch {
+    throw new deps.CLIError(
+      "quality save: selected project must be an existing directory.",
+      2,
+    );
+  }
+}
+
+/**
+ * Reject a report that belongs to another project or another goat-flow version.
+ *
+ * Ownership is checked against the realpath of both sides so a symlinked or
+ * relative `project_path` cannot smuggle a report into a different project's
+ * history; version equality keeps saved reports comparable across `quality
+ * history` and `quality diff`.
+ *
+ * @param report - the report's own project path and version fields
+ * @param projectRoot - realpath of the selected project the caller named
+ * @param deps - CLIError constructor used for every rejection
+ */
+function assertReportOwnership(
+  report: {
+    projectPath: string;
+    goatFlowVersion: string;
+    /** Optional on older parsed reports; a missing value fails the match below. */
+    rubricVersion: string | undefined;
+  },
+  projectRoot: string,
+  deps: Pick<QualityCommandDeps, "CLIError">,
+): void {
+  let reportRoot: string;
+  try {
+    reportRoot = realpathSync(resolve(report.projectPath));
+  } catch {
+    throw new deps.CLIError(
+      "quality save: report.project_path must name the selected project.",
+      2,
+    );
+  }
+  if (reportRoot !== projectRoot) {
+    throw new deps.CLIError(
+      "quality save: report.project_path does not match the selected project.",
+      2,
+    );
+  }
+  const version = getPackageVersion();
+  if (report.goatFlowVersion !== version || report.rubricVersion !== version) {
+    throw new deps.CLIError(
+      `quality save: report version must match goat-flow v${version}.`,
+      2,
+    );
+  }
+}
+
+/**
+ * Public persistence contract shared by the CLI subcommand and dashboard capture.
+ * Raw text remains in memory until this boundary validates, redacts, and writes the owned report.
+ */
+export interface PersistQualityReportOptions {
+  /** Selected project directory the report must belong to; realpath-resolved here. */
+  projectPath: string;
+  /** Raw report text exactly as received from the caller's channel. */
+  rawText: string;
+  /** Channel name used in error messages: "stdin" for the CLI subcommand, "draft" for capture. */
+  sourceLabel?: string;
+}
+
+/** Recursively scrub every accepted report string while preserving its shape. */
+function scrubQualityReportStrings(value: unknown): unknown {
+  if (typeof value === "string") return scrubDurableText(value);
+  if (Array.isArray(value)) return value.map(scrubQualityReportStrings);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, child]) => [
+      key,
+      scrubQualityReportStrings(child),
+    ]),
+  );
+}
+
+/**
+ * Validate, scrub, revalidate, and persist one report through the shared CLI/dashboard path.
+ * Only accepted text reaches disk, so every user sees the same bounded save contract.
+ *
+ * @param input - Project, raw report, and source label; empty text means the user supplied no report.
+ * @param deps - Error type plus optional directory creator; omission uses the production filesystem.
+ * @returns Absolute persisted report path; this method throws instead of returning an empty path.
+ */
+export function persistQualityReportText(
+  input: PersistQualityReportOptions,
+  deps: QualityPersistenceDeps,
+): string {
+  const sourceLabel = input.sourceLabel ?? "stdin";
+  const projectRoot = resolveSelectedProjectRoot(input.projectPath, deps);
+
+  if (input.rawText.trim().length === 0) {
+    throw new deps.CLIError(
+      `quality save: expected one JSON report on ${sourceLabel}.`,
+      2,
+    );
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(input.rawText);
+  } catch {
+    throw new deps.CLIError(`quality save: invalid JSON on ${sourceLabel}.`, 2);
+  }
+  const accepted = parseQualityReport(raw, { requireCurrentFields: true });
+  if (!accepted.ok) {
+    throw new deps.CLIError(`quality save: schema error: ${accepted.error}`, 2);
+  }
+  // Traverse only the accepted report shape. Rejected JSON may contain
+  // attacker-controlled nesting deep enough to overflow a recursive scrubber.
+  const scrubbed = scrubQualityReportStrings(accepted.report);
+  const parsed = parseQualityReport(scrubbed, { requireCurrentFields: true });
+  if (!parsed.ok) {
+    throw new deps.CLIError(
+      "quality save: redaction produced an invalid report.",
+      2,
+    );
+  }
+
+  assertReportOwnership(
+    {
+      projectPath: parsed.report.project_path,
+      goatFlowVersion: parsed.report.goat_flow_version,
+      rubricVersion: parsed.report.rubric_version,
+    },
+    projectRoot,
+    deps,
+  );
+
+  const serializedReport = `${JSON.stringify(parsed.report, null, 2)}\n`;
+  return writeQualityReport(
+    projectRoot,
+    parsed.report.agent,
+    serializedReport,
+    deps,
+  );
+}
+
+/** Redact, strictly validate, and persist one current report supplied through stdin. */
+function handleQualitySaveSubcommand(
+  options: ParsedCLI,
+  deps: QualityCommandDeps,
+): void {
+  // Pre-check the project directory before touching stdin so interactive
+  // misuse with a bad path still fails fast instead of blocking on a TTY read.
+  resolveSelectedProjectRoot(options.projectPath, deps);
+
+  const input = readFileSync(0, "utf8");
+  const reportPath = persistQualityReportText(
+    { projectPath: options.projectPath, rawText: input },
+    deps,
+  );
+  deps.writeOutput(options, `OK ${reportPath}`);
 }
 
 async function handleQualityPromptSubcommand(
@@ -232,7 +625,10 @@ async function handleQualityPromptSubcommand(
       harness: true,
     });
   } catch {
-    // Quality prompts still render with degraded audit context.
+    // Audit infrastructure failure degrades prompt evidence, so tell the user without inventing a code finding.
+    console.error(
+      "quality: audit unavailable; continuing with degraded context.",
+    );
   }
 
   const qualityMode = options.qualityMode ?? "agent-setup";
@@ -281,6 +677,10 @@ export async function handleQualityCommand(
   }
   if (options.qualitySubcommand === "validate") {
     await handleQualityValidateSubcommand(options, deps);
+    return;
+  }
+  if (options.qualitySubcommand === "save") {
+    handleQualitySaveSubcommand(options, deps);
     return;
   }
   await handleQualityPromptSubcommand(options, deps);

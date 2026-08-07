@@ -5,6 +5,7 @@
   "ignore": [
     "src/dashboard/app.ts",
     "src/dashboard/dashboard-app-data-loading-fragments.ts",
+    "src/dashboard/dashboard-app-hook-setup-fragments.ts",
     "src/dashboard/dashboard-app-init.ts",
     "src/dashboard/dashboard-app-merge.ts",
     "src/dashboard/dashboard-app-project-terminal-fragments.ts",

@@ -231,6 +231,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  // Covers a playbook a consumer marked as their own: writes it; the audit must leave user-owned files alone.
   it("accepts an explicitly user-owned consumer playbook", () => {
     const fixtureRoot = setupFixture();
     try {
@@ -269,6 +270,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  // Covers marked vs unmarked custom skills: writes both; only the unmarked one must be reported.
   it("accepts an explicitly user-owned custom skill but reports an unmarked one", () => {
     const fixtureRoot = setupFixture();
     try {
@@ -371,6 +373,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  // Covers dispatcher docs that drifted from the code: writes stale claims; each one must be reported.
   it("reports stale dispatcher control-flow, retrieval, and learning-loop claims", () => {
     // Regression: docs/skills.md flattened every request into one route,
     // attributed routed-skill retrieval to the dispatcher, and told every
@@ -406,6 +409,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  // Covers public skill docs promising gates the skill lost: writes them; each must be reported.
   it("reports stale public skill workflow gates and modes", () => {
     const fixtureRoot = setupFixture();
     try {
@@ -560,6 +564,66 @@ describe("checkDrift: artifact integrity", () => {
         ),
         false,
         `command prefix produced a removed-command finding: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Covers a project still on the old commit-guidance filename: writes it; the audit must not fail it.
+  it("accepts the ADR-043 commit-guidance compatibility path", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "Existing projects may keep `docs/coding-standards/git-commit.md`.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "path-ref-unresolved" &&
+            finding.message.includes("git-commit.md"),
+        ),
+        false,
+        `compatibility path produced an unresolved-path finding: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Covers a doc reference pointing nowhere: writes the dangling path, which must be reported.
+  it("reports an arbitrary missing documentation path", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "Missing guidance lives at `docs/coding-standards/nonexistent.md`.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "path-ref-unresolved" &&
+            finding.message.includes("docs/coding-standards/nonexistent.md"),
+        ),
+        true,
+        `expected unresolved-path finding, got ${JSON.stringify(report.findings)}`,
       );
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });

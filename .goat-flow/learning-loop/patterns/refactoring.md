@@ -1,7 +1,35 @@
 ---
 category: refactoring
-last_reviewed: 2026-05-27
+last_reviewed: 2026-08-06
 ---
+
+## Pattern: Hold the file-length line continuously, not in a cleanup pass
+
+**Context:** A size gate (`size.file-length`, threshold 750 in `.gruff-ts.yaml`) accumulates violations quietly because no single commit crosses it — each edit adds twenty lines to an already-large file and nothing fails. The bill arrives all at once as a cleanup project.
+
+**Approach:** Treat a file nearing the threshold as the trigger to split, at the moment you are already editing it, while you hold the context needed to find the seam. Splitting is cheap then and expensive later: doing it retroactively means re-deriving every dependency, and a seam that looked like one module often turns out to be two once you check which private helpers are used on both sides.
+
+**Evidence (ACTUAL_MEASURED, 2026-08-04):** A goat-flow gruff sweep found 35 files over the 750-line gate totalling ~13,200 lines above threshold, topped by a 5,069-line contract test and a 2,069-line source file. Splitting the first one, `src/cli/facts/shared/learning-loop-common.ts` (836 lines), took roughly 15 tool calls and produced three modules rather than the two originally planned, because `isFileRef`, `isIntentionallyGitignored`, and `isCheckableForStaleness` were each used on both sides of the intended seam and had to become a third shared module. Evidence anchors: `src/cli/facts/shared/reference-paths.ts` (search: `isCheckableForStaleness`), `src/cli/facts/shared/search-anchors.ts` (search: `evaluateSearchAnchors`).
+
+Three second-order effects make deferral worse than it looks. Doc-comment rules and the size gate pull against each other - adding required documentation pushed one test file from 749 to 753 lines and *created* a size finding. Clearing an entire pillar can lower the reported composite, so a long deferred cleanup shows the score sagging while the codebase improves; judge progress on per-pillar finding counts instead.
+
+Most dangerous: **moving a symbol silently breaks every learning-loop anchor that cites it by path.** Four entries pointed at symbols that still existed but no longer lived where the anchor said. Typecheck and focused tests stayed green throughout - nothing in the compiler can see a Markdown citation - and it surfaced only as `support-bundle` exiting 1 through the `feedback-loop-active` harness check. After any extraction, run `goat-flow stats --check` and re-run `goat-flow index`, and treat a passing typecheck as no evidence at all about artifact references. Evidence anchors: `.goat-flow/learning-loop/lessons/audit-contracts.md` (search: `function toCheckResult`), `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `checkCodexWorkspaceRootExactPaths`).
+
+## Pattern: Extract to a new module without a convenience re-export
+
+**Context:** Splitting a large file and wanting existing consumers to keep importing from the original path.
+
+**Approach:** Point consumers at the module that now owns the symbol. Re-exporting it from the original file to spare that edit creates an import cycle whenever the new module imports anything back - shared types, a helper - and TypeScript compiles a cycle without complaint. Only `design.circular-import` catches it, so a run that skips gruff ships the cycle.
+
+**Evidence (ACTUAL_MEASURED, 2026-08-05):** Hit twice in one session with identical shape. `src/cli/quality/history.ts` re-exported `buildQualityDiff` while `history-diff.ts` imported types back from it; `compose-quality-common.ts` re-exported the contract renderer while `compose-quality-contract.ts` imported formatting helpers back. Typecheck passed both times. The fix in both cases was deleting the re-export and updating the two or three real consumers. Evidence anchors: `src/cli/quality/history-diff.ts` (search: `buildQualityDiff`), `src/cli/prompt/compose-quality-contract.ts` (search: `appendQualityReportContract`).
+
+## Pattern: Resolve every cut boundary before splicing any of them
+
+**Context:** Scripting a multi-block extraction where each block's end marker is the next block's start.
+
+**Approach:** Resolve all boundaries against the untouched file first, then splice bottom-up. Deleting as you iterate erases the marker the next lookup needs, and the failure surfaces as a confusing "not found" for a symbol that is plainly still in the file.
+
+**Evidence (ACTUAL_MEASURED, 2026-08-05):** A five-block extraction from `src/cli/review-validate.ts` aborted on its second cut looking for `parseShipVerdictDecision`, which the first cut had just removed. It failed before writing, so nothing was corrupted - but two runs were spent re-verifying the markers by hand. Pre-resolving the boundaries fixed it in one pass. Related: scripted extraction over-exports by default, so run knip afterwards and un-export everything only used inside its own module.
 
 ## Pattern: Canary-first contract changes (one consumer before all consumers)
 
@@ -14,7 +42,7 @@ last_reviewed: 2026-05-27
 A canary path — apply to `LocalEnvironment` only first, run mini against a real task for a week, then propagate to `DockerEnvironment` / `SingularityEnvironment` / `BubblewrapEnvironment` / configs / tests — would have surfaced the failure mode against a 1-file revert surface instead of 15.
 
 **Goat-flow application:**
-- Cross-file contracts that share this shape: `CheckResult` / `HarnessCheckResult` in `src/cli/audit/types.ts`, manifest schema in `workflow/manifest.json`, skill composition contract in `src/cli/audit/check-drift.ts`, hook event naming (per `.goat-flow/plans/1.40.0/M01-hook-programme-foundation.md`).
+- Cross-file contracts that share this shape: `CheckResult` / `HarnessCheckResult` in `src/cli/audit/types.ts`, manifest schema in `workflow/manifest.json`, skill composition contract in `src/cli/audit/check-drift.ts`, hook event naming (per `.goat-flow/plans/1.45.0/M01-hook-programme-foundation.md`).
 - "Smallest canary" usually means: one audit check (not all of them), one environment-style class (not all), one skill (not all six), one agent harness config (not all four).
 - The canary's PR description must name *why* this consumer is representative. If the canary doesn't share the failure mode with peers, it's not a canary — it's just a smaller change.
 - Reverting a breadth-first contract change is structurally expensive even when the per-file revert is trivial — the diff is wide, parity has to be re-proven across the same surface, and reviewers can't tell which file's symptom motivated the revert. The canary caps that downside.
@@ -35,7 +63,7 @@ A canary path — apply to `LocalEnvironment` only first, run mini against a rea
 
 ## Pattern: Put prompt side effects on the CLI side of the boundary
 **Context:** A prompt contract forbids tracked-file writes or unrestricted I/O, but a new feature needs persistence, capture, or report history.
-**Approach:** Keep the prompt read-only or single-path-limited and move extraction, path validation, suffix numbering, schema validation, and writes into CLI code whenever possible. If the prompt must write, pin the path to a gitignored local-state directory and make the exception explicit. Evidence anchor: `src/cli/prompt/compose-quality.ts` (search: `No tracked-file writes`).
+**Approach:** Keep the prompt read-only or single-path-limited and move extraction, path validation, suffix numbering, schema validation, and writes into CLI code whenever possible. If the prompt must write, pin the path to a gitignored local-state directory and make the exception explicit. Evidence anchor: `src/cli/prompt/compose-quality-static-sections.ts` (search: `No tracked-file writes`).
 
 ---
 

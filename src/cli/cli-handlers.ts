@@ -20,12 +20,14 @@ import {
 import type { Command, ParsedCLI } from "./cli-types.js";
 import { createFS } from "./facts/fs.js";
 import { handleHooksCommand } from "./hooks-command.js";
+import { handleReviewCommand } from "./review-validate.js";
 import {
   buildInstallerInvocation,
   buildInstallerSpawnSpec,
 } from "./install-invocation.js";
 import {
   buildManagedSetupPreview,
+  managedSetupPreviewForInstallerLaunch,
   managedSetupAdmissionFailure,
   recordManagedInstallAfterVerification,
 } from "./managed-setup-preview.js";
@@ -45,7 +47,8 @@ import {
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
-import { handlePlansExportCommand } from "./plans-export.js";
+import { handlePlansCommand } from "./plans-check.js";
+import type { runSkillNew } from "./skill-author.js";
 const PACKAGE_VERSION = getPackageVersion();
 function formatCandidacyArtifact(
   recommendation: CandidacyResult["recommendedArtifact"],
@@ -405,61 +408,70 @@ function emitCommitGuidanceInstallResult(projectPath: string): void {
 /**
  * Run a managed preview or deterministic install after the user chooses an agent.
  * Use for install or setup dry-run/apply; it throws CLI errors or preserves a non-zero child exit.
+ *
+ * @param options - parsed user choices; a missing agent is rejected before preview or installation
+ * @returns completion after preview or install; no value means output and exit state already describe the result
  */
 async function handleInstallCommand(options: ParsedCLI): Promise<void> {
   const selectedAgent = validateManagedSetupRequest(options);
-  const managedPreview = buildManagedSetupPreview(
+  const installPreview = buildManagedSetupPreview(
     options.projectPath,
     selectedAgent,
   );
-  // A dry-run reports the exact managed-template result and exits before installer side effects.
-  if (options.shouldDryRun) {
-    emitManagedSetupDryRun(options, managedPreview);
-    return;
-  }
-
-  const admissionFailure = managedSetupAdmissionFailure(
-    managedPreview,
-    options.shouldForce,
-  );
-  // A conflict report is returned before Bash starts, so the user's target remains unchanged.
-  if (admissionFailure !== null) throw new CLIError(admissionFailure, 1);
-
-  const invocation = buildInstallerInvocation({
+  const installerLaunch = buildInstallerInvocation({
     scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
     projectPath: options.projectPath,
     agent: selectedAgent,
     installerFlags: collectInstallerFlags(options, selectedAgent),
     platform: process.platform,
   });
+  // A dry-run reports the exact managed-template result and exits before installer side effects.
+  if (options.shouldDryRun) {
+    emitManagedSetupDryRun(
+      options,
+      managedSetupPreviewForInstallerLaunch(installPreview, installerLaunch),
+    );
+    return;
+  }
+
+  const overwriteBlocker = managedSetupAdmissionFailure(
+    installPreview,
+    options.shouldForce,
+  );
+  // A conflict report is returned before Bash starts, so the user's target remains unchanged.
+  if (overwriteBlocker !== null) throw new CLIError(overwriteBlocker, 1);
+
   // Invalid launch arguments stop before Bash can change the selected target.
-  if (!invocation.ok) {
-    throw new CLIError(invocation.error, 1);
+  if (!installerLaunch.ok) {
+    throw new CLIError(installerLaunch.error, 1);
   }
 
   const { spawnInheritedSync } = await import("./server/safe-exec.js");
-  const spawnSpec = buildInstallerSpawnSpec(invocation);
-  const result = spawnInheritedSync({
-    command: spawnSpec.command,
-    args: spawnSpec.args,
+  const installerProcess = buildInstallerSpawnSpec(installerLaunch);
+  const installResult = spawnInheritedSync({
+    command: installerProcess.command,
+    args: installerProcess.args,
     allowedBasenames: ["bash", "bash.exe"],
-    env: spawnSpec.env,
+    env: installerProcess.env,
   });
   // A spawn failure means the installer never started, so users receive the operating-system error.
-  if (result.error) {
+  if (installResult.error) {
     throw new CLIError(
-      `Could not run installer with ${spawnSpec.command}: ${result.error.message}`,
+      `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
       1,
     );
   }
   // A signal means installation ended mid-flow and cannot be recorded as a verified baseline.
-  if (result.signal) {
-    throw new CLIError(`Installer terminated by signal ${result.signal}`, 1);
+  if (installResult.signal) {
+    throw new CLIError(
+      `Installer terminated by signal ${installResult.signal}`,
+      1,
+    );
   }
   // A non-zero or missing child status is preserved as failure instead of running post-install writes.
-  if (result.status !== 0) {
+  if (installResult.status !== 0) {
     // Missing numeric status still maps to exit 1 so scripts never mistake it for success.
-    process.exitCode = result.status ?? 1;
+    process.exitCode = installResult.status ?? 1;
     return;
   }
 
@@ -518,7 +530,8 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
     // code (configured launcher string and managed script) and runs by default.
     // `--untrusted-target` keeps the deny check static for a checkout you do not
     // trust; otherwise the property is omitted, leaving the default unchanged.
-    // (The dashboard separately audits selected targets at "static".)
+    // This trusted CLI audit is the only runtime-proof path: passive dashboard
+    // audit and quality routes stay at "static" or weaker evidence.
     ...(options.isTargetUntrusted
       ? { denyMechanismEvidenceLevel: "static" as const }
       : {}),
@@ -657,7 +670,8 @@ const COMMAND_HANDLERS: Partial<
   diagnostics: handleDiagnosticsCommand,
   index: handleIndexCommand,
   redact: handleRedactCommand,
-  plans: handlePlansExportCommand,
+  review: handleReviewCommand,
+  plans: handlePlansCommand,
   status: handleStatusCommand,
   dashboard: runDashboardCommand,
   info: handleInfoCommand,
@@ -674,6 +688,38 @@ async function handleSkillCommand(options: ParsedCLI): Promise<void> {
   await handleSkillNewCommand(options);
 }
 
+type SkillNewCommandResult = Awaited<ReturnType<typeof runSkillNew>>;
+/** Build the authoring request from parsed CLI fields while omitting absent optional values. */
+function skillNewRequest(options: ParsedCLI) {
+  return {
+    agent: options.agent,
+    description: options.skillDescription ?? undefined,
+    draftPath: options.skillDraftPath ?? undefined,
+    redLogPath: options.skillRedLogPath ?? undefined,
+    shouldUseInteractivePrompt: options.skillInteractive,
+    name: options.skillName ?? undefined,
+    shouldSkipConfirm: options.skillSkipConfirm,
+    projectRoot: options.projectPath,
+  };
+}
+/** Render one authoring result in the caller's selected JSON or human-readable contract. */
+function renderSkillNewResult(
+  result: SkillNewCommandResult,
+  asJson: boolean,
+): string {
+  if (!asJson) return result.output.join("\n");
+  return JSON.stringify(
+    {
+      candidacy: result.candidacy,
+      proposedPath: result.proposedPath,
+      written: result.written,
+      postScaffoldScore: result.postScaffoldScore ?? null,
+      nextSteps: result.nextSteps,
+    },
+    null,
+    2,
+  );
+}
 /** Run skill authoring; throws `CLIError` for usage/input failures and preserves JSON/text output. */
 async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
   // Any remaining mode must be the existing skill-new authoring contract.
@@ -686,40 +732,14 @@ async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
   const { runSkillNew, SkillNewInputError } = await import("./skill-author.js");
   let result: Awaited<ReturnType<typeof runSkillNew>>;
   try {
-    result = await runSkillNew({
-      agent: options.agent,
-      description: options.skillDescription ?? undefined,
-      draftPath: options.skillDraftPath ?? undefined,
-      redLogPath: options.skillRedLogPath ?? undefined,
-      shouldUseInteractivePrompt: options.skillInteractive,
-      name: options.skillName ?? undefined,
-      shouldSkipConfirm: options.skillSkipConfirm,
-      projectRoot: options.projectPath,
-    });
+    result = await runSkillNew(skillNewRequest(options));
   } catch (err) {
     if (err instanceof SkillNewInputError) {
       throw new CLIError(err.message, 2);
     }
     throw err;
   }
-  if (options.format === "json") {
-    writeOutput(
-      options,
-      JSON.stringify(
-        {
-          candidacy: result.candidacy,
-          proposedPath: result.proposedPath,
-          written: result.written,
-          postScaffoldScore: result.postScaffoldScore ?? null,
-          nextSteps: result.nextSteps,
-        },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-  writeOutput(options, result.output.join("\n"));
+  writeOutput(options, renderSkillNewResult(result, options.format === "json"));
 }
 
 /** Dispatch one parsed CLI command to its handler. */

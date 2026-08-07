@@ -66,7 +66,7 @@ Dedicated prompt library. Two-pane layout: left pane is the list with search, ca
 Good default presets to start with:
 
 - `Debug UI in Browser` routes to `/goat-debug` and diagnoses browser-visible bugs with live browser evidence. It checks for `browser-use`, asks for the URL and symptom, captures page state and screenshots, then maps the evidence back to source before proposing a fix.
-- `Fix Bug` runs `/goat-debug` from diagnosis through a minimal fix and post-fix verification.
+- `Fix Bug` runs `/goat-debug` from diagnosis through a minimal fix and post-fix verification, pausing for your approval before the fix plan and again before implementation.
 - `Review Uncommitted` runs `/goat-review` as a pre-commit gate for MUST-level findings only.
 - `Pre Walk-Through with Draft Targeted Testing` turns a PR and issue into reviewer questions plus targeted local UI test tasks.
 - `Test Plan vs Code Changes` compares a proposed test plan against the actual diff and calls out coverage gaps.
@@ -92,6 +92,7 @@ Getting-started page for new users. Explains what goat-flow is, the audit/qualit
 - 480-minute idle timeout (8 hours) with auto-kill
 - Maximum 10 concurrent sessions
 - Session state: running / ended / error
+- Prompt presets with `mayWriteFiles: false`, unclassified preset launches, and investigator sessions request reporting access. Codex uses a native read-mostly profile with narrowly writable ignored paths; Quality launches grant log writes only in the mode-selected report owner (controlling workspace for process/skills; selected target for agent-setup/harness). Claude uses an isolated per-session permission overlay: read-only commands remain available, tracked edits and write-capable shell commands are denied, and quality reports persist dashboard-side per ADR-044. The session writes one draft into that owner's gitignored `.goat-flow/logs/quality/staging/` directory. Before reading it, the server acquires an exclusive per-draft filesystem claim shared across dashboard processes. The owner strictly accepts the report shape, scrubs accepted strings, revalidates and persists through the `quality save` core, deletes the draft, and writes a receipt the session confirms from. Competing owners skip live claims; stale claims produce rejection receipts instead of replaying a possibly persisted report. Shutdown removes only claims owned by that process and never sweeps another process's drafts. Finalized reports under `.goat-flow/logs/quality/` are deny-listed against agent edits. Unsupported Claude controls fail closed instead of reopening workspace access. Explicit write-enabled builder presets and ordinary direct sessions use workspace access; other runners still rely on their available prompt and hook guardrails.
 
 ## API Endpoints
 
@@ -119,7 +120,7 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) plus dashboard project identity |
 | `/api/hooks` | GET | Registered hook state for the selected project (each hook's enabled/disabled state and wired agents) |
 | `/api/hooks/:hookId/toggle` | POST | Enable or disable one hook; updates `.goat-flow/config.yaml` and reconciles per-agent hook config files |
-| `/api/terminal/create` | POST | Start a terminal session |
+| `/api/terminal/create` | POST | Start a terminal session; accepts `accessMode: "workspace" | "reporting"`, applies supported runner-specific reporting enforcement, and defaults omitted values to `workspace` |
 | `/api/terminal/list` | GET | List active terminal sessions |
 | `/api/terminal/sessions` | GET | Session metadata |
 | `/api/terminal/:id` | DELETE | End a terminal session |

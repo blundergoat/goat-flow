@@ -12,7 +12,7 @@ On 2026-05-20, a coding agent posted a GitHub issue comment after interpreting f
 
 The first policy response treated all GitHub CLI writes as blocked. On 2026-06-02, ADR-028 was narrowed because issue and pull request conversation comments are low-blast-radius, reversible writes; they do not approve a PR, merge code, create releases, trigger workflows, or mutate repository configuration.
 
-The incident is captured as a hooks footgun at `.goat-flow/learning-loop/footguns/deny-dangerous.md` (search: `GitHub CLI comments bypassed shared-system write guardrails`). The hook implementation now has `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`) and regression coverage in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment body-file allowed`).
+The incident is captured as a hooks footgun at `.goat-flow/learning-loop/footguns/deny-writes.md` (search: `GitHub CLI comments bypassed shared-system write guardrails`). The hook implementation now has `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`) and regression coverage in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment body-file allowed`).
 
 ## Decision
 

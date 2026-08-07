@@ -108,6 +108,14 @@ const INSTALLED_PLAYBOOK_AUTHORING_SYNC = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
 );
+const TEMPLATE_WRITING_STYLE = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/writing-style.md",
+);
+const INSTALLED_WRITING_STYLE = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/writing-style.md",
+);
 const TEMPLATE_CHANGELOG = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/changelog.md",
@@ -311,6 +319,20 @@ describe("preamble/conventions sync: current state", () => {
     );
   });
 
+  // Prose-style guidance ships to consumers, so the installed copy must not drift.
+  it("template and installed writing-style.md match", () => {
+    assertMirrorExists(
+      TEMPLATE_WRITING_STYLE,
+      INSTALLED_WRITING_STYLE,
+      "writing-style.md",
+    );
+    assert.equal(
+      diffQuiet(TEMPLATE_WRITING_STYLE, INSTALLED_WRITING_STYLE),
+      0,
+      "writing-style.md: template and installed should match",
+    );
+  });
+
   it("template and installed changelog.md match", () => {
     assertMirrorExists(TEMPLATE_CHANGELOG, INSTALLED_CHANGELOG, "changelog.md");
     assert.equal(
@@ -431,8 +453,10 @@ describe("preamble/conventions sync: Proof Gate presence (ADR-018)", () => {
 });
 
 describe("preamble/conventions sync: proof-evidence pointer", () => {
-  it("points both preambles directly to the verification claim evidence table", () => {
-    for (const preamblePath of [TEMPLATE_PREAMBLE, INSTALLED_PREAMBLE]) {
+  // One named case per preamble copy, so a failure names the template or the installed file.
+  for (const preamblePath of [TEMPLATE_PREAMBLE, INSTALLED_PREAMBLE]) {
+    // Covers where an agent is sent for proof examples: the stale README pointer must be gone.
+    it(`points directly to the verification claim evidence table in ${preamblePath}`, () => {
       const content = readFileSync(preamblePath, "utf-8");
       assert.match(
         content,
@@ -444,6 +468,6 @@ describe("preamble/conventions sync: proof-evidence pointer", () => {
         /Concrete claim\/proof examples live in `\.goat-flow\/skill-docs\/skill-quality-testing\/README\.md`/,
         preamblePath,
       );
-    }
-  });
+    });
+  }
 });

@@ -104,6 +104,15 @@ const SHARED_PHRASES = [
       ".goat-flow/learning-loop/decisions/",
     ],
   },
+  {
+    label: "prose-surface READ routing",
+    section: "Execution Loop",
+    phrases: [
+      "Prose surfaces route the same way before writing",
+      "need `writing-style.md`",
+      "the trigger is touching the surface, not the request naming it",
+    ],
+  },
 ];
 
 /** Render a repository-relative path for deterministic failure messages. */
@@ -116,7 +125,10 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Read the current package release date from CHANGELOG.md for live-header validation. */
+/**
+ * Read the current package release date for live-header validation.
+ * Package read or parse failures are recorded and recover to null; CHANGELOG read failures propagate.
+ */
 function readReleaseMetadata(failures) {
   let version;
   try {

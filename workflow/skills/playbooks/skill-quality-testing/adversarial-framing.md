@@ -1,9 +1,9 @@
 ---
-goat-flow-reference-version: "1.14.0"
+goat-flow-reference-version: "1.15.0"
 ---
 # Adversarial Framing (review-class skills)
 
-Patterns specific to authoring or hardening review-class skills - goat-review, goat-critique, goat-qa. Covers the cynical-reviewer role prompt, the zero-findings HALT rule, the parallel reviewer information-asymmetry pattern, and the structured finding schema that downstream tools consume.
+Patterns specific to authoring or hardening review-class skills - goat-review, goat-critique, goat-qa. Covers the cynical-reviewer role prompt, the zero-findings HALT rule, the parallel reviewer information-asymmetry pattern, and an optional structured finding schema for explicit machine-readable consumers.
 
 Companion files in this pack:
 - `tdd-iteration.md` - core TDD methodology (load first when authoring any skill)
@@ -47,7 +47,7 @@ goat-critique's Agent C (Fresh Eyes, artefact + rubric only) IS the Blind Hunter
 
 ## Structured finding schema
 
-When findings need downstream machine processing (audit pipelines, PR bots, goat-critique synthesis):
+Use this optional schema only when a real downstream consumer requires machine-readable findings (for example, an audit pipeline or PR bot):
 
 ```json
 {
@@ -69,4 +69,4 @@ Rules:
 |-------|------|
 | `/goat-review` skill | Zero-findings HALT - adversarial pattern in the wild |
 | `/goat-critique` skill | Agent C fresh-eyes - parallel reviewer info asymmetry in the wild |
-| `/goat-qa` skill | Structured-finding shape for gap output |
+| `/goat-qa` skill | Human-readable gap tables; not an implementation of the optional JSON schema |

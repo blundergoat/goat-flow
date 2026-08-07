@@ -31,7 +31,7 @@ flowchart LR
 |-------|---------|-----------|-------------|
 | [/goat](#goat--dispatcher) | Route to the right skill | -- | When intent is ambiguous; skip for simple implementations (the no-skill fast path in `skill-preamble.md`) |
 | [/goat-debug](#goat-debug) | Diagnosis-first debugging + investigate mode + browser evidence | No fixes until human reviews diagnosis | Bug or test failure, UI issues, exploring unfamiliar code |
-| [/goat-plan](#goat-plan) | Milestone planning with testing gates | Direct file-write mode; human approval between milestones | Before non-trivial implementation |
+| [/goat-plan](#goat-plan) | Milestone planning with claim-based Proof | Direct file-write mode; human approval between milestones | Before non-trivial implementation |
 | [/goat-review](#goat-review) | Structured code review + quality audit | Negative verification before presenting findings | Before merging, quality audits |
 | [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Runs only with delegated sub-agents; blocks on unresolved disputes before synthesis | High-stakes decisions, plans, assessments |
 | [/goat-security](#goat-security) | Threat-model-driven security assessment | MUST re-check framework/tooling mitigations before flagging findings | Before releases, after dependency changes, during audits |
@@ -122,21 +122,22 @@ flowchart TD
     S0["Step 0\nGather context\nFootgun check\nUI bug detection"] --> D1
 
     subgraph Diagnose["Diagnose Mode"]
-        D1["D1: Investigate\nHypotheses (2+ categories)\nTrace code paths"] --> BrowserCheck{UI bug?}
+        D1["D1: Investigate\nHypotheses (2+ categories)\nTrace code paths"] --> D15["D1.5: Minimise\nMethod fits the failure shape\nPreserve the load-bearing condition"]
+        D15 --> BrowserCheck{UI bug?}
         BrowserCheck -->|Yes| Browser["Browser evidence\nbrowser-use open/state/screenshot\nOBSERVED data"]
         BrowserCheck -->|No| D2
         Browser --> D2["D2: Diagnosis\nConfidence: HIGH/MEDIUM/LOW"]
     end
 
     D2 -->|"BLOCKING GATE"| Decision{Human decision}
-    Decision -->|"Fix it"| D3["D3: Fix Plan"]
+    Decision -->|"Fix it"| D3["D3: Fix Plan\nplanning only"]
     Decision -->|"Go deeper"| D1
     Decision -->|"Just report"| Close
-    D3 --> D4["D4: Post-Fix Verification\n+ browser re-verification for UI bugs"]
+    D3 -->|"BLOCKING GATE"| D4["D4: Post-Fix Verification\nOriginal unminimized reproduction\n+ browser re-verification for UI bugs"]
     D4 -->|"CHECKPOINT"| Close["Closing\nLearning loop"]
 ```
 
-No fixes until human reviews diagnosis. Confidence levels: HIGH = reproduced, MEDIUM = traced but not reproduced, LOW = inferred from code reading. For UI bugs, Step 0 detects browser-visible symptoms and loads `.goat-flow/skill-docs/playbooks/browser-use.md` on-demand. D1 uses browser evidence (screenshots, DOM state) to confirm or eliminate hypotheses after initial code reading. D4 reruns the browser reproduction post-fix as proof. Browser evidence is OBSERVED data; interpretations remain INFERRED until mapped to `file + semantic anchor`. When `browser-use` is unavailable, the reference includes a manual fallback using OS screenshot tools and browser DevTools.
+No fixes until human reviews diagnosis, and approval to write D3 authorizes planning only - implementation needs its own approval. Symptom reproduction is not root-cause proof: HIGH requires a traced mechanism plus a distinguishing counterfactual or intervention, MEDIUM means the mechanism is traced but distinguishing proof is unavailable or unsafe, and LOW rests on a load-bearing inferred link. For UI bugs, Step 0 detects browser-visible symptoms and loads `.goat-flow/skill-docs/playbooks/browser-use.md` on-demand. D1 uses browser evidence (screenshots, DOM state) to confirm or eliminate hypotheses after initial code reading. D4 reruns the browser reproduction post-fix as proof. Browser evidence is OBSERVED data; interpretations remain INFERRED until mapped to `file + semantic anchor`. When `browser-use` is unavailable, the reference includes a manual fallback using OS screenshot tools and browser DevTools.
 
 **Investigate mode:**
 
@@ -161,35 +162,35 @@ For an explicit goal and scope continue without waiting at I1; pause only for am
 
 ## /goat-plan
 
-Milestone planner and manager. It breaks work into testing-gated milestones, routing through five modes based on scope and user signals: Path-Only Intake (bare task path, read-only orientation), Named-File Update (explicit plan-file edit verb), Read-Only Analysis (analysis signals detected), Small File-Write (Hotfix/Small Feature), or File-Write (clear Standard+ build objective). Files are written to `.goat-flow/plans/` in Small File-Write, File-Write, and explicit Named-File Update modes; Path-Only Intake and Read-Only Analysis never write.
+Milestone planner and manager. The delivery budget controls scope: it fits the smallest complete result, estimates coding-agent time separately from human waiting, and adds detail only when risk or handoff needs it.
 
 ```mermaid
 flowchart TD
-    S0["Step 0\nCheck existing milestones\nIdentify riskiest part\nKill criteria"] --> P1
+    S0["Step 0\nChoose one mode\nCheck plan state and risk"] --> P1
 
     subgraph Plan["Milestone Breakdown"]
-        P1["Phase 1: Break into milestones\nArchetypes: Prove It Works → Make It Real\n→ Make It Solid → Make It Shine"]
+        P1["Phase 1: Fit must-deliver scope to budget\nUse only helpful planning lenses"]
     end
 
-    P1 -->|"CHECKPOINT"| P2["Phase 2: Output per mode\n(inline, file-write, or read-only)"]
+    P1 --> P2["Phase 2: Emit the proportional plan\nor report read-only analysis"]
     P2 -->|"Plan/design only"| Planned["Stop after plan handoff"]
     P2 -->|"return-to-implement"| ACT["Ordinary ACT implementation"]
-    ACT --> P3["Phase 3: Between milestones\nAI verification gate\nHuman verification gate"]
+    ACT --> P3["Phase 3: Fresh proof\nHuman verification gate"]
     P3 -->|"BLOCKING GATE"| Next{"Next milestone?"}
     Next -->|Yes| P3
-    Next -->|No| P4["Phase 4: Plan Complete\nAI verification gate\nHuman verification gate"]
+    Next -->|No| P4["Phase 4: Final proof\nHuman completion gate"]
     P4 -->|"BLOCKING GATE"| Close["Complete"]
 ```
 
-**Milestone archetypes:** Prove It Works (spike the riskiest part first) → Make It Real (end-to-end working) → Make It Solid (edge cases, security) → Make It Shine (polish, optional). Write modes persist milestone files immediately after breakdown; `/goat-plan` does not auto-chain `/goat-critique`. For an authorized build/change route, `/goat-plan` hands the first milestone to ordinary ACT implementation and remains the owner of the between-milestone gates. Each milestone has kill criteria, assumption tracking, and a dual AI + human verification gate (BLOCKING) before the next begins. Read-Only Analysis mode is available at any complexity level via analysis signals ("break this down for me", "how would you approach").
+**Modes:** Path-Only Intake and Read-Only Analysis never write. Named-File Update changes only the named plan file. Small File-Write creates one compact file; Standard File-Write creates a one-screen `ISSUE.md` overview plus executable milestones. High-risk work adds only the assumptions, rollback, compatibility, security, or layered proof its named risks require.
 
-**Handoff-grade milestone artifacts:** Standard+ plans record a planned-at SHA/date, committed and uncommitted drift commands, semantic-anchor current state, explicit in/out scope, a verification baseline, expected command results, STOP conditions, and maintenance notes. Small low-risk plans stay compact.
+**Planning lenses:** Prove It Works, Make It Real, Make It Solid, and Make It Shine are optional planning lenses, not required phases. A spike exists only for a named uncertainty. Lenses merge or disappear when they do not reduce uncertainty, deliver independent value, or create a real decision gate.
 
-**Reconcile:** On an explicit reconcile request, `/goat-plan` checks local TODO/DONE/BLOCKED/IN PROGRESS state against current code and evidence, then asks whether stale in-progress work should resume or be abandoned. Plan state remains local workflow context, never a setup invariant or implementation command.
+**Artifacts and proof:** Small plans target one screen. Standard overviews put outcome, budget, must-deliver scope, exclusions, risk, proof, and next action first. Milestones keep tasks executable for a fresh agent, organise proof as claim → evidence, give each command one home, and omit empty sections.
 
-**Plan completion (Phase 4):** When all milestones are done, the agent runs an AI verification gate (every milestone complete, every task ticked, every exit criterion evidenced, every testing gate passed with current-session proof) then presents results at a blocking human verification gate. Plan artifacts must not include self-destruct instructions, and agents must not delete or archive plan files without human approval.
+**Execution and recovery:** Authorized build/change requests may return to ordinary ACT without another implementation-approval pause. Every milestone still stops on invalidated assumptions, kill criteria, changed scope, or conflicting evidence. Fresh proof records actual effort before the blocking human gate. Reconciliation remains read-only, and plan state remains local workflow context.
 
-**Key constraints:** MUST check for existing milestone files before creating new ones. MUST include testing gates on every milestone. MUST NOT continue building on an invalidated assumption. MUST NOT invoke or prompt for `/goat-critique` from `/goat-plan`. MUST pick exactly one mode in Step 0 and stay in it - cross-mode drift is the failure the mode-picker exists to prevent.
+**Completion:** Final closure requires current evidence and human approval. `/goat-plan` never infers approval, silently weakens requirements, auto-runs `/goat-critique`, or writes self-deletion instructions.
 
 ---
 
@@ -211,15 +212,23 @@ flowchart TD
 
     subgraph Review["Quick Review"]
         R1["Pass 1: Blind Suspicion\nDiff only\nCapture raw suspicions"]
-        R1 -->|"CHECKPOINT"| R2["Pass 2: Grounded Verification\nOpen full files\nConfirm / Refute / Unresolve"]
-        R2 --> R3["Present Findings\nMUST / SHOULD / MAY Fix"]
+        R1 -->|"CHECKPOINT"| R2["Pass 2: Grounded Verification\nOpen full files\nConfirm / Adjust / Refute / Unresolve"]
+        R2 --> AR["Post-local reconciliation\nAutomated review after both passes"]
+        AR --> R3["Present Findings\nR-NNN [SEVERITY:ACTION]\nReview Integrity"]
     end
 
     R3 -->|"BLOCKING GATE"| DoD["DoD Gate Check"]
-    DoD -->|"CHECKPOINT"| Close["Closing"]
+    DoD --> V["Version-matched CLI\nreview validate when available"]
+    V -->|"CHECKPOINT"| Close["Closing"]
 ```
 
-Pass 1 never surfaces findings. Pass 2 is the source of truth: it opens full files, attempts to disprove every suspicion, and removes refuted items before presentation. MUST NOT flag pre-existing issues as part of this change.
+Pass 1 never surfaces findings. Pass 2 is the source of truth: it opens full files and classifies each suspicion as confirmed, adjusted, refuted, or unresolved; refuted items stay in the local ledger rather than Findings. Automated-review conclusions stay unread until both local passes finish, then locally verified bot-only findings may enter the same evidence pipeline. MUST NOT flag pre-existing issues as part of this change.
+
+Findings use `R-NNN [SEVERITY:ACTION]`, semantic anchors, Evidence/Proof, and `Harm:` for MUST/SHOULD; every result includes Review Integrity. With a version-matched CLI, pipe the draft through `goat-flow review validate`; validator unavailability does not block reporting.
+
+Pass 2.5 re-frames only evidence already gathered and makes no new tool, file, command, or model calls. Refutation ledgers use a declared exact path and counted one-line records; ledgers and captured refuter JSON use host-owned pre-write redaction. Unavailable redaction skips persistence but preserves the count. Full and compact integrity output records `Review validator: validated | validator-unavailable`.
+
+Pass 3 is optional and requires explicit informed approval. An uncited or unresolvable refuter claim cannot remove a finding; a MUST remains blocking until the host verifies its cited guard, and only a verified citation can change Ship Verdict.
 
 **Audit mode:** For codebase areas (not a diff). Scan using severity ordering, run negative verification, group 3+ related findings as systemic patterns. MUST NOT propose fixes in audit mode - findings only.
 

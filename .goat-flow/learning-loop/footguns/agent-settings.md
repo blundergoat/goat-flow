@@ -1,6 +1,6 @@
 ---
 category: agent-settings
-last_reviewed: 2026-07-17
+last_reviewed: 2026-08-03
 ---
 
 ## Footgun: Settings-layer deny globs match guarded phrases quoted inside benign read-only commands
@@ -48,13 +48,13 @@ last_reviewed: 2026-07-17
 
 **Evidence:**
 - Removed-tool deny rules surface as launch-time warnings, not test failures: pre-fix `npm run test:fast` was green with the 12 `MultiEdit(...)` rules present.
-- The `Edit(...)` deny rules covering the same 12 secret paths already exist, so dropping the `MultiEdit(...)` rules loses zero coverage (verified: deny count 57 → 45, all paths retain Read/Edit/Write).
+- At the 2026-06-07 fix, the `Edit(...)` denies already covered the same 12 secret paths, so dropping `MultiEdit(...)` lost no coverage: deny count moved 57 → 45 and all paths retained Read/Edit/Write. The 2026-07-16 follow-up below later removed unmatched Write rules.
 - Sources scrubbed: `.claude/settings.json`, `.codex/hooks.json`, template `workflow/hooks/agent-config/claude.json`, generators `src/cli/server/hooks-registry.ts` (matcher `Edit|Write`) + `workflow/install-goat-flow.sh` (`gruffHookEntries`), docs `workflow/hooks/README.md`, and the hook self-test in `workflow/hooks/gruff-code-quality.sh` (synced to the installed `.goat-flow/hooks/` copy or `audit` drift fails).
 
 **Prevention:**
 1. A "fixed" config regression needs a test, not just a CHANGELOG line. Guards now in place: `test/unit/agent-config-template-parity.test.ts` (search: `never carries a rule form Claude will not match`) locks every Claude permission rule (deny/allow/ask) in the template AND `.claude/settings.json` to `{Bash,Read,Edit}` (see 2026-07-16 follow-up); `test/unit/hook-registrar.test.ts` (search: `Edit|Write`) and `test/integration/setup-install-migrations.test.ts` (search: `/"matcher": "MultiEdit"/`) lock the gruff matcher.
 2. When mirroring permission or hook entries for a new tool, confirm the tool exists AND its permission-rule form is matched — file permission checks only match `Edit(path)`/`Read(path)` rules; `Write`/`NotebookEdit` are hook-matcher-only.
-3. Editing a `workflow/hooks/*.sh` template means re-syncing the installed `.goat-flow/hooks/` copy in the same change; `audit` drift (search: `hook template ... and installed copy ... differ`) fails otherwise.
+3. Editing a `workflow/hooks/*.sh` template means re-syncing the installed `.goat-flow/hooks/` copy in the same change; `audit` drift (search: `differs from the current goat-flow template`) fails otherwise.
 
 **Follow-up (2026-06-08): the template guard was necessary but NOT sufficient — upgrades didn't clean existing installs.** The 1.10.0 fix above scrubbed the templates and added `test/unit/agent-config-template-parity.test.ts` (allow-set `{Bash,Read,Edit,Write}`). Both green — yet every real user still saw the 13 warnings on launch. All five `gruff-workspace` projects (`gruff-go|rs|ts|php|py`), upgraded to 1.10.x, still carried 13 `MultiEdit(...)` rules in `.claude/settings.json`. Root cause: `workflow/install-goat-flow.sh` settings block (search: `SETTINGS_MIGRATIONS=()`) only ran *Codex* migrations on an existing settings file; for Claude it fell through to "exists, skipped", and the Claude hook-config migration `migrate_agent_hook_config` only rewrites `current.hooks`, never `permissions.deny`. **A test on the template can't see the thousands of user-owned installed files that already hold the bad value.** Removing/renaming anything that lands in a user-owned config (a deny rule, a hook matcher, a config key) needs an UPGRADE MIGRATION that prunes the orphaned value from existing files — not just a clean template (cf. the standing rule: upgrades MUST prune orphaned/renamed artifacts).
 

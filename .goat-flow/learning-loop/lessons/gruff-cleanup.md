@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-07-17
+last_reviewed: 2026-08-07
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -39,6 +39,8 @@ last_reviewed: 2026-07-17
 
 **What happened:** During M01 gruff cleanup, extracting `src/cli/facts/fs.ts` cache helpers added comments that said "read errors cache and return null", "stat errors cache and return false", and "readdir errors cache and return []". Humans could infer the behavior, but `gruff-ts` still reported `docs.missing-error-behavior-doc` until the comments used the installed rule vocabulary: `swallows ... fallback`.
 
+**Recurrence update (2026-08-06):** New Windows Bash discovery comments said lookup errors returned no choices, but the rule stayed open until the text explicitly said the process errors `recover` to fallback discovery. The targeted report then cleared all three error-behavior findings.
+
 **Root cause:** I wrote comments that described the behavior semantically but did not satisfy the analyzer's marker vocabulary for error recovery.
 
 **Prevention:** When `docs.missing-error-behavior-doc` survives a comment pass, read the installed rule vocabulary and use accepted recovery words such as `swallows`, `fallback`, or `recover` when truthful. Evidence anchors: `src/cli/facts/fs.ts` (search: `swallows read errors as a cached null fallback`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
@@ -47,11 +49,13 @@ last_reviewed: 2026-07-17
 
 **Status:** active | **Created:** 2026-06-09
 
-**What happened:** After running `gruff-ts init --force` as a probe, I left the generated default `.gruff-ts.yaml` in place while continuing hook work. Preflight later failed `Learning-loop schema` because the generated config removed project-specific tuning anchors such as `repo-standard short names`, `dashboard state and CLI option DTOs`, and `test-quality.setup-bloat`.
+**What happened:** After running `gruff-ts init --force` as a probe, I left the generated default `.gruff-ts.yaml` in place while continuing hook work. Preflight later failed `Learning-loop schema` because the generated config removed project-specific tuning anchors such as `repo-standard short names` and `dashboard state and CLI option DTOs`.
+
+**Recurrence 2026-08-02:** Regenerating the config after the 0.4.0 upgrade removed the same project allowlists. Six stale anchors then failed both `stats --check` and the support bundle's harness audit. The retired `test-quality.setup-bloat` block was not restored; its historical lesson was resolved instead.
 
 **Root cause:** I treated `init --force` as a harmless command run instead of a policy rewrite. In goat-flow, `.gruff-ts.yaml` carries durable tuning plus semantic anchors referenced by lessons, so a generated-default reset can break verification even when the hook implementation is correct.
 
-**Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, restore the project-specific tuning anchors before broad verification. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`), `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`), `.gruff-ts.yaml` (search: `test-quality.setup-bloat`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
+**Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, merge current generated defaults with the still-supported project tuning before broad verification; do not revive rules removed by the installed version. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`), `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
 
 ## Lesson: Verify a gruff path-ignore by directory scan, not by naming the file
 
@@ -67,11 +71,15 @@ last_reviewed: 2026-07-17
 
 **Status:** active | **Created:** 2026-05-31
 
+**Incident count:** 3 | **Latest occurrence:** 2026-08-06
+
 **What happened:** During the gruff findings cleanup, I treated `waste.unused-import` findings as safe mechanical removals. Removing `realpathSync` / `fileURLToPath` from `src/cli/cli.ts` broke `npm run typecheck`, and removing `rename` / `TERMINAL_UPLOAD_MAX_BODY_BYTES` from `test/integration/dashboard-server.test.ts` broke the focused dashboard-server test.
+
+**Recurrence update (2026-08-06):** The analyzer reported `relative`, `resolve`, and `fileURLToPath` unused in both `run-with-bash.mjs` mirrors even though direct searches found executable references. The imports stayed, and Node syntax plus focused launcher tests remained green.
 
 **Root cause:** The analyzer reported imports as unused even though the symbols were referenced later in large files. I trusted the finding before doing a local symbol search or running the focused test.
 
-**Prevention:** For every gruff `waste.unused-import` finding, run `rg "<symbol>" <file>` before editing. Delete the import only when the import specifier is the sole hit, then run the focused typecheck or test that covers the file. Evidence anchors: `src/cli/cli.ts` (search: `realpathSync(fileURLToPath(import.meta.url))`), `test/integration/dashboard-server-dashboard-terminal-endpoints.test.ts` (search: `TERMINAL_UPLOAD_MAX_BODY_BYTES + 1`), failing output (search: `ReferenceError: rename is not defined`).
+**Prevention:** For every gruff `waste.unused-import` finding, run `rg "<symbol>" <file>` before editing. Delete the import only when the import specifier is the sole hit, then run the focused typecheck or test that covers the file. Evidence anchors: `src/cli/cli.ts` (search: `realpathSync(fileURLToPath(import.meta.url))`) and `test/integration/dashboard-server-dashboard-terminal-endpoints.test.ts` (search: `TERMINAL_UPLOAD_MAX_BODY_BYTES + 1`).
 
 ## Lesson: Check staged deletions after bulk gruff rewrites
 
@@ -87,11 +95,21 @@ last_reviewed: 2026-07-17
 
 **Status:** active | **Created:** 2026-05-31
 
+**Incident count:** 5 | **Latest occurrence:** 2026-08-07
+
 **What happened:** During the gruff naming cleanup, the full `npm test` run reached the installer round-trip fixture and failed its temp-repo preflight because local style gates still had issues: ESLint flagged a non-null assertion in `src/cli/cli-parser.ts`, and Prettier found an unformatted modified contract test.
 
 **Root cause:** I verified the target gruff rule and typecheck first, then jumped to the expensive full suite before running the cheap local style gates that the round-trip preflight also enforces.
 
-**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`).
+**Recurrence 2026-08-03:** The PR #57 hardening pass ran the 96-second installer round-trip before targeted ESLint. Its temp preflight then rejected `compareManagedHookTimeouts` at complexity 16, although typecheck, focused tests, and gruff comment checks were already green. Extracting config-read, per-agent, and per-hook helpers cleared ESLint immediately.
+
+**Recurrence 2026-08-03 (M03):** The reporting-capture race fix launched focused tests and gruff alongside Prettier before confirming formatting. The behavior tests passed, but Prettier rejected `src/cli/quality/quality-command.ts`, gruff found four missing side-effect comments, and the corrected style pass then caught an unbound-method signature. Running the cheap style checks first would have kept the proof run clean.
+
+**Same-day recurrence:** M02 correctly ran cheap gates before broad tests, and Prettier caught the newly edited `plans-time.ts` before the timing suites. Formatting first prevented a later preflight or round-trip failure; the proof sequence stopped, formatted the file, and re-ran the exact check before continuing.
+
+**Recurrence 2026-08-07:** R2's degradation-list behavior and focused tests passed, but the release-wide format gate later rejected the modified verdict test. Formatting that file and rerunning the same gate cleared the failure before full tests or preflight. Evidence anchor: `test/unit/review-validate-verdict.test.ts` (search: `rejects empty or contradictory degradation flag lists`).
+
+**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`), `src/cli/plans-time.ts` (search: `beforeMilestoneReplacement`).
 
 ## Lesson: Size refactors must preserve browser script load graphs in tests
 
@@ -152,8 +170,8 @@ last_reviewed: 2026-07-17
 **Status:** active | **Created:** 2026-07-13
 **Decision changed:** Generate one named test per matrix value and keep the assertion in that test callback; shared helpers return evidence instead of hiding assertions.
 **Trigger phase:** VERIFY
-**Incident count:** 2
-**Latest occurrence:** 2026-07-13
+**Incident count:** 3
+**Latest occurrence:** 2026-08-07
 
 **What happened:** The first M03 cross-agent install matrix wrapped assertions for all four agents inside two test-level loops. Gruff reported `test-quality.loop-in-test`; moving the work into named per-agent helpers then exposed `test-quality.no-assertions` because the visible test callbacks only called those helpers. The behavior suite passed both shapes, but its TAP output and analyzer evidence could not prove each named case owned an assertion.
 
@@ -161,4 +179,6 @@ last_reviewed: 2026-07-17
 
 **Prevention:** Register one named case per matrix value, return a concrete result from the shared scenario helper, and assert that result inside the test callback. Document temporary filesystem and subprocess side effects on helpers that perform installer flows. Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `Separate names make the failing agent visible`).
 
-**Recurrence 2026-07-13:** M14's evidence-envelope and local-data contract tests initially asserted matrix values inside test-level loops. Gruff again reported `test-quality.loop-in-test`; named cases restored direct, user-visible failure localization and produced `A`, composite `100`, with 0 findings. Evidence anchors: `test/unit/evidence-envelope.test.ts` (search: `FORBIDDEN_RAW_PAYLOAD_KEYS`) and `test/contract/local-data-contract.test.ts` (search: `LOCAL_STATE_README_PAIRS`).
+**Recurrence 2026-07-13:** M14's evidence-envelope and local-data contract tests initially asserted matrix values inside test-level loops. Gruff again reported `test-quality.loop-in-test`; named cases restored direct, user-visible failure localization and produced `A`, composite `100`, with 0 findings. Evidence anchors: `test/unit/evidence-envelope.test.ts` (search: `FORBIDDEN_RAW_PAYLOAD_KEYS`) and `test/contract/local-data-contract.test.ts` (search: `LOCAL_STATE_README_ENTRIES`).
+
+**Recurrence 2026-08-07:** M04 initially checked nine staged-only prompt phrases inside one bounded-saver test loop. Direct Gruff analysis reported a new `test-quality.loop-in-test` advisory. Registering one named test per phrase kept a direct assertion and made the failed contract visible in TAP; the focused suite passed 45 tests and the rerun removed the new finding. Evidence anchor: `test/unit/quality-report-contract.test.ts` (search: `keeps bounded-saver prompts free of staged-only guidance`).

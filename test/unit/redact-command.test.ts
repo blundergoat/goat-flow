@@ -18,6 +18,16 @@ import {
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
+const BARE_SECRET_NAMES = [
+  "API_KEY",
+  "AUTH",
+  "COOKIE",
+  "PASSWORD",
+  "PASSWD",
+  "PRIVATE_KEY",
+  "SECRET",
+  "TOKEN",
+] as const;
 
 /** Build fake credential shapes at runtime so tracked fixtures never contain usable-looking values. */
 function buildFakeSecrets(): {
@@ -81,19 +91,8 @@ describe("durable artifact redaction", () => {
   });
 
   // Bare names are the most common `.env` spelling and must receive the same protection as prefixed names.
-  it("redacts bare secret environment names without consuming benign near-matches", () => {
-    const bareNames = [
-      "API_KEY",
-      "AUTH",
-      "COOKIE",
-      "PASSWORD",
-      "PASSWD",
-      "PRIVATE_KEY",
-      "SECRET",
-      "TOKEN",
-    ];
-
-    for (const name of bareNames) {
+  for (const name of BARE_SECRET_NAMES) {
+    it(`redacts the bare ${name} environment name`, () => {
       assert.equal(
         scrubDurableText(`${name}=fixture-value`),
         `${name}=[REDACTED:env-value]`,
@@ -102,8 +101,10 @@ describe("durable artifact redaction", () => {
         scrubDurableText(`export ${name}="fixture-value" # retained comment`),
         `export ${name}=[REDACTED:env-value] # retained comment`,
       );
-    }
+    });
+  }
 
+  it("does not consume benign near-matches of bare secret names", () => {
     const benignName = ["TOKEN", "COUNT"].join("_");
     const benignAssignment = `${benignName}=4`;
     assert.equal(scrubDurableText(benignAssignment), benignAssignment);

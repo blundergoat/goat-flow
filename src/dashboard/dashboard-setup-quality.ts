@@ -187,13 +187,23 @@ function dashboardQualityShellQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+/**
+ * Select the project that owns the active quality mode's saved report.
+ * Use for both prompt text and runner permissions so the UI shows and enforces one destination.
+ *
+ * @param ctx - Quality view state; an empty project path means target selection has not finished
+ * @param mode - selected quality mode; never null after the user chooses a Quality card
+ * @returns controlling workspace for process/skills, otherwise the selected target; never empty in a launch
+ */
 function dashboardQualityReportProjectPath(
   ctx: DashboardSetupQualityContext,
   mode: QualityModeOption,
 ): string {
+  // Framework modes save beside the framework evidence the user asked to assess.
   if (mode.id === "process" || mode.id === "skills") {
     return dashboardQualityControllingWorkspace();
   }
+  // Target modes save beside the selected project's setup or harness evidence.
   return ctx.projectPath;
 }
 
@@ -225,23 +235,11 @@ function dashboardQualityReportLogPrompt(
       : "consumer",
   );
   const reportRootShell = dashboardQualityShellQuote(projectPath);
-  const validatorRootShell = dashboardQualityShellQuote(
-    dashboardQualityControllingWorkspace(),
-  );
   return [
     "Quality report log:",
     `- Report owner project_path for this mode: ${projectPath}`,
-    "- Write the final machine-readable report to the owner project's `.goat-flow/logs/quality/`. This path is gitignored and expected; do not write the JSON inline only.",
-    "- Filename format: `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`, where `<agent>` is the literal selected quality target shown below.",
-    "- Derive the timestamp and random suffix from the shell at write time:",
-    "```bash",
-    `REPORT_ROOT=${reportRootShell}`,
-    `VALIDATOR_ROOT=${validatorRootShell}`,
-    'STAMP="$(date +"%Y-%m-%d-%H%M")"',
-    "RAND=\"$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 5)\"",
-    `FILE="$REPORT_ROOT/.goat-flow/logs/quality/\${STAMP}-${agent}-\${RAND}.json"`,
-    'mkdir -p "$REPORT_ROOT/.goat-flow/logs/quality"',
-    "```",
+    "- Persist the final report through the bounded saver. It redacts and validates stdin in memory, then chooses a filename under the owner project's gitignored `.goat-flow/logs/quality/`.",
+    "- Filename format: `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`; the saver derives every filename component.",
     "- JSON body shape:",
     "```json",
     "{",
@@ -269,9 +267,23 @@ function dashboardQualityReportLogPrompt(
     "- Allowed severities: `BLOCKER`, `MAJOR`, `MINOR`. Allowed evidence methods: `runtime-probe`, `static-analysis`, `mixed`.",
     '- `prior_report_id`: keep `null` unless you can cite a specific prior report id (from `goat-flow quality history`) for this same agent/mode. When it is set, `delta_tag` is REQUIRED on every finding (`"new"` unless the finding materially matches that prior report; then `"persisted"`); when it is `null`, leave `delta_tag` as `null` or omit it.',
     "- Live review findings should cite `file` + semantic anchor after re-reading the cited file and anchor. Durable footguns, lessons, patterns, and decisions must use file paths plus semantic anchors rather than line numbers.",
-    '- Validate before confirming: `(cd "$VALIDATOR_ROOT" && node --import tsx src/cli/cli.ts quality validate "$FILE")`.',
-    '- Verify the file exists and is non-zero: `ls -la "$FILE"`.',
-    `- End your response with: \`Wrote quality report to ${projectPath}/.goat-flow/logs/quality/<filename>.json\`.`,
+    "- **Version-skew calibration:** Executable version checks select a compatible report saver; they are not findings or score inputs. Before publication, the framework checkout may be newer than the bare `goat-flow` on `PATH`; use the matching source CLI and do not report or score that PATH-only skew. Raise version findings only when repository-owned declarations or managed target artifacts disagree.",
+    "- In the controlling goat-flow checkout, confirm `node --import tsx src/cli/cli.ts --version` matches the report version, then run:",
+    "```bash",
+    `node --import tsx src/cli/cli.ts quality save ${reportRootShell} <<'JSON'`,
+    "<insert the complete report object as one JSON line here>",
+    "JSON",
+    "```",
+    "- Outside the framework checkout, use the matching installed CLI:",
+    "```bash",
+    `goat-flow quality save ${reportRootShell} <<'JSON'`,
+    "<insert the complete report object as one JSON line here>",
+    "JSON",
+    "```",
+    "- Minify the completed object to one JSON line; multi-line heredoc bodies can be mistaken for chained commands by safety hooks.",
+    "- Never stage the raw JSON or pass `--output`. If neither saver is compatible, report `persist-skipped: redactor-unavailable`.",
+    "- Success prints `OK <absolute-report-path>` only after the report exists and validates.",
+    "- End your response with: `Wrote quality report to <absolute-report-path>` using the exact `OK` path.",
     `- This log requirement applies to the ${mode.label} mode; do not skip it even when the prose assessment is complete.`,
   ].join("\n");
 }

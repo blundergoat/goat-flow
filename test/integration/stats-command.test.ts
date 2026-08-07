@@ -16,6 +16,7 @@ import {
   extractLessonsFacts,
 } from "../../src/cli/facts/shared/learning-loop.js";
 import {
+  BUCKET_SIZE_WARN_BYTES,
   buildDecisionsSection,
   buildStatsReport,
   checkStats,
@@ -79,6 +80,7 @@ function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
 function makeFixtureRepo(spec: {
   footguns: Record<string, string>;
   lessons: Record<string, string>;
+  patterns?: Record<string, string>;
   decisions?: Record<string, string>;
 }): string {
   const fixtureProjectRoot = mkdtempSync(join(tmpdir(), "goatflow-stats-"));
@@ -94,8 +96,13 @@ function makeFixtureRepo(spec: {
     fixtureProjectRoot,
     ".goat-flow/learning-loop/decisions",
   );
+  const patternDirectory = join(
+    fixtureProjectRoot,
+    ".goat-flow/learning-loop/patterns",
+  );
   mkdirSync(footgunDirectory, { recursive: true });
   mkdirSync(lessonDirectory, { recursive: true });
+  mkdirSync(patternDirectory, { recursive: true });
   mkdirSync(decisionDirectory, { recursive: true });
   // Each footgun fixture becomes a real bucket the selected-project extractor can discover.
   for (const [bucketFilename, bucketContent] of Object.entries(spec.footguns)) {
@@ -104,6 +111,12 @@ function makeFixtureRepo(spec: {
   // Each lesson fixture becomes a real bucket the stats user would see.
   for (const [bucketFilename, bucketContent] of Object.entries(spec.lessons)) {
     writeFileSync(join(lessonDirectory, bucketFilename), bucketContent);
+  }
+  // Pattern fixtures share the semantic-anchor parser but have no freshness bucket in stats.
+  for (const [bucketFilename, bucketContent] of Object.entries(
+    spec.patterns ?? {},
+  )) {
+    writeFileSync(join(patternDirectory, bucketFilename), bucketContent);
   }
   // Omitted decisions model a user project with an empty but valid decision directory.
   const decisionFixtures = spec.decisions ?? {};
@@ -363,6 +376,31 @@ describe("goat-flow stats - graduation candidates", () => {
 });
 
 describe("goat-flow stats --check", () => {
+  it("fails when a pattern entry carries a stale semantic anchor", () => {
+    const report = loadReport({
+      footguns: {},
+      lessons: {},
+      patterns: {
+        "verification.md":
+          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Pattern: stale evidence\n\nEvidence: `.goat-flow/learning-loop/decisions/README.md` (search: `retiredSymbol`).\n",
+      },
+      decisions: { "README.md": "# Decisions\n" },
+    });
+
+    const verdict = checkStats(report);
+
+    assert.equal(verdict.status, "fail");
+    assert.ok(
+      verdict.findings.some(
+        (finding) =>
+          finding.rule === "stale-ref" &&
+          finding.file.endsWith("patterns/verification.md") &&
+          finding.message.includes("retiredSymbol"),
+      ),
+      "stale pattern evidence must block stats --check",
+    );
+  });
+
   it("exposes legacy optional metadata in JSON without flooding warnings", () => {
     const report = loadReport({
       footguns: {
@@ -425,6 +463,26 @@ describe("goat-flow stats --check", () => {
     const verdict = checkStats(report);
     assert.equal(verdict.status, "pass");
     assert.deepEqual(verdict.findings, []);
+  });
+
+  it("reports exact byte operands when a bucket exceeds the size gate", () => {
+    const bucketPrefix =
+      "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\n";
+    const oversizedBucket = `${bucketPrefix}${"x".repeat(BUCKET_SIZE_WARN_BYTES)}`;
+    const report = loadReport({
+      footguns: { "hooks.md": oversizedBucket },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    const finding = verdict.findings.find(
+      (item) => item.rule === "bucket-size",
+    );
+
+    assertExists(finding, "expected an oversized-bucket finding");
+    assert.equal(
+      finding.message,
+      `.goat-flow/learning-loop/footguns/hooks.md: ${Buffer.byteLength(oversizedBucket)} bytes exceeds ${BUCKET_SIZE_WARN_BYTES}-byte threshold; split into narrower category buckets`,
+    );
   });
 
   it("fails when footgun entries do not have exactly one canonical evidence label", () => {

@@ -1,6 +1,7 @@
 /**
  * Dashboard model readers for injected shell data and API payloads that feed
  * presets, projects, sessions, quality views, and task state.
+ * Use when server responses must become safe, complete browser-facing models.
  */
 function readSupportedAgent(rawAgent: unknown): SupportedAgent | null {
   if (!isRecord(rawAgent)) return null;
@@ -177,11 +178,21 @@ function readProjectEntry(rawProject: unknown): ProjectEntry | null {
   return entry;
 }
 
+/** Decode access mode compatibly: absent legacy values stay workspace, unknown values restrict writes. */
+function readTerminalAccessMode(value: unknown): TerminalAccessMode {
+  return value === undefined || value === "workspace"
+    ? "workspace"
+    : "reporting";
+}
+
+/** Read an optional numeric session metric; non-numeric legacy values stay absent. */
+function readOptionalSessionMetric(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
 /**
- * Read one backend terminal-session record.
- *
- * This stays explicit because old session payloads may omit cwd/targetPath, and
- * the dashboard must default them to projectPath without marking the session bad.
+ * Read one backend terminal-session record, rejecting incomplete required identity fields.
+ * Old payloads may omit cwd/targetPath, so those fields preserve the project-path compatibility fallback.
  */
 function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
   if (!isRecord(rawSession)) return null;
@@ -192,6 +203,16 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
   const projectPath = readString(rawSession.projectPath);
   const cwd = readString(rawSession.cwd);
   const targetPath = readString(rawSession.targetPath);
+  // Absent means a session projection that predates access modes, so it keeps
+  // the workspace default. An unrecognised value is a server bug, not a
+  // permission grant: fall back to the restricted mode rather than carry a
+  // write-enabled session into the retry and reconnect payloads.
+  const accessMode = readTerminalAccessMode(rawSession.accessMode);
+  // Legacy sessions omit capture metadata, which means the UI has no receipt channel to restore.
+  const captureQualityDrafts = rawSession.captureQualityDrafts === true;
+  // An empty owner remains null so retry never invents which visible project should receive a report.
+  const qualityReportProjectPath =
+    readString(rawSession.qualityReportProjectPath) || null;
   if (
     !id ||
     !status ||
@@ -211,12 +232,12 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
     cwd: cwd || projectPath,
     targetPath: targetPath || projectPath,
     runner,
+    accessMode,
+    captureQualityDrafts,
+    qualityReportProjectPath,
     lastInputAt: rawSession.lastInputAt,
-    age: typeof rawSession.age === "number" ? rawSession.age : undefined,
-    idleDuration:
-      typeof rawSession.idleDuration === "number"
-        ? rawSession.idleDuration
-        : undefined,
+    age: readOptionalSessionMetric(rawSession.age),
+    idleDuration: readOptionalSessionMetric(rawSession.idleDuration),
     projectName: readString(rawSession.projectName) || undefined,
   };
 }
@@ -237,13 +258,18 @@ function readQualityResult(rawResult: unknown): QualityResult {
     throw new Error("Quality response returned an invalid payload");
   }
 
+  const prompt = readString(payload.prompt);
+  const launchPrompt = readString(payload.launchPrompt);
   return {
     command: "quality",
     agent,
     auditStatus: auditStatus ?? "unavailable",
     auditCacheStatus: auditCacheStatus as QualityResult["auditCacheStatus"],
     auditSummary: readString(payload.auditSummary),
-    prompt: readString(payload.prompt),
+    prompt,
+    // Older servers omit launchPrompt; falling back to the saver prompt keeps
+    // launches working with the previous single-variant contract.
+    launchPrompt: launchPrompt || prompt,
   };
 }
 

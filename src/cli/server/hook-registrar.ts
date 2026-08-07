@@ -18,6 +18,8 @@ import {
   setHookEnabled,
 } from "../config/writer.js";
 import { getTemplatePath } from "../paths.js";
+import { AUDIT_VERSION } from "../constants.js";
+import { projectIsAheadOfCli } from "../version-compare.js";
 import type { AgentId, AgentProfile } from "../types.js";
 import {
   getHookSpec,
@@ -356,6 +358,42 @@ function hookScriptContent(script: string): string {
   return readFileSync(getTemplatePath(`workflow/hooks/${script}`), "utf-8");
 }
 
+/**
+ * Report whether an installed hook script is stamped newer than this CLI's bundled copy.
+ * Guards the guardrail layer: `hooks sync` rewrites installed files from the running CLI's bundle, so an
+ * older CLI run against a newer install would silently replace current deny/safety hooks with its own
+ * stale copies.
+ *
+ * This never throws. A target that is missing, unreadable, or carries no version stamp is
+ * reported as "not newer", so a first install or a repair still goes ahead for the user.
+ *
+ * @param target - absolute path of the installed hook script about to be overwritten
+ * @returns true when the installed script is ahead of this CLI and must be left alone; false
+ *   also covers "cannot tell", so the caller proceeds with the sync
+ */
+function installedHookIsNewer(target: string): boolean {
+  // Nothing installed there yet, so this is a first install with no user work to protect.
+  if (!existsSync(target)) return false;
+
+  let installed: string;
+  try {
+    installed = readFileSync(target, "utf-8");
+  } catch {
+    // e.g. the user pointed the CLI at a project checkout they do not own, so the hook is
+    // present but cannot be opened. Treat it as unknown rather than blocking their sync.
+    return false;
+  }
+
+  const stamped = installed.match(
+    /goat-flow-hook-version:\s*([0-9]+\.[0-9]+\.[0-9]+)/,
+  );
+
+  // A hand-written or pre-stamp hook carries no version, so we cannot claim it is newer.
+  if (!stamped?.[1]) return false;
+
+  return projectIsAheadOfCli(stamped[1], AUDIT_VERSION);
+}
+
 function copyHookScripts(
   projectPath: string,
   agent: AgentProfile,
@@ -365,6 +403,12 @@ function copyHookScripts(
   mkdirSync(join(projectPath, agent.hooksDir), { recursive: true });
   for (const script of spec.scriptFiles) {
     const target = scriptTarget(projectPath, agent, script);
+    if (installedHookIsNewer(target)) {
+      throw new HookRegistrarError(
+        `Refusing to overwrite ${script}: the installed hook is newer than this CLI (${AUDIT_VERSION}). Re-run with a matching goat-flow release instead of downgrading the guardrail.`,
+        409,
+      );
+    }
     writeFileAtomic(target, hookScriptContent(script), projectPath);
     chmodSync(target, 0o755);
   }

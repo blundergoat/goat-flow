@@ -1,13 +1,13 @@
 ---
 category: external-lessons
-last_reviewed: 2026-05-27
+last_reviewed: 2026-08-01
 ---
 
 Patterns extracted from reviewing merged PRs in external projects relevant to goat-flow's
 surfaces (CLI, dashboard, audit pipeline, config merging, persistence). Each entry names
 the source PR(s), the root cause, and the goat-flow surface where the rule applies.
 
-## Lesson: Error messages MUST include the input identity that caused them
+## Pattern: Error messages MUST include the input identity that caused them
 
 **Status:** active | **Created:** 2026-05-25
 
@@ -29,7 +29,7 @@ Applies wherever goat-flow throws on user-supplied or external-supplied data: au
 
 ---
 
-## Lesson: Bug-fix clusters arc fix → over-correct → calibrate when the original bug was a silent equality-contract violation
+## Pattern: Bug-fix clusters arc fix → over-correct → calibrate when the original bug was a silent equality-contract violation
 
 **Status:** active | **Created:** 2026-05-25
 
@@ -55,7 +55,7 @@ Reinforces existing CLAUDE.md verification discipline: "Fix verified by passing 
 
 ---
 
-## Lesson: New polymorphic classes ship with silent bugs without integration tests at parity
+## Pattern: New polymorphic classes ship with silent bugs without integration tests at parity
 
 **Status:** active | **Created:** 2026-05-25
 
@@ -65,7 +65,7 @@ Reinforces existing CLAUDE.md verification discipline: "Fix verified by passing 
 
 ---
 
-## Lesson: Tests that monkeypatch the function under test mask empty production paths
+## Pattern: Tests that monkeypatch the function under test mask empty production paths
 
 **Status:** active | **Created:** 2026-05-25
 
@@ -82,7 +82,7 @@ Related principle: replacing the subject of measurement with a stub or shortcut 
 
 ---
 
-## Lesson: CLI must enforce every constraint the service silently applies
+## Pattern: CLI must enforce every constraint the service silently applies
 
 **Status:** active | **Created:** 2026-05-25
 
@@ -99,7 +99,7 @@ Related principle: replacing the subject of measurement with a stub or shortcut 
 
 ---
 
-## Lesson: Verify a fix by re-running the original reproducer, not just the test suite
+## Pattern: Verify a fix by re-running the original reproducer, not just the test suite
 
 **Status:** active | **Created:** 2026-05-25
 
@@ -117,7 +117,7 @@ Related principle: replacing the subject of measurement with a stub or shortcut 
 
 ---
 
-## Lesson: Status markers drift from ground truth unless the audit verifies the underlying change
+## Pattern: Status markers drift from ground truth unless the audit verifies the underlying change
 
 **Status:** active | **Created:** 2026-05-26
 

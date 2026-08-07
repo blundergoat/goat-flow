@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.14.0"
+goat-flow-reference-version: "1.15.0"
 ---
 # Release Notes
 
@@ -63,6 +63,7 @@ Theme names must help a user decide whether to read further. Good: "Windows inst
 - Lead with effect, then add mechanism only when it helps trust or action.
 - Use plain English and short sentences.
 - Prefer bullets over paragraphs.
+- One physical line per bullet, 150 characters max; split or cut instead of hard-wrapping.
 - Say "Fixed duplicate search results", not "Refactored search reconciliation".
 - Say "Search results now load 3x faster", not "Improved performance".
 - Do not use "excited to announce", "game-changing", "powerful", or other launch-copy.
@@ -125,6 +126,7 @@ Before publishing:
 8. Version, date, and install/update location are present.
 9. A reader can decide whether to upgrade without reading commit history.
 10. The compression pass ran.
+11. Every bullet is one physical line within the 150-character cap.
 
 ## Troubleshooting
 
@@ -136,5 +138,6 @@ Before publishing:
 ## Related References
 
 - [`changelog.md`](./changelog.md) - source-of-truth release ledger.
+- [`writing-style.md`](./writing-style.md) - prose style for the narrative itself, once themes and structure are chosen.
 - Project's prior release announcements - match voice and structure before inventing a new one.
 - Project instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) may declare release-note policy.

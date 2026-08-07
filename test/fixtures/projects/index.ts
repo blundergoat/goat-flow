@@ -34,6 +34,7 @@ const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
   "page-capture.md",
   "release-notes.md",
   "skill-playbook-authoring-sync.md",
+  "writing-style.md",
 ] as const;
 
 /** Render the default playbook index a healthy-project audit fixture exposes to users. */
@@ -344,7 +345,7 @@ export function makeSharedFacts(): ProjectFacts["shared"] {
     gitCommitInstructions: {
       exists: false,
       path: null,
-      requiredPath: "docs/coding-standards/git-commit.md",
+      requiredPath: "docs/coding-standards/git-commit-message.md",
       misplacedPaths: [],
     },
     localInstructionsLineCount: 0,

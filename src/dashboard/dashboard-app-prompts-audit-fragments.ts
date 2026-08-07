@@ -538,6 +538,14 @@ function dashboardQualityPromptActionsFragment(): DashboardAppFragment {
       return dashboardQualityLaunchLabel(this);
     },
 
+    /** Return the single project root that owns this mode's quality report. */
+    qualityReportProjectPath(): string {
+      const mode = dashboardSelectedQualityModeMeta(this);
+      return mode
+        ? dashboardQualityReportProjectPath(this, mode)
+        : this.projectPath;
+    },
+
     /** Return the selected setup target's instruction/config surfaces. */
     setupInstructionSurfaces(): string {
       return dashboardSetupInstructionSurfaces(this);

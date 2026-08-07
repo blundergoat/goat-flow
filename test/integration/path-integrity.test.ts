@@ -191,3 +191,65 @@ describe("path-integrity script: copilot surfaces", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// docs/*.md cross-references resolve the same way on a clean checkout
+// ---------------------------------------------------------------------------
+describe("path-integrity script: docs cross-references", () => {
+  // Covers a ref resolving only via gitignored local state: writes the shape that passed locally and failed CI.
+  it("fails when a docs ref resolves only through gitignored local state", () => {
+    const dir = makeTempProject();
+    try {
+      mkdirSync(join(dir, "docs"), { recursive: true });
+      writeFileSync(
+        join(dir, "docs", "guide.md"),
+        "See `local-only-note.md` for the rollout steps.\n",
+      );
+      mkdirSync(join(dir, ".goat-flow", "plans", "1.0.0"), { recursive: true });
+      writeFileSync(
+        join(dir, ".goat-flow", "plans", "1.0.0", "local-only-note.md"),
+        "# Local plan note\n",
+      );
+
+      const result = runScript(dir);
+      assert.equal(
+        result.passed,
+        false,
+        `Local-only plan files must not resolve docs refs: ${result.output}`,
+      );
+      assert.ok(
+        result.output.includes(
+          "docs/guide.md: references missing file `local-only-note.md`",
+        ),
+        `Should report the unresolved docs ref: ${result.output}`,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Covers two artifacts goat-flow documents but never ships: writes refs to ISSUE.md and the ADR-043 guide.
+  it("allows docs refs to artifacts that live outside this repo by design", () => {
+    const dir = makeTempProject();
+    try {
+      mkdirSync(join(dir, "docs"), { recursive: true });
+      writeFileSync(
+        join(dir, "docs", "guide.md"),
+        [
+          "Standard File-Write creates a one-screen `ISSUE.md` overview.",
+          "Commit guidance may live at `docs/coding-standards/git-commit.md`.",
+          "",
+        ].join("\n"),
+      );
+
+      const result = runScript(dir);
+      assert.equal(
+        result.passed,
+        true,
+        `Documented non-repo artifacts must not report as drift: ${result.output}`,
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

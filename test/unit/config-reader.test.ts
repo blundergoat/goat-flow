@@ -45,6 +45,22 @@ describe("config defaults when file is missing", () => {
   });
 });
 
+describe("config validates release versions", () => {
+  it("rejects malformed versions before downstream direction checks", () => {
+    const result = loadConfig("/tmp", configFS('version: "999.invalid"\n'));
+
+    assert.equal(result.valid, false);
+    assert.equal(result.config.version, AUDIT_VERSION);
+    assert.deepEqual(result.errors, [
+      {
+        level: "error",
+        path: "version",
+        message: "must use numeric X.Y.Z release format",
+      },
+    ]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Config merging
 // ---------------------------------------------------------------------------

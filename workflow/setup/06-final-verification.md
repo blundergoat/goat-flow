@@ -61,7 +61,7 @@ After generating footguns and the instruction file, re-verify the evidence:
 
 2. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 
-3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-docs/` (meta) and `.goat-flow/skill-docs/playbooks/` (tools) READ rules / Router Table rows from Step 02. Verify `docs/coding-standards/git-commit.md` exists with project-specific commit guidance and that the instruction file references it under `## Commit Messages`. A file with the `goat-flow: generated stub - insufficient git history` header is acceptable for the audit gate but must be listed in the gap report as a human-edit follow-up.
+3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-docs/` (meta) and `.goat-flow/skill-docs/playbooks/` (tools) READ rules / Router Table rows from Step 02. Verify at least one accepted commit guide exists - preferred `docs/coding-standards/git-commit-message.md`, or compatible `docs/coding-standards/git-commit.md` in an existing project - and that the instruction file references either accepted existing guide under `## Commit Messages`; when both exist, either bridge remains valid while fact extraction prefers the new path. Never create the preferred file alongside an existing compatible guide. A file with the `goat-flow: generated stub - insufficient git history` header is acceptable for the audit gate but must be listed in the gap report as a human-edit follow-up.
 
 ## Duplicate surface check
 

@@ -39,6 +39,7 @@ describe("decodeTerminalCreateBody", () => {
         projectPath: "/tmp/goat-flow",
         targetPath: "/tmp/a",
         runner: "codex",
+        accessMode: "reporting",
       }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
@@ -47,9 +48,10 @@ describe("decodeTerminalCreateBody", () => {
     assert.equal(value.projectPath, "/tmp/goat-flow");
     assert.equal(value.targetPath, "/tmp/a");
     assert.equal(value.runner, "codex");
+    assert.equal(value.accessMode, "reporting");
   });
 
-  it("defaults runner only when absent", () => {
+  it("defaults runner and access mode only when absent", () => {
     const defaultRunnerResult = decodeTerminalCreateBody(
       JSON.stringify({ prompt: "x" }),
       {
@@ -57,7 +59,9 @@ describe("decodeTerminalCreateBody", () => {
         defaultRunner: "claude",
       },
     );
-    assert.equal(assertDecodeOk(defaultRunnerResult).runner, "claude");
+    const defaults = assertDecodeOk(defaultRunnerResult);
+    assert.equal(defaults.runner, "claude");
+    assert.equal(defaults.accessMode, "workspace");
 
     const invalidRunnerResult = decodeTerminalCreateBody(
       JSON.stringify({ runner: "cursor" }),
@@ -106,6 +110,122 @@ describe("decodeTerminalCreateBody", () => {
       },
     );
     assert.equal(assertDecodeError(result).path, "body.targetPath");
+  });
+
+  it("rejects unknown terminal access modes", () => {
+    const result = decodeTerminalCreateBody(
+      JSON.stringify({ accessMode: "unrestricted" }),
+      {
+        validRunners: RUNNERS,
+        defaultRunner: "claude",
+      },
+    );
+    assert.equal(assertDecodeError(result).path, "body.accessMode");
+  });
+
+  it("types report ownership separately from Claude draft capture", () => {
+    // Absent means an ordinary launch: no staging tree in the selected target.
+    const absent = decodeTerminalCreateBody(
+      JSON.stringify({ accessMode: "reporting" }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    const absentValue = assertDecodeOk(absent);
+    assert.equal(absentValue.captureQualityDrafts, false);
+    assert.equal(absentValue.qualityReportProjectPath, "");
+
+    const requested = decodeTerminalCreateBody(
+      JSON.stringify({
+        accessMode: "reporting",
+        captureQualityDrafts: true,
+        qualityReportProjectPath: "/tmp/report-owner",
+      }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    const requestedValue = assertDecodeOk(requested);
+    assert.equal(requestedValue.captureQualityDrafts, true);
+    assert.equal(requestedValue.qualityReportProjectPath, "/tmp/report-owner");
+
+    const missingOwner = decodeTerminalCreateBody(
+      JSON.stringify({
+        runner: "claude",
+        accessMode: "reporting",
+        captureQualityDrafts: true,
+      }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(
+      assertDecodeError(missingOwner).path,
+      "body.qualityReportProjectPath",
+    );
+
+    const codexOwner = decodeTerminalCreateBody(
+      JSON.stringify({
+        runner: "codex",
+        accessMode: "reporting",
+        qualityReportProjectPath: "/tmp/report-owner",
+      }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    const codexOwnerValue = assertDecodeOk(codexOwner);
+    assert.equal(codexOwnerValue.captureQualityDrafts, false);
+    assert.equal(codexOwnerValue.qualityReportProjectPath, "/tmp/report-owner");
+
+    const ownerOutsideReporting = decodeTerminalCreateBody(
+      JSON.stringify({ qualityReportProjectPath: "/tmp/report-owner" }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(
+      assertDecodeError(ownerOutsideReporting).path,
+      "body.qualityReportProjectPath",
+    );
+
+    const unsupportedRunnerOwner = decodeTerminalCreateBody(
+      JSON.stringify({
+        runner: "copilot",
+        accessMode: "reporting",
+        qualityReportProjectPath: "/tmp/report-owner",
+      }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(
+      assertDecodeError(unsupportedRunnerOwner).path,
+      "body.qualityReportProjectPath",
+    );
+
+    const invalid = decodeTerminalCreateBody(
+      JSON.stringify({ captureQualityDrafts: "yes" }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(assertDecodeError(invalid).path, "body.captureQualityDrafts");
+
+    const invalidOwner = decodeTerminalCreateBody(
+      JSON.stringify({
+        runner: "claude",
+        accessMode: "reporting",
+        captureQualityDrafts: true,
+        qualityReportProjectPath: 42,
+      }),
+      { validRunners: RUNNERS, defaultRunner: "claude" },
+    );
+    assert.equal(
+      assertDecodeError(invalidOwner).path,
+      "body.qualityReportProjectPath",
+    );
+
+    for (const invalidCombination of [
+      { runner: "codex", accessMode: "reporting" },
+      { runner: "claude", accessMode: "workspace" },
+    ]) {
+      const result = decodeTerminalCreateBody(
+        JSON.stringify({
+          ...invalidCombination,
+          captureQualityDrafts: true,
+          qualityReportProjectPath: "/tmp/report-owner",
+        }),
+        { validRunners: RUNNERS, defaultRunner: "claude" },
+      );
+      assert.equal(assertDecodeError(result).path, "body.captureQualityDrafts");
+    }
   });
 });
 

@@ -135,6 +135,11 @@ function assertInstalledAgentSurface(
     /\.goat-flow\/hooks\/deny-dangerous\.sh/u,
     `${agentProfile.id} hook config must launch the central runtime path`,
   );
+  assert.match(
+    installedHookConfig,
+    /run-with-bash\.mjs/u,
+    `${agentProfile.id} hook config must use the managed Bash resolver`,
+  );
 
   const denyDangerousHook = getHookSpec("deny-dangerous");
   assert.ok(
@@ -148,10 +153,11 @@ function assertInstalledAgentSurface(
     `${agentProfile.id} installed command drifted from runtime writer semantics`,
   );
 
-  // Copilot users on Windows need the emitted PowerShell fallback even on Linux CI.
+  // Copilot uses the same shell-neutral Node command for Bash and PowerShell hosts.
   if (agentProfile.id === "copilot") {
-    assert.match(installedHookConfig, /Get-Command bash/u);
+    assert.match(installedHookConfig, /node -e/u);
     assert.match(installedHookConfig, /permissionDecision/u);
+    assert.doesNotMatch(installedHookConfig, /Get-Command bash/u);
   }
 
   // A separate settings file is visible to users and must exist after installation.

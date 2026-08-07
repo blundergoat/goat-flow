@@ -9,43 +9,20 @@
  * behind `inferQualityScope`.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { join } from "node:path";
 import type { AgentId, SharedFacts } from "../types.js";
 import type { AuditConcernKey, AuditReport } from "../audit/types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
-import { QUALITY_REPORT_KIND, type QualityMode } from "../quality/schema.js";
-import {
-  QUALITY_EVIDENCE_METHODS,
-  QUALITY_FINDING_SEVERITIES,
-  QUALITY_FINDING_TYPES,
-} from "../quality/schema-types.js";
-import { getPackageVersion } from "../paths.js";
+import type { QualityMode } from "../quality/schema.js";
 import {
   renderLearningLoopContext,
   selectLearningLoopContext,
 } from "./learning-loop-context.js";
 
 /**
- * Build the forward-slash project sub-path that goes inside a Bash snippet in
- * the prompt. On Windows `path.resolve` returns backslashes and (worse) drive-
- * prefixes POSIX-shape inputs; `path.posix.join` keeps the input shape and
- * forces forward-slash separators for the appended segment. Backslashes are
- * normalised first so UNC roots (`\\server\share`) survive as `//server/share`;
- * the leading slash that `posix.join` collapses on UNC inputs is then restored
- * so quality writes still target the network share, not a local absolute path.
- *
- * @param projectPath - absolute project root; may be a Windows path or a UNC root (`\\server\share`)
- * @param sub - POSIX-shaped sub-path to append, e.g. `.goat-flow/logs/quality`
- * @returns forward-slash path safe to embed in a generated Bash snippet, with the UNC root preserved
+ * Public input contract for composing one project quality-review prompt.
+ * Optional evidence stays absent rather than being synthesized, so every surface renders the same facts.
  */
-function toShellProjectPath(projectPath: string, sub: string): string {
-  const normalized = projectPath.replace(/\\/g, "/");
-  const isUnc = normalized.startsWith("//");
-  const joined = posix.join(normalized, sub);
-  return isUnc && !joined.startsWith("//") ? "/" + joined : joined;
-}
-
-/** Inputs needed to compose an agent quality-review prompt for one project. */
 export interface QualityInput {
   agent: AgentId;
   projectPath: string;
@@ -56,7 +33,18 @@ export interface QualityInput {
   selectedProjectPath?: string;
   runDate?: string;
   sharedFacts?: SharedFacts | null;
+  /** Report persistence contract; defaults to the bounded stdin saver. */
+  persistence?: QualityPersistenceVariant | undefined;
 }
+
+/**
+ * How the generated prompt tells the agent to persist its report.
+ * `bounded-saver` = the agent pipes the report into `quality save` itself
+ * (manual and Codex runs). `staged-draft` = the agent writes one draft file
+ * and the dashboard server persists it (enforced Claude reporting sessions,
+ * per ADR-044, where no Bash rule can authorize the heredoc saver).
+ */
+export type QualityPersistenceVariant = "bounded-saver" | "staged-draft";
 
 /**
  * Why an audit summary could not be embedded in a quality prompt: the audit run
@@ -92,7 +80,7 @@ export function formatLocalDate(date: Date = new Date()): string {
  * @param value - raw string to embed in the prompt's JSON example
  * @returns the value as a quoted, escaped JSON string literal
  */
-function jsonString(value: string): string {
+export function jsonString(value: string): string {
   return JSON.stringify(value);
 }
 
@@ -102,7 +90,7 @@ function jsonString(value: string): string {
  * @param value - raw string to quote for a generated shell snippet
  * @returns a single-quoted Bash literal with embedded quotes escaped as `'\''`
  */
-function shellSingleQuote(value: string): string {
+export function shellSingleQuote(value: string): string {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
@@ -113,7 +101,9 @@ function shellSingleQuote(value: string): string {
  * @returns `framework-self` when the package is `@blundergoat/goat-flow`, otherwise `consumer`
  *   (also `consumer` when `package.json` is missing or unparseable)
  */
-function inferQualityScope(projectPath: string): "framework-self" | "consumer" {
+export function inferQualityScope(
+  projectPath: string,
+): "framework-self" | "consumer" {
   const packagePath = join(projectPath, "package.json");
   try {
     if (!existsSync(packagePath)) return "consumer";
@@ -171,7 +161,7 @@ function appendConcernSummary(lines: string[], report: AuditReport): void {
   }
 }
 
-/** Append template-drift findings when the audit collected drift evidence. */
+/** Append template-drift findings in their deterministic audit order when evidence exists. */
 function appendDriftSummary(lines: string[], report: AuditReport): void {
   if (!report.drift) return;
   lines.push("");
@@ -183,7 +173,7 @@ function appendDriftSummary(lines: string[], report: AuditReport): void {
   }
 }
 
-/** Append content-lint findings when the audit collected content evidence. */
+/** Append content-lint findings without changing the audit report's stable path and rule identity. */
 function appendContentSummary(lines: string[], report: AuditReport): void {
   if (!report.content) return;
   lines.push("");
@@ -191,8 +181,9 @@ function appendContentSummary(lines: string[], report: AuditReport): void {
     `- **Content Claims**: ${report.content.status === "pass" ? "PASS" : "FAIL"} (${report.content.filesScanned} files scanned)`,
   );
   for (const finding of report.content.findings) {
+    const lineSuffix = finding.line ? `:${finding.line}` : "";
     lines.push(
-      `  - ${finding.path}${finding.line ? `:${finding.line}` : ""} [${finding.rule}]: ${finding.message}`,
+      `  - ${finding.path}${lineSuffix} [${finding.rule}]: ${finding.message}`,
     );
   }
 }
@@ -255,6 +246,7 @@ export function renderDegradedNote(reason: AuditUnavailableReason): string {
       "",
       "> **Note:** The dashboard requested a fast quality prompt and no cached audit report was available.",
       "> This does not mean the audit failed. Run the Re-audit action or `goat-flow audit . --harness --agent <id>` for live audit status.",
+      '> The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.',
       "> Continue the assessment, but do not infer setup failure from this cache miss.",
       "",
     ].join("\n");
@@ -411,10 +403,16 @@ export function renderPriorReportContext(
     }
     lines.push("");
     lines.push(
+      "A prior finding is a claim to re-test, not a fact. Validate its premise (who the violated standard binds, whether an accepted ADR already resolves it, whether the code still shows it) before carrying it forward; a prior severity is not evidence.",
+    );
+    lines.push(
       'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `resolved` in current findings - resolved issues are derived later by `goat-flow quality diff` when a prior finding id disappears from a later run.',
     );
     lines.push(
       `Set top-level \`prior_report_id\` to \`${priorReport.id}\` so readers can tell that \`delta_tag: "new"\` means newly discovered relative to that same-agent report, not necessarily newly introduced in the codebase.`,
+    );
+    lines.push(
+      'When a prior finding cannot be re-tested, do not carry the unverified claim into the current findings array solely to keep it visible and do not assign it `delta_tag: "persisted"`. List it under `What You Did Not Verify`, include the literal denied or unavailable probe, and state that omission is not verified resolution; the diff\'s derived `resolved` label means absent from the later report, not proven fixed.',
     );
   } else {
     const modeText = qualityMode === "agent-setup" ? "" : `${qualityMode} `;
@@ -442,346 +440,4 @@ export function renderBoundedLearningLoopContext(
   return renderLearningLoopContext(
     selectLearningLoopContext(sharedFacts, { surface }),
   );
-}
-
-/** Everything a report-contract render needs to know about the current run. */
-export interface ReportContractInput {
-  agent: AgentId;
-  projectPath: string;
-  auditStatus: QualityPayload["auditStatus"];
-  qualityMode: QualityMode;
-  priorReport: QualityHistoryEntry | null;
-  runDate: string;
-}
-
-/**
- * Per-surface presentation switches for the quality report contract block.
- * Use when CLI and dashboard prompt surfaces need the same report schema with different verbosity.
- * Invariant: option names stay internal so user-facing JSON field names do not drift.
- */
-export interface ReportContractOptions {
-  /** `full` = agent-setup verbosity with explanations; `compact` = focused-mode terseness. */
-  detail: "full" | "compact";
-  /** Prepend a `---` section separator (focused prompts end with the contract). */
-  hasLeadingSeparator?: boolean;
-  /** Finding `type` shown in the JSON sample; defaults to `setup_quality`. */
-  sampleFindingType?: (typeof QUALITY_FINDING_TYPES)[number];
-}
-
-/** Render a schema enum list as backticked prompt text, e.g. `` `a`, `b`, `c` ``. */
-function backtickList(values: readonly (string | number)[]): string {
-  return values.map((value) => `\`${value}\``).join(", ");
-}
-
-/**
- * THE single authoritative renderer for the quality report JSON contract.
- *
- * Every surface that asks an agent to write a quality report - the CLI's
- * agent-setup and focused prompts today - appends this block, so a user
- * running `goat-flow quality --agent claude` and one clicking Launch in the
- * dashboard's Quality page get reports that `goat-flow quality validate`,
- * `history`, and `diff` all parse identically. Field lists come from
- * `quality/schema-types.ts`, so prompt text cannot drift from the parser.
- * (The dashboard's browser-side mirror cannot import this module - it is
- * pinned to the same required fields by `test/unit/quality-report-contract.test.ts`.)
- *
- * @param lines - prompt line buffer; appended to in place
- * @param input - run facts embedded into the contract (agent, paths, prior report, mode)
- * @param opts - per-surface presentation switches (detail level, separator, sample type)
- */
-export function appendQualityReportContract(
-  lines: string[],
-  input: ReportContractInput,
-  opts: ReportContractOptions,
-): void {
-  const full = opts.detail === "full";
-  /**
-   * Push the full-detail or compact wording of one line. The detail branch
-   * lives in this arrow's own scope, so it does not add to the enclosing
-   * function's complexity budget - just its readability.
-   */
-  const pushVariant = (fullText: string, compactText: string): void => {
-    lines.push(full ? fullText : compactText);
-  };
-  /** Push extra lines that only the full-detail prompt carries. */
-  const pushFull = (...texts: string[]): void => {
-    if (full) for (const text of texts) lines.push(text);
-  };
-
-  // Focused prompts place the contract as the final section -> visually separate it.
-  if (opts.hasLeadingSeparator) {
-    lines.push("---");
-    lines.push("");
-  }
-  lines.push("### Write the JSON report");
-  lines.push("");
-  lines.push(
-    "Do **not** emit the JSON as a fenced block in your reply. Write it as a file to `.goat-flow/logs/quality/` - that path is gitignored and expected. No tracked-file writes or implementation edits are permitted.",
-  );
-  lines.push("");
-  // Full detail spells out WHY the file must exist on disk - a report that
-  // lives only in the agent's reply is invisible to history/diff.
-  pushFull(
-    "**CRITICAL:** After writing the file, verify it was saved by running `ls -la .goat-flow/logs/quality/` and confirming the file appears with non-zero size. If missing, retry the write. A quality report that exists only in conversation history is invisible to `goat-flow quality history` and `goat-flow quality diff`.",
-    "",
-  );
-  lines.push("**Filename format:** `YYYY-MM-DD-HHMM-<agent>-<rand5>.json`");
-  lines.push("");
-  pushFull(
-    "Where:",
-    "- `YYYY-MM-DD-HHMM` is the current local date and 24-hour time (e.g. `2026-04-19-1430`)",
-    `- \`<agent>\` is the literal string \`${input.agent}\``,
-    "- `<rand5>` is 5 lowercase alphanumeric characters (a-z, 0-9) that you generate fresh to avoid collisions with other parallel runs",
-    "",
-    "**Derive the date/time/random parts via your shell** (so the filename reflects when the report was actually written, not when this prompt was generated). On Linux/macOS:",
-    "",
-  );
-  lines.push("```bash");
-  lines.push('STAMP="$(date +"%Y-%m-%d-%H%M")"      # e.g. 2026-04-19-1430');
-  lines.push("RAND=\"$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 5)\"");
-  lines.push(
-    `QUALITY_DIR=${shellSingleQuote(toShellProjectPath(input.projectPath, ".goat-flow/logs/quality"))}`,
-  );
-  lines.push(`FILE="\${QUALITY_DIR}/\${STAMP}-${input.agent}-\${RAND}.json"`);
-  lines.push('mkdir -p "$QUALITY_DIR"');
-  lines.push(
-    "# Keep the completed JSON in memory; the redaction gate below writes $FILE.",
-  );
-  lines.push("```");
-  lines.push("");
-  lines.push("**JSON body shape:**");
-  lines.push("");
-  lines.push("```json");
-  lines.push("{");
-  lines.push(`  "report_kind": ${jsonString(QUALITY_REPORT_KIND)},`);
-  lines.push(`  "goat_flow_version": ${jsonString(getPackageVersion())},`);
-  lines.push(`  "agent": ${jsonString(input.agent)},`);
-  lines.push(`  "project_path": ${jsonString(input.projectPath)},`);
-  lines.push(`  "run_date": ${jsonString(input.runDate)},`);
-  lines.push(`  "audit_status": ${jsonString(input.auditStatus)},`);
-  lines.push(`  "scope": ${jsonString(inferQualityScope(input.projectPath))},`);
-  lines.push(`  "rubric_version": ${jsonString(getPackageVersion())},`);
-  lines.push(`  "quality_mode": ${jsonString(input.qualityMode)},`);
-  lines.push(
-    `  "prior_report_id": ${input.priorReport ? jsonString(input.priorReport.id) : "null"},`,
-  );
-  lines.push('  "scores": {');
-  lines.push(
-    '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
-  );
-  lines.push(
-    '    "system": { "total": 0, "usefulness": 0, "signal_to_noise": 0, "adaptability": 0, "learnability": 0 }',
-  );
-  lines.push("  },");
-  lines.push('  "findings": [');
-  const sampleType = opts.sampleFindingType ?? "setup_quality";
-  const sampleDelta = input.priorReport ? '"new"' : "null";
-  // Full detail keeps the multi-line sample with the semantic-anchor guidance
-  // baked into the detail text; compact keeps the one-liner.
-  if (full) {
-    lines.push("    {");
-    lines.push(
-      `      "type": "${sampleType}", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null,`,
-    );
-    lines.push(
-      `      "summary": "One-line finding summary", "detail": "Why it matters; include a semantic anchor when the evidence should survive as a durable learning-loop artifact.", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta}`,
-    );
-    lines.push("    }");
-  } else {
-    lines.push(
-      `    { "type": "${sampleType}", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta} }`,
-    );
-  }
-  lines.push("  ]");
-  lines.push("}");
-  lines.push("```");
-  lines.push("");
-  lines.push("JSON rules:");
-  lines.push(
-    "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",
-  );
-  lines.push(
-    `- Allowed \`type\` values: ${backtickList(QUALITY_FINDING_TYPES)}.`,
-  );
-  lines.push(
-    `- Allowed \`severity\` values: ${backtickList(QUALITY_FINDING_SEVERITIES)}.`,
-  );
-  pushVariant(
-    "- `evidence_quality` is REQUIRED on every finding. Allowed values: `OBSERVED` (verified in code/output), `INFERRED` (state what's missing). Omitting this field causes the report to be rejected.",
-    "- `evidence_quality` is REQUIRED on every finding. Allowed values: `OBSERVED` or `INFERRED`.",
-  );
-  pushVariant(
-    "- `evidence_method` is REQUIRED on every finding (schema v2, 2026-04-19+). Allowed values: `runtime-probe` (you invoked commands/tools to verify - e.g. `npx eslint`, `bash <hook>`), `static-analysis` (you read files only), `mixed` (both methods for this specific finding). A finding labelled `OBSERVED` via `static-analysis` can still miss runtime-only defects; labelling the method honestly lets cross-report triangulation flag methodology gaps.",
-    `- \`evidence_method\` is REQUIRED on every finding. Allowed values: ${backtickList(QUALITY_EVIDENCE_METHODS)}.`,
-  );
-  pushVariant(
-    "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command` (the command), `evidence_exit_code` (integer), `evidence_summary` (literal pass/fail or warning summary), `evidence_warning_count` (integer), and `evidence_excerpt` (short single-line excerpt). Do not paste raw terminal blocks into JSON.",
-    "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command`, `evidence_exit_code`, `evidence_summary`, `evidence_warning_count`, and `evidence_excerpt`. Keep these single-line and concise; do not paste raw terminal blocks.",
-  );
-  pushVariant(
-    '- `scope` is REQUIRED at top level. Set `framework-self` if you detect this is the goat-flow repo itself (heuristic: `package.json` contains `"name": "@blundergoat/goat-flow"`). Otherwise set `consumer`.',
-    "- `scope` is REQUIRED at top level: `framework-self` when the target is the goat-flow repo itself, otherwise `consumer` (copy the template value above).",
-  );
-  pushVariant(
-    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getPackageVersion()}"\`). The Rating bands section above is the rubric - future readers use this version tag to trace which band anchors produced your scores.`,
-    `- \`rubric_version\` is REQUIRED at top level; copy the template value (\`"${getPackageVersion()}"\`).`,
-  );
-  lines.push(
-    `- \`quality_mode\` is REQUIRED for new reports generated from this prompt. Use \`${jsonString(input.qualityMode)}\` for this ${qualityModeLabel(input.qualityMode)} assessment.`,
-  );
-  // Same prior-report id in both wordings - compute once so the branch doesn't
-  // sit inline in each variant string.
-  const priorIdText = input.priorReport
-    ? `\`${input.priorReport.id}\``
-    : "`null`";
-  pushVariant(
-    `- \`prior_report_id\` must be ${priorIdText} for this run. This makes \`delta_tag\` traceable to the same-agent baseline and prevents readers from treating \`new\` as newly introduced without a diff.`,
-    `- \`prior_report_id\` must be ${priorIdText} for this run. This makes \`delta_tag\` traceable to the same-agent baseline.`,
-  );
-  pushFull(
-    "- `line` must be a positive integer OR `null`. Never `0`. For file-wide findings with no specific line, use `null`.",
-    "- Live review findings should cite `file` + semantic anchor after re-reading the cited file and anchor. Durable footguns, lessons, patterns, and decisions must use file paths plus semantic anchors rather than line numbers.",
-  );
-  // Prior-report context flips the delta_tag requirement - keep both halves of
-  // that rule here so no surface restates (and drifts) it.
-  if (input.priorReport) {
-    lines.push(
-      '- `delta_tag` is REQUIRED on every current finding and must be either `"new"` or `"persisted"`. `resolved` belongs in derived diff output, not the current finding list.',
-    );
-  } else {
-    lines.push(
-      "- `delta_tag` must be `null` or omitted when no prior report context exists.",
-    );
-  }
-  pushVariant(
-    "- Do NOT include an `id` field. The CLI attaches positional finding ids deterministically when the report is loaded.",
-    "- Do NOT include an `id` field.",
-  );
-  pushVariant(
-    "- Do NOT include extra top-level keys or extra finding keys outside this contract. Unknown keys are rejected.",
-    "- Do NOT include extra top-level keys or extra finding keys outside this contract.",
-  );
-  pushFull(
-    "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
-    "- When streaming the report through the redaction heredoc below, QUOTE the delimiter (`<<'NODE'`, not `<<NODE`). Unquoted delimiters make the shell interpret `` `backticks` `` as command substitution, which silently eats your inline code references.",
-  );
-  lines.push("");
-  lines.push(
-    "**Redact before writing.** Build the complete JSON in memory, then replace the placeholder below and stream it through the readable scrubber. Only the redacted JSON may reach `$FILE`; never stage the raw draft in a file.",
-  );
-  lines.push("");
-  lines.push(
-    `**Select a compatible redactor.** The installed CLI must report \`goat-flow v${getPackageVersion()}\`. A stale CLI can interpret \`redact\` as an audit target and write the wrong JSON. The source fallback below is allowed only in the goat-flow framework checkout.`,
-  );
-  lines.push("");
-  lines.push("```bash");
-  lines.push(
-    "node --input-type=module - \"$FILE\" <<'NODE'",
-    'import { spawnSync } from "node:child_process";',
-    'import { existsSync, readFileSync } from "node:fs";',
-    "",
-    "const outputPath = process.argv[2];",
-    `const expectedVersion = "goat-flow v${getPackageVersion()}";`,
-    "const report = <insert the complete report object here>;",
-    "",
-    "function probeCompatibleCli(command, args) {",
-    '  const result = spawnSync(command, [...args, "--version"], {',
-    '    encoding: "utf8",',
-    "  });",
-    "  if (result.error || result.status !== 0) return null;",
-    "  if (result.stdout.trim() !== expectedVersion) return null;",
-    "  return { command, args };",
-    "}",
-    "",
-    'let selectedCli = probeCompatibleCli("goat-flow", []);',
-    'if (!selectedCli && existsSync("package.json")) {',
-    "  let packageJson = null;",
-    "  try {",
-    '    packageJson = JSON.parse(readFileSync("package.json", "utf8"));',
-    "  } catch {",
-    "    packageJson = null;",
-    "  }",
-    '  if (packageJson && packageJson.name === "@blundergoat/goat-flow" && existsSync("src/cli/cli.ts")) {',
-    "    selectedCli = probeCompatibleCli(process.execPath, [",
-    '      "--import",',
-    '      "tsx",',
-    '      "src/cli/cli.ts",',
-    "    ]);",
-    "  }",
-    "}",
-    "",
-    "if (!selectedCli) {",
-    `  console.error("Compatible goat-flow v${getPackageVersion()} redactor unavailable; raw report not written");`,
-    "  process.exit(1);",
-    "}",
-    "",
-    "function runOrExit(command, args, { input } = {}) {",
-    "  const result = spawnSync(command, args, {",
-    "    input,",
-    '    stdio: input === undefined ? "inherit" : ["pipe", "inherit", "inherit"],',
-    "  });",
-    "  if (result.error) {",
-    "    console.error(result.error.message);",
-    "    process.exit(1);",
-    "  }",
-    "  if (result.signal) {",
-    "    console.error(`Subprocess terminated by ${result.signal}`);",
-    "    process.kill(process.pid, result.signal);",
-    "  }",
-    "  if (result.status !== 0) process.exit(result.status ?? 1);",
-    "}",
-    "",
-    'const reportJson = JSON.stringify(report, null, 2) + "\\n";',
-    "runOrExit(",
-    "  selectedCli.command,",
-    '  [...selectedCli.args, "redact", "--output", outputPath],',
-    "  { input: reportJson },",
-    ");",
-    "runOrExit(selectedCli.command, [",
-    "  ...selectedCli.args,",
-    '  "quality", "validate", outputPath,',
-    "]);",
-    'runOrExit("ls", ["-la", outputPath]);',
-    "NODE",
-  );
-  lines.push("```");
-  lines.push("");
-  lines.push(
-    "If the compatibility block exits non-zero, keep the report non-durable and state the exact reason; do not write an unredacted fallback.",
-  );
-  lines.push("");
-  lines.push(
-    "**Validate before confirming.** The block above uses the same compatible CLI for redaction and validation, stops on either failure, and lists the resulting file only after validation passes.",
-  );
-  lines.push("");
-  lines.push(
-    "If validate exits non-zero, read the reported error, fix the JSON, and re-write the file. Do NOT emit the confirmation below until validate passes.",
-  );
-  lines.push("");
-  lines.push(
-    "If command execution is unavailable, do not claim validation passed. Confirm instead with: `Wrote unvalidated quality report to .goat-flow/logs/quality/<your-filename>.json; validation unavailable: <exact reason>`.",
-  );
-  lines.push("");
-  lines.push(
-    "**End of response:** After validate passes, confirm in prose with a single line: `Wrote quality report to .goat-flow/logs/quality/<your-filename>.json`. Do not include the JSON inline in your reply.",
-  );
-}
-
-/**
- * Focused-mode wrapper over {@link appendQualityReportContract}: compact
- * wording, trailing-section separator, framework-flavoured sample finding.
- * Kept as a named export so focused composers read naturally.
- *
- * @param lines - prompt line buffer; appended to in place
- * @param input - run facts embedded into the contract
- */
-export function appendFocusedReportContract(
-  lines: string[],
-  input: ReportContractInput,
-): void {
-  appendQualityReportContract(lines, input, {
-    detail: "compact",
-    hasLeadingSeparator: true,
-    sampleFindingType: "framework_flaw",
-  });
 }

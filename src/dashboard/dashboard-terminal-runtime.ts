@@ -170,6 +170,7 @@ async function dashboardUpdateSessionCountImpl(
     }
   } catch {
     // Session refresh is best-effort; keep the visible terminal state if the endpoint fails.
+    return;
   }
 }
 
@@ -442,6 +443,9 @@ async function dashboardLaunchPreset(
     presetId?: string | null;
     cwdPath?: string | null;
     targetPath?: string | null;
+    accessMode?: TerminalAccessMode;
+    captureQualityDrafts?: boolean;
+    qualityReportProjectPath?: string | null;
   } = {},
 ): Promise<void> {
   // A launch is already in progress, so ignore duplicate button clicks.
@@ -459,11 +463,19 @@ async function dashboardLaunchPreset(
   const promptLabel = label || preset?.name || "Custom prompt";
   const presetId = preset?.id || options.presetId || null;
   const runnerResolved = runner || ctx.activeRunner;
+  const accessMode =
+    options.accessMode ?? dashboardTerminalAccessMode(preset, ctx.userRole);
   // Preset badges show running state while the terminal session is active.
   if (presetId) ctx.promptRunStates[presetId] = "running";
   let adapted = ctx.adaptPrompt(prompt, runnerResolved);
   adapted +=
-    "\n\n" + dashboardGlobalLaunchContext(ctx, runnerResolved, preset ?? null);
+    "\n\n" +
+    dashboardGlobalLaunchContext(
+      ctx,
+      runnerResolved,
+      preset ?? null,
+      accessMode,
+    );
   // Investigator role opens read-only guidance from the user's configured perspective.
   if (ctx.userRole === "investigator") {
     adapted =
@@ -480,6 +492,9 @@ async function dashboardLaunchPreset(
     presetId,
     cwdPath: options.cwdPath ?? null,
     targetPath: options.targetPath ?? ctx.projectPath,
+    accessMode,
+    captureQualityDrafts: options.captureQualityDrafts === true,
+    qualityReportProjectPath: options.qualityReportProjectPath ?? null,
   });
 }
 
@@ -534,6 +549,9 @@ function dashboardDetachTerminal(
       agent: s.runner,
       cwd: s.cwd,
       targetPath: s.targetPath,
+      accessMode: s.accessMode,
+      captureQualityDrafts: s.captureQualityDrafts,
+      qualityReportProjectPath: s.qualityReportProjectPath,
     }));
   if (toSave.length > 0) {
     ctx._projectSessions[savePath] = toSave;
@@ -600,6 +618,12 @@ async function dashboardReconnectTerminal(
   for (const saved of liveSaved) {
     const alive = aliveMap.get(saved.sessionId);
     if (!alive) continue;
+    // Legacy backend rows may omit capture, so the browser's saved true value preserves the receipt channel.
+    const reconnectCaptureQualityDrafts =
+      alive.captureQualityDrafts || saved.captureQualityDrafts;
+    // Prefer the backend's validated owner; a missing legacy value falls back to the saved launch owner.
+    const reconnectQualityReportProjectPath =
+      alive.qualityReportProjectPath ?? saved.qualityReportProjectPath;
     const session: LocalSession = {
       id: saved.sessionId,
       runner: saved.agent,
@@ -607,6 +631,9 @@ async function dashboardReconnectTerminal(
       projectPath: alive.projectPath,
       cwd: alive.cwd || saved.cwd || alive.projectPath,
       targetPath: alive.targetPath || saved.targetPath || alive.projectPath,
+      accessMode: alive.accessMode,
+      captureQualityDrafts: reconnectCaptureQualityDrafts,
+      qualityReportProjectPath: reconnectQualityReportProjectPath,
       startTime: saved.startTime,
       lastInputTime: alive.lastInputAt,
       connected: false,
@@ -622,11 +649,13 @@ async function dashboardReconnectTerminal(
     ctx.rememberSessionTitle(session.id, session.promptLabel);
     ctx.sessions.push(session);
     ctx._terminalRefs[session.id] = {
-      retryPrompt: "",
       retryPromptLabel: session.promptLabel,
       retryPresetId: null,
       retryCwdPath: session.cwd,
       retryTargetPath: session.targetPath,
+      retryAccessMode: session.accessMode,
+      retryCaptureQualityDrafts: session.captureQualityDrafts,
+      retryQualityReportProjectPath: session.qualityReportProjectPath,
     };
     dashboardArmTerminalLoadingTimers(ctx, session.id, session);
   }
@@ -656,11 +685,17 @@ async function dashboardLaunchInTerminal(
     presetId = null,
     cwdPath = null,
     targetPath = null,
+    accessMode = "workspace",
+    captureQualityDrafts = false,
+    qualityReportProjectPath = null,
   }: {
     promptLabel?: string | null;
     presetId?: string | null;
     cwdPath?: string | null;
     targetPath?: string | null;
+    accessMode?: TerminalAccessMode;
+    captureQualityDrafts?: boolean;
+    qualityReportProjectPath?: string | null;
   } = {},
 ): Promise<void> {
   if (
@@ -694,6 +729,9 @@ async function dashboardLaunchInTerminal(
         projectPath: controllingCwd,
         targetPath: selectedTargetPath,
         runner,
+        accessMode,
+        captureQualityDrafts,
+        ...(qualityReportProjectPath ? { qualityReportProjectPath } : {}),
       }),
     });
     const payload = readRecord(await res.json(), "Terminal create response");
@@ -711,6 +749,9 @@ async function dashboardLaunchInTerminal(
       projectPath: selectedTargetPath,
       cwd: controllingCwd,
       targetPath: selectedTargetPath,
+      accessMode,
+      captureQualityDrafts,
+      qualityReportProjectPath,
       startTime: Date.now(),
       lastInputTime: Date.now(),
       connected: false,
@@ -732,6 +773,11 @@ async function dashboardLaunchInTerminal(
       retryPresetId: presetId,
       retryCwdPath: controllingCwd,
       retryTargetPath: selectedTargetPath,
+      retryAccessMode: accessMode,
+      // Retry must reopen with capture too, or the retried report has nowhere
+      // to persist and the agent waits on a receipt that never arrives.
+      retryCaptureQualityDrafts: captureQualityDrafts,
+      retryQualityReportProjectPath: qualityReportProjectPath,
     };
     dashboardArmTerminalLoadingTimers(ctx, session.id, session);
     ctx.activeSessionId = session.id;

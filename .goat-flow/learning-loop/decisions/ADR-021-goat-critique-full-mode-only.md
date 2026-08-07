@@ -5,10 +5,11 @@
 **Updated:** 2026-05-18 - stale file-line citations replaced with current anchors or historical notes where Quick-mode text was removed.
 **Updated:** 2026-05-27 - Runtime slot updated per ADR-030; delegation revisit trigger now names Claude, Codex, Antigravity, and Copilot.
 **Updated:** 2026-07-17 - lifecycle and delegation counts aligned with mandatory meta-audit and outcome capture.
+**Updated:** 2026-08-04 - refreshed skill and factual-drift anchors after contract refactors.
 
 ## Context
 
-- The skill previously shipped two modes: Quick (inline SKEPTIC/ANALYST/STRATEGIST lens passes in a single reviewer context) and Full / delegated (2-3 isolated sub-agents + cross-examination + dispute gating). That Quick-mode text was removed by this decision; the current skill now states `goat-critique runs in one mode` (`.claude/skills/goat-critique/SKILL.md` (search: `goat-critique runs in one mode`)).
+- The skill previously shipped two modes: Quick (inline SKEPTIC/ANALYST/STRATEGIST lens passes in a single reviewer context) and Full / delegated (2-3 isolated sub-agents + cross-examination + dispute gating). That Quick-mode text was removed by this decision; the current skill now states `goat-critique runs only full delegated mode` (`.claude/skills/goat-critique/SKILL.md` (search: `goat-critique runs only full delegated mode`)).
 - Quick mode produced artifact-shaped output without the mechanism that makes the skill worth invoking. A single reviewer running three named lens passes in the same context is not multi-perspective critique - it is self-talk under three labels. Informational diversity, which the current skill body preserves through real delegated spawning (`.claude/skills/goat-critique/SKILL.md` (search: `Spawn all three sub-agents in parallel`)), disappears when all passes share one context.
 - The skill's own historical Quick-mode text admitted this gap: under Quick mode, Phase 2 required every split finding to be tagged as inconclusive because cross-examination was skipped. That deleted rule was a concession that Quick mode could not do the job the skill exists to do.
 - Low-ceremony multi-lens review is already covered elsewhere. `/goat-review` handles diff-level analysis, pre-existing separation, and single-reviewer quality questions without delegation. Users who want inline lens thinking have that surface; they do not need a Quick fallback inside goat-critique.
@@ -21,7 +22,7 @@
 2. ~~**If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.~~ **Superseded (2026-04-23; updated 2026-05-27):** All four supported agents (Claude Code, Codex, Antigravity, Copilot) ship sub-agent delegation. The redirect is dead ceremony per `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Sub-agent delegation is universal`). Removed from `docs/skills.md` and skill files.
 3. **Skill-chained entry still runs the full lifecycle (Phases 1-5, 5.5, and 5.6).** The only concession granted by skill-chaining is skipping the intake confirmation; it does not unlock a quick variant.
 4. **`Output Format` ships one template.** The dual Quick/Full template is removed.
-5. **The `SKILLS_DOC_STALE_PHRASES` detector entry that asserted "quick mode skips cross-examination and clarification" (`src/cli/audit/check-factual-claims.ts` (search: `SKILLS_DOC_STALE_PHRASES`); formerly `skills-critique-contract-drift`) is removed.** With Quick mode retired, the detector's own claim is no longer true; keeping it would false-positive on correct docs.
+5. **The `SKILLS_DOC_STALE_PHRASES` detector entry that asserted "quick mode skips cross-examination and clarification" (`src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`); formerly `skills-critique-contract-drift`) is removed.** With Quick mode retired, the detector's own claim is no longer true; keeping it would false-positive on correct docs.
 
 ## Consequences
 
@@ -35,7 +36,7 @@
 - Reduced accessibility: a user who wants lightweight multi-lens thinking without delegation overhead no longer gets an inline option from goat-critique. They must use `/goat-review` or apply the SKEPTIC/ANALYST/STRATEGIST framing themselves.
 - Existing habits and stored prompts that invoked goat-critique in Quick mode break immediately at Step 0. The redirect is explicit, but it is still a behavioural break.
 - Public docs referencing Quick mode (`docs/skills.md` (search: `goat-critique runs in one mode`)) must be updated in the same change. Stale references would re-introduce the expectation the skill just removed.
-- Harness / audit surfaces that referenced Quick vs Full mode as separate paths (`src/cli/audit/check-factual-claims.ts` (search: `SKILLS_DOC_STALE_PHRASES`)) need adjustment. Footgun/lesson narrative that discussed Quick mode is historical and remains as-is; it is not rewritten.
+- Harness / audit surfaces that referenced Quick vs Full mode as separate paths (`src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`)) need adjustment. Footgun/lesson narrative that discussed Quick mode is historical and remains as-is; it is not rewritten.
 - The 2026-04-19 quality-log Quick-mode run becomes an orphan pattern. It does not need retraction, but future readers comparing the log to the shipped skill will see a structure the skill no longer produces.
 
 **Neutral**
@@ -70,7 +71,7 @@ Open a new ADR only if one of these occurs after the change ships:
 - `.agents/skills/goat-critique/SKILL.md`
 - `.github/skills/goat-critique/SKILL.md`
 - `docs/skills.md` (search: `goat-critique runs in one mode`)
-- `src/cli/audit/check-factual-claims.ts` (search: `SKILLS_DOC_STALE_PHRASES`)
+- `src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`)
 - `.goat-flow/learning-loop/decisions/ADR-011-critique-mob-core-features.md`
 - `.goat-flow/learning-loop/decisions/ADR-019-rename-sbao-to-critique-and-test-to-qa.md`
 - `.goat-flow/skill-docs/skill-preamble.md`

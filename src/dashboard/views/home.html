@@ -1217,7 +1217,7 @@
           const setupPrompt = await generateSetupPromptForAgent(setupTarget);
           // If prompt generation fails, stay on Home so the user can choose another route.
           if (!setupPrompt) return;
-          await launchPreset(setupPrompt, activeRunner, 'Setup ' + agentName(setupTarget) + ' via ' + agentName(activeRunner), { cwdPath: projectPath, targetPath: projectPath });
+          await launchPreset(setupPrompt, activeRunner, 'Setup ' + agentName(setupTarget) + ' via ' + agentName(activeRunner), { cwdPath: projectPath, targetPath: projectPath, accessMode: 'workspace' });
           activeView = 'workspace';
           workspacePanel = 'terminal';
           return;
@@ -1228,7 +1228,7 @@
       }
       // Harness repair launches a focused fix prompt in Workspace.
       if (priority === 'harness') {
-        launchPreset(this.harnessFixPrompt(), activeRunner, 'Harness fix ' + agentName(this.failingHarnessAgent()));
+        launchPreset(this.harnessFixPrompt(), activeRunner, 'Harness fix ' + agentName(this.failingHarnessAgent()), { accessMode: 'workspace' });
         activeView = 'workspace';
         workspacePanel = 'terminal';
         return;

@@ -9,10 +9,14 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { assertExists } from "../helpers/assert-exists.ts";
+import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
 import { runAudit } from "../../src/cli/audit/audit.js";
+import { AUDIT_VERSION } from "../../src/cli/constants.js";
+import { PROFILES } from "../../src/cli/detect/agents.js";
 import { createFS } from "../../src/cli/facts/fs.js";
+import { extractSharedFacts } from "../../src/cli/facts/shared/index.js";
 import type {
   AuditConcernKey,
   AuditReport,
@@ -21,6 +25,7 @@ import type { AgentId } from "../../src/cli/types.js";
 import {
   makeCtx,
   makeSharedFacts,
+  stubConfig,
   stubFS,
   stubAgentFacts,
 } from "../fixtures/projects/index.js";
@@ -44,6 +49,51 @@ function getRepoAudit(opts: {
   }
   return report;
 }
+
+describe("audit against a project from a newer goat-flow release", () => {
+  it("reports version skew without older-template agent or drift findings", () => {
+    const futureVersion = "999.0.0";
+    const base = createFS(PROJECT_ROOT);
+    const fs = {
+      ...base,
+      readFile: (path: string) => {
+        const content = base.readFile(path);
+        if (content === null) return null;
+        if (
+          path === ".goat-flow/config.yaml" ||
+          path.startsWith(".agents/skills/") ||
+          path.startsWith(".goat-flow/hooks/")
+        ) {
+          return content.replaceAll(AUDIT_VERSION, futureVersion);
+        }
+        return content;
+      },
+    };
+
+    const report = runAudit(fs, PROJECT_ROOT, {
+      agentFilter: "codex",
+      harness: false,
+      checkDrift: true,
+      checkContent: true,
+      denyMechanismEvidenceLevel: "static",
+    });
+
+    const setupFailures = report.scopes.setup.checks
+      .filter((check) => check.status === "fail")
+      .map((check) => check.id);
+    assert.deepEqual(setupFailures, ["config-version", "hook-version"]);
+    for (const id of ["agent-skills", "agent-guardrails"]) {
+      const check = report.scopes.agent.checks.find(
+        (candidate) => candidate.id === id,
+      );
+      assertExists(check);
+      assert.equal(check.status, "skipped");
+      assert.equal(check.failure, undefined);
+    }
+    assert.equal(report.drift, null);
+    assert.equal(report.content, null);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Harness concerns produce pass/fail status
@@ -135,8 +185,8 @@ describe("commit-guidance harness check", () => {
     const shared = makeSharedFacts();
     shared.gitCommitInstructions = {
       exists: true,
-      path: "docs/coding-standards/git-commit.md",
-      requiredPath: "docs/coding-standards/git-commit.md",
+      path: "docs/coding-standards/git-commit-message.md",
+      requiredPath: "docs/coding-standards/git-commit-message.md",
       misplacedPaths: [],
     };
 
@@ -152,7 +202,7 @@ describe("commit-guidance harness check", () => {
     assert.equal(result.status, "pass");
     assert.match(
       result.findings.join("\n"),
-      /docs\/coding-standards\/git-commit\.md/,
+      /docs\/coding-standards\/git-commit-message\.md/,
     );
   });
 
@@ -162,7 +212,7 @@ describe("commit-guidance harness check", () => {
     shared.gitCommitInstructions = {
       exists: false,
       path: null,
-      requiredPath: "docs/coding-standards/git-commit.md",
+      requiredPath: "docs/coding-standards/git-commit-message.md",
       misplacedPaths: [".github/git-commit-instructions.md"],
     };
 
@@ -178,12 +228,101 @@ describe("commit-guidance harness check", () => {
     assert.equal(result.status, "fail");
     assert.match(
       result.findings.join("\n"),
-      /belongs at docs\/coding-standards\/git-commit\.md/,
+      /belongs at docs\/coding-standards\/git-commit-message\.md/,
     );
     assert.match(
       result.howToFix?.join("\n") ?? "",
       /\.github\/git-commit-instructions\.md/,
     );
+  });
+
+  it("accepts the former docs path from real project facts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-commit-guidance-"));
+    try {
+      const guidanceDir = join(root, "docs", "coding-standards");
+      await mkdir(guidanceDir, { recursive: true });
+      await writeFile(
+        join(guidanceDir, "git-commit.md"),
+        "# Existing Commit Rules\n",
+      );
+
+      const report = runAudit(createFS(root), root, {
+        agentFilter: null,
+        harness: true,
+      });
+      const result = report.scopes.harness?.checks.find(
+        (check) => check.id === "commit-guidance",
+      );
+
+      assert.ok(result, "commit-guidance audit result must exist");
+      assert.equal(result.status, "pass");
+      assert.equal(result.failure, undefined);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("prefers the new docs path when both accepted guides exist", () => {
+    const preferredPath = "docs/coding-standards/git-commit-message.md";
+    const compatiblePath = "docs/coding-standards/git-commit.md";
+    /** Read the detected commit-guide facts for one controlled set of existing paths. */
+    const factsFor = (paths: string[]) =>
+      extractSharedFacts(
+        stubFS({
+          exists: (path) => paths.includes(path),
+        }),
+        stubConfig(),
+      ).gitCommitInstructions;
+
+    assert.deepEqual(factsFor([compatiblePath]), {
+      exists: true,
+      path: compatiblePath,
+      requiredPath: preferredPath,
+      misplacedPaths: [],
+    });
+    assert.deepEqual(factsFor([compatiblePath, preferredPath]), {
+      exists: true,
+      path: preferredPath,
+      requiredPath: preferredPath,
+      misplacedPaths: [],
+    });
+  });
+
+  it("accepts either docs path in the Copilot instruction bridge", () => {
+    const agentInstructionCheck = AGENT_CHECKS.find(
+      (check) => check.id === "agent-instruction",
+    );
+    assert.ok(agentInstructionCheck, "agent-instruction check must exist");
+    const instructionPath = ".github/copilot-instructions.md";
+
+    for (const guidePath of [
+      "docs/coding-standards/git-commit-message.md",
+      "docs/coding-standards/git-commit.md",
+    ]) {
+      const instructionContent = `## Commit Messages\n\nSee \`${guidePath}\`.\n`;
+      const baseAgent = stubAgentFacts();
+      const result = agentInstructionCheck.run(
+        makeCtx({
+          agentFilter: "copilot",
+          agents: [
+            stubAgentFacts({
+              agent: PROFILES.copilot,
+              instruction: {
+                ...baseAgent.instruction,
+                content: instructionContent,
+              },
+            }),
+          ],
+          fs: stubFS({
+            exists: (path) => path === ".github" || path === instructionPath,
+            readFile: (path) =>
+              path === instructionPath ? instructionContent : null,
+          }),
+        }),
+      );
+
+      assert.equal(result, null, `Copilot should accept ${guidePath}`);
+    }
   });
 });
 

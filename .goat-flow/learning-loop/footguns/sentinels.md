@@ -49,7 +49,7 @@ last_reviewed: 2026-07-17
 
 **Goat-flow applicability:** Goat-flow already uses a namespace prefix on its sentinels (`goat-`, `GOAT_`, `__GOAT_FLOW_`). This footgun is recorded so a future cleanup does not "simplify" the prefixes away without understanding why they exist.
 - `src/cli/prompt/learning-loop-context.ts` (search: `<goat-learning-loop`) — block emitted to skill preambles; the `goat-` prefix prevents the agent's own observation of the learning-loop block from being re-interpreted as an injection target.
-- `src/cli/server/terminal.ts` (search: `GOAT_RUNNER`) — env var the dashboard uses to point a shell session at the local CLI; the `GOAT_` prefix prevents collision with `RUNNER` or other generic env vars an agent might inspect.
+- `src/cli/server/terminal-spawn.ts` (search: `GOAT_RUNNER`) — env var the dashboard uses to point a shell session at the local CLI; the `GOAT_` prefix prevents collision with `RUNNER` or other generic env vars an agent might inspect.
 - `src/dashboard/globals.d.ts` (search: `__GOAT_FLOW_REPORT__`) — window globals exposed to dashboard JS; the double-underscore + `GOAT_FLOW_` prefix avoids collision with anything the surrounding page may inject.
 
 **Prevention:**

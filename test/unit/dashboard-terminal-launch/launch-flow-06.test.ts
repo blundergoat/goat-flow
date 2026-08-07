@@ -2,7 +2,8 @@
  * Dashboard terminal launch flow, part 6: launch-prompt delivery and workspace wiring - prompts stay queued
  * through Antigravity auth output until the composer is ready and clear/fall back on Codex config errors, the
  * awaiting-input badge is debounced and mapped into the workspace waiting state and meters, and prompts are
- * deferred until after terminal attachment.
+ * deferred until after terminal attachment. Rehydrated reporting sessions retain capture metadata across
+ * open, saved reconnect, and recent-session projection paths.
  */
 import {
   assert,
@@ -13,6 +14,8 @@ import {
   it,
   loadHelpers,
   makeLaunchPromptContext,
+  makeContext,
+  makeTerminalSession,
   PROJECT_ROOT,
   readFileSync,
   readDashboardAppSource,
@@ -23,6 +26,143 @@ import {
 } from "./helpers.js";
 
 describe("dashboard terminal launch flow", () => {
+  it("rehydrates reporting capture metadata when opening a backend session", async () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const ctx = makeContext();
+
+    await helpers.dashboardOpenServerSession(ctx, {
+      id: "session-reporting",
+      runner: "claude",
+      status: "active",
+      createdAt: new Date().toISOString(),
+      projectPath: "/tmp/example",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/example",
+      accessMode: "reporting",
+      captureQualityDrafts: true,
+      qualityReportProjectPath: "/tmp/example",
+      lastInputAt: Date.now(),
+    });
+
+    assert.equal(ctx.sessions[0]?.captureQualityDrafts, true);
+    assert.equal(ctx.sessions[0]?.qualityReportProjectPath, "/tmp/example");
+    assert.equal(
+      ctx._terminalRefs["session-reporting"]?.retryCaptureQualityDrafts,
+      true,
+    );
+    assert.equal(
+      ctx._terminalRefs["session-reporting"]?.retryQualityReportProjectPath,
+      "/tmp/example",
+    );
+    assert.equal(
+      ctx._terminalRefs["session-reporting"]?.retryPrompt,
+      undefined,
+    );
+  });
+
+  it("saves reporting capture metadata when detaching from a project", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+    const session = makeTerminalSession({
+      id: "session-detached-report",
+      accessMode: "reporting",
+      captureQualityDrafts: true,
+      qualityReportProjectPath: "/tmp/example",
+    });
+    const ctx = makeContext({
+      activeSessionId: session.id,
+      sessions: [session],
+      _terminalRefs: { [session.id]: {} },
+    });
+
+    helpers.dashboardDetachTerminal(ctx);
+
+    const saved = ctx._projectSessions["/tmp/example"]?.[0];
+    assert.equal(saved?.captureQualityDrafts, true);
+    assert.equal(saved?.qualityReportProjectPath, "/tmp/example");
+  });
+
+  /**
+   * Restore capture intent after a user leaves and returns to the Workspace project.
+   * Side effects: fetches backend metadata and reconnects the saved browser session.
+   */
+  it("preserves reporting capture metadata through saved-session reconnect", async () => {
+    const serverSession = {
+      id: "session-saved-report",
+      runner: "claude",
+      status: "active",
+      createdAt: new Date().toISOString(),
+      projectPath: "/tmp/example",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/example",
+      accessMode: "reporting",
+      captureQualityDrafts: true,
+      qualityReportProjectPath: "/tmp/example",
+      lastInputAt: Date.now(),
+    };
+    const helpers = loadHelpers(
+      async () =>
+        ({ json: async () => ({ sessions: [serverSession] }) }) as Response,
+      { setTimeout, clearTimeout, setInterval, clearInterval },
+      { readServerSessionInfo: (value: unknown) => value },
+    );
+    const ctx = makeContext({
+      _projectSessions: {
+        "/tmp/example": [
+          {
+            sessionId: serverSession.id,
+            startTime: Date.now(),
+            prompt: "Quality report",
+            agent: "claude",
+            cwd: "/tmp/example",
+            targetPath: "/tmp/example",
+            accessMode: "reporting",
+            captureQualityDrafts: true,
+            qualityReportProjectPath: "/tmp/example",
+          },
+        ],
+      },
+      _projectActiveSession: { "/tmp/example": serverSession.id },
+    });
+
+    assert.equal(await helpers.dashboardReconnectTerminal(ctx), true);
+    assert.equal(ctx.sessions[0]?.captureQualityDrafts, true);
+    assert.equal(ctx.sessions[0]?.qualityReportProjectPath, "/tmp/example");
+    assert.equal(
+      ctx._terminalRefs[serverSession.id]?.retryCaptureQualityDrafts,
+      true,
+    );
+  });
+
+  it("keeps reporting capture metadata in recent-session projection", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      { setTimeout, clearTimeout, setInterval, clearInterval },
+      {
+        localStorage: { setItem: () => undefined },
+        window: { __GOAT_FLOW_DEFAULT_PATH__: "/tmp/example" },
+      },
+    );
+    const ctx = makeContext();
+    const session = makeTerminalSession({
+      id: "session-recent-report",
+      accessMode: "reporting",
+      captureQualityDrafts: true,
+      qualityReportProjectPath: "/tmp/example",
+    });
+
+    helpers.dashboardRememberRecentSession(ctx, session);
+
+    assert.equal(ctx.recentTerminalSessions[0]?.captureQualityDrafts, true);
+    assert.equal(
+      ctx.recentTerminalSessions[0]?.qualityReportProjectPath,
+      "/tmp/example",
+    );
+  });
+
   it("keeps Antigravity launch prompts queued through auth output until the composer is ready", () => {
     const timers = createFakeTimers();
     const helpers = loadHelpers(
@@ -445,6 +585,22 @@ describe("dashboard terminal launch flow", () => {
     assert.match(
       source,
       /x-text="launching \? 'Starting setup\.\.\.' : 'Run Setup in Terminal'"/,
+    );
+    assert.match(source, /launchPreset\([^\n]+accessMode: 'workspace'/u);
+  });
+
+  it("launches Home setup and harness repair with workspace access", () => {
+    const source = readFileSync(
+      resolve(PROJECT_ROOT, "src", "dashboard", "views", "home.html"),
+      "utf-8",
+    );
+    assert.match(
+      source,
+      /launchPreset\(setupPrompt,[^\n]+accessMode: 'workspace'/u,
+    );
+    assert.match(
+      source,
+      /launchPreset\(this\.harnessFixPrompt\(\),[^\n]+accessMode: 'workspace'/u,
     );
   });
 

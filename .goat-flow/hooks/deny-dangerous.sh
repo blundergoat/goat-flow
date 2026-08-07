@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034,SC2317,SC2319
 
 # deny-dangerous.sh
-# goat-flow-hook-version: 1.14.0
+# goat-flow-hook-version: 1.15.0
 #
 # Checks an agent's proposed shell command before the developer lets it run.
 # Use this dispatcher from an agent hook to keep safe evidence gathering available
@@ -396,8 +396,26 @@ goat_first_word_is_inert() {
   return 1
 }
 
+goat_flow_cli_consumes_heredoc_as_data() {
+  local command="$1"
+  local word="${command%%[[:space:]]*}"
+  local base="${word##*/}"
+  local arguments=""
+
+  [[ "$base" == "goat-flow" ]] || return 1
+  arguments="${command#"$word"}"
+  arguments="${arguments#"${arguments%%[![:space:]]*}"}"
+
+  # These two CLI surfaces parse stdin as report/prose data. Keep the match
+  # command-shaped: other goat-flow subcommands may mutate projects or launch
+  # runtimes, so the executable itself must never enter the broad inert list.
+  [[ "$arguments" =~ ^quality[[:space:]]+save([[:space:]]|$) ]] && return 0
+  [[ "$arguments" =~ ^redact([[:space:]]|$) ]] && return 0
+  return 1
+}
+
 heredoc_command_list_is_inert() {
-  local scan segment first inner match ps_re substitution_count iterations
+  local scan segment first normalized inner match ps_re substitution_count iterations
   local -a segs=()
 
   # Strip quoted spans first (so a shell NAME used as data is not read as a
@@ -436,8 +454,10 @@ heredoc_command_list_is_inert() {
   for segment in "${segs[@]}"; do
     segment="${segment#"${segment%%[![:space:]]*}"}"
     [[ -z "$segment" ]] && continue
-    first=$(first_word_base "$(normalize_command_candidate "$segment")")
-    goat_first_word_is_inert "$first" || return 1
+    normalized=$(normalize_command_candidate "$segment")
+    first=$(first_word_base "$normalized")
+    goat_first_word_is_inert "$first" ||
+      goat_flow_cli_consumes_heredoc_as_data "$normalized" || return 1
   done
   return 0
 }
@@ -2115,7 +2135,10 @@ check_segment() {
   local depth="${2:-0}"
   local previous_scope="${GOAT_ACTIVE_GUARD_SCOPE-}"
 
+  # Parse once per segment. Every policy module below consumes the same
+  # CMD_* and HAS_* context; reparsing here would add policy-count latency.
   GOAT_ACTIVE_GUARD_SCOPE="destructive"
+  prepare_segment_context "$cmd" "$depth" || return $?
   check_destructive_segment "$cmd" "$depth" || return $?
   GOAT_ACTIVE_GUARD_SCOPE="secret"
   check_secret_segment "$cmd" "$depth" || return $?

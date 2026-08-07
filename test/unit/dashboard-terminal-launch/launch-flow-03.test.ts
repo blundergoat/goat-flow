@@ -45,6 +45,7 @@ function makePreOutputRetryHarness(): {
     cwd: "/tmp/example",
     targetPath: "/tmp/target",
     loadingPhase: "connecting",
+    accessMode: "reporting",
   });
   const ctx = makeContext({
     activeSessionId: "session-error",
@@ -56,6 +57,7 @@ function makePreOutputRetryHarness(): {
         retryPresetId: "preset-setup",
         retryCwdPath: "/tmp/example",
         retryTargetPath: "/tmp/target",
+        retryAccessMode: "reporting",
         // Stub that records the backend-shell teardown the retry path must perform before relaunching.
         cleanup(): void {
           calls.push("cleanup:session-error");
@@ -218,7 +220,7 @@ describe("dashboard terminal launch flow", () => {
     const ctx = makeContext({
       sessions: [session],
       _terminalRefs: {
-        "session-loading": {},
+        "session-loading": { retryPrompt: "loading prompt" },
       },
     });
 
@@ -362,9 +364,76 @@ describe("dashboard terminal launch flow", () => {
           presetId: "preset-setup",
           cwdPath: "/tmp/example",
           targetPath: "/tmp/target",
+          accessMode: "reporting",
+          captureQualityDrafts: false,
         },
       },
     ]);
+  });
+
+  it("keeps a rehydrated session when its original retry prompt is unavailable", async () => {
+    const { ctx, helpers, launchCalls, session } = makePreOutputRetryHarness();
+    const refs = ctx._terminalRefs[session.id];
+    if (refs) {
+      delete refs.retryPrompt;
+      delete refs.launchPrompt;
+    }
+    session.loadingShowRetry = true;
+
+    await helpers.dashboardRetryTerminalSession(ctx, session.id);
+
+    assert.deepStrictEqual(ctx.sessions, [session]);
+    assert.deepStrictEqual(launchCalls, []);
+    assert.equal(session.loadingShowRetry, false);
+  });
+
+  it("carries staged-draft capture through a retried launch", async () => {
+    const { ctx, helpers, launchCalls } = makePreOutputRetryHarness();
+    const refs = ctx._terminalRefs["session-error"];
+    if (refs) {
+      refs.retryCaptureQualityDrafts = true;
+      refs.retryQualityReportProjectPath = "/tmp/report-owner";
+    }
+
+    await helpers.dashboardRetryTerminalSession(ctx, "session-error");
+
+    // Dropping the flag here would reopen the session without a staging
+    // directory, leaving the agent waiting on a receipt that never arrives.
+    assert.equal(
+      (launchCalls[0]?.options as { captureQualityDrafts?: boolean })
+        ?.captureQualityDrafts,
+      true,
+    );
+    assert.equal(
+      (
+        launchCalls[0]?.options as {
+          qualityReportProjectPath?: string | null;
+        }
+      )?.qualityReportProjectPath,
+      "/tmp/report-owner",
+    );
+  });
+
+  it("falls back to rehydrated session capture metadata when retry refs are absent", async () => {
+    const { ctx, helpers, launchCalls, session } = makePreOutputRetryHarness();
+    session.captureQualityDrafts = true;
+    session.qualityReportProjectPath = "/tmp/report-owner";
+
+    await helpers.dashboardRetryTerminalSession(ctx, "session-error");
+
+    assert.equal(
+      (launchCalls[0]?.options as { captureQualityDrafts?: boolean })
+        ?.captureQualityDrafts,
+      true,
+    );
+    assert.equal(
+      (
+        launchCalls[0]?.options as {
+          qualityReportProjectPath?: string | null;
+        }
+      )?.qualityReportProjectPath,
+      "/tmp/report-owner",
+    );
   });
 
   it("treats terminal WebSocket close as detach until an exit message arrives", () => {
@@ -475,6 +544,7 @@ describe("dashboard terminal launch flow", () => {
       projectPath: "/tmp/example",
       cwd: "/tmp/example",
       targetPath: "/tmp/example",
+      accessMode: "workspace",
       lastInputAt: Date.now(),
     });
 

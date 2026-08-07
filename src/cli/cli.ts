@@ -3,7 +3,7 @@
 /**
  * Command-line entry point for goat-flow.
  * Handles argv parsing, command dispatch, exit codes, and output for audit,
- * quality, setup, diagnostics, dashboard, events, redaction, and information workflows.
+ * quality, setup, diagnostics, dashboard, events, redaction, review validation, and information workflows.
  */
 
 import { realpathSync } from "node:fs";
@@ -34,7 +34,7 @@ Usage:
 Commands:
   menu              Interactive command picker (default when run with no args)
   audit             Deterministic pass/fail: GOAT Flow Setup + Agent Setup (add --harness for AI Harness Completeness)
-  quality           Agent-driven quality prompt plus history/diff surfaces
+  quality           Agent-driven quality prompt plus save/history/diff surfaces
   setup             Generate setup prompt (adapts to project state)
   install           Deterministically copy/update goat-flow system files
   status            Show project state (bare/partial/v0.9/outdated/current)
@@ -47,7 +47,10 @@ Commands:
   diagnostics threat-model  Show static agent/tool posture without executing target hooks
   index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
   redact            Scrub durable text from stdin before stdout or --output persistence
+  review validate [report-file] [--output <path>]  Validate goat-review Markdown; structural failures exit 1, advisory warnings stay at exit 0
   plans export      Preview or write redacted local milestone bundles
+  plans check       Check milestone effort arithmetic; report rough 70/20/10 mix drift
+  plans time        System-stamp start/stop/status timing receipts in one milestone
   events tail       Read local gitignored evidence-envelope events
   skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
   skill doctor      Explain installed skill paths, invocation syntax, and static load blockers.
@@ -58,6 +61,7 @@ Commands:
   hooks verify      Run bounded managed deny-hook classifier proof for one agent
 Arguments:
   project-path    Target project directory (default: .)
+  report-file     Saved goat-review Markdown for review validate (omit to read stdin)
 
 Flags:
   --format <type>   Output format: json, text, markdown, sarif (omit for auto-detect: text in terminal, json otherwise)
@@ -75,6 +79,10 @@ Flags:
   --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
   --red-log <file>  Skill new: failing RED receipt required before a skill write
   --scenario <name> Hooks verify: required bounded scenario group (deny-hook)
+  --strict          Plans check: require fully derived current-format estimates and completed Actuals
+  --category <kind> Plans time start: product, proof, or other
+  --finalize        Plans time stop: close the open span and finalize a measured receipt
+  --discard-open    Plans time stop: discard an interrupted span without inventing an end
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
   --dry-run         Install/setup: preview managed template drift without changing the target
   --force           Install/setup --apply: overwrite managed seeds; plans export: regenerate output
@@ -102,6 +110,7 @@ Examples:
   goat-flow quality history --agent claude
   goat-flow quality history --agent codex --mode skills
   goat-flow quality diff --agent claude --mode agent-setup
+  goat-flow quality save .             Redact, validate, and persist one report from stdin
   goat-flow quality validate <path>    Schema-check a freshly written report (exit 2 on any error)
   goat-flow manifest                   Print the resolved manifest
   goat-flow manifest --check           Verify the manifest is consistent with code
@@ -121,8 +130,15 @@ Examples:
   goat-flow diagnostics threat-model . --agent codex --format json
   goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries
   goat-flow redact --output .goat-flow/logs/sessions/handoff.md
-  goat-flow plans export .goat-flow/plans/1.14.0 --format markdown
-  goat-flow plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
+  goat-flow review validate saved-review.md
+  goat-flow plans export .goat-flow/plans/1.15.0 --format markdown
+  goat-flow plans export .goat-flow/plans/1.15.0 --format json --output .goat-flow/plans/exports/1.15.0.json
+  goat-flow plans check .goat-flow/plans/1.15.0
+  goat-flow plans check .goat-flow/plans/1.15.0 --strict
+  goat-flow plans time start .goat-flow/plans/1.15.0/example/M01-example.md --category product
+  goat-flow plans time stop .goat-flow/plans/1.15.0/example/M01-example.md
+  goat-flow plans time stop .goat-flow/plans/1.15.0/example/M01-example.md --finalize
+  goat-flow plans time status .goat-flow/plans/1.15.0/example/M01-example.md
   goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
   goat-flow skill new "<description>" --red-log <file>
                                       Scaffold a skill after failing RED evidence

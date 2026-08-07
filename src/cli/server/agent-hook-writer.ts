@@ -7,7 +7,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AgentProfile } from "../types.js";
+import type { AgentId, AgentProfile } from "../types.js";
 import { writeFileAtomic } from "./safe-exec.js";
 import type { HookSpec } from "./hooks-registry.js";
 
@@ -108,71 +108,235 @@ function matcherParts(matcher: string): string[] {
     .filter(Boolean);
 }
 
-/** Build the repo-relative hook script path stored in agent config files; throws for unsupported agents. */
-function commandPath(agent: AgentProfile, script: string): string {
-  if (!agent.hooksDir) throw new Error(`${agent.id} has no hooks dir`);
-  return `${agent.hooksDir}/${script}`.replace(/\/+/gu, "/");
+/**
+ * Build the hook path written into an agent's managed configuration.
+ * Use when setup enables a hook; empty path parts would produce an unusable registration.
+ *
+ * @param hooksDirectory - project hook folder shown in config; empty means no valid managed location
+ * @param hookScriptName - script the agent should run; empty means the registration cannot identify a hook
+ * @returns normalized project-relative path; never empty when registry metadata is valid
+ */
+function commandPath(hooksDirectory: string, hookScriptName: string): string {
+  return `${hooksDirectory}/${hookScriptName}`.replace(/\/+/gu, "/");
 }
 
-/** Quote one script for `bash -c` without leaving shell metacharacters active. */
-function shellSingleQuote(value: string): string {
-  return `'${value.split("'").join("'\\''")}'`;
+/**
+ * Choose the unavailable-hook response understood by the active agent host.
+ * Use when setup writes a launcher so startup failures remain visible without corrupting host protocol.
+ *
+ * @param hookResponseMode - host protocol for this hook; empty or unknown uses fail-closed policy text
+ * @returns Node source for the host response; never empty because every hook needs a failure outcome
+ */
+function unavailableHookResponseProgram(hookResponseMode: string): string {
+  // Antigravity expects a deny decision on stdout and treats the host response as handled.
+  if (hookResponseMode === "antigravity") {
+    return "const reportUnavailable=()=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: git repository root unavailable.'})+lineBreak);process.exit(0);};";
+  }
+  // Copilot expects its own permission-decision fields when the policy hook cannot start.
+  if (hookResponseMode === "copilot") {
+    return "const reportUnavailable=()=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: git repository root unavailable.'})+lineBreak);process.exit(0);};";
+  }
+  // Optional Gruff feedback fails soft so a missing analyzer shell never blocks the user's edit.
+  if (hookResponseMode === "gruff") {
+    return "const reportUnavailable=()=>{process.stderr.write('gruff-code-quality: hook unavailable: git repository root or hook launcher unavailable; skipped.'+lineBreak);process.exit(0);};";
+  }
+  // Post-turn safety cannot claim a completed scan when its launcher never started.
+  if (hookResponseMode === "post-turn") {
+    return "const reportUnavailable=()=>{process.stderr.write('post-turn-safety: hook unavailable: git repository root or hook launcher unavailable.'+lineBreak);process.exit(2);};";
+  }
+  // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
+  return "const reportUnavailable=()=>{process.stderr.write('BLOCKED: Policy hook unavailable: git repository root unavailable.'+lineBreak);process.exit(2);};";
 }
 
-/** Build the shell command variant that matches each agent's hook response protocol. */
+/**
+ * Build shell-neutral Node source that finds the user's project before starting its Bash hook.
+ * Use in generated agent configs so PowerShell, cmd, and POSIX shells share one launch path.
+ *
+ * @param hookResponseMode - host response selected for this hook; empty uses fail-closed policy behavior
+ * @returns portable `node -e` source; never empty because it becomes the registered hook command
+ */
+function hookLaunchBootstrap(hookResponseMode: string): string {
+  const unavailableResponseProgram =
+    unavailableHookResponseProgram(hookResponseMode);
+  return [
+    "const childProcess=require('node:child_process');",
+    "const filesystem=require('node:fs');",
+    "const path=require('node:path');",
+    "const hookScriptPath=process.argv[1];",
+    "const responseMode=process.argv[2];",
+    "const rootEnvironmentName=process.argv[3];",
+    "const lineBreak=String.fromCharCode(10);",
+    unavailableResponseProgram,
+    "const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});",
+    "let projectRoot=gitRootLookup.status===0?gitRootLookup.stdout.trim():'';",
+    "let bashLauncherPath=projectRoot?path.join(projectRoot,'.goat-flow','hooks','run-with-bash.mjs'):'';",
+    "/* A user may leave the repo, so supported hosts can recover the project originally selected. */",
+    "if((!bashLauncherPath||!filesystem.existsSync(bashLauncherPath))&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){projectRoot=process.env[rootEnvironmentName];bashLauncherPath=path.join(projectRoot,'.goat-flow','hooks','run-with-bash.mjs');}",
+    "/* Missing managed launch code means the host must not report an unchecked hook as successful. */",
+    "if(!bashLauncherPath||!filesystem.existsSync(bashLauncherPath))reportUnavailable();",
+    "const hookResult=childProcess.spawnSync(process.execPath,[bashLauncherPath,hookScriptPath,responseMode],{cwd:projectRoot,stdio:'inherit'});",
+    "/* A startup error or absent status means the user's hook never produced a trustworthy result. */",
+    "if(hookResult.error||!Number.isInteger(hookResult.status))reportUnavailable();",
+    "process.exit(hookResult.status);",
+  ].join("");
+}
+
+/**
+ * Select the response protocol the user's agent understands for one hook.
+ * Use while writing config; an unknown combination falls back to the safety-policy protocol.
+ *
+ * @param agentId - selected agent; empty is impossible after setup request validation
+ * @param spec - hook being registered; missing metadata is rejected by the registry before this call
+ * @returns response mode consumed by the launcher; never empty
+ */
+function hookLaunchMode(agentId: AgentId, spec: HookSpec): string {
+  // Gruff is optional feedback, so unavailable execution is shown as a non-blocking skip.
+  if (spec.id === "gruff-code-quality") return "gruff";
+  // Post-turn safety must return a failing scan outcome rather than an agent permission payload.
+  if (spec.id === "post-turn-safety") return "post-turn";
+  // Antigravity requires its decision JSON shape for command admission.
+  if (agentId === "antigravity") return "antigravity";
+  // Copilot requires permission-decision fields in its pre-tool response.
+  if (agentId === "copilot") return "copilot";
+  // Claude and Codex consume the standard fail-closed policy exit.
+  return "policy";
+}
+
+/**
+ * Build the hook command written into the selected agent's configuration.
+ * Use during install and sync so every host reaches the same managed Bash resolver.
+ *
+ * @param agentId - agent receiving the command; empty is impossible after setup validation
+ * @param hooksDirectory - project hook folder; empty would produce an invalid managed path
+ * @param spec - hook behavior and script; missing metadata is rejected before config generation
+ * @returns shell-neutral Node command; never empty because enabled hooks must be runnable
+ */
+export function buildAgentHookCommand(
+  agentId: AgentId,
+  hooksDirectory: string,
+  spec: HookSpec,
+): string {
+  const hookScriptPath = commandPath(hooksDirectory, spec.primaryScript);
+  const hookResponseMode = hookLaunchMode(agentId, spec);
+  // Codex has no supported project-root environment, so it stays fail-closed outside Git.
+  const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
+  return [
+    "node",
+    "-e",
+    JSON.stringify(hookLaunchBootstrap(hookResponseMode)),
+    JSON.stringify(hookScriptPath),
+    JSON.stringify(hookResponseMode),
+    JSON.stringify(rootEnvironmentName),
+  ].join(" ");
+}
+
+/**
+ * Build a managed command after setup has selected an agent profile.
+ * A profile without a hook folder is rejected so users never receive a dead config entry.
+ *
+ * @param agent - selected agent profile; a missing hook folder means this host cannot register hooks
+ * @param spec - enabled hook; missing metadata is rejected before this writer runs
+ * @returns registered Node command; never empty for supported agents
+ * @throws when the selected agent has no managed hook directory
+ */
 function shellCommand(agent: AgentProfile, spec: HookSpec): string {
-  const path = commandPath(agent, spec.primaryScript);
-  const unavailable =
-    spec.id === "gruff-code-quality"
-      ? `{ printf 'gruff-code-quality: hook unavailable: git repository root or hook script unavailable; skipped.\\n' >&2; exit 0; }`
-      : spec.id === "post-turn-safety"
-        ? `{ printf 'post-turn-safety: hook unavailable: git repository root or hook script unavailable.\\n' >&2; exit 2; }`
-        : agent.id === "antigravity"
-          ? `{ printf '{"decision":"deny","reason":"Policy hook unavailable: git repository root unavailable."}\\n'; exit 0; }`
-          : `{ printf 'BLOCKED: Policy hook unavailable: git repository root unavailable.\\n' >&2; exit 2; }`;
-  // Central hook scripts live in the active worktree under .goat-flow/hooks.
-  // Resolve the active tree first so linked worktrees run the policy checked out
-  // beside the files being edited. Claude/Antigravity also fall back to
-  // Claude's project-root env when a session has cd'd outside any git checkout;
-  // Codex has no documented equivalent, so it stays fail-closed outside git.
-  // The launcher cd's into the resolved root because deny-dangerous.sh resolves
-  // its policy store from cwd; cd failure uses the same hook-specific
-  // unavailable behavior.
-  const resolveRoot = `root="$(git rev-parse --show-toplevel 2>/dev/null || true)"`;
-  const claudeRootFallback =
-    agent.id === "codex"
-      ? ""
-      : `; [ -f "$root/${path}" ] || root="\${CLAUDE_PROJECT_DIR:-}"`;
-  const ensureRoot = `[ -f "$root/${path}" ] || ${unavailable}`;
-  const script = `${resolveRoot}${claudeRootFallback}; ${ensureRoot}; cd "$root" || ${unavailable}; bash "$root/${path}"`;
-  return `bash -c ${shellSingleQuote(script)}`;
+  // An unsupported profile cannot offer a working hook, so setup fails before writing its config.
+  if (!agent.hooksDir) throw new Error(`${agent.id} has no hooks dir`);
+  return buildAgentHookCommand(agent.id, agent.hooksDir, spec);
 }
 
-/** Build Copilot's Windows hook command with a denial response when bash is unavailable. */
-function powershellCommand(agent: AgentProfile, spec: HookSpec): string {
-  const path = commandPath(agent, spec.primaryScript);
-  return `if (Get-Command bash -ErrorAction SilentlyContinue) { bash ${path} } else { Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"Bash, Git Bash, or WSL is required to run ${path} on Windows."}' }`;
+/**
+ * Decide whether a hook entry in the user's agent config is one goat-flow installed.
+ * Use before setup adds, replaces, or removes a registration, so toggling a hook in the dashboard
+ * never rewrites a hook the user wrote themselves. The name must appear as a whole path token: a
+ * user hook called `custom-post-turn-safety.sh` merely contains a managed name, and claiming it
+ * would delete the user's own guard when they switched the managed one off.
+ *
+ * @param commands - command strings from one config entry, joined by newlines; empty means the entry
+ *   runs nothing and can never be a managed registration
+ * @param script - managed script filename to look for, such as `post-turn-safety.sh`
+ * @returns true when this entry launches the managed script, so setup owns it; false leaves the
+ *   entry untouched as the user's own hook
+ */
+function commandsReferenceScriptToken(
+  commands: string,
+  script: string,
+): boolean {
+  const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // The name must start at a path or word boundary and end at one, so `custom-<name>` never matches.
+  const scriptTokenPattern = new RegExp(
+    `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
+    "mu",
+  );
+  return scriptTokenPattern.test(commands);
 }
 
-/** Detect any existing hook entry that already points at one of the spec's managed scripts. */
-function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+/** Detect a command entry that directly launches one managed hook script. */
+function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+  // Non-object JSON cannot represent a runnable hook command.
   if (!isObject(entry)) return false;
   const commands = [
     typeof entry.command === "string" ? entry.command : "",
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
   ].join("\n");
-  if (spec.scriptFiles.some((script) => commands.includes(script))) return true;
+  // Current managed script names identify the registration setup owns.
   if (
-    spec.id === "deny-dangerous" &&
-    LEGACY_DENY_DANGEROUS_SCRIPT_NAMES.some((script) =>
-      commands.includes(script),
+    spec.scriptFiles.some(
+      (script) =>
+        script !== "run-with-bash.mjs" &&
+        commandsReferenceScriptToken(commands, script),
     )
   ) {
     return true;
   }
+  // Historical deny script names remain managed so upgrades can remove them.
+  if (
+    spec.id === "deny-dangerous" &&
+    LEGACY_DENY_DANGEROUS_SCRIPT_NAMES.some((script) =>
+      commandsReferenceScriptToken(commands, script),
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Detect any nested hook entry that points at one of the spec's managed scripts. */
+function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
+  // Non-object JSON cannot contain a managed hook command or nested hook list.
+  if (!isObject(entry)) return false;
+  // A direct command match is enough for upgrade removal and replacement.
+  if (commandEntryReferencesSpec(entry, spec)) return true;
+  // Matcher groups nest the runnable command under their hooks array.
   if (Array.isArray(entry.hooks)) {
     return entry.hooks.some((hook) => entryReferencesSpec(hook, spec));
+  }
+  return false;
+}
+
+/**
+ * Checks command and runner timeout so dashboard state matches what users will actually run.
+ */
+function entryMatchesSpecRegistration(
+  entry: unknown,
+  agent: AgentProfile,
+  spec: HookSpec,
+): boolean {
+  // Non-object JSON cannot represent a valid managed registration.
+  if (!isObject(entry)) return false;
+  // A direct command must also carry the timeout supported by this runner.
+  if (commandEntryReferencesSpec(entry, spec)) {
+    // Codex has no timeout field, and hooks without a registry timeout use agent defaults.
+    if (agent.id === "codex" || spec.timeoutSec === undefined) return true;
+    const timeoutField = agent.id === "copilot" ? "timeoutSec" : "timeout";
+    return entry[timeoutField] === spec.timeoutSec;
+  }
+  // Matcher groups are valid when one nested command has the complete registration.
+  if (Array.isArray(entry.hooks)) {
+    return entry.hooks.some((hook) =>
+      entryMatchesSpecRegistration(hook, agent, spec),
+    );
   }
   return false;
 }
@@ -244,10 +408,11 @@ function claudeCodexEntries(agent: AgentProfile, spec: HookSpec): JsonObject[] {
 
 /** Create Copilot's single hook entry shape with both bash and PowerShell commands. */
 function copilotEntry(agent: AgentProfile, spec: HookSpec): JsonObject {
+  const crossPlatformCommand = shellCommand(agent, spec);
   return {
     type: "command",
-    bash: commandPath(agent, spec.primaryScript),
-    powershell: powershellCommand(agent, spec),
+    bash: crossPlatformCommand,
+    powershell: crossPlatformCommand,
     timeoutSec: spec.timeoutSec ?? 30,
   };
 }
@@ -312,14 +477,15 @@ function hasAntigravityExpectedEntries(
   if (!Array.isArray(entries)) return false;
   if (spec.event === "Stop") {
     return entries.some(
-      (entry) => isObject(entry) && entryReferencesSpec(entry, spec),
+      (entry) =>
+        isObject(entry) && entryMatchesSpecRegistration(entry, agent, spec),
     );
   }
   return entries.some(
     (entry) =>
       isObject(entry) &&
       entry.matcher === matcherForAgent(agent, spec) &&
-      entryReferencesSpec(entry, spec),
+      entryMatchesSpecRegistration(entry, agent, spec),
   );
 }
 
@@ -332,17 +498,21 @@ function hasEventExpectedEntries(
   const entries = hooks[hookEventKey(agent, spec)];
   if (!Array.isArray(entries)) return false;
   if (spec.event === "Stop") {
-    return entries.some((entry) => entryReferencesSpec(entry, spec));
+    return entries.some((entry) =>
+      entryMatchesSpecRegistration(entry, agent, spec),
+    );
   }
   if (agent.id === "copilot") {
-    return entries.some((entry) => entryReferencesSpec(entry, spec));
+    return entries.some((entry) =>
+      entryMatchesSpecRegistration(entry, agent, spec),
+    );
   }
   return matcherParts(spec.matcher).every((matcher) =>
     entries.some(
       (entry) =>
         isObject(entry) &&
         entry.matcher === matcher &&
-        entryReferencesSpec(entry, spec),
+        entryMatchesSpecRegistration(entry, agent, spec),
     ),
   );
 }

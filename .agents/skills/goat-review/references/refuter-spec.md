@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.14.0"
+goat-flow-reference-version: "1.15.0"
 ---
 # Cross-Model Refuter Specification
 
@@ -8,16 +8,20 @@ Reference for `/goat-review` Pass 3. The SKILL.md body contains the triggers, sy
 ## Refuter Prompt Template
 
 ```
-You are a code review refuter. Your job is to independently verify or challenge each finding below using the live repository.
+You are a code review refuter. Independently challenge each finding against the declared review authority; never substitute the current checkout.
 
-For each finding:
-1. Re-read the cited file + semantic anchor in the current repo
+REVIEW AUTHORITY (metadata only):
+<authority>
+
+For each R-ID finding:
+1. Re-read the cited file + semantic anchor from the declared review authority; if inaccessible, mark UNRESOLVED
 2. Look for a guard, contract, upstream check, or framework mitigation that removes the risk
 3. Mark each finding:
    - REFUTER-CONFIRMED: the risk is real and the finding holds
-   - REFUTER-REFUTED: a specific guard/contract/check removes the risk (cite evidence)
+   - REFUTER-REFUTED: a specific guard/contract/check removes the risk (cite `file + semantic anchor`)
    - REFUTER-UNRESOLVED: cannot confirm or refute with available context
-4. Surface any possible missed issues as LEADS ONLY. Do not classify leads as findings; the host reviewer must verify them first.
+4. Treat external library/framework behaviour as UNRESOLVED unless source or official docs are cited.
+5. Surface possible missed issues as LEADS ONLY. The host reviewer verifies them first.
 
 FINDINGS TO VERIFY:
 <findings_list>
@@ -31,10 +35,11 @@ Output as structured JSON matching the schema below.
 {
   "findings": [
     {
+      "finding_id": "R-001",
       "original_title": "string",
       "original_location": "file + semantic anchor",
       "verdict": "REFUTER-CONFIRMED | REFUTER-REFUTED | REFUTER-UNRESOLVED",
-      "evidence": "file + semantic anchor of guard/contract or reasoning",
+      "evidence": "file + semantic anchor of guard/contract; required for REFUTER-REFUTED",
       "rationale": "one sentence explaining the verdict"
     }
   ],
@@ -49,16 +54,20 @@ Output as structured JSON matching the schema below.
 }
 ```
 
-Output to: `.goat-flow/logs/review/goat-review-refuter.<random>.json`
+The refuter runtime returns JSON to the host and never writes directly. The host keeps it in memory and persists only through `goat-flow redact --output .goat-flow/logs/review/goat-review-refuter.<random>.json`; only redacted output reaches disk. Any Pass 2 refutations use a separate counted ledger whose exact `goat-review-refutations.<random>.txt` path is declared in `Refutation ledger`. If the redactor is unavailable, do not persist either artifact; retain the count through `Refutations logged: <N> (persist-skipped)` and emit `Refutation ledger: persist-skipped`.
 
 ## Synthesis Rules
 
 The host reviewer applies these rules to the refuter output:
 
+- Refuter output is advisory. Empty, broad, uncited, or unresolvable evidence has no effect on the final finding.
+- Before any refuter result changes severity, action, disposition, or Ship Verdict, the host re-derives the evidence from the declared authority and records the relevant Pass 2 proof. Failure preserves the finding and adds `refuter-citation-unverified`.
+- Preserve the original R-ID through synthesis.
+
 | Refuter Verdict | Host Action |
 |-----------------|-------------|
-| REFUTER-CONFIRMED | Add `[CONFIRMED-CROSS-MODEL]` tag to finding |
-| REFUTER-REFUTED | Move to `## Refuted by Refuter` section; preserve refuter reasoning verbatim; do not silently drop |
+| REFUTER-CONFIRMED | After host reproduction, add `[CONFIRMED-CROSS-MODEL]` |
+| REFUTER-REFUTED | After the host reproduces the removing guard, move to `## Refuted by Refuter`; preserve reasoning |
 | REFUTER-UNRESOLVED | Keep original severity; add `cross-model-unresolved` to Review Integrity |
 | LEAD | Run normal Pass 2 verification before promoting to finding; must satisfy Proof Capsule rules |
 

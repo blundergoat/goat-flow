@@ -1,6 +1,69 @@
 # Changelog
 
-## Unreleased
+## v1.15.0 - 2026-08-07
+
+- **Passive dashboard checks stop executing audited hook code** - `/api/audit` and `/api/quality` now use static deny-hook evidence and report `limited`/`static-local` instead of runtime proof. Dashboards from v1.9.0-v1.14.0 ran the selected checkout's configured hook launcher; until upgrading, avoid per-agent Dashboard checks on untrusted code (v1.9-v1.11) or audit with `--untrusted-target` from the CLI (v1.12-v1.14).
+- **Runtime hook proof stays on the trusted CLI path** - `goat-flow audit --agent <id>` still executes the configured launcher and `$root` glue by default; `--untrusted-target` keeps that audit static for checkouts you do not trust.
+- **Managed hook launches reject redirected scripts** - Symlinked, non-regular, multi-hard-linked, or root-escaping hook scripts fail closed before Bash starts.
+- **Post-turn scans catch terminated credential assignments** - `KEY="value";` is detected on the native and Bash 3 paths; expressions after the terminator stay excluded.
+- **Managed hook matching requires complete path tokens** - Setup, drift audit, and deny smoke no longer claim user hooks such as `custom-post-turn-safety.sh` whose names merely contain a managed script name.
+- **Review and content parsing follow rendered CommonMark** - Closing ATX markers and up-to-three-space indented headings parse as rendered, so review sections and readiness markers cannot hide or invent state.
+- **Preflight and CI ratchet Gruff warning debt** - A reviewed manifest pins warning identities by `stableIdentity`; new warnings, occurrence growth, worsened metadata, stale accepted debt, or coverage loss fail preflight and a dedicated Node 22 CI ratchet job.
+- **Accepted debt stays visible on a green run** - The ratchet prints its identity, occurrence, coverage, and advisory counts so a passing gate never reads as "no debt".
+- **Windows install discovery finds Git Bash** - Standard machine and per-user Git paths work when PATH exposes only the WSL shim.
+- **Install previews use real Windows admission** - `--dry-run` reports the same missing-Bash blocker as a real install.
+- **Managed hooks use the resolved Windows shell** - Node launches discovered Git Bash instead of relying on bare `bash`.
+- **Preflight cleanup waits for observable readiness** - Its escaped-output fixture signals readiness before escalation, removing the CI race.
+- **Windows post-turn scans finish in under a second** - Batched scans take 0.655s on Git Bash and 0.027s on Linux for 25 files.
+- **Stop scans fail closed through Bash 3** - A 60-second budget blocks incomplete scans; path decoding and hook sync remain safe.
+- **Review validation matches workflow guidance** - Wrapped lists and code examples parse correctly; degraded reviews cannot overstate verdicts.
+- **Review degradation lists stay unambiguous** - Validation rejects empty entries and `none` combined with a real degradation flag.
+- **Plan effort estimates are checkable** - Strict mode requires derived estimates and structured Actuals; ~70/20/10 remains advisory.
+- **Plan evidence fails closed** - Timing rejects invalid or conflicting receipts while previews redact rationale and preserve user files.
+- **Plan timing states its concurrency boundary** - The atomic-write contract distinguishes ordinary editor saves from hostile ancestor mutation.
+- **Milestone timing starts only during active work** - Start requires one rendered `in-progress` or `testing-gate` status; recovery stays available.
+- **Strict plan checks validate lifecycle and dependencies** - Missing sections, bad dependencies, and invalid human-review states fail.
+- **Plan exports include proof and stop conditions** - Exports normalize proof headings, kill criteria, and competing sections.
+- **goat-plan budgets the smallest complete result** - Milestones require outcomes, tasks, proof, exits, and stop conditions.
+- **Milestone timing uses durable receipts** - UTC spans track open and invalid clocks; strict checks require reconciled final Actuals.
+- **Actuals declare provenance** - Measured values require final receipts; retrospective, unavailable, and incomplete avoid invented precision.
+- **Forecast calibration stays optional** - Three measured milestones enable ratio bounds; smaller samples remain uncalibrated.
+- **Unclaimed legacy receipts stay advisory** - Only measured Actuals and active clocks require valid, reconciled receipt shapes.
+- **goat-debug verifies the reported bug** - D4 reruns the original reproduction and cleans approved diagnostics without deleting user files.
+- **goat-debug docs match behavior** - Guidance includes D1.5 minimization, both approvals, and the dashboard Fix Bug flow.
+- **Commit guidance gets a clearer filename** - New installs use `git-commit-message.md`; the legacy filename remains valid. See ADR-043.
+- **Dashboard terminals preserve access mode** - Reporting and workspace modes survive defaults, retries, and session rehydration.
+- **Reporting terminals close with their runner** - POSIX and Windows expose no fallback shell; delayed prompts cancel after early exits.
+- **Codex reporting sessions enforce read-only tracking** - Profiles allow reads and ignored outputs while denying tracked edits and secrets.
+- **Codex quality reports follow workflow ownership** - Process/skills write only in the controller; agent-setup/harness write only in the target.
+- **Claude reporting sessions enforce read-only tracking** - Session overlays allow approved reads and ignored paths but deny tracked edits.
+- **`quality save` owns report destinations** - It redacts and validates stdin, selects an ignored filename, and rejects caller outputs.
+- **Quality dates reject impossible current runs** - New reports require real calendar days; invalid legacy dates load but cannot extend streaks.
+- **Quality findings require relevant evidence** - Assessors check who a standard binds, ADRs, agent authorship, and actionable factual errors.
+- **Prior quality findings are re-tested** - Unavailable probes are disclosed without carrying unverified claims forward or claiming they were fixed.
+- **Locked quality reviews degrade honestly** - Denied probes are recorded; reviewers continue with read-only evidence instead of guessing.
+- **Staged quality reports fail closed** - Reviewers pre-check draft and receipt names, disclose residual ambiguity, and survive write-locked modes.
+- **Claude assessments persist without writable shells** - The dashboard validates drafts; finalized reports stay read-only. See ADR-044.
+- **Report capture fails closed through recovery** - Private staging, atomic claims, and receipts prevent unsafe duplicate persistence.
+- **QA templates load on demand** - `/goat-qa` loads Standard or Audit templates only when rendering.
+- **Skill checks name their evidence** - Preflight labels static checks accurately and verifies progressive QA mirrors and manifest references.
+- **Runtime boundaries cover the shipped surface** - Instructions, maps, and learning records cover server, setup, hooks, and multi-root access.
+- **Cross-harness prompts require approval** - Agent CLI prompts are Ask First; probes and native sub-agents remain unrestricted. See ADR-042.
+- **Shared references load as documented** - `skill-conventions.md` loads only at full depth, never through `/goat`.
+- **Setup guidance includes the prose-style trigger** - Shipped instructions include `prose style`; customized agent files keep local wording.
+- **goat-* prose edits preserve meaning and plan controls** - Style edits protect facts, status, uncertainty, human prose, and approved milestones.
+- **Orientation docs cover the dashboard** - Code maps cover CLI-server and dashboard modules; architecture reflects the TypeScript surface.
+- **Evidence anchors resolve** - The glossary targets the live quality command; deny-hook evidence distinguishes shipped and unbuilt proof.
+- **Content audits validate durable Markdown evidence** - Anchors, fences, readiness answers, and excluded work roots are checked correctly.
+- **Deny hooks separate report data from commands** - Quoted save/redact heredocs avoid false blocks while executable heredocs remain inspected.
+- **Deny policies share one parsed command context** - Destructive, secret, and repository checks reuse one tokenized command segment.
+- **Review and debug dispositions stay coherent** - Explicit fix authorization is accepted; integrity totals include `ADJUSTED`.
+- **Version-skew audits fail safely** - Older CLIs suppress unsafe relative findings; hook sync rejects newer hooks and malformed versions.
+- **`scripts/gruff-ts.sh` emits parseable output** - The wrapper runs from repo root, forwards arguments, and preserves analyzer exit classes.
+- **gruff-ts findings clear without weaker rules** - Code and test fixes remove false findings; config excludes only generated logs.
+- **Test fixtures explain purpose and effects** - Plain-English comments make fixture intent visible without reading implementation files.
+- **Contract failures name their surface** - File- and rule-named TAP cases expose drift without reducing behavioral coverage.
+- **Multi-step sweeps use named helpers** - Review, timing, terminal, audit, and quality sweeps report the missing concern or format.
 
 ## v1.14.0 - 2026-07-19
 

@@ -26,6 +26,12 @@ const MODEL_READERS_PATH = resolve(
 
 type HelperContext = {
   readRunnerId: (_value: unknown) => string | null;
+  readServerSessionInfo: (_value: unknown) =>
+    | (Record<string, unknown> & {
+        captureQualityDrafts: boolean;
+        qualityReportProjectPath: string | null;
+      })
+    | null;
   readInjectedSupportedAgents: () => SupportedAgent[];
   readDashboardReport: (_value: unknown) => {
     scopes: {
@@ -175,6 +181,7 @@ function loadHelpers(
     `${js}
 globalThis.__helpers = {
   readRunnerId,
+  readServerSessionInfo,
   readInjectedSupportedAgents,
   readDashboardReport,
   readTaskState,
@@ -388,6 +395,44 @@ function readPlansViewTaskState(): ReturnType<HelperContext["readTaskState"]> {
 }
 
 describe("dashboard payload readers", () => {
+  it("preserves report ownership with and without Claude draft capture", () => {
+    const helpers = loadHelpers({
+      __GOAT_FLOW_RUNNER_IDS__: ["claude", "codex"],
+      __GOAT_FLOW_AGENTS__: [supportedAgent("claude"), supportedAgent("codex")],
+    });
+    const claudeSession = helpers.readServerSessionInfo({
+      id: "session-reporting",
+      status: "active",
+      runner: "claude",
+      createdAt: "2026-08-03T00:00:00.000Z",
+      projectPath: "/tmp/example",
+      cwd: "/tmp/example",
+      targetPath: "/tmp/example",
+      accessMode: "reporting",
+      captureQualityDrafts: true,
+      qualityReportProjectPath: "/tmp/example",
+      lastInputAt: 1,
+    });
+    const codexSession = helpers.readServerSessionInfo({
+      id: "session-codex-reporting",
+      status: "active",
+      runner: "codex",
+      createdAt: "2026-08-03T00:00:00.000Z",
+      projectPath: "/tmp/target",
+      cwd: "/tmp/controller",
+      targetPath: "/tmp/target",
+      accessMode: "reporting",
+      captureQualityDrafts: false,
+      qualityReportProjectPath: "/tmp/target",
+      lastInputAt: 1,
+    });
+
+    assert.equal(claudeSession?.captureQualityDrafts, true);
+    assert.equal(claudeSession?.qualityReportProjectPath, "/tmp/example");
+    assert.equal(codexSession?.captureQualityDrafts, false);
+    assert.equal(codexSession?.qualityReportProjectPath, "/tmp/target");
+  });
+
   it("narrows supported agents from injected runner metadata", () => {
     const helpers = loadHelpers({
       __GOAT_FLOW_RUNNER_IDS__: ["claude", "codex"],
@@ -498,6 +543,7 @@ describe("dashboard payload readers", () => {
     assert.equal(score, expectedTwoPassesOutOfFourScore);
   });
 
+  // Covers older reports with no concern limits, because an absent list must read as empty, not missing.
   it("preserves concern limits and treats older missing limits as an empty list", () => {
     const report = loadHelpers().readDashboardReport({
       status: "pass",

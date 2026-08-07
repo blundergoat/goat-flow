@@ -222,8 +222,6 @@ search_file_operands_touch_secret() {
 
 check_secret_segment() {
   local cmd="$1"
-  local depth="${2:-0}"
-  prepare_segment_context "$cmd" "$depth" || return $?
   cmd="$CMD_TRIMMED"
 
   if [[ "$HAS_REDIRECT" -eq 0 && "$HAS_PIPE" -eq 0 ]]; then
@@ -256,4 +254,3 @@ check_secret_segment() {
     return 0
   fi
 }
-

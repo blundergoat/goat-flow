@@ -368,7 +368,7 @@ phase_for() {
         "Shell Scripts"|"TypeScript") printf 'STATIC' ;;
         "Deny Policy"|"ADR Enforcement"|"Gruff Policy") printf 'POLICY' ;;
         "Agent Config Parity"|"Skill and Reference Versions"|"Version Consistency") printf 'CONFIG INTEGRITY' ;;
-        "Skill Behavioral Contracts"|"Reference Budgets"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
+        "Skill Static Contracts"|"Reference Budgets"|"Cross-Agent Consistency"|"Instruction Parity Contract"|"Instruction File Quality") printf 'CONTRACTS' ;;
         "Tests"|"Dependency Audit") printf 'TESTS' ;;
         "GOAT Flow Audit"|"Learning-Loop Schema"|"Doc/Code Drift"|"Content Drift"|"Skill Docs Sync"|"Skill SKILL.md Parity") printf 'DRIFT' ;;
         "Path Integrity"|"Markdown Links"|"Package README Links") printf 'LINKS' ;;
@@ -386,7 +386,7 @@ display_for() {
         "Agent Config Parity") printf 'Agent config parity' ;;
         "Skill and Reference Versions") printf 'Skill versions' ;;
         "Version Consistency") printf 'Version consistency' ;;
-        "Skill Behavioral Contracts") printf 'Skill behavioural' ;;
+        "Skill Static Contracts") printf 'Skill static' ;;
         "Reference Budgets") printf 'Reference budgets' ;;
         "Cross-Agent Consistency") printf 'Cross-agent' ;;
         "Instruction Parity Contract") printf 'Instruction parity' ;;
@@ -416,7 +416,7 @@ collapsed_desc_for() {
         "Agent Config Parity") printf 'claude · codex · antigravity · copilot' ;;
         "Skill and Reference Versions") printf 'templates + installed match version' ;;
         "Version Consistency") printf 'package.json · config.yaml' ;;
-        "Skill Behavioral Contracts") printf 'goat-critique invocation' ;;
+        "Skill Static Contracts") printf 'skill wording and structure' ;;
         "Reference Budgets") printf 'ADR-023 headroom' ;;
         "Cross-Agent Consistency") printf 'execution loop · router table' ;;
         "Instruction Parity Contract") printf 'agent files share contract' ;;
@@ -519,7 +519,7 @@ _compute_widths() {
         "Shell Scripts" "TypeScript"
         "Deny Policy" "ADR Enforcement" "Gruff Policy"
         "Agent Config Parity" "Skill and Reference Versions" "Version Consistency"
-        "Skill Behavioral Contracts" "Cross-Agent Consistency"
+        "Skill Static Contracts" "Cross-Agent Consistency"
         "Reference Budgets"
         "Instruction Parity Contract" "Instruction File Quality"
         "Tests"
@@ -1368,8 +1368,8 @@ else
     skip "Version check (missing package.json)"
 fi
 
-# ── Skill Behavioral Contracts ───────────────────────────────────────
-section "Skill Behavioral Contracts"
+# ── Skill Static Contracts ───────────────────────────────────────────
+section "Skill Static Contracts"
 contract_ok=true
 bad_goat_critique_patterns=(
     "Exception: on C""odex"
@@ -1442,6 +1442,7 @@ const files = [
       "page-capture.md",
       "release-notes.md",
       "skill-playbook-authoring-sync.md",
+      "writing-style.md",
     ].flatMap((name) => [
       `workflow/skills/playbooks/${name}`,
       `.goat-flow/skill-docs/playbooks/${name}`,
@@ -1690,9 +1691,10 @@ if [[ -f tsconfig.json ]]; then
         skip "ESLint (not configured)"
     fi
 
-    # Knip (unused exports, dead code - breaking error)
+    # Knip (unused exports, dead code - breaking error). The project graph exceeds
+    # Node's default 4 GiB heap on the supported Node 20 runtime.
     if command -v npx >/dev/null 2>&1 && npx knip --version >/dev/null 2>&1; then
-        knip_output=$(npx knip --no-progress 2>&1) && knip_exit=0 || knip_exit=$?
+        knip_output=$(node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress 2>&1) && knip_exit=0 || knip_exit=$?
         if [[ "$knip_exit" -eq 0 ]]; then
             pass "Knip (no unused exports or deps)"
         else
@@ -1869,6 +1871,25 @@ if [[ -f .gruff-ts.yaml ]]; then
     else
         fail "gruff-ts rule(s) disabled in .gruff-ts.yaml - satisfy or tune, never silence"
         printf '%s\n' "$disabled_lines" | head -5 | details_pipe
+    fi
+
+    # Reviewed warning-debt ratchet: run the repo-local analyzer once and
+    # compare warning stableIdentity debt against the reviewed manifest.
+    # Fails closed on analyzer errors, new or duplicated warnings, worsened
+    # metadata, stale accepted debt, or degraded scan coverage; unchanged
+    # accepted debt stays visible in the row details. Never satisfy this gate
+    # by disabling a rule or raising a threshold.
+    if [[ -f scripts/check-gruff-warning-ratchet.mjs ]]; then
+        ratchet_output=$(node scripts/check-gruff-warning-ratchet.mjs 2>&1) && ratchet_exit=0 || ratchet_exit=$?
+        if [[ "$ratchet_exit" -eq 0 ]]; then
+            pass "Gruff warning ratchet: accepted debt unchanged or reduced"
+            printf '%s\n' "$ratchet_output" | tail -3 | details_pipe
+        else
+            fail "Gruff warning ratchet failed (exit $ratchet_exit)"
+            printf '%s\n' "$ratchet_output" | head -20 | details_pipe
+        fi
+    else
+        fail "Gruff warning ratchet script missing (scripts/check-gruff-warning-ratchet.mjs)"
     fi
 else
     skip "Gruff Policy (.gruff-ts.yaml not found)"
@@ -2180,6 +2201,16 @@ if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill
     fi
 else
     skip "release-notes.md sync (one or both files missing)"
+fi
+# Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
+if [[ -f workflow/skills/playbooks/writing-style.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-style.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-style.md .goat-flow/skill-docs/playbooks/writing-style.md >/dev/null 2>&1; then
+        pass "writing-style.md: template and installed copy match"
+    else
+        fail "writing-style.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-style.md sync (one or both files missing)"
 fi
 # Hook maintainers need the same policy-test workflow that consumer agents receive.
 if [[ -f workflow/skills/playbooks/hook-policy-testing.md ]] && [[ -f .goat-flow/skill-docs/playbooks/hook-policy-testing.md ]]; then

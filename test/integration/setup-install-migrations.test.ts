@@ -10,9 +10,42 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { makeTempProject, runInstaller } from "./setup-install.helpers.js";
+import {
+  makeTempProject,
+  POST_TURN_SAFETY_TIMEOUT_SECONDS,
+  readClaudePostTurnSafetyTimeout,
+  runInstaller,
+} from "./setup-install.helpers.js";
+
+/** Permission arrays read from one migrated Claude settings contract. */
+interface ClaudePermissionGroups {
+  deny: string[];
+  allow: string[];
+  ask: string[];
+}
+
+/** Reads the three Claude permission groups from one migrated settings fixture. */
+function readClaudePermissionGroups(root: string): ClaudePermissionGroups {
+  const settings = JSON.parse(
+    readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
+  ) as { permissions?: Record<string, string[]> };
+  return {
+    deny: settings.permissions?.deny ?? [],
+    allow: settings.permissions?.allow ?? [],
+    ask: settings.permissions?.ask ?? [],
+  };
+}
+
+/** Return every permission rule that still uses one retired or unmatched tool form. */
+function stalePermissionRules(groups: ClaudePermissionGroups): string[] {
+  const stalePrefixes = ["MultiEdit(", "Write(", "NotebookEdit(", "Glob("];
+  return [groups.deny, groups.allow, groups.ask]
+    .flat()
+    .filter((rule) => stalePrefixes.some((prefix) => rule.startsWith(prefix)));
+}
 
 describe("setup --apply installer upgrade migrations", () => {
+  // Covers upgrading past the retired guard: writes old config, which must be pruned because it is retired.
   it("prunes retired plan checkbox guard config and selected-agent registration", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
@@ -56,6 +89,15 @@ describe("setup --apply installer upgrade migrations", () => {
                 hooks: [
                   {
                     type: "command",
+                    command: "bash .goat-flow/hooks/post-turn-safety.sh",
+                    timeout: 60,
+                  },
+                ],
+              },
+              {
+                hooks: [
+                  {
+                    type: "command",
                     command: "bash .goat-flow/hooks/plan-checkbox-guard.sh",
                   },
                 ],
@@ -91,8 +133,13 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.doesNotMatch(gitignore, /plan-guard-state/u);
     assert.doesNotMatch(settings, /plan-checkbox-guard\.sh/u);
     assert.match(settings, /post-turn-safety\.sh/u);
+    assert.equal(
+      readClaudePostTurnSafetyTimeout(root),
+      POST_TURN_SAFETY_TIMEOUT_SECONDS,
+    );
   });
 
+  // Covers the same prune on CRLF config a Windows user committed: writes it and expects a clean result.
   it("prunes retired plan guard config from CRLF config files", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".claude"), { recursive: true });
@@ -508,8 +555,8 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.doesNotMatch(config, /"\*\*\/\.env\*" = "deny"/);
   });
 
-  // Fixture purpose: writes stale Claude permission rules to cover removed-tool
-  // pruning, unmatched-rule rewriting, and broad env read-deny expansion.
+  // Covers removed-tool, unmatched-rule, and broad env-deny migrations together.
+  // Fixture purpose: writes stale Claude rules for pruning, rewriting, and env-deny expansion.
   it("prunes removed-tool (MultiEdit) denies and rewrites unmatched Write/NotebookEdit/Glob denies on upgrade", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".claude"), { recursive: true });
@@ -551,21 +598,12 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /stale or superseded permission rules/);
 
-    const settings = JSON.parse(
-      readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
-    ) as { permissions?: Record<string, string[]> };
-    const deny = settings.permissions?.deny ?? [];
-    const allow = settings.permissions?.allow ?? [];
-    const ask = settings.permissions?.ask ?? [];
-    const staleForms = ["MultiEdit(", "Write(", "NotebookEdit(", "Glob("];
-    for (const rules of [deny, allow, ask]) {
-      for (const staleForm of staleForms) {
-        assert.ok(
-          rules.every((rule) => !rule.startsWith(staleForm)),
-          `${staleForm}...) rules should be gone, got: ${rules.join(", ")}`,
-        );
-      }
-    }
+    const { deny, allow, ask } = readClaudePermissionGroups(root);
+    assert.deepEqual(
+      stalePermissionRules({ deny, allow, ask }),
+      [],
+      "retired and unmatched permission forms should be gone",
+    );
     // Write(**/*.key) deduped into the existing Edit rule, not duplicated.
     assert.deepEqual(
       deny.filter((rule) => rule === "Edit(**/*.key)"),
@@ -609,7 +647,7 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.doesNotMatch(second.stdout, /stale or superseded permission rules/);
   });
 
-  // Fixture purpose: seeds a personal settings.local.json to cover local-override repair.
+  // Fixture purpose: writes a personal settings.local.json to cover local-override repair.
   it("repairs stale permission rules in .claude/settings.local.json on upgrade", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".claude"), { recursive: true });

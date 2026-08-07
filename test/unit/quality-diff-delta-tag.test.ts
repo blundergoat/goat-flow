@@ -1,17 +1,12 @@
 /**
- * Unit tests for the delta_tag disagreement signal in `quality diff` (M16,
- * 1.13.0).
- *
- * Positional finding ids are the source of truth for new/persisted/resolved.
- * Agents ALSO self-report a `delta_tag` per finding; instead of silently
- * ignoring that work, the diff cross-checks it against the deterministic
- * class and surfaces contradictions - but only when the diff pair matches
- * the baseline (`prior_report_id`) the agent actually tagged against, so a
- * user diffing an unrelated pair never sees phantom disagreements.
+ * Verifies deterministic signals shown by `quality diff`.
+ * Users see finding identity, delta-tag disagreements, and stuck streaks when comparing runs.
+ * Positional finding ids remain authoritative, while streaks require provably consecutive dates.
+ * In-memory reports isolate those rules from filesystem history loading.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildQualityDiff } from "../../src/cli/quality/history.js";
+import { buildQualityDiff } from "../../src/cli/quality/history-diff.js";
 import type { QualityHistoryEntry } from "../../src/cli/quality/history.js";
 import { renderQualityDiffText } from "../../src/cli/quality/history-render.js";
 import type {
@@ -87,19 +82,63 @@ function entry(
 
 const FROM_ID = "2026-06-01-0900-claude-aaaaa";
 const TO_ID = "2026-06-15-0900-claude-bbbbb";
+const STREAK_OLDEST_ID = "2026-05-01-0900-claude-ccccc";
+const STREAK_MIDDLE_ID = "2026-05-15-0900-claude-ddddd";
+const STREAK_NEWEST_ID = "2026-06-01-0900-claude-eeeee";
+
+/**
+ * Count stuck findings across three newest-first report dates.
+ * Use when a test needs the user-visible streak result without filesystem setup.
+ *
+ * @param runDates - newest, middle, and oldest report dates; invalid values must break continuity
+ * @returns stuck finding count; zero means the diff cannot prove three consecutive runs
+ */
+function countStuckFindings(
+  runDates: readonly [string, string, string],
+): number {
+  const oldestReport = entry(
+    STREAK_OLDEST_ID,
+    runDates[2],
+    [finding("f-stuck", null)],
+    null,
+  );
+  const middleReport = entry(
+    STREAK_MIDDLE_ID,
+    runDates[1],
+    [finding("f-stuck", "persisted")],
+    STREAK_OLDEST_ID,
+  );
+  const newestReport = entry(
+    STREAK_NEWEST_ID,
+    runDates[0],
+    [finding("f-stuck", "persisted")],
+    STREAK_MIDDLE_ID,
+  );
+  const result = buildQualityDiff([newestReport, middleReport, oldestReport], {
+    agent: "claude",
+    pair: `${STREAK_MIDDLE_ID}:${STREAK_NEWEST_ID}`,
+  });
+  assert.ok(result.ok, !result.ok ? result.error : "");
+  return result.diff.stuck.length;
+}
 
 describe("quality diff delta_tag disagreement signal", () => {
   it("flags contradictions when the diff pair matches the tag baseline", () => {
-    const from = entry(FROM_ID, "2026-06-01", [finding("f-1", null)], null);
+    const olderReport = entry(
+      FROM_ID,
+      "2026-06-01",
+      [finding("f-1", null)],
+      null,
+    );
     // f-1 persists but the agent tagged it "new"; f-2 is new and correctly
     // tagged; both directions of the check are exercised.
-    const to = entry(
+    const newerReport = entry(
       TO_ID,
       "2026-06-15",
       [finding("f-1", "new"), finding("f-2", "new")],
       FROM_ID,
     );
-    const result = buildQualityDiff([to, from], {
+    const result = buildQualityDiff([newerReport, olderReport], {
       agent: "claude",
       pair: `${FROM_ID}:${TO_ID}`,
     });
@@ -119,14 +158,19 @@ describe("quality diff delta_tag disagreement signal", () => {
   });
 
   it("stays silent when agent tags agree with the deterministic diff", () => {
-    const from = entry(FROM_ID, "2026-06-01", [finding("f-1", null)], null);
-    const to = entry(
+    const olderReport = entry(
+      FROM_ID,
+      "2026-06-01",
+      [finding("f-1", null)],
+      null,
+    );
+    const newerReport = entry(
       TO_ID,
       "2026-06-15",
       [finding("f-1", "persisted"), finding("f-2", "new")],
       FROM_ID,
     );
-    const result = buildQualityDiff([to, from], {
+    const result = buildQualityDiff([newerReport, olderReport], {
       agent: "claude",
       pair: `${FROM_ID}:${TO_ID}`,
     });
@@ -142,18 +186,47 @@ describe("quality diff delta_tag disagreement signal", () => {
     // The newer report was tagged against SOME OTHER baseline - comparing its
     // tags to this pair would manufacture disagreements about a diff the
     // agent never performed.
-    const from = entry(FROM_ID, "2026-06-01", [finding("f-1", null)], null);
-    const to = entry(
+    const olderReport = entry(
+      FROM_ID,
+      "2026-06-01",
+      [finding("f-1", null)],
+      null,
+    );
+    const newerReport = entry(
       TO_ID,
       "2026-06-15",
       [finding("f-1", "new")],
       "2026-05-01-0900-claude-zzzzz",
     );
-    const result = buildQualityDiff([to, from], {
+    const result = buildQualityDiff([newerReport, olderReport], {
       agent: "claude",
       pair: `${FROM_ID}:${TO_ID}`,
     });
     assert.ok(result.ok, !result.ok ? result.error : "");
     assert.deepEqual(result.diff.deltaTagDisagreements, []);
   });
+});
+
+describe("quality diff stuck-finding continuity", () => {
+  /** Invariant: same-day reruns are consecutive and must expose a finding present in all three. */
+  it("keeps a finding stuck across three zero-day gaps", () => {
+    assert.equal(
+      countStuckFindings(["2026-06-15", "2026-06-15", "2026-06-15"]),
+      1,
+    );
+  });
+
+  const brokenContinuityCases = [
+    ["a negative date gap", ["2026-06-01", "2026-06-15", "2026-05-30"]],
+    ["a gap over 30 days", ["2026-06-15", "2026-05-01", "2026-04-15"]],
+    ["an invalid legacy date", ["2026-03-10", "2026-02-30", "2026-02-25"]],
+  ] as const;
+
+  // Each unprovable sequence stays out of the user's stuck-finding list.
+  for (const [caseName, runDates] of brokenContinuityCases) {
+    /** One broken date relationship must stop the streak before it reaches three runs. */
+    it(`breaks continuity across ${caseName}`, () => {
+      assert.equal(countStuckFindings(runDates), 0);
+    });
+  }
 });

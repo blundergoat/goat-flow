@@ -46,6 +46,8 @@ Inside a bucket, add entries as `## Footgun:` blocks. Each entry MUST begin with
 <body>
 ```
 
+Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-style.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
+
 Evidence labels are mutually exclusive: `ACTUAL_MEASURED` means reproduced or measured in the current project; `OBSERVED` means directly verified from current code or configuration without runtime measurement; `EXTERNAL_REFERENCE` means a cited real external incident with explicit local applicability. `goat-flow stats --check` fails unless every entry has exactly one of these labels. Hypothetical scenarios are never evidence.
 
 New entries SHOULD include `**Decision changed:**`; stats JSON exposes missing guidance for migration visibility without turning every legacy entry into a `stats --check` warning. Add `**Trigger phase:** READ|SCOPE|ACT|VERIFY` when one execution-loop phase should retrieve the memory. When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`.

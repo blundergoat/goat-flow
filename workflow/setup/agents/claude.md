@@ -32,9 +32,11 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 ## Commit Messages
 
 Summarise the target project's commit conventions here - subject format, any branch/issue prefix
-rule, and the weak-verb ban - then point to the full reference at `docs/coding-standards/git-commit.md`.
-Keep it to a few lines: the detector seeds that doc from git history (Step 02) and the full rules
-live there, not inline.
+rule, and the weak-verb ban - then point to the preferred full reference at
+`docs/coding-standards/git-commit-message.md`. If an existing project instead has
+`docs/coding-standards/git-commit.md`, preserve and reference it rather than creating a duplicate.
+Keep it to a few lines: the detector seeds the preferred doc from git history (Step 02) and the
+full rules live there, not inline.
 
 ## Key Resources
 
@@ -57,7 +59,7 @@ Only include commands that exist and were verified in the target project. Agent 
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
-MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` when the task involves architecture, policy, or setup work. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
+MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` when the task involves architecture, policy, or setup work. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool". Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`; README, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-style.md` - the trigger is touching the surface, not the request naming it.
 BAD: "The project has 20 audit checks" (guessed without reading)
 GOOD: Read the relevant source, config, or generated instruction file before stating exact counts.
 

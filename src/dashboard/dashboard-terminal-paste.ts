@@ -1,5 +1,7 @@
 /**
  * Dashboard terminal paste and launch-prompt lifecycle helpers.
+ * Use when the Workspace adapts prompts, explains access, or submits text to a runner.
+ * Prompt guidance must describe the same authority the backend applies to that session.
  */
 function dashboardMutateLocalSession(
   ctx: DashboardTerminalContext,
@@ -29,6 +31,16 @@ function dashboardClearTerminalLoadingTimers(
   }
 }
 
+/** Return whether retry can reproduce the original launch, including an intentional empty prompt. */
+function dashboardHasTerminalRetryPrompt(
+  refs: TerminalRefs | undefined,
+): boolean {
+  return (
+    typeof refs?.retryPrompt === "string" ||
+    typeof refs?.launchPrompt === "string"
+  );
+}
+
 /** Move one session through the terminal loading-overlay state machine. */
 function dashboardSetTerminalLoadingPhase(
   ctx: DashboardTerminalContext,
@@ -44,7 +56,9 @@ function dashboardSetTerminalLoadingPhase(
     target.loadingPhase = phase;
     if (phase === "error") {
       target.loadingError = error ?? "Could not start session.";
-      target.loadingShowRetry = true;
+      target.loadingShowRetry = dashboardHasTerminalRetryPrompt(
+        ctx._terminalRefs[sessionId],
+      );
     } else {
       target.loadingError = undefined;
       if (phase === "ready") {
@@ -72,6 +86,9 @@ function dashboardArmTerminalLoadingTimers(
       target.loadingShowSlowHint = true;
     });
   }, TERMINAL_LOADING_SLOW_HINT_MS);
+  // Rehydrated sessions do not retain the original prompt, so retry would
+  // otherwise destroy the live session and relaunch an empty assessment.
+  if (!dashboardHasTerminalRetryPrompt(refs)) return;
   refs.loadingRetryTimer = setTimeout(() => {
     refs.loadingRetryTimer = undefined;
     const current = ctx.sessions.find((s) => s.id === sessionId) ?? fallback;
@@ -379,36 +396,66 @@ function dashboardHandlePasteSubmitOutput(
   }
 }
 
-/** Build target context appended to launched preset prompts. */
+/** Resolve the terminal filesystem mode from preset intent and investigator posture. */
+function dashboardTerminalAccessMode(
+  preset: Preset | null,
+  userRole: string,
+): TerminalAccessMode {
+  return preset?.mayWriteFiles === true && userRole !== "investigator"
+    ? "workspace"
+    : "reporting";
+}
+
+/**
+ * Build the target and write-authority context appended to a user's launch prompt.
+ * Use the resolved backend access mode so dynamic and overridden launches receive matching guidance.
+ *
+ * @param dashboardContext - selected dashboard project; its path is present after launch validation
+ * @param runner - terminal runner the user chose; always present for a launchable session
+ * @param preset - selected preset; null means a custom prompt with no route-specific guidance
+ * @param accessMode - backend-enforced mode shown to the user; never empty after access resolution
+ * @returns launch guidance appended to the prompt; never empty for a valid terminal launch
+ */
 function dashboardGlobalLaunchContext(
-  ctx: DashboardTerminalContext,
+  dashboardContext: DashboardTerminalContext,
   runner: RunnerId,
   preset: Preset | null,
+  accessMode: TerminalAccessMode,
 ): string {
   const controllingWorkspace = dashboardControllingWorkspace();
-  const mayWrite = preset?.mayWriteFiles === true;
+  // Custom prompts have no preset text, so route-specific guidance stays empty.
   const presetPrompt = preset?.prompt.trim() ?? "";
-  // Launched prompts may suggest learning-loop follow-up, but automatic
-  // durable lesson/footgun/pattern/decision writes require opted-in CLI capture.
-  const writeLine = mayWrite
-    ? "Write behavior: this preset may write only after the prompt or user explicitly approves it."
-    : "Write behavior: default to read-only analysis; do not write files in the selected target unless the user explicitly asks.";
-  const routeLine =
+  // A denied reporting probe becomes a visible evidence gap instead of a retry or guessed result.
+  const reportingProbeFallback =
+    "If a requested runtime probe (bash/npm/node) is denied or unavailable, record the literal denial or unavailability, continue with available read-only evidence, state what was not verified, and do not retry, bypass the profile, or infer a result.";
+  // Workspace users see the approval rule; reporting users see their runner's actual enforcement.
+  const writeAccessGuidance =
+    accessMode === "workspace"
+      ? "Write behavior: this preset may write only after the prompt or user explicitly approves it."
+      : runner === "codex"
+        ? `Write behavior: this terminal is reporting-only. Local report/build artifacts may be written, but the Codex permission profile blocks tracked project writes; start a write-enabled preset or manual session for implementation. ${reportingProbeFallback}`
+        : runner === "claude"
+          ? `Write behavior: this terminal is reporting-only. Local report artifacts may be written, but the Claude permission overlay blocks tracked project writes; start a write-enabled preset or manual session for implementation. ${reportingProbeFallback}`
+          : `Write behavior: this terminal is reporting-only. Do not write tracked project files; this runner relies on prompt and hook guardrails rather than a native filesystem profile. ${reportingProbeFallback}`;
+  // Goat Plan and Critique presets show the extra ownership rule users need for that route.
+  const routeGuidance =
     preset?.route === "goat-plan" && /^\/goat-plan\b/.test(presetPrompt)
       ? "goat-plan global mode: honor Step 0 modes; analysis/path-only stay read-only, while File-Write modes may create target .goat-flow/plans when this preset allows writes or the prompt explicitly requests files."
       : preset?.route === "goat-critique" &&
           /^\/goat-critique\b/.test(presetPrompt)
         ? "goat-critique global mode: keep gitignored critique logs/artifacts in the controlling workspace; do not write goat-flow logs in the selected target unless the user explicitly makes that target the controlling workspace."
         : "";
+  // Custom and unrelated presets need no extra route line in the launch prompt.
+  const routeGuidanceLines = routeGuidance ? [`- ${routeGuidance}`] : [];
   return [
     "GOAT Flow target context:",
     `- Controlling workspace for goat skills/reference files: ${controllingWorkspace}`,
-    `- Selected target project for code evidence: ${ctx.projectPath}`,
+    `- Selected target project for code evidence: ${dashboardContext.projectPath}`,
     `- Runner: ${runner}`,
     "- Target projects do not need goat-flow installed; missing target .goat-flow, skills, hooks, or stale goat-flow files are normal unless this preset audits goat-flow installation.",
-    `- Use target-scoped commands such as git -C ${dashboardShellQuote(ctx.projectPath)} status when inspecting the selected target.`,
-    `- ${writeLine}`,
-    ...(routeLine ? [`- ${routeLine}`] : []),
+    `- Use target-scoped commands such as git -C ${dashboardShellQuote(dashboardContext.projectPath)} status when inspecting the selected target.`,
+    `- ${writeAccessGuidance}`,
+    ...routeGuidanceLines,
   ].join("\n");
 }
 

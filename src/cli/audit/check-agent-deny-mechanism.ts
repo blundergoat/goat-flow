@@ -16,6 +16,7 @@ import type { AuditContext, AuditFailure, BuildCheck } from "./types.js";
 import {
   checkSelectedInstructionAvailable,
   incidentProvenance,
+  targetUsesNewerGoatFlow,
 } from "./check-agent-common.js";
 import {
   checkHookRuntimeSmoke,
@@ -325,8 +326,10 @@ export const agentDenyMechanism: BuildCheck = {
   scope: "agent",
   provenance: incidentProvenance([
     ".goat-flow/learning-loop/footguns/auditor.md",
-    ".goat-flow/learning-loop/footguns/hooks.md",
+    ".goat-flow/learning-loop/footguns/hook-installation.md",
   ]),
+  // Template parity and bundled smoke expectations are not authoritative for a newer hook release.
+  skip: targetUsesNewerGoatFlow,
   /** Run the Agent deny mechanism check. */
   run: (ctx) => {
     if (!ctx.agentFilter) return null;

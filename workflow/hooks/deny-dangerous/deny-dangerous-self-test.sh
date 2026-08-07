@@ -593,6 +593,7 @@ run_common_dependency_checks() {
 }
 
 run_smoke() {
+  local report_json='{"detail":"Use `quality save`; literal $(rm -rf /) and git push are evidence."}'
   expect_block shell "rm -rf /" "rm -rf"
   expect_block paths "cat .env" ".env read"
   expect_block writes "git push origin main" "git push"
@@ -606,6 +607,8 @@ run_smoke() {
   expect_allow shell 'rg "&& rm -rf /" src/' "quoted destructive search literal"
   expect_allow paths "cat .env.example" ".env.example read"
   expect_allow writes "git status" "git status"
+  expect_allow shell "goat-flow quality save '/tmp/project' <<'JSON'"$'\n'"${report_json}"$'\n'"JSON" "bounded quality saver treats Markdown report JSON as data"
+  expect_block writes "goat-flow quality save '/tmp/project' <<'JSON'"$'\n'"${report_json}"$'\n'"JSON"$'\n'"git push origin main" "bounded quality saver still scans commands after the delimiter"
   expect_copilot_payload_allow paths '{"toolName":"view","toolArgs":"{\"path\":\"README.md\"}"}' "stringified non-bash file read"
   expect_allow shell 'echo $(date; whoami)' "read-only subst with command chain"
   expect_allow shell 'echo $((1 + 2))' "arithmetic expansion"
@@ -910,6 +913,13 @@ run_full() {
   expect_allow shell "php <<'PHP'"$'\n'"${_hd_body}echo 1;"$'\n'"PHP" "long quoted php heredoc body (60 lines) allowed"
   expect_allow shell "cat <<'EOF'"$'\n'"${_hd_body}EOF" "long quoted cat heredoc body (60 lines) allowed"
   expect_allow shell "python - <<'PY'"$'\n'"code = 'rm -rf /'"$'\n'"print(code)"$'\n'"PY" "rm -rf as quoted-heredoc data allowed (masked)"
+  local _report_json='{"detail":"Keep `file + semantic anchor`; rm -rf / and git push are quoted evidence."}'
+  expect_allow shell "goat-flow redact --output .goat-flow/logs/review/probe.md <<'TEXT'"$'\n'"${_report_json}"$'\n'"TEXT" "bounded redactor treats Markdown prose as data"
+  expect_allow shell "/usr/local/bin/goat-flow quality save /tmp/project <<'JSON'"$'\n'"${_report_json}"$'\n'"JSON" "absolute bounded quality saver treats report JSON as data"
+  expect_allow shell "command goat-flow redact <<'TEXT'"$'\n'"${_report_json}"$'\n'"TEXT" "command-wrapped bounded redactor treats prose as data"
+  expect_block shell "goat-flow install /tmp/project <<'TEXT'"$'\n'"rm -rf /"$'\n'"TEXT" "unrelated goat-flow subcommand heredoc stays inspectable"
+  expect_block shell "goat-flow quality history <<'JSON'"$'\n'"rm -rf /"$'\n'"JSON" "non-save quality subcommand heredoc stays inspectable"
+  expect_block shell "goat-flow quality save /tmp/project <<'JSON' | bash"$'\n'"${_report_json}"$'\n'"JSON" "bounded saver piped into a shell stays inspectable"
   expect_block shell "bash <<'SH'"$'\n'"${_sh_body}SH" "shell-fed heredoc body stays counted (60 lines blocks at cap)"
   expect_block shell $'cat <<-\'EOF\'\n\thello\n\tEOF\nrm -rf /' "rm -rf after <<- tab heredoc still scanned"
   local _chain="echo 1"
@@ -989,7 +999,7 @@ run_full() {
   # not interpreter languages - the same reason `python - <<X` is masked, and the
   # price of not false-positiving on >50-line SQL migrations / sed-awk scripts.
   # These bodies stay ALLOWED BY DESIGN. Do NOT "fix" to block without revisiting
-  # the decision (see footgun deny-dangerous.md, search: `accepted scope limit`). ---
+  # the decision (see `workflow/hooks/deny-dangerous.sh`, search: `accepted scope limit`). ---
   expect_allow shell "python3 <<'PY'"$'\n'"import os"$'\n'"os.system('rm -rf /')"$'\n'"PY" "ACCEPTED scope: python3 shell escape in body is not inspected"
   expect_allow shell "psql <<'SQL'"$'\n'"\\! rm -rf /"$'\n'"SQL" "ACCEPTED scope: psql shell-escape in body is not inspected"
   expect_allow shell "sed e <<'X'"$'\n'"rm -rf /"$'\n'"X" "ACCEPTED scope: sed 'e' shell-escape in body is not inspected"

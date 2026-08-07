@@ -19,9 +19,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { buildInstallerInvocation } from "../../src/cli/install-invocation.js";
 import {
   buildManagedSetupPreview,
   classifyManagedSetupFile,
+  managedSetupPreviewForInstallerLaunch,
   managedInstallStatePath,
   writeManagedInstallState,
   type ManagedSetupFileState,
@@ -128,7 +130,7 @@ describe("managed setup classification", () => {
   });
 
   /**
-   * Fixture models the first CLI install into a target set up before
+   * Fixture writes the first CLI install into a target set up before
    * install-state existed: a differing regular managed file must warn and
    * refresh, never block the whole upgrade behind --force.
    */
@@ -154,6 +156,45 @@ describe("managed setup classification", () => {
     } finally {
       rmSync(projectPath, { recursive: true, force: true });
     }
+  });
+});
+
+describe("managed setup prerequisites", () => {
+  /** Contract: preview and install share the blocker while the input stays unchanged. */
+  it("blocks dry-run with the same launch failure the real install would report", () => {
+    const preview: ManagedSetupPreview = {
+      schemaVersion: "goat-flow.managed-setup-preview.v1",
+      coverage: "managed-template-files",
+      agent: "claude",
+      goatFlowVersion: "1.15.0",
+      baselineStatus: "missing",
+      verdict: "ready",
+      limits: [],
+      files: [],
+    };
+    const installerLaunch = buildInstallerInvocation({
+      scriptPath: "C:\\package\\workflow\\install-goat-flow.sh",
+      projectPath: "C:\\Users\\Example\\project",
+      agent: "claude",
+      installerFlags: [],
+      platform: "win32",
+      windowsBashCandidates: [],
+    });
+
+    const blocked = managedSetupPreviewForInstallerLaunch(
+      preview,
+      installerLaunch,
+    );
+
+    assert.ok(!installerLaunch.ok, "Expected missing Windows Bash");
+    assert.equal(blocked.verdict, "blocked");
+    assert.equal(
+      blocked.limits.includes(
+        `Install prerequisite failed: ${installerLaunch.error}`,
+      ),
+      true,
+    );
+    assert.equal(preview.verdict, "ready");
   });
 });
 
@@ -231,7 +272,12 @@ describe("managed install state", () => {
     }
   });
 
-  /** This fixture plants a symlinked temp entry and proves the baseline write cannot be redirected. */
+  /**
+   * This fixture writes a symlinked temp entry, then proves the preview still
+   * writes baseline bytes to the real destination. The redirect must fail even
+   * when an attacker pre-plants the temp path, so the victim file outside the
+   * project stays untouched.
+   */
   it("never writes baseline bytes through a pre-planted temp symlink", () => {
     const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-preview-state-"));
     const victimPath = join(

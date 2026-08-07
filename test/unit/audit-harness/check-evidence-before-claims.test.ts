@@ -156,8 +156,8 @@ describe("evidence-before-claims harness metric", () => {
             ...baseFacts.shared,
             gitCommitInstructions: {
               exists: true,
-              path: "docs/coding-standards/git-commit.md",
-              requiredPath: "docs/coding-standards/git-commit.md",
+              path: "docs/coding-standards/git-commit-message.md",
+              requiredPath: "docs/coding-standards/git-commit-message.md",
               misplacedPaths: [],
             },
           },
@@ -175,6 +175,12 @@ describe("evidence-before-claims harness metric", () => {
     assert.equal(check.impact, "score-only");
     assert.match(check.failure?.evidence ?? "", /Metric/);
     assert.equal(concerns.verification.status, "pass");
+    assert.ok(
+      concerns.verification.limits.includes(
+        "Instruction-file evidence-before-claims red-flags coverage is metric-only; gaps lower the Verification score but do not fail audit status.",
+      ),
+      JSON.stringify(concerns.verification.limits),
+    );
     assert.ok(
       concerns.verification.findings.some((finding) =>
         finding.includes("CLAUDE.md: missing Hallucination red-flags section"),

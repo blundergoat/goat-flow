@@ -198,7 +198,7 @@ const hooksRegistered: HarnessCheck = {
     "integrity",
     [
       "docs/harness-audit.md",
-      ".goat-flow/learning-loop/footguns/hooks.md",
+      ".goat-flow/learning-loop/footguns/hook-installation.md",
       ".goat-flow/learning-loop/footguns/auditor.md",
     ],
     "incident",
@@ -278,7 +278,7 @@ const commitGuidance: HarnessCheck = {
   evidenceKind: "structural",
   provenance: verificationProvenance("advisory", [
     "docs/harness-audit.md",
-    "docs/coding-standards/git-commit.md",
+    "docs/coding-standards/git-commit-message.md",
   ]),
   /** Run the Commit guidance present check. */
   run: (ctx) => {

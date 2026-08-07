@@ -14,7 +14,7 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 
 ## Autonomy Tiers
 
-**Always:** Set up Copilot-owned surfaces: `.github/copilot-instructions.md` (including its `## Commit Messages` section), `docs/coding-standards/git-commit.md`, `.github/skills/`, `.github/hooks/`, `.copilotignore`, and shared `.goat-flow/`.
+**Always:** Set up Copilot-owned surfaces: `.github/copilot-instructions.md` (including its `## Commit Messages` section), preferred `docs/coding-standards/git-commit-message.md` (or preserve an existing `docs/coding-standards/git-commit.md`), `.github/skills/`, `.github/hooks/`, `.copilotignore`, and shared `.goat-flow/`.
 
 **Ask First:** Before touching non-Copilot surfaces, ask and wait for approval; include boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
 
@@ -26,16 +26,18 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 - `.github/copilot-instructions.md` is standalone and must not defer to `AGENTS.md`.
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
 - Keep `.github/copilot-instructions.md` within the 150-line hard limit and 125-line target.
-- Commit guidance belongs at `docs/coding-standards/git-commit.md`; `.github/copilot-instructions.md` summarises it under `## Commit Messages` and points there, because IDEs auto-read the instruction file, not the doc. `goat-flow install` seeds the doc from git history when missing, and manual setup follows the same detector in Step 02.
+- Commit guidance prefers `docs/coding-standards/git-commit-message.md`; `.github/copilot-instructions.md` summarises it under `## Commit Messages` and points there, because IDEs auto-read the instruction file, not the doc. An existing `docs/coding-standards/git-commit.md` remains accepted: preserve and reference it instead of creating a duplicate. `goat-flow install` seeds the preferred doc from git history only when neither accepted path exists, and manual setup follows the same detector in Step 02.
 - Keep a single Copilot hook config file at `.github/hooks/hooks.json`; do not split one file per event.
 - Do not create `.github/agents/` unless a future concrete gap justifies it.
 
 ## Commit Messages
 
 Summarise the target project's commit conventions here - subject format, any branch/issue prefix
-rule, and the weak-verb ban - then point to the full reference at `docs/coding-standards/git-commit.md`.
-Keep it to a few lines: the detector seeds that doc from git history (Step 02) and the full rules
-live there, not inline.
+rule, and the weak-verb ban - then point to the preferred full reference at
+`docs/coding-standards/git-commit-message.md`. If an existing project instead has
+`docs/coding-standards/git-commit.md`, preserve and reference it rather than creating a duplicate.
+Keep it to a few lines: the detector seeds the preferred doc from git history (Step 02) and the
+full rules live there, not inline.
 
 ## Key Resources
 
@@ -58,7 +60,7 @@ Only include commands that exist and were verified in the target project. Agent 
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
-MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` when the task involves architecture, policy, or setup work. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
+MUST read relevant files before changes. Never fabricate codebase facts. For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback. Cross-doc: MUST read all files describing the same concept. Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` when the task involves architecture, policy, or setup work. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool". Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`; README, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-style.md` - the trigger is touching the surface, not the request naming it.
 BAD: "The project has 20 audit checks" (guessed without reading)
 GOOD: Read the relevant source, config, or generated instruction file before stating exact counts.
 
@@ -98,7 +100,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 ## Definition of Done
 
 - `.github/copilot-instructions.md` exists, follows the canonical section order where compatible with Copilot compression, and stays under the hard line limit.
-- `docs/coding-standards/git-commit.md` exists and `.github/copilot-instructions.md` references it under a `## Commit Messages` section.
+- At least one accepted commit guide exists - preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md` - and `.github/copilot-instructions.md` references either accepted existing guide under `## Commit Messages`. When both exist, fact extraction prefers the new path but either bridge remains valid. Fresh setup creates only the preferred file.
 - Essential Commands list only real target-project commands.
 - Router Table contains installed project resources only; no `workflow/setup/`, `workflow/hooks/`, or manifest paths.
 - Tool playbook pointer to `.goat-flow/skill-docs/playbooks/` is present.
@@ -118,7 +120,7 @@ Requests to add footguns, lessons, decisions, or patterns route to the matching 
 | Skill playbooks (tools) | `.goat-flow/skill-docs/playbooks/` |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Architecture | `.goat-flow/architecture.md` |
-| Copilot skills/config | `.github/skills/`, `docs/coding-standards/git-commit.md`, `.github/hooks/`, `.copilotignore` when installed |
+| Copilot skills/config | `.github/skills/`, preferred `docs/coding-standards/git-commit-message.md` (existing `docs/coding-standards/git-commit.md` accepted), `.github/hooks/`, `.copilotignore` when installed |
 | Project source/docs/config | adapt to detected project paths |
 | Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/` |
 | Peer instructions | `CLAUDE.md`, `AGENTS.md` when present |

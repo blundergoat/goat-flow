@@ -1,17 +1,22 @@
 ---
 category: verification-testing
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-07
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
 
 **Status:** active | **Created:** 2026-06-03
+**Decision changed:** Verify fallback and optimized hook paths against the same adversarial repository configuration, not only the same payload.
+**Trigger phase:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-08-03
 
 **What happened:** During PR #47 follow-up fixes, the first deny-dangerous fallback patch set the unsafe JSON status inside helper functions called through command substitution. The focused full self-test still failed the top-level unsupported unicode regression because Bash ran the helpers in subshells and the caller never saw the updated variable. The first gruff staged-hunk patch had a similar over-broad shape: adding cached diff ranges unconditionally widened explicit payload scopes and broke existing changed-range tests before the fallback-only test could be trusted.
 
-**Root cause:** I changed fallback behavior without keeping the failure signal at the same boundary the caller observes. For deny-dangerous that meant relying on mutated shell state across `$(...)`; for gruff that meant mixing explicit payload paths and pathless git fallback paths before proving their different contracts.
+**Recurrence 2026-08-03:** The optimized `post-turn-safety` path pinned Git's diff prefixes, but its Bash 3 fallback consumed the repository's default diff format. With `diff.mnemonicPrefix=true`, the fallback stopped recognizing destination headers, skipped a changed credential file, and exited zero while the optimized path blocked it. Pinning `core.quotepath`, mnemonic-prefix behavior, and source/destination prefixes at the fallback's own `git diff` boundary restored parity. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `fallback_scan_diff`) and `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `pins mnemonic Git diff prefixes on both paths`).
 
-**Prevention:** For hook fallback changes, add the exact regression probe first, then verify that helper return status or source-aware branching reaches the caller boundary. Keep explicit payload scopes and git-discovered fallback scopes separate until focused tests prove both paths. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `extraction_status`), `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `top-level unsupported unicode escape`), and `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses staged hunks for pathless fallback files`).
+**Root cause:** I changed fallback behavior without keeping the failure signal and input grammar at the same boundary the caller observes. For deny-dangerous that meant relying on mutated shell state across `$(...)`; for gruff that meant mixing explicit payload paths and pathless git fallback paths before proving their different contracts; for post-turn-safety it meant allowing repository Git configuration to change only the fallback parser's input shape.
+
+**Prevention:** For hook fallback changes, add the exact regression probe first, then verify that helper return status or source-aware branching reaches the caller boundary. Force compatibility paths under adversarial user and repository configuration, assert parity with the optimized path, and pin any machine-readable Git output grammar at the command that produces it. Keep explicit payload scopes and git-discovered fallback scopes separate until focused tests prove both paths. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `extraction_status`), `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `top-level unsupported unicode escape`), and `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses staged hunks for pathless fallback files`).
 
 ---
 
@@ -73,6 +78,8 @@ last_reviewed: 2026-07-19
 
 **What happened:** During the M00 gruff docs continuation, the first internal-helper comment batch cleared `docs.missing-internal-function-doc` but left the full snapshot at only 175 findings down because gruff then reported `docs.missing-side-effect-doc` on helpers that write fixture files or spawn tools. Retuning those comments to explicitly say `Writes` or `Spawns` moved the full snapshot to `summary error=0 warning=121 advisory=598 total=719` and both doc clusters to zero.
 
+**Recurrence update (2026-08-06):** Windows discovery described its purpose and fallback but did not explicitly name the `where.exe` process side effect. Adding that concrete process action cleared the three targeted side-effect findings.
+
 **Root cause:** I wrote purpose comments for side-effecting helpers but did not include analyzer-recognised side-effect language. For gruff-ts docs rules, a human-useful purpose sentence is not enough when the helper mutates filesystem state or runs a subprocess.
 
 **Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, include the side effect in plain maintainer language (`Write`, `Run`, `filesystem`) instead of a generic purpose sentence. After large docs batches, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
@@ -89,140 +96,6 @@ last_reviewed: 2026-07-19
 
 **Prevention:** For server cache behavior, expose a narrow response/debug contract or inject an explicit dependency, then assert that contract at the route boundary. Avoid timing ratios and late monkeypatches of already-imported helpers. Evidence anchors: `src/cli/server/dashboard-quality-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
 
----
-
-## Lesson: Reference-pack wording fixes must check word budget immediately
-
-**Status:** active | **Created:** 2026-05-19
-
-**Decision changed:** Run the canonical word-budget contract immediately after every skill or shared-reference wording edit.
-
-**Trigger phase:** VERIFY
-
-**Incident count:** 14
-
-**Latest occurrence:** 2026-07-19
-
-**What happened:** Fourteen edits crossed ADR-023 or bucket caps:
-
-- **2026-05-19/22:** TDD packs hit 3022/3008 words, the preamble exceeded 1500, and QA exceeded 2578. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within the 3000-word cap per file`).
-- **2026-06-14:** Dispatcher guidance hit 653/555. Evidence: `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
-- **2026-07-12 M33:** `verification-preflight.md` hit 40KB. Evidence: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
-- **2026-07-12 boundary rollout:** Plan/QA hit 2503/2524 while a bad delimiter count said 1202. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `Counts user-facing skill guidance without YAML frontmatter`).
-- **2026-07-12 M15:** Plan hit 2533. Evidence: `workflow/skills/goat-plan/SKILL.md` (search: `Handoff-grade artifacts`).
-- **2026-07-13 M13:** Shared references hit 1560/1601, then compacted to 1484/1490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
-- **2026-07-16 PR #56:** Goat/plan/preamble/TDD measured 597/2689/1540/3021; compaction also repaired stale assertions. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `dispatcher /goat stays within the 555-word cap`; `requires pre-write redaction for durable local text`).
-- **2026-07-17 QA Audit:** A post-gate template pushed QA to 2531; compaction restored 2476. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps goat-qa Audit priorities coherent through the post-gate plan`).
-- **2026-07-17 quality follow-up:** Goat-plan hit 2517, then compacted to 2490. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-07-17 inline-review ingestion:** Goat-review hit 2511, then compacted below 2500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `ingests path-bearing automated findings from inline PR comments`).
-- **2026-07-17 quality remediation:** The preamble hit 1514, then compacted below 1500. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
-- **2026-07-18 review independence:** Goat-review hit 2527, then compacted to 2488. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `keeps automated-review conclusions hidden until both local passes finish`).
-- **2026-07-19 review scope:** Worktree/area wording pushed goat-review to 2512; compaction restored 2498. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `defines two evidence-producing area audit passes`; `functional skills stay within the 2500-word cap across all mirrors`).
-- **2026-07-19 QA rows:** Goat-qa hit 2506, then 2499. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
-
-**Root cause:** Treated capped prose as tiny.
-
-**Prevention:** Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` after each edit; compact before expanding scope.
-
----
-
-## Lesson: Skill compaction must preserve indexed semantic anchors
-
-**Status:** active | **Created:** 2026-07-12
-
-**Decision changed:** After prose/parser renames, run `stats --check` and preserve or update durable anchors.
-
-**Trigger phase:** VERIFY
-
-**Incident count:** 5
-
-**Latest occurrence:** 2026-07-19
-
-**What happened:** Five compactions broke durable references:
-
-- **M15:** Removed `Use when work needs milestone tracking`; stats caught its footgun.
-- **2026-07-13:** `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`); `src/cli/facts/shared/learning-loop-entries.ts` (search: `isDecisionRecordMarkdown`).
-- **2026-07-16:** `workflow/skills/goat/SKILL.md` (search: `Emit a Route Snapshot`).
-- **2026-07-17:** `workflow/skills/goat-qa/SKILL.md` (search: `safe to skip more PTY timing tests`).
-- **2026-07-19:** `workflow/skills/reference/skill-preamble.md` (search: "If stale, emit"; "Claim/proof examples live in"); stats and `preamble-sync.test.ts` restored both.
-
-**Root cause:** Treated prose as self-contained despite durable cross-file anchors.
-
-**Prevention:** Search indexes before renames; run `stats --check`; repair every stale anchor in the same change.
-
----
-
-## Lesson: Source-regex dashboard tests must tolerate formatter reflow
-
-**Status:** active | **Created:** 2026-05-11
-
-**What happened:** While fixing dashboard terminal paste submission, focused `test/unit/dashboard-terminal-launch.test.ts` first passed. After formatting touched files, the rerun failed only because the "warms xterm" source assertion expected a multi-line `if` block shape that Prettier collapsed into one line. The runtime behavior was still correct; the test was over-specified to formatting.
-
-**Root cause:** A classic-script source grep test used a whitespace-sensitive regex to assert control-flow structure. Formatter reflow changed the syntax layout without changing semantics.
-
-**Fix:** Keep source-regex tests focused on semantic tokens and tolerate formatter-owned whitespace. Evidence anchors: `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `warms xterm when the workspace or setup view opens`), `src/dashboard/dashboard-app-init.ts` (search: `view === "workspace" || view === "setup"`).
-
-**Prevention:** After changing source-grep tests for dashboard classic scripts, run Prettier before the focused test rerun. If a regex only protects structure, make whitespace flexible enough for formatter reflow or use a small VM helper test instead.
-
-**Recurrence 2026-05-12:** While self-hosting xterm assets, `test/integration/dashboard-server.test.ts` fetched `/assets/xterm.js` successfully but failed because the assertion looked for `XTerm`, a string not present in the minified upstream bundle. The route was correct; the test anchor was wrong. For vendored/minified assets, assert route status/content type and stable feature strings observed in the actual bundle, such as `bracketedPasteMode`, not package names or branding text.
-
-**Recurrence 2026-05-16:** While moving setup instruction surfaces into manifest-backed agent capabilities, full `npm test` failed because a source-grep prompt test still asserted literal `CLAUDE.md, .claude/settings.json` strings in `dashboard-setup-quality.ts`. The product change was correct; the test had become a stale parallel authority. For manifest-backed refactors, update source-grep tests to assert the data boundary (`workflow/manifest.json` plus injected fields) instead of the old duplicated literals.
-
-**Recurrence 2026-05-27:** While hardening dashboard paste-submit timing in `src/dashboard/dashboard-terminal.ts`, the focused terminal suite passed but `npx prettier --check src/dashboard/dashboard-terminal.ts test/unit/dashboard-terminal-launch.test.ts` flagged `test/unit/dashboard-terminal-launch.test.ts` after long fake-timer assertions were added. Running Prettier on the touched TypeScript files fixed it before the final focused rerun. Prevention unchanged: run Prettier on changed dashboard classic-script tests before claiming verification is complete.
-
-**Recurrence 2026-05-31:** While renaming dashboard classic-script files, `npx prettier --check ... test/unit/dashboard-terminal-launch/helpers.ts` failed after the source-list edit. Running Prettier on the touched helper before rerunning focused tests fixed the formatter-owned diff. Prevention unchanged: format changed dashboard classic-script tests before claiming verification is complete.
----
-
-## Lesson: Regressions caught too late - tests run at milestone granularity, not edit granularity
-
-**Status:** active | **Created:** 2026-04-05
-
-**What happened:** Claude Insights reported 68 buggy-code friction events across 112 sessions (61% of sessions had at least one). The `/goat-qa` skill generates test plans after implementation, and `stop-lint.sh` used to run linting after every turn before its removal from goat-flow core per ADR-015, but neither caught logic regressions mid-implementation. Tests only run when the user explicitly asks or when a milestone completes. Regressions introduced in turn 3 of a 10-turn implementation aren't caught until the end, when the debugging context is stale.
-
-**Root cause:** The verification loop runs at the wrong granularity. Lint after every turn catches syntax. Tests after every milestone catch logic. The gap between these two is where regressions hide.
-
-**Prevention:**
-1. Consider an optional post-write hook that runs the project's test command after file changes (configured via `config.yaml`, off by default)
-2. Skills with implementation phases should include a "run tests" checkpoint every N edits, not just at phase boundaries
-3. For test-heavy projects (1000+ tests), a focused test subset (changed files only) avoids the full-suite penalty while still catching regressions early
----
-
-## Lesson: Semantic drift checks must normalize natural-language lists before claiming mismatch
-
-**Status:** active | **Created:** 2026-04-18
-
-**What happened:** A new semantic-drift check was added for the runner list in `docs/dashboard.md`. The first verification run still failed content audit even after the doc was corrected to "Claude, Codex, and Gemini". The checker split on commas before handling the Oxford-comma `and`, so it parsed the claim as `["Claude", "Codex", "and Gemini"]` and reported a false mismatch against the manifest-backed list.
-
-**Root cause:** The drift check compared human-written prose too literally. It handled exact token matches but not natural-language list formatting, so a doc that was semantically correct still failed verification. The bug was in the checker, not in the docs.
-
-**Fix:** Normalize list items before comparison by stripping a leading `and ` token after the split, then add a regression test that proves the current dashboard wording does not trigger `dashboard-runner-drift`.
-
-**Prevention:**
-1. When adding semantic drift checks for prose, test both a known-bad example and the current canonical wording.
-2. Normalize natural-language list glue (`and`, Oxford commas, surrounding whitespace) before comparing against code-backed enumerations.
-3. Treat a new drift rule that immediately flags corrected docs as a checker bug until the parser is disproven.
-
----
-
-## Lesson: Filtered manifest ids still need explicit indexed-lookup proof in TypeScript
-
-**Status:** active | **Created:** 2026-04-21
-
-**What happened:** A manifest-backed registry cleanup reused one `loadManifest().agents` snapshot per public call and filtered configured ids with `isKnownAgentId()`. The focused unit tests passed, but the first `npm run typecheck` still failed on the follow-up mapping step because `agents[id]` was treated as possibly `undefined` inside `.map((id) => toRuntimeProfile(id, agents[id]))`. The same verification pass also caught a Prettier reflow issue in the touched registry file.
-
-**Root cause:** Runtime truth from a filter callback does not always carry through to a later indexed `Record<string, T>` lookup strongly enough for TypeScript to discharge `undefined`. The refactor was logically correct, but the type proof at the final lookup site was incomplete. Formatting drift surfaced because the new helper signature changed line wrapping and the file had not yet been reflowed.
-
-**Fix:** Add the explicit proof at the indexed lookup site (`agents[id]!` or a typed-entry helper), run Prettier on the touched TypeScript file, and rerun the exact failing gates.
-
-**Recurrence 2026-07-04:** While addressing PR #54 review feedback, the first
-`npm run typecheck` caught `TS4104` after `classifyProjectState` assigned the
-readonly result of `getSkillNames()` to a mutable `string[]`. The fix was to
-keep the manifest-derived list readonly through the local variable and helper
-parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalSkills: readonly string[]`).
-
-**Prevention:**
-1. After refactoring manifest/registry code that filters ids and then indexes a `Record`, run `npm run typecheck` even if the focused unit tests already pass.
-2. When a helper signature or typed callback changes in a touched `.ts` file, include `prettier --check` or `prettier --write` in the focused verification pass before closeout.
 ---
 
 ## Lesson: guardrail self-test needs no-space redirect and false-positive probes
@@ -261,7 +134,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Status:** active | **Created:** 2026-04-25
 
-**What happened:** While removing one forbidden phrase and changing dashboard quality report ownership, the first full `npm test` run failed two contract-style checks: `test/contract/skill-hardening-contracts.test.ts` still required the established "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message.
+**What happened:** While removing one forbidden phrase and changing dashboard quality report ownership, the first full `npm test` run failed two contract-style checks: a skill-hardening contract (now `test/contract/skill-hardening-shared-3.test.ts`, search: `hardening debt`) still required the established "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message.
 
 **Root cause:** I treated wording cleanup and path-semantics changes as local edits, but these surfaces are intentionally pinned by tests because agents consume the exact phrasing.
 
@@ -271,7 +144,11 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Recurrence 2026-07-19:** A `setupPrompt` fixture landed in the preceding subtest, so RED failed with `setupPrompt is not defined` instead of the intended prompt-copy assertion. Moving the fixture into its consumer produced the real failure. Evidence: `test/contract/command-phrases.test.ts` (search: `keeps git-history correlations as candidates until semantic proof exists`).
 
-**Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine.
+**Recurrence 2026-07-29:** Pins include section adjacency: inserting an `## Effort Estimates` section between the illustrative-scenario label and `## Assumption Tracking` in `goat-plan/references/milestone-examples.md` failed `test/contract/skill-hardening-shared-3.test.ts` (search: `scenario label must immediately precede the assumption block`); moving the section above the label fixed it.
+
+**Recurrence 2026-08-03:** The first GREEN wording for oversized review scope and critique context merging pushed `goat-review` and `goat-critique` from 2495/2494 words to 2592/2531. The focused skill-contract run rejected both before broader verification; budget-neutral rewrites finished at 2498/2495. Evidence anchors: `workflow/skills/goat-review/SKILL.md` (search: `never guess commit windows`), `workflow/skills/goat-critique/SKILL.md` (search: `never replace baseline context`), `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`). TDD receipts: `.goat-flow/logs/sessions/2026-08-03-goat-review-tdd.md` and `.goat-flow/logs/sessions/2026-08-03-goat-critique-tdd.md`.
+
+**Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN.
 ---
 
 ## Lesson: Split transient preflight test failures from task regressions
@@ -288,8 +165,11 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 ## Lesson: Temp cleanup must satisfy destructive-command hooks
 
 **Status:** active | **Created:** 2026-05-08
+**Incident count:** 2 | **Latest occurrence:** 2026-08-03
 
 **What happened:** While smoke-testing `scripts/install-browser-tools.sh` wrapper-guard behavior, a temp-directory cleanup command used `rm -rf "$tmpdir"`. The PreToolUse hook blocked the command with `BLOCKED: rm -r without safe scoping. Specify an explicit target path.` The smoke test had to be rerun with non-recursive cleanup: `rm -f "$tmpdir/browser-use"; rmdir "$tmpdir"`.
+
+**Recurrence 2026-08-03:** A packaged-release smoke again placed variable-scoped `rm -rf` in the same shell program as the validation. The hook rejected the complete command before `mktemp` ran, so no validation state was created. The rerun omitted destructive cleanup and retained its printed `/tmp/goat-flow-release-check.*` directory as disposable local evidence.
 
 **Root cause:** Treated a `mktemp` path as self-evidently safe, but the hook cannot prove variable-scoped recursive deletion is bounded.
 
@@ -317,6 +197,11 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **Root cause:** I tested new must-block probes before accounting for must-allow placeholders that were accidentally protected by the old false negative.
 
 **Prevention:** For credential-scanner changes, run a matrix that includes must-block misses and must-allow placeholder assignments after each parser edit. Parse/normalize the assignment key first, classify it second, and expect a broader key match to require explicit placeholder allowlist proof. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_env_assignment`), `test/integration/post-turn-safety-hook.test.ts` (search: `blocks exported credential assignments`), and `test/integration/post-turn-safety-hook.test.ts` (search: `allows safe placeholders in env examples`).
+
+**Recurrence 2026-08-02:** The PR #57 scanner-parity fix first lost the raw assignment key because a placeholder helper overwrote Bash's global `BASH_REMATCH`, then broader forced-fallback fixtures exposed Docker space-form and multi-assignment drift, dotted config-reference drift, npm secondary-assignment drift, and quoted-password mismatches. The complete native-versus-fallback finding-set comparison caught these after the initial named examples agreed. Capture regex matches before calling helpers, and compare normalized findings across the full existing block-and-allow corpus rather than treating a few equal exit codes as parity. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_literal_credential_assignment`), and `test/integration/post-turn-safety-hook.helpers.ts` (search: `hookFindingSignatures`).
+
+**Recurrence 2026-08-02:** PR #57 review found `plans time` rejecting `stop --discard-open` under the clock reversal whose own error names discard as the remedy. The suite had a discard case and a reversal case; neither crossed. Rule: when an error names a recovery path, test that path under the condition raising it. Evidence: `src/cli/plans-time.ts` (search: `if (transition.discardOpen) return;`), `test/unit/plans-time.test.ts` (search: `lets discard-open recover a span the clock reversed under`).
+
 ---
 
 ## Lesson: Scanner scope gates need parser-shape fixtures for each claimed file family
@@ -344,7 +229,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Root cause:** Filename and file-level summaries are lossy coverage proxies. Tests cross filenames, and one source file can contain behaviours with different coverage depths.
 
-**Prevention:** Search all tests and end-to-end invocations before classifying. Inventory every named behaviour/invariant, make CRITICAL/HIGH exhaustive, and assign one coverage row per behaviour. BEHAVIOURAL applies only to what that row proves. Keep shipped examples explicitly non-evidence unless a contract locks live coverage. Evidence anchors: `workflow/skills/goat-qa/SKILL.md` (search: `A file summary cannot promote a row`), `test/contract/skill-hardening-contracts.test.ts` (search: `keeps covered behaviours from deferring uncovered siblings`), `src/cli/audit/check-goat-flow.ts` (search: `SETUP_CHECKS`) and `test/integration/audit-build.test.ts` (search: `assertBuildChecksPass`).
+**Prevention:** Search all tests and end-to-end invocations before classifying. Inventory every named behaviour/invariant, make CRITICAL/HIGH exhaustive, and assign one coverage row per behaviour. BEHAVIOURAL applies only to what that row proves. Keep shipped examples explicitly non-evidence unless a contract locks live coverage. Evidence anchors: `workflow/skills/goat-qa/SKILL.md` (search: `A file summary cannot promote a row`), `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps covered behaviours from deferring uncovered siblings`), `src/cli/audit/check-goat-flow.ts` (search: `SETUP_CHECKS`) and `test/integration/audit-build.test.ts` (search: `assertBuildChecksPass`).
 ---
 
 ## Lesson: Declined optional verification must not create a degradation flag
@@ -353,7 +238,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **What happened:** On 2026-07-12, declining goat-review's optional external refuter incorrectly added `coverage-degraded`; on 2026-07-18, an unselected Spec Drift pass still added `spec-drift-skipped`. Both penalized a complete local review for omitting optional verification.
 
-**Prevention:** Optional verification gets a separate status and cannot create degradation by absence alone. Name forbidden flags and pin each path. Evidence: `workflow/skills/goat-review/SKILL.md` (search: `Preserve only degradation flags`; search: `Optional skip is not degradation`), `test/contract/skill-hardening-contracts.test.ts` (search: `solely because the user declined`; search: `keeps an unselected optional Spec Drift pass out of review degradation`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-review-tdd.md`.
+**Prevention:** Optional verification gets a separate status and cannot create degradation by absence alone. Name forbidden flags and pin each path. Evidence: `workflow/skills/goat-review/SKILL.md` (search: `Optional skip is not degradation`) and `test/contract/skill-hardening-review-3.test.ts` (search: `solely because the user declined`; search: `keeps an unselected optional Spec Drift pass out of review degradation`).
 
 ---
 
@@ -363,6 +248,16 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **What happened:** On 2026-07-12, goat-security Quick Scan entered a Full-only specialist phase and waited about eight minutes. On 2026-07-18, goat-debug Investigate made an explicit read-only scope wait at I1. In both cases, headings implied flow but did not define the runtime boundary.
 
-**Prevention:** Every branch needs an explicit stop or continue rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-contracts.test.ts` (search: `Quick Scan out of Full-only specialist work`; search: `lets an explicit read-only investigation pass its scope checkpoint`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-debug-tdd.md`.
+**Prevention:** Every branch needs an explicit stop or continue rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-skills-2.test.ts` (search: `Quick Scan out of Full-only specialist work`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
 
 ---
+
+## Lesson: A documentation pass can push a file past a size gate it was written to enforce
+
+**Status:** active | **Created:** 2026-08-07
+
+**What happened:** Applying the mandatory comment standard to `scripts/check-gruff-warning-ratchet.mjs` grew it from 626 to 783 lines, past the 750-line `size.file-length` threshold. The warning-debt ratchet then reported its own checker as new debt on the very run that was meant to prove the release clean.
+
+**Root cause:** I treated comment work as free of quality-gate consequences. Doc comments on every function, context lines on every branch, and null/empty meaning on every tag add real lines, so a file already near a size threshold crosses it.
+
+**Prevention:** Before commenting a file that sits within about 20% of its size threshold, check the current count and plan the split first. Splitting by responsibility is the fix, never accepting the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).

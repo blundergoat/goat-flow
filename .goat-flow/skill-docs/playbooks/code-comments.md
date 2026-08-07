@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.14.0"
+goat-flow-reference-version: "1.15.0"
 ---
 # Code Comments
 
@@ -274,5 +274,6 @@ If a comment fails any check, fix it before merging.
 
 ## Related References
 
+- `writing-style.md` - comments and docstrings follow this playbook; other human-read prose follows `writing-style.md`.
 - Sibling playbooks installed alongside this one share the same scaffold.
 - Project instruction files may point here as the canonical comment policy.

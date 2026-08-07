@@ -1,5 +1,7 @@
 /**
  * Dashboard terminal WebSocket connection and session switching helpers.
+ * Use when a Workspace user attaches, retries, switches, or ends a terminal session.
+ * Recovery paths retain the access and report-capture intent of the original launch.
  */
 function dashboardConnectTerminal(
   ctx: DashboardTerminalContext,
@@ -408,12 +410,25 @@ async function dashboardRetryTerminalSession(
   const session = ctx.sessions.find((s) => s.id === sessionId);
   if (!session) return;
   const refs = ctx._terminalRefs[sessionId];
+  // A server-rehydrated session has no reproducible launch prompt. Keep it
+  // intact instead of deleting it and silently starting an empty retry.
+  if (!dashboardHasTerminalRetryPrompt(refs)) {
+    session.loadingShowRetry = false;
+    return;
+  }
   const prompt = refs?.retryPrompt ?? refs?.launchPrompt ?? "";
   const runner = session.runner;
   const promptLabel = refs?.retryPromptLabel ?? session.promptLabel;
   const presetId = refs?.retryPresetId ?? session.presetId;
   const cwdPath = refs?.retryCwdPath ?? session.cwd;
   const targetPath = refs?.retryTargetPath ?? session.targetPath;
+  const accessMode = refs?.retryAccessMode ?? session.accessMode;
+  // Rehydrated sessions may have no launch ref, so retry falls back to their server-backed intent.
+  const captureQualityDrafts =
+    refs?.retryCaptureQualityDrafts ?? session.captureQualityDrafts;
+  // A null owner means the original launch did not choose a mode-specific quality destination.
+  const qualityReportProjectPath =
+    refs?.retryQualityReportProjectPath ?? session.qualityReportProjectPath;
 
   dashboardClearTerminalLoadingTimers(ctx, sessionId);
   if (refs?.cleanup) refs.cleanup();
@@ -429,6 +444,9 @@ async function dashboardRetryTerminalSession(
     presetId,
     cwdPath,
     targetPath,
+    accessMode,
+    captureQualityDrafts,
+    ...(qualityReportProjectPath ? { qualityReportProjectPath } : {}),
   });
 }
 
@@ -447,7 +465,11 @@ async function dashboardOpenServerSession(
   serverSession: ServerSessionInfo,
 ): Promise<void> {
   const local = ctx.sessions.find((s) => s.id === serverSession.id && !s.ended);
+  // Existing browser rows refresh their authority from the backend before a reconnect or retry.
   if (local) {
+    local.accessMode = serverSession.accessMode;
+    local.captureQualityDrafts = serverSession.captureQualityDrafts;
+    local.qualityReportProjectPath = serverSession.qualityReportProjectPath;
     ctx.activeSessionId = local.id;
     ctx.activeView = "workspace";
     ctx.workspacePanel = "terminal";
@@ -457,11 +479,13 @@ async function dashboardOpenServerSession(
       if (refs?.cleanup) refs.cleanup();
       ctx._terminalRefs[local.id] = {
         ...ctx._terminalRefs[local.id],
-        retryPrompt: "",
         retryPromptLabel: local.promptLabel,
         retryPresetId: null,
         retryCwdPath: local.cwd,
         retryTargetPath: local.targetPath,
+        retryAccessMode: local.accessMode,
+        retryCaptureQualityDrafts: local.captureQualityDrafts,
+        retryQualityReportProjectPath: local.qualityReportProjectPath,
       };
       dashboardArmTerminalLoadingTimers(ctx, local.id, local);
       const self = ctx as DashboardTerminalContext &
@@ -482,6 +506,9 @@ async function dashboardOpenServerSession(
     projectPath: serverSession.projectPath,
     cwd: serverSession.cwd,
     targetPath: serverSession.targetPath,
+    accessMode: serverSession.accessMode,
+    captureQualityDrafts: serverSession.captureQualityDrafts,
+    qualityReportProjectPath: serverSession.qualityReportProjectPath,
     startTime: new Date(serverSession.createdAt).getTime(),
     lastInputTime: serverSession.lastInputAt || Date.now(),
     connected: false,
@@ -497,11 +524,13 @@ async function dashboardOpenServerSession(
   ctx.rememberSessionTitle(session.id, session.promptLabel);
   ctx.sessions.push(session);
   ctx._terminalRefs[session.id] = {
-    retryPrompt: "",
     retryPromptLabel: session.promptLabel,
     retryPresetId: null,
     retryCwdPath: session.cwd,
     retryTargetPath: session.targetPath,
+    retryAccessMode: session.accessMode,
+    retryCaptureQualityDrafts: session.captureQualityDrafts,
+    retryQualityReportProjectPath: session.qualityReportProjectPath,
   };
   dashboardArmTerminalLoadingTimers(ctx, session.id, session);
   ctx.activeSessionId = session.id;

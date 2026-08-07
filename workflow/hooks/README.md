@@ -40,6 +40,7 @@ Claude, Codex, and Antigravity hook commands resolve the active repository root 
 - Claude, Codex, and Antigravity support nested cwd inside a git checkout through the root-resolving wrapper. Outside a git checkout, `deny-dangerous.sh` fails closed unless an agent-specific project root fallback is documented and configured; today that fallback is `$CLAUDE_PROJECT_DIR` for Claude/Antigravity, not Codex. `gruff-code-quality.sh` fails soft.
 - Copilot uses direct project-local paths and therefore requires a repo-root working directory for the configured command. Nested-cwd execution is outside the current Copilot contract unless that runtime adds a portable project-root variable or root-resolving command support.
 - Directly invoked `.sh` hooks must keep executable bits. Missing `bash` is a hard runtime prerequisite for all shipped guardrails.
+- `post-turn-safety.sh` uses an optimized Bash 4+ scanner and a bounded compatibility scanner on stock macOS Bash 3.2; both enforce the same finding, byte, and wall-clock limits. If either scanner exhausts `GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS` (default 60s), it reports an incomplete scan and exits with blocking status 2, so a partial scan cannot look clean. Exit 1 is reserved for prerequisites such as an unavailable Git root. The registered Stop timeout is 90s, deliberately above the hook budget so its own diagnostic prints before the runner intervenes.
 
 ## Post-Turn Safety
 

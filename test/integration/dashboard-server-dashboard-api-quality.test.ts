@@ -3,6 +3,7 @@
  * prompts for a supported agent, uses cache-only audit enrichment when fast=true and reuses cached
  * audits unless fresh=true, and emits a redacted evidence envelope for the generated prompts.
  */
+import { existsSync } from "node:fs";
 import {
   assert,
   assertValidEmittedEnvelope,
@@ -11,11 +12,13 @@ import {
   fetchJson,
   it,
   join,
+  makeDashboardCacheProject,
   mkdtemp,
   PROJECT_PATH,
   readEventEnvelopes,
   rm,
   tmpdir,
+  writeProjectFile,
 } from "./dashboard-server.helpers.js";
 describe("dashboard /api/quality", () => {
   it("returns 400 without agent", async () => {
@@ -128,6 +131,78 @@ describe("dashboard /api/quality", () => {
     assert.equal(first.auditCacheStatus, "bypass");
     assert.equal(second.auditCacheStatus, "hit");
     assert.equal(third.auditCacheStatus, "bypass");
+  });
+
+  it("does not execute selected-project hook launcher in /api/quality", async () => {
+    const project = await makeDashboardCacheProject();
+    const markerPath = join(project.root, "launcher-executed.marker");
+    try {
+      // The selected project configures a launcher that records execution
+      // before delegating to the managed script. Quality prompt generation is
+      // passive on every cache path, so none of miss, hit, or fresh bypass may
+      // run the audited checkout's configured command.
+      await writeProjectFile(
+        project.root,
+        ".codex/hooks.json",
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: "Bash",
+                hooks: [
+                  {
+                    type: "command",
+                    command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-dangerous.sh`,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+
+      const requestQuality = async (
+        suffix: string,
+      ): Promise<Record<string, unknown>> => {
+        const { res, body } = await fetchJson(
+          `/api/quality?path=${encodeURIComponent(project.root)}&agent=codex${suffix}`,
+        );
+        assert.equal(res.status, 200);
+        return expectRecord(body, "Quality marker response");
+      };
+
+      const miss = await requestQuality("");
+      assert.equal(miss.auditCacheStatus, "miss");
+      assert.equal(
+        existsSync(markerPath),
+        false,
+        "quality audit cache miss must not execute the configured hook launcher",
+      );
+
+      const hit = await requestQuality("");
+      assert.equal(hit.auditCacheStatus, "hit");
+      assert.equal(
+        existsSync(markerPath),
+        false,
+        "quality audit cache hit must not execute the configured hook launcher",
+      );
+
+      const bypass = await requestQuality("&fresh=true");
+      assert.equal(bypass.auditCacheStatus, "bypass");
+      assert.equal(
+        existsSync(markerPath),
+        false,
+        "quality fresh bypass must not execute the configured hook launcher",
+      );
+
+      // Schema stays stable while runtime execution is skipped.
+      assert.equal(miss.command, "quality");
+      assert.equal(miss.agent, "codex");
+      assert.equal(typeof miss.prompt, "string");
+      assert.ok(String(miss.prompt).length > 100);
+    } finally {
+      await project.cleanup();
+    }
   });
 
   it("generates quality output for claude", async () => {

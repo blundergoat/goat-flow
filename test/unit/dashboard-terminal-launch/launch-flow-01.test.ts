@@ -16,6 +16,9 @@ import {
   makeTerminalSession,
 } from "./helpers.js";
 
+const REPORTING_PROBE_FALLBACK =
+  /If a requested runtime probe \(bash\/npm\/node\) is denied or unavailable/u;
+
 /** Build two live sessions so send-routing assertions can prove only the requested tab receives input. */
 function makeRequestedSessionRoutingHarness(): {
   helpers: ReturnType<typeof loadHelpers>;
@@ -58,6 +61,114 @@ function makeRequestedSessionRoutingHarness(): {
 }
 
 describe("dashboard terminal launch flow", () => {
+  it("maps read-only presets and investigator sessions to reporting access", () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+    );
+
+    assert.equal(
+      helpers.dashboardTerminalAccessMode({ mayWriteFiles: false }, "builder"),
+      "reporting",
+    );
+    assert.equal(
+      helpers.dashboardTerminalAccessMode({ mayWriteFiles: true }, "builder"),
+      "workspace",
+    );
+    assert.equal(
+      helpers.dashboardTerminalAccessMode(
+        { mayWriteFiles: true },
+        "investigator",
+      ),
+      "reporting",
+    );
+    assert.equal(
+      helpers.dashboardTerminalAccessMode(null, "builder"),
+      "reporting",
+    );
+  });
+
+  it("honors explicit workspace access for dynamic write-oriented prompts", async () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      { setTimeout, clearTimeout, setInterval, clearInterval },
+      { window: { __GOAT_FLOW_DEFAULT_PATH__: "/tmp/controller" } },
+    );
+    const launches: Array<Record<string, unknown>> = [];
+    const ctx = makeContext({
+      allPresets: [],
+      userRole: "builder",
+      async launchInTerminal(
+        prompt: string,
+        runner: string,
+        options: Record<string, unknown>,
+      ): Promise<void> {
+        launches.push({ prompt, runner, ...options });
+      },
+    });
+
+    await helpers.dashboardLaunchPreset(
+      ctx,
+      "repair the harness",
+      "claude",
+      "Harness repair",
+      { accessMode: "workspace" },
+    );
+
+    assert.equal(launches[0]?.accessMode, "workspace");
+    assert.match(
+      String(launches[0]?.prompt),
+      /this preset may write only after the prompt or user explicitly approves it/u,
+    );
+    assert.doesNotMatch(String(launches[0]?.prompt), /reporting-only/u);
+    assert.doesNotMatch(String(launches[0]?.prompt), REPORTING_PROBE_FALLBACK);
+  });
+
+  // Every reporting runner shows the same recovery path while naming its real write enforcement.
+  it("describes enforcement and denied-probe fallback for every reporting runner", async () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      { setTimeout, clearTimeout, setInterval, clearInterval },
+      { window: { __GOAT_FLOW_DEFAULT_PATH__: "/tmp/controller" } },
+    );
+    const launches: Array<Record<string, unknown>> = [];
+    const ctx = makeContext({
+      allPresets: [],
+      userRole: "builder",
+      async launchInTerminal(
+        prompt: string,
+        runner: string,
+        options: Record<string, unknown>,
+      ): Promise<void> {
+        launches.push({ prompt, runner, ...options });
+      },
+    });
+
+    await helpers.dashboardLaunchPreset(ctx, "review", "claude", "Review", {
+      accessMode: "reporting",
+    });
+    await helpers.dashboardLaunchPreset(
+      ctx,
+      "review",
+      "antigravity",
+      "Review",
+      { accessMode: "reporting" },
+    );
+    await helpers.dashboardLaunchPreset(ctx, "review", "codex", "Review", {
+      accessMode: "reporting",
+    });
+
+    assert.match(String(launches[0]?.prompt), /Claude permission overlay/u);
+    assert.doesNotMatch(
+      String(launches[0]?.prompt),
+      /prompt and hook guardrails/u,
+    );
+    assert.match(String(launches[1]?.prompt), /prompt and hook guardrails/u);
+    assert.match(String(launches[2]?.prompt), /Codex permission profile/u);
+    assert.match(String(launches[0]?.prompt), REPORTING_PROBE_FALLBACK);
+    assert.match(String(launches[1]?.prompt), REPORTING_PROBE_FALLBACK);
+    assert.match(String(launches[2]?.prompt), REPORTING_PROBE_FALLBACK);
+  });
+
   it("keeps controlling cwd and selected target separate in terminal create payloads", async () => {
     const createBodies: unknown[] = [];
     const helpers = loadHelpers(async (input, init) => {
@@ -80,6 +191,7 @@ describe("dashboard terminal launch flow", () => {
       cwdPath: "/tmp/controlling-goat-flow",
       targetPath: "/tmp/selected-target",
       promptLabel: "Boundary check",
+      accessMode: "reporting",
     });
 
     assert.deepStrictEqual(createBodies, [
@@ -88,11 +200,53 @@ describe("dashboard terminal launch flow", () => {
         projectPath: "/tmp/controlling-goat-flow",
         targetPath: "/tmp/selected-target",
         runner: "claude",
+        accessMode: "reporting",
+        // Reporting access alone must never request staged-draft capture, or
+        // every read-only launch would build a staging tree in the target.
+        captureQualityDrafts: false,
       },
     ]);
     assert.equal(ctx.sessions[0]?.cwd, "/tmp/controlling-goat-flow");
     assert.equal(ctx.sessions[0]?.targetPath, "/tmp/selected-target");
     assert.equal(ctx.sessions[0]?.projectPath, "/tmp/selected-target");
+    assert.equal(ctx.sessions[0]?.accessMode, "reporting");
+  });
+
+  it("sends exactly one explicit report owner for staged-draft capture", async () => {
+    const createBodies: unknown[] = [];
+    const helpers = loadHelpers(async (input, init) => {
+      if (String(input) === "/api/terminal/create") {
+        createBodies.push(JSON.parse(String(init?.body ?? "{}")));
+        return {
+          json: async () => ({
+            id: "session-capture-owner",
+            wsUrl: "/ws/terminal/session-capture-owner",
+          }),
+        } as Response;
+      }
+      return { json: async () => ({ ok: true }) } as Response;
+    });
+    const ctx = makeContext({ projectPath: "/tmp/selected-target" });
+
+    await helpers.dashboardLaunchInTerminal(ctx, "assess process", "claude", {
+      cwdPath: "/tmp/controlling-goat-flow",
+      targetPath: "/tmp/selected-target",
+      accessMode: "reporting",
+      captureQualityDrafts: true,
+      qualityReportProjectPath: "/tmp/controlling-goat-flow",
+    });
+
+    assert.deepStrictEqual(createBodies, [
+      {
+        prompt: "",
+        projectPath: "/tmp/controlling-goat-flow",
+        targetPath: "/tmp/selected-target",
+        runner: "claude",
+        accessMode: "reporting",
+        captureQualityDrafts: true,
+        qualityReportProjectPath: "/tmp/controlling-goat-flow",
+      },
+    ]);
   });
 
   it("sends terminal text to the requested session instead of the current active tab", async () => {

@@ -20,9 +20,10 @@ import {
 import { makeSharedFacts, stubAgentFacts } from "../fixtures/projects/index.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
+const EXPECTED_OVER_BUDGET_SURFACE_COUNT = 4;
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
 
-/** Spawn the real read-only command so parser, facts, dispatch, and stdout stay integrated. */
+/** Spawns the real read-only command so parser, facts, dispatch, and stdout stay integrated. */
 function runContextCommand(...args: string[]) {
   return spawnSync(
     process.execPath,
@@ -83,8 +84,9 @@ function contextFacts(
 }
 
 describe("static context report", () => {
-  // A user sees every normative pressure source together, ordered by measured budget ratio.
+  // Covers every normative pressure source together, ordered by measured budget ratio, as a user sees them.
   it("reports oversized instruction, skill, reference, and learning-loop surfaces", () => {
+    const expectedDispatcherWords = 556;
     const oversizedInstruction = Array.from(
       { length: 151 },
       (_, index) => `instruction ${index}`,
@@ -133,8 +135,11 @@ describe("static context report", () => {
     });
 
     assert.equal(report.measurement.telemetryRequired, false);
-    assert.equal(report.summary.overBudgetSurfaces, 4);
-    assert.equal(report.surfaces.skills[0]?.words, 556);
+    assert.equal(
+      report.summary.overBudgetSurfaces,
+      EXPECTED_OVER_BUDGET_SURFACE_COUNT,
+    );
+    assert.equal(report.surfaces.skills[0]?.words, expectedDispatcherWords);
     assert.deepEqual(
       report.topPressure.map((surface) => surface.path),
       [
@@ -155,6 +160,7 @@ describe("static context report", () => {
     );
   });
 
+  // Covers CRLF frontmatter a Windows author committed: it must stay out of skill word budgets.
   it("excludes CRLF frontmatter from skill word budgets", () => {
     const dispatcher = [
       "---",
@@ -188,7 +194,7 @@ describe("static context report", () => {
     assert.equal(report.surfaces.skills[0]?.words, 2);
   });
 
-  // The short authoring index uses its enforced 400-word routing cap, not the broad reference cap.
+  // Covers the short authoring index using its enforced 400-word routing cap, not the broad reference cap.
   it("applies the skill-authoring index budget", () => {
     const projectFiles = {
       ".goat-flow/skill-docs/skill-quality-testing/README.md":
@@ -220,7 +226,7 @@ describe("static context report", () => {
     assert.equal(authoringIndex?.words, 400);
   });
 
-  // A missing pack reference does not erase the canonical skill body's functional budget.
+  // Covers an incomplete canonical skill: a missing pack reference must not erase its ADR budget.
   it("keeps incomplete canonical skills under their ADR budget", () => {
     const projectFiles = {
       ".claude/skills/goat-review/SKILL.md": "review ".repeat(2_500),
@@ -252,7 +258,7 @@ describe("static context report", () => {
     assert.equal(incompleteCanonicalSkill?.words, 2_500);
   });
 
-  // Machine consumers receive one stable JSON object even when the selected project is empty.
+  // Covers machine consumers: one stable JSON object even when the selected project is empty.
   it("renders parseable JSON without telemetry or provider state", () => {
     const sharedFacts = makeSharedFacts();
     sharedFacts.footguns.buckets = [];

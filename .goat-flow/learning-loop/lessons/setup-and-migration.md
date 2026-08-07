@@ -1,6 +1,23 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-07-18
+last_reviewed: 2026-08-04
+---
+
+## Lesson: Packaged install smoke is not a completed setup audit
+
+**Created:** 2026-08-03
+**Decision changed:** Release probes verify deterministic installation and adapted-project audit as separate stages.
+**Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-03
+
+**What happened:** A packaged-release probe ran `setup --apply` against an empty git repository and immediately required the full harness audit to pass. The installer correctly wrote its 69 managed files, but the audit failed because no agent had yet authored the project-specific `AGENTS.md`, architecture, or code map named in the installer's own next steps.
+
+**Recurrence 2026-08-03:** A second release-readiness pass repeated the same bare-target audit even though this lesson already existed. The packaged CLI again installed 69 managed files and correctly failed the incomplete target. Re-reading this entry redirected the actual package proof to the configured goat-flow checkout, where setup, Codex agent setup, all five harness concerns, 49 drift comparisons, and 234-file content lint passed. The failed bare-target result remains evidence of an invalid smoke contract, not a release defect.
+
+**Evidence:** `src/cli/cli-handlers.ts` (search: `Setup preview and setup apply both use the deterministic install path`) routes `setup --apply` through managed installation, while plain `setup` composes the adaptive guidance. The packaged installer output explicitly says `Run the setup steps to create project-specific content` after the managed files are installed.
+
+**Prevention:** In a package smoke, assert version and managed install results on a fresh target. Run harness/content/drift audit against a fixture or checkout whose adaptive project content is already complete; do not treat deterministic file installation as proof that the LLM-authored setup phase ran.
+
 ---
 
 ## Lesson: Skill edits must fan out to all four installed mirrors, and removed anchors cascade
@@ -9,7 +26,7 @@ last_reviewed: 2026-07-18
 
 **What happened:** A goat-critique SKILL.md + reference-pack edit was synced to `workflow/skills/`, `.claude/skills/`, and `.agents/skills/` and the contract suite passed - but `goat-flow audit . --check-drift` failed on the fourth mirror, `.github/skills/goat-critique/` (Copilot), and the workspace-self support-bundle test failed with it. Separately, removing a hook helper (`is_env_example_redirect_write`) made two footgun evidence anchors stale, failing the `feedback-loop-active` harness check; rewriting those anchors then pushed the footgun bucket over the 39KB size gate.
 
-**Prevention:** Treat one canonical skill edit as a four-target fan-out - `workflow/skills/` plus the `.claude/`, `.agents/`, and `.github/` mirrors - and verify with `goat-flow audit . --check-drift`. After deleting or renaming any anchored function, run `goat-flow stats . --check` and rewrite the citing footgun/lesson anchors as dated resolved-history prose, then re-check bucket size. Evidence anchors: `test/unit/support-bundle.test.ts` (search: `emits clean JSON through the CLI`), `.goat-flow/learning-loop/footguns/deny-dangerous.md` (search: `removed 2026-07-18`).
+**Prevention:** Treat one canonical skill edit as a four-target fan-out - `workflow/skills/` plus the `.claude/`, `.agents/`, and `.github/` mirrors - and verify with `goat-flow audit . --check-drift`. After deleting or renaming any anchored function, run `goat-flow stats . --check` and rewrite the citing footgun/lesson anchors as dated resolved-history prose, then re-check bucket size. Evidence anchors: `test/unit/support-bundle.test.ts` (search: `emits clean JSON through the CLI`), `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `removed 2026-07-18`).
 
 ---
 
@@ -39,7 +56,7 @@ last_reviewed: 2026-07-18
 
 **What happened:** Both rampart and sus-form-detector agents dropped Sub-Agent Objectives (f) and Communication When Blocked (g) when compressing CLAUDE.md toward the line target. In the historical setup prompt flow, the instructions said "Do NOT skip sections (f)-(i)" in Prompt B, but Prompt A (used for new projects) didn't have this warning. That old setup-prompt path no longer exists; current per-agent setup guidance lives under `workflow/setup/agents/`.
 
-**Prevention:** Every constraint that agents are likely to cut under pressure must appear in both the shared template (`workflow/setup/reference/execution-loop.md` (search: `Target: under 125 lines. Hard limit: 150.`)) and the current per-agent setup guide under `workflow/setup/agents/` (search: `configured line target and hard limit`). A rule in only one place is a rule that gets missed.
+**Prevention:** Every constraint that agents are likely to cut under pressure must appear in the shared template (`workflow/setup/reference/execution-loop.md` (search: `Target: under 125 lines. Hard limit: 150.`)) and, where an agent guide owns the same limit, in that guide: `workflow/setup/agents/claude.md` (search: `125-line target and 150-line hard limit`) and `workflow/setup/agents/copilot.md` (search: `150-line hard limit and 125-line target`). A rule in only one applicable place is a rule that gets missed.
 
 ---
 

@@ -153,7 +153,7 @@ describe("managed setup preview", () => {
   /**
    * Fixture reproduces a target installed before install-state existed: a
    * differing system-owned file with no baseline. The upgrade must adopt and
-   * refresh it without --force, then record a baseline for the next run.
+   * refresh it without --force, then writes a baseline for the next run.
    */
   it("adopts pre-baseline managed files instead of blocking the upgrade", () => {
     const projectPath = makeTempProject();
@@ -377,6 +377,7 @@ describe("managed setup preview", () => {
     }
   });
 
+  // Covers a symlinked baseline under --force: writes it; the install must be blocked before any write.
   it("blocks an invalid symlinked install-state baseline under force before writes", (testContext) => {
     const projectPath = makeTempProject();
     const redirectedStatePath = makeTempProject();

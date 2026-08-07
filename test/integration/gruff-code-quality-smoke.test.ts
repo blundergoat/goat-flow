@@ -35,7 +35,7 @@ import {
 } from "./gruff-code-quality-smoke.helpers.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
-const GRUFF_HOOK_COPIES = [
+const GRUFF_HOOK_COPY_ENTRIES = [
   {
     label: "workflow",
     path: join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh"),
@@ -48,14 +48,27 @@ const GRUFF_HOOK_COPIES = [
 
 after(cleanupHookTestDirs);
 
-/** Return true when a candidate jq binary exists and can be executed. */
+/**
+ * Check that a candidate jq binary really runs before the smoke test relies on it.
+ * Use while resolving the optional pinned jq, so a stale path in the developer's environment
+ * shows up as a clear skip rather than a confusing hook failure later on.
+ *
+ * @param path - candidate binary path from the developer's environment or a known install
+ *   location; a path that does not exist just means "not usable here", not an error
+ * @returns true when the binary exists and reports a version; false means the pinned-jq
+ *   proof is skipped rather than reported as though it ran
+ */
 function isExecutableFile(path: string): boolean {
+  // Nothing at that path, so there is no binary to probe.
   if (!existsSync(path)) return false;
+
+  // Fixed `--version` argv with no shell. The path is developer test configuration, never
+  // end-user input, so there is no command-injection surface here.
   const result = spawnSync(path, ["--version"], { encoding: "utf-8" });
   return result.status === 0;
 }
 
-/** Locate the optional jq 1.6 binary used by the compatibility regression leg. */
+/** Locate optional jq 1.6; an invalid configured override throws instead of silently skipping proof. */
 function resolveJq16Binary(): { path: string | null; skipReason: string } {
   const fromEnv = process.env.GOAT_FLOW_JQ16_BIN;
   if (fromEnv !== undefined && fromEnv.trim() !== "") {
@@ -106,14 +119,16 @@ function assertSelfTestOk(
 }
 
 describe("gruff-code-quality hook", () => {
-  it("passes the smoke self-test for both hook copies with system jq", () => {
-    for (const hook of GRUFF_HOOK_COPIES) {
+  // One named case per hook copy, so a failure names which copy drifted.
+  for (const hook of GRUFF_HOOK_COPY_ENTRIES) {
+    // Covers the shipped hook a consumer actually runs, using whatever jq is on their PATH.
+    it(`passes the smoke self-test with system jq for the ${hook.label} hook copy`, () => {
       assertSelfTestOk(
         hook.label,
         runHookSelfTest(hook.path, process.env.PATH ?? "/usr/bin:/bin"),
       );
-    }
-  });
+    });
+  }
 
   const jq16 = resolveJq16Binary();
   it(
@@ -121,6 +136,9 @@ describe("gruff-code-quality hook", () => {
     jq16.path === null ? { skip: jq16.skipReason } : {},
     () => {
       assert.ok(jq16.path, jq16.skipReason);
+
+      // Fixed `--version` argv with no shell, against a path this test already proved
+      // executable; developer test configuration, never end-user input.
       const version = spawnSync(jq16.path, ["--version"], {
         encoding: "utf-8",
       });
@@ -130,7 +148,7 @@ describe("gruff-code-quality hook", () => {
       symlinkSync(jq16.path, join(pinnedBin, "jq"));
       const pathPrefix = `${pinnedBin}:${process.env.PATH ?? "/usr/bin:/bin"}`;
 
-      for (const hook of GRUFF_HOOK_COPIES) {
+      for (const hook of GRUFF_HOOK_COPY_ENTRIES) {
         assertSelfTestOk(hook.label, runHookSelfTest(hook.path, pathPrefix));
       }
     },
@@ -522,7 +540,7 @@ describe("gruff-code-quality hook", () => {
     assert.deepEqual(readInvocations(root), ["src/sample.py"]);
   });
 
-  // Fixture purpose: names a nested-venv analyzer only in .goat-flow/config.yaml to cover repo-owned overrides.
+  // Fixture purpose: writes a nested-venv analyzer path into .goat-flow/config.yaml to cover repo overrides.
   it("uses a repo-owned config binaries override for a non-standard monorepo gruff binary", () => {
     const root = makeRoot();
     writeMockGruffBinary(
@@ -567,6 +585,7 @@ describe("gruff-code-quality hook", () => {
     assert.deepEqual(readInvocations(root), ["src/sample.py"]);
   });
 
+  // Covers both override spellings a maintainer writes, because compact and commented forms must both work.
   it("uses compact and commented config binary override forms", () => {
     const fixtures = [
       {

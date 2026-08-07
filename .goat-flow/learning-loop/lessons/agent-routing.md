@@ -1,6 +1,6 @@
 ---
 category: agent-routing
-last_reviewed: 2026-05-02
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: Bare task paths are context, not implementation approval
@@ -11,7 +11,7 @@ last_reviewed: 2026-05-02
 
 **Root cause:** The agent combined the generic "assume implementation" coding default with goat-plan's existing milestone discovery and skipped the blocking gate. The skill also treated named existing plan files as write approval too broadly, so a context path could be misread as a target.
 
-**Prevention:** A bare or ambiguous task path is read-only context. The correct first response is an orientation summary plus a next-action question. `.active` changes, milestone status changes, task checkboxes, and code edits require explicit verbs such as "start", "implement", "resume", "update", or "write". Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Path-only guard runs first`), `workflow/skills/goat/SKILL.md` (search: `Bare or ambiguous task paths are read-only context`), `test/contract/skill-hardening-contracts.test.ts` (search: `path-only task intake`).
+**Prevention:** A bare or ambiguous task path is read-only context. The correct first response is an orientation summary plus a next-action question. `.active` changes, milestone status changes, task checkboxes, and code edits require explicit verbs such as "start", "implement", "resume", "update", or "write". Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Path-only guard runs first`), `workflow/skills/goat/SKILL.md` (search: `Bare or ambiguous task paths are read-only context`), `test/contract/skill-hardening-plan-1.test.ts` (search: `path-only task intake`).
 
 ---
 
@@ -60,15 +60,22 @@ The user's point: "if it wasn't for that we wouldn't have found the better name.
 
 **Created:** 2026-04-14
 
+**Incident count:** 2
+
+**Latest occurrence:** 2026-08-06
+
 **What happened:** User asked to list all audit checks in config.yaml. Simple task. Instead of writing it once correctly, the agent: (1) added preflight checks the user never asked for, (2) used wrong section names that didn't match the dashboard, (3) put it in config.yaml as comments, (4) tried to move it into an existing doc instead of the requested new file, (5) entered plan mode for a follow-up dashboard task where the user had already given the exact spec, (6) wrote a memory file while still in plan mode. A task that should have been one turn took 5-10 turns and multiple corrections.
 
-**Root cause:** The agent treated a clear directive as ambiguous. The user said "add all the checks" - the agent added checks the user didn't ask for (preflight). The user pasted an exact 3-section dashboard mockup - the agent entered plan mode instead of implementing. Each time the user corrected, the agent made a different wrong assumption instead of asking or doing exactly what was said.
+On 2026-08-06, the user asked for each changelog bullet to be at most 150 characters. The agent wrapped unchanged text across multiple lines, satisfying a physical-line check while missing the requested reading limit.
+
+**Root cause:** The agent treated a clear directive as ambiguous. The user said "add all the checks" - the agent added checks the user didn't ask for (preflight). The user pasted an exact 3-section dashboard mockup - the agent entered plan mode instead of implementing. Each time the user corrected, the agent made a different wrong assumption instead of asking or doing exactly what was said. In the changelog incident, it treated a semantic-unit limit (each bullet) as a physical-line limit.
 
 **Prevention:**
 1. When the user gives a clear spec, implement it literally. Don't add scope. Don't reinterpret.
 2. A detailed mockup IS the plan. Don't enter plan mode when the user already told you what to build.
 3. If you're unsure what the user wants, ask one question. Don't guess across multiple turns.
 4. Never edit files in plan mode (except the plan file).
+5. Apply numeric limits to the named unit. "Each bullet at most 150 characters" means the complete bullet, on one line unless wrapping is explicitly requested.
 
 ---
 
@@ -94,7 +101,7 @@ The user's point: "if it wasn't for that we wouldn't have found the better name.
 
 **Current contract** (per `skill-preamble.md` + `skill-conventions.md`, post-2026-04-18): session logs are OPTIONAL continuity notes. Write one only when (a) `/compact` fires without an active milestone file, or (b) the human explicitly requests a session summary. Otherwise skip - the old blanket "every invocation" rule is retired.
 
-**Recurrence 2026-07-17:** `.goat-flow/glossary.md` (search: `| Handoff |`) still called the entire handoff concept deprecated, while `Working Memory` made every `/compact` write a session log. The glossary now distinguishes the retired mandatory workflow from the current optional redacted receipt; `test/contract/skill-hardening-contracts.test.ts` (search: `keeps glossary continuity terms aligned with the conditional session-log contract`) pins the condition.
+**Recurrence 2026-07-17:** `.goat-flow/glossary.md` (search: `| Handoff |`) still called the entire handoff concept deprecated, while `Working Memory` made every `/compact` write a session log. The glossary now distinguishes the retired mandatory workflow from the current optional redacted receipt; `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps glossary continuity terms aligned with the conditional session-log contract`) pins the condition.
 
 **Prevention:** Do not put a "write a session log" bullet in every skill's closing protocol. Keep the conditional phrasing in `skill-preamble.md` / `skill-conventions.md` and let skills opt in via the Milestone Retrospective pattern. The Notification/compact hook that was meant to mechanize this was silently dead (see `.goat-flow/learning-loop/footguns/hooks.md` Resolved Entries 2026-04-19) - don't revive that approach.
 
@@ -126,7 +133,7 @@ The user's point: "if it wasn't for that we wouldn't have found the better name.
 
 **What happened:** During a quality follow-up, the agent treated the active-plan marker pointing at a missing subdir as a MAJOR setup defect. The user corrected that the active marker is local working state: its target can disappear when a project completes, can change multiple times a day as users switch projects, or can be irrelevant when the user is only using goat-flow for bug work. The same review treated `/goat-critique` writing gitignored critique logs as a read-only violation. The user corrected the contract: read-only/reporting work means no committed-file changes and no implementation, not "never write gitignored continuity logs or task checkboxes."
 
-**Recurrence 2026-07-17:** `.goat-flow/skill-docs/skill-preamble.md` (search: `If stale, emit`) required `goat-flow index` whenever an index was stale, even during reporting-only work; `generateIndexes` writes tracked `INDEX.md` files. The preamble now defers regeneration in reporting-only/read-only/no-write/no-implementation modes, guarded by `test/contract/skill-hardening-contracts.test.ts` (search: `defers stale-index regeneration when committed writes are forbidden`).
+**Recurrence 2026-07-17:** `.goat-flow/skill-docs/skill-preamble.md` (search: `If stale, emit`) required `goat-flow index` whenever an index was stale, even during reporting-only work; `generateIndexes` writes tracked `INDEX.md` files. The preamble now defers regeneration in reporting-only/read-only/no-write/no-implementation modes, guarded by `test/contract/skill-hardening-shared-1.test.ts` (search: `defers stale-index regeneration when committed writes are forbidden`).
 
 **Root cause:** The agent applied generic quality-report assumptions without first checking goat-flow's persistence tiers and local-state semantics. It judged stale local pointers and gitignored continuity writes as setup defects instead of asking whether the skill handles them gracefully and whether committed state changes.
 

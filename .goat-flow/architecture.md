@@ -18,8 +18,9 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | CLI auditor | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
 | CLI diagnostics | `src/cli/diagnostics/` | Redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
 | Managed setup | `src/cli/managed-setup-command.ts`, `src/cli/managed-setup-preview.ts`, `src/cli/managed-setup-state.ts` | Hash-only dry-run classification, install admission, and local recovery state for manifest-managed template files |
-| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML + views) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
+| Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML, views, and ~20 client TypeScript modules) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
 | Hook registration and proof | `src/cli/hooks-command.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | CLI/dashboard hook toggles plus explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
+| Plan export and effort check | `src/cli/plans-export.ts`, `src/cli/plans-effort.ts`, `src/cli/plans-check.ts` | Redacted milestone export, shared estimate/Actual grammar, and user-invoked `plans check`; `--strict` gates derivable current-plan accounting while the rough mix stays advisory, and neither mode joins audit because plans are optional local state |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
 ## Data Flow
@@ -85,9 +86,18 @@ src/cli/
 
 src/dashboard/
   index.html          # Dashboard entry point
+  app.ts              # Client app entry; composes the Alpine fragment modules
+  styles.css          # Dashboard stylesheet
   preset-prompts.json  # Preset configurations
+  dashboard-app-*.ts  # Alpine app fragments: init, merge, state, data loading,
+                      #   project/terminal, prompts/audit, skill-quality
+  dashboard-terminal*.ts # xterm client plus connect, paste, and runtime helpers
+  dashboard-*.ts      # Feature modules: custom prompts (+actions), projects, prompts,
+                      #   readers, model readers, setup/quality
   views/              # Page views (about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace)
 ```
+
+Per-file descriptions for both `src/cli/server/` and `src/dashboard/` live in `.goat-flow/code-map.md`; this block names module families only.
 
 ## Key Constraints
 
@@ -107,7 +117,7 @@ Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) 
 
 | Tier | Paths | Committed? | Purpose |
 |------|-------|-----------|---------|
-| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `config.yaml`, `.goat-flow/learning-loop/patterns/**`, `.goat-flow/learning-loop/decisions/`, `.goat-flow/learning-loop/footguns/**`, `.goat-flow/learning-loop/lessons/**`, the meta references at `.goat-flow/skill-docs/skill-preamble.md`, `.goat-flow/skill-docs/skill-conventions.md`, the skill-authoring methodology pack under `.goat-flow/skill-docs/skill-quality-testing/`, and the standalone playbooks indexed by `.goat-flow/skill-docs/playbooks/README.md`: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, and `skill-playbook-authoring-sync.md` | Yes | Durable project record. Source of truth across sessions. |
+| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `config.yaml`, `.goat-flow/learning-loop/patterns/**`, `.goat-flow/learning-loop/decisions/`, `.goat-flow/learning-loop/footguns/**`, `.goat-flow/learning-loop/lessons/**`, the meta references at `.goat-flow/skill-docs/skill-preamble.md`, `.goat-flow/skill-docs/skill-conventions.md`, the skill-authoring methodology pack under `.goat-flow/skill-docs/skill-quality-testing/`, and the standalone playbooks indexed by `.goat-flow/skill-docs/playbooks/README.md`: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, and `writing-style.md` | Yes | Durable project record. Source of truth across sessions. |
 | **Local session state** | `.goat-flow/plans/**`, `.goat-flow/scratchpad/**`, `.goat-flow/logs/sessions/*.md`, `.goat-flow/dashboard-state.json`, `.goat-flow/project-id` | No (gitignored by design; only anchor files such as `README.md`, `.gitignore`, and `.gitkeep` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes, session continuity logs, and dashboard runtime state. Coordinates a single work session - not project history. |
 | **Local evidence history** | `.goat-flow/logs/events/*.jsonl` | No (gitignored by design; only the directory README is committed) | Validated `EvidenceEnvelope` metadata from local runtime producers. Supports checkout-local diagnosis and recovery; it is not durable project truth or a share-safe export. |
 | **Local report history** | `.goat-flow/logs/quality/*.json`, `.goat-flow/logs/quality/*.md`, `.goat-flow/logs/critiques/*.md`, `.goat-flow/logs/review/*.txt`, `.goat-flow/logs/review/*.json`, `.goat-flow/logs/security/*.md` | No (gitignored by design; only the directory README is committed) | Saved agent quality reports, captured prose, critique snapshots from goat-critique runs, review refutation/refuter artifacts from goat-review runs, and security assessment history from goat-security runs. Feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. |
@@ -119,6 +129,8 @@ Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) 
 Local-only artifacts may prove that a named producer recorded bounded metadata at a stated time and that the record passed its local schema. They cannot prove an external tool's claim is true, authorize an external write, replace a fresh verification run, or become durable project knowledge by themselves. Promotion is explicit: extract the verified conclusion into a lesson, footgun, or decision with durable source evidence.
 
 `EvidenceEnvelope` is the only runtime event schema. Payloads contain JSON-compatible summary metadata; raw prompts, terminal output or scrollback, uploads, screenshots, JSON/HTML bodies, and tool output require hash-only `RedactedEvidenceValue` markers. Paths, labels, identifiers, warning text, and other metadata remain local-sensitive and must be scrubbed before any shareable export. There is no automatic retention or purge promise; users control cleanup of gitignored artifacts.
+
+Timing receipts are milestone-local plan state. The embedded receipt, not the local event stream, is the validation authority for a measured Actual. Removing, truncating, or moving gitignored event logs must not change a finalized receipt's validity.
 
 | Event kind | Status | Expected producer | Actor | Allowed payload budget | Redaction requirement | Intended local consumer |
 |------------|--------|-------------------|-------|------------------------|-----------------------|-------------------------|
@@ -132,13 +144,16 @@ Local-only artifacts may prove that a named producer recorded bounded metadata a
 | `audit.run` | existing | `dashboard-session-trace` | server | Cache, harness, agent, and status summary | No audit body | Dashboard audit continuity |
 | `setup.prompt` | existing | `dashboard-session-trace` | server | Agent plus rendered-output hash metadata | Output must be `RedactedEvidenceValue` | Setup-prompt continuity |
 | `quality.prompt` | existing | `dashboard-session-trace` | server | Agent, quality mode, audit status, prompt hash metadata | Prompt must be `RedactedEvidenceValue` | Quality-prompt continuity |
+| `quality.persisted` | new in 1.15.0 | `quality-draft-capture` | server | Draft identifier, finalized report path, and receipt availability | No draft or report JSON body; paths remain local-sensitive metadata | Staged-persistence recovery and diagnosis |
+| `quality.rejected` | new in 1.15.0 | `quality-draft-capture` | server | Draft identifier, fixed rejection diagnostic, and optional raw-draft hash metadata | Raw JSON must be a `RedactedEvidenceValue`; parser excerpts are forbidden | Staged-rejection diagnosis without retaining report text |
 | `index.regenerate` | existing | `dashboard-session-trace` | server | Regenerated bucket count | No bucket body | Index-maintenance diagnosis |
 | `project.save` | existing | `dashboard-session-trace` | server | Project/favourite/add/remove counts | No project-list body | Project-list continuity |
 | `project.remove` | existing | `dashboard-session-trace` | server | Removed-project count | No removed path list | Project-list continuity |
 | `project.switch` | existing | `dashboard-session-trace` | server | Readiness state and project identity metadata | No config or file body | Selected-target diagnosis |
 | `hook.verify` | new in 1.14.0 | `hooks-runtime-evidence` | cli | Scenario id, agent, expected/observed state, verdict, evidence level, duration, and reason code | No command operand, stdout, stderr, or external-agent delivery claim | Checkout-local deny-hook proof and diagnosis |
+| `plan.time` | new in 1.15.0 | `plans-time` | cli | Action, category, receipt state, segment count, and finalized raw-second total | No milestone body, work descriptions, prompts, commands, or source content | Timing-transition diagnosis; never Actual validation |
 
-Route/checkpoint/promotion event families and all other runtime event families remain **deferred**. M17 owns `hook.verify`; every future producer must add its exact event kind, producer, actor, bounded payload, redaction rule, consumer, and focused validation before extending `EvidenceEventKind`. M14 added no event kind.
+M01 timing adds `plan.time`; route/checkpoint/promotion event families and all other runtime event families remain **deferred**. Every future producer must add its exact event kind, producer, actor, bounded payload, redaction rule, consumer, and focused validation before extending `EvidenceEventKind`.
 
 ### Evidence Depth and Tool Trust
 

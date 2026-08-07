@@ -42,7 +42,7 @@ The enforcement matrix is deliberately conservative. It reports local facts such
 
 ### `goat-flow quality [path] --agent <id> [--mode <mode>]`
 
-Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. `--mode` selects the assessment contract: `agent-setup` (default), `process`, `harness`, or `skills`. The prompt keeps the completed report object in process memory, selects an exact-version compatible CLI, streams the JSON through `redact` into `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` (gitignored), then validates it before listing the file. Prose findings come back in the agent's reply; the JSON does not.
+Generate a structured quality-assessment prompt for a selected agent. Requires `--agent`. `--mode` selects the assessment contract: `agent-setup` (default), `process`, `harness`, or `skills`. The prompt keeps the completed report in memory and sends it to an exact-version `quality save` command. That bounded command strictly accepts the report shape, scrubs accepted strings, revalidates the report, and creates a gitignored file under `.goat-flow/logs/quality/`. Prose findings come back in the agent's reply; the JSON does not. Dashboard-launched enforced Claude reporting sessions use a different persistence contract (ADR-044): the session writes one staged draft with its file tool, and the dashboard server acquires an exclusive per-draft filesystem claim before running the same accept-scrub-revalidate-persist core. Competing processes skip live claims, and stale claims are rejected rather than replayed, so those prompts contain no saver command.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality . --agent claude         # Quality prompt for Claude
@@ -50,7 +50,7 @@ npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness
 npx @blundergoat/goat-flow@latest quality . --agent codex          # Quality prompt for Codex
 ```
 
-The agent derives the date/time from its shell and generates a 5-character lowercase-alphanumeric random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
+The saver derives the date/time and a random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
 
 The CLI command composes the prompt with fresh audit context. The dashboard
 Quality page may use cached audit enrichment for passive page loads, but its
@@ -144,6 +144,16 @@ Validate a saved quality report JSON file against the report schema. Checks that
 
 ```bash
 npx @blundergoat/goat-flow@latest quality validate .goat-flow/logs/quality/2026-04-01-0900-claude-aaaaa.json
+```
+
+### `goat-flow quality save <project>`
+
+Persist one current quality report supplied as JSON on stdin. The command strictly accepts the report shape in memory, scrubs accepted string values, revalidates the report, verifies its project and goat-flow versions, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. It rejects caller-selected output paths and redirected report directories.
+
+```bash
+npx @blundergoat/goat-flow@latest quality save . <<'JSON'
+{"report_kind":"goat-flow-quality-report","goat_flow_version":"<current-version>","agent":"claude","project_path":"<absolute-project-path>","run_date":"YYYY-MM-DD","audit_status":"pass","scope":"framework-self","rubric_version":"<current-version>","quality_mode":"skills","prior_report_id":null,"scores":{"setup":{"total":0,"accuracy":0,"relevance":0,"completeness":0,"friction":0},"system":{"total":0,"usefulness":0,"signal_to_noise":0,"adaptability":0,"learnability":0}},"findings":[]}
+JSON
 ```
 
 ### `goat-flow manifest [--check] [--format json]`
@@ -247,19 +257,75 @@ npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/hando
 
 Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, only the scrubbed result is persisted. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
 
-### `goat-flow plans export <plan-path> [--format markdown|json] [--output <path>] [--force]`
+### `goat-flow review validate [report-file] [--output <path>]`
 
-Convert local `M*.md` milestones into portable, redacted Markdown issue bodies or JSON records. Exports retain title, status, dependencies, objective, scope, boundary notes, task checkboxes, verification gates, and exit criteria. A missing top-level title is rejected; other missing fields remain visible as export warnings.
+Validate a drafted goat-review Markdown report from a file or stdin. Semantic anchors and the declared refutation ledger resolve against the current working directory, so run it from the reviewed project's root. Structural V1-V6/V8 failures exit `1`; advisory V7 shape warnings and unknown degradation flags are printed but retain exit `0`. By default the result prints to stdout; `--output` writes the same PASS/FAIL report to the selected file.
 
 ```bash
-npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format markdown
-npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format markdown --output .goat-flow/plans/exports/1.14.0
-npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.14.0 --format json --output .goat-flow/plans/exports/1.14.0.json
+npx @blundergoat/goat-flow@latest review validate review.md
+npx @blundergoat/goat-flow@latest review validate < review.md
+npx @blundergoat/goat-flow@latest review validate review.md --output validation.txt
+```
+
+### `goat-flow plans export <plan-path> [--format markdown|json] [--output <path>] [--force]`
+
+Convert local `M*.md` milestones into portable, redacted Markdown issue bodies or JSON records. Exports retain title, status, dependencies, objective, scope, boundary notes, task checkboxes, proof and mid-proof items, effort/Actual fields, plan/admin overhead, exit criteria, and stop/rescope conditions. Canonical `Proof` and legacy Testing/Verification Gate headings share the existing verification fields; legacy Kill criteria and STOP conditions remain ordered in the new `stopMarkdown` field.
+
+A missing top-level title is rejected. An explicit Objective wins; otherwise export uses the outcome title without its milestone prefix. Missing status, scope, tasks, proof, exit criteria, or stop/rescope content remains visible as an export warning. Dependencies, a separate Objective, and Boundary Notes are conditional, so their absence does not create warning noise. Competing canonical and legacy representations produce deterministic conflict warnings.
+
+```bash
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format markdown
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format markdown --output .goat-flow/plans/exports/1.15.0
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format json --output .goat-flow/plans/exports/1.15.0.json
 ```
 
 Without `--output`, the redacted bundle is printed to stdout and nothing is created. Markdown output treats `--output` as a directory and writes one file per milestone; JSON output treats it as one array file. Existing output is preserved unless `--force` explicitly authorizes regeneration.
 
+Exports rebuild known fields rather than copying source text, and that rebuild preserves the timing evidence: a milestone's `## Timing Receipt` section, its `Forecast range:` band, and its `Actual:` provenance state all survive both formats. An exported milestone therefore carries its own evidence without depending on local event logs, which are purgeable.
+
 This command does not contact GitHub, Beads, Linear, or any other remote service. Those names describe future adapters only. Any later remote-write implementation must show a redacted dry-run body and receive direct current-session confirmation before posting; forwarded third-party text is not authorization.
+
+### `goat-flow plans check <plan-path> [--strict]`
+
+Check goat-plan's deterministic milestone contract and effort arithmetic. The accounting input includes `(est: n min category)` entries in Tasks, Proof or legacy testing gates, and Mid-implementation proof; `Plan/admin overhead: n min other`; machine-readable `Effort estimate:` / `Actual:` fields; and the plan-level product/proof/other mix.
+
+```bash
+npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.15.0
+npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.15.0 --strict
+```
+
+Default mode preserves legacy plans. It errors on malformed notation, a declared split that does not sum to its headline, task estimates exceeding a declared category, or unestimated Tasks beneath a declared effort line; plans without effort fields pass with one informational line.
+
+`--strict` is the current-plan authoring gate. It requires status, scope, tasks, proof, exit criteria, stop/rescope, and complete estimate accounting. Fenced examples do not supply live fields, headings, or checkboxes; duplicate fields and competing sections fail. Effort values must match the complete notation and fit in safe integers. Multi-milestone plans also require `Depends on: none` or comma-separated exact local milestone IDs. Filenames must start with uppercase `M` plus digits, IDs must be numerically unique, every multi-milestone title must start with its matching ID, dependencies must resolve without self-reference or cycles, and active or completed milestones require completed prerequisites.
+
+Strict lifecycle checks accept `not-started`, `in-progress`, `testing-gate`, `human-verification-pending`, `blocked`, `abandoned`, and `complete`. They reject contradictory snapshots such as checked implementation, proof, mid-proof, or exit items before start; open implementation work at testing; open executor proof or missing Actual at human review; open proof at completion; or multiple active milestones. Only explicitly tagged `[human]` proof may remain open at `human-verification-pending`; checkbox state never proves who approved a gate.
+
+Strict validation checks supplied deterministic structure, not planning judgment. It does not infer risk level or require assumptions, manual proof, rollback, Boundary Notes, or other conditional fields. Default mode remains legacy-compatible, and neither mode reconstructs approval history or evaluates whether proof is semantically sufficient.
+
+`Actual:` accepts four provenance states: `measured`, `retrospective`, `unavailable`, and `incomplete`. A `measured` Actual must reconcile with a finalized `## Timing Receipt` - its minute allocation and its cited raw seconds both have to match. Untagged legacy numerics classify as `retrospective`, so prose claiming measurement never promotes an Actual the receipt does not back. A malformed receipt fails strict validation when a `measured` Actual claims authority from it or while the receipt is active and controls executing work. Hand-written historical receipts sitting beside retrospective Actuals stay advisory, so finished plans are not invalidated by evidence nothing depends on.
+
+The optional `Forecast range:` band is validated only when present, leaving point-estimate plans strict-valid without migration. When present, `low <= likely <= high` must hold and `likely` must equal the `Effort estimate` headline.
+
+Calibration output is informational and never affects the exit code. It reports estimate-to-Actual ratios computed from raw receipt seconds, a plan median, and observed bounds, drawing only on `complete` milestones with `measured` Actuals - `complete` is the human ratification signal, so `human-verification-pending` never qualifies. Below three eligible samples the report reads `uncalibrated` rather than offering a multiplier.
+
+Plan-level drift beyond 15 percentage points produces an advisory with exit 0. Roughly 70/20/10 is a flexible diagnostic guide, never a quota or pass/fail rule: consolidate duplicated proof, but retain and explain proof justified by the task's risk. This command remains user-invoked and outside `audit` because plans are optional local workflow state. The report prints to stdout; `--output` and `--force` are rejected.
+
+### `goat-flow plans time <start|stop|status> <milestone-file> [--category <c>] [--finalize|--discard-open]`
+
+System-stamp active-work spans into one milestone's `## Timing Receipt`. The CLI supplies UTC and epoch seconds; the agent supplies only the category. Because the receipt lives inside the milestone file, it survives log purges and moves with the plan.
+
+`plans time start` requires exactly one rendered `Status:` field set to `in-progress` or `testing-gate`; fenced and commented examples do not count. Status, stop, finalize, and discard recovery remain available after lifecycle drift. Stop or finalize the clock before changing status to `human-verification-pending`, `blocked`, `abandoned`, or `complete`; strict validation rejects active human-wait and terminal snapshots so those waits cannot inflate measured Actual time.
+
+```bash
+goat-flow plans time start .goat-flow/plans/<active>/M01-example.md --category product
+goat-flow plans time status .goat-flow/plans/<active>/M01-example.md
+goat-flow plans time stop .goat-flow/plans/<active>/M01-example.md
+goat-flow plans time stop .goat-flow/plans/<active>/M01-example.md --finalize
+```
+
+One span is open at a time. `stop` then `start` performs a pause, a resume, or a category change; switch category when the kind of work changes, since a single span across mixed work produces a `measured` split that measured nothing. `stop --finalize` closes the timeline at the human gate. `stop --discard-open` drops a span with no honest end time - a crash, a suspend, a forgotten pause - and permanently marks the receipt `incomplete`; no recovery path invents an end time.
+
+The milestone path is resolved inside its containing project, and symlinked or hardlinked milestone paths are rejected so a write cannot be redirected outside that root. Each transition also appends a metadata-only `plan.time` event to the local evidence log, but strict validation never reads it: the embedded receipt is the only authority, and deleting local events cannot rot a finalized `measured` Actual. Receipts carry bounded timing metadata only - never prompts, commands, output, or work descriptions.
 
 ### `goat-flow events tail [path] [--limit <n>] [--format json]`
 

@@ -16,9 +16,7 @@ import {
   QUALITY_MODES,
   QUALITY_REPORT_KIND,
   QUALITY_SCOPES,
-  QUALITY_SCORE_VALUES,
   type ParseResult,
-  type QualityAxisScore,
   type QualityDeltaTag,
   type QualityEvidenceMethod,
   type QualityFinding,
@@ -30,234 +28,54 @@ import {
   type QualitySetupScores,
   type QualitySystemScores,
 } from "./schema-types.js";
+import {
+  expectAxisScore,
+  expectEnumValue,
+  expectNonEmptyString,
+  expectNullablePositiveInteger,
+  expectNullableString,
+  expectOptionalNonEmptyString,
+  expectOptionalNonNegativeInteger,
+  expectScoreTotal,
+  isRecord,
+  rejectUnknownKeys,
+} from "./schema-expectations.js";
 
 /**
- * Decide whether parsed JSON can be read as a named-field report object.
- * Use before field validation so malformed agent output becomes one clear user-facing error.
+ * Confirm a formatted run date names a real Gregorian calendar day.
+ * Use for new report admission and when legacy history tries to prove consecutive runs.
+ * It reads no files and changes no report state.
  *
- * @param candidate - value from JSON parsing; `null`, arrays, or primitives mean there is no report object to show
- * @returns whether the value has named fields; `false` means validation stops before reading report keys
+ * @param runDate - `YYYY-MM-DD` text from a report; empty or malformed values are not real dates
+ * @returns true for a real day; false means reject a new report or break legacy streak continuity
  */
-function isRecord(candidate: unknown): candidate is Record<string, unknown> {
-  return (
-    typeof candidate === "object" &&
-    candidate !== null &&
-    !Array.isArray(candidate)
-  );
-}
+export function isRealCalendarDate(runDate: string): boolean {
+  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(runDate);
+  // Without three formatted parts, the user has not supplied a comparable calendar date.
+  if (!dateMatch) return false;
 
-/**
- * Find unsupported keys in one report object.
- * Use when validating agent output so extra fields do not silently appear in saved quality history.
- *
- * @param value - report object to inspect; an empty object has no unknown keys but may fail required fields later
- * @param allowedKeys - keys the UI and history readers understand; empty means no keys are accepted
- * @param path - schema path shown in the error; empty would produce a less useful user message
- * @returns error text for the first unknown-key group, or `null` when all keys are displayable
- */
-function rejectUnknownKeys(
-  value: Record<string, unknown>,
-  allowedKeys: readonly string[],
-  path: string,
-): string | null {
-  // Extra keys would make the saved report promise fields the UI cannot display.
-  const unknown = Object.keys(value).filter(
-    (key) => !allowedKeys.includes(key),
-  );
-  // No unsupported fields were found, so validation can continue to required user-visible fields.
-  if (unknown.length === 0) return null;
-  return `${path} has unknown key(s): ${unknown.join(", ")}`;
-}
-
-/**
- * Read a required string field from an agent report.
- * Use for values the CLI prints or stores exactly, such as summaries and dates.
- *
- * @param value - raw field value; `null`, missing, or non-string values become a path-specific error
- * @param path - schema path shown to the user; empty makes the failure harder to fix
- * @returns parsed string, or an error that tells the user which report field is wrong
- */
-function expectString(
-  value: unknown,
-  path: string,
-): { ok: true; value: string } | { ok: false; error: string } {
-  // Non-string report fields cannot be rendered safely in quality history.
-  if (typeof value !== "string") {
-    return { ok: false, error: `${path} must be a string` };
-  }
-  return { ok: true, value };
-}
-
-/**
- * Read text that must be visible to the user.
- * Use for report fields where blank text would leave a card, table row, or history entry unexplained.
- *
- * @param value - raw report value; `null`, missing, or blank text means the user would see an empty label
- * @param path - schema path shown in validation output; empty makes the remediation unclear
- * @returns non-empty string, or a path-specific error for the quality command
- */
-function expectNonEmptyString(
-  value: unknown,
-  path: string,
-): { ok: true; value: string } | { ok: false; error: string } {
-  const parsed = expectString(value, path);
-  // Type errors are already user-ready, so keep the original field-specific message.
-  if (!parsed.ok) return parsed;
-  // Blank text would produce an unexplained quality row, so reject it before saving.
-  if (parsed.value.trim().length === 0) {
-    return { ok: false, error: `${path} must not be empty` };
-  }
-  return { ok: true, value: parsed.value };
-}
-
-/**
- * Read a field whose value must match the quality UI vocabulary.
- * Use for statuses, severities, modes, and evidence labels that drive badges and filters.
- *
- * @param value - raw report value; missing or unknown text means the UI has no badge to show
- * @param path - schema path shown in validation output; empty hides where the bad value came from
- * @param values - allowed display values; empty means every candidate is rejected
- * @returns one allowed value, or a path-specific error listing the accepted choices
- */
-function expectEnumValue<T extends string>(
-  value: unknown,
-  path: string,
-  values: readonly T[],
-): { ok: true; value: T } | { ok: false; error: string } {
-  // Unknown enum text cannot be mapped to a stable badge, filter, or report mode.
-  if (typeof value !== "string" || !values.includes(value as T)) {
-    return {
-      ok: false,
-      error: `${path} must be one of: ${values.join(", ")}`,
-    };
-  }
-  return { ok: true, value: value as T };
-}
-
-/**
- * Read optional text where `null` is a meaningful blank state.
- * Use for fields like file paths where absence means the finding is project-wide.
- *
- * @param value - raw field value; `null` means no user-visible file value is attached
- * @param path - schema path shown in validation output; empty makes a bad optional field hard to fix
- * @returns non-empty string or `null`; errors when the field cannot be shown safely
- */
-function expectNullableString(
-  value: unknown,
-  path: string,
-): { ok: true; value: string | null } | { ok: false; error: string } {
-  // Null is the report's explicit "no specific text to show" state.
-  if (value === null) return { ok: true, value: null };
-  const parsed = expectNonEmptyString(value, path);
-  // Preserve the path-specific message so the user can repair the emitted report.
-  if (!parsed.ok) return parsed;
-  return { ok: true, value: parsed.value };
-}
-
-/**
- * Read an optional positive line number.
- * Use for finding rows where `null` means the issue applies to a whole file or project.
- *
- * @param value - raw field value; `null` means the UI should omit the line suffix
- * @param path - schema path shown in validation output; empty makes the bad number hard to locate
- * @returns positive integer or `null`; errors for zero, negative, fractional, or non-number values
- */
-function expectNullablePositiveInteger(
-  value: unknown,
-  path: string,
-): { ok: true; value: number | null } | { ok: false; error: string } {
-  // Null keeps project-wide findings visible without inventing a line number.
-  if (value === null) return { ok: true, value: null };
-  // Non-positive or fractional lines cannot point the user to a real source location.
-  if (!Number.isInteger(value) || Number(value) <= 0) {
-    return { ok: false, error: `${path} must be a positive integer or null` };
-  }
-  return { ok: true, value: Number(value) };
-}
-
-/**
- * Read optional text that may be absent on legacy reports.
- * Use for evidence fields where missing means the old report cannot show that detail.
- *
- * @param value - raw field value; `undefined` means the UI leaves the optional evidence field blank
- * @param path - schema path shown in validation output; empty hides the invalid optional field
- * @returns non-empty string or `undefined`; errors when present text would render empty
- */
-function expectOptionalNonEmptyString(
-  value: unknown,
-  path: string,
-): { ok: true; value: string | undefined } | { ok: false; error: string } {
-  // Missing legacy evidence stays blank instead of failing old history reads.
-  if (value === undefined) return { ok: true, value: undefined };
-  const parsed = expectNonEmptyString(value, path);
-  // Keep the exact field error so the report author can fix the emitted JSON.
-  if (!parsed.ok) return parsed;
-  return { ok: true, value: parsed.value };
-}
-
-/**
- * Read an optional count or exit code that may be absent on legacy reports.
- * Use when the UI can show the number when present and omit it when absent.
- *
- * @param value - raw field value; `undefined` means no count is shown for this report
- * @param path - schema path shown in validation output; empty hides the invalid numeric field
- * @returns non-negative integer or `undefined`; errors for negative, fractional, or non-number values
- */
-function expectOptionalNonNegativeInteger(
-  value: unknown,
-  path: string,
-): { ok: true; value: number | undefined } | { ok: false; error: string } {
-  // Missing legacy count fields stay absent so old reports still open.
-  if (value === undefined) return { ok: true, value: undefined };
-  // Negative or fractional counts cannot be displayed as reliable evidence.
-  if (!Number.isInteger(value) || Number(value) < 0) {
-    return { ok: false, error: `${path} must be a non-negative integer` };
-  }
-  return { ok: true, value: Number(value) };
-}
-
-/**
- * Read one rubric-axis score.
- * Use for the setup and system score breakdown that users compare across quality runs.
- *
- * @param value - raw score value; missing or unknown scores make the totals misleading
- * @param path - schema path shown in validation output; empty hides which axis failed
- * @returns accepted axis score, or an error listing the score values the UI supports
- */
-function expectAxisScore(
-  value: unknown,
-  path: string,
-): { ok: true; value: QualityAxisScore } | { ok: false; error: string } {
-  // Unknown score values cannot be compared on the quality scale.
-  if (
-    !Number.isInteger(value) ||
-    !QUALITY_SCORE_VALUES.includes(Number(value) as QualityAxisScore)
-  ) {
-    return {
-      ok: false,
-      error: `${path} must be one of: ${QUALITY_SCORE_VALUES.join(", ")}`,
-    };
-  }
-  return { ok: true, value: Number(value) as QualityAxisScore };
-}
-
-/**
- * Read a 0-100 score total.
- * Use for the headline quality score that appears in CLI history and dashboard summaries.
- *
- * @param value - raw total value; missing or out-of-range totals would mislead the user
- * @param path - schema path shown in validation output; empty hides which total failed
- * @returns integer score total, or an error when the headline score cannot be displayed
- */
-function expectScoreTotal(
-  value: unknown,
-  path: string,
-): { ok: true; value: number } | { ok: false; error: string } {
-  // The headline score must fit the 0-100 scale the UI labels and compares.
-  if (!Number.isInteger(value) || Number(value) < 0 || Number(value) > 100) {
-    return { ok: false, error: `${path} must be an integer between 0 and 100` };
-  }
-  return { ok: true, value: Number(value) };
+  const year = Number(dateMatch[1]);
+  const month = Number(dateMatch[2]);
+  const day = Number(dateMatch[3]);
+  const februaryDays =
+    year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28;
+  const daysPerMonth = [
+    31,
+    februaryDays,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
+  // An out-of-range month has no valid maximum day for the report to claim.
+  const maximumDay = daysPerMonth[month - 1] ?? 0;
+  return year > 0 && day > 0 && day <= maximumDay;
 }
 
 /**
@@ -683,6 +501,16 @@ function parseReportInternal(
   // The date must sort predictably in history lists and comparisons.
   if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate.value)) {
     return { ok: false, error: "report.run_date must be YYYY-MM-DD" };
+  }
+  // Newly saved reports must name a real day; legacy history stays readable under format-only rules.
+  if (
+    options.requireCurrentFields === true &&
+    !isRealCalendarDate(runDate.value)
+  ) {
+    return {
+      ok: false,
+      error: "report.run_date must be a real calendar date in YYYY-MM-DD",
+    };
   }
   const auditStatus = expectEnumValue(
     raw.audit_status,

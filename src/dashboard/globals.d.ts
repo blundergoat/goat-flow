@@ -280,6 +280,8 @@ interface QualityResult {
   auditCacheStatus: "hit" | "miss" | "bypass";
   auditSummary: string;
   prompt: string;
+  /** Staged-draft persistence variant used when launching a Claude reporting session (ADR-044). */
+  launchPrompt: string;
 }
 
 /** One row in the quality-history trend table from `/api/quality/history`. */
@@ -313,6 +315,9 @@ interface QualityHistoryLatest {
 // ---------------------------------------------------------------------------
 
 /** Server-side terminal session info, enriched by `/api/terminal/sessions`. */
+type TerminalAccessMode = "workspace" | "reporting";
+
+/** Server session contract preserved before browser-local reconnect state is merged. */
 interface ServerSessionInfo {
   id: string;
   status: SessionStatus;
@@ -321,6 +326,11 @@ interface ServerSessionInfo {
   cwd: string;
   targetPath: string;
   runner: RunnerId;
+  accessMode: TerminalAccessMode;
+  /** Whether retry/reconnect must restore dashboard-owned quality draft capture. */
+  captureQualityDrafts: boolean;
+  /** Mode-selected report owner, or null when the launch did not declare one. */
+  qualityReportProjectPath: string | null;
   lastInputAt: number;
   age?: number | undefined;
   idleDuration?: number | undefined;
@@ -341,6 +351,10 @@ interface LocalSession
   projectPath: string;
   cwd: string;
   targetPath: string;
+  accessMode: TerminalAccessMode;
+  captureQualityDrafts: boolean;
+  /** Owner retained across retries so Codex and Claude keep the same quality destination. */
+  qualityReportProjectPath: string | null;
   startTime: number;
   lastInputTime: number;
   outputTail?: string;
@@ -372,6 +386,9 @@ interface TerminalRefs {
   retryPresetId?: string | null;
   retryCwdPath?: string | null;
   retryTargetPath?: string | null;
+  retryAccessMode?: TerminalAccessMode;
+  retryCaptureQualityDrafts?: boolean;
+  retryQualityReportProjectPath?: string | null;
   loadingSlowTimer?: ReturnType<typeof setTimeout> | undefined;
   loadingRetryTimer?: ReturnType<typeof setTimeout> | undefined;
   launchPromptFallbackTimer?: ReturnType<typeof setTimeout> | undefined;
@@ -387,6 +404,10 @@ interface SavedSession {
   agent: RunnerId;
   cwd: string;
   targetPath: string;
+  accessMode: TerminalAccessMode;
+  captureQualityDrafts: boolean;
+  /** Owner retained while the user switches projects; null means no quality owner was declared. */
+  qualityReportProjectPath: string | null;
 }
 
 // ---------------------------------------------------------------------------

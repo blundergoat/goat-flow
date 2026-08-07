@@ -103,7 +103,7 @@ describe("hooks runtime evidence", () => {
     command: "git push",
   };
 
-  /** Fixture proves a symlinked hook script cannot smuggle execution outside the checkout. */
+  /** Fixture writes a symlinked hook script and proves it cannot smuggle execution outside the checkout. */
   it("rejects a symlinked hook script pointing outside the checkout", () => {
     const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-hook-symlink-"));
     const outsidePath = mkdtempSync(join(tmpdir(), "goat-flow-hook-outside-"));
@@ -141,7 +141,7 @@ describe("hooks runtime evidence", () => {
     }
   });
 
-  /** Control fixture keeps regular in-checkout hook scripts executable after the symlink guard. */
+  /** Control fixture writes a regular in-checkout hook script, still executable after the symlink guard. */
   it("still executes a regular in-checkout hook script", () => {
     const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-hook-regular-"));
 

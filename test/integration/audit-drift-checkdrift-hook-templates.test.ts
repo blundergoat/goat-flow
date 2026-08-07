@@ -13,6 +13,7 @@ import {
   HOOK_STUB,
   it,
   join,
+  mkdirSync,
   rmSync,
   setupFixture,
   writeFileSync,
@@ -20,6 +21,71 @@ import {
 } from "./audit-drift.helpers.ts";
 
 describe("checkDrift: hook templates", () => {
+  // Fixture writes stale settings because the stable drift contract must fail at 60s and pass at 90s.
+  it("reports stale managed hook timeouts and accepts the registry value", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+      const claudeSettingsDirectory = join(root, ".claude");
+      const claudeSettingsPath = join(claudeSettingsDirectory, "settings.json");
+      mkdirSync(claudeSettingsDirectory, { recursive: true });
+      const claudeSettings = {
+        hooks: {
+          Stop: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command: "bash .goat-flow/hooks/post-turn-safety.sh",
+                  timeout: 60,
+                },
+              ],
+            },
+          ],
+        },
+      };
+      writeFileSync(
+        claudeSettingsPath,
+        `${JSON.stringify(claudeSettings, null, 2)}\n`,
+      );
+
+      const staleTimeoutReport = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(staleTimeoutReport.status, "fail");
+      assert.ok(
+        staleTimeoutReport.findings.some(
+          (finding) =>
+            finding.kind === "content" &&
+            finding.path === ".claude/settings.json" &&
+            finding.message.includes("60s") &&
+            finding.message.includes("90s"),
+        ),
+        `expected timeout drift, findings=${JSON.stringify(staleTimeoutReport.findings)}`,
+      );
+
+      claudeSettings.hooks.Stop[0]!.hooks[0]!.timeout = 90;
+      writeFileSync(
+        claudeSettingsPath,
+        `${JSON.stringify(claudeSettings, null, 2)}\n`,
+      );
+      const currentTimeoutReport = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(
+        currentTimeoutReport.status,
+        "pass",
+        `registry timeout should be drift-clean: ${JSON.stringify(currentTimeoutReport.findings)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("reports pass when installed hook scripts and Copilot config match templates", () => {
     const root = setupFixture();
     try {
@@ -154,7 +220,7 @@ describe("checkDrift: hook templates", () => {
     }
   });
 
-  // A stale optional script for an unsupported lifecycle must not fail an agent-scoped audit.
+  // Covers a stale optional script for an unsupported lifecycle: writes it; an agent audit must ignore it.
   it("ignores registry hook scripts unsupported by the selected agent", () => {
     const root = setupFixture();
     try {

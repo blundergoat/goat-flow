@@ -6,7 +6,7 @@
  * user-facing payload shape.
  */
 import type { AgentId } from "../types.js";
-import type { ClientMessage, Runner } from "./types.js";
+import type { ClientMessage, Runner, TerminalAccessMode } from "./types.js";
 
 type DecodeResult<T> =
   { ok: true; value: T } | { ok: false; error: string; path: string };
@@ -17,6 +17,9 @@ interface TerminalCreateBody {
   projectPath: string;
   targetPath: string;
   runner: Runner;
+  accessMode: TerminalAccessMode;
+  captureQualityDrafts: boolean;
+  qualityReportProjectPath: string;
 }
 
 /** Dashboard project-list state after omitted optional collections use their state-file fallbacks. */
@@ -75,7 +78,7 @@ function err(
 }
 
 /**
- * Parse a JSON request body without throwing through the route handler.
+ * Parse a JSON request body. Swallows parse errors into the shared decoder failure shape.
  * Use at every dashboard ingress so malformed user/browser payloads become field errors.
  *
  * @param body - raw request body; empty or invalid text means there is no usable payload to process
@@ -156,7 +159,7 @@ function decodeStringArrayField(
  */
 function decodeOptionalStringField(
   raw: Record<string, unknown>,
-  key: "prompt" | "projectPath" | "targetPath",
+  key: "prompt" | "projectPath" | "targetPath" | "qualityReportProjectPath",
 ): DecodeResult<string> {
   // Missing optional terminal fields mean "use the route default" instead of blocking launch.
   if (!Object.hasOwn(raw, key)) {
@@ -167,6 +170,68 @@ function decodeOptionalStringField(
     : err(`body.${key}`, "must be a string");
 }
 
+/** Decode the optional filesystem policy requested for one terminal session. */
+function decodeTerminalAccessMode(
+  raw: Record<string, unknown>,
+): DecodeResult<TerminalAccessMode> {
+  if (!Object.hasOwn(raw, "accessMode")) {
+    return { ok: true, value: "workspace" };
+  }
+  if (raw.accessMode === "workspace" || raw.accessMode === "reporting") {
+    return { ok: true, value: raw.accessMode };
+  }
+  return err("body.accessMode", 'must be either "workspace" or "reporting"');
+}
+
+/**
+ * Resolve the runner for a terminal launch, defaulting only when the field is absent.
+ *
+ * An unknown runner would create a terminal the dashboard cannot label or launch,
+ * so it stays an error rather than silently falling back to the default.
+ */
+function decodeTerminalRunner(
+  raw: Record<string, unknown>,
+  options: { validRunners: ReadonlySet<string>; defaultRunner: AgentId },
+): DecodeResult<AgentId> {
+  // Missing runner means use the dashboard's active/default runner.
+  if (!Object.hasOwn(raw, "runner")) {
+    return { ok: true, value: options.defaultRunner };
+  }
+  // Runner ids must be strings so they can be matched against configured agents.
+  if (typeof raw.runner !== "string") {
+    return err("body.runner", "must be a string");
+  }
+  if (!options.validRunners.has(raw.runner)) {
+    return err(
+      "body.runner",
+      `unknown runner: ${raw.runner}. Valid: ${Array.from(options.validRunners).join(", ")}`,
+    );
+  }
+  return { ok: true, value: raw.runner as AgentId };
+}
+
+/**
+ * Decode whether this launch should start staged quality-draft capture.
+ *
+ * Only the dashboard's quality flow sends `true`, because only its prompt tells
+ * the agent to write a draft (ADR-044). Access mode cannot stand in for this:
+ * every preset without write permission - and every custom prompt, which
+ * resolves to no preset at all - is a reporting session, so deriving capture
+ * from access mode would create a staging tree in each selected target.
+ */
+function decodeTerminalCaptureQualityDrafts(
+  raw: Record<string, unknown>,
+): DecodeResult<boolean> {
+  // Absent means an ordinary launch; capture is opt-in.
+  if (!Object.hasOwn(raw, "captureQualityDrafts")) {
+    return { ok: true, value: false };
+  }
+  if (typeof raw.captureQualityDrafts === "boolean") {
+    return { ok: true, value: raw.captureQualityDrafts };
+  }
+  return err("body.captureQualityDrafts", "must be a boolean");
+}
+
 /**
  * Decode a request to open a dashboard terminal.
  * Use when the user clicks a terminal action so invalid runner names fail before any session starts.
@@ -175,6 +240,7 @@ function decodeOptionalStringField(
  * @param options - allowed runners plus fallback; empty runner set means every explicit runner is rejected
  * @returns terminal-create payload, or an error the route can show without starting a session
  */
+// eslint-disable-next-line complexity -- Intentional because flat launch checks preserve one error path per rejected relationship.
 export function decodeTerminalCreateBody(
   body: string,
   options: { validRunners: ReadonlySet<string>; defaultRunner: AgentId },
@@ -200,22 +266,56 @@ export function decodeTerminalCreateBody(
   // Invalid target path types would open the runner in the wrong place.
   if (!targetPath.ok) return targetPath;
 
-  // Invalid runner names stay errors; the default only applies when the field is absent.
-  let runner: AgentId = options.defaultRunner;
-  // Missing runner means use the dashboard's active/default runner.
-  if (Object.hasOwn(raw, "runner")) {
-    // Runner ids must be strings so they can be matched against configured agents.
-    if (typeof raw.runner !== "string") {
-      return err("body.runner", "must be a string");
-    }
-    // Unknown runners would create a terminal the dashboard cannot label or launch.
-    if (!options.validRunners.has(raw.runner)) {
-      return err(
-        "body.runner",
-        `unknown runner: ${raw.runner}. Valid: ${Array.from(options.validRunners).join(", ")}`,
-      );
-    }
-    runner = raw.runner as AgentId;
+  const runner = decodeTerminalRunner(raw, options);
+  if (!runner.ok) return runner;
+
+  const accessMode = decodeTerminalAccessMode(raw);
+  if (!accessMode.ok) return accessMode;
+
+  const captureQualityDrafts = decodeTerminalCaptureQualityDrafts(raw);
+  if (!captureQualityDrafts.ok) return captureQualityDrafts;
+  if (
+    captureQualityDrafts.value &&
+    (runner.value !== "claude" || accessMode.value !== "reporting")
+  ) {
+    return err(
+      "body.captureQualityDrafts",
+      "is supported only for Claude reporting sessions",
+    );
+  }
+
+  const qualityReportProjectPath = decodeOptionalStringField(
+    raw,
+    "qualityReportProjectPath",
+  );
+  // A non-string owner cannot be matched safely to the projects visible in the launch.
+  if (!qualityReportProjectPath.ok) return qualityReportProjectPath;
+  const hasQualityReportOwner =
+    qualityReportProjectPath.value.trim().length > 0;
+  // Claude draft capture needs one owner so its receipt cannot land in an inferred project.
+  if (captureQualityDrafts.value && !hasQualityReportOwner) {
+    return err(
+      "body.qualityReportProjectPath",
+      "is required when staged-draft capture is enabled",
+    );
+  }
+  // Report ownership only has meaning in the read-mostly reporting mode shown by Quality.
+  if (hasQualityReportOwner && accessMode.value !== "reporting") {
+    return err(
+      "body.qualityReportProjectPath",
+      "is supported only for reporting sessions",
+    );
+  }
+  // Other runners have no enforceable report-owner channel, so accepting one would overstate isolation.
+  if (
+    hasQualityReportOwner &&
+    runner.value !== "claude" &&
+    runner.value !== "codex"
+  ) {
+    return err(
+      "body.qualityReportProjectPath",
+      "is supported only for Claude or Codex reporting sessions",
+    );
   }
 
   return {
@@ -224,7 +324,10 @@ export function decodeTerminalCreateBody(
       prompt: prompt.value,
       projectPath: projectPath.value,
       targetPath: targetPath.value,
-      runner,
+      runner: runner.value,
+      accessMode: accessMode.value,
+      captureQualityDrafts: captureQualityDrafts.value,
+      qualityReportProjectPath: qualityReportProjectPath.value,
     },
   };
 }

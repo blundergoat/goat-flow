@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.14.0"
+goat-flow-reference-version: "1.15.0"
 ---
 # Skill Preamble
 
@@ -18,7 +18,7 @@ An active goat-* skill's Step 0 replaces READ and selects mode/depth. SCOPE stil
 
 ## Durable Local Text Redaction
 
-Before durable local text, require `goat-flow --version` to match this reference's `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Send the in-memory draft through stdin to `goat-flow redact --output <destination>`. Only redacted output reaches disk; never stage raw text. Otherwise keep the text non-durable.
+Before durable local text, require `goat-flow --version` to match this reference's `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. In the framework checkout, `node --import tsx src/cli/cli.ts` also qualifies only when `package.json` names `@blundergoat/goat-flow`, the source entry exists, and its version matches. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or the equivalent selected source command. Only redacted output reaches disk; never stage raw text. If neither CLI qualifies, do not write and report `persist-skipped: redactor-unavailable` in the skill's integrity output.
 
 ## Severity Scale
 
@@ -30,12 +30,14 @@ Order findings by severity, not by file or discovery order.
 
 - NEVER suppress linter warnings or bypass types (e.g., casts) without a same-line `-- rationale` naming the load-bearing reason
 - Read surrounding files; keep updates surgical, idiomatic, and convention-aligned
+- Human-read skill output - reports, `ISSUE.md`, milestone and testing-plan narrative, decision records, learning-loop entry bodies, and release or changelog text - follows `.goat-flow/skill-docs/playbooks/writing-style.md`; fixed schema fields, exact paths, commands, approved requirements and acceptance/proof/verification/exit criteria, task/proof checklists, tables, catalogues, and deliberate control repetition stay exempt
 
 ## Evidence Standard
 
 - Live findings and durable learning-loop artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function name, or unique string); line numbers are navigation hints only.
 - For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible tasks, check `.goat-flow/skill-docs/playbooks/browser-use.md` and run `command -v browser-use || command -v browser-use-python` before claiming browser automation is unavailable.
 - MUST NOT fabricate paths, symbols, or content; re-read every cited file and anchor before presenting findings.
+- Findings whose load-bearing claim is an absence MUST be re-derived by the host: read the region or search the exact symbol expecting zero lines; subagent negatives and broad-pattern hits are not evidence.
 - Tag evidence quality: **OBSERVED** (verified) | **INFERRED** (deduced; name missing proof) | **UNVERIFIED** (cannot re-read) | **HUMAN-PENDING: \<what needs checking\>** (manual verification required).
 - When citing a cross-reference code from another skill's output (e.g. S-03, Q2, A.F3), include the source file path on first use
 - Verify symbols, CLI flags, and config keys against repo search, `--help`, or live config.
@@ -89,7 +91,7 @@ Use complexity only for **pre-invocation routing**. An explicitly invoked skill 
 |------------|----------|
 | Hotfix | Skip goat-plan and goat-critique. |
 | Small Feature | goat-plan: 1-2 milestones, minimal ceremony. Skip goat-critique. |
-| Standard | goat-plan: full milestones with testing gates. Don't auto-chain goat-critique. |
+| Standard | goat-plan: full milestones with claim-based Proof. Don't auto-chain goat-critique. |
 | System / Infrastructure | goat-plan: full milestones + cross-boundary verification + rollback. Don't auto-chain goat-critique. |
 
 ## Depth Choice

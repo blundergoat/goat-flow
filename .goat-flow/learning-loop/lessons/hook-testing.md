@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-07-14
+last_reviewed: 2026-08-06
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -61,7 +61,7 @@ last_reviewed: 2026-07-14
 
 **Root cause:** I treated "did any toggle change?" as the only outcome, but the loop also had side effects that had to run for every hook spec. Short-circuiting preserved the boolean result and lost later generated config entries.
 
-**Prevention:** When refactoring generated-state or drift-render code, separate "apply all mutations" from "did anything change?" helpers. Do not use short-circuiting array methods (`some`, `find`, `every`) when each item may need to mutate the rendered artifact. Add focused drift tests that include at least two enabled optional hooks so skipped later entries fail visibly. Evidence anchors: `src/cli/audit/check-drift.ts` (search: `applyExplicitHookToggles`) and `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `allows Copilot hook config entries for enabled optional hooks`).
+**Prevention:** When refactoring generated-state or drift-render code, separate "apply all mutations" from "did anything change?" helpers. Do not use short-circuiting array methods (`some`, `find`, `every`) when each item may need to mutate the rendered artifact. Add focused drift tests that include at least two enabled optional hooks so skipped later entries fail visibly. Evidence anchors: `src/cli/audit/check-drift-hooks.ts` (search: `applyExplicitHookToggles`) and `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `allows Copilot hook config entries for enabled optional hooks`).
 
 ## Lesson: deny-dangerous self-test missed a whole false-positive class while green
 
@@ -71,7 +71,7 @@ last_reviewed: 2026-07-14
 
 **Root cause:** The corpus over-indexed on dangerous block cases plus a few canonical allow cases. Parser regressions surface as false positives on benign-but-structurally-varied input (operators inside substitutions, arithmetic, redirects on allowlisted reads), which the curated allow set did not vary.
 
-**Prevention:** For guardrail parsers, vary shell *structure* in the allow corpus, not just verbs: substitutions with/without inner operators, quoted vs unquoted, arithmetic expansion, process substitution, and redirects (`2>&1`, `2>/dev/null`, redirect-to-other-file) on allowlisted-readable files - each paired with its dangerous counterpart. A green smoke run proves only the cases present. Also: when a report fingers a downstream rule (a catch-all), trace the token that rule sees back to the tokenizer before relaxing it - here the catch-all was correct and the orphan `$(` was manufactured upstream by the segment splitter. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`), (search: `arithmetic expansion`), (search: `.env.example read with stderr dup`); root-cause anchor in `.goat-flow/learning-loop/footguns/deny-dangerous.md` (search: `track substitution depth`).
+**Prevention:** For guardrail parsers, vary shell *structure* in the allow corpus, not just verbs: substitutions with/without inner operators, quoted vs unquoted, arithmetic expansion, process substitution, and redirects (`2>&1`, `2>/dev/null`, redirect-to-other-file) on allowlisted-readable files - each paired with its dangerous counterpart. A green smoke run proves only the cases present. Also: when a report fingers a downstream rule (a catch-all), trace the token that rule sees back to the tokenizer before relaxing it - here the catch-all was correct and the orphan `$(` was manufactured upstream by the segment splitter. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`), (search: `arithmetic expansion`), (search: `.env.example read with stderr dup`); root-cause anchor in `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `track substitution depth`).
 
 ---
 
@@ -125,6 +125,8 @@ last_reviewed: 2026-07-14
 
 **Updated 2026-07-14:** M26's first disposable-target walkthrough repeated the same failure: the live PreToolUse hook rejected an all-in-one managed-setup validation command before any fixture was created. Moving the reviewed steps into `.goat-flow/scratchpad/m26-managed-setup-manual.sh` and invoking that file directly applied the existing prevention without weakening the hook.
 
+**Updated 2026-08-03:** PR-thread verification piped the bundled GitHub comment snapshot directly into an inline Node parser, so the live guard rejected the outer command before the read-only parser ran. Persisting the snapshot under `.goat-flow/logs/review/` and reading it through stdin redirection preserved the same local workflow without an interpreter pipe. The first retry also assumed a `python` shim that this host does not provide; use the interpreter returned by `command -v python3 || command -v python` before invoking a bundled Python workflow.
+
 ---
 
 ## Lesson: Format patched hook test fixtures before full preflight
@@ -171,6 +173,8 @@ last_reviewed: 2026-07-14
 
 **Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. Verify the workflow and installed mirrors with the same no-`-x` ShellCheck command used by preflight. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
 
+**Updated 2026-08-07:** Release ShellCheck caught SC2016 because gruff guidance put Markdown backticks inside a single-quoted `printf` in both hook mirrors. Escape command backticks in a double-quoted string, then lint the full workflow and installed hook sets before treating the mirrors as ready. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`) and `.goat-flow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`).
+
 **Updated 2026-05-27:** M12 moved git parsing into `deny-dangerous.sh`, but ShellCheck still warned in thin hooks with SC2154 because helper-owned output variables (`__goat_git_rest`, `__goat_git_aliased_push`) were assigned dynamically in the sourced file. Initialize helper output variables in each thin hook before first reference so static analysis sees the contract. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_aliased_push=0`) and `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `__goat_git_rest=""`).
 
 ## Lesson: Shared hook helpers need missing-dependency runtime tests
@@ -191,7 +195,7 @@ last_reviewed: 2026-07-14
 
 **Root cause:** I assumed the Claude-style hook command string was safe for Codex too. The audit parser only needed to see the hook script path, but the runtime needed a command shape Codex can execute directly.
 
-**Updated 2026-06-09:** This lesson is narrowed, not a blanket ban on all shell substitution. Current Codex docs say hook commands run with the session cwd and repo-local hooks should resolve from the git root; bare `.goat-flow/hooks/...` commands fail from nested cwd. The current safe Codex shape is a `bash -c` wrapper that resolves `git rev-parse --show-toplevel`, checks `$root/.goat-flow/hooks/<script>`, `cd`s to `$root`, and then invokes `bash "$root/.goat-flow/hooks/<script>"`. Do not copy Claude-only `$CLAUDE_PROJECT_DIR` fallback into Codex unless Codex documents an equivalent project-root variable. Evidence anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `git rev-parse --show-toplevel`), `.codex/hooks.json` (search: `git rev-parse --show-toplevel`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `direct configured command is replayed from nested cwd`).
+**Updated 2026-08-06:** This lesson is narrowed, not a blanket ban on all shell substitution. Codex hook commands run with the session cwd, so bare `.goat-flow/hooks/...` paths fail from nested directories. The current safe shape is a Node bootstrap that resolves the active git root, loads `run-with-bash.mjs`, passes the selected hook as an argument, and starts the launcher with the resolved root as cwd. Codex deliberately receives no `$CLAUDE_PROJECT_DIR` fallback. Evidence anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `run-with-bash.mjs`), `.codex/hooks.json` (search: `run-with-bash.mjs`), and `test/unit/hook-registrar.test.ts` (search: `generated Codex launchers resolve the active root`).
 
 ## Lesson: Configured hook smoke must verify the registered guard path
 

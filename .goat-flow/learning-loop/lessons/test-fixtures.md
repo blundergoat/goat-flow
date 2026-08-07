@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-07-17
+last_reviewed: 2026-08-07
 ---
 
 ## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
@@ -45,10 +45,20 @@ last_reviewed: 2026-07-17
 ## Lesson: Workflow parser refactors need both fixture coverage and typecheck
 
 **Status:** active | **Created:** 2026-04-03
+**Incident count:** 8
+**Latest occurrence:** 2026-08-03
 
 **What happened:** While tightening CI-validation checks, the first pass on the workflow `run:` parser read the wrong regex capture group and then used a router heuristic that only matched commands containing the word `router`. The focused regression suite and `tsc` both failed before the broader test run finished.
 **Root cause:** Changed parsing and heuristics together without first validating the extracted command shape. The new regression covered the shell pattern, but the implementation still assumed the old capture layout and overfit to existing workflow wording.
-**Fix:** For parser refactors, verify in this order: (1) print/exercise the extracted intermediate values, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, then (4) run the full test suite. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
+**Recurrence 2026-08-01:** Before implementing the goat-review output validator, the producer survey found that the systemic template and shipped examples disagreed on R-IDs, `Harm:`, Evidence/Proof, and the retired overlap tag. Independent Verify RED then found that the nominally valid fixture contradicted its Top 5 threshold, provenance totals, refuter state, and Spec Drift status; correcting it changed the verdict count and exposed a stale negative-fixture mutation. After behavioral tests and typecheck went green, whole-file ESLint and gruff still caught shared-parser complexity and file-length headroom, so review positional parsing moved to a bounded helper and validator checks split in place. Evidence anchors: `test/contract/skill-hardening-review-2.test.ts` (search: `keeps goat-review finding examples on the validator-ready grammar`), `test/unit/review-validate.test.ts` (search: `Verdicts: 4/0/0/0`), `src/cli/review-command-parser.ts` (search: `buildReviewCLIFields`).
+**Recurrence 2026-08-01 (state-authority M04):** The seeded V2 fixture used a broad first-occurrence replacement for `R-001`, so it changed the earlier integrity prose instead of the finding definition. The first combined lint then measured `validateConditionalSections` at complexity 12. A literal finding-prefix mutation and two narrow section-shape helpers restored the intended proof. The plan-wide anchor sweep next treated an unlabeled `path`/`literal` output placeholder as a live repository citation; changing it to `<target-project>/path` restored the explicit placeholder boundary and produced `live misses=0`. Evidence anchors: `test/unit/review-validate-verdict.test.ts` (search: `structuralValidationCases`), `src/cli/review-validate-sections.ts` (search: `warnTopFiveShape`), `test/contract/skill-hardening-review-2.test.ts` (search: `placeholder anchors exempted`).
+**Recurrence 2026-08-01 (PR #57 hardening):** A compiler correction used an under-specified patch context shared by adjacent estimate and Actual parsers, so `!match` landed in the estimate parser where only `estimateMatch` exists. Re-reading both complete functions and patching their distinct variable anchors fixed the correction; the next typecheck exited zero. Evidence anchor: `src/cli/plans-effort.ts` (search: `estimateText.match(EFFORT_ESTIMATE_PATTERN)`).
+**Recurrence 2026-08-01 (PR #57 preflight):** Focused behavior tests, typecheck, and the full package suite were green before repository preflight reported seven complexity-limit failures in newly hardened plan and review parsers. Splitting lifecycle, numeric-field, fence-state, and exact-ledger checks into named helpers preserved the tested contract while bringing each decision surface under the repository lint limit. That refactor removed an older evidence anchor in this entry; `stats --check` caught the stale reference before closeout, and the anchor moved to the surviving semantic parse call. Evidence anchors: `src/cli/plans-check.ts` (search: `collectNotStartedSnapshotErrors`), `src/cli/plans-effort.ts` (search: `readEffortNumbers`), `src/cli/rendered-markdown.ts` (search: `isFencedLine`), `src/cli/review-validate-ledger.ts` (search: `readDeclaredLedgerLines`).
+**Recurrence 2026-08-02 (plans time export cleanup):** Removing unconsumed M01 module exports made Knip green but left the now-internal Actual-state alias unreferenced. Fresh typecheck and ESLint failed while the behavior regressions remained green; deleting the dead alias restored all three gates. Evidence anchor: `src/cli/plans-effort.ts` (search: `export interface PlanEffortNumericActual`).
+**Recurrence 2026-08-03 (review heading aliases):** Refactoring the Top-5 validator to receive one resolved alias section left its missing-section warning reading the removed `lines` parameter. The first focused GREEN run failed 39/40 at that branch; passing the Findings heading location explicitly restored the same suite to 40/40. Immediate whole-file ESLint then measured both the compact-integrity and verdict readers at complexity 11; removing the redundant branch and extracting the full-verdict reader restored lint without suppression. Evidence anchors: `src/cli/review-validate-sections.ts` (search: `function warnTopFiveShape`), `src/cli/review-validate-verdict.ts` (search: `function readFullShipVerdictClaim`).
+**Recurrence 2026-08-03 (indented Markdown masking):** The focused validator suite proved that four-space examples stayed hidden, but the first full package run failed `plans export` because the shared masker also hid an indented `(est: ...)` continuation inside a visible checklist item. Indented code cannot interrupt visible prose; carrying whether the prior rendered line was blank preserved wrapped task metadata while keeping standalone examples masked. Evidence anchors: `src/cli/rendered-markdown.ts` (search: `previousRenderedLineWasBlank`), `test/unit/plans-export-parsing.test.ts` (search: `parses est entries at the end of wrapped multi-line tasks`).
+**Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's relationships, and lock one grammar with focused fixtures. Negative mutations target a unique semantic substring; shipped path examples label placeholders explicitly. At first behavioral GREEN, check whole-file complexity and headroom before adding branches.
+**Fix:** For parser refactors, verify in this order: (1) print/exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity/size analysis, then (5) run the full test suite. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
 
 ---
 
@@ -108,15 +118,32 @@ last_reviewed: 2026-07-17
 
 ---
 
-## Lesson: Stats fixtures need real files for line-reference assertions
+## Lesson: Isolated fixtures must create every dependency they assert
 
 **Status:** active | **Created:** 2026-04-27
+**Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
+**Trigger phase:** VERIFY
+**Incident count:** 7 | **Latest occurrence:** 2026-08-07
 
 **What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
 
 **Root cause:** I reused a familiar root file path without checking the isolated fixture filesystem. The stats extractor validates refs against the temp repo, not the real goat-flow checkout.
 
-**Prevention:** In temp-repo stats fixtures, cite a file the fixture creates when asserting line-reference behavior. For this path, `.goat-flow/learning-loop/footguns/hooks.md` is created by the fixture and can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+**Recurrence 2026-08-01:** The first PR #57 terminal/dashboard batch failed three fixtures before exercising the product assertions: the ignored-root temp repo asserted `.goat-flow/plans/README.md` without creating it, the launch VM reached `window.__GOAT_FLOW_DEFAULT_PATH__` without injecting `window`, and a source-shape test searched `readDashboardAppSource()` even though that helper intentionally excludes `views/home.html`. The fixes created the asserted plan file, supplied the browser global, and read the owning HTML file directly. Evidence anchors: `test/unit/terminal-spawn.test.ts` (search: `grants build-directory writes only when Git proves they are ignored`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `__GOAT_FLOW_DEFAULT_PATH__`), and `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `launches Home setup and harness repair with workspace access`).
+
+**Recurrence 2026-08-01 (full suite):** The focused launch suite was green, but `dashboard-home.test.ts` separately deep-compared the complete setup launch-options object and retained its old two-field fixture. The full suite correctly failed until that consumer required `accessMode: "workspace"`. Evidence anchor: `test/unit/dashboard-home.test.ts` (search: `Setup Claude Code via Claude Code`).
+
+**Recurrence 2026-08-02:** M02 added an exact Git-ignore precondition to quality persistence. The real-path/symlink-alias fixture initialized Git only in its parent, so the nested project correctly failed the new precondition; giving the nested project its own repository and ignore rule restored the intended alias proof. The redirected-directory fixture then showed that checking ignore before inspecting existing path components masked the more specific symlink-containment decision, so both persistence helpers now complete their read-only component inspection before the ignore gate and create nothing until both pass. The first D4 report counter also over-escaped its digit regex and printed a false zero; inspecting the produced filename plus success receipt corrected the probe instead of reopening a working fix. Evidence anchors: `test/unit/quality-draft-capture.test.ts` (search: `shares one capture across real-path and symlink aliases`; search: `preserves a paused open writer until its completed report persists`), `test/unit/quality-subcommands.test.ts` (search: `refuses a redirected quality-report directory`), and `src/cli/quality/quality-command.ts` (search: `inspectedComponents`).
+
+**Recurrence 2026-08-02 (plans time):** The first end-to-end timing fixture declared one minute of other work in its headline while its counted task, proof, and plan/admin entries contained zero other minutes. Timing finalization succeeded, but the live strict check correctly failed on the unrelated accounting mismatch before the event-deletion assertion could prove receipt authority. Aligning the fixture headline with its counted `1 product / 1 proof / 0 other` baseline restored the intended proof. Evidence anchor: `test/unit/plans-time.test.ts` (search: `function writeTimingFixture`).
+
+**Recurrence 2026-08-07:** A dashboard-reader regression added a Codex session to prove report ownership without Claude draft capture, but the VM fixture registered only Claude. `readServerSessionInfo` correctly rejected the unknown runner before reading the owner, and optional chaining made the assertion resemble a missing-field bug. Registering Codex in both injected runner collections let the test reach the intended contract. Evidence anchor: `test/unit/dashboard-readers.test.ts` (search: `preserves report ownership with and without Claude draft capture`).
+
+**Recurrence 2026-08-07 (plans time):** Replacing the timing test's inline milestone body with the shared canonical builder invalidated the editor-save substitution. The no-op replacement made the expected concurrent-edit error disappear. Anchoring the edit to text the shared builder emits and asserting that the replacement changed the fixture restored the intended proof. Evidence anchor: `test/unit/plans-time.test.ts` (search: `preserves an in-place user edit detected before atomic replacement`).
+
+**Recurrence 2026-08-07 (quality history):** The first impossible-date streak fixture placed `2026-02-30` beside a June report. The existing 30-day cutoff already broke continuity, so the test passed without proving that an impossible date cannot bridge a streak. Moving the surrounding dates within 30 days made the pre-fix test fail on JavaScript's calendar normalization and isolated the new rule. Evidence anchor: `test/unit/quality-diff-delta-tag.test.ts` (search: `an invalid legacy date`).
+
+**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
 ---
 
@@ -143,7 +170,7 @@ last_reviewed: 2026-07-17
 
 **Root cause:** I wrote the test against an internal diagnostic phrase rather than the audit result field users and dashboard consumers actually receive.
 
-**Prevention:** For harness-audit regressions, assert the serialized/public `CheckResult` contract first: `status`, `displayStatus`, `impact`, `failure.message`, and `howToFix` when relevant. Only assert raw finding phrasing if that phrasing is intentionally part of the public contract. Evidence anchors: `src/cli/audit/audit.ts` (search: `Convert a harness check`), `src/cli/audit/harness/check-context.ts` (search: `missing step words inside the section`).
+**Prevention:** For harness-audit regressions, assert the serialized/public `CheckResult` contract first: `status`, `displayStatus`, `impact`, `failure.message`, and `howToFix` when relevant. Only assert raw finding phrasing if that phrasing is intentionally part of the public contract. Evidence anchors: `src/cli/audit/harness-scoring.ts` (search: `Convert a harness check`), `src/cli/audit/harness/check-context.ts` (search: `missing step words inside the section`).
 
 **Recurrence (2026-07-13):** The M07 ownership test matched a detailed validator finding against `ManifestValidationError.message`, but the public summary intentionally contains only the finding count. The validator was correct; the assertion now inspects `ManifestValidationError.findings`, matching existing manifest tests. Evidence anchor: `test/unit/manifest-file-ownership.test.ts` (search: `rejects ownership records without a usable source or generator`).
 
@@ -153,13 +180,15 @@ last_reviewed: 2026-07-17
 
 ## Lesson: Fixture-heavy tests need a higher setup-bloat threshold
 
-**Status:** active | **Created:** 2026-05-30
+**Status:** resolved | **Created:** 2026-05-30 | **Resolved:** 2026-08-02
 
 **What happened:** During the M00 gruff cleanup, `test-quality.setup-bloat` reported 158 advisory findings at the default 12-line threshold. The top offenders were not opaque unit tests; they were harness, dashboard, quality-history, and terminal tests that build temp projects, fake servers, injected browser globals, or serialized audit payloads before the assertion.
 
 **Root cause:** The default threshold is tuned for small unit tests. goat-flow has many contract tests where visible fixture construction is part of the evidence. Extracting all of that setup into generic helpers would hide the behavioural contract the test is meant to preserve.
 
-**Prevention:** Keep `test-quality.setup-bloat.threshold` at `30` in `.gruff-ts.yaml` unless a future fixture helper makes those setup blocks clearer without hiding the SUT call or assertion. Still fix tests above that threshold case-by-case: extract reusable temp-project builders, keep assertions visible, and do not add empty `arrange()` wrappers only to satisfy the analyzer. Evidence anchors: `.gruff-ts.yaml` (search: `test-quality.setup-bloat`).
+**Resolution:** Gruff 0.4.0 no longer exposes `test-quality.setup-bloat`; `gruff-ts list-rules test-quality.setup-bloat` reports an unknown rule. Do not recreate its stale config block merely to preserve historical evidence.
+
+**Prevention:** Keep fixture construction visible when it explains the behavioural contract. If a current rule reports excessive setup, assess each test against that rule's live options; extract reusable builders only when they clarify the SUT call and assertion.
 
 ---
 
@@ -190,7 +219,7 @@ last_reviewed: 2026-07-17
 
 **Root cause:** `countFootgunLabels` counted regex matches across the complete bucket and `hasEvidenceLabels` accepted `labelCount >= entryCount`. The aggregate could not preserve which section owned each match, the global case-insensitive flag weakened the documented enum, and one undifferentiated Markdown regex treated evidence-body headings as evidence-type declarations.
 
-**Recurrence 2026-07-17:** The first `skill new --red-log` gate counted any three comma-separated tokens as pressures, accepted `fail` inside `did not fail`, accepted `- none` as a verbatim rationalisation, and searched later GREEN sections for fields missing from RED. In the same review, the shipped-scenario contract checked only that an illustrative label existed, so moving it below `## Assumption Tracking` still satisfied the test. The focused suite and full preflight both passed before adversarial probes reproduced the two semantic bypasses. Evidence anchors: `src/cli/skill-author.ts` (search: `documentedPressureCount`) now validates the isolated RED section; `test/integration/skill-author.test.ts` (search: `rejects RED receipts whose fields describe success instead of failure`) locks the near-miss; `test/contract/skill-hardening-contracts.test.ts` (search: `scenario label must immediately precede the assumption block`) locks the required ordering relation.
+**Recurrence 2026-07-17:** The first `skill new --red-log` gate counted any three comma-separated tokens as pressures, accepted `fail` inside `did not fail`, accepted `- none` as a verbatim rationalisation, and searched later GREEN sections for fields missing from RED. In the same review, the shipped-scenario contract checked only that an illustrative label existed, so moving it below `## Assumption Tracking` still satisfied the test. The focused suite and full preflight both passed before adversarial probes reproduced the two semantic bypasses. Evidence anchors: `src/cli/skill-author-red-log.ts` (search: `documentedPressureCount`) now validates the isolated RED section; `test/integration/skill-author.test.ts` (search: `rejects RED receipts whose fields describe success instead of failure`) locks the near-miss; `test/contract/skill-hardening-shared-3.test.ts` (search: `scenario label must immediately precede the assumption block`) locks the required ordering relation.
 
 **Recurrence 2026-07-17 (quality recheck):** A follow-up RED-log probe used every canonical token only inside explicit negations: `no time pressure`, `failed? no`, and `none observed because it complied`. The gate still accepted the receipt and wrote a discoverable skill because each field validator recognized tokens without validating the field's asserted meaning. The first literal fix blocked that receipt, but an immediate boundary probe reproduced the same bypass with label-prefixed absence claims: `time: no pressure`, `failed: false`, and `No rationalisation occurred`. The pressure validator now rejects a directly negated detail after a canonical label, the outcome validator rejects directly negated failure classifications, and the rationalisation validator rejects prose that explicitly reports absence. Evidence anchors: `src/cli/skill-author.ts` (search: `startsWithNegatedAssertion` and `isAbsentRationalisation`), `test/integration/skill-author.test.ts` (search: `rejects negated RED evidence that includes canonical tokens` and `rejects alternate absence claims after canonical RED labels`), and the paired acceptance control (search: `accepts positive pressure details and a substantive no-prefixed rationalisation`).
 
@@ -201,11 +230,36 @@ last_reviewed: 2026-07-17
 ## Lesson: Pressure scenarios must isolate the rule under test
 
 **Status:** active | **Created:** 2026-07-12
+**Decision changed:** Validate the provenance of every pressure fact before launching an evaluator; a source-grounded target decision does not make transplanted urgency or simplicity facts valid.
+**Trigger phase:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-08-02
 
 **What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-040 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
 
 **Root cause:** The scenario varied both test ordering and repository-history authority. Its wrong answer was independently invalid under always-loaded policy.
 
-**Fix:** The replacement uses an explicitly labelled illustrative security-depth scenario and holds file scope plus mirror duties constant; only test-first ordering differs. The shipped scenario defines input/output shape, never incident evidence; live runs must substitute current target-project facts. Evidence anchors: `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Illustrative four-pressure scenario`) and `test/contract/skill-hardening-contracts.test.ts` (search: `isolated from repository-history policy`).
+**Fix:** The replacement uses an explicitly labelled illustrative security-depth scenario and holds file scope plus mirror duties constant; only test-first ordering differs. The shipped scenario defines input/output shape, never incident evidence; live runs must substitute current target-project facts. Evidence anchors: `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` (search: `Illustrative four-pressure scenario`) and `test/contract/skill-hardening-shared-2.test.ts` (search: `isolated from repository-history policy`).
 
-**Prevention:** Before using an A/B/C pressure fixture, compare every option with always-loaded instructions and accepted ADRs. Keep all non-target obligations equal so only the rule under test explains the result.
+**Recurrence 2026-08-02:** The first goat-debug hardening wave used source-grounded lifecycle and probe decisions but added an unsupported “one-line patch” and transplanted “teammate is waiting” pressure from a different historical scenario. All three evaluators selected the safe option, and the host invalidated the entire wave rather than treating its rationales as RED evidence. The redacted receipt remains local current-run context, not durable evidence. Committed evidence anchor: `src/dashboard/preset-prompts.json` (search: `"id": "fix-bug"`) contains the real fix intent but no patch-size or waiting claim.
+
+**Recurrence 2026-08-02 (same hardening run):** After correcting fact provenance, a hypothesis evaluator prompt explicitly requested “What would disconfirm each.” The evaluator returned good falsifiers, but the prompt had named the target field and therefore measured recitation rather than unaided technique use. The host excluded the run and rewound after the second scenario-method correction. This is the same isolation failure at a different layer: the fixture supplied the decision it claimed to test.
+
+**Prevention:** Before using a pressure or application fixture, compare every option with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend facts from separate incidents or ask the evaluator to recite the target technique. Keep all non-target obligations equal so only the rule under test explains the result.
+
+**Current-run record:** `.goat-flow/logs/sessions/2026-08-01-goat-review-tdd.md` preserves the M06 pressure and seeded-corpus receipts for this checkout. It is gitignored session evidence, not a durable repository anchor.
+
+---
+
+## Lesson: Node test filters must precede explicit test paths
+
+**Status:** active | **Created:** 2026-08-01
+
+**Decision changed:** Put Node test-runner filters before explicit test paths and verify the reported test count proves isolation.
+
+**Trigger phase:** VERIFY
+
+**What happened:** The M03 anchor command placed `--test-name-pattern` after the TypeScript test path. The Node/tsx runner executed all 110 contracts instead of the one anchor contract, so expected interim mirror failures obscured the intended proof. Moving the filter before the path produced exactly one passing test and the zero-miss diagnostic.
+
+**Evidence:** `test/contract/skill-hardening-review-2.test.ts` (search: `goat-review internal anchors resolve to named current targets`) - this is the intended isolated contract; its diagnostic reports checked, exempted, and missed anchors.
+
+**Prevention:** Use `node --import tsx --test --test-name-pattern="<pattern>" <test-path>` and require both the named subtest and expected `# tests` count before treating the run as focused proof.

@@ -128,7 +128,7 @@
     "id": "milestones",
     "name": "Break Into Milestones",
     "desc": "Milestone task files with testable exit criteria",
-    "prompt": "/goat-plan break this into milestones. Use the feature plan from context; if none, ask which feature. Each milestone gets: goal (one sentence), exit criteria (testable), key tasks. The first milestone is always a spike validating the riskiest assumption. No milestone longer than 3-5 days of work - split if larger.",
+    "prompt": "/goat-plan break this into the smallest useful milestones. Use the feature plan from context; if none, ask which feature. Fit must-deliver work to the delivery budget and estimate coding-agent time, excluding human waiting. Treat Prove It Works, Make It Real, Make It Solid, and Make It Shine as optional lenses: create a spike only for a named uncertainty, and merge or omit lenses unless they reduce uncertainty, deliver independent value, or create a real decision gate. Each milestone needs an outcome, executable tasks, claim-based proof, an exit condition, and a stop/rescope condition.",
     "cat": "plan",
     "route": "goat-plan",
     "source": "goat-flow-catalog",

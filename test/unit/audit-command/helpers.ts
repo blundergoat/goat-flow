@@ -435,7 +435,7 @@ export function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
         gitCommitInstructions: {
           exists: false,
           path: null,
-          requiredPath: "docs/coding-standards/git-commit.md",
+          requiredPath: "docs/coding-standards/git-commit-message.md",
           misplacedPaths: [],
         },
         localInstructionsLineCount: 0,

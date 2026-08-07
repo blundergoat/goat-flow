@@ -17,6 +17,72 @@ const PARENT_SIGNAL_EXIT_CODES = new Map([
 ]);
 
 /**
+ * Mutates one parsed option field and throws distinct operator guidance for unsupported names.
+ *
+ * @param {{timeoutSeconds: number, heartbeatSeconds: number, progressLabel: string, progressFileDescriptor: number | null}} options - runner state receiving one parsed value
+ * @param {string | undefined} optionName - internal option name; missing names are rejected
+ * @param {string} optionValue - required option value; empty strings remain available for validation
+ * @returns {void} updates exactly one field
+ * @throws {Error} when the internal preflight caller passes an unknown option
+ */
+function applyRunnerOption(options, optionName, optionValue) {
+  switch (optionName) {
+    // The timeout bounds how long the developer waits before cleanup begins.
+    case "--timeout-seconds":
+      options.timeoutSeconds = Number(optionValue);
+      return;
+    // The heartbeat interval controls liveness frequency without changing verification work.
+    case "--heartbeat-seconds":
+      options.heartbeatSeconds = Number(optionValue);
+      return;
+    // The label tells the developer whether the first run or retry is active.
+    case "--label":
+      options.progressLabel = optionValue;
+      return;
+    // The descriptor keeps progress separate from child output used by the final report.
+    case "--progress-fd":
+      options.progressFileDescriptor = Number(optionValue);
+      return;
+    // Unknown options stop before a child starts, so the operator never waits on the wrong contract.
+    default:
+      throw new Error(`unknown runner option: ${optionName}`);
+  }
+}
+
+/**
+ * Validate parsed timing and progress options before any verification child starts.
+ * Throws one field-specific usage error so the developer can repair the preflight invocation.
+ *
+ * @param {{timeoutSeconds: number, heartbeatSeconds: number, progressLabel: string, progressFileDescriptor: number | null}} options - parsed runner options; null descriptor disables progress output
+ * @returns {void} successful validation leaves the parsed values unchanged
+ */
+function validateRunnerOptions(options) {
+  // Invalid timeout input cannot masquerade as a bounded verification run.
+  if (!Number.isFinite(options.timeoutSeconds) || options.timeoutSeconds < 0) {
+    throw new Error("timeout seconds must be a finite non-negative number");
+  }
+  // Invalid heartbeat input would make progress noisy or silently absent.
+  if (
+    !Number.isFinite(options.heartbeatSeconds) ||
+    options.heartbeatSeconds < 0
+  ) {
+    throw new Error("heartbeat seconds must be a finite non-negative number");
+  }
+  // An empty label would show meaningless liveness copy while the developer waits.
+  if (options.progressLabel.trim().length === 0) {
+    throw new Error("progress label must not be empty");
+  }
+  // No descriptor is the normal CI path; a supplied value must be an inherited file handle.
+  if (
+    options.progressFileDescriptor !== null &&
+    (!Number.isInteger(options.progressFileDescriptor) ||
+      options.progressFileDescriptor < 0)
+  ) {
+    throw new Error("progress file descriptor must be a non-negative integer");
+  }
+}
+
+/**
  * Parse the internal runner contract used by preflight and its focused tests.
  * Use only behind preflight; it throws a usage error before invalid Tests work begins.
  * Explicit branches preserve distinct timeout, progress, and command guidance for the operator.
@@ -39,10 +105,12 @@ function parseRunnerOptions(commandLineArguments) {
     throw new Error("expected -- before the child command");
   }
 
-  let timeoutSeconds = 0;
-  let heartbeatSeconds = 10;
-  let progressLabel = "Tests";
-  let progressFileDescriptor = null;
+  const options = {
+    timeoutSeconds: 0,
+    heartbeatSeconds: 10,
+    progressLabel: "Tests",
+    progressFileDescriptor: null,
+  };
   let optionIndex = 0;
 
   // Each internal option has one value, keeping the shell call explicit and testable.
@@ -55,28 +123,7 @@ function parseRunnerOptions(commandLineArguments) {
       throw new Error(`missing value for ${optionName}`);
     }
 
-    // Each supported option controls one operator-visible part of the Tests phase.
-    switch (optionName) {
-      // The timeout bounds how long the developer waits before cleanup begins.
-      case "--timeout-seconds":
-        timeoutSeconds = Number(optionValue);
-        break;
-      // The heartbeat interval controls liveness frequency without changing verification work.
-      case "--heartbeat-seconds":
-        heartbeatSeconds = Number(optionValue);
-        break;
-      // The label tells the developer whether the first run or retry is active.
-      case "--label":
-        progressLabel = optionValue;
-        break;
-      // The descriptor keeps progress separate from child output used by the final report.
-      case "--progress-fd":
-        progressFileDescriptor = Number(optionValue);
-        break;
-      // Unknown options fail before a child starts, so the operator never waits on the wrong contract.
-      default:
-        throw new Error(`unknown runner option: ${optionName}`);
-    }
+    applyRunnerOption(options, optionName, optionValue);
     optionIndex += 2;
   }
 
@@ -89,34 +136,10 @@ function parseRunnerOptions(commandLineArguments) {
     throw new Error("child command must not be empty");
   }
 
-  // Invalid timeout input must fail before users mistake an unbounded run for a protected one.
-  if (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 0) {
-    throw new Error("timeout seconds must be a finite non-negative number");
-  }
-
-  // Invalid heartbeat input would make progress noisy or silently absent, so reject it explicitly.
-  if (!Number.isFinite(heartbeatSeconds) || heartbeatSeconds < 0) {
-    throw new Error("heartbeat seconds must be a finite non-negative number");
-  }
-
-  // An empty label would show meaningless liveness copy while the developer waits.
-  if (progressLabel.trim().length === 0) {
-    throw new Error("progress label must not be empty");
-  }
-
-  // No descriptor is the normal CI path; a supplied descriptor must be a real inherited file handle.
-  if (
-    progressFileDescriptor !== null &&
-    (!Number.isInteger(progressFileDescriptor) || progressFileDescriptor < 0)
-  ) {
-    throw new Error("progress file descriptor must be a non-negative integer");
-  }
+  validateRunnerOptions(options);
 
   return {
-    timeoutSeconds,
-    heartbeatSeconds,
-    progressLabel,
-    progressFileDescriptor,
+    ...options,
     childCommand,
     childArguments,
   };
@@ -207,35 +230,241 @@ function writeOperatorHeartbeat(
   }
 }
 
+/** Clear every timer and parent-signal listener once one command result wins the race. */
+function clearCapturedCommandResources(state) {
+  // Completed work no longer needs the original timeout.
+  if (state.timeoutTimer !== null) clearTimeout(state.timeoutTimer);
+  // A normal close before escalation cancels the pending force kill.
+  if (state.forceStopTimer !== null) clearTimeout(state.forceStopTimer);
+  // A normal close after SIGKILL cancels the fallback result deadline.
+  if (state.resultDeadlineTimer !== null) {
+    clearTimeout(state.resultDeadlineTimer);
+  }
+  // Once a result is ready, the user no longer needs liveness heartbeats.
+  if (state.heartbeatTimer !== null) clearInterval(state.heartbeatTimer);
+  // Signal handlers are installed before child events can deliver a result.
+  if (state.handlePreflightInterrupt !== null) {
+    process.off("SIGINT", state.handlePreflightInterrupt);
+  }
+  if (state.handlePreflightTermination !== null) {
+    process.off("SIGTERM", state.handlePreflightTermination);
+  }
+}
+
+/** Release inherited output handles after escalation so an escaped descendant cannot hide the result. */
+function releaseEscapedOutputHandles(state, renderedCommand) {
+  state.capturedOutputChunks.push(
+    Buffer.from(
+      "\n[preflight] cleanup deadline reached after process-group escalation; " +
+        "returning without waiting for inherited output handles: " +
+        renderedCommand +
+        "\n",
+    ),
+  );
+  state.childProcess.stdout?.destroy();
+  state.childProcess.stderr?.destroy();
+  state.childProcess.unref();
+}
+
+/** Classify one child close into the exact preflight status and diagnostic contract. */
+function capturedCommandFinalStatus(
+  state,
+  childExitCode,
+  childExitSignal,
+  renderedCommand,
+) {
+  let finalStatus = childExitCode ?? 1;
+
+  // Timeout owns status 124 even when later cleanup produces a signal close.
+  if (state.hasCommandTimedOut) {
+    finalStatus = 124;
+    state.capturedOutputChunks.push(
+      Buffer.from(
+        "\n[preflight] command timed out after " +
+          state.runnerOptions.timeoutSeconds +
+          "s: " +
+          renderedCommand +
+          "\n",
+      ),
+    );
+    // Parent termination retains its conventional status after child cleanup.
+  } else if (state.preflightStopSignal !== null) {
+    finalStatus = PARENT_SIGNAL_EXIT_CODES.get(state.preflightStopSignal) ?? 1;
+    state.capturedOutputChunks.push(
+      Buffer.from(
+        "\n[preflight] command stopped after parent " +
+          state.preflightStopSignal +
+          ": " +
+          renderedCommand +
+          "\n",
+      ),
+    );
+    // A startup failure has no useful child code, so preflight returns status 1.
+  } else if (state.hasCommandFailedToStart) {
+    finalStatus = 1;
+    // Signal-only closes are failed verification with the signal named for the user.
+  } else if (childExitCode === null) {
+    finalStatus = 1;
+    const displayedSignal = childExitSignal ?? "unknown signal";
+    state.capturedOutputChunks.push(
+      Buffer.from(
+        "\n[preflight] command terminated by " +
+          displayedSignal +
+          ": " +
+          renderedCommand +
+          "\n",
+      ),
+    );
+  }
+
+  return finalStatus;
+}
+
+/** Deliver the first final status and captured output; every later close or deadline is ignored. */
+function deliverCapturedCommandResult(
+  state,
+  childExitCode,
+  childExitSignal,
+  cleanupDeadlineReached = false,
+) {
+  // A prior close or deadline already gave the developer a result.
+  if (state.hasReturnedResultToPreflight) return;
+  state.hasReturnedResultToPreflight = true;
+  clearCapturedCommandResources(state);
+
+  const renderedCommand = displayCommand(
+    state.runnerOptions.childCommand,
+    state.runnerOptions.childArguments,
+  );
+  // Escaped descendants can retain pipes after the child group has been killed.
+  if (cleanupDeadlineReached) {
+    releaseEscapedOutputHandles(state, renderedCommand);
+  }
+
+  const finalStatus = capturedCommandFinalStatus(
+    state,
+    childExitCode,
+    childExitSignal,
+    renderedCommand,
+  );
+  state.resolveCommand({
+    status: finalStatus,
+    capturedOutput: Buffer.concat(state.capturedOutputChunks),
+  });
+}
+
+/** Request graceful cleanup, then force the group and return after the bounded output deadline. */
+function stopCapturedCommand(state) {
+  stopChildProcessGroup(state.childProcess, "SIGTERM");
+  state.forceStopTimer = setTimeout(() => {
+    stopChildProcessGroup(state.childProcess, "SIGKILL");
+
+    // A normal close during SIGKILL already delivered the result.
+    if (state.hasReturnedResultToPreflight) return;
+    state.resultDeadlineTimer = setTimeout(() => {
+      deliverCapturedCommandResult(
+        state,
+        state.observedCommandExitCode,
+        state.observedCommandExitSignal,
+        true,
+      );
+    }, FORCED_RESULT_DELAY_MS);
+    state.resultDeadlineTimer.unref();
+  }, FORCE_KILL_DELAY_MS);
+  state.forceStopTimer.unref();
+}
+
+/** Preserve the first parent stop signal while cleaning the child process group before returning. */
+function handleCapturedParentStop(state, stopSignal) {
+  // Repeated signals and timeout callbacks cannot create competing cleanup timers.
+  if (state.preflightStopSignal !== null || state.hasCommandTimedOut) return;
+  state.preflightStopSignal = stopSignal;
+  stopCapturedCommand(state);
+}
+
+/** Register stable signal-handler identities so result delivery can remove them exactly once. */
+function registerCapturedCommandSignals(state) {
+  state.handlePreflightInterrupt = () =>
+    handleCapturedParentStop(state, "SIGINT");
+  state.handlePreflightTermination = () =>
+    handleCapturedParentStop(state, "SIGTERM");
+  process.once("SIGINT", state.handlePreflightInterrupt);
+  process.once("SIGTERM", state.handlePreflightTermination);
+}
+
+/** Capture child output, startup failure, and the direct exit status before inherited pipes close. */
+function registerCapturedChildEvents(state) {
+  state.childProcess.once("exit", (childExitCode, childExitSignal) => {
+    state.observedCommandExitCode = childExitCode;
+    state.observedCommandExitSignal = childExitSignal;
+  });
+
+  // Configured pipes retain both child channels when startup reaches stream creation.
+  state.childProcess.stdout?.on("data", (chunk) =>
+    state.capturedOutputChunks.push(chunk),
+  );
+  state.childProcess.stderr?.on("data", (chunk) =>
+    state.capturedOutputChunks.push(chunk),
+  );
+  state.childProcess.once("error", (error) => {
+    state.hasCommandFailedToStart = true;
+    state.capturedOutputChunks.push(
+      Buffer.from(
+        "\n[preflight] command failed to start: " +
+          String(error.message || error) +
+          "\n",
+      ),
+    );
+  });
+}
+
+/** Start the optional silence timeout; zero preserves the documented timeout opt-out. */
+function startCapturedCommandTimeout(state) {
+  // Zero leaves the child unbounded by explicit preflight contract.
+  if (state.runnerOptions.timeoutSeconds <= 0) return;
+  state.timeoutTimer = setTimeout(() => {
+    // Parent termination already owns cleanup and its conventional exit status.
+    if (state.preflightStopSignal !== null) return;
+    state.hasCommandTimedOut = true;
+    stopCapturedCommand(state);
+  }, state.runnerOptions.timeoutSeconds * 1_000);
+}
+
+/** Start interactive liveness heartbeats while keeping CI and captured child output deterministic. */
+function startCapturedCommandHeartbeat(state) {
+  const { progressFileDescriptor, heartbeatSeconds, progressLabel } =
+    state.runnerOptions;
+  // CI has no progress descriptor, while zero explicitly disables heartbeats.
+  if (progressFileDescriptor === null || heartbeatSeconds <= 0) return;
+
+  state.heartbeatTimer = setInterval(() => {
+    const heartbeatWritten = writeOperatorHeartbeat(
+      progressFileDescriptor,
+      progressLabel,
+      Date.now() - state.commandStartedAt,
+      heartbeatSeconds,
+    );
+
+    // A closed terminal needs no more progress attempts, but command capture continues.
+    if (!heartbeatWritten && state.heartbeatTimer !== null) {
+      clearInterval(state.heartbeatTimer);
+      state.heartbeatTimer = null;
+    }
+  }, heartbeatSeconds * 1_000);
+  state.heartbeatTimer.unref();
+}
+
 /**
- * Run one captured verification command with bounded progress and process-group cleanup.
- * Use for first-run and retry Tests paths so users receive one consistent result contract.
- * It spawns and owns the child group because one result must preserve output, signals, and status.
+ * Spawns one captured verification command with bounded progress and process-group cleanup.
+ * Use for first-run and retry Tests paths so every result preserves output, signals, and status.
  *
  * @param {ReturnType<typeof parseRunnerOptions>} runnerOptions - validated command, timing, and progress contract
- * @returns {Promise<{
- *   status: number,
- *   capturedOutput: Buffer
- * }>} exact exit status and merged child output; empty output means the child was silent
+ * @returns {Promise<{status: number, capturedOutput: Buffer}>} exact status and merged output
  */
 function runCapturedCommand(runnerOptions) {
   return new Promise((resolveCommand) => {
     const commandStartedAt = Date.now();
-    const capturedOutputChunks = [];
-    let hasCommandTimedOut = false;
-    let hasCommandFailedToStart = false;
-
-    // Null timers and child results mean that no matching operator event has happened yet.
-    let preflightStopSignal = null;
-    let timeoutTimer = null;
-    let forceStopTimer = null;
-    let resultDeadlineTimer = null;
-    let heartbeatTimer = null;
-    let hasReturnedResultToPreflight = false;
-    let observedCommandExitCode = null;
-    let observedCommandExitSignal = null;
-
-    // Preflight supplies an argv array and no shell, so user-entered test text cannot become shell syntax.
+    // Preflight supplies argv without a shell, so user-entered test text cannot become shell syntax.
     const childProcess = spawn(
       runnerOptions.childCommand,
       runnerOptions.childArguments,
@@ -244,202 +473,34 @@ function runCapturedCommand(runnerOptions) {
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
+    const state = {
+      runnerOptions,
+      resolveCommand,
+      childProcess,
+      commandStartedAt,
+      capturedOutputChunks: [],
+      hasCommandTimedOut: false,
+      hasCommandFailedToStart: false,
+      preflightStopSignal: null,
+      timeoutTimer: null,
+      forceStopTimer: null,
+      resultDeadlineTimer: null,
+      heartbeatTimer: null,
+      hasReturnedResultToPreflight: false,
+      observedCommandExitCode: null,
+      observedCommandExitSignal: null,
+      handlePreflightInterrupt: null,
+      handlePreflightTermination: null,
+    };
 
-    /**
-     * Return one final status and captured output to the developer waiting on preflight.
-     * Use for normal close or the cleanup deadline; late child events cannot duplicate the result.
-     *
-     * @param {number | null} childExitCode - direct child status; null means signal exit or no close yet
-     * @param {NodeJS.Signals | null} childExitSignal - direct child signal; null means normal or pending exit
-     * @param {boolean} cleanupDeadlineReached - true when escaped output handles outlive escalation
-     * @returns {void} resolves the surrounding runner promise exactly once
-     */
-    function deliverCommandResult(
-      childExitCode,
-      childExitSignal,
-      cleanupDeadlineReached = false,
-    ) {
-      // A prior close or deadline already gave the developer a result, so late events are ignored.
-      if (hasReturnedResultToPreflight) {
-        return;
-      }
-      hasReturnedResultToPreflight = true;
-
-      // Completed work no longer needs the original timeout.
-      if (timeoutTimer !== null) {
-        clearTimeout(timeoutTimer);
-      }
-      // A normal close before escalation cancels the pending force kill.
-      if (forceStopTimer !== null) {
-        clearTimeout(forceStopTimer);
-      }
-      // A normal close after SIGKILL cancels the fallback result deadline.
-      if (resultDeadlineTimer !== null) {
-        clearTimeout(resultDeadlineTimer);
-      }
-      // Once a result is ready, the user no longer needs liveness heartbeats.
-      if (heartbeatTimer !== null) {
-        clearInterval(heartbeatTimer);
-      }
-      process.off("SIGINT", handlePreflightInterrupt);
-      process.off("SIGTERM", handlePreflightTermination);
-
-      const renderedCommand = displayCommand(
-        runnerOptions.childCommand,
-        runnerOptions.childArguments,
-      );
-
-      // An escaped process may retain output handles, so release local pipes and return the known result.
-      if (cleanupDeadlineReached) {
-        capturedOutputChunks.push(
-          Buffer.from(
-            `\n[preflight] cleanup deadline reached after process-group escalation; returning without waiting for inherited output handles: ${renderedCommand}\n`,
-          ),
-        );
-        childProcess.stdout?.destroy();
-        childProcess.stderr?.destroy();
-        childProcess.unref();
-      }
-
-      // A null exit code means signal termination, which is a failed verification until classified below.
-      let finalStatus = childExitCode ?? 1;
-
-      // Timeout is a stable preflight contract, including its status and one precise explanation.
-      if (hasCommandTimedOut) {
-        finalStatus = 124;
-        capturedOutputChunks.push(
-          Buffer.from(
-            `\n[preflight] command timed out after ${runnerOptions.timeoutSeconds}s: ${renderedCommand}\n`,
-          ),
-        );
-        // Parent termination is preserved after cleanup so callers still receive the conventional status.
-      } else if (preflightStopSignal !== null) {
-        // An unknown parent signal still returns failure rather than presenting a successful preflight.
-        finalStatus = PARENT_SIGNAL_EXIT_CODES.get(preflightStopSignal) ?? 1;
-        capturedOutputChunks.push(
-          Buffer.from(
-            `\n[preflight] command stopped after parent ${preflightStopSignal}: ${renderedCommand}\n`,
-          ),
-        );
-        // A startup failure has no useful child code, so the user receives one explicit status 1 result.
-      } else if (hasCommandFailedToStart) {
-        finalStatus = 1;
-        // A signal-only close is otherwise a failed verification with the signal named for the user.
-      } else if (childExitCode === null) {
-        finalStatus = 1;
-        // No signal name is rare, but the user still receives a concrete abnormal-exit explanation.
-        const displayedSignal = childExitSignal ?? "unknown signal";
-        capturedOutputChunks.push(
-          Buffer.from(
-            `\n[preflight] command terminated by ${displayedSignal}: ${renderedCommand}\n`,
-          ),
-        );
-      }
-
-      resolveCommand({
-        status: finalStatus,
-        capturedOutput: Buffer.concat(capturedOutputChunks),
-      });
-    }
-
-    /** Request graceful cleanup, then force the group and return even if an escaped pipe stays open. */
-    function stopRunningCommand() {
-      stopChildProcessGroup(childProcess, "SIGTERM");
-      forceStopTimer = setTimeout(() => {
-        stopChildProcessGroup(childProcess, "SIGKILL");
-
-        // A normal close during SIGKILL already delivered the result, so no fallback timer is needed.
-        if (hasReturnedResultToPreflight) {
-          return;
-        }
-        resultDeadlineTimer = setTimeout(() => {
-          deliverCommandResult(
-            observedCommandExitCode,
-            observedCommandExitSignal,
-            true,
-          );
-        }, FORCED_RESULT_DELAY_MS);
-        resultDeadlineTimer.unref();
-      }, FORCE_KILL_DELAY_MS);
-      forceStopTimer.unref();
-    }
-
-    /** Preserve parent termination intent while still cleaning up the child process group first. */
-    function handleParentStopSignal(stopSignal) {
-      // The first parent signal owns cleanup; repeated signals must not create duplicate timers.
-      if (preflightStopSignal !== null || hasCommandTimedOut) {
-        return;
-      }
-      preflightStopSignal = stopSignal;
-      stopRunningCommand();
-    }
-
-    /** Preserve a developer's Ctrl+C request while preflight cleans up its active Tests command. */
-    const handlePreflightInterrupt = () => handleParentStopSignal("SIGINT");
-    /** Preserve a terminal or CI stop request while preflight cleans up its active Tests command. */
-    const handlePreflightTermination = () => handleParentStopSignal("SIGTERM");
-    process.once("SIGINT", handlePreflightInterrupt);
-    process.once("SIGTERM", handlePreflightTermination);
-
-    // Remember the direct child's status even when an escaped descendant delays the later close event.
-    childProcess.once("exit", (childExitCode, childExitSignal) => {
-      observedCommandExitCode = childExitCode;
-      observedCommandExitSignal = childExitSignal;
-    });
-
-    // Configured pipes retain both child channels; absent streams mean startup failed before output existed.
-    childProcess.stdout?.on("data", (chunk) =>
-      capturedOutputChunks.push(chunk),
-    );
-    childProcess.stderr?.on("data", (chunk) =>
-      capturedOutputChunks.push(chunk),
-    );
-    childProcess.once("error", (error) => {
-      hasCommandFailedToStart = true;
-      capturedOutputChunks.push(
-        Buffer.from(
-          `\n[preflight] command failed to start: ${String(error.message || error)}\n`,
-        ),
-      );
-    });
-
-    // A positive timeout bounds silence; zero deliberately keeps the documented timeout opt-out.
-    if (runnerOptions.timeoutSeconds > 0) {
-      timeoutTimer = setTimeout(() => {
-        // Parent termination already owns cleanup and must retain its conventional exit status.
-        if (preflightStopSignal !== null) {
-          return;
-        }
-        hasCommandTimedOut = true;
-        stopRunningCommand();
-      }, runnerOptions.timeoutSeconds * 1_000);
-    }
-
-    // e.g. a developer waiting on release tests gets liveness; CI has no descriptor and stays stable.
-    if (
-      runnerOptions.progressFileDescriptor !== null &&
-      runnerOptions.heartbeatSeconds > 0
-    ) {
-      heartbeatTimer = setInterval(() => {
-        const heartbeatWritten = writeOperatorHeartbeat(
-          runnerOptions.progressFileDescriptor,
-          runnerOptions.progressLabel,
-          Date.now() - commandStartedAt,
-          runnerOptions.heartbeatSeconds,
-        );
-
-        // A closed terminal needs no more progress attempts, but command capture continues safely.
-        if (!heartbeatWritten && heartbeatTimer !== null) {
-          clearInterval(heartbeatTimer);
-          heartbeatTimer = null;
-        }
-      }, runnerOptions.heartbeatSeconds * 1_000);
-      heartbeatTimer.unref();
-    }
+    registerCapturedCommandSignals(state);
+    registerCapturedChildEvents(state);
+    startCapturedCommandTimeout(state);
+    startCapturedCommandHeartbeat(state);
 
     // Normal completion keeps the exact child result and cancels every fallback timer.
     childProcess.once("close", (childExitCode, childExitSignal) => {
-      deliverCommandResult(childExitCode, childExitSignal);
+      deliverCapturedCommandResult(state, childExitCode, childExitSignal);
     });
   });
 }

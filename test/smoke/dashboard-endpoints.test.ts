@@ -46,12 +46,16 @@ interface TestTerminalSession {
   cwd: string;
   targetPath: string;
   runner: "claude";
+  accessMode: "workspace" | "reporting";
+  captureQualityDrafts: boolean;
+  qualityReportProjectPath: string | null;
   lastInputAt: number;
   pty: TestPty | null;
   ws: TerminalWebSocket | null;
   idleTimer: ReturnType<typeof setTimeout> | null;
   detachBuffer: string[];
   detachBufferSize: number;
+  qualityCaptures: Array<{ dispose(): void }>;
 }
 
 /** Private TerminalManager fields initialized directly for focused tests. */
@@ -159,12 +163,16 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
     cwd: "/tmp/project",
     targetPath: "/tmp/project",
     runner: "claude",
+    accessMode: "workspace",
+    captureQualityDrafts: false,
+    qualityReportProjectPath: null,
     lastInputAt: 0,
     pty,
     ws: null,
     idleTimer: null,
     detachBuffer: [],
     detachBufferSize: 0,
+    qualityCaptures: [],
     ...overrides,
   };
   return { session, writes, resizes };
@@ -181,6 +189,8 @@ function makeSpawnedPty(): {
   writes: string[];
   /** Emit fake runner output into TerminalManager's PTY data handler. */
   emitData(data: string): void;
+  /** Emit runner exit independently from kill for teardown-order tests. */
+  emitExit(): void;
 } {
   const writes: string[] = [];
   let dataHandler: (data: string) => void = () => undefined;
@@ -209,6 +219,10 @@ function makeSpawnedPty(): {
     /** Emit fake runner output into TerminalManager's PTY data handler. */
     emitData(data: string): void {
       dataHandler(data);
+    },
+    /** Emit one synthetic PTY exit so endpoint tests can observe terminal teardown. */
+    emitExit(): void {
+      exitHandler({ exitCode: 0 });
     },
   };
 }
@@ -331,7 +345,7 @@ describe("terminal exports", () => {
     assert.equal(spec.shell, "/bin/zsh");
     assert.deepStrictEqual(spec.args, [
       "-c",
-      '"$GOAT_RUNNER"; unset GOAT_RUNNER; exec "$SHELL" -i',
+      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
     ]);
     assert.equal(spec.env.GOAT_PROMPT, undefined);
     assert.equal(spec.initialInput, null);
@@ -350,7 +364,7 @@ describe("terminal exports", () => {
     assert.equal(spec.shell, "/bin/bash");
     assert.deepStrictEqual(spec.args, [
       "-c",
-      '"$GOAT_RUNNER" --sandbox danger-full-access; unset GOAT_RUNNER; exec "$SHELL" -i',
+      '"$GOAT_RUNNER" --sandbox danger-full-access; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
     ]);
     assert.equal(spec.env.GOAT_RUNNER, "/usr/local/bin/codex");
     assert.equal(spec.initialInput, null);
@@ -368,7 +382,7 @@ describe("terminal exports", () => {
     assert.equal(spec.shell, "/bin/bash");
     assert.deepStrictEqual(spec.args, [
       "-c",
-      '"$GOAT_RUNNER"; unset GOAT_RUNNER; exec "$SHELL" -i',
+      '"$GOAT_RUNNER"; unset GOAT_RUNNER GOAT_CODEX_REPORTING_PROFILE GOAT_CLAUDE_REPORTING_SETTINGS; exec "$SHELL" -i',
     ]);
     assert.equal(spec.env.GOAT_PROMPT, undefined);
     assert.equal(spec.initialInput, "\x1b[200~audit target\x1b[201~\r");
@@ -432,6 +446,59 @@ describe("terminal exports", () => {
     }
   });
 
+  it("cancels deferred prompt delivery when a reporting runner exits early", async () => {
+    const timers = enableTerminalMockTimers();
+    const manager = makeManager();
+    const internals = managerInternals(manager);
+    const spawned = makeSpawnedPty();
+    internals.runnerPaths.set("claude", "/usr/local/bin/claude");
+    internals.nodePtyModule = { spawn: () => spawned.pty };
+    internals.nodePtyAvailable = true;
+
+    try {
+      const created = await manager.create(
+        "run the quality report",
+        PROJECT_ROOT,
+        "claude",
+        { accessMode: "reporting" },
+      );
+      // For example, a user can close the runner before its launch prompt delay expires.
+      spawned.emitExit();
+      timers.tick(5000);
+
+      assert.deepStrictEqual(spawned.writes, []);
+      assert.equal(manager.get(created.id)?.status, "terminated");
+    } finally {
+      manager.shutdown();
+      timers.reset();
+    }
+  });
+
+  it("releases quality capture only after PTY termination begins", async () => {
+    const manager = makeManager();
+    const internals = managerInternals(manager);
+    const spawned = makeSpawnedPty();
+    const events: string[] = [];
+    const originalKill = spawned.pty.kill;
+    spawned.pty.kill = () => {
+      events.push("pty-kill");
+      originalKill();
+    };
+    internals.runnerPaths.set("claude", "/usr/local/bin/claude");
+    internals.nodePtyModule = { spawn: () => spawned.pty };
+    internals.nodePtyAvailable = true;
+
+    const created = await manager.create("", PROJECT_ROOT, "claude");
+    const session = internals.sessions.get(created.id);
+    assert.ok(session);
+    session.qualityCaptures = [
+      { dispose: () => events.push("capture-dispose") },
+    ];
+
+    assert.equal(manager.kill(created.id), true);
+    assert.deepStrictEqual(events, ["pty-kill", "capture-dispose"]);
+  });
+
   it("sends a typed error and closes when attaching to a missing session", () => {
     const manager = makeManager();
     const socket = new FakeWebSocket();
@@ -463,6 +530,21 @@ describe("terminal exports", () => {
     const payload = JSON.stringify(manager.list());
     assert.equal(payload.includes("sensitive prompt text"), false);
     assert.equal(payload.includes("GOAT_PROMPT"), false);
+  });
+
+  it("projects report ownership independently of Claude draft capture", () => {
+    const manager = makeManager();
+    const { session } = makeSession({
+      accessMode: "reporting",
+      captureQualityDrafts: false,
+      qualityReportProjectPath: "/tmp/project",
+    });
+    managerInternals(manager).sessions.set(session.id, session);
+
+    const projected = manager.list()[0];
+
+    assert.equal(projected?.captureQualityDrafts, false);
+    assert.equal(projected?.qualityReportProjectPath, "/tmp/project");
   });
 
   it("replays detached output exactly once when a browser reconnects", () => {
@@ -543,7 +625,27 @@ describe("terminal exports", () => {
   });
 });
 
+/**
+ * Confirm every create past the cap failed with the message the user actually sees.
+ * Use after a concurrency burst: it separates "the cap held" from "something crashed",
+ * which look identical in a plain rejected-count assertion.
+ *
+ * @param rejections - creates the manager refused; an empty list means the cap never
+ *   engaged, which the caller asserts separately
+ */
+function assertRejectionsCarryCapMessage(
+  rejections: PromiseRejectedResult[],
+): void {
+  // Overflow creates fail with the visible cap message, not a stray crash.
+  for (const rejection of rejections) {
+    const message =
+      rejection.reason instanceof Error ? rejection.reason.message : "";
+    assert.match(message, /Maximum \d+ concurrent sessions/);
+  }
+}
+
 describe("terminal session concurrency cap", () => {
+  // Covers racing terminal creates: spawns concurrent requests and expects MAX_SESSIONS never exceeded.
   it("never exceeds MAX_SESSIONS when creates race around loadNodePty", async () => {
     const manager = makeManager();
     const internals = managerInternals(manager);
@@ -576,12 +678,7 @@ describe("terminal session concurrency cap", () => {
       assert.equal(manager.list().length, MAX_SESSIONS);
       assert.equal(created, MAX_SESSIONS);
       assert.equal(rejected.length, attempts - MAX_SESSIONS);
-      // Overflow creates fail with the visible cap message, not a stray crash.
-      for (const rejection of rejected) {
-        const message =
-          rejection.reason instanceof Error ? rejection.reason.message : "";
-        assert.match(message, /Maximum \d+ concurrent sessions/);
-      }
+      assertRejectionsCarryCapMessage(rejected);
     } finally {
       manager.shutdown();
     }
@@ -608,13 +705,13 @@ describe("terminal session concurrency cap", () => {
     const internals = managerInternals(manager);
     internals.runnerPaths.set("claude", "/usr/local/bin/claude");
     // Track whether the PTY spawned after the delete gets torn down.
-    let spawnedKilled = false;
+    let wasSpawnedPtyKilled = false;
     internals.nodePtyModule = {
       spawn: () => {
         const spawned = makeSpawnedPty();
         const originalKill = spawned.pty.kill;
         spawned.pty.kill = () => {
-          spawnedKilled = true;
+          wasSpawnedPtyKilled = true;
           originalKill();
         };
         return spawned.pty;
@@ -634,6 +731,6 @@ describe("terminal session concurrency cap", () => {
     // deleted session as an untracked runner.
     await assert.rejects(createPromise, /cancelled during startup/);
     assert.equal(manager.list().length, 0);
-    assert.equal(spawnedKilled, true);
+    assert.equal(wasSpawnedPtyKilled, true);
   });
 });

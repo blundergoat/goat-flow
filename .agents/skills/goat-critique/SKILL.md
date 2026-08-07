@@ -1,7 +1,7 @@
 ---
 name: goat-critique
 description: "Use when a decision or analysis needs multi-lens critique to surface blind spots before shipping."
-goat-flow-skill-version: "1.14.0"
+goat-flow-skill-version: "1.15.0"
 ---
 # /goat-critique
 
@@ -40,7 +40,7 @@ goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 out
 - Use the preamble's learning-loop retrieval on relevant `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/`; record explicit misses instead of broad-loading buckets.
 - Delegation consent: proceed directly to Phase 1. Skill-chained entry: skip intake confirmation, use caller context; still run retrieval + rubric selection. All phases (1-5 + 5.5 + 5.6) always run.
 - **Differential mode detection:** If `.goat-flow/logs/critiques/` has a same-artifact slug within 30 days, offer differential mode: A/B receive prior log + artifact diff; C stays cold. Phase 5 adds delta counts and `[diff-of: <prior-uuid>]`.
-- **Read context map:** Read the selected rubric's context map (see `references/rubric-examples.md`) and pass to each sub-agent's spawn directive.
+- **Read context map:** Merge the selected rubric map from `references/rubric-examples.md` into the fixed A/B/C split; never replace baseline context.
 
 ## Phase 1 - Generate Competing Critiques
 
@@ -151,7 +151,7 @@ Then the full critique:
 
 **Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion. Every synthesised finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`.
 
-**Phase 5.5 - Meta-audit.** Spawn a lightweight meta-agent (budget: 2 tool calls, no context beyond the draft Phase 5 output). Audit the critique for internal consistency against the 10-point rubric in `references/rubric-examples.md`. If issues found, insert an `## Auto-Detected Issues` block before presenting. Verdict block updated with `Meta-score: N/100`.
+**Phase 5.5 - Meta-audit.** Give a 2-call meta-agent only the Phase 5 draft and the 10 checks in `references/rubric-examples.md`. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Before presentation, insert non-empty `## Auto-Detected Issues`; add `Meta-score: N/100` to the verdict.
 
 **BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." After plan critique, suggest `/goat-plan`.
 

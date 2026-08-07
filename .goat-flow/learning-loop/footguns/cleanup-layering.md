@@ -1,6 +1,6 @@
 ---
 category: cleanup-layering
-last_reviewed: 2026-05-25
+last_reviewed: 2026-08-03
 ---
 
 ## Footgun: Resource cleanup at one layer leaves the consumer loop running at the next layer
@@ -26,3 +26,17 @@ last_reviewed: 2026-05-25
 2. **Test the timeout path explicitly.** Resource-timeout behaviour is the kind of thing nobody writes a test for unless prompted. Every resource ceiling needs a test that exercises the consumer's behaviour when the ceiling fires.
 3. **Document both ceilings together.** When introducing or tuning a resource TTL (`container_timeout`, `session_idle_timeout`, scheduled-run TTL), the matching consumer-loop ceiling must be named in the same commit. A grep for the resource TTL config field must surface the consumer ceiling.
 4. **Codify in an ADR** (see [ADR-029-two-ceiling-runaway-protection.md](../decisions/ADR-029-two-ceiling-runaway-protection.md)) — this principle is durable and will be tempted away by future "simplify by removing the inner ceiling" refactors.
+
+---
+
+## Footgun: Session-scoped cleanup over a project-scoped resource deletes a sibling's live state
+
+**Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Two concurrent sessions on one project silently lose work. One session ends normally and the other's in-flight file vanishes before it is processed - no error, no receipt, and the waiting agent polls for a result that never arrives. The same cause produces a second symptom: one input yields two outputs, because both sessions processed the file before either deleted it.
+
+**Why it happens:** The handle is per session or process, but the resource it cleans is per project. `ensureQualityDraftStagingDirectory` derives the watched directory from the project root, so N dashboard processes can share one directory while each module instance believes it is the owner. A process-local `rootCaptures` map fixed sibling sessions inside one server but could not serialize a second server process. Its `dispose()` still swept every draft in the directory, and each process's `busy` flag guarded only its own loop, leaving the persistence window open for duplicate reports. The agent chooses the draft nonce, so nothing in the filename binds a draft to one server.
+
+**Evidence:** Reproduced first in-process on 2026-08-01, then across two synchronized Node processes on 2026-08-03: one staged draft produced two report files, and shutdown in one module instance could delete state still watched by the other. `test/unit/quality-draft-capture.test.ts` (search: `persists one draft once across independent server processes`) now runs the child-process regression. A second diff audit found that a contender could retain pre-claim metadata until after the winner finished, then rewrite the winner's receipt under the old collision policy; the regression at (search: `preserves a terminal receipt when a late claimant saw the old draft`) keeps completed receipts immutable. A final crash-window audit found that deleting the draft before writing its receipt left an orphaned stale claim invisible to a draft-only scan; `test/unit/quality-draft-orphan-recovery.test.ts` (search: `rejects an orphaned stale claim when its draft is already gone`) now proves claim-marker recovery. `src/cli/server/quality-draft-capture.ts` (search: `orphanedOwnership`) uses an exclusive filesystem claim before reading or persisting, scans orphaned ownership without acquiring it, preserves live claims, rejects stale claims with terminal receipts, and limits shutdown to `ownedClaims` instead of sweeping the shared directory.
+
+**Prevention:** Before giving a session, request, connection, or process its own cleanup handle, name the resource that handle deletes. When the resource key is coarser than the handle's scope (project vs process, directory vs file, table vs row), bind ownership into a cross-process primitive such as an exclusive claim; an in-memory map or reference count is insufficient. Revalidate any pre-claim snapshot after ownership is acquired, treat a valid terminal receipt as another owner's immutable outcome, and scan stale ownership markers as well as source artifacts so a crash between deletion and receipt creation remains recoverable. A `dispose()` that deletes by pattern rather than a verified owner token is the tell. Crash recovery must fail closed when the previous owner may already have completed an irreversible write.

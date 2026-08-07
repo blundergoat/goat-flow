@@ -309,6 +309,17 @@ function dashboardUtilityActionsFragment(): DashboardAppFragment {
   };
 }
 
+/** Optional workspace and reporting fields forwarded by dashboard terminal launch actions. */
+interface DashboardTerminalLaunchOptions {
+  promptLabel?: string | null;
+  presetId?: string | null;
+  cwdPath?: string | null;
+  targetPath?: string | null;
+  accessMode?: TerminalAccessMode;
+  captureQualityDrafts?: boolean;
+  qualityReportProjectPath?: string | null;
+}
+
 /**
  * Build terminal launch and reconnect method shims.
  *
@@ -343,11 +354,7 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
       prompt: string,
       runner?: RunnerId,
       label?: string,
-      options?: {
-        presetId?: string | null;
-        cwdPath?: string | null;
-        targetPath?: string | null;
-      },
+      options?: DashboardTerminalLaunchOptions,
     ) {
       await dashboardLaunchPreset(this, prompt, runner, label, options);
     },
@@ -391,18 +398,19 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
         presetId = null,
         cwdPath = null,
         targetPath = null,
-      }: {
-        promptLabel?: string | null;
-        presetId?: string | null;
-        cwdPath?: string | null;
-        targetPath?: string | null;
-      } = {},
+        accessMode = "workspace",
+        captureQualityDrafts = false,
+        qualityReportProjectPath = null,
+      }: DashboardTerminalLaunchOptions = {},
     ) {
       await dashboardLaunchInTerminal(this, prompt, runner, {
         promptLabel,
         presetId,
         cwdPath,
         targetPath,
+        accessMode,
+        captureQualityDrafts,
+        qualityReportProjectPath,
       });
     },
   };

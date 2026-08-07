@@ -1,22 +1,44 @@
 /**
  * PTY-backed terminal session manager used by the dashboard.
  * It validates runner and project inputs, spawns CLI sessions, and brokers WebSocket traffic.
+ * Use when a user launches, reconnects to, or ends a runner from the Workspace UI.
  */
 import { randomUUID } from "node:crypto";
-import { extname } from "node:path";
-import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import type { WebSocket } from "ws";
 import type {
   SessionInfo,
   SessionStatus,
   CreateResponse,
   HealthResponse,
-  ServerMessage,
   Runner,
+  TerminalAccessMode,
 } from "./types.js";
 import { decodeClientMessage } from "./decoders.js";
 import { getAgentProfiles } from "../agents/registry.js";
 import { validateProjectPath } from "./local-paths.js";
+import {
+  ensureQualityDraftStagingDirectory,
+  startQualityDraftCapture,
+  type QualityDraftCapture,
+} from "./quality-draft-capture.js";
+
+import { stagedQualityCaptureRoots } from "./terminal-reporting-profile.js";
+import {
+  buildTerminalSpawnSpec,
+  chunkTerminalInput,
+  clampDim,
+  looksLikePromptSend,
+  resolveCLIPath,
+  sendMessage,
+} from "./terminal-spawn.js";
+
+export {
+  buildTerminalSpawnSpec,
+  chunkTerminalInput,
+  INITIAL_PROMPT_CHUNK_SIZE,
+  pickWindowsRunnerPath,
+} from "./terminal-spawn.js";
 
 /** Shape of the optional node-pty module without making startup resolve the native package. */
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- because node-pty may be absent until a user opens a terminal
@@ -30,25 +52,12 @@ type IPty = ReturnType<typeof import("node-pty").spawn>;
 export const MAX_SESSIONS = 10;
 const DEFAULT_IDLE_TIMEOUT_MINUTES = 480; // Default limit: one workday keeps abandoned PTYs from surviving overnight.
 
-const WINDOWS_RUNNER_EXTENSION_PRIORITY = [
-  ".exe",
-  ".cmd",
-  ".bat",
-  ".com",
-  ".ps1",
-] as const;
-const WINDOWS_TERMINAL_SHELL = "powershell.exe";
-const POSIX_PROMPT_ENV_CLEANUP = "unset GOAT_RUNNER";
-const WINDOWS_PROMPT_ENV_CLEANUP =
-  "Remove-Item Env:GOAT_RUNNER -ErrorAction SilentlyContinue";
-const CODEX_DASHBOARD_ARGS = "--sandbox danger-full-access";
 const INITIAL_PROMPT_AFTER_OUTPUT_DELAY_MS = 150;
 const INITIAL_PROMPT_FALLBACK_DELAY_MS = 5000;
-export const INITIAL_PROMPT_CHUNK_SIZE = 2048;
 
 const DETACH_BUFFER_LIMIT = 512 * 1024; // Buffer limit: 512KB preserves reconnect scrollback without unbounded server memory.
 
-/** Internal state for a single PTY terminal session */
+/** Internal session contract that keeps PTY resources and user-selected launch authority together. */
 interface TerminalSession {
   id: string;
   status: SessionStatus;
@@ -60,6 +69,11 @@ interface TerminalSession {
   /** Explicit target project path passed to the launched agent. */
   targetPath: string;
   runner: Runner;
+  accessMode: TerminalAccessMode;
+  /** Whether retry/reconnect must restore the dashboard-owned quality receipt channel. */
+  captureQualityDrafts: boolean;
+  /** Validated mode-selected report owner, or null when this launch did not declare one. */
+  qualityReportProjectPath: string | null;
   lastInputAt: number;
   pty: IPty | null;
   ws: WebSocket | null;
@@ -68,14 +82,8 @@ interface TerminalSession {
   detachBuffer: string[];
   /** Total character count in detachBuffer (for limit enforcement). */
   detachBufferSize: number;
-}
-
-/** Shell, arguments, environment, and deferred input needed to launch a runner in a durable PTY. */
-interface TerminalSpawnSpec {
-  shell: string;
-  args: string[];
-  env: NodeJS.ProcessEnv;
-  initialInput: string | null;
+  /** Staged-draft persistence pollers for enforced Claude reporting sessions (ADR-044). */
+  qualityCaptures: QualityDraftCapture[];
 }
 
 type TerminalTraceEventKind = "terminal.send" | "prompt.send";
@@ -95,200 +103,11 @@ export interface TerminalTraceEvent {
 /** Observer hook for terminal input traces; sink failures are isolated from session writes. */
 export type TerminalTraceSink = (event: TerminalTraceEvent) => void;
 
-/** Format a full prompt as one terminal paste submitted once to the runner. */
-function formatInitialPromptInput(prompt: string): string {
-  return "\x1b[200~" + prompt + "\x1b[201~" + "\r";
-}
-
 /**
- * Split terminal input into bounded chunks for PTY write reliability.
- *
- * @param input Full terminal payload to write.
- * @param chunkSize Maximum characters per PTY write; must be a positive integer.
- * @returns Ordered chunks that concatenate back to the original input.
- * @throws Error when `chunkSize` is not a positive integer.
+ * Own every dashboard PTY session from launch reservation through cleanup.
+ * Use when Workspace users start, reconnect, send input to, or close runner terminals.
+ * Public snapshots retain the access and report-capture intent needed for safe retries.
  */
-export function chunkTerminalInput(
-  input: string,
-  chunkSize = INITIAL_PROMPT_CHUNK_SIZE,
-): string[] {
-  if (!Number.isInteger(chunkSize) || chunkSize <= 0) {
-    throw new Error("chunkSize must be a positive integer");
-  }
-  const chunks: string[] = [];
-  for (let index = 0; index < input.length; index += chunkSize) {
-    chunks.push(input.slice(index, index + chunkSize));
-  }
-  return chunks;
-}
-
-/**
- * Pick the most runnable Windows runner path from a `where` result set.
- *
- * @param candidates Raw paths returned by `where`, including possible blank or duplicate lines.
- * @returns The preferred executable-like path, or null when nothing usable remains.
- */
-export function pickWindowsRunnerPath(
-  candidates: readonly string[],
-): string | null {
-  const cleaned = Array.from(
-    new Set(
-      candidates
-        .map((candidate) => candidate.trim())
-        .filter((candidate) => {
-          return candidate.length > 0;
-        }),
-    ),
-  );
-  if (cleaned.length === 0) return null;
-
-  const rank = (candidate: string): number => {
-    const ext = extname(candidate).toLowerCase();
-    const index = WINDOWS_RUNNER_EXTENSION_PRIORITY.indexOf(
-      ext as (typeof WINDOWS_RUNNER_EXTENSION_PRIORITY)[number],
-    );
-    return index === -1 ? WINDOWS_RUNNER_EXTENSION_PRIORITY.length : index;
-  };
-
-  cleaned.sort((left, right) => rank(left) - rank(right));
-  return cleaned[0] ?? null;
-}
-
-/** Build the runner command embedded in the shell wrapper. */
-function terminalRunnerCommand(
-  runner: Runner,
-  platform: NodeJS.Platform,
-): string {
-  if (runner !== "codex") {
-    return platform === "win32" ? "& $env:GOAT_RUNNER" : '"$GOAT_RUNNER"';
-  }
-  return platform === "win32"
-    ? `& $env:GOAT_RUNNER ${CODEX_DASHBOARD_ARGS}`
-    : `"$GOAT_RUNNER" ${CODEX_DASHBOARD_ARGS}`;
-}
-
-/**
- * Build the PTY shell invocation that keeps a usable terminal open per OS.
- *
- * @param runner Runner identity used for runner-specific launch flags.
- * @param cliPath Absolute runner binary path to launch inside the shell.
- * @param prompt Optional launch prompt delivered through PTY input after startup.
- * @param environment Environment snapshot merged into the spawned process.
- * @param platform Platform selector used by tests and cross-platform launch planning.
- * @returns Spawn details plus deferred initial input; callers own the actual PTY spawn.
- */
-export function buildTerminalSpawnSpec(
-  runner: Runner,
-  cliPath: string,
-  prompt: string,
-  environment: NodeJS.ProcessEnv = process.env,
-  platform = process.platform,
-): TerminalSpawnSpec {
-  const hasPrompt = prompt.length > 0;
-  const env: NodeJS.ProcessEnv = {
-    ...environment,
-    GOAT_RUNNER: cliPath,
-  };
-  const initialInput = hasPrompt ? formatInitialPromptInput(prompt) : null;
-
-  if (platform === "win32") {
-    return {
-      shell: WINDOWS_TERMINAL_SHELL,
-      args: [
-        "-NoLogo",
-        "-NoExit",
-        "-Command",
-        `try { ${terminalRunnerCommand(runner, platform)} } finally { ${WINDOWS_PROMPT_ENV_CLEANUP} }`,
-      ],
-      env,
-      initialInput,
-    };
-  }
-
-  const configuredShell = environment.SHELL;
-  const shell = configuredShell?.length ? configuredShell : "/bin/bash";
-  const shellCmd = `${terminalRunnerCommand(runner, platform)}; ${POSIX_PROMPT_ENV_CLEANUP}; exec "$SHELL" -i`;
-
-  return {
-    shell,
-    args: ["-c", shellCmd],
-    env: {
-      ...env,
-      SHELL: shell,
-    },
-    initialInput,
-  };
-}
-
-/**
- * Resolve a CLI binary by reading the process PATH through platform lookup tools.
- * Reads process state only; swallows lookup errors and reports them as null because missing runners are normal dashboard state.
- */
-function resolveCLIPath(name: string): string | null {
-  if (process.platform === "win32") {
-    try {
-      const candidates = execFileSync("where", [name], {
-        encoding: "utf-8",
-        timeout: 5000,
-      })
-        .split(/\r?\n/)
-        .map((candidate) => candidate.trim())
-        .filter(Boolean);
-      const preferred = pickWindowsRunnerPath(candidates);
-      if (preferred) return preferred;
-      return null;
-    } catch {
-      /* passive detection only; do not execute runner binaries at startup */
-      return null;
-    }
-  }
-
-  try {
-    return execFileSync("which", [name], {
-      encoding: "utf-8",
-      timeout: 5000,
-    }).trim();
-  } catch {
-    try {
-      return (
-        execFileSync("where", [name], { encoding: "utf-8", timeout: 5000 })
-          .trim()
-          .split("\n")[0]
-          ?.trim() ?? null
-      );
-    } catch {
-      return null;
-    }
-  }
-}
-
-/** Clamp a terminal dimension to a safe integer range. */
-function clampDim(
-  dimensionValue: unknown,
-  max: number,
-  fallback: number,
-): number {
-  return Number.isInteger(dimensionValue) &&
-    (dimensionValue as number) > 0 &&
-    (dimensionValue as number) <= max
-    ? (dimensionValue as number)
-    : fallback;
-}
-
-/** Send a terminal message when the browser socket is still open. */
-function sendMessage(socket: WebSocket, msg: ServerMessage): void {
-  if (socket.readyState === 1) {
-    // WebSocket.OPEN
-    socket.send(JSON.stringify(msg));
-  }
-}
-
-/** Detect bracketed paste sends so trace output can distinguish launch prompts from typing. */
-function looksLikePromptSend(input: string): boolean {
-  return input.includes("\x1b[200~");
-}
-
-/** Manages PTY-backed terminal sessions for the dashboard */
 class TerminalManager {
   private sessions = new Map<string, TerminalSession>();
   private runnerPaths = new Map<Runner, string>();
@@ -326,19 +145,19 @@ class TerminalManager {
   }
 
   /**
-   * Create a terminal session for the requested runner and project.
-   *
-   * A slot is reserved synchronously - a `starting` placeholder lands in the
-   * session map before any async work - so the MAX_SESSIONS cap holds even when
-   * the dashboard fires several launches at once (a user double-clicking "Run",
-   * or opening two runner tabs together). The reservation becomes a live
-   * session once the PTY spawns, or is released if any startup step fails.
+   * Reserve and create one runner terminal for the user's selected project.
+   * The synchronous placeholder keeps double-clicks under the session cap, then becomes active or is released.
    */
   async create(
     prompt: string,
     projectPath: string,
     runner: Runner = "claude",
-    options: { targetPath?: string } = {},
+    options: {
+      targetPath?: string;
+      accessMode?: TerminalAccessMode;
+      captureQualityDrafts?: boolean;
+      qualityReportProjectPath?: string;
+    } = {},
   ): Promise<CreateResponse> {
     const activeSessions = Array.from(this.sessions.values()).filter(
       (s) => s.status !== "terminated",
@@ -363,12 +182,16 @@ class TerminalManager {
       cwd: projectPath,
       targetPath: projectPath,
       runner,
+      accessMode: options.accessMode ?? "workspace",
+      captureQualityDrafts: false,
+      qualityReportProjectPath: null,
       lastInputAt: Date.now(),
       pty: null,
       ws: null,
       idleTimer: null,
       detachBuffer: [],
       detachBufferSize: 0,
+      qualityCaptures: [],
     };
     this.sessions.set(id, session);
 
@@ -400,11 +223,17 @@ class TerminalManager {
    * @param options - optional explicit target path for the launched agent
    * @returns the create response describing the now-active session
    */
+  // eslint-disable-next-line complexity -- Intentional because owner validation must precede staging, permissions, and spawn.
   private async startReservedSession(
     session: TerminalSession,
     prompt: string,
     projectPath: string,
-    options: { targetPath?: string },
+    options: {
+      targetPath?: string;
+      accessMode?: TerminalAccessMode;
+      captureQualityDrafts?: boolean;
+      qualityReportProjectPath?: string;
+    },
   ): Promise<CreateResponse> {
     const { id, runner } = session;
     const cliPath = this.runnerPaths.get(runner);
@@ -420,9 +249,59 @@ class TerminalManager {
     const validatedTarget = validateProjectPath(
       options.targetPath || validatedCwd,
     );
+    const validatedQualityReportProject = options.qualityReportProjectPath
+      ? validateProjectPath(options.qualityReportProjectPath)
+      : null;
+    // A missing owner means this launch has no mode-specific report destination to restore later.
+    const canonicalQualityReportProject =
+      validatedQualityReportProject === null
+        ? null
+        : realpathSync(validatedQualityReportProject);
+    let qualityReportProjectPath: string | null = null;
+    // A supplied owner must remain one of the projects the user deliberately launched.
+    if (canonicalQualityReportProject !== null) {
+      const allowedReportOwner = [validatedCwd, validatedTarget].find(
+        (rootPath) => realpathSync(rootPath) === canonicalQualityReportProject,
+      );
+      // A different owner could redirect a quality report into an unrelated project.
+      if (!allowedReportOwner) {
+        throw new Error(
+          "Quality report owner must match the terminal workspace or selected target.",
+        );
+      }
+      qualityReportProjectPath = allowedReportOwner;
+    }
+    // Staging must exist BEFORE the permission overlay is built below so a
+    // fresh target still receives its `.goat-flow/logs` write allow. Failure
+    // here fails the launch closed: a staged-draft session must never start
+    // without a working persistence path.
+    const reportingCaptureRoots = stagedQualityCaptureRoots(
+      runner,
+      session.accessMode,
+      options.captureQualityDrafts === true,
+      qualityReportProjectPath,
+    );
+    session.captureQualityDrafts = reportingCaptureRoots.length > 0;
+    session.qualityReportProjectPath = qualityReportProjectPath;
+    // Each capture root must exist before Claude receives permission to write its one draft.
+    for (const captureRoot of reportingCaptureRoots) {
+      ensureQualityDraftStagingDirectory(captureRoot);
+    }
     const nodePty = await this.loadNodePty();
 
-    const spawnSpec = buildTerminalSpawnSpec(runner, cliPath, prompt);
+    const spawnSpec = buildTerminalSpawnSpec(
+      runner,
+      cliPath,
+      prompt,
+      process.env,
+      process.platform,
+      {
+        accessMode: session.accessMode,
+        projectPath: validatedCwd,
+        targetPath: validatedTarget,
+        ...(qualityReportProjectPath ? { qualityReportProjectPath } : {}),
+      },
+    );
 
     console.log(
       `[terminal] Starting ${runner} session in ${validatedCwd} for target ${validatedTarget}`,
@@ -458,6 +337,11 @@ class TerminalManager {
     session.targetPath = validatedTarget;
     session.pty = pty;
     session.lastInputAt = Date.now();
+    for (const captureRoot of reportingCaptureRoots) {
+      session.qualityCaptures.push(
+        startQualityDraftCapture({ projectRoot: captureRoot }),
+      );
+    }
 
     let hasInitialInputSent = false;
     let initialInputTimer: ReturnType<typeof setTimeout> | null = null;
@@ -521,6 +405,7 @@ class TerminalManager {
 
     pty.onExit(({ exitCode, signal }) => {
       session.status = "terminated";
+      this.disposeQualityCaptures(session);
       if (initialInputTimer) {
         clearTimeout(initialInputTimer);
         initialInputTimer = null;
@@ -558,6 +443,7 @@ class TerminalManager {
    */
   private releaseReservedSession(session: TerminalSession): void {
     this.clearIdleTimer(session);
+    this.disposeQualityCaptures(session);
     // A PTY exists only if spawn succeeded but a later step failed; kill it.
     if (session.pty) {
       try {
@@ -750,6 +636,9 @@ class TerminalManager {
         } catch {
           /* already dead */
         }
+      } else {
+        // No runner exists, so no process can create another staged draft.
+        this.disposeQualityCaptures(session);
       }
     }
     if (session.ws) {
@@ -810,6 +699,19 @@ class TerminalManager {
     }, timeoutMs);
   }
 
+  /** Swallows one staged-draft teardown error so every sibling capture still releases. */
+  private disposeQualityCaptures(session: TerminalSession): void {
+    for (const capture of session.qualityCaptures) {
+      try {
+        capture.dispose();
+      } catch {
+        // One capture failure cannot block sibling release or terminal teardown.
+        continue;
+      }
+    }
+    session.qualityCaptures = [];
+  }
+
   /** Clear the idle-timeout timer for a session. */
   private clearIdleTimer(session: TerminalSession): void {
     if (session.idleTimer) {
@@ -828,6 +730,9 @@ class TerminalManager {
       cwd: session.cwd,
       targetPath: session.targetPath,
       runner: session.runner,
+      accessMode: session.accessMode,
+      captureQualityDrafts: session.captureQualityDrafts,
+      qualityReportProjectPath: session.qualityReportProjectPath,
       lastInputAt: session.lastInputAt,
     };
   }
