@@ -2,6 +2,14 @@
 
 ## v1.15.0 - 2026-08-07
 
+- **Passive dashboard checks stop executing audited hook code** - `/api/audit` and `/api/quality` now use static deny-hook evidence and report `limited`/`static-local` instead of runtime proof. Dashboards from v1.9.0-v1.14.0 ran the selected checkout's configured hook launcher; until upgrading, avoid per-agent Dashboard checks on untrusted code (v1.9-v1.11) or audit with `--untrusted-target` from the CLI (v1.12-v1.14).
+- **Runtime hook proof stays on the trusted CLI path** - `goat-flow audit --agent <id>` still executes the configured launcher and `$root` glue by default; `--untrusted-target` keeps that audit static for checkouts you do not trust.
+- **Managed hook launches reject redirected scripts** - Symlinked, non-regular, multi-hard-linked, or root-escaping hook scripts fail closed before Bash starts.
+- **Post-turn scans catch terminated credential assignments** - `KEY="value";` is detected on the native and Bash 3 paths; expressions after the terminator stay excluded.
+- **Managed hook matching requires complete path tokens** - Setup, drift audit, and deny smoke no longer claim user hooks such as `custom-post-turn-safety.sh` whose names merely contain a managed script name.
+- **Review and content parsing follow rendered CommonMark** - Closing ATX markers and up-to-three-space indented headings parse as rendered, so review sections and readiness markers cannot hide or invent state.
+- **Preflight and CI ratchet Gruff warning debt** - A reviewed manifest pins warning identities by `stableIdentity`; new warnings, occurrence growth, worsened metadata, stale accepted debt, or coverage loss fail preflight and a dedicated Node 22 CI ratchet job.
+- **Accepted debt stays visible on a green run** - The ratchet prints its identity, occurrence, coverage, and advisory counts so a passing gate never reads as "no debt".
 - **Windows install discovery finds Git Bash** - Standard machine and per-user Git paths work when PATH exposes only the WSL shim.
 - **Install previews use real Windows admission** - `--dry-run` reports the same missing-Bash blocker as a real install.
 - **Managed hooks use the resolved Windows shell** - Node launches discovered Git Bash instead of relying on bare `bash`.

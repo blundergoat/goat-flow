@@ -2,7 +2,7 @@
   "schemaVersion": "gruff.analysis.v2",
   "analyzer": "@blundergoat/gruff-ts",
   "reviewedAt": "2026-08-07",
-  "minimumAnalysedFiles": 447,
+  "minimumAnalysedFiles": 449,
   "entries": [
     {
       "stableIdentity": "19af30392f9d5c19",

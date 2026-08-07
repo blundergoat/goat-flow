@@ -1,17 +1,20 @@
 /**
- * Stand-in analyzer entry for gruff-warning-ratchet tests.
- *
- * The ratchet checker spawns this file through `process.execPath` when
- * `GOAT_FLOW_GRUFF_RATCHET_ANALYZER_BIN` is set, so fixtures can replay any
- * analyzer outcome deterministically: exit codes for operational failures,
- * arbitrary stdout for malformed or drifted JSON, and stderr diagnostics.
- * It never inspects the repository; every behaviour comes from FAKE_GRUFF_*
- * environment variables set by the test that spawned the checker.
+ * Stand-in analyzer used by the warning-ratchet tests instead of the real gruff-ts scan.
+ * The ratchet spawns this file whenever GOAT_FLOW_GRUFF_RATCHET_ANALYZER_BIN is set, which lets a
+ * test replay any outcome a maintainer could hit for real: a crashed analyzer, a banner printed ahead
+ * of the JSON, a drifted schema, or a clean report. It never looks at the repository - every response
+ * comes from the FAKE_GRUFF_* variables the test sets, so ratchet behaviour is checked without
+ * needing a repository that actually has the debt under test.
  */
-const stdout = process.env.FAKE_GRUFF_STDOUT ?? "";
-const stderr = process.env.FAKE_GRUFF_STDERR ?? "";
-const exitCode = Number(process.env.FAKE_GRUFF_EXIT ?? "0");
+const scriptedStdout = process.env.FAKE_GRUFF_STDOUT ?? "";
+const scriptedStderr = process.env.FAKE_GRUFF_STDERR ?? "";
+const scriptedExitCode = Number(process.env.FAKE_GRUFF_EXIT ?? "0");
 
-if (stdout.length > 0) process.stdout.write(stdout);
-if (stderr.length > 0) process.stderr.write(stderr);
-process.exit(Number.isFinite(exitCode) ? exitCode : 1);
+// A test asked for report output, standing in for the analyzer's JSON on a real run.
+if (scriptedStdout.length > 0) process.stdout.write(scriptedStdout);
+
+// A test asked for diagnostics, standing in for an analyzer complaining about its own config.
+if (scriptedStderr.length > 0) process.stderr.write(scriptedStderr);
+
+// A non-numeric exit code would mean the test set something unusable, so fail rather than pass.
+process.exit(Number.isFinite(scriptedExitCode) ? scriptedExitCode : 1);

@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-07
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -251,3 +251,13 @@ last_reviewed: 2026-08-06
 **Prevention:** Every branch needs an explicit stop or continue rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-skills-2.test.ts` (search: `Quick Scan out of Full-only specialist work`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
 
 ---
+
+## Lesson: A documentation pass can push a file past a size gate it was written to enforce
+
+**Status:** active | **Created:** 2026-08-07
+
+**What happened:** Applying the mandatory comment standard to `scripts/check-gruff-warning-ratchet.mjs` grew it from 626 to 783 lines, past the 750-line `size.file-length` threshold. The warning-debt ratchet then reported its own checker as new debt on the very run that was meant to prove the release clean.
+
+**Root cause:** I treated comment work as free of quality-gate consequences. Doc comments on every function, context lines on every branch, and null/empty meaning on every tag add real lines, so a file already near a size threshold crosses it.
+
+**Prevention:** Before commenting a file that sits within about 20% of its size threshold, check the current count and plan the split first. Splitting by responsibility is the fix, never accepting the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).

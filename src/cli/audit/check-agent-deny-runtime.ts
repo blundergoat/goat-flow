@@ -292,23 +292,23 @@ function extractConfiguredScriptPath(
 }
 
 /**
- * Match a managed script filename only as a complete path token. A user hook
- * such as `custom-deny-dangerous.sh` contains the managed name as a plain
- * substring, so bare `includes` would collect it for the smoke and report the
- * user's unrelated hook as a broken managed command; requiring a token
- * boundary before the name (start, whitespace, quote, `=`, or a path
- * separator) and after it (end, whitespace, quote, or a shell delimiter)
- * keeps unrelated project hooks out of managed smoke validation.
+ * Decide whether a configured hook command launches the managed deny script.
+ * Use when picking which commands the trusted audit replays with a blocked payload, so the user's own
+ * hooks are never run or reported. The name must appear as a whole path token: a project hook called
+ * `custom-deny-dangerous.sh` merely contains the managed name, and replaying it would tell the user
+ * their guard is broken when it is simply their own script.
  *
- * @param command - one configured hook command string
- * @param script - managed script filename to look for as a full token
- * @returns whether the command references the script as a complete token
+ * @param command - one command string from the project's hook config; empty is never a match
+ * @param script - managed script filename to look for, such as `deny-dangerous.sh`
+ * @returns true when this command launches the managed script and is worth replaying; false skips it
+ *   so an unrelated project hook is left alone
  */
 function commandReferencesScriptToken(
   command: string,
   script: string,
 ): boolean {
   const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // The name must start at a path or word boundary and end at one, so `custom-<name>` never matches.
   const scriptTokenPattern = new RegExp(
     `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
     "mu",

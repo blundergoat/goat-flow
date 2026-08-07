@@ -76,11 +76,11 @@ function buildDashboardAuditReport(
       {
         agentFilter,
         harness: includeHarness,
-        // Passive dashboard reads never execute the audited checkout's
-        // configured hook launcher: summary cards only need to know whether
-        // the deny mechanism is installed, and per-agent audits stop at
-        // static evidence. Runtime proof requires the explicit trusted CLI
-        // audit; a selected path is not a trust grant.
+        // Opening a page must never run code from the project the user selected. Home cards only
+        // need to show whether a deny hook is installed, and clicking one agent still stops at
+        // static evidence, so the card reads "limited" instead of claiming proof it did not gather.
+        // Real runtime proof is a deliberate CLI audit the user chooses to run against a checkout
+        // they trust; picking a folder in the dashboard is not that choice.
         denyMechanismEvidenceLevel:
           agentFilter === null ? "present-only" : "static",
         factProfile: auditFactProfile,

@@ -202,7 +202,8 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
   // Plain concatenation instead of a nested template: a template literal
   // inside an interpolation confuses simpler block scanners into reading the
   // rest of the file as this function.
-  const unavailableReason = "Policy hook unavailable: " + userFacingReason + ".";
+  const unavailableReason =
+    "Policy hook unavailable: " + userFacingReason + ".";
   // Antigravity reads deny JSON from stdout and considers that response handled.
   if (hookResponseMode === "antigravity") {
     process.stdout.write(
@@ -244,46 +245,57 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
 }
 
 /**
- * Reject managed hook scripts whose on-disk shape could redirect execution.
- * A managed hook must be a plain project-owned file: a symlink, non-regular
- * file, extra hard link, or symlink-resolved escape from the project root can
- * each hand execution to code the project does not contain, so every
- * redirected shape fails closed before Bash starts.
+ * Refuse a managed hook whose file on disk could send execution somewhere else.
+ * Runs on every hook launch, before Bash starts, because a guard the user
+ * believes is protecting them must run the project's own reviewed script and
+ * nothing else. Each rejected shape becomes a visible "hook unavailable" block
+ * rather than a silent pass, so the user is told their guard did not run.
+ * Error behavior: never throws - a file that stops resolving mid-check is
+ * reported as "hook script was not found" so the launch still fails closed.
  *
- * @param {string} projectRoot - Selected project root the hook must stay inside.
- * @param {string} hookScriptPath - Absolute hook script path that already exists.
- * @returns {string | null} User-facing failure reason, or null for a plain contained file.
+ * @param {string} projectRoot - Project the user selected; the hook must resolve inside it.
+ * @param {string} hookScriptPath - Absolute path to the hook file, already known to exist.
+ * @returns {string | null} Reason shown to the user, or null when the file is a plain
+ *   project-owned script and the hook may run normally.
  */
 function hookScriptShapeFailure(projectRoot, hookScriptPath) {
   let hookScriptStats;
   try {
     hookScriptStats = lstatSync(hookScriptPath);
   } catch {
+    // The file vanished between the existence check and now - for example the
+    // user reinstalled hooks in another window while an agent was working.
     return "hook script was not found";
   }
+  // A symlink means the file the user reviewed is not the file that would run.
   if (hookScriptStats.isSymbolicLink()) {
     return "hook script is a symlink; managed hooks must be regular files";
   }
+  // A directory or device in the hook's place cannot be the reviewed script.
   if (!hookScriptStats.isFile()) {
     return "hook script is not a regular file";
   }
+  // Extra hard links mean the same content is reachable under another name that
+  // can be swapped independently of the path the user installed.
   if (hookScriptStats.nlink > 1) {
     return "hook script has multiple hard links";
   }
-  // A symlinked parent directory can escape the root even when the textual
-  // relative path looks contained, so the fully resolved path is checked too.
   let resolvedHookScriptPath;
   let resolvedProjectRoot;
   try {
     resolvedHookScriptPath = realpathSync(hookScriptPath);
     resolvedProjectRoot = realpathSync(projectRoot);
   } catch {
+    // The path stopped resolving mid-check - for example a synced folder the
+    // user's file-sync tool replaced while the hook was starting.
     return "hook script was not found";
   }
   const resolvedRelativeHookPath = relative(
     resolvedProjectRoot,
     resolvedHookScriptPath,
   );
+  // A symlinked parent directory can leave the project even when the plain path
+  // text looks contained, so the fully resolved location is checked as well.
   if (
     resolvedRelativeHookPath === ".." ||
     resolvedRelativeHookPath.startsWith(`..${win32.sep}`) ||

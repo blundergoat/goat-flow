@@ -246,22 +246,24 @@ function shellCommand(agent: AgentProfile, spec: HookSpec): string {
 }
 
 /**
- * Match a managed script filename only as a complete path token. A user hook
- * such as `custom-post-turn-safety.sh` contains a managed name as a plain
- * substring, so bare `includes` would claim it and setup would remove or
- * replace the user's own hook; requiring a token boundary before the name
- * (start, whitespace, quote, `=`, or a path separator) and after it (end,
- * whitespace, quote, or a shell delimiter) keeps unrelated hooks unmanaged.
+ * Decide whether a hook entry in the user's agent config is one goat-flow installed.
+ * Use before setup adds, replaces, or removes a registration, so toggling a hook in the dashboard
+ * never rewrites a hook the user wrote themselves. The name must appear as a whole path token: a
+ * user hook called `custom-post-turn-safety.sh` merely contains a managed name, and claiming it
+ * would delete the user's own guard when they switched the managed one off.
  *
- * @param commands - newline-joined command strings from one config entry
- * @param script - managed script filename to look for as a full token
- * @returns whether any command references the script as a complete token
+ * @param commands - command strings from one config entry, joined by newlines; empty means the entry
+ *   runs nothing and can never be a managed registration
+ * @param script - managed script filename to look for, such as `post-turn-safety.sh`
+ * @returns true when this entry launches the managed script, so setup owns it; false leaves the
+ *   entry untouched as the user's own hook
  */
 function commandsReferenceScriptToken(
   commands: string,
   script: string,
 ): boolean {
   const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // The name must start at a path or word boundary and end at one, so `custom-<name>` never matches.
   const scriptTokenPattern = new RegExp(
     `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
     "mu",

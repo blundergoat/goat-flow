@@ -373,7 +373,10 @@ describe("hook launcher script validation", () => {
     "run-with-bash.mjs",
   );
 
-  /** Run the canonical launcher exactly as agent configs do: a child process rooted in the project. */
+  /**
+   * Run the canonical launcher exactly as agent configs do.
+   * Side effect: starts one child process with the fixture project as its working directory.
+   */
   function runLauncherProcess(root: string, scriptRel: string) {
     return spawnSync(process.execPath, [LAUNCHER, scriptRel, "policy"], {
       cwd: root,
@@ -381,7 +384,10 @@ describe("hook launcher script validation", () => {
     });
   }
 
-  /** Create the managed hooks directory inside a fixture project. */
+  /**
+   * Create the managed hooks directory inside a fixture project.
+   * Side effect: writes the `.goat-flow/hooks` directory tree under the temporary project.
+   */
   function makeHookDir(root: string): string {
     const hookDir = join(root, ".goat-flow", "hooks");
     mkdirSync(hookDir, { recursive: true });
@@ -444,6 +450,9 @@ describe("hook launcher script validation", () => {
     });
   });
 
+  // The hook path text stays inside the project, so only resolving the symlinked parent directory
+  // reveals that the script really lives elsewhere. This fixture writes a project plus an outside
+  // directory and spawns the launcher, because path text alone cannot prove containment.
   it("fails closed when a symlinked parent directory escapes the project root", () => {
     withTempProject((root) => {
       const outsideHooks = mkdtempSync(join(tmpdir(), "goat-flow-outside-"));
@@ -470,6 +479,9 @@ describe("hook launcher script validation", () => {
 });
 
 describe("hook registrar: unrelated hook preservation", () => {
+  // The user's own Stop hook is called `custom-post-turn-safety.sh`, which merely contains the
+  // managed name, so a wrong claim would delete their guard when the managed hook is switched off.
+  // This fixture writes their settings file and toggles the hook, because only the off step deletes it.
   it("preserves user hooks whose names merely contain a managed script name", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".claude"), { recursive: true });

@@ -286,12 +286,23 @@ interface ReadinessHeading {
   text: string;
 }
 
-/** Parse one hash-prefixed Markdown heading; ordinary lines return null. */
+/**
+ * Read one `#`-style heading the way a reader sees it rendered.
+ * Used while scanning a document for readiness sections, so an author's "Open Questions" heading is
+ * recognised whether or not they left a few spaces in front of it. Pure inspection: it reads the line
+ * and writes nothing, so re-running an audit never changes the document.
+ *
+ * @param line - one line of the document being audited
+ * @returns the heading level and visible text, or null when this line is ordinary prose and the audit
+ *   simply moves on
+ */
 function parseAtxHeading(line: string): ReadinessHeading | null {
-  // CommonMark allows up to three leading spaces before an ATX heading, the
-  // same indentation the setext parser below already accepts.
+  // Up to three leading spaces still render as a heading, so an indented "## Open Questions" the
+  // author sees on screen must be scanned rather than skipped as plain text.
   const match = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+  // Not a heading line at all, so there is no section boundary here.
   if (!match?.[1]) return null;
+  // Hash marks with no text after them, which readers see as an empty heading.
   if (match[2] === undefined) return null;
   return { level: match[1].length, text: match[2] };
 }

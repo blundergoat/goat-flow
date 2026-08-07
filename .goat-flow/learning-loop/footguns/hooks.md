@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-05
+last_reviewed: 2026-08-07
 ---
 
 **Scope:** Hook runtime delivery, Stop-scanner behavior, execution performance, and resolved hook history. Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -120,6 +120,26 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 2. Do not assume a `$( )` count predicts wall clock. Substitutions actually executed per invocation are far fewer than a count of traced lines mentioning a function name suggests.
 3. Prepare segment context once in `check_segment`; policy modules consume the shared `CMD_*` and `HAS_*` values. A new module must not call `prepare_segment_context` itself.
 4. This is security-critical parsing: any restructuring needs `--self-test=full` green plus a byte-exact verdict corpus before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
+
+## Footgun: Gitignored installed mirrors make repository-scan baselines diverge between local and CI
+
+**Status:** active | **Created:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
+
+**Trap:** A full-repository analyzer baseline recorded from a developer working tree silently includes gitignored local state. The gruff warning-ratchet floor was first recorded as 448 analysed files because the scan counted `.goat-flow/hooks/run-with-bash.mjs`, the gitignored installed mirror of the tracked `workflow/hooks/run-with-bash.mjs`. A fresh CI checkout never contains that mirror, so the same manifest would fail CI two ways at once: analysed-file coverage below the recorded floor, and the mirror's warning identity reported as stale accepted debt. Both failures would read as regressions when nothing regressed.
+
+**Evidence:** Measured on 2026-08-07 while adding the ratchet: local scan `paths.analysedFiles: 448` with a `security.process-exec` identity for the gitignored mirror; the identical tree minus gitignored state analyses 447 files with no mirror identity. Anchors: `.gruff-ts.yaml` (search: `installed hook mirrors are gitignored local copies`), `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`), `.github/workflows/ci.yml` (search: `gruff-warning-ratchet`).
+
+**Prevention:** A shared scan contract may only cover files every environment can see. Before recording a coverage floor or accepted-debt manifest, ignore gitignored local artifacts in the analyzer's own path config (mirroring the existing `.goat-flow/logs/**` ignore) and verify every manifest entry's file with `git ls-files --error-unmatch`. Keep the tracked canonical copies fully analyzed so the ignore removes duplication, never coverage.
+
+## Footgun: Nested template literals can blind the gruff-ts block scanner to everything after them
+
+**Status:** active | **Created:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
+
+**Trap:** A template literal nested inside another template's `${...}` interpolation (for example `` `${JSON.stringify({ reason: `text ${value}` })}` ``) breaks gruff-ts 0.4.0 function-block detection: the scanner treats the inner backtick as closing the outer template, misreads the following braces, and attributes the rest of the file to the enclosing function. Findings inside the blinded region simply never appear, so the file reads cleaner than it is - the launcher's argv `spawnSync` calls produced no `security.process-exec` finding at all until the nesting was removed, and the phantom mega-function only surfaced when added lines pushed it over `size.function-length`.
+
+**Evidence:** Measured on 2026-08-07: with nested templates in `reportUnavailable`, the analyzer reported `size.function-length` of 226 lines attributed to `reportUnavailable` (a ~40-line function) and zero process-exec findings for the file; after replacing the nested template with plain concatenation, the phantom finding disappeared and the file's real `spawnSync` warning appeared for the first time. Anchors: `workflow/hooks/run-with-bash.mjs` (search: `a template literal`), `scripts/gruff-warning-baseline.json` (search: `surfaced when the M03 nested-template refactor`).
+
+**Prevention:** Treat a suspiciously clean gruff result on a file with nested template literals as unparsed, not clean. Prefer plain concatenation or an extracted variable over templates nested inside interpolations in analyzed source, and when a size/complexity finding names a function far smaller than the reported span, suspect scanner blinding before refactoring the named function.
 
 ## Resolved Entries
 

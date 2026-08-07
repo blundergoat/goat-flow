@@ -83,22 +83,23 @@ function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
  * @returns True for a direct managed command; false for unrelated or empty values.
  */
 /**
- * Match a managed script filename only as a complete path token. A user hook
- * such as `custom-post-turn-safety.sh` contains a managed name as a plain
- * substring, so bare `includes` would claim it as managed drift; requiring a
- * token boundary before the name (start, whitespace, quote, `=`, or a path
- * separator) and after it (end, whitespace, quote, or a shell delimiter)
- * keeps unrelated project hooks out of managed comparisons.
+ * Decide whether a hook entry in the project's agent config is one goat-flow installed.
+ * Use while auditing for drift, so a user's own hook is never reported as a broken managed one. The
+ * name must appear as a whole path token: a project hook called `custom-post-turn-safety.sh` merely
+ * contains a managed name, and treating it as managed would show the user drift they cannot fix.
  *
- * @param commands - newline-joined command strings from one config entry
- * @param script - managed script filename to look for as a full token
- * @returns whether any command references the script as a complete token
+ * @param commands - command strings from one config entry, joined by newlines; empty means the entry
+ *   runs nothing and is never reported as managed drift
+ * @param script - managed script filename to look for, such as `post-turn-safety.sh`
+ * @returns true when this entry launches the managed script and belongs in the drift comparison;
+ *   false leaves it out as the user's own hook
  */
 function commandsReferenceScriptToken(
   commands: string,
   script: string,
 ): boolean {
   const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // The name must start at a path or word boundary and end at one, so `custom-<name>` never matches.
   const scriptTokenPattern = new RegExp(
     `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
     "mu",
@@ -106,6 +107,15 @@ function commandsReferenceScriptToken(
   return scriptTokenPattern.test(commands);
 }
 
+/**
+ * Check whether one config entry directly launches this managed hook's own script.
+ * Used per entry while auditing, so drift is only reported against registrations goat-flow installed.
+ *
+ * @param entry - one hook entry from the project's agent config; non-object JSON can hold no command
+ *   and is never treated as managed
+ * @param spec - the managed hook being audited, naming the scripts it may launch
+ * @returns true when this entry belongs to the managed hook; false leaves the user's own hook alone
+ */
 function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   // Non-object JSON cannot represent a runnable hook command.
   if (!isRecord(entry)) return false;
@@ -114,6 +124,8 @@ function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
   ].join("\n");
+  // The shared Node launcher is named in every managed command, so matching it would claim
+  // any hook the user routes through the same launcher.
   return spec.scriptFiles.some(
     (script) =>
       script !== "run-with-bash.mjs" &&

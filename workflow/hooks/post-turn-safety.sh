@@ -138,21 +138,27 @@ fallback_is_placeholder() {
   [[ "$value" =~ $PLACEHOLDER_MARKER_RE ]]
 }
 
-# Decides whether the text after a closing quote still leaves a single
-# embedded literal. `KEY="value";` denotes the same credential as
-# `KEY="value"`, so an empty suffix, a comment, or one bare semicolon
-# (optionally followed by whitespace and a comment) ends the assignment.
-# Anything else stays classified as an expression the scanner must not
-# guess about, keeping interpolations and command suffixes excluded.
-# Shared by the native scanner and the Bash 3 compatibility fallback;
-# callers pass a suffix already stripped of surrounding whitespace.
+# Decides whether what follows a closing quote still leaves one plain secret.
+# A user writing `API_KEY="abc123";` in a deploy script means exactly what
+# `API_KEY="abc123"` means, so the trailing semicolon must not stop the scan
+# from warning them. Accepts nothing, a comment, or one bare semicolon
+# (optionally with spaces and a comment); anything else is treated as an
+# expression the scanner will not guess about, which keeps interpolations and
+# chained commands out of credential warnings. Shared by the native scanner and
+# the Bash 3 fallback so stock macOS users get the same verdict; callers pass a
+# suffix already trimmed of surrounding whitespace.
+# $1 - text after the closing quote; empty means the assignment ended there.
+# Returns 0 when a single literal remains, 1 when the line is an expression.
 suffix_ends_assignment() {
   local after_terminator
   case "$1" in
+    # Nothing or a comment follows, so the quoted value is the whole assignment.
     "" | \#*) return 0 ;;
+    # A bare statement terminator, as in `export TOKEN="abc123";`.
     ";") return 0 ;;
     ";"*)
       after_terminator=$(printf '%s' "${1#;}" | sed 's/^[[:space:]]*//')
+      # Only spacing or a trailing comment after the semicolon, still one value.
       case "$after_terminator" in
         "" | \#*) return 0 ;;
       esac
