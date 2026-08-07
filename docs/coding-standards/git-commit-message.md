@@ -13,6 +13,7 @@ Preferred subject format:
 type(scope): subject
 ```
 
+Detect current branch name or might be: $GIT_BRANCH_NAME
 When the current branch is `feat/<digits>`, prefix the subject with `#<digits> `,
 using the number from the branch name only:
 
