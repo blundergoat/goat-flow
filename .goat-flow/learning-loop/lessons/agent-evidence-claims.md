@@ -84,10 +84,12 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 ## Lesson: A learning-loop entry's evidence lines are claims, not proof
 
 **Status:** active | **Created:** 2026-08-07
+**Decision changed:** Re-read cited call sites when reusing a claim, and update the learning entry when later code changes invalidate it.
+**Trigger phase:** READ
 
-**What happened:** While prioritising work, I cited `footguns/auditor.md` to assert that `goat-flow audit` executes an untrusted checkout's hook launcher by default, and that the dashboard was already safe on `"static"`. A cross-harness review disputed both. Re-verification proved the footgun's dashboard evidence line was wrong and had been since the day it was written - `dashboard-audit-routes.ts` requests `"full"` for per-agent audits, and the `"static"` in that file belongs to the setup path. I had also dropped the `--agent` qualifier the footgun's own Trap text carried, overstating the reach to "any audit". The wrong fact had already propagated into the milestone written to fix the bug.
+**What happened:** While prioritising work, I cited `footguns/auditor.md` to assert that `goat-flow audit` executes an untrusted checkout's hook launcher by default, and that the dashboard was already safe on `"static"`. A cross-harness review disputed both. Re-verification showed that the CLI claim needed the `--agent` qualifier and that `buildDashboardAuditReport` then requested `"full"`; commit `9007a9e` corrected the learning entry at 07:09 on 2026-08-07. Commit `19046c08` changed the dashboard branch to `"static"` at 17:06 but did not update this lesson or the footgun. Current `test/integration/dashboard-audit-api.test.ts` (search: `does not execute selected-project hook launcher in /api/audit`) proves the selected-agent endpoint does not run the configured launcher.
 
-**Root cause:** I treated a bucket entry as verified truth because it was tagged `ACTUAL_MEASURED`. That tag records what the author believed they measured, not a re-run. Two distinct failures followed: restating a claim more broadly than its source said (dropping `--agent`), and forwarding a second-hand claim about a surface I never opened (the dashboard call site).
+**Root cause:** I treated a bucket entry as verified truth because it was tagged `ACTUAL_MEASURED`. That tag records what the author believed they measured, not a re-run. Three failures followed: I dropped the source's `--agent` qualifier, forwarded a claim about a dashboard call site I had not opened, and later code changed the corrected behavior without refreshing the learning entries that described it.
 
 **Prevention:**
 1. Before restating a learning-loop claim in a plan, report, or recommendation, open the cited call site. The entry gives you the anchor to check, not the answer.
@@ -95,3 +97,4 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 3. Never widen a source's qualifier. If the entry says `--agent <id>`, the restatement says `--agent <id>`.
 4. When an entry is found wrong, correct the entry in place with the dating evidence, and grep for what inherited it - a wrong fact in the loop tends to be copied into the milestone that cites it.
 5. `ACTUAL_MEASURED` means "the author measured something once". Date it against the code: `git log -L <lines>:<file>` showed the disputed line predated the entry by two weeks, which is what proved it wrong-on-arrival rather than a regression.
+6. When behavior changes at a cited call site, search the learning-loop indexes for that file or symbol and update affected entries in the same change. Index freshness cannot detect a semantically obsolete claim.

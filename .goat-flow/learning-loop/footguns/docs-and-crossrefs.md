@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-08-04
+last_reviewed: 2026-08-07
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -96,22 +96,24 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Active footgun Symptoms paragraph drifts after the underlying bug is fixed
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Validate the real citation grammar, including same-sentence chains and root dotfiles, without guessing across sentence boundaries.
+**Decision changed:** When a behavior fix changes evidence cited by an active footgun, update or resolve that entry in the same change.
 **Trigger phase:** VERIFY
-**Incident count:** 2
-**Latest occurrence:** 2026-08-04
+**Incident count:** 3
+**Latest occurrence:** 2026-08-07
 
-**Symptoms:** A footgun is tagged `**Status:** active` and reads as a current trap. The Prevention rules are still good, but the Symptoms paragraph describes a code shape that no longer exists. Search anchors in the Symptoms paragraph resolve to nothing — `grep` on the live tree returns zero hits for the identifier the footgun says to look at. Future agents following the anchor either chase a ghost incident (looking for a regex that's been refactored away) or distrust the entire footgun bucket because one entry is verifiably wrong.
+**Symptoms:** A footgun is tagged `**Status:** active` and reads as a current trap. The Prevention rules are still good, but the Symptoms paragraph describes an obsolete code shape. Its search anchor either resolves to behavior that now contradicts the prose or resolves to nothing. Future agents following it either make the wrong current-state decision, chase a removed implementation, or distrust the entire footgun bucket because one entry is verifiably wrong.
 
-**Why it happens:** Footguns get created when an incident hits. When the bug is fixed, the fixer often updates code + tests + changelog but does not update the footgun text. The Status tag stays `active` because the *principle* (e.g., "two paths checking the same shape must call one predicate") is still valid — but the *evidence* (the specific identifier the Symptoms paragraph names) is now stale. The Prevention rules and the Symptoms paragraph live at different lifecycles, and no single check enforces that they stay in sync.
+**Why it happens:** Footguns get created when an incident hits. When the bug is fixed, the fixer often updates code, tests, and release prose but not the footgun text. The Status tag stays `active` because the principle remains valid, while the cited behavior or identifier becomes stale. The Prevention rules and current-state evidence live at different lifecycles, and index freshness cannot prove that the prose still matches the call site.
 
 **Evidence:** Caught by Codex quality report 2026-05-25-2006-codex-jqclh (local gitignored quality history) flagging `.goat-flow/learning-loop/footguns/setup.md` (search: `Codex install migration matcher and post-install validator used different`). The original active entry's Symptoms paragraph named a search anchor for an obsolete matcher, but `rg` returned zero hits in `workflow/install-goat-flow.sh` - the installer was refactored (per the v1.8.0 changelog entry "Codex install: filesystem permissions migrated in place") to use a single `isInvalidNoneKey` predicate across both the migration awk pass and the validator awk pass. The setup footgun is now resolved with current anchors, preserving the prevention rule without sending agents after a removed symbol.
 
 **Recurrence 2026-08-04:** The first evaluator missed chained needles and root dotfiles; naive carry-over then crossed sentence boundaries. The final grammar follows chains only from an explicit same-sentence target, recognizes dotfiles, and ignores fences. Contracts: `test/unit/check-content-quality.test.ts` (search: `validates every chained search needle`), (search: `does not guess a target for an unqualified search anchor`), and (search: `validates root dotfile search anchors`).
 
+**Recurrence 2026-08-07:** `.goat-flow/learning-loop/footguns/auditor.md` (search: `## Footgun: The deny-mechanism runtime smoke executes the target checkout's own hook command`) and the lesson that cited it were corrected at 07:09 to describe a dashboard audit using `"full"`. Commit `19046c08` changed `src/cli/server/dashboard-audit-routes.ts` (search: `agentFilter === null ? "present-only" : "static"`) at 17:06 without refreshing either entry. The route-level contract in `test/integration/dashboard-audit-api.test.ts` (search: `does not execute selected-project hook launcher in /api/audit`) proves the old present-tense claim is now false.
+
 **Prevention:**
 1. When you fix a bug that has a footgun entry, in the same PR EITHER (a) rewrite the Symptoms paragraph to describe the principle the fix demonstrates and update the search anchors to point at the current shape, OR (b) move the entry to the file's "Resolved Entries" section with a one-line summary of what was learned. Do not leave an `active` footgun whose Symptoms anchors don't resolve.
-2. When reviewing a footgun bucket, treat zero-hit search anchors as a SEV signal: either the anchor was always wrong (find the right one) or the underlying bug was fixed (rewrite or resolve). A footgun that fails `rg <anchor>` is documentation rot, not a guard.
+2. When reviewing a footgun bucket, treat a zero-hit anchor or a resolved anchor that contradicts the prose as a SEV signal: either the evidence was always wrong or the underlying behavior changed. Rewrite or resolve the entry; documentation rot is not a guard.
 3. `stats --check` validates literal `(search: ...)` anchors in footguns and lessons, and promotes stale existing-target anchors in pattern entries to blocking findings. `audit --check-content` applies the same literal check to current guidance and accepted ADR evidence. History may explain removed code, but its pointer must still resolve to live proof rather than a moved literal.
 4. The lifecycle is: incident → footgun (active) → fix lands → footgun rewritten or moved to Resolved. Skipping the last step leaves a trap that punishes the most-careful agents (the ones who actually follow search anchors).
 
