@@ -138,6 +138,30 @@ fallback_is_placeholder() {
   [[ "$value" =~ $PLACEHOLDER_MARKER_RE ]]
 }
 
+# Decides whether the text after a closing quote still leaves a single
+# embedded literal. `KEY="value";` denotes the same credential as
+# `KEY="value"`, so an empty suffix, a comment, or one bare semicolon
+# (optionally followed by whitespace and a comment) ends the assignment.
+# Anything else stays classified as an expression the scanner must not
+# guess about, keeping interpolations and command suffixes excluded.
+# Shared by the native scanner and the Bash 3 compatibility fallback;
+# callers pass a suffix already stripped of surrounding whitespace.
+suffix_ends_assignment() {
+  local after_terminator
+  case "$1" in
+    "" | \#*) return 0 ;;
+    ";") return 0 ;;
+    ";"*)
+      after_terminator=$(printf '%s' "${1#;}" | sed 's/^[[:space:]]*//')
+      case "$after_terminator" in
+        "" | \#*) return 0 ;;
+      esac
+      return 1
+      ;;
+  esac
+  return 1
+}
+
 fallback_is_env_assignment_file() {
   local basename
   local lower_path
@@ -204,11 +228,8 @@ fallback_literal_assignment_value() {
       text_after_closing_quote="${text_after_opening_quote#*\"}"
       text_after_closing_quote=$(printf '%s' "$text_after_closing_quote" |
         sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-      # Only an empty suffix or a user comment may follow the closing quote.
-      case "$text_after_closing_quote" in
-        "" | \#*) ;;
-        *) return 1 ;;
-      esac
+      # Only an assignment-ending suffix may follow the closing quote.
+      suffix_ends_assignment "$text_after_closing_quote" || return 1
       FALLBACK_LITERAL_VALUE="$literal_value"
       return 0
       ;;
@@ -224,11 +245,8 @@ fallback_literal_assignment_value() {
       text_after_closing_quote="${text_after_opening_quote#*\'}"
       text_after_closing_quote=$(printf '%s' "$text_after_closing_quote" |
         sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-      # Only an empty suffix or a user comment may follow the closing quote.
-      case "$text_after_closing_quote" in
-        "" | \#*) ;;
-        *) return 1 ;;
-      esac
+      # Only an assignment-ending suffix may follow the closing quote.
+      suffix_ends_assignment "$text_after_closing_quote" || return 1
       FALLBACK_LITERAL_VALUE="$literal_value"
       return 0
       ;;
@@ -857,10 +875,8 @@ literal_assignment_value() {
       after="${rest#*\"}"
       strip_space "$after"
       after="$STRIPPED"
-      case "$after" in
-        "" | \#*) ;;
-        *) return 1 ;;
-      esac
+      # Only an assignment-ending suffix may follow the closing quote.
+      suffix_ends_assignment "$after" || return 1
       LITERAL_VALUE="$value"
       return 0
       ;;
@@ -875,10 +891,8 @@ literal_assignment_value() {
       after="${rest#*\'}"
       strip_space "$after"
       after="$STRIPPED"
-      case "$after" in
-        "" | \#*) ;;
-        *) return 1 ;;
-      esac
+      # Only an assignment-ending suffix may follow the closing quote.
+      suffix_ends_assignment "$after" || return 1
       LITERAL_VALUE="$value"
       return 0
       ;;

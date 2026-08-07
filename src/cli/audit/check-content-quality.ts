@@ -288,7 +288,9 @@ interface ReadinessHeading {
 
 /** Parse one hash-prefixed Markdown heading; ordinary lines return null. */
 function parseAtxHeading(line: string): ReadinessHeading | null {
-  const match = /^(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
+  // CommonMark allows up to three leading spaces before an ATX heading, the
+  // same indentation the setext parser below already accepts.
+  const match = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
   if (!match?.[1]) return null;
   if (match[2] === undefined) return null;
   return { level: match[1].length, text: match[2] };

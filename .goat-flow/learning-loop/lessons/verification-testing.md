@@ -134,7 +134,7 @@ last_reviewed: 2026-08-06
 
 **Status:** active | **Created:** 2026-04-25
 
-**What happened:** While removing one forbidden phrase and changing dashboard quality report ownership, the first full `npm test` run failed two contract-style checks: `test/contract/skill-hardening-contracts.test.ts` still required the established "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message.
+**What happened:** While removing one forbidden phrase and changing dashboard quality report ownership, the first full `npm test` run failed two contract-style checks: a skill-hardening contract (now `test/contract/skill-hardening-shared-3.test.ts`, search: `hardening debt`) still required the established "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message.
 
 **Root cause:** I treated wording cleanup and path-semantics changes as local edits, but these surfaces are intentionally pinned by tests because agents consume the exact phrasing.
 
@@ -238,7 +238,7 @@ last_reviewed: 2026-08-06
 
 **What happened:** On 2026-07-12, declining goat-review's optional external refuter incorrectly added `coverage-degraded`; on 2026-07-18, an unselected Spec Drift pass still added `spec-drift-skipped`. Both penalized a complete local review for omitting optional verification.
 
-**Prevention:** Optional verification gets a separate status and cannot create degradation by absence alone. Name forbidden flags and pin each path. Evidence: `workflow/skills/goat-review/SKILL.md` (search: `Preserve only degradation flags`; search: `Optional skip is not degradation`), `test/contract/skill-hardening-contracts.test.ts` (search: `solely because the user declined`; search: `keeps an unselected optional Spec Drift pass out of review degradation`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-review-tdd.md`.
+**Prevention:** Optional verification gets a separate status and cannot create degradation by absence alone. Name forbidden flags and pin each path. Evidence: `workflow/skills/goat-review/SKILL.md` (search: `Optional skip is not degradation`) and `test/contract/skill-hardening-review-3.test.ts` (search: `solely because the user declined`; search: `keeps an unselected optional Spec Drift pass out of review degradation`).
 
 ---
 
@@ -248,6 +248,6 @@ last_reviewed: 2026-08-06
 
 **What happened:** On 2026-07-12, goat-security Quick Scan entered a Full-only specialist phase and waited about eight minutes. On 2026-07-18, goat-debug Investigate made an explicit read-only scope wait at I1. In both cases, headings implied flow but did not define the runtime boundary.
 
-**Prevention:** Every branch needs an explicit stop or continue rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-contracts.test.ts` (search: `Quick Scan out of Full-only specialist work`; search: `lets an explicit read-only investigation pass its scope checkpoint`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-debug-tdd.md`.
+**Prevention:** Every branch needs an explicit stop or continue rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-skills-2.test.ts` (search: `Quick Scan out of Full-only specialist work`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
 
 ---

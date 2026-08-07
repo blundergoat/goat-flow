@@ -82,6 +82,30 @@ function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
  * @param spec - Managed hook to find; an empty script list cannot match.
  * @returns True for a direct managed command; false for unrelated or empty values.
  */
+/**
+ * Match a managed script filename only as a complete path token. A user hook
+ * such as `custom-post-turn-safety.sh` contains a managed name as a plain
+ * substring, so bare `includes` would claim it as managed drift; requiring a
+ * token boundary before the name (start, whitespace, quote, `=`, or a path
+ * separator) and after it (end, whitespace, quote, or a shell delimiter)
+ * keeps unrelated project hooks out of managed comparisons.
+ *
+ * @param commands - newline-joined command strings from one config entry
+ * @param script - managed script filename to look for as a full token
+ * @returns whether any command references the script as a complete token
+ */
+function commandsReferenceScriptToken(
+  commands: string,
+  script: string,
+): boolean {
+  const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const scriptTokenPattern = new RegExp(
+    `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
+    "mu",
+  );
+  return scriptTokenPattern.test(commands);
+}
+
 function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   // Non-object JSON cannot represent a runnable hook command.
   if (!isRecord(entry)) return false;
@@ -91,7 +115,9 @@ function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
     typeof entry.powershell === "string" ? entry.powershell : "",
   ].join("\n");
   return spec.scriptFiles.some(
-    (script) => script !== "run-with-bash.mjs" && commands.includes(script),
+    (script) =>
+      script !== "run-with-bash.mjs" &&
+      commandsReferenceScriptToken(commands, script),
   );
 }
 

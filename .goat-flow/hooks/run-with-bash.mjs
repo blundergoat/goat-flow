@@ -7,8 +7,15 @@
  * stdout, stderr, cwd, and the hook's exit status.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { delimiter, dirname, relative, resolve, win32 } from "node:path";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
+import {
+  delimiter,
+  dirname,
+  isAbsolute,
+  relative,
+  resolve,
+  win32,
+} from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -192,12 +199,16 @@ export function pickWindowsBashPath(candidatePaths) {
  */
 function reportUnavailable(hookResponseMode, userFacingReason) {
   const lineBreak = String.fromCharCode(10);
+  // Plain concatenation instead of a nested template: a template literal
+  // inside an interpolation confuses simpler block scanners into reading the
+  // rest of the file as this function.
+  const unavailableReason = "Policy hook unavailable: " + userFacingReason + ".";
   // Antigravity reads deny JSON from stdout and considers that response handled.
   if (hookResponseMode === "antigravity") {
     process.stdout.write(
       `${JSON.stringify({
         decision: "deny",
-        reason: `Policy hook unavailable: ${userFacingReason}.`,
+        reason: unavailableReason,
       })}${lineBreak}`,
     );
     return 0;
@@ -207,7 +218,7 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
     process.stdout.write(
       `${JSON.stringify({
         permissionDecision: "deny",
-        permissionDecisionReason: `Policy hook unavailable: ${userFacingReason}.`,
+        permissionDecisionReason: unavailableReason,
       })}${lineBreak}`,
     );
     return 0;
@@ -230,6 +241,59 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
     `BLOCKED: Policy hook unavailable: ${userFacingReason}.${lineBreak}`,
   );
   return 2;
+}
+
+/**
+ * Reject managed hook scripts whose on-disk shape could redirect execution.
+ * A managed hook must be a plain project-owned file: a symlink, non-regular
+ * file, extra hard link, or symlink-resolved escape from the project root can
+ * each hand execution to code the project does not contain, so every
+ * redirected shape fails closed before Bash starts.
+ *
+ * @param {string} projectRoot - Selected project root the hook must stay inside.
+ * @param {string} hookScriptPath - Absolute hook script path that already exists.
+ * @returns {string | null} User-facing failure reason, or null for a plain contained file.
+ */
+function hookScriptShapeFailure(projectRoot, hookScriptPath) {
+  let hookScriptStats;
+  try {
+    hookScriptStats = lstatSync(hookScriptPath);
+  } catch {
+    return "hook script was not found";
+  }
+  if (hookScriptStats.isSymbolicLink()) {
+    return "hook script is a symlink; managed hooks must be regular files";
+  }
+  if (!hookScriptStats.isFile()) {
+    return "hook script is not a regular file";
+  }
+  if (hookScriptStats.nlink > 1) {
+    return "hook script has multiple hard links";
+  }
+  // A symlinked parent directory can escape the root even when the textual
+  // relative path looks contained, so the fully resolved path is checked too.
+  let resolvedHookScriptPath;
+  let resolvedProjectRoot;
+  try {
+    resolvedHookScriptPath = realpathSync(hookScriptPath);
+    resolvedProjectRoot = realpathSync(projectRoot);
+  } catch {
+    return "hook script was not found";
+  }
+  const resolvedRelativeHookPath = relative(
+    resolvedProjectRoot,
+    resolvedHookScriptPath,
+  );
+  if (
+    resolvedRelativeHookPath === ".." ||
+    resolvedRelativeHookPath.startsWith(`..${win32.sep}`) ||
+    resolvedRelativeHookPath.startsWith("../") ||
+    resolvedRelativeHookPath.startsWith("..\\") ||
+    isAbsolute(resolvedRelativeHookPath)
+  ) {
+    return "hook script path escaped the project root";
+  }
+  return null;
 }
 
 /**
@@ -266,6 +330,13 @@ export function runHookWithBash(
   // For example, a partial install may register a hook whose script was never copied.
   if (!existsSync(hookScriptPath)) {
     return reportUnavailable(hookResponseMode, "hook script was not found");
+  }
+  const hookScriptShapeReason = hookScriptShapeFailure(
+    projectRoot,
+    hookScriptPath,
+  );
+  if (hookScriptShapeReason !== null) {
+    return reportUnavailable(hookResponseMode, hookScriptShapeReason);
   }
 
   // Normal launches follow the host platform; tests can model native Windows.

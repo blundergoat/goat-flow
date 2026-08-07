@@ -136,7 +136,7 @@ Confirm before proceeding. Ask only what's missing.
 1. **Page list** - explicit URLs, manifest path, or a diff to derive from
 2. **Auth** - required? If yes: storage state path, login flow, or none
 3. **Viewport** - default `1280x800` desktop unless stated; `390x844` for mobile checks
-4. **Output dir** - default: `.goat-flow/logs/sessions/<date>-<label>/` (gitignored, local-only). Screenshots go in a `screenshots/` subdirectory. **NEVER write captures to the project root, `captures/`, or any tracked directory.** Page captures are session artifacts, not committed project files. If the user specifies a different output dir, verify it is gitignored before writing
+4. **Output dir** - always `.goat-flow/logs/sessions/<date>-<label>/` (gitignored, local-only). Screenshots go in a `screenshots/` subdirectory. **NEVER write captures to the project root, `captures/`, or any tracked directory.** Page captures are session artifacts, not committed project files
 5. **Project reference** - does one exist at `.goat-flow/learning-loop/patterns/<project>-playwright.md`? Read it now if so. Also run the footgun grep for the target area against `.goat-flow/learning-loop/footguns/` per `skill-preamble.md`
 6. **Playwright tier** - run the availability check; record which tier will be used
 

@@ -4,6 +4,7 @@
  * after instruction/hook/lesson edits yet serves cache hits under budget, and (with quality=true)
  * folds in harness concerns without running deny-hook self-tests or changing the shared report.
  */
+import { existsSync } from "node:fs";
 import {
   assert,
   assertAuditScope,
@@ -456,6 +457,65 @@ describe("dashboard /api/audit", () => {
         String(limit).includes("end-to-end resumability"),
       ),
     );
+  });
+
+  it("does not execute selected-project hook launcher in /api/audit", async () => {
+    const project = await makeDashboardCacheProject();
+    const markerPath = join(project.root, "launcher-executed.marker");
+    try {
+      // The selected project configures a launcher that records execution
+      // before delegating to the managed script. A passive per-agent audit
+      // must never run it: the audited checkout's config is untrusted input.
+      await writeProjectFile(
+        project.root,
+        ".codex/hooks.json",
+        JSON.stringify({
+          hooks: {
+            PreToolUse: [
+              {
+                matcher: "Bash",
+                hooks: [
+                  {
+                    type: "command",
+                    command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-dangerous.sh`,
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+
+      const { res, body } = await fetchJson(
+        `/api/audit?path=${encodeURIComponent(project.root)}&agent=codex&quality=true&fresh=true`,
+      );
+      assert.equal(res.status, 200);
+      assert.equal(
+        existsSync(markerPath),
+        false,
+        "passive /api/audit must not execute the selected project's configured hook launcher",
+      );
+
+      const report = assertDashboardReport(body);
+      const codex = (report.agentScores as unknown[])
+        .map((score) => expectRecord(score, "Dashboard report agent score"))
+        .find((score) => score.id === "codex");
+      assert.ok(codex, "per-agent audit should include the codex score");
+      const enforcement = expectRecord(codex.enforcement, "Codex enforcement");
+      const selfTest = (enforcement.capabilities as unknown[])
+        .map((entry) => expectRecord(entry, "Codex enforcement capability"))
+        .find((entry) => entry.id === "hook-self-test");
+      assert.ok(selfTest, "enforcement should report the hook-self-test row");
+      assert.equal(selfTest.status, "limited");
+      assert.equal(selfTest.assurance, "static-local");
+      assert.match(
+        String(selfTest.summary),
+        /runtime self-test was skipped/,
+        "static evidence copy should say the runtime self-test was skipped",
+      );
+    } finally {
+      await project.cleanup();
+    }
   });
 
   it("with quality=true uses dashboard-summary facts without changing the shared report surface", async () => {

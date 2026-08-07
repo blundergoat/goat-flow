@@ -291,6 +291,31 @@ function extractConfiguredScriptPath(
   return null;
 }
 
+/**
+ * Match a managed script filename only as a complete path token. A user hook
+ * such as `custom-deny-dangerous.sh` contains the managed name as a plain
+ * substring, so bare `includes` would collect it for the smoke and report the
+ * user's unrelated hook as a broken managed command; requiring a token
+ * boundary before the name (start, whitespace, quote, `=`, or a path
+ * separator) and after it (end, whitespace, quote, or a shell delimiter)
+ * keeps unrelated project hooks out of managed smoke validation.
+ *
+ * @param command - one configured hook command string
+ * @param script - managed script filename to look for as a full token
+ * @returns whether the command references the script as a complete token
+ */
+function commandReferencesScriptToken(
+  command: string,
+  script: string,
+): boolean {
+  const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const scriptTokenPattern = new RegExp(
+    `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
+    "mu",
+  );
+  return scriptTokenPattern.test(command);
+}
+
 function pushConfiguredCommand(
   commands: ConfiguredHookCommand[],
   command: unknown,
@@ -298,7 +323,7 @@ function pushConfiguredCommand(
 ): void {
   if (typeof command !== "string" || command.length === 0) return;
   const scriptFile = CONFIGURED_SMOKE_SCRIPTS.find((script) =>
-    command.includes(script),
+    commandReferencesScriptToken(command, script),
   );
   if (!scriptFile) return;
   commands.push({

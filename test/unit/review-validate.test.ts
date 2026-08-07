@@ -33,6 +33,21 @@ What I Didn't Examine: none.
     assert.deepEqual(validateReviewReport(compact, projectRoot).violations, []);
   });
 
+  it("reads closing-ATX H2 headings the way CommonMark renders them", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    // `## Review Integrity ##` renders as the heading "Review Integrity", so
+    // validation must find the section instead of reporting it missing.
+    const closingAtx = validReview().replace(
+      "## Review Integrity",
+      "## Review Integrity ##",
+    );
+
+    assert.deepEqual(
+      validateReviewReport(closingAtx, projectRoot).violations,
+      [],
+    );
+  });
+
   it("rejects a second decision appended to a compact verdict", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     for (const verdict of [

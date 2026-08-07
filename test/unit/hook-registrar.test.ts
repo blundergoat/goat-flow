@@ -5,8 +5,19 @@
  * Every case builds a real project and reads back what the registrar actually wrote.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
@@ -348,6 +359,164 @@ describe("hook registrar: launchers and installation", () => {
       );
       assert.equal(blocked.status, 2);
       assert.match(blocked.stderr, /BLOCKED: Policy/u);
+    });
+  });
+});
+
+describe("hook launcher script validation", () => {
+  const LAUNCHER = resolve(
+    import.meta.dirname,
+    "..",
+    "..",
+    "workflow",
+    "hooks",
+    "run-with-bash.mjs",
+  );
+
+  /** Run the canonical launcher exactly as agent configs do: a child process rooted in the project. */
+  function runLauncherProcess(root: string, scriptRel: string) {
+    return spawnSync(process.execPath, [LAUNCHER, scriptRel, "policy"], {
+      cwd: root,
+      encoding: "utf8" as const,
+    });
+  }
+
+  /** Create the managed hooks directory inside a fixture project. */
+  function makeHookDir(root: string): string {
+    const hookDir = join(root, ".goat-flow", "hooks");
+    mkdirSync(hookDir, { recursive: true });
+    return hookDir;
+  }
+
+  /** Diagnostic string so a failing launcher assertion names both streams. */
+  function launcherDiagnostics(
+    result: ReturnType<typeof runLauncherProcess>,
+  ): string {
+    return `status=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
+  }
+
+  it("fails closed when the managed hook script is a symlink", () => {
+    withTempProject((root) => {
+      const hookDir = makeHookDir(root);
+      const redirectTarget = join(root, "innocent-looking.sh");
+      writeFileSync(redirectTarget, "#!/usr/bin/env bash\nexit 0\n");
+      symlinkSync(redirectTarget, join(hookDir, "deny-dangerous.sh"));
+
+      const result = runLauncherProcess(
+        root,
+        ".goat-flow/hooks/deny-dangerous.sh",
+      );
+      assert.equal(result.status, 2, launcherDiagnostics(result));
+      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+      assert.match(result.stderr, /symlink/u);
+    });
+  });
+
+  it("fails closed when the managed hook path is not a regular file", () => {
+    withTempProject((root) => {
+      const hookDir = makeHookDir(root);
+      mkdirSync(join(hookDir, "deny-dangerous.sh"));
+
+      const result = runLauncherProcess(
+        root,
+        ".goat-flow/hooks/deny-dangerous.sh",
+      );
+      assert.equal(result.status, 2, launcherDiagnostics(result));
+      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+      assert.match(result.stderr, /regular file/u);
+    });
+  });
+
+  it("fails closed when the managed hook script has extra hard links", () => {
+    withTempProject((root) => {
+      const hookDir = makeHookDir(root);
+      const scriptPath = join(hookDir, "deny-dangerous.sh");
+      writeFileSync(scriptPath, "#!/usr/bin/env bash\nexit 0\n");
+      linkSync(scriptPath, join(root, "second-name.sh"));
+
+      const result = runLauncherProcess(
+        root,
+        ".goat-flow/hooks/deny-dangerous.sh",
+      );
+      assert.equal(result.status, 2, launcherDiagnostics(result));
+      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+      assert.match(result.stderr, /hard link/u);
+    });
+  });
+
+  it("fails closed when a symlinked parent directory escapes the project root", () => {
+    withTempProject((root) => {
+      const outsideHooks = mkdtempSync(join(tmpdir(), "goat-flow-outside-"));
+      try {
+        writeFileSync(
+          join(outsideHooks, "deny-dangerous.sh"),
+          "#!/usr/bin/env bash\nexit 0\n",
+        );
+        mkdirSync(join(root, ".goat-flow"), { recursive: true });
+        symlinkSync(outsideHooks, join(root, ".goat-flow", "hooks"));
+
+        const result = runLauncherProcess(
+          root,
+          ".goat-flow/hooks/deny-dangerous.sh",
+        );
+        assert.equal(result.status, 2, launcherDiagnostics(result));
+        assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+        assert.match(result.stderr, /escaped the project root/u);
+      } finally {
+        rmSync(outsideHooks, { recursive: true, force: true });
+      }
+    });
+  });
+});
+
+describe("hook registrar: unrelated hook preservation", () => {
+  it("preserves user hooks whose names merely contain a managed script name", () => {
+    withTempProject((root) => {
+      mkdirSync(join(root, ".claude"), { recursive: true });
+      writeFileSync(
+        join(root, ".claude", "settings.json"),
+        `${JSON.stringify(
+          {
+            hooks: {
+              Stop: [
+                {
+                  hooks: [
+                    {
+                      type: "command",
+                      command: "bash .claude/hooks/custom-post-turn-safety.sh",
+                      timeout: 30,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      applyHookState("post-turn-safety", true, root);
+      const afterEnable = readFileSync(
+        join(root, ".claude", "settings.json"),
+        "utf-8",
+      );
+      assert.match(
+        afterEnable,
+        /custom-post-turn-safety\.sh/u,
+        "managed registration must not claim the user's similarly named hook",
+      );
+
+      applyHookState("post-turn-safety", false, root);
+      const afterDisable = readFileSync(
+        join(root, ".claude", "settings.json"),
+        "utf-8",
+      );
+      assert.match(
+        afterDisable,
+        /custom-post-turn-safety\.sh/u,
+        "managed removal must not delete the user's similarly named hook",
+      );
     });
   });
 });

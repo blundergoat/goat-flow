@@ -114,7 +114,7 @@ describe("agent deny hook template comparison", () => {
                   hooks: [
                     {
                       type: "command",
-                      command: ".codex/hooks/stale-deny-dangerous.sh",
+                      command: ".codex/stale-hooks/deny-dangerous.sh",
                     },
                   ],
                 },
@@ -182,6 +182,60 @@ describe("agent deny hook template comparison", () => {
       /configured hook command exited before deny-dangerous\.sh could start from project root \(exit 127\)/,
     );
     assert.equal(result.evidence, ".codex/hooks.json");
+  });
+
+  it("ignores unrelated hooks whose names merely contain a managed script name", () => {
+    assert.ok(denyCheck, "agent deny check should exist");
+    const templates = guardrailTemplates();
+    const ctx = makeCtx({
+      agentFilter: "codex",
+      projectPath: PROJECT_ROOT,
+      agents: [
+        stubAgentFacts({
+          agent: PROFILES.codex,
+          settings: {
+            exists: true,
+            valid: true,
+            parsed: {},
+            hasDenyPatterns: false,
+          },
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            readDenyCoversSecrets: false,
+          },
+        }),
+      ],
+      fs: stubFS({
+        readFile: installedGuardrailContent(".codex/hooks", templates, {
+          ".codex/hooks.json": JSON.stringify({
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    {
+                      type: "command",
+                      command: "bash .codex/hooks/custom-deny-dangerous.sh",
+                    },
+                  ],
+                },
+              ],
+            },
+          }),
+        }),
+      }),
+    });
+
+    const result = denyCheck.run(ctx);
+    // The user's custom hook only contains the managed name as a substring,
+    // so managed smoke discovery must skip it and validate the registered
+    // hook directly instead of reporting the user's hook as broken.
+    assert.equal(
+      result,
+      null,
+      `unrelated hook was claimed as managed: ${JSON.stringify(result)}`,
+    );
   });
 
   it("fails when a configured hook command points at a legacy per-agent mirror", () => {

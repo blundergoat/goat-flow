@@ -337,6 +337,21 @@ describe("scanContentQuality: unresolved readiness markers", () => {
     );
   });
 
+  it("recognizes an indented open-questions heading the way CommonMark renders it", () => {
+    // Up to three leading spaces still form an ATX heading in CommonMark, so
+    // an indented readiness section must be scanned, not silently skipped.
+    const findings = scanContentQuality(
+      "docs/proposal.md",
+      ["  ## Open Questions", "- TODO: choose storage"].join("\n"),
+    );
+
+    assert.equal(
+      findings.filter((finding) => finding.rule === "unresolved-content-marker")
+        .length,
+      1,
+    );
+  });
+
   it("closes readiness before scanning a setext heading title", () => {
     const findings = scanContentQuality(
       "docs/proposal.md",

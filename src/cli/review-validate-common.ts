@@ -316,7 +316,10 @@ export function readSections(
   const sections: MarkdownSection[] = [];
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index]?.match(/^##\s+(.+?)(?:\s+<!--.*)?\s*$/u);
-    if (match?.[1]?.trim() !== heading) continue;
+    // CommonMark strips a spaced closing hash run, so `## Verdict ##` renders
+    // as "Verdict"; compare against the rendered text, never the raw line.
+    const renderedHeading = match?.[1]?.trim().replace(/\s+#+$/u, "");
+    if (renderedHeading !== heading) continue;
     let endIndex = lines.length;
     for (let end = index + 1; end < lines.length; end += 1) {
       if (/^##\s+/u.test(lines[end] ?? "")) {

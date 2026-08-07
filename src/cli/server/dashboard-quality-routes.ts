@@ -179,6 +179,12 @@ function getOrRunQualityAudit(
     const report = runAudit(fs, projectPath, {
       agentFilter: agent,
       harness: true,
+      // Quality prompts are passive reads for framework and target modes
+      // alike, so the audit stops at static evidence and never executes the
+      // audited checkout's configured hook launcher. Every producer for
+      // qualityAuditCache must keep this single static contract while
+      // buildQualityAuditCacheKey omits the evidence level.
+      denyMechanismEvidenceLevel: "static",
     });
     writeQualityAuditCache(ctx, projectPath, agent, report);
     return { report, cacheStatus };

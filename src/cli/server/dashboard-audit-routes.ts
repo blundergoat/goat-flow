@@ -76,11 +76,13 @@ function buildDashboardAuditReport(
       {
         agentFilter,
         harness: includeHarness,
-        // Summary cards only need to know whether the deny mechanism is
-        // installed. Explicit per-agent audits and quality flows still run the
-        // slower runtime self-test.
+        // Passive dashboard reads never execute the audited checkout's
+        // configured hook launcher: summary cards only need to know whether
+        // the deny mechanism is installed, and per-agent audits stop at
+        // static evidence. Runtime proof requires the explicit trusted CLI
+        // audit; a selected path is not a trust grant.
         denyMechanismEvidenceLevel:
-          agentFilter === null ? "present-only" : "full",
+          agentFilter === null ? "present-only" : "static",
         factProfile: auditFactProfile,
         profile: profiler,
       },

@@ -1872,6 +1872,25 @@ if [[ -f .gruff-ts.yaml ]]; then
         fail "gruff-ts rule(s) disabled in .gruff-ts.yaml - satisfy or tune, never silence"
         printf '%s\n' "$disabled_lines" | head -5 | details_pipe
     fi
+
+    # Reviewed warning-debt ratchet: run the repo-local analyzer once and
+    # compare warning stableIdentity debt against the reviewed manifest.
+    # Fails closed on analyzer errors, new or duplicated warnings, worsened
+    # metadata, stale accepted debt, or degraded scan coverage; unchanged
+    # accepted debt stays visible in the row details. Never satisfy this gate
+    # by disabling a rule or raising a threshold.
+    if [[ -f scripts/check-gruff-warning-ratchet.mjs ]]; then
+        ratchet_output=$(node scripts/check-gruff-warning-ratchet.mjs 2>&1) && ratchet_exit=0 || ratchet_exit=$?
+        if [[ "$ratchet_exit" -eq 0 ]]; then
+            pass "Gruff warning ratchet: accepted debt unchanged or reduced"
+            printf '%s\n' "$ratchet_output" | tail -3 | details_pipe
+        else
+            fail "Gruff warning ratchet failed (exit $ratchet_exit)"
+            printf '%s\n' "$ratchet_output" | head -20 | details_pipe
+        fi
+    else
+        fail "Gruff warning ratchet script missing (scripts/check-gruff-warning-ratchet.mjs)"
+    fi
 else
     skip "Gruff Policy (.gruff-ts.yaml not found)"
 fi

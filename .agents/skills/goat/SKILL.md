@@ -48,7 +48,7 @@ Relevant prior learnings: <direct route: matches | none | retrieval miss; routed
 | Intent | Route |
 |--------|-------|
 | Bug, failure, unexpected behaviour; verify a fix | `/goat-debug` |
-| Browser-visible issue | Browser evidence first; `/goat-debug` Investigate if diagnosis needed |
+| Browser-visible issue | Browser evidence first; then `/goat-debug` (Diagnose mode) |
 | Understand, explain, explore unfamiliar code | `/goat-debug` (Investigate mode) |
 | GOAT Flow setup/process/harness/skills quality assessment | `goat-flow quality` CLI/dashboard prompt flow (no goat skill wrapper) |
 | Code quality review, area audit, diff check | `/goat-review` |

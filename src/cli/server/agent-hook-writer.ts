@@ -245,6 +245,30 @@ function shellCommand(agent: AgentProfile, spec: HookSpec): string {
   return buildAgentHookCommand(agent.id, agent.hooksDir, spec);
 }
 
+/**
+ * Match a managed script filename only as a complete path token. A user hook
+ * such as `custom-post-turn-safety.sh` contains a managed name as a plain
+ * substring, so bare `includes` would claim it and setup would remove or
+ * replace the user's own hook; requiring a token boundary before the name
+ * (start, whitespace, quote, `=`, or a path separator) and after it (end,
+ * whitespace, quote, or a shell delimiter) keeps unrelated hooks unmanaged.
+ *
+ * @param commands - newline-joined command strings from one config entry
+ * @param script - managed script filename to look for as a full token
+ * @returns whether any command references the script as a complete token
+ */
+function commandsReferenceScriptToken(
+  commands: string,
+  script: string,
+): boolean {
+  const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const scriptTokenPattern = new RegExp(
+    `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
+    "mu",
+  );
+  return scriptTokenPattern.test(commands);
+}
+
 /** Detect a command entry that directly launches one managed hook script. */
 function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   // Non-object JSON cannot represent a runnable hook command.
@@ -257,7 +281,9 @@ function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   // Current managed script names identify the registration setup owns.
   if (
     spec.scriptFiles.some(
-      (script) => script !== "run-with-bash.mjs" && commands.includes(script),
+      (script) =>
+        script !== "run-with-bash.mjs" &&
+        commandsReferenceScriptToken(commands, script),
     )
   ) {
     return true;
@@ -266,7 +292,7 @@ function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   if (
     spec.id === "deny-dangerous" &&
     LEGACY_DENY_DANGEROUS_SCRIPT_NAMES.some((script) =>
-      commands.includes(script),
+      commandsReferenceScriptToken(commands, script),
     )
   ) {
     return true;

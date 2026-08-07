@@ -287,6 +287,30 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       });
     });
 
+    it("blocks a double-quoted credential terminated by a semicolon on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "deploy.sh",
+          'export DB_PASSWORD="correct-horse-battery-staple";\n',
+        );
+
+        assertScannerParity(root, 2, /credential assignment/u);
+      });
+    });
+
+    it("blocks a single-quoted credential terminated by a semicolon on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(
+          root,
+          "deploy.sh",
+          "export DB_PASSWORD='correct-horse-battery-staple';\n",
+        );
+
+        assertScannerParity(root, 2, /credential assignment/u);
+      });
+    });
+
     for (const path of ["space name.env", "café.env"]) {
       it(`decodes the Git diff header for ${path} on both paths`, () => {
         withTempRepo((root) => {

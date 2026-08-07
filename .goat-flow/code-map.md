@@ -207,6 +207,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── run-tests.mjs                = Node test runner used by npm test scripts
 ├── build-dashboard-assets.mjs   = copies dashboard assets/views/vendor files into dist
 ├── bump-version.sh              = version sync across package/config/skills/docs
+├── check-gruff-warning-ratchet.mjs = reviewed Gruff warning-debt ratchet against gruff-warning-baseline.json
 ├── check-instruction-parity.mjs = instruction-file section/order parity
 ├── check-markdown-links.sh      = markdown link resolver
 ├── check-package-readme-links.mjs = npm-pack README link check

@@ -530,7 +530,8 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
     // code (configured launcher string and managed script) and runs by default.
     // `--untrusted-target` keeps the deny check static for a checkout you do not
     // trust; otherwise the property is omitted, leaving the default unchanged.
-    // (The dashboard separately audits selected targets at "static".)
+    // This trusted CLI audit is the only runtime-proof path: passive dashboard
+    // audit and quality routes stay at "static" or weaker evidence.
     ...(options.isTargetUntrusted
       ? { denyMechanismEvidenceLevel: "static" as const }
       : {}),
