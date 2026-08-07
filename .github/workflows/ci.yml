@@ -169,5 +169,7 @@ jobs:
           cache: "npm"
       - name: Install
         run: npm ci
+      - name: Build package binary
+        run: npm run build
       - name: Gruff warning ratchet
         run: node scripts/check-gruff-warning-ratchet.mjs
