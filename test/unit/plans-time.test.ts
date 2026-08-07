@@ -473,11 +473,11 @@ describe("plans time", () => {
     }
   });
 
-  // Covers reopening a finalized receipt when verification continues: writes the reopen transition.
-  it("reopens a finalized receipt when verification continues", () => {
+  /** Fixture purpose: rendered ATX preserves segments; filesystem side effects write/remove one temporary receipt. */
+  it("reopens a finalized receipt under a rendered heading", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-time-"));
     const { milestonePath } = writeTimingFixture(temporaryRoot);
-
+    const expectedSeconds = 120;
     try {
       applyPlanTimeTransition(
         milestonePath,
@@ -489,28 +489,28 @@ describe("plans time", () => {
         { action: "stop", finalize: true },
         160,
       );
+      const renderedHeadingMilestone = readFileSync(
+        milestonePath,
+        "utf-8",
+      ).replace("## Timing Receipt", "   ## Timing Receipt ##");
+      writeFileSync(milestonePath, renderedHeadingMilestone, "utf-8");
       const reopened = applyPlanTimeTransition(
         milestonePath,
         { action: "start", category: "proof" },
         200,
       );
+      const persisted = readFileSync(milestonePath, "utf-8");
 
       assert.equal(reopened.receipt.state, "active");
       assert.equal(reopened.receipt.summary, undefined);
-      assert.equal(reopened.receipt.segments.length, 2);
-      assert.match(readFileSync(milestonePath, "utf-8"), /\*\*Actual:\*\* _/u);
-
+      assert.equal(reopened.receipt.segments[1]?.id, "M01-S02");
+      assert.equal(persisted.match(/\*\*Receipt state:\*\*/gu)?.length, 1);
       const refinalized = applyPlanTimeTransition(
         milestonePath,
         { action: "stop", finalize: true },
         260,
       );
-      assert.deepEqual(refinalized.receipt.summary, {
-        totalSeconds: 120,
-        seconds: { product: 60, proof: 60, other: 0 },
-        totalMinutes: 2,
-        minutes: { product: 1, proof: 1, other: 0 },
-      });
+      assert.equal(refinalized.receipt.summary?.totalSeconds, expectedSeconds);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

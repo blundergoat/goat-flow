@@ -15,9 +15,46 @@ import {
   writeCheckPlan,
   estimatedMilestoneBody,
   canonicalMilestoneBody,
+  withActiveTimingReceipt,
+  receiptStamp,
 } from "./plans-check.helpers.js";
 
 describe("plans check: effort arithmetic and plan shapes", () => {
+  const timingEvidenceFailureCases = [
+    {
+      name: "an open segment on an inactive milestone",
+      body: withActiveTimingReceipt(
+        canonicalMilestoneBody({ status: "blocked" }),
+      ).replace("**Receipt state:** active", "**Receipt state:** incomplete"),
+      expected: /blocked milestone must not have an active Timing Receipt/u,
+    },
+    {
+      name: "a normalized impossible calendar date",
+      body: withActiveTimingReceipt(
+        canonicalMilestoneBody({ status: "in-progress" }),
+      ).replace(receiptStamp(100), "1970-02-30T00:01:40Z / 5184100"),
+      expected: /timing receipt segment 1 is not parseable/u,
+    },
+  ];
+
+  for (const testCase of timingEvidenceFailureCases) {
+    /** Fixture purpose: each hand-edited receipt must fail at its exact evidence boundary.
+     * Filesystem side effects: writes and removes one temporary milestone per case. */
+    it(`strict mode rejects ${testCase.name}`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-plan-check-"),
+      );
+      try {
+        const planPath = writeCheckFixture(temporaryRoot, testCase.body);
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.match(result.stdout, testCase.expected);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
   // Covers the smallest plan an author writes: writes it and expects strict mode to accept the compact shape.
   it("accepts the compact Small rendering in strict mode", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-check-"));

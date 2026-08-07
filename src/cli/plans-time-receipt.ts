@@ -115,17 +115,14 @@ function readSafeInteger(value: string): number | null {
 /** Parse and cross-check one `UTC / epoch` table cell. */
 function parseStamp(value: string): TimingStamp | null {
   const match = value.match(/^(.+?)\s*\/\s*(\d+)$/u);
+  const iso = match?.[1]?.trim();
   const epochSeconds = match?.[2] ? readSafeInteger(match[2]) : null;
-  const parsedMilliseconds = match?.[1] ? Date.parse(match[1]) : Number.NaN;
-  if (
-    !match?.[1] ||
-    epochSeconds === null ||
-    Number.isNaN(parsedMilliseconds) ||
-    Math.floor(parsedMilliseconds / 1000) !== epochSeconds
-  ) {
-    return null;
-  }
-  return { iso: match[1].trim(), epochSeconds };
+  if (!iso || epochSeconds === null) return null;
+  const instant = new Date(epochSeconds * 1000);
+  if (Number.isNaN(instant.getTime())) return null;
+  const canonicalIso = instant.toISOString().replace(/\.\d{3}Z$/u, "Z");
+  if (iso !== canonicalIso) return null;
+  return { iso, epochSeconds };
 }
 
 /** Read a receipt segment table row; malformed rows add a fixed warning. */

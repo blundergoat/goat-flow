@@ -73,6 +73,17 @@ describe("plans export: milestone parsing", () => {
     assert.ok(!record.warnings.includes("missing boundary notes"));
   });
 
+  /** CommonMark-indented titles remain the visible issue title after optional closing markers. */
+  it("parses rendered milestone title variants", () => {
+    const record = parseMilestoneMarkdown(
+      "   # M44: Indented milestone #\n",
+      "M44-indented-milestone.md",
+    );
+
+    assert.equal(record.title, "M44: Indented milestone");
+    assert.equal(record.objective, "Indented milestone");
+  });
+
   // Handoff-grade milestones use a `## Objective` section and bare `Status:` line.
   it("parses section-style objectives and plain status lines", () => {
     const record = parseMilestoneMarkdown(

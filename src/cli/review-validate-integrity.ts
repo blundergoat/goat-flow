@@ -32,6 +32,7 @@ import {
   type IntegrityField,
   type IntegrityFieldMap,
 } from "./review-validate-common.js";
+import { validateDegradationConclusion } from "./review-validate-verdict.js";
 
 /**
  * Extract colon-delimited integrity fields and fail repeated authority claims.
@@ -280,6 +281,13 @@ function validateDegradationFlags(
   }
 
   warnUnknownDegradationFlags(flags, field.line, warnings);
+  const conclusionField = fields.get("Conclusion");
+  validateDegradationConclusion(
+    flags,
+    conclusionField?.value,
+    conclusionField?.line ?? field.line,
+    violations,
+  );
   validateRiskDepthConclusion(flags, fields, field.line, violations);
   return flags;
 }

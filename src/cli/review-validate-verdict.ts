@@ -154,6 +154,32 @@ function downgradeShipVerdict(
 }
 
 /**
+ * Reject the strongest confidence claim when the reviewer disclosed reduced coverage.
+ *
+ * @param flags - normalized disclosure tokens; `none` is the only non-degrading value
+ * @param conclusion - claimed coverage level; absent or malformed values fail elsewhere
+ * @param line - source line attached to a confidence contradiction
+ * @param violations - shared structural failures, appended only for overconfidence
+ */
+export function validateDegradationConclusion(
+  flags: ReadonlySet<string>,
+  conclusion: string | undefined,
+  line: number,
+  violations: ReviewValidationViolation[],
+): void {
+  const hasDegradation = Array.from(flags).some(
+    (flag) => flag.length > 0 && flag !== "none",
+  );
+  if (!hasDegradation || conclusion !== "confident") return;
+  addViolation(
+    violations,
+    "integrity-format",
+    line,
+    "degradation flags require a non-confident Conclusion",
+  );
+}
+
+/**
  * Derive the decision users should see from surfaced severity and integrity confidence.
  *
  * @param definitions - findings parsed from the report; empty means the review raised none, which is legitimate only if it also attests to that

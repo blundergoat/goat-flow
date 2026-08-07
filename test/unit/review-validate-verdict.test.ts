@@ -370,6 +370,21 @@ describe("review output validation: ledger, sections, and verdict", () => {
     );
   });
 
+  /** A declared coverage loss cannot retain the validator's strongest confidence claim. */
+  it("rejects confident conclusions paired with degradation flags", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const overconfident = validReview()
+      .replace("- Conclusion: coverage-degraded", "- Conclusion: confident")
+      .replace("Decision: **PARTIAL**", "Decision: **YES WITH CONDITIONS**");
+
+    const result = validateReviewReport(overconfident, projectRoot);
+
+    assert.match(
+      result.violations.map((violation) => violation.message).join("\n"),
+      /degradation flags require a non-confident Conclusion/u,
+    );
+  });
+
   it("warns for unknown degradation flags without failing validation", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = validReview().replace(

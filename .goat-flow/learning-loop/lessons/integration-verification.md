@@ -147,13 +147,15 @@ last_reviewed: 2026-08-07
 
 **Recurrence update (2026-07-29):** `plans check` plus a comment pass pushed `cli-handlers.ts` to 751 then `plans-export.ts` to 753 - moving code re-trips the length gate in the destination. Extracting the whole effort-notation concern into `src/cli/plans-effort.ts` (search: `Effort-estimate notation parser`) with a nearby test cleared both; single-function shuffles only relocate the overflow.
 
-**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-07-18
+**Recurrence update (2026-08-07):** Tightening Timing Receipt stamp validation passed 116 focused tests and typecheck before whole-file ESLint rejected `parseStamp` at complexity 11. Extracting the canonical UTC comparison into `readCanonicalReceiptIso` cleared targeted ESLint without weakening the invalid-calendar regression.
+
+**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-08-07
 
 **Prevention:**
 1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
 2. Keep parser modules dependency-light. A diagnostic subcommand may lazy-load audit/manifest code after dispatch, but argv parsing must not import that runtime.
 3. Before the human gate, run Knip and path-integrity through full preflight; focused TypeScript and analyzer checks do not prove the command's public exports or documentation references are clean.
-3. After behavioral GREEN, run whole-file ESLint, typecheck, and gruff before documentation or task completion; the verification unit is the changed file set, not only the new test cases.
+4. After behavioral GREEN, run whole-file ESLint, typecheck, and gruff before documentation or task completion; the verification unit is the changed file set, not only the new test cases.
 
 ---
 

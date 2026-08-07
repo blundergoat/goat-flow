@@ -381,7 +381,7 @@ export function parseMilestoneMarkdown(
 ): PlanExportRecord {
   const title =
     maskNonRenderedMarkdown(content)
-      .match(/^#\s+(.+)$/mu)?.[1]
+      .match(/^ {0,3}#[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/mu)?.[1]
       ?.trim() ?? "";
 
   // Without a title, users cannot identify or create the resulting issue safely.

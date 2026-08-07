@@ -512,7 +512,13 @@ function collectInactiveReceiptErrors(
   record: PlanExportRecord,
   status: string,
 ): string[] {
-  if (record.timingReceipt?.state !== "active") return [];
+  // A later open span still runs even when an earlier discard keeps the receipt incomplete.
+  const hasOpenTimingSegment =
+    record.timingReceipt?.segments.some(
+      (segment) => segment.state === "open",
+    ) ?? false;
+  // With no live span, the milestone's inactive status and timing evidence agree.
+  if (!hasOpenTimingSegment) return [];
   return [
     `${record.sourceFile}: ${status} milestone must not have an active Timing Receipt`,
   ];

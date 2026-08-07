@@ -57,6 +57,8 @@ const TIMING_ERROR = {
   emptyFinalization: "Cannot finalize before recording a timing segment.",
   openClock: "System clock moved backwards in the open span; discard it.",
 } as const;
+const RECEIPT_ATX = /^ {0,3}##[ \t]+Timing Receipt(?:[ \t]+#+)?[ \t]*$/gimu;
+const LEVEL_TWO_ATX = /^ {0,3}##(?:[ \t]+|$)/mu;
 
 export {
   allocateTimingMinutes,
@@ -279,14 +281,12 @@ function resolvePlanFileContext(inputPath: string): PlanFileContext {
  */
 function findReceiptSection(content: string): ReceiptSection | null {
   const masked = maskNonRenderedMarkdown(content);
-  const headings = Array.from(masked.matchAll(/^##\s+Timing Receipt\s*$/gimu));
-  if (headings.length > 1) {
-    throw new CLIError(TIMING_ERROR.multipleReceipts, 2);
-  }
+  const headings = Array.from(masked.matchAll(RECEIPT_ATX));
+  if (headings.length > 1) throw new CLIError(TIMING_ERROR.multipleReceipts, 2);
   const heading = headings[0];
   if (heading?.index === undefined) return null;
   const bodyStart = heading.index + heading[0].length;
-  const nextHeadingOffset = masked.slice(bodyStart).search(/^##\s+/mu);
+  const nextHeadingOffset = masked.slice(bodyStart).search(LEVEL_TWO_ATX);
   const sectionEnd =
     nextHeadingOffset >= 0 ? bodyStart + nextHeadingOffset : content.length;
   return {
@@ -306,7 +306,7 @@ function writeReceiptSection(
   if (existing) {
     return `${content.slice(0, existing.headingStart)}${rendered}${content.slice(existing.sectionEnd)}`;
   }
-  const firstSection = maskNonRenderedMarkdown(content).match(/^##\s+/mu);
+  const firstSection = maskNonRenderedMarkdown(content).match(LEVEL_TWO_ATX);
   if (firstSection?.index !== undefined) {
     return `${content.slice(0, firstSection.index)}${rendered}${content.slice(firstSection.index)}`;
   }
