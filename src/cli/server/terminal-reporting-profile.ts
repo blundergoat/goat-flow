@@ -11,7 +11,7 @@
  * the local-state trees goat-flow owns, never the user's source.
  */
 import { execFileSync } from "node:child_process";
-import { lstatSync, realpathSync } from "node:fs";
+import { lstatSync, realpathSync, type Stats } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { isPathWithin } from "./local-paths.js";
@@ -186,6 +186,46 @@ function isSharedDirectory(
       return false;
     }
   });
+}
+
+/**
+ * Confirm an absent write root can be created without following a parent outside the project.
+ * Existing targets stay governed by {@link isSharedDirectory}, which also rejects final symlinks.
+ *
+ * @param rootPath - visible project root that owns the prospective directory
+ * @param relativePath - project-relative directory the reporting command may need to create
+ * @returns true only when the first missing component follows verified in-project directories
+ */
+function isSafeMissingDirectory(
+  rootPath: string,
+  relativePath: string,
+): boolean {
+  let cursor = rootPath;
+  let realRootPath: string;
+  try {
+    realRootPath = realpathSync(rootPath);
+  } catch {
+    return false;
+  }
+  for (const component of relativePath.split("/")) {
+    cursor = join(cursor, component);
+    let stat: Stats;
+    try {
+      stat = lstatSync(cursor);
+    } catch (error) {
+      return (
+        error instanceof Error &&
+        (error as NodeJS.ErrnoException).code === "ENOENT"
+      );
+    }
+    if (!stat.isDirectory() && !stat.isSymbolicLink()) return false;
+    try {
+      if (!isPathWithin(realRootPath, realpathSync(cursor))) return false;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 /** List tracked and canonical protected paths beneath one candidate in one root. */
@@ -449,8 +489,11 @@ export function buildCodexReportingProfile(
   );
   const reportLogRelativePath = ".goat-flow/logs";
   const reportOwnerFilesystemRules: Array<readonly [string, string]> = [];
-  // Existing owner logs can receive this run's report without granting the other project writes.
-  if (isSharedDirectory([qualityReportProjectPath], reportLogRelativePath)) {
+  // The owner may create its local log tree, but an escaping parent still blocks the grant.
+  if (
+    isSharedDirectory([qualityReportProjectPath], reportLogRelativePath) ||
+    isSafeMissingDirectory(qualityReportProjectPath, reportLogRelativePath)
+  ) {
     reportOwnerFilesystemRules.push([
       join(qualityReportProjectPath, reportLogRelativePath),
       "write",

@@ -8,6 +8,7 @@ interface MarkdownMaskState {
   fenceCharacter: string;
   fenceLength: number;
   inIndentedCode: boolean;
+  pendingListContinuationIndent: number | null;
   inHtmlComment: boolean;
   inlineCodeDelimiterLength: number;
   rawHtmlClosingPattern: RegExp | null;
@@ -66,6 +67,35 @@ function isFencedLine(line: string, state: MarkdownMaskState): boolean {
   return true;
 }
 
+/** Count source columns, expanding tabs at CommonMark's four-column tab stops. */
+function markdownColumnWidth(value: string): number {
+  let width = 0;
+  for (const character of value) {
+    width += character === "\t" ? 4 - (width % 4) : 1;
+  }
+  return width;
+}
+
+/** Return the source-column indent that continues one visible list item. */
+function listContinuationIndent(line: string): number | null {
+  const marker = comparableMarkdownLine(line).match(
+    /^( {0,3})(?:[*+-]|\d{1,9}[.)])[ \t]{1,4}(?=\S)/u,
+  );
+  return marker ? markdownColumnWidth(marker[0]) : null;
+}
+
+/** Return whether list indentation leaves this source line as visible prose. */
+function isVisibleListContinuation(
+  line: string,
+  state: MarkdownMaskState,
+): boolean {
+  const listIndent = state.pendingListContinuationIndent;
+  if (listIndent === null) return false;
+  const indentation = line.match(/^[ \t]*/u)?.[0] ?? "";
+  const indentationWidth = markdownColumnWidth(indentation);
+  return indentationWidth >= listIndent && indentationWidth < listIndent + 4;
+}
+
 /** Return whether Markdown renders this source line inside an indented code block. */
 function isIndentedCodeLine(line: string, state: MarkdownMaskState): boolean {
   const lineIsBlank = line.trim().length === 0;
@@ -81,6 +111,9 @@ function isIndentedCodeLine(line: string, state: MarkdownMaskState): boolean {
 
   // Once an example starts, each indented line stays hidden until visible text resumes.
   if (state.inIndentedCode) return true;
+  // List indentation is stripped before leaf blocks are classified. Four source
+  // spaces can therefore be visible prose even though four relative spaces are code.
+  if (isVisibleListContinuation(line, state)) return false;
   // Markdown treats indentation after prose as wrapping, but a heading is a
   // block boundary and may be followed immediately by an indented code block.
   if (
@@ -354,6 +387,14 @@ function recordRenderedLine(
 ): string {
   const lineIsBlank = visibleLine.trim().length === 0;
   const lineIsHeading = canBeHeading && isMarkdownHeading(visibleLine);
+  const nextListIndent = canBeHeading
+    ? listContinuationIndent(visibleLine)
+    : null;
+  if (nextListIndent !== null) {
+    state.pendingListContinuationIndent = nextListIndent;
+  } else if (!lineIsBlank || !canBeHeading) {
+    state.pendingListContinuationIndent = null;
+  }
   state.previousRenderedLineWasHeading = lineIsHeading;
   state.previousRenderedLineWasBlank = lineIsBlank;
   state.previousRenderedLineWasParagraph =
@@ -555,6 +596,7 @@ export function maskNonRenderedMarkdown(content: string): string {
     fenceCharacter: "",
     fenceLength: 0,
     inIndentedCode: false,
+    pendingListContinuationIndent: null,
     inHtmlComment: false,
     inlineCodeDelimiterLength: 0,
     rawHtmlClosingPattern: null,

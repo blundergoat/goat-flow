@@ -230,6 +230,14 @@ describe("plans export: source masking", () => {
     );
   });
 
+  it("preserves visible list continuations while masking nested list code", () => {
+    const visible = ["- context", "", "    TODO resolve this"].join("\n");
+    const code = ["- context", "", "      TODO example"].join("\n");
+
+    assert.match(maskNonRenderedMarkdown(visible), /TODO resolve this/u);
+    assert.doesNotMatch(maskNonRenderedMarkdown(code), /TODO example/u);
+  });
+
   for (const [flag, field] of [
     ["--help", "showHelp"],
     ["--version", "showVersion"],

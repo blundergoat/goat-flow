@@ -96,6 +96,9 @@ function readMarkdownField(
   return content.match(pattern)?.[1]?.trim() || fallback;
 }
 
+const LEVEL_TWO_ATX_HEADING = /^ {0,3}##[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/u;
+const LEVEL_TWO_ATX_BOUNDARY = /^ {0,3}##(?:[ \t]+|$)/u;
+
 /**
  * Read one level-two Markdown section without consuming its peer sections.
  *
@@ -108,13 +111,13 @@ function readLevelTwoSection(
 ): string | null {
   const lines = content.split(/\r?\n/u);
   const headingIndex = lines.findIndex((line) => {
-    const heading = line.match(/^##\s+(.+)\s*$/u)?.[1]?.trim();
+    const heading = line.match(LEVEL_TWO_ATX_HEADING)?.[1]?.trim();
     return heading?.toLowerCase() === expectedHeading.toLowerCase();
   });
   if (headingIndex < 0) return null;
   const nextHeadingOffset = lines
     .slice(headingIndex + 1)
-    .findIndex((line) => /^##\s+/u.test(line));
+    .findIndex((line) => LEVEL_TWO_ATX_BOUNDARY.test(line));
   const bodyEnd =
     nextHeadingOffset < 0 ? lines.length : headingIndex + 1 + nextHeadingOffset;
   return lines

@@ -147,7 +147,7 @@ last_reviewed: 2026-08-07
 
 **Recurrence update (2026-07-29):** `plans check` plus a comment pass pushed `cli-handlers.ts` to 751 then `plans-export.ts` to 753 - moving code re-trips the length gate in the destination. Extracting the whole effort-notation concern into `src/cli/plans-effort.ts` (search: `Effort-estimate notation parser`) with a nearby test cleared both; single-function shuffles only relocate the overflow.
 
-**Recurrence update (2026-08-07):** Tightening Timing Receipt stamp validation passed 116 focused tests and typecheck before whole-file ESLint rejected `parseStamp` at complexity 11. Extracting the canonical UTC comparison into `readCanonicalReceiptIso` cleared targeted ESLint without weakening the invalid-calendar regression.
+**Recurrence update (2026-08-07):** Tightening Timing Receipt stamp validation passed 116 focused tests and typecheck before whole-file ESLint rejected `parseStamp` at complexity 11. The first helper extraction then made preflight report five new file-length warnings. Deriving canonical UTC from the epoch inside `parseStamp`, folding regressions into existing test cases, and restoring the accepted `plans-time.ts` size cleared targeted Gruff without weakening the invalid-calendar or rendered-heading checks.
 
 **Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-08-07
 

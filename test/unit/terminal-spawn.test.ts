@@ -456,16 +456,16 @@ describe("buildTerminalSpawnSpec", () => {
     }
   });
 
-  // Covers all quality modes with asymmetric tracked log anchors in the controller and target.
+  // Covers all quality modes when the target owner has not created its local log tree yet.
   it("grants Codex log writes only to each quality mode's report owner", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-profile-"));
     const controllerPath = join(tempRoot, "controller");
     const targetPath = join(tempRoot, "target");
     try {
+      mkdirSync(join(controllerPath, ".goat-flow/logs/quality"), {
+        recursive: true,
+      });
       for (const rootPath of [controllerPath, targetPath]) {
-        mkdirSync(join(rootPath, ".goat-flow/logs/quality"), {
-          recursive: true,
-        });
         mkdirSync(join(rootPath, "dist"), { recursive: true });
         writeFileSync(join(rootPath, ".gitignore"), "dist/\n");
         writeFileSync(join(rootPath, "dist/local.txt"), "ignored\n");
