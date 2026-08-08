@@ -1,8 +1,8 @@
 /**
  * setup --apply installer behaviour: scaffolds config.yaml without an agents allowlist and manages
  * that allowlist on existing configs (removing single/multi-agent lists or a null value, leaving an
- * absent one absent), does not duplicate an existing node_modules gitignore entry, and seeds GitHub
- * commit instructions from target git history. Upgrade migration and prune cases live in
+ * absent one absent), does not duplicate an existing node_modules gitignore entry, and installs
+ * deterministic Git commit instructions only for Git projects. Upgrade migration and prune cases live in
  * setup-install-migrations.test.ts.
  */
 import { describe, it } from "node:test";
@@ -17,11 +17,9 @@ import {
 import { join } from "node:path";
 
 import {
-  addCommit,
-  git,
-  gitAvailable,
   makeTempProject,
   POST_TURN_SAFETY_TIMEOUT_SECONDS,
+  PROJECT_ROOT,
   readClaudePostTurnSafetyTimeout,
   runCliInstaller,
   runInstaller,
@@ -294,48 +292,86 @@ describe("setup --apply installer", () => {
     assert.equal(readFileSync(cursorIgnorePath, "utf-8"), editorRules);
   });
 
-  it("CLI install preserves commit guidance at the former canonical path", () => {
+  it("CLI install renames commit guidance from the former canonical path", () => {
     const root = makeTempProject();
     const guidanceDir = join(root, "docs", "coding-standards");
     const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
     const legacyGuidance = "# Team Commit Rules\n\nKeep this project rule.\n";
+    mkdirSync(join(root, ".git"));
     mkdirSync(guidanceDir, { recursive: true });
     writeFileSync(legacyGuidancePath, legacyGuidance);
 
     const result = runCliInstaller(root, "--agent", "copilot");
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.equal(readFileSync(legacyGuidancePath, "utf-8"), legacyGuidance);
-    assert.equal(existsSync(join(guidanceDir, "git-commit-message.md")), false);
+    assert.equal(existsSync(legacyGuidancePath), false);
+    assert.equal(readFileSync(preferredGuidancePath, "utf-8"), legacyGuidance);
+    assert.match(
+      result.stdout,
+      /renamed from docs\/coding-standards\/git-commit\.md/,
+    );
+  });
+
+  it("CLI install copies the reviewed template for a Git project", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".git"));
+
+    const result = runCliInstaller(root, "--agent", "copilot");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const guidance = readFileSync(
+      join(root, "docs", "coding-standards", "git-commit-message.md"),
+      "utf-8",
+    );
+    const template = readFileSync(
+      join(
+        PROJECT_ROOT,
+        "workflow",
+        "setup",
+        "reference",
+        "git-commit-message.md",
+      ),
+      "utf-8",
+    );
+    assert.equal(guidance, template);
+    assert.match(result.stdout, /copied from goat-flow template/);
+  });
+
+  it("CLI install does not create commit guidance without .git", () => {
+    const root = makeTempProject();
+
+    const result = runCliInstaller(root, "--agent", "copilot");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(
+      existsSync(
+        join(root, "docs", "coding-standards", "git-commit-message.md"),
+      ),
+      false,
+    );
     assert.doesNotMatch(result.stdout, /Git commit instructions:/);
   });
 
-  it(
-    "CLI install seeds missing commit-message guidance from target git history",
-    { skip: !gitAvailable },
-    () => {
-      const root = makeTempProject();
-      git(root, ["init"]);
-      git(root, ["config", "user.name", "GOAT Test"]);
-      git(root, ["config", "user.email", "goat@example.test"]);
-      for (let i = 0; i < 10; i += 1) {
-        addCommit(root, `feat(setup): add fixture ${i}`);
-      }
+  it("CLI install preserves both commit guides when the preferred path exists", () => {
+    const root = makeTempProject();
+    const guidanceDir = join(root, "docs", "coding-standards");
+    const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
+    const legacyGuidance = "# Legacy Team Rules\n";
+    const preferredGuidance = "# Preferred Team Rules\n";
+    mkdirSync(join(root, ".git"));
+    mkdirSync(guidanceDir, { recursive: true });
+    writeFileSync(legacyGuidancePath, legacyGuidance);
+    writeFileSync(preferredGuidancePath, preferredGuidance);
 
-      const result = runCliInstaller(root, "--agent", "copilot");
-      assert.equal(result.status, 0, result.stderr || result.stdout);
+    const result = runCliInstaller(root, "--agent", "copilot");
 
-      const guidance = readFileSync(
-        join(root, "docs", "coding-standards", "git-commit-message.md"),
-        "utf-8",
-      );
-      assert.match(guidance, /generated from recent git history/);
-      assert.match(guidance, /Use conventional commits/);
-      assert.match(result.stdout, /Git commit instructions:/);
-      assert.equal(
-        existsSync(join(root, "docs", "coding-standards", "git-commit.md")),
-        false,
-      );
-    },
-  );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(readFileSync(legacyGuidancePath, "utf-8"), legacyGuidance);
+    assert.equal(
+      readFileSync(preferredGuidancePath, "utf-8"),
+      preferredGuidance,
+    );
+    assert.doesNotMatch(result.stdout, /Git commit instructions:/);
+  });
 });

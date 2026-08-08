@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-08
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -197,15 +197,17 @@ last_reviewed: 2026-08-07
 ## Lesson: Milestone task sections contain estimated work, not evidence notes
 
 **Status:** active | **Created:** 2026-08-07
-**Decision changed:** Put audit notes in Context and command output in Actual evidence; reserve Tasks for estimated implementation checkboxes.
+**Decision changed:** Reserve Tasks for estimated implementation checkboxes and keep each `(est: ...)` entry at the end of its item.
 **Trigger phase:** VERIFY
-**Incident count:** 1
-**Latest occurrence:** 2026-08-07
+**Incident count:** 2
+**Latest occurrence:** 2026-08-08
 
 **What happened:** M05 recorded a completed test-audit result as another checkbox under `## Tasks`. Strict plan validation counted it as implementation work, then reported one missing `(est: ...)` entry and a 15/20-minute product mismatch.
 
-**Root cause:** The task section was treated as a convenient narrative checklist. Its checkboxes are machine-readable work records that feed estimate coverage and category totals.
+**Recurrence update (2026-08-08):** M01 completion notes were appended after all four task estimates. The terminal estimate parser then treated every task as unestimated and reported zero counted product minutes against the declared 60-minute split. Moving each completion note before its estimate restored strict validation.
 
-**Prevention:** Keep `## Tasks` to estimated work items. Put discoveries in `## Context` and literal gate output in `## Actual evidence` so proof does not alter effort accounting.
+**Root cause:** The task section was treated as a convenient narrative checklist without preserving its terminal estimate grammar. Its checkboxes and final `(est: ...)` entries are machine-readable work records that feed estimate coverage and category totals.
 
-**Evidence anchor:** `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task-section checkbox into an estimate-bearing record; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.
+**Prevention:** Keep `## Tasks` to estimated work items. Put discoveries in `## Context` and literal gate output in `## Actual evidence`; if a task needs a completion note, place it before the terminal estimate and rerun strict plan validation.
+
+**Evidence anchor:** `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task-section checkbox into an estimate-bearing record; `src/cli/plans-effort.ts` (search: `const TASK_ESTIMATE_PATTERN`) requires the estimate at the item's end; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.

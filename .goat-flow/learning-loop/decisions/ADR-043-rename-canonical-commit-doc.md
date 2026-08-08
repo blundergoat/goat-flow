@@ -1,7 +1,8 @@
 # ADR-043: Prefer git-commit-message.md while accepting git-commit.md
 
-**Status:** Accepted
+**Status:** Superseded by ADR-051
 **Date:** 2026-07-27
+**Updated:** 2026-08-08 - ADR-051 replaces history-derived setup and former-path preservation with Git-only template copy and collision-safe migration.
 
 ## Decision
 

@@ -280,6 +280,7 @@ const commitGuidance: HarnessCheck = {
     "docs/harness-audit.md",
     "docs/coding-standards/git-commit-message.md",
   ]),
+  skip: (ctx) => !ctx.fs.exists(".git"),
   /** Run the Commit guidance present check. */
   run: (ctx) => {
     const guidance = ctx.facts.shared.gitCommitInstructions;

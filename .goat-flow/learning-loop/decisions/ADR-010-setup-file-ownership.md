@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-06
+**Updated:** 2026-08-08 - ADR-051 adds a Git-only commit-guidance seed and former-path migration.
 
 ## Context
 
@@ -24,6 +25,8 @@ Users also don't typically want every supported agent set up at once. A Claude s
 - Reference them from the instruction file's Router Table and `.goat-flow/learning-loop/patterns/`.
 
 **Exception for upgrades:** Older goat-flow versions (v0.9) have files outside `.goat-flow/` (e.g., `docs/footguns.md`, `tasks/`). These can be migrated during an upgrade -- moved, not deleted without migration.
+
+**Commit-guidance exception:** When a target contains `.git`, setup may copy `workflow/setup/reference/git-commit-message.md` to the preferred docs path if neither accepted guide exists. During upgrades it may migrate a former-only `docs/coding-standards/git-commit.md` after verifying the preferred destination is absent. Targets without `.git` and collisions remain untouched.
 
 **Single-agent scoping:** Setup for one agent only touches that agent's files.
 - Claude setup: CLAUDE.md, `.claude/`, and shared `.goat-flow/`. Does NOT touch AGENTS.md, `.agents/`, `.github/copilot-instructions.md`, `.github/`, or their skills.

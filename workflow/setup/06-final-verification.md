@@ -61,7 +61,7 @@ After generating footguns and the instruction file, re-verify the evidence:
 
 2. **Router table paths:** For every path in the instruction file's Router Table, verify it exists on disk. Remove entries that point to nonexistent files or directories.
 
-3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-docs/` (meta) and `.goat-flow/skill-docs/playbooks/` (tools) READ rules / Router Table rows from Step 02. Verify at least one accepted commit guide exists - preferred `docs/coding-standards/git-commit-message.md`, or compatible `docs/coding-standards/git-commit.md` in an existing project - and that the instruction file references either accepted existing guide under `## Commit Messages`; when both exist, either bridge remains valid while fact extraction prefers the new path. Never create the preferred file alongside an existing compatible guide. A file with the `goat-flow: generated stub - insufficient git history` header is acceptable for the audit gate but must be listed in the gap report as a human-edit follow-up.
+3. **Harness-only instruction requirements:** Verify the instruction file includes path-agnostic workspace boundary guidance and the canonical `.goat-flow/skill-docs/` (meta) and `.goat-flow/skill-docs/playbooks/` (tools) READ rules / Router Table rows from Step 02. Check commit guidance only when the target contains `.git`: the preferred `docs/coding-standards/git-commit-message.md` must exist and the instruction file must reference it under `## Commit Messages`. A former-only `docs/coding-standards/git-commit.md` must be renamed after confirming the destination is absent; pre-existing dual guides must both be preserved while the bridge points to the preferred path. When `.git` is absent, verify that setup created neither guide and did not add a commit-guide bridge.
 
 ## Duplicate surface check
 
@@ -112,7 +112,7 @@ Before finalising, add a gap report to the setup session log:
 - **Known gaps:** [list detected gaps that setup couldn't fix, e.g., "Python source files found but no Python tests exist"]
 - **Things skipped:** [list anything setup chose not to do, with reason]
 - **History candidates:** [list correlation-only candidates that were not promoted, with the paths or commits that prompted investigation]
-- **Harness-specific checks:** [confirm workspace boundary guidance, skill-docs snippets, and commit guidance were checked; list any exception, including generated insufficient-history commit-guidance stubs]
+- **Harness-specific checks:** [confirm workspace boundary guidance and skill-docs snippets; for commit guidance, record the Git guide/bridge result or the non-Git not-applicable result]
 
 For each detected language with source files but no test files, note it in the gap report. This is a setup gap, NOT a footgun - do not create a footgun entry for missing tests. The gap report goes in the session log only.
 

@@ -130,6 +130,8 @@ function checkAnyAgentConfigured(ctx: AuditContext): AuditFailure | null {
  * @returns whether the Copilot commit-instruction bridge should be validated
  */
 function shouldCheckCopilotCommitInstructions(ctx: AuditContext): boolean {
+  // Commit guidance has no repository workflow to govern outside a Git checkout.
+  if (!ctx.fs.exists(".git")) return false;
   // A different explicit agent should not receive Copilot-specific setup findings.
   if (ctx.agentFilter !== null && ctx.agentFilter !== "copilot") return false;
   // Without `.github`, there is no Copilot auto-read instruction file for the user to fix.

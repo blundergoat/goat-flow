@@ -14,7 +14,7 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 
 ## Autonomy Tiers
 
-**Always:** Set up Copilot-owned surfaces: `.github/copilot-instructions.md` (including its `## Commit Messages` section), preferred `docs/coding-standards/git-commit-message.md` (or preserve an existing `docs/coding-standards/git-commit.md`), `.github/skills/`, `.github/hooks/`, `.copilotignore`, and shared `.goat-flow/`.
+**Always:** Set up Copilot-owned surfaces: `.github/copilot-instructions.md`, `.github/skills/`, `.github/hooks/`, `.copilotignore`, and shared `.goat-flow/`. When the target contains `.git`, also set up its `## Commit Messages` bridge and preferred `docs/coding-standards/git-commit-message.md`; omit both for a non-Git target.
 
 **Ask First:** Before touching non-Copilot surfaces, ask and wait for approval; include boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
 
@@ -26,18 +26,18 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 - `.github/copilot-instructions.md` is standalone and must not defer to `AGENTS.md`.
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
 - Keep `.github/copilot-instructions.md` within the 150-line hard limit and 125-line target.
-- Commit guidance prefers `docs/coding-standards/git-commit-message.md`; `.github/copilot-instructions.md` summarises it under `## Commit Messages` and points there, because IDEs auto-read the instruction file, not the doc. An existing `docs/coding-standards/git-commit.md` remains accepted: preserve and reference it instead of creating a duplicate. `goat-flow install` seeds the preferred doc from git history only when neither accepted path exists, and manual setup follows the same detector in Step 02.
+- Commit guidance applies only when the target contains `.git`. The preferred guide is `docs/coding-standards/git-commit-message.md`, copied from `workflow/setup/reference/git-commit-message.md` when neither guide exists. Rename a former-only `docs/coding-standards/git-commit.md` after confirming the preferred destination is absent. Preserve both files when both already exist. For a Git target, `.github/copilot-instructions.md` summarises and points to the preferred guide; for a non-Git target, omit that bridge.
 - Keep a single Copilot hook config file at `.github/hooks/hooks.json`; do not split one file per event.
 - Do not create `.github/agents/` unless a future concrete gap justifies it.
 
 ## Commit Messages
 
-Summarise the target project's commit conventions here - subject format, any branch/issue prefix
-rule, and the weak-verb ban - then point to the preferred full reference at
-`docs/coding-standards/git-commit-message.md`. If an existing project instead has
-`docs/coding-standards/git-commit.md`, preserve and reference it rather than creating a duplicate.
-Keep it to a few lines: the detector seeds the preferred doc from git history (Step 02) and the
-full rules live there, not inline.
+For a target with `.git`, summarise the shipped commit standard here and point to
+`docs/coding-standards/git-commit-message.md`. Setup copies that guide from
+`workflow/setup/reference/git-commit-message.md` when neither accepted path exists. Rename a
+former-only `docs/coding-standards/git-commit.md` after confirming the preferred destination is
+absent; when both files exist, preserve both and reference the preferred path. For a target without
+`.git`, omit this section and do not create a commit guide.
 
 ## Key Resources
 
@@ -100,7 +100,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 ## Definition of Done
 
 - `.github/copilot-instructions.md` exists, follows the canonical section order where compatible with Copilot compression, and stays under the hard line limit.
-- At least one accepted commit guide exists - preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md` - and `.github/copilot-instructions.md` references either accepted existing guide under `## Commit Messages`. When both exist, fact extraction prefers the new path but either bridge remains valid. Fresh setup creates only the preferred file.
+- Commit guidance matches target applicability: a Git target has the preferred guide and Copilot bridge, while a non-Git target has neither; a former-only guide was renamed without collision and pre-existing dual guides were preserved.
 - Essential Commands list only real target-project commands.
 - Router Table contains installed project resources only; no `workflow/setup/`, `workflow/hooks/`, or manifest paths.
 - Tool playbook pointer to `.goat-flow/skill-docs/playbooks/` is present.
@@ -120,7 +120,7 @@ Requests to add footguns, lessons, decisions, or patterns route to the matching 
 | Skill playbooks (tools) | `.goat-flow/skill-docs/playbooks/` |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Architecture | `.goat-flow/architecture.md` |
-| Copilot skills/config | `.github/skills/`, preferred `docs/coding-standards/git-commit-message.md` (existing `docs/coding-standards/git-commit.md` accepted), `.github/hooks/`, `.copilotignore` when installed |
+| Copilot skills/config | `.github/skills/`, `.github/hooks/`, `.copilotignore`, and preferred `docs/coding-standards/git-commit-message.md` when `.git` is present |
 | Project source/docs/config | adapt to detected project paths |
 | Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/` |
 | Peer instructions | `CLAUDE.md`, `AGENTS.md` when present |

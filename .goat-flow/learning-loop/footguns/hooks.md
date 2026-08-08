@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-08
 ---
 
 **Scope:** Hook runtime delivery, Stop-scanner behavior, execution performance, and resolved hook history. Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -8,7 +8,7 @@ last_reviewed: 2026-08-07
 ## Footgun: Changed-range scoping makes a quality hook structurally blind to file-level rules
 
 **Status:** active | **Created:** 2026-08-05 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 2 | **Latest occurrence:** 2026-08-05
+**Incident count:** 3 | **Latest occurrence:** 2026-08-08
 **Decision changed:** Keep edit-time attribution and release-time repository enforcement as separate layers: the hook reports findings attributable to touched files/ranges, while preflight owns a full-repository accepted-debt ratchet.
 **Trigger phase:** VERIFY
 
@@ -19,6 +19,8 @@ Measured on 2026-08-05: editing `test/unit/hook-registrar.test.ts` (1,139 lines,
 The fix trades symbol-aware scoping for structural visibility: request the whole file and select scopes in the hook, keeping `scope=file`/`scope=project` findings unconditionally while confining line and symbol findings to the edited ranges. Symbol widening is lost, which is a real cost, but a rule nobody can ever see is worth less than one that occasionally reports a sibling function. Residual gap: the fix covers only the `gruff.hook.v1` contract path (gruff-ts today). The legacy `analyse` path still delegates ranges to analyzers advertising the native trio, and those cannot express finding scope, so partial edits to oversized files stay silent there until the M02 combined-mode work. Evidence anchors: `.goat-flow/hooks/gruff-code-quality.sh` (search: `Ranges are applied by this hook rather than by the analyzer`), `.goat-flow/hooks/gruff-code-quality.sh` (search: `A file-scope finding describes the file the agent is editing right now`).
 
 Recurrence on 2026-08-05 exposed the adjacent release gate gap. A fresh gruff-ts 0.4.0 full-repository scan at commit `9f1bb2be` reported 36 findings: 14 `size.file-length` warnings, 4 `security.process-exec` warnings, and 18 documentation advisories. Preflight still reported `PASS   79 checks · 0 warnings` because its Gruff Policy check only rejects disabled rules; it never runs the analyzer. The per-edit hook also cannot be expected to enumerate untouched repository debt. Neither result proves a clean repository, even though both surfaces can be read that way.
+
+Recurrence on 2026-08-08 showed that the ratchet's downward path is part of completing a fix. Replacing history-derived commit guidance shortened `src/cli/cli-handlers.ts` from 759 to 747 lines, below the 750-line threshold. Full preflight then failed on stale accepted identity `4348d703d920ab92` until only that baseline entry was removed; rule thresholds and enabled state stayed unchanged. A change that eliminates a warning must reconcile the accepted-debt manifest in the same proof pass. Evidence anchors: `scripts/gruff-warning-ratchet-checks.mjs` (search: `The finding is gone`) enforces stale-entry removal; `src/cli/cli-handlers.ts` (search: `ensureGitCommitInstructions`) contains the shortened command handler.
 
 Prevention has two layers. Keep PostToolUse fast and attributable, but expose incomplete coverage explicitly when the analyzer is missing, times out, emits invalid JSON, or reports zero analyzed files. In preflight, run the repo-local analyzer once in JSON mode and compare findings by `stableIdentity` against reviewed accepted debt; fail on analyzer errors, new warnings, worsened size metadata, stale baseline state, or degraded scan coverage while reporting unchanged accepted findings. Do not use the composite grade or raw finding count as the ratchet, and do not clear the gate by disabling rules or raising thresholds. Evidence anchors: `scripts/preflight-checks.sh` (search: `No gruff-ts rules disabled (satisfy or tune)`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: "Prefer `stableIdentity` for finding diffs"), `.gruff-ts.yaml` (search: `size.file-length`).
 
