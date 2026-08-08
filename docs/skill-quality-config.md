@@ -4,7 +4,7 @@ goat-flow ships a zero-config skill-quality rubric. Consumer projects can overri
 
 Use config only when the project has real conventions that differ from goat-flow defaults: custom artifact roots, different verification-gate vocabulary, project-specific subtype profiles, or extra fixture corpora.
 
-## Minimal Example
+## Minimal example
 
 ```yaml
 # .goat-flow/config.yaml
@@ -13,14 +13,11 @@ quality:
     verification-gate:
       - BLOCKING GATE
       - Release Gate
-      - SLO Gate
-  additional-fixtures:
-    - test/fixtures/skill-quality/team-expected-scores.json
 ```
 
 With no `quality:` block, the default rubric is unchanged.
 
-## Custom Existing Subtype
+## Customize an existing subtype
 
 Customize an existing subtype when the project has a repeatable artifact shape that should adjust goat-flow's default scoring or detection rules. The current evaluator supports these subtype keys: `workflow`, `dispatcher`, `report`, `playbook`, `index`, and `meta`.
 
@@ -36,24 +33,15 @@ quality:
         must-not-have:
           - "^## Step 0\\b"
         name-patterns: []
-      profile:
-        trigger-clarity: 15
-        workflow-completeness: 5
-        gate-quality: 10
-        evidence-testability: 10
-        cold-start: 10
-        token-cost: 10
-        tool-deps: 5
-        write-risk: 0
-        skill-reference-fit: 10
-      notes: "Audit-only skills score like reports but use a domain-specific Audit Mode marker."
 ```
+
+This override changes report detection while retaining the default report scoring profile.
 
 Subtype detection contributes to the classification confidence shown in the dashboard. `subtype` remains the applied scoring profile, so existing reports and fixtures keep a stable contract. Newer reports may also include additive shape fields such as `detectedShape`, `shapeConfidence`, and `shapeMismatch`; these describe what the content reads like without changing the profile used for scoring. For example, an uploaded skill file can keep `subtype: workflow` while reporting `detectedShape: playbook` when the content is really a runbook. A high structure score with low subtype confidence still returns `consider-reclassifying`.
 
 Fallback-only subtype matches are intentionally low confidence. If a subtype only matched because it is the default fallback for a kind, the evaluator must not report that as certain.
 
-## Focused Semantic Review
+## Focused semantic review
 
 The dashboard's focused assessment scores five semantic dimensions: Clarity, Examples, Focus, Coherence, and Misuse / Limits. Misuse / Limits checks whether a skill states forbidden shortcuts, invocation limits, and where adjacent work belongs; the prompt also asks what checklist-shaped wording could satisfy the score without changing agent behavior.
 
@@ -61,7 +49,7 @@ The deterministic trigger scorer accepts either the legacy `NOT this skill` word
 
 Skill and playbook prose also receives an advisory fit note for unconditioned phrases such as `as appropriate`, `as needed`, `where possible`, `if useful`, and `etc.`. A same-line or next-line trigger, condition, or owner suppresses the note, as does a fenced code example. This advisory never changes the deterministic score, recommendation, or release gate.
 
-## Supported Keys
+## Supported keys
 
 | Key | Purpose |
 |---|---|

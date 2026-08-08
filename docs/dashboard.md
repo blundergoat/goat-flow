@@ -8,21 +8,11 @@ The dashboard is a local privileged control plane. Each server process prints a 
 
 Read-only browsing and audit routes may still inspect arbitrary local paths selected in the UI after token authorization. Side-effectful routes are guarded by the same token boundary, and terminal creation still validates that the requested project path is an existing directory.
 
-Successful dashboard operations append redacted evidence-envelope records to
-`.goat-flow/logs/events/*.jsonl`. The trace records metadata such as terminal
-creation, prompt launch/send, audit runs, setup/quality prompt generation, and
-project list changes without storing full prompt text, terminal scrollback, or
-uploaded file contents. Inspect it with `goat-flow events tail . --limit 20`.
+Successful dashboard operations append redacted evidence-envelope records to `.goat-flow/logs/events/*.jsonl`. The trace records terminal creation, prompt launch/send, audit runs, setup or quality prompt generation, and project-list changes without storing full prompt text, terminal scrollback, or uploaded file contents. Inspect it with `goat-flow events tail . --limit 20`.
 
 ## Views
 
-The dashboard uses a persistent desktop side rail for primary navigation. The
-rail collapses to icon-only with hover tooltips, exposes an active-plan tooltip
-when collapsed, and keeps Projects, Prompts, and New Prompt grouped together.
-The header stays focused on the current project switcher, runner switcher, and
-utility actions. The rail exposes backed destinations only: Home, Prompts,
-Workspace, Hooks, Plans, Skill Evaluator, Projects, Quality, and Setup -- each
-maps to a real view.
+The dashboard uses a persistent desktop side rail for primary navigation. It collapses to icons with tooltips, exposes the active plan while collapsed, and groups Projects, Prompts, and New Prompt. The main destinations are Home, Prompts, Workspace, Hooks, Plans, Skill Evaluator, Projects, Quality, and Setup; Settings and About remain available as utility views. Every destination maps to a real view.
 
 ### Home
 
@@ -92,7 +82,12 @@ Getting-started page for new users. Explains what goat-flow is, the audit/qualit
 - 480-minute idle timeout (8 hours) with auto-kill
 - Maximum 10 concurrent sessions
 - Session state: running / ended / error
-- Prompt presets with `mayWriteFiles: false`, unclassified preset launches, and investigator sessions request reporting access. Codex uses a native read-mostly profile with narrowly writable ignored paths; Quality launches grant log writes only in the mode-selected report owner (controlling workspace for process/skills; selected target for agent-setup/harness). Claude uses an isolated per-session permission overlay: read-only commands remain available, tracked edits and write-capable shell commands are denied, and quality reports persist dashboard-side per ADR-044. The session writes one draft into that owner's gitignored `.goat-flow/logs/quality/staging/` directory. Before reading it, the server acquires an exclusive per-draft filesystem claim shared across dashboard processes. The owner strictly accepts the report shape, scrubs accepted strings, revalidates and persists through the `quality save` core, deletes the draft, and writes a receipt the session confirms from. Competing owners skip live claims; stale claims produce rejection receipts instead of replaying a possibly persisted report. Shutdown removes only claims owned by that process and never sweeps another process's drafts. Finalized reports under `.goat-flow/logs/quality/` are deny-listed against agent edits. Unsupported Claude controls fail closed instead of reopening workspace access. Explicit write-enabled builder presets and ordinary direct sessions use workspace access; other runners still rely on their available prompt and hook guardrails.
+- Presets with `mayWriteFiles: false`, unclassified launches, and investigator sessions request reporting access; explicit builders and ordinary sessions use workspace access.
+- Codex reporting sessions use a native read-mostly profile with narrowly writable ignored paths. Quality writes belong to the controlling workspace for process/skills mode and the selected target for agent-setup/harness mode.
+- Claude reporting sessions use an isolated permission overlay: reads remain available, tracked edits and write-capable shell commands are denied, and finalized quality reports are deny-listed against agent edits.
+- Claude quality persistence uses one draft under the report owner's gitignored `.goat-flow/logs/quality/staging/` directory. The server claims the draft, validates and scrubs it through the `quality save` core, persists the report, deletes the draft, and writes a receipt.
+- Competing dashboard processes skip live draft claims. Stale claims produce rejection receipts, and shutdown removes only claims owned by that process.
+- Unsupported Claude controls fail closed instead of reopening workspace access. Other runners rely on their available prompt and hook guardrails.
 
 ## API Endpoints
 

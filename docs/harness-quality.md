@@ -1,6 +1,6 @@
 # AI Harness Quality Assessment
 
-`npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness` generates a structured prompt for a coding agent to evaluate the harness. Where the audit runs deterministic pass/fail checks (see [harness-audit.md](harness-audit.md)), the quality assessment asks an LLM to try the system on real code and judge whether the content is actually useful for this project.
+`npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness` generates a structured prompt for a coding agent to evaluate the harness. Where the audit runs deterministic pass/fail checks (see [harness-audit.md](harness-audit.md)), the quality assessment asks an agent to inspect project evidence and judge whether the harness is useful in this codebase.
 
 | Mode | Command | Question |
 |------|---------|----------|
@@ -21,7 +21,7 @@ Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality mar
 
 ## Persisting quality reports
 
-`npx @blundergoat/goat-flow@latest quality . --agent X --mode harness` composes a prompt that instructs the agent to save its final JSON report directly to `.goat-flow/logs/quality/` - a gitignored path. No separate capture step: the agent owns the write, and `history` / `diff` read whatever the agent saved.
+The CLI prompt keeps the completed JSON in memory and sends it to the exact-version `quality save` command. The saver redacts accepted strings, validates the report, chooses the filename, and persists the final JSON under the selected project's gitignored `.goat-flow/logs/quality/` directory. Dashboard-launched enforced Claude sessions use the dashboard staging contract described in the [CLI reference](cli.md#goat-flow-quality-path---agent-id---mode-mode).
 
 ```bash
 npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness
@@ -29,7 +29,7 @@ npx @blundergoat/goat-flow@latest quality history --agent claude
 npx @blundergoat/goat-flow@latest quality diff --agent claude
 ```
 
-Saved reports live locally under `.goat-flow/logs/quality/` as validated `.json` files (with any companion `.md` prose the agent chooses). `history` and `diff` only operate on saved reports.
+Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. `history` and `diff` only operate on reports that completed the persistence contract.
 
 ---
 
@@ -69,7 +69,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 ### 4. Recovery
 
-**Audit checks:** tasks directory exists, session logs directory exists.
+**Audit checks:** plans directory exists, session logs directory exists.
 
 **Quality evaluates:**
 - Are recovery instructions clear about optional task files versus session logs?
@@ -82,7 +82,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 **Quality evaluates:**
 - Are footgun and lesson entries from real incidents, or synthetic?
-- Are entries recent? A project with no entries in the last 90 days has a feedback loop problem.
+- Do recent incidents appear in the learning loop, or are recurring failures missing from the record?
 - Are active/resolved statuses accurate? An "active" footgun describing fixed behavior is stale.
 - Do semantic-anchor references in entries still resolve in the current code?
 

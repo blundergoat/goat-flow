@@ -339,7 +339,7 @@ npx @blundergoat/goat-flow@latest events tail . --limit 20
 npx @blundergoat/goat-flow@latest events tail . --limit 50 --format json
 ```
 
-### `goat-flow setup [path] --agent <id>`
+### `goat-flow setup [path] --agent <id> [--dry-run] [--apply] [--force]`
 
 Generate a setup prompt adapted to the project's current state. Detects existing goat-flow installations and routes to upgrade path if appropriate.
 
@@ -354,7 +354,7 @@ npx @blundergoat/goat-flow@latest setup . --agent claude --apply
 
 Use `--dry-run` to inspect managed template drift without composing a prompt or invoking the installer. Use `--apply` when you want setup to run the deterministic file-copy installer instead of printing a prompt. Use `--force` with `--apply` only after inspection and only when existing settings and `.goat-flow/config.yaml` may also be overwritten.
 
-### `goat-flow install [path] --agent <id> [--dry-run] [--force]`
+### `goat-flow install [path] --agent <id> [--dry-run] [--force] [--update-config-version] [--clean-deprecated]`
 
 Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved unless `--force` is passed. Existing config files are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. For outdated or v0.9 projects the installer automatically updates the config version field and (for v0.9) removes deprecated skill directories; use `--force` for an explicit user-owned overwrite instead.
 
@@ -495,7 +495,7 @@ npx @blundergoat/goat-flow@latest setup . --agent claude
 npx @blundergoat/goat-flow@latest dashboard .
 ```
 
-## Global flags
+## Help and version flags
 
 | Flag | Description |
 |------|-------------|

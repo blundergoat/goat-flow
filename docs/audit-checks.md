@@ -68,7 +68,7 @@ Aggregate-mode nuance:
 
 | Concern | Check id | Type | What it validates |
 |---------|----------|------|-------------------|
-| Context | `instruction-line-count` | `advisory` | Each configured instruction file stays within `lineLimits.limit` from `.goat-flow/config.yaml` |
+| Context | `instruction-line-count` | `advisory` | Each configured instruction file stays within `line-limits.limit` from `.goat-flow/config.yaml` |
 | Context | `execution-loop-present` | `advisory` | Structural smoke check for the Execution Loop heading plus READ / SCOPE / ACT / VERIFY vocabulary |
 | Context | `doc-paths-resolve` | `integrity` | Router-table paths, `.goat-flow/architecture.md` backtick paths, and curated audit/glossary docs backtick paths resolve to real files |
 | Context | `instruction-sections-present` | `advisory` | Structural smoke check for required hot-path headings: Truth Order, Execution Loop, Definition of Done, and Router Table |

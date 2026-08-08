@@ -31,7 +31,7 @@ flowchart LR
 |-------|---------|-----------|-------------|
 | [/goat](#goat--dispatcher) | Route to the right skill | -- | When intent is ambiguous; skip for simple implementations (the no-skill fast path in `skill-preamble.md`) |
 | [/goat-debug](#goat-debug) | Diagnosis-first debugging + investigate mode + browser evidence | No fixes until human reviews diagnosis | Bug or test failure, UI issues, exploring unfamiliar code |
-| [/goat-plan](#goat-plan) | Milestone planning with claim-based Proof | Direct file-write mode; human approval between milestones | Before non-trivial implementation |
+| [/goat-plan](#goat-plan) | Milestone planning with claim-based Proof | Human approval closes every milestone and the final plan | Before non-trivial implementation |
 | [/goat-review](#goat-review) | Structured code review + quality audit | Negative verification before presenting findings | Before merging, quality audits |
 | [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Runs only with delegated sub-agents; blocks on unresolved disputes before synthesis | High-stakes decisions, plans, assessments |
 | [/goat-security](#goat-security) | Threat-model-driven security assessment | MUST re-check framework/tooling mitigations before flagging findings | Before releases, after dependency changes, during audits |
@@ -335,10 +335,11 @@ Standard presents Phase 2 and pauses by default. An explicit "what should I test
 ## Shared Conventions
 
 Every skill shares:
+
 - **Step 0** - context gathering before any work begins
 - **BLOCKING GATEs** - agent stops and waits for human decision
 - **CHECKPOINTs** - agent reports status and continues unless interrupted
-- **Footgun check** - cross-reference `.goat-flow/learning-loop/footguns/` for known traps
+- **Learning retrieval** - search generated learning-loop indexes first, then open only relevant source entries
 - **Learning loop** - write durable entries only after a VERIFY failure, course correction, or explicit request
 - **Ceremony scaling** - hotfixes skip ceremony, system changes get full treatment
 

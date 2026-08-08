@@ -98,7 +98,6 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 ## DON'T
 
 - Don't add unnecessary runtime dependencies (keep the dependency footprint minimal)
-- Don't use `console.log` outside `cli.ts` and `audit/render.ts` (preflight warns)
 - Don't turn `src/cli/types.ts` into a catch-all; colocate domain types with their owning module and reserve the shared file for cross-cutting contracts
 - Don't hardcode version strings (derive from package.json via constants.ts)
 - Don't use hypothetical examples in docs -- real incidents only
@@ -109,11 +108,6 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 
 Never edit or commit: `dist/`, `node_modules/`, `.claude/projects/`, `.claude/worktrees/`, `.claude/settings.local.json`
 
-## Dangerous Operations (Ask First)
+## Ask First boundaries
 
-These files are high-risk because other files reference them or users depend on them:
-- `workflow/setup/` -- numbered setup steps (01-system-overview.md through 06-final-verification.md) plus reference docs, referenced by 10+ docs
-- `workflow/setup/` -- prompt changes affect what users generate
-- `workflow/skills/` -- template changes affect user skill creation
-- `src/cli/constants.ts` -- AUDIT_VERSION must match package.json
-- Any file rename (breaks cross-references; CLAUDE.md DoD requires grep-after-rename)
+The active repository instruction file owns the complete Ask First list. Read it before changing workflow or manifest files, architecture, skill references or playbooks, server runtime, agent configuration, CI/hooks, three or more docs, or any add/remove/rename. This document does not grant those changes.

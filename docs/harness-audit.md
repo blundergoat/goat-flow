@@ -1,6 +1,6 @@
 # AI Harness Audit
 
-`npx @blundergoat/goat-flow@latest audit . --harness` adds 18 structural installation checks to the standard build audit. Each check answers an installation question - is the file present, is the registration in sync, is the deny pattern installed. Deterministic, no LLM involvement. Harness results contribute to the overall audit status. Not all checks can reach "installed" on every platform (e.g., Codex has no settings-based Read deny coverage; its deny layer is script-only), but install as much as possible.
+`npx @blundergoat/goat-flow@latest audit . --harness` adds 18 deterministic harness checks to the standard build audit. They inspect required files, registrations, deny patterns, and other local evidence without an LLM. Harness failures contribute to the overall audit status. Platform limits remain explicit: a runtime can pass with limited assurance where broader enforcement is unavailable.
 
 | Mode | Command | Question |
 |------|---------|----------|
@@ -66,7 +66,7 @@ Only `advisory`-typed checks can be acknowledged. Integrity checks have no opt-o
 
 Every registered build and harness check now carries machine-readable `provenance` in `npx @blundergoat/goat-flow@latest audit . --format json`. The record includes `source_type`, `normative_level`, `verified_on`, and supporting `evidence_paths` / `source_urls`. The legacy `evidence_paths` list is also split into `framework_evidence_paths` and `target_evidence_paths` when serialized, so framework rationale files do not look like missing files in the audited target project. Check results also expose `displayStatus`, `impact`, and optional `evidenceKind` / `assurance` fields so dashboard consumers can distinguish hard failures, score-only warnings, skipped checks, metrics, structural smoke evidence, and passing checks with platform-limited assurance.
 
-1.2.0 keeps provenance JSON-only on purpose. Terminal and markdown renderers stay focused on status + remediation; if you need the justification trail for a check, inspect the per-check `provenance` object in JSON output.
+Provenance remains JSON-only. Terminal and Markdown output stays focused on status and remediation; inspect each check's `provenance` object for its justification trail.
 
 ### The 18 checks by type
 
@@ -99,7 +99,7 @@ The agent can only work with what it sees. Stale router paths, missing execution
 
 **Question:** Do the deterministic safety rules cover the known-dangerous patterns?
 
-Constraints are the cheapest, most reliable layer of the harness. They cost zero tokens, produce zero false positives when well-designed, and prevent entire failure categories without any LLM involvement.
+Constraints run before model judgment and can prevent covered failure classes without consuming model context. Their value still depends on precise patterns and honest platform limits.
 
 **Constraints checks (5):**
 
@@ -119,7 +119,7 @@ Constraints are the cheapest, most reliable layer of the harness. They cost zero
 
 **Question:** Is the agent's verification wiring structurally in place?
 
-Verification loops are consistently reported as the single highest-impact harness pattern. The audit checks that the wiring is present; it does not grade whether the verification is sufficient.
+Verification turns an agent's completion claim into inspectable evidence. The audit checks that the wiring is present; it does not grade whether the chosen verification is sufficient.
 
 **Verification checks (4):**
 

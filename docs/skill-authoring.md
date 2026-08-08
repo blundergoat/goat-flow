@@ -8,12 +8,12 @@ goat-flow has two authoring surfaces:
 | `goat-flow skill new` | Scaffold a skill or playbook from a description or validate a draft location. | Skills require accepted RED evidence and confirmation; playbooks require confirmation |
 | Dashboard `Evaluate skill` | Score pasted/uploaded markdown and get improvement tips. | No |
 
-## Decide First
+## Decide first
 
 Use candidacy before drafting when the artifact shape is unclear.
 
 ```bash
-node --import tsx src/cli/cli.ts quality candidacy "I want a workflow that audits Postgres indexes before deploy"
+node --import tsx src/cli/cli.ts quality candidacy "<artifact description>"
 node --import tsx src/cli/cli.ts quality candidacy --draft ./draft.md
 ```
 
@@ -30,7 +30,7 @@ The result recommends one of:
 
 Candidacy is deterministic. Borderline LLM-assisted candidacy is intentionally deferred.
 
-## Choose The Artifact
+## Choose the artifact
 
 Use the smallest durable artifact that fits the evidence:
 
@@ -46,7 +46,7 @@ Use the smallest durable artifact that fits the evidence:
 
 Before editing shared references or playbooks, check the ADR-023 tier. Always-loaded shared references must stay under 1500 body words; top-level playbooks and progressive topical files must stay under 3000 body words.
 
-## Scaffold From Description
+## Scaffold from a description
 
 For a skill, run the failing scenario before scaffolding and capture the RED
 receipt at `.goat-flow/logs/sessions/YYYY-MM-DD-<name>-tdd.md`. The receipt must
@@ -57,9 +57,9 @@ this pressure gate.
 
 ```bash
 node --import tsx src/cli/cli.ts skill new \
-  "I want a workflow that reviews risky database migrations before deploy" \
-  --name db-migration-review \
-  --red-log .goat-flow/logs/sessions/2026-07-17-db-migration-review-tdd.md \
+  "<workflow description>" \
+  --name <skill-name> \
+  --red-log .goat-flow/logs/sessions/YYYY-MM-DD-<skill-name>-tdd.md \
   --agent codex
 ```
 
@@ -82,7 +82,7 @@ An untouched generated skill is a placeholder, so the command does not show a
 numeric quality score after writing it. Human and JSON output cite the accepted
 RED receipt and defer scoring until GREEN, REFACTOR, and STAY GREEN have run.
 
-## Validate A Draft
+## Validate a draft
 
 ```bash
 node --import tsx src/cli/cli.ts skill new --draft ./draft.md
@@ -90,25 +90,25 @@ node --import tsx src/cli/cli.ts skill new --draft ./draft.md
 
 Draft mode never writes. It runs candidacy, compares the artifact shape to the selected agent profile's skill directory, and prints a move suggestion when the draft belongs somewhere else. For an installed `<name>/SKILL.md`, it derives the artifact name from the parent directory and returns that exact draft's current score in both human and JSON output; a same-name copy for another agent is not substituted. Omitting `--agent` retains the Claude default.
 
-## Interactive Mode
+## Interactive mode
 
 ```bash
 node --import tsx src/cli/cli.ts skill new --interactive \
-  --name example-skill \
-  --red-log .goat-flow/logs/sessions/2026-07-17-example-skill-tdd.md
+  --name <skill-name> \
+  --red-log .goat-flow/logs/sessions/YYYY-MM-DD-<skill-name>-tdd.md
 ```
 
 Interactive mode asks for the description and confirmation; omit `--name` when
 the log basename already matches the name you will enter at its prompt. Skill
 recommendations use the same `--red-log` gate as description mode.
 
-## Dashboard Evaluation
+## Dashboard evaluation
 
 Open the Skills page and click **Evaluate skill**. Paste markdown, upload one file, or drag a small multi-file bundle. The dashboard posts to `POST /api/quality/evaluate`, returns a deterministic score, and renders improvement tips mapped to the metric breakdown.
 
 The modal is read-only. It does not scaffold, move, or save files.
 
-## Authoring Checks
+## Authoring checks
 
 After creating or changing a skill, run:
 

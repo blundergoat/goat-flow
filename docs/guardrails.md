@@ -1,8 +1,6 @@
-# guardrails
+# Guardrails
 
-`guardrails` are goat-flow's runtime command-safety hooks. The shipped safety
-surface is one `deny-dangerous.sh` dispatcher per agent, backed by shared policy
-modules in `.goat-flow/hooks/deny-dangerous/`.
+Guardrails are goat-flow's runtime command-safety hooks. Each agent invokes the central `deny-dangerous.sh` dispatcher, backed by shared policy modules in `.goat-flow/hooks/deny-dangerous/`.
 
 ## Surfaces
 
@@ -30,7 +28,4 @@ modules in `.goat-flow/hooks/deny-dangerous/`.
 
 ## Limitations
 
-The hooks are literal command guards, not a shell parser or general ignore
-system. They do not reliably catch aliases, variable indirection, encoded
-commands, or arbitrary interpreter code. File-read deny layers still live in
-the agent-specific settings where the runtime supports them.
+The hooks are literal command guards, not a shell parser or general ignore system. They do not reliably catch aliases, variable indirection, encoded commands, or arbitrary interpreter code. File-read deny layers remain in agent-specific settings where the runtime supports them.
