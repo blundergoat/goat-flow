@@ -1,7 +1,7 @@
 {
   "schemaVersion": "gruff.analysis.v2",
   "analyzer": "@blundergoat/gruff-ts",
-  "reviewedAt": "2026-08-07",
+  "reviewedAt": "2026-08-09",
   "minimumAnalysedFiles": 449,
   "entries": [
     {
@@ -131,6 +131,11 @@
           "shellEnabled": false
         },
         {
+          "callName": "spawnSync",
+          "argumentSource": "parameter",
+          "shellEnabled": false
+        },
+        {
           "callName": "spawn",
           "argumentSource": "parameter",
           "shellEnabled": false
@@ -170,6 +175,19 @@
         {
           "callName": "spawn",
           "argumentSource": "member",
+          "shellEnabled": false
+        }
+      ]
+    },
+    {
+      "stableIdentity": "c6e417fbc63e6ce3",
+      "ruleId": "security.process-exec",
+      "file": "src/cli/install-invocation.ts",
+      "rationale": "Windows Bash discovery launches absolute SystemRoot\\System32\\where.exe with enum-only bash/git argv and shell disabled.",
+      "occurrences": [
+        {
+          "callName": "execFileSync",
+          "argumentSource": "parameter",
           "shellEnabled": false
         }
       ]

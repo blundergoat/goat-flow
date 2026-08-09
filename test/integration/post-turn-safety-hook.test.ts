@@ -12,13 +12,17 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  FORCE_BASH3_ENV_KEY,
   TEST_AWS_ACCESS_KEY,
   TEST_GITHUB_TOKEN,
   TEST_NPM_TOKEN,
   TEST_SLACK_TOKEN,
   TEST_API_TOKEN,
   withTempRepo,
+  withUnbornTempRepo,
   writeFile,
+  runGit,
+  runHook,
   commitAll,
   assertHookAllows,
   assertHookBlocks,
@@ -110,6 +114,7 @@ describe("post-turn-safety hook: secret and marker detection", () => {
       },
     ];
 
+    // Each realistic secret example must produce the blocked result the user sees.
     for (const fixture of fixtures) {
       it(`blocks ${fixture.name}`, () => {
         withTempRepo((root) => {
@@ -170,6 +175,7 @@ describe("post-turn-safety hook: secret and marker detection", () => {
       },
     ];
 
+    // Each safe example must leave the user's turn unblocked.
     for (const fixture of fixtures) {
       it(`allows ${fixture.name}`, () => {
         withTempRepo((root) => {
@@ -179,6 +185,43 @@ describe("post-turn-safety hook: secret and marker detection", () => {
         });
       });
     }
+  });
+
+  it("detects new hazards added to files that were already dirty", () => {
+    withTempRepo((root) => {
+      writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+      const firstPass = runHook(root, { [FORCE_BASH3_ENV_KEY]: "0" });
+      assert.equal(firstPass.status, 0, firstPass.stderr);
+      writeFile(
+        root,
+        "settings.env",
+        `API_KEY=your_api_key_here\nAWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`,
+      );
+
+      assertHookBlocks(root, /AWS access key/u);
+    });
+  });
+
+  it("blocks staged-only secrets when the worktree copy is restored", () => {
+    withTempRepo((root) => {
+      writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+      commitAll(root, "add placeholder settings");
+      writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+      runGit(root, ["add", "settings.env"]);
+      runGit(root, ["restore", "--worktree", "--source=HEAD", "settings.env"]);
+
+      assertHookBlocks(root, /API token/u);
+    });
+  });
+
+  it("blocks staged-only secrets before the first commit", () => {
+    withUnbornTempRepo((root) => {
+      writeFile(root, "config.env", `API_KEY=${TEST_API_TOKEN}\n`);
+      runGit(root, ["add", "config.env"]);
+      writeFile(root, "config.env", "API_KEY=your_api_key_here\n");
+
+      assertHookBlocks(root, /API token/u);
+    });
   });
 
   it("blocks high-confidence secrets in untracked text files", () => {

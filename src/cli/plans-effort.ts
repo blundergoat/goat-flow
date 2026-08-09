@@ -321,14 +321,9 @@ function readOptionalMinutes(capture: string | undefined): number | undefined {
 }
 
 /**
- * Parse the optional `Forecast range:` field into low, likely, and high minutes.
- *
- * Absence is the legacy and in-flight default and stays silent; a supplied but
- * unreadable band is drifted notation and warns with a fixed string. The unit
- * phrase is part of the grammar, so a band that omits it fails to parse rather
- * than being silently compared against headline minutes it may not share.
- * Ordering and headline agreement are `plans check`'s job, not the parser's.
- *
+ * Parse the optional forecast band users see beside a milestone estimate.
+ * Missing text preserves legacy point estimates; malformed text emits a fixed warning.
+ * `plans check` owns ordering and headline agreement after parsing.
  * @param value - raw text after the `Forecast range:` label; empty means absent
  * @param warnings - record warning sink receiving the fixed-string parse warning
  * @returns the parsed band; undefined means absent or unreadable
@@ -355,9 +350,37 @@ function parseForecastRangeValue(
   return range;
 }
 
+/** Values captured from user-authored forecast text before completeness is proven. */
+interface ForecastBasisCandidate {
+  agentWorkUnits: number | undefined;
+  lowMinutesPerUnit: number | undefined;
+  likelyMinutesPerUnit: number | undefined;
+  highMinutesPerUnit: number | undefined;
+  source: string | undefined;
+}
+
+/**
+ * Confirm that a candidate contains every value users need to audit a forecast.
+ * Use before exports or checks treat user-authored basis text as trusted plan data.
+ * @param candidate - parsed fields; undefined or zero values mean the text was incomplete
+ * @returns true when every numeric value is positive and the source is non-empty
+ */
+function hasCompleteForecastBasis(
+  candidate: ForecastBasisCandidate,
+): candidate is PlanEffortForecastBasis {
+  return (
+    candidate.agentWorkUnits !== undefined &&
+    candidate.agentWorkUnits > 0 &&
+    candidate.lowMinutesPerUnit !== undefined &&
+    candidate.likelyMinutesPerUnit !== undefined &&
+    candidate.highMinutesPerUnit !== undefined &&
+    candidate.source !== undefined &&
+    candidate.source.length > 0
+  );
+}
+
 /**
  * Parse the countable units and evidence source behind an optional forecast.
- *
  * @param value - text after `Forecast basis:`; empty means a legacy or point estimate
  * @param warnings - fixed warning sink; empty stays unchanged for users
  * @returns parsed basis; undefined means the field is absent or cannot be reviewed safely
@@ -367,39 +390,27 @@ function parseForecastBasisValue(
   warnings: string[],
 ): PlanEffortForecastBasis | undefined {
   const normalizedBasis = value.trim();
-
   // No basis is valid compatibility state for plans written before work-unit forecasting.
   if (normalizedBasis.length === 0) return undefined;
 
   const basisMatch = normalizedBasis.match(FORECAST_BASIS_PATTERN);
-  const agentWorkUnits = basisMatch?.[1]
-    ? readSafeMinutes(basisMatch[1])
-    : undefined;
-  const lowMinutesPerUnit = readSafePositiveRate(basisMatch?.[2]);
-  const likelyMinutesPerUnit = readSafePositiveRate(basisMatch?.[3]);
-  const highMinutesPerUnit = readSafePositiveRate(basisMatch?.[4]);
-  const forecastSource = basisMatch?.[5]?.trim();
+  const forecastBasisCandidate: ForecastBasisCandidate = {
+    agentWorkUnits: basisMatch?.[1]
+      ? readSafeMinutes(basisMatch[1])
+      : undefined,
+    lowMinutesPerUnit: readSafePositiveRate(basisMatch?.[2]),
+    likelyMinutesPerUnit: readSafePositiveRate(basisMatch?.[3]),
+    highMinutesPerUnit: readSafePositiveRate(basisMatch?.[4]),
+    source: basisMatch?.[5]?.trim(),
+  };
 
   // A partial or zero-unit basis cannot explain the duration shown to the user.
-  if (
-    agentWorkUnits === undefined ||
-    agentWorkUnits === 0 ||
-    lowMinutesPerUnit === undefined ||
-    likelyMinutesPerUnit === undefined ||
-    highMinutesPerUnit === undefined ||
-    !forecastSource
-  ) {
+  if (!hasCompleteForecastBasis(forecastBasisCandidate)) {
     warnings.push("forecast basis not parseable");
     return undefined;
   }
 
-  return {
-    agentWorkUnits,
-    lowMinutesPerUnit,
-    likelyMinutesPerUnit,
-    highMinutesPerUnit,
-    source: forecastSource,
-  };
+  return forecastBasisCandidate;
 }
 
 /** Candidate estimate that may count as one coding-agent work unit. */
@@ -569,7 +580,9 @@ export function parseEffortLineValue(
   if (fieldValue.length === 0) return undefined;
 
   // Everything before the first `|` is the estimate; the remainder carries `Actual:`.
-  const [estimateText = "", ...actualParts] = fieldValue.split("|");
+  // Splitting non-empty plan text always gives the user-visible estimate as its first item.
+  const effortLineParts = fieldValue.split("|") as [string, ...string[]];
+  const [estimateText, ...actualParts] = effortLineParts;
   const parsedNumbers = readEffortNumbers(
     estimateText.match(EFFORT_ESTIMATE_PATTERN),
   );

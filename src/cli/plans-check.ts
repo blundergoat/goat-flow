@@ -255,10 +255,8 @@ function collectForecastRangeErrors(record: PlanExportRecord): string[] {
  */
 function collectForecastBasisErrors(record: PlanExportRecord): string[] {
   const forecastBasis = record.effort?.forecastBasis;
-
   // Plans without the opt-in field keep their existing estimate contract and receive no error.
   if (!forecastBasis) return [];
-
   // Missing plan/admin time contributes no unit, matching what the author sees in the milestone.
   const countedAgentWorkUnits = countAgentWorkUnits([
     ...record.tasks,

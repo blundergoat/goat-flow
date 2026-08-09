@@ -331,16 +331,8 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Effort estimate \(agent-time\)/, skillPath);
-      assert.match(
-        skillGuidance,
-        /Never use duration intuition/,
-        skillPath,
-      );
-      assert.match(
-        skillGuidance,
-        /~70\/20\/10 stays advisory/,
-        skillPath,
-      );
+      assert.match(skillGuidance, /Never use duration intuition/, skillPath);
+      assert.match(skillGuidance, /~70\/20\/10 stays advisory/, skillPath);
       assert.match(
         skillGuidance,
         /goat-flow plans check \.goat-flow\/plans\/<active> --strict/,

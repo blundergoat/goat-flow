@@ -10,6 +10,7 @@
 - **Plans keep issue templates read-only** - Standard+ creates `ISSUE.md` beside milestones instead of overwriting shared guidance.
 - **Hook registration checks fit consumer projects** - Verification scans present configs, shows file names, and fails when none exist.
 - **Plan forecasts expose countable inputs** - Work-unit bases round-trip through exports, strict checks catch stale scope math, and measured receipts prompt the next reforecast.
+- **Published README links stay usable** - npm packages now include the guardrails and coding-standards pages linked from the project index.
 
 ## v1.15.0 - 2026-08-07
 
