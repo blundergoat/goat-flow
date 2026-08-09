@@ -6,6 +6,11 @@
 - **Hook result migration fails visibly** - Legacy output stays intact; malformed, partial, oversized, or block-weakening envelopes are rejected.
 - **Antigravity Gruff limitations are explicit** - Its legacy registration remains compatible, while adapter evidence marks PostToolUse result delivery ineffective until support changes propagate atomically.
 - **Post-turn scan failures block cleanly** - Missing roots, parser errors, and failed scan commands now fail closed on native and Bash 3 paths.
+- **Post-turn scans no longer skip declared changes** - Oversized tracked hunks stream; binary and oversized untracked paths block as incomplete.
+- **BREAKING: new secrets cannot use inline allow markers** - Use split fixtures or leave reviewed fixtures unchanged; self-suppression was unsafe.
+- **Post-turn token coverage matches current formats** - CRLF conflicts and segmented provider tokens block without printing token bodies.
+- **Stop retries are bounded** - One exact repeated command failure may end loudly; findings, coverage gaps, and malformed payloads still block.
+- **Post-turn hooks have an installed self-test** - `--self-test` checks clean, finding, incomplete, and Bash 3 outcomes; unknown options fail.
 - **Managed hooks run safely outside Git** - Launchers find a verified Goat Flow root, reject redirected files, and stop timed-out process trees.
 - **Hook setup converges on one launcher** - Installs, sync, audits, and 1.15.0 upgrades repair stale commands without `git init`.
 - **goat-debug keeps onboarding investigative** - Investigate mode no longer inherits bug hypotheses, reproduction, or minimisation.

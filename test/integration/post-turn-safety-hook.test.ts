@@ -6,7 +6,15 @@
  * scanner behaves as asserted, not a reimplementation of it.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -18,11 +26,17 @@ import {
   TEST_NPM_TOKEN,
   TEST_SLACK_TOKEN,
   TEST_API_TOKEN,
+  TEST_UNDERSCORE_API_TOKEN,
+  TEST_OPENAI_PROJECT_TOKEN,
+  TEST_ANTHROPIC_API_TOKEN,
   withTempRepo,
   withUnbornTempRepo,
   writeFile,
   runGit,
   runHook,
+  runHookCommand,
+  buildStopPayload,
+  withCommandShim,
   commitAll,
   assertHookAllows,
   assertHookBlocks,
@@ -168,11 +182,6 @@ describe("post-turn-safety hook: secret and marker detection", () => {
         path: "docs.md",
         content: "Section\n=======\n",
       },
-      {
-        name: "inline allow comment",
-        path: ".env",
-        content: `API_KEY=${TEST_API_TOKEN} # goat-flow-allow-secret\n`,
-      },
     ];
 
     // Each safe example must leave the user's turn unblocked.
@@ -185,6 +194,164 @@ describe("post-turn-safety hook: secret and marker detection", () => {
         });
       });
     }
+  });
+
+  it("blocks a new finding that carries its own suppression marker", () => {
+    withTempRepo((root) => {
+      writeFile(
+        root,
+        ".env",
+        `API_KEY=${TEST_API_TOKEN} # goat-flow-allow-secret\n`,
+      );
+
+      const result = assertHookBlocks(root, /API token/u);
+      assert.equal(result.stderr.includes(TEST_API_TOKEN), false);
+    });
+  });
+
+  it("leaves an unchanged reviewed suppression outside changed scope", () => {
+    withTempRepo((root) => {
+      writeFile(
+        root,
+        "reviewed.env",
+        `API_KEY=${TEST_API_TOKEN} # goat-flow-allow-secret\n`,
+      );
+      commitAll(root, "record reviewed suppression");
+      writeFile(root, "notes.txt", "safe user-facing change\n");
+
+      assertHookAllows(root);
+    });
+  });
+
+  it("blocks segmented provider tokens without printing their bodies", () => {
+    const providerTokenFixtures = [
+      { path: "underscore.txt", value: TEST_UNDERSCORE_API_TOKEN },
+      { path: "openai-project.txt", value: TEST_OPENAI_PROJECT_TOKEN },
+      { path: "anthropic.txt", value: TEST_ANTHROPIC_API_TOKEN },
+    ];
+    // Each current provider shape must give the user the same safe diagnostic on both scanners.
+    for (const providerTokenFixture of providerTokenFixtures) {
+      // Native and compatibility paths must independently detect the exact runtime token shape.
+      for (const forceFallback of ["0", "1"]) {
+        withTempRepo((root) => {
+          writeFile(
+            root,
+            providerTokenFixture.path,
+            `provider token ${providerTokenFixture.value}\n`,
+          );
+          const result = runHook(root, {
+            [FORCE_BASH3_ENV_KEY]: forceFallback,
+          });
+
+          assert.equal(result.status, 2, result.stderr);
+          assert.match(result.stderr, /API token/u);
+          assert.equal(
+            result.stderr.includes(providerTokenFixture.value),
+            false,
+          );
+        });
+      }
+    }
+  });
+
+  it("bounds repeated Stop failures while new findings keep blocking", () => {
+    // Both scanner implementations must make the same continuation decision for the user.
+    for (const forceFallback of ["0", "1"]) {
+      withTempRepo((root) => {
+        const sessionId = `fixture-session-${forceFallback}`;
+        const statePath = join(
+          root,
+          ".goat-flow/scratchpad/post-turn-safety-reentry-v1.state",
+        );
+        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+
+        withCommandShim("wc", "exit 2", (shimEnv) => {
+          const firstFailure = runHook(
+            root,
+            { ...shimEnv, [FORCE_BASH3_ENV_KEY]: forceFallback },
+            buildStopPayload(sessionId, false),
+          );
+          assert.equal(firstFailure.status, 2, firstFailure.stderr);
+          assert.equal(existsSync(statePath), true);
+          assert.equal(statSync(statePath).mode & 0o777, 0o600);
+          assert.equal(
+            readFileSync(statePath, "utf8").includes(sessionId),
+            false,
+          );
+
+          writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+          const changedFinding = runHook(
+            root,
+            { [FORCE_BASH3_ENV_KEY]: forceFallback },
+            buildStopPayload(sessionId, true),
+          );
+          assert.equal(changedFinding.status, 2, changedFinding.stderr);
+          assert.match(changedFinding.stderr, /API token/u);
+
+          writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+          const fixedResult = runHook(
+            root,
+            { [FORCE_BASH3_ENV_KEY]: forceFallback },
+            buildStopPayload(sessionId, true),
+          );
+          assert.equal(fixedResult.status, 0, fixedResult.stderr);
+
+          const repeatedFirstFailure = runHook(
+            root,
+            { ...shimEnv, [FORCE_BASH3_ENV_KEY]: forceFallback },
+            buildStopPayload(sessionId, false),
+          );
+          assert.equal(
+            repeatedFirstFailure.status,
+            2,
+            repeatedFirstFailure.stderr,
+          );
+          const repeatedActiveFailure = runHook(
+            root,
+            { ...shimEnv, [FORCE_BASH3_ENV_KEY]: forceFallback },
+            buildStopPayload(sessionId, true),
+          );
+          assert.equal(
+            repeatedActiveFailure.status,
+            0,
+            repeatedActiveFailure.stderr,
+          );
+          assert.match(
+            repeatedActiveFailure.stderr,
+            /ending repeated Stop.*infrastructure failure/iu,
+          );
+          assert.equal(existsSync(statePath), false);
+        });
+      });
+    }
+  });
+
+  it("fails closed on malformed Stop input for both scanners", () => {
+    // A broken provider payload must never look like a clean turn-end result.
+    for (const forceFallback of ["0", "1"]) {
+      withTempRepo((root) => {
+        const result = runHook(
+          root,
+          { [FORCE_BASH3_ENV_KEY]: forceFallback },
+          "{invalid-json",
+        );
+
+        assert.equal(result.status, 2, result.stderr);
+        assert.match(result.stderr, /invalid Stop payload/iu);
+      });
+    }
+  });
+
+  it("runs self-test explicitly and rejects unknown options", () => {
+    withTempRepo((root) => {
+      const selfTestResult = runHookCommand(root, ["--self-test"]);
+      assert.equal(selfTestResult.status, 0, selfTestResult.stderr);
+      assert.match(selfTestResult.stdout, /post-turn-safety self-test: ok/u);
+
+      const unknownOptionResult = runHookCommand(root, ["--unknown"]);
+      assert.equal(unknownOptionResult.status, 2, unknownOptionResult.stderr);
+      assert.match(unknownOptionResult.stderr, /Usage:/u);
+    });
   });
 
   it("detects new hazards added to files that were already dirty", () => {

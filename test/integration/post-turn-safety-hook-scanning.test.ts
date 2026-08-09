@@ -21,7 +21,6 @@ import {
   TEST_SHORT_NPM_TOKEN,
   TEST_SLACK_TOKEN,
   TEST_API_TOKEN,
-  TEST_UNDERSCORE_API_TOKEN,
   withTempRepo,
   writeFile,
   runGit,
@@ -39,6 +38,12 @@ import {
 } from "./post-turn-safety-hook.helpers.js";
 
 describe("post-turn-safety hook: git states and batched scanning", () => {
+  /** Confirm both scanner paths tell the user that declared coverage is incomplete.
+   *
+   * @param root - fixture repository with a path the hook cannot fully scan
+   * @param env - optional fault controls; empty uses normal user commands
+   * @returns nothing; either scanner allowing the turn fails the user contract
+   */
   function assertIncompleteOnBothScanners(
     root: string,
     env: Record<string, string> = {},
@@ -194,16 +199,17 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       });
     });
 
-    it("blocks when staged blob sizing fails on both paths", () => {
+    it("blocks when changed-content coverage inventory fails on both paths", () => {
       withTempRepo((root) => {
         writeFile(root, "settings.env", "safe=1\n");
         commitAll(root, "add staged size fixture");
         writeFile(root, "settings.env", "safe=2\n");
         runGit(root, ["add", "settings.env"]);
         writeFile(root, "settings.env", "safe=1\n");
+        // A failed Git coverage inventory means the user cannot be told every changed path was checked.
         withCommandShim(
           "git",
-          'case " $* " in *" cat-file "*) exit 2 ;; esac',
+          'case " $* " in *" --numstat "*) exit 2 ;; esac',
           (shimEnv) => {
             assertIncompleteOnBothScanners(root, shimEnv);
           },
@@ -246,21 +252,24 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     });
   });
 
-  it("skips binary content and oversized files", () => {
-    withTempRepo((root) => {
-      writeFile(
-        root,
-        "binary.dat",
-        Buffer.from([0, 1, 2, ...Buffer.from(TEST_AWS_ACCESS_KEY)]),
-      );
-      writeFile(
-        root,
-        "large.txt",
-        `${"a".repeat(1024 * 1024 + 1)}\n${TEST_AWS_ACCESS_KEY}\n`,
-      );
-
-      assertHookAllows(root);
-    });
+  it("reports unscannable untracked paths as incomplete", () => {
+    const fixtures = [
+      {
+        path: "binary.dat",
+        content: Buffer.from([0, 1, 2, ...Buffer.from(TEST_AWS_ACCESS_KEY)]),
+      },
+      {
+        path: "large.txt",
+        content: `${"a".repeat(1024 * 1024 + 1)}\n${TEST_AWS_ACCESS_KEY}\n`,
+      },
+    ];
+    // Each excluded path must block independently instead of borrowing the other's result.
+    for (const fixture of fixtures) {
+      withTempRepo((root) => {
+        writeFile(root, fixture.path, fixture.content);
+        assertIncompleteOnBothScanners(root);
+      });
+    }
   });
 
   it("allows rename and delete-only changes without content findings", () => {
@@ -280,19 +289,15 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
   // that batching could silently change while the headline detectors still
   // pass: line bytes, path attribution, and diff-frame parsing.
   describe("batched scanning preserves per-line semantics", () => {
-    // Covers CRLF merge markers a literal line comparison misses: writes that diff and expects no detection.
-    it("leaves CRLF merge markers undetected, as a literal line comparison does", () => {
+    // A Windows-edited conflict must block just like the same user's LF file.
+    it("detects CRLF merge markers after normalizing the line ending", () => {
       withTempRepo((root) => {
-        // The middle marker is matched as the exact string "=======", so a
-        // trailing CR means no match. A grep that strips CR would newly block
-        // this file and change the shipped contract.
         writeFile(
           root,
           "conflict.txt",
           "<<<<<<< HEAD\r\nleft\r\n=======\r\nright\r\n>>>>>>> branch\r\n",
         );
-
-        assertHookAllows(root);
+        assertHookBlocks(root, /merge conflict marker/u);
       });
     });
 
@@ -379,6 +384,12 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
 
     /**
      * Confirms that stock macOS Bash and newer Bash give the user one Stop result.
+     *
+     * @param root - non-empty fixture root both scanners inspect
+     * @param expectedStatus - 0 allows the turn; 2 means the user sees a block
+     * @param expectedPattern - optional explanation; absent compares outcome and findings only
+     * @param env - optional scanner controls; empty uses normal user commands
+     * @returns nothing; any user-visible scanner difference fails the active test
      */
     function assertScannerParity(
       root: string,
@@ -543,19 +554,14 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         writeFile(
           root,
           "tokens.txt",
-          [
-            TEST_SHORT_GITHUB_TOKEN,
-            TEST_SHORT_NPM_TOKEN,
-            TEST_UNDERSCORE_API_TOKEN,
-            "",
-          ].join("\n"),
+          [TEST_SHORT_GITHUB_TOKEN, TEST_SHORT_NPM_TOKEN, ""].join("\n"),
         );
 
         assertScannerParity(root, 0);
       });
     });
 
-    it("allows Slack placeholders and standard suppression markers on both paths", () => {
+    it("blocks changed suppression markers while ignoring a safe placeholder", () => {
       withTempRepo((root) => {
         writeFile(
           root,
@@ -568,7 +574,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           ].join("\n"),
         );
 
-        assertScannerParity(root, 0);
+        assertScannerParity(root, 2, /AWS access key/u);
       });
     });
 
@@ -664,7 +670,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           `safe=${"x".repeat(80)}\nAPI_KEY=${TEST_CLIENT_SECRET}\n`,
         );
 
-        assertScannerParity(root, 0, undefined, {
+        assertScannerParity(root, 2, /credential assignment/u, {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "64",
         });
       });
@@ -683,7 +689,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         runGit(root, ["add", "large.env"]);
         writeFile(root, "large.env", "safe=1\n");
 
-        assertScannerParity(root, 0, undefined, {
+        assertScannerParity(root, 2, /credential assignment/u, {
           GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES: "64",
         });
       });
