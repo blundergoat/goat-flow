@@ -148,6 +148,8 @@ last_reviewed: 2026-08-09
 
 **Recurrence 2026-08-03:** The first GREEN wording for oversized review scope and critique context merging pushed `goat-review` and `goat-critique` from 2495/2494 words to 2592/2531. The focused skill-contract run rejected both before broader verification; budget-neutral rewrites finished at 2498/2495. Evidence anchors: `workflow/skills/goat-review/SKILL.md` (search: `never guess commit windows`), `workflow/skills/goat-critique/SKILL.md` (search: `never replace baseline context`), `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`). TDD receipts: `.goat-flow/logs/sessions/2026-08-03-goat-review-tdd.md` and `.goat-flow/logs/sessions/2026-08-03-goat-critique-tdd.md`.
 
+**Recurrence 2026-08-09:** A new milestone roadmap first failed strict validation because six mid-implementation proof items had no parseable estimates. After that arithmetic was corrected, `plans check --strict` passed while 24 `Read first` anchors still named stale paths or paraphrases absent from their files. A separate exact path and `rg -F` anchor audit exposed the cold-start failures. Treat each validator as proof only of its named contract: run strict plan validation for structure and estimates, then independently verify every referenced path and semantic anchor. Evidence anchors: `src/cli/plans-check.ts` (search: `mid-proof item(s) missing an (est: ...) entry`) and `test/unit/plans-check-lifecycle.test.ts` (search: `strict mode rejects unestimated testing and mid-proof work`).
+
 **Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN.
 ---
 
@@ -263,3 +265,18 @@ last_reviewed: 2026-08-09
 **Root cause:** I treated comment work as free of quality-gate consequences. Doc comments on every function, context lines on every branch, and null/empty meaning on every tag add real lines, so a file already near a size threshold crosses it.
 
 **Prevention:** Before commenting a file that sits within about 20% of its size threshold, check the current count and plan the split first. Splitting by responsibility is the fix, never accepting the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
+
+---
+
+## Lesson: A failed multi-file patch can preserve earlier edits
+
+**Status:** active | **Created:** 2026-08-09
+**Decision changed:** Inspect every target after a failed multi-file patch; never assume the operation was atomic.
+**Trigger phase:** ACT
+**Incident count:** 1 | **Latest occurrence:** 2026-08-09
+
+**What happened:** During peer-plan synthesis, one patch updated the roadmap issue and provider-contract milestone, then failed when a later post-turn hunk used a near-match instead of the file's exact wording. The failure named only the unmatched hunk, which made the operation look rejected as a whole; a target-by-target read showed the earlier file edits had persisted.
+
+**Root cause:** I treated a multi-file patch as a transaction and reasoned from the final failing hunk instead of checking the state of every target. The retry therefore risked applying already-landed edits twice or building new hunks against stale bytes.
+
+**Prevention:** Prefer one file or independently recoverable hunk group per patch when source is changing concurrently. After any patch failure, inspect timestamps and exact semantic anchors across every target before retrying, then generate the retry from current bytes. The affected artifacts were gitignored milestone files, so they are deliberately not cited as durable learning-loop anchors; the evidence was the failed patch result followed by the same-session target-by-target read.

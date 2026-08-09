@@ -5,13 +5,19 @@
  * Every case builds a real project and reads back what the registrar actually wrote.
  */
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   applyHookState,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
+import {
+  readAgentHookState,
+  writeAgentHookState,
+} from "../../src/cli/server/agent-hook-writer.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import { PROFILES } from "../../src/cli/detect/agents.js";
 
 import {
   HOOK_IDENTIFIER,
@@ -23,6 +29,7 @@ import {
   readStopHookCommands,
   readAntigravitySafetyCommand,
   writePostTurnCapableSurfaces,
+  verifyAgentHookRegistrationMatrix,
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: surface detection, toggles, and sync", () => {
@@ -75,6 +82,65 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       assertCodexPreToolUseOnly(root);
     });
   });
+
+  it("treats a stale managed launcher command as uninstalled until sync rewrites it", () => {
+    withTempProject((root) => {
+      const denySpec = getHookSpec(HOOK_IDENTIFIER);
+      assert.ok(denySpec);
+      writeAgentHookState(root, PROFILES.codex, denySpec, true);
+
+      const hooksPath = join(root, ".codex", "hooks.json");
+      const current = readFileSync(hooksPath, "utf-8");
+      const stale = current.replace(
+        /managed root unavailable/gu,
+        "git repository root unavailable",
+      );
+      assert.notEqual(
+        stale,
+        current,
+        "fixture must alter the launcher contract",
+      );
+      writeFileSync(hooksPath, stale);
+
+      assert.equal(
+        readAgentHookState(root, PROFILES.codex, denySpec).installed,
+        false,
+      );
+
+      mkdirSync(join(root, ".goat-flow"), { recursive: true });
+      writeFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        "hooks:\n  deny-dangerous:\n    enabled: true\n",
+      );
+      syncHookStates(root);
+
+      assert.equal(existsSync(join(root, ".git")), false);
+      assert.equal(
+        readAgentHookState(root, PROFILES.codex, denySpec).installed,
+        true,
+      );
+      assert.doesNotMatch(
+        readFileSync(hooksPath, "utf-8"),
+        /git repository root unavailable/u,
+      );
+    });
+  });
+
+  // One TAP case per agent tells users exactly which registration contract drifted.
+  for (const agentProfile of Object.values(PROFILES)) {
+    it(`${agentProfile.id} keeps supported hook deadlines and response formats`, () => {
+      withTempProject((targetProjectPath) => {
+        const installedCommandCount = verifyAgentHookRegistrationMatrix(
+          agentProfile,
+          targetProjectPath,
+        );
+        assert.ok(
+          installedCommandCount > 0,
+          `${agentProfile.id} should expose at least one runnable hook command`,
+        );
+      });
+    });
+  }
 
   it("keeps generated Codex hooks PreToolUse-only", () => {
     withTempProject((root) => {

@@ -1,17 +1,139 @@
 /**
- * Codex config.toml migration during install: rewrites deprecated codex_hooks (and removes it when
- * hooks is already present), refreshes legacy Codex permission profiles to the current
- * `extends = ":workspace"` + access="deny" shape, and leaves comment-only references and unrelated
- * glob 'none' entries untouched.
+ * Covers Codex upgrades users receive when they run setup on an older project.
+ * Use for hook-launcher, feature-flag, and permission-profile migrations.
+ * Real release bytes prove supported upgrades without approximating old installs.
+ * User settings and unrelated permission tables remain intact throughout.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { PROFILES } from "../../src/cli/detect/agents.js";
+import { readAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
-import { makeTempProject, runInstaller } from "./setup-install.helpers.js";
+import {
+  makeTempProject,
+  PROJECT_ROOT,
+  runInstaller,
+} from "./setup-install.helpers.js";
+
+/**
+ * Spawns a read-only Git process to load exact v1.15.0 bytes for a user upgrade fixture.
+ * @param relativePath - non-empty tagged path; empty cannot identify a release file
+ * @returns file bytes, or null when the user's checkout lacks the v1.15.0 tag
+ */
+function readReleaseFile(relativePath: string): string | null {
+  const gitShowResult = spawnSync("git", ["show", `v1.15.0:${relativePath}`], {
+    cwd: PROJECT_ROOT,
+    encoding: "utf-8",
+  });
+  // Missing tag bytes make the real upgrade fixture unavailable instead of approximate.
+  return gitShowResult.status === 0 ? gitShowResult.stdout : null;
+}
+
+const V1_15_0_CODEX_HOOKS = readReleaseFile(
+  "workflow/hooks/agent-config/codex-hooks.json",
+);
+const V1_15_0_BASH_RUNNER = readReleaseFile("workflow/hooks/run-with-bash.mjs");
+// Shallow archives have no release bytes, so users' upgrade proof is explicitly unavailable.
+const V1_15_0_UPGRADE_FIXTURE_UNAVAILABLE =
+  V1_15_0_CODEX_HOOKS === null || V1_15_0_BASH_RUNNER === null;
 
 describe("codex config migration", () => {
+  it(
+    "migrates the literal 1.15.0 launcher and runner without creating Git state",
+    { skip: V1_15_0_UPGRADE_FIXTURE_UNAVAILABLE },
+    () => {
+      // The skip above handles shallow archives; these checks narrow the real tagged bytes.
+      assert.ok(V1_15_0_CODEX_HOOKS);
+      assert.ok(V1_15_0_BASH_RUNNER);
+      const targetProjectPath = makeTempProject();
+      mkdirSync(join(targetProjectPath, ".codex"), { recursive: true });
+      mkdirSync(join(targetProjectPath, ".goat-flow", "hooks"), {
+        recursive: true,
+      });
+      // This is the exact non-Git project a Codex user would have after installing v1.15.0.
+      writeFileSync(
+        join(targetProjectPath, ".codex", "hooks.json"),
+        V1_15_0_CODEX_HOOKS,
+      );
+      writeFileSync(
+        join(targetProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        V1_15_0_BASH_RUNNER,
+      );
+
+      const installResult = runInstaller(targetProjectPath, "--agent", "codex");
+      // When setup fails, show whichever user-facing stream explains the problem.
+      assert.equal(
+        installResult.status,
+        0,
+        installResult.stderr || installResult.stdout,
+      );
+      // Upgrade must not create Git state just to make the user's hook launcher work.
+      assert.equal(existsSync(join(targetProjectPath, ".git")), false);
+
+      const installedHookConfig = readFileSync(
+        join(targetProjectPath, ".codex", "hooks.json"),
+        "utf-8",
+      );
+      const installedBashRunner = readFileSync(
+        join(targetProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        "utf-8",
+      );
+      assert.doesNotMatch(
+        installedHookConfig,
+        /git repository root unavailable/u,
+      );
+      assert.match(installedHookConfig, /managed root unavailable/u);
+      assert.notEqual(installedBashRunner, V1_15_0_BASH_RUNNER);
+      assert.equal(
+        installedBashRunner,
+        readFileSync(
+          join(PROJECT_ROOT, "workflow", "hooks", "run-with-bash.mjs"),
+          "utf-8",
+        ),
+      );
+
+      const denySpec = getHookSpec("deny-dangerous");
+      // A missing registry entry means setup cannot prove the user's deny registration.
+      assert.ok(denySpec);
+      assert.equal(
+        readAgentHookState(targetProjectPath, PROFILES.codex, denySpec)
+          .installed,
+        true,
+      );
+
+      const convergedHookConfig = installedHookConfig;
+      const convergedBashRunner = installedBashRunner;
+      const repeatedInstallResult = runInstaller(
+        targetProjectPath,
+        "--agent",
+        "codex",
+      );
+      // When repeated setup fails, show whichever user-facing stream explains the problem.
+      assert.equal(
+        repeatedInstallResult.status,
+        0,
+        repeatedInstallResult.stderr || repeatedInstallResult.stdout,
+      );
+      // Repeating setup keeps the user's project non-Git and leaves managed bytes unchanged.
+      assert.equal(existsSync(join(targetProjectPath, ".git")), false);
+      assert.equal(
+        readFileSync(join(targetProjectPath, ".codex", "hooks.json"), "utf-8"),
+        convergedHookConfig,
+      );
+      assert.equal(
+        readFileSync(
+          join(targetProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+          "utf-8",
+        ),
+        convergedBashRunner,
+      );
+    },
+  );
+
   it("migrates deprecated codex_hooks without overwriting custom config", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");

@@ -18,11 +18,13 @@ last_reviewed: 2026-08-09
 **Evidence:**
 - Pre-fix runtime probes against `<clean-temp-dir>`: `node --import tsx src/cli/cli.ts hooks disable deny-dangerous <clean-temp-dir>` created `.agents/hooks.json`, `.claude/settings.json`, `.codex/hooks.json`, `.github/hooks/hooks.json`, and `.goat-flow/config.yaml`; the `hooks enable deny-dangerous` form created hook scripts under `.agents/hooks/`, `.claude/hooks/`, `.codex/hooks/`, and `.github/hooks/`.
 - Guard anchors: `src/cli/server/hook-registrar.ts` (search: `shouldReconcileAgent`) gates writes on detected installed surfaces or existing hook residue; `test/unit/hook-registrar-surfaces.test.ts` (search: `does not scaffold uninstalled agent surfaces`) locks the clean-target regression.
+- 2026-08-09 recurrence: copying Copilot's baseline template over its installed config removed the explicitly enabled Gruff hook. Audit expected the project toggle and reported drift until the writer restored it. Anchor: `src/cli/audit/check-drift-hooks.ts` (search: `applyExplicitHookToggles`).
 
 **Prevention:**
 1. Treat hook support and agent installation as different facts. Support comes from the manifest; installation from target-project surfaces.
 2. Don't count shared markers such as `AGENTS.md` or `.agents/skills/` as a per-agent hook opt-in when multiple profiles share them.
 3. On disable, remove existing hook residue, but don't create a missing hook config file just to remove an entry from it.
+4. Regenerate installed configs through the hook writer so project toggles survive; raw template copies are only defaults.
 
 ## Footgun: Hook command strings can fail before guard code starts
 
@@ -34,7 +36,7 @@ last_reviewed: 2026-08-09
 
 **Evidence:**
 - Preflight/audit parse configured command strings from `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`, require an exact guard script path, then run that guard with safe deny payloads. Anchors: `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredGuardCommands`).
-- 2026-06-01 release-review recurrence (now fixed): an earlier `runConfiguredHookCommandSmoke` parsed the configured command but launched `bash` against `configured.scriptPath`, so a broken `$root` resolver, stale wrapper, syntax error, or executable-bit failure could pass audit while the configured agent command failed before guard startup. `src/cli/audit/check-agent-deny-runtime.ts` (search: `runConfiguredHookCommandSmoke`) now executes the configured launcher string (`configured.command`) directly, and the drift tests below lock that it must not fall back to the bare script path.
+- 2026-06-01 release-review recurrence (now fixed): an earlier `verifyConfiguredHookRuntime` parsed the configured command but launched `bash` against `configured.scriptPath`, so a broken `$root` resolver, stale wrapper, syntax error, or executable-bit failure could pass audit while the configured agent command failed before guard startup. `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`) now executes the configured launcher string (`configured.command`) directly, and the drift tests below lock that it must not fall back to the bare script path.
 - `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `exact configured hook command points at a stale path`) locks the stale-path case; `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`) locks the unsafe hidden-script-path case. Runtime contract anchors: `workflow/hooks/README.md` (search: `Failure Modes / Runtime Contracts`) and `src/cli/server/agent-hook-writer.ts` (search: `managed root unavailable`).
 - 2026-06-04 PR #47 review recurrence: the generated launcher added a `$CLAUDE_PROJECT_DIR` fallback for the script path but still ran `bash "$root/..."` from the old cwd, so the dispatcher recomputed policy root from the wrong directory and failed closed outside a repo. The current Node launcher preserves the corrected root as its child cwd. Anchors: `src/cli/server/agent-hook-writer.ts` (search: `hookLaunchBootstrap`), `workflow/hooks/deny-dangerous.sh` (search: `resolve_goat_flow_root_from_git`), `workflow/hooks/agent-config/claude.json` (search: `CLAUDE_PROJECT_DIR`), and `.claude/settings.json` (search: `CLAUDE_PROJECT_DIR`).
 - 2026-06-09 recurrence for Codex: bare `.goat-flow/hooks/deny-dangerous.sh` commands exited 127 from a nested cwd, while a root-resolving wrapper reached the central policy. The current cross-platform implementation replaces that shell wrapper with a Node bootstrap and managed Bash launcher. Current anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `run-with-bash.mjs`), `src/cli/server/agent-hook-writer.ts` (search: `rootEnvironmentName`), and `test/unit/hook-registrar.test.ts` (search: `generated Codex launchers resolve the active root`).
@@ -115,7 +117,7 @@ last_reviewed: 2026-08-09
 
 **Evidence:**
 - `workflow/hooks/agent-config/copilot-hooks.json` and `.github/hooks/hooks.json` (search: `"preToolUse"`).
-- `src/cli/audit/check-agent-deny-runtime.ts` (search: `runtimeSmokePayload`) validates script-shaped stdin only.
+- `src/cli/audit/check-agent-deny-runtime.ts` (search: `blockedRuntimeProbe`) validates script-shaped stdin only.
 
 **Prevention:** In release QA, label Copilot coverage as script/config evidence unless live capture writes a payload or emits `hook.start`. `POLICY_HOOKS: false` means runtime enforcement is unavailable/limited.
 

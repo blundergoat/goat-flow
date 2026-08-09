@@ -1,8 +1,8 @@
 /**
- * Registry of goat-flow-shipped hook scripts.
- *
- * The registry is the dashboard/CLI authority for togglable hooks. The
- * manifest remains the authority for which agents have hook support.
+ * Defines the hooks users can enable from the dashboard or CLI.
+ * Use when setup, sync, and audit need one display name, script, event, and deadline.
+ * The manifest still decides which coding agents support hook registration.
+ * Keeping these values central makes every user-facing setup path agree.
  */
 import type { AgentId } from "../types.js";
 
@@ -37,6 +37,9 @@ const HOOKS: HookSpec[] = [
     togglable: true,
     defaultEnabled: true,
     requiresConfirmDialog: true,
+    // Above the shared launcher's 25s policy deadline so Goat Flow can emit
+    // its protocol-specific unavailable response before supported hosts stop it.
+    timeoutSec: 30,
   },
   {
     id: "gruff-code-quality",

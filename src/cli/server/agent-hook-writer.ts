@@ -1,9 +1,8 @@
 /**
- * Agent-specific hook registration readers/writers.
- *
- * The registrar owns script files and desired state; this module owns the
- * four JSON shapes used by Claude, Codex, Antigravity, and Copilot hook config
- * files.
+ * Reads and writes the hook registrations users run in supported coding agents.
+ * Use when setup, hook toggles, or sync must show the same enabled state everywhere.
+ * The registrar owns script files; this module owns the Claude, Codex,
+ * Antigravity, and Copilot configuration shapes.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -349,6 +348,13 @@ function entryMatchesSpecRegistration(
   if (!isObject(entry)) return false;
   // A direct command must also carry the timeout supported by this runner.
   if (commandEntryReferencesSpec(entry, spec)) {
+    const expectedCommand = shellCommand(agent, spec);
+    const matchesManagedLauncher =
+      agent.id === "copilot"
+        ? entry.bash === expectedCommand && entry.powershell === expectedCommand
+        : entry.command === expectedCommand;
+    // A stale launcher appears disabled until sync restores what the user will actually run.
+    if (!matchesManagedLauncher) return false;
     // Codex has no timeout field, and hooks without a registry timeout use agent defaults.
     if (agent.id === "codex" || spec.timeoutSec === undefined) return true;
     const timeoutField = agent.id === "copilot" ? "timeoutSec" : "timeout";

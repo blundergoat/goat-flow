@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: I edited a dead code path because I assumed one implementation
@@ -97,13 +97,15 @@ last_reviewed: 2026-08-07
 
 ## Lesson: Header-only edits leave bodies contradicting the new scope
 
-**Status:** active | **Created:** 2026-05-16 | **Incident count:** 2 | **Latest occurrence:** 2026-08-07
+**Status:** active | **Created:** 2026-05-16 | **Incident count:** 3 | **Latest occurrence:** 2026-08-09
 
 **What happened:** I updated status/dependency headers across several milestone files and reframed M11, but left body sections, deferred items, field names, and one filename contradicting the new scope. Review caught doc-only milestones still requiring code helpers, stale dependencies, an old `confidence` field, and an abandoned filename.
 
 **Root cause:** I treated the header as the scope change. In planning docs, status/dependency/framing changes ripple through Scope Discipline, Tasks, Exit Criteria, Testing Gate, Deferred, filenames, and schema field names.
 
 **Recurrence 2026-08-07:** The first usage-insights plan set passed strict plan validation, but a cold-start reread found semantic contradictions the validator cannot see: M08 required a nonexistent quality `proof_class` field, M06 left a placeholder response mode and an under-scoped live sync command, M11 could race M07 on the same instruction files, and M10 assumed persistent markers were necessary after current Claude documentation added skill-scoped hook cleanup. The corrected milestones now cite the live schema and platform contract, use runnable fixture commands, and encode shared-file dependencies.
+
+**Recurrence 2026-08-09:** The revised analysis-derived roadmap passed strict plan validation with zero exporter warnings, but a cold-start path-and-anchor audit found that M06 named `runConfiguredHookCommandSmoke`, which does not exist in the current deny-runtime source. The plan now uses the live `verifyConfiguredHookRuntime` anchor. The first lesson draft then failed learning-loop validation because it cited the gitignored roadmap as durable evidence; the retained evidence points only to tracked source. Evidence anchor: `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`).
 
 **Prevention:** After adding or changing a milestone, re-read the whole file, grep old-scope keywords, check the filename, compare every named field with its live schema, resolve shared write paths into dependency headers, and require every command to be literal or name the task that creates it. Re-verify time-sensitive platform premises against current primary documentation and the installed version. Run structural plan validation last; it proves shape and arithmetic, not semantic executability. In closeout, list what changed in each touched milestone so reviewers can target the same surfaces. Evidence anchors: `.goat-flow/skill-docs/skill-conventions.md` (search: `Task Tracking`), `src/cli/quality/schema-types.ts` (search: `QUALITY_EVIDENCE_METHODS`), and `workflow/skills/reference/skill-preamble.md` (search: `Report-Only Skill Contract`). External platform evidence: [Claude Code hooks reference](https://code.claude.com/docs/en/hooks) (search: `Hooks in skills and agents`).
 

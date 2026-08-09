@@ -101,9 +101,11 @@ last_reviewed: 2026-08-09
 
 **Recurrences (2026-08-03, 2026-08-07, 2026-08-09):** M00 repeated the focused-GREEN-before-Prettier failure; M02-M05 formatted first. Evidence anchors: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`), and `test/integration/post-turn-safety-hook.helpers.ts` (search: `withCommandShim`).
 
-**Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
+**2026-08-09:** M02 repeated this. Evidence: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`).
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 11 | **Latest occurrence:** 2026-08-09
+**Prevention:** Format touched TypeScript before focused proof; retain Prettier in final verification.
+
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 12 | **Latest occurrence:** 2026-08-09
 
 ---
 
@@ -115,7 +117,7 @@ last_reviewed: 2026-08-09
 
 **Root cause:** Focused behavior tests and typecheck do not run the full-source lint and format gates that the copied checkout enforces.
 
-**Prevention:** Before rerunning npm run test:slow after prompt or test changes, run npx eslint src/cli src/dashboard and npm run format:check in the source checkout. Reproduce a reported gate directly before changing installer or drift logic. Evidence anchors: src/cli/prompt/compose-quality-common.ts (search: appendScopeSummary), src/cli/audit/check-agent-deny-runtime.ts (search: runConfiguredHookCommandSmoke), test/unit/quality-report-contract.test.ts (search: embeds drift and content failures).
+**Prevention:** Before rerunning npm run test:slow after prompt or test changes, run npx eslint src/cli src/dashboard and npm run format:check in the source checkout. Reproduce a reported gate directly before changing installer or drift logic. Evidence anchors: src/cli/prompt/compose-quality-common.ts (search: appendScopeSummary), src/cli/audit/check-agent-deny-runtime.ts (search: verifyConfiguredHookRuntime), test/unit/quality-report-contract.test.ts (search: embeds drift and content failures).
 
 ---
 
@@ -247,11 +249,13 @@ last_reviewed: 2026-08-09
 
 **What happened:** Multiple verification failures came from citing paths that were not durable repo truth: gitignored task files in ADRs, ignored `.goat-flow` paths hidden by normal `rg`, unresolved optional skill-path examples, and fake external PR paths formatted as repo-local code spans.
 
-**Recurrence update (2026-05-27):** During the M11 learning-loop consolidation, `stats --check` passed after lesson files were merged and renamed, but the targeted audit unit suite failed with `Invalid audit check provenance` because `src/cli/audit/harness/check-context.ts` still cited the deleted `auditor-and-rubric.md` lesson, and `src/cli/audit/harness/check-verification.ts` still cited the deleted `verification-review.md` and `agent-behavior-trust.md` lessons. The markdown cross-reference grep was clean; the stale paths lived in code-owned provenance metadata.
+**2026-05-27:** Lesson renames left deleted paths in code-owned audit provenance even though Markdown greps passed. Evidence: `src/cli/audit/harness/check-context.ts` (search: `boundary-guidance-present`).
 
 **Recurrences (2026-06-10, 2026-07-19):** `stats --check` caught `bucket-size` after Step 0 and M07 recurrence edits crossed `BUCKET_SIZE_WARN_BYTES`; the first run also caught a bare-path `stale-ref`. Both fixes compacted redundant wording, preserved anchors, regenerated indexes, and reran stats. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Step 0 retrieval was advisory`) and `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
 
 **Recurrence update (2026-08-04):** A broad Markdown evidence scan initially admitted a gitignored nested plan README; adversarial review also exposed a permissive log-README rule and omitted tool-cache roots. The gate now admits only enumerated committed local-state READMEs and excludes ignored agent/tool roots. Evidence: `src/cli/audit/check-content-quality.ts` (search: `COMMITTED_LOCAL_STATE_READMES`).
+
+**2026-08-09:** M02 crossed this bucket cap, then index regeneration pulled an unrelated lesson into its rollback patch. Compact first and diff generated files before scoping them. Evidence: `src/cli/learning-loop-index/generate.ts` (search: `generateIndexes`).
 
 **Root cause:** Filesystem/path checks prove that a local path currently resolves, not that the reference is committed, portable, or appropriate for a durable lesson/ADR. Ignored local workspaces and external examples require different citation forms from repo-local files.
 

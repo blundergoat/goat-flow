@@ -1,7 +1,8 @@
 /**
- * checkDrift hook-template parity: drift-clean when installed deny-dangerous scripts and the
- * Copilot hooks.json match their workflow templates, and the content/missing findings raised when
- * a .codex script or the Copilot config diverges, including the enabled-optional-hook allowance.
+ * Covers the hook drift report users receive after setup or an upgrade.
+ * Use when hook scripts, launchers, timeouts, or optional-hook settings change.
+ * Fixtures prove current installs pass and stale managed values name a repair.
+ * User-owned and explicitly disabled hooks remain outside the drift result.
  */
 import {
   assert,
@@ -19,6 +20,8 @@ import {
   writeFileSync,
   writeHookFixtures,
 } from "./audit-drift.helpers.ts";
+import { buildAgentHookCommand } from "../../src/cli/server/agent-hook-writer.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 describe("checkDrift: hook templates", () => {
   // Fixture writes stale settings because the stable drift contract must fail at 60s and pass at 90s.
@@ -29,6 +32,8 @@ describe("checkDrift: hook templates", () => {
       const claudeSettingsDirectory = join(root, ".claude");
       const claudeSettingsPath = join(claudeSettingsDirectory, "settings.json");
       mkdirSync(claudeSettingsDirectory, { recursive: true });
+      const postTurnSafetySpec = getHookSpec("post-turn-safety");
+      assert.ok(postTurnSafetySpec);
       const claudeSettings = {
         hooks: {
           Stop: [
@@ -36,7 +41,11 @@ describe("checkDrift: hook templates", () => {
               hooks: [
                 {
                   type: "command",
-                  command: "bash .goat-flow/hooks/post-turn-safety.sh",
+                  command: buildAgentHookCommand(
+                    "claude",
+                    ".goat-flow/hooks",
+                    postTurnSafetySpec,
+                  ),
                   timeout: 60,
                 },
               ],
@@ -83,6 +92,59 @@ describe("checkDrift: hook templates", () => {
       );
     } finally {
       rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // Covers filesystem writes because exact launcher identity is the user's drift contract.
+  it("reports a managed hook launcher whose command identity is stale", () => {
+    const targetProjectPath = setupFixture();
+    try {
+      writeHookFixtures(targetProjectPath);
+      const codexHooksDirectory = join(targetProjectPath, ".codex");
+      mkdirSync(codexHooksDirectory, { recursive: true });
+      // This models a user whose Codex config still names a pre-upgrade launcher.
+      writeFileSync(
+        join(codexHooksDirectory, "hooks.json"),
+        `${JSON.stringify(
+          {
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    {
+                      type: "command",
+                      command:
+                        'node -e "process.exit(2)" ".goat-flow/hooks/deny-dangerous.sh"',
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      const driftReport = checkDrift({
+        fs: createFS(targetProjectPath),
+        projectPath: targetProjectPath,
+        templateRoot: targetProjectPath,
+        agentFilter: "codex",
+      });
+
+      assert.equal(driftReport.status, "fail");
+      assert.ok(
+        driftReport.findings.some(
+          (finding) =>
+            finding.path === ".codex/hooks.json" &&
+            finding.message.includes("registered launcher command"),
+        ),
+        `expected launcher-command drift, findings=${JSON.stringify(driftReport.findings)}`,
+      );
+    } finally {
+      rmSync(targetProjectPath, { recursive: true, force: true });
     }
   });
 

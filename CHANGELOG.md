@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Post-turn scan failures block cleanly** - Missing roots, parser errors, and failed scan commands now fail closed on native and Bash 3 paths.
+- **Managed hooks run safely outside Git** - Launchers find a verified Goat Flow root, reject redirected files, and bound child execution.
+- **Hook setup converges on one launcher** - Installs, sync, audits, and 1.15.0 upgrades repair stale commands without `git init`.
+
 ## v1.15.0 - 2026-08-07
 
 - **Dashboard audits no longer run target hooks** - APIs use static evidence. Upgrade v1.9-v1.14 before checking an untrusted project.

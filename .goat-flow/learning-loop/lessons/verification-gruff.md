@@ -45,13 +45,15 @@ last_reviewed: 2026-08-03
 
 ## Lesson: Keep the binary path returned by the gruff availability check
 
-**Status:** active | **Created:** 2026-08-03
+**Status:** active | **Created:** 2026-08-03 | **Incident count:** 2 | **Latest occurrence:** 2026-08-09
 
 **Decision changed:** Run later gruff commands through the exact `$found` path instead of guessing a global install location.
 
 **Trigger phase:** VERIFY
 
 **What happened:** The required availability check found the repo-local `node_modules/.bin/gruff-ts`, but the first analysis command discarded that result and invoked `$HOME/.local/bin/gruff-ts`. Bash reported `No such file or directory`, while the following `jq` stage returned zero and made the failed probe easy to misread as analyzer output.
+
+**Recurrence (2026-08-09):** M02 repeated the same path guess after discovery had already found `node_modules/.bin/gruff-ts`. Reusing the discovered path ran gruff-ts 0.4.0 and preserved its three advisory findings.
 
 **Root cause:** I verified that a gruff binary existed but treated discovery as a boolean instead of preserving the executable path for the verification command. I also omitted pipeline failure propagation on a command whose analyzer output was piped through `jq`.
 

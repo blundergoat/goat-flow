@@ -25,6 +25,15 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyHookState } from "../../src/cli/server/hook-registrar.js";
+import {
+  buildAgentHookCommand,
+  writeAgentHookState,
+} from "../../src/cli/server/agent-hook-writer.js";
+import {
+  listHookSpecs,
+  type HookSpec,
+} from "../../src/cli/server/hooks-registry.js";
+import type { AgentProfile } from "../../src/cli/types.js";
 
 export const HOOK_IDENTIFIER = "deny-dangerous";
 export const CLAUDE_SAFE_PAYLOAD =
@@ -65,6 +74,177 @@ export const GENERATED_AGENT_SURFACES = [
   ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
   ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
 ];
+
+/**
+ * Collect runnable commands from one nested agent config for shared registration checks.
+ * Use after hook writes so every supported JSON shape gets the same assertions.
+ */
+function collectInstalledHookCommandEntries(
+  configValue: unknown,
+  installedCommandEntries: Array<Record<string, unknown>>,
+): void {
+  // Hook groups are arrays, so every nested item may contain a user-visible command.
+  if (Array.isArray(configValue)) {
+    // Preserve every entry because one managed hook may register more than one command.
+    for (const nestedConfigValue of configValue) {
+      collectInstalledHookCommandEntries(
+        nestedConfigValue,
+        installedCommandEntries,
+      );
+    }
+    return;
+  }
+  // Null and primitive settings cannot contain a runnable hook command for the user.
+  if (configValue === null || typeof configValue !== "object") return;
+  const configEntry = configValue as Record<string, unknown>;
+  // Any supported command field marks this object as an executable registration.
+  if (
+    typeof configEntry.command === "string" ||
+    typeof configEntry.bash === "string" ||
+    typeof configEntry.powershell === "string"
+  ) {
+    installedCommandEntries.push(configEntry);
+  }
+  // Matcher and lifecycle wrappers may contain further commands the user will run.
+  for (const nestedConfigValue of Object.values(configEntry)) {
+    collectInstalledHookCommandEntries(
+      nestedConfigValue,
+      installedCommandEntries,
+    );
+  }
+}
+
+/** Select installed command entries that run one managed hook; empty means no launcher exists. */
+function installedEntriesForHook(
+  installedCommandEntries: Array<Record<string, unknown>>,
+  hookSpec: HookSpec,
+): Array<Record<string, unknown>> {
+  return installedCommandEntries.filter((commandEntry) =>
+    [commandEntry.command, commandEntry.bash, commandEntry.powershell].some(
+      (commandValue) =>
+        typeof commandValue === "string" &&
+        commandValue.includes(hookSpec.primaryScript),
+    ),
+  );
+}
+
+/** Assert one installed entry matches the command and deadline the user should receive. */
+function assertManagedHookRegistration(
+  agentProfile: AgentProfile,
+  hookSpec: HookSpec,
+  commandEntry: Record<string, unknown>,
+  expectedCommand: string,
+): void {
+  // Copilot users need the same portable launcher in both supported shell fields.
+  if (agentProfile.id === "copilot") {
+    assert.equal(commandEntry.bash, expectedCommand);
+    assert.equal(commandEntry.powershell, expectedCommand);
+    assert.equal(commandEntry.timeoutSec, hookSpec.timeoutSec);
+    return;
+  }
+  assert.equal(commandEntry.command, expectedCommand);
+  // Codex has no host timeout field, so the shared launcher is the user's deadline.
+  if (agentProfile.id === "codex") {
+    assert.equal(commandEntry.timeout, undefined);
+    return;
+  }
+  assert.equal(commandEntry.timeout, hookSpec.timeoutSec);
+}
+
+/** Assert launcher failure uses the response format this agent's user sees. */
+function assertHookUnavailableResponse(
+  agentProfile: AgentProfile,
+  hookSpec: HookSpec,
+  installedCommand: string,
+): void {
+  // Quality-hook startup failures remain advisory instead of blocking the user's edit.
+  if (hookSpec.id === "gruff-code-quality") {
+    assert.match(installedCommand, /gruff-code-quality: hook unavailable/u);
+    return;
+  }
+  // Stop-hook startup failures block completion with their own visible category.
+  if (hookSpec.id === "post-turn-safety") {
+    assert.match(installedCommand, /post-turn-safety: hook unavailable/u);
+    return;
+  }
+  // Antigravity users receive a deny decision object on standard output.
+  if (agentProfile.id === "antigravity") {
+    assert.match(installedCommand, /decision:'deny'/u);
+    return;
+  }
+  // Copilot users receive its permission-decision response object.
+  if (agentProfile.id === "copilot") {
+    assert.match(installedCommand, /permissionDecision:'deny'/u);
+    return;
+  }
+  assert.match(installedCommand, /BLOCKED: Policy hook unavailable/u);
+}
+
+/**
+ * Verify one agent receives every supported launcher, deadline, and response format.
+ * @param agentProfile - selected agent; a missing config path means no registration surface
+ * @param targetProjectPath - non-empty isolated project where the user-facing config is written
+ * @returns installed command count; zero means the user received no runnable hook
+ */
+export function verifyAgentHookRegistrationMatrix(
+  agentProfile: AgentProfile,
+  targetProjectPath: string,
+): number {
+  // Install every hook this agent can expose to the user.
+  for (const hookSpec of listHookSpecs()) {
+    // Unsupported lifecycles stay absent instead of creating a broken user toggle.
+    if (hookSpec.unsupportedAgents?.[agentProfile.id]) continue;
+    writeAgentHookState(targetProjectPath, agentProfile, hookSpec, true);
+  }
+
+  // Without a config path, this agent cannot expose the registrations under test.
+  assert.ok(agentProfile.hookConfigFile);
+  const installedAgentConfig = JSON.parse(
+    readFileSync(join(targetProjectPath, agentProfile.hookConfigFile), "utf-8"),
+  ) as unknown;
+  const installedCommandEntries: Array<Record<string, unknown>> = [];
+  collectInstalledHookCommandEntries(
+    installedAgentConfig,
+    installedCommandEntries,
+  );
+
+  // Recheck every supported hook against the exact registration setup promises the user.
+  for (const hookSpec of listHookSpecs()) {
+    // Unsupported hooks are intentionally absent and have no registration to compare.
+    if (hookSpec.unsupportedAgents?.[agentProfile.id]) continue;
+    const expectedCommand = buildAgentHookCommand(
+      agentProfile.id,
+      agentProfile.hooksDir ?? ".goat-flow/hooks",
+      hookSpec,
+    );
+    const matchingCommandEntries = installedEntriesForHook(
+      installedCommandEntries,
+      hookSpec,
+    );
+    assert.ok(
+      matchingCommandEntries.length > 0,
+      `${agentProfile.id} missing ${hookSpec.id} registration`,
+    );
+    // Multiple host fields must preserve the same managed command and response contract.
+    for (const commandEntry of matchingCommandEntries) {
+      assertManagedHookRegistration(
+        agentProfile,
+        hookSpec,
+        commandEntry,
+        expectedCommand,
+      );
+      // Empty command fields mean this registration cannot start a user-visible hook.
+      const installedCommand = String(
+        commandEntry.command ??
+          commandEntry.bash ??
+          commandEntry.powershell ??
+          "",
+      );
+      assertHookUnavailableResponse(agentProfile, hookSpec, installedCommand);
+    }
+  }
+  return installedCommandEntries.length;
+}
 
 /** Writes a cleaned temporary target project for hook-registrar assertions.
  *
