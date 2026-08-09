@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   HOOK_RESULT_FINDING_LIMIT,
+  HOOK_RESULT_OUTPUT_LIMIT_BYTES,
   HOOK_RESULT_SCHEMA,
   validateHookResultEnvelope,
   type HookResultCoverage,
@@ -123,6 +124,26 @@ describe("hook result contract", () => {
     assert.ok(
       validationMessages.includes(
         `findings exceed the ${HOOK_RESULT_FINDING_LIMIT}-item limit`,
+      ),
+    );
+  });
+
+  // A result larger than the smallest host channel stays unavailable instead of being truncated.
+  it("rejects an oversized result envelope", () => {
+    const validationMessages = validateHookResultEnvelope(
+      completeHookResult({
+        findings: [
+          {
+            code: "oversized-result",
+            message: "x".repeat(HOOK_RESULT_OUTPUT_LIMIT_BYTES),
+          },
+        ],
+      }),
+    );
+
+    assert.ok(
+      validationMessages.includes(
+        `result exceeds the ${HOOK_RESULT_OUTPUT_LIMIT_BYTES}-byte limit`,
       ),
     );
   });

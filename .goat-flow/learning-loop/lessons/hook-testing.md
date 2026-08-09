@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -199,13 +199,13 @@ last_reviewed: 2026-08-06
 
 ## Lesson: Configured hook smoke must verify the registered guard path
 
-**Status:** active | **Created:** 2026-05-27 | **Incident count:** 5 | **Latest occurrence:** 2026-08-09
+**Status:** active | **Created:** 2026-05-27 | **Incident count:** 6 | **Latest occurrence:** 2026-08-09
 
 **Decision changed:** Treat configured replay as a safe-and-dangerous semantic matrix, and make mocks identify the command boundary rather than infer it from call order.
 
 **Trigger phase:** VERIFY
 
-**What happened:** M12 found that audit and preflight smoke tests launched hook scripts directly, so they could pass even when an agent config contained a stale command string or a command shape that exited before the hook started. The fix parses `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`, requires an exact configured guard script path, then runs that script with runtime-shaped safe and dangerous payloads.
+**What happened:** A configured-hook review found that audit and preflight smoke tests launched hook scripts directly, so they could pass even when an agent config contained a stale command string or a command shape that exited before the hook started. The fix parses `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`, requires an exact configured guard script path, then runs that script with runtime-shaped safe and dangerous payloads.
 
 **Root cause:** The verification target was the hook file, not the runtime contract. That missed stale paths, executable-bit loss, and shell-substitution assumptions before guard code could run.
 
@@ -217,7 +217,9 @@ last_reviewed: 2026-08-06
 
 **Recurrence 2026-08-09 (support metadata):** A matrix-helper refactor treated `unsupportedAgents` like a boolean map and compared its values with literal `true`; the registry actually stores non-empty reason strings. Cross-agent install tests then expected Codex Gruff and Antigravity/Copilot post-turn hooks to install. Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `shouldInstallHook`).
 
-**Prevention:** Hook verification must include configured guard-script replay in addition to direct script self-tests. Run safe and dangerous payloads from every audited cwd, require policy-specific denial text so startup failures cannot satisfy the dangerous case, reject commands that hide the script path inside shell text, and fail hard on exit 126/127. Test doubles must branch on payload and command shape, never an assumed spawn index. Single-axis drift fixtures must start from the canonical builder and mutate only the field under test. After renaming a user-visible outcome, grep the old label and rerun its exact message assertion. Treat `unsupportedAgents` as a presence-and-reason map: a non-empty reason means unsupported, never `=== true`. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`), `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
+**Recurrence 2026-08-09 (namespaced launcher mode):** Generated commands moved from one-word response modes to a six-field delivery contract, but the startup bootstrap still matched only the legacy words. Registrar fixtures then showed Claude Gruff, Antigravity policy, and Copilot policy startup failures all falling through to the generic policy response. Decoding the generated provider and response kind before choosing startup output restored each user-facing contract. Evidence anchors: `src/cli/server/agent-hook-writer.ts` (search: `hasNamespacedResponseMode`) and `test/unit/hook-registrar.helpers.ts` (search: `assertHookUnavailableResponse`).
+
+**Prevention:** Hook verification must include configured guard-script replay in addition to direct script self-tests. Run safe and dangerous payloads from every audited cwd, require policy-specific denial text so startup failures cannot satisfy the dangerous case, reject commands that hide the script path inside shell text, and fail hard on exit 126/127. Test doubles must branch on payload and command shape, never an assumed spawn index. Single-axis drift fixtures must start from the canonical builder and mutate only the field under test. After renaming a user-visible outcome, grep the old label and rerun its exact message assertion. Treat `unsupportedAgents` as a presence-and-reason map: a non-empty reason means unsupported, never `=== true`. When a generated mode gains fields, update and test both the downstream launcher decoder and the pre-launch failure selector in the same batch. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`), `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
 
 ## Lesson: Hook parser regressions need false-positive grammar probes
 

@@ -11,6 +11,8 @@ import type { AgentId, AgentProfile } from "../types.js";
 import { writeFileAtomic } from "./safe-exec.js";
 import type { HookSpec } from "./hooks-registry.js";
 
+const HOOK_LAUNCH_MODE_PART_COUNT = 6; // Contract: host, response, result, event, adapter, deadline.
+
 /** Result of reading an agent hook config without mutating it. */
 export interface AgentHookReadState {
   installed: boolean;
@@ -128,21 +130,30 @@ function commandPath(hooksDirectory: string, hookScriptName: string): string {
  * @returns Node source for the host response; never empty because every hook needs a failure outcome
  */
 function unavailableHookResponseProgram(hookResponseMode: string): string {
-  // Antigravity expects a deny decision on stdout and treats the host response as handled.
-  if (hookResponseMode === "antigravity") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
-  }
-  // Copilot expects its own permission-decision fields when the policy hook cannot start.
-  if (hookResponseMode === "copilot") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
-  }
+  const responseModeParts = hookResponseMode.split(":");
+  const hasNamespacedResponseMode =
+    responseModeParts.length === HOOK_LAUNCH_MODE_PART_COUNT;
+  const providerIdentifier = hasNamespacedResponseMode
+    ? responseModeParts[0]
+    : hookResponseMode;
+  const responseKind = hasNamespacedResponseMode
+    ? responseModeParts[1]
+    : hookResponseMode;
   // Optional Gruff feedback fails soft so a missing analyzer shell never blocks the user's edit.
-  if (hookResponseMode === "gruff") {
+  if (responseKind === "gruff") {
     return "const reportUnavailable=(reason)=>{process.stderr.write('gruff-code-quality: hook unavailable: '+reason+'; skipped.'+lineBreak);process.exit(0);};";
   }
   // Post-turn safety cannot claim a completed scan when its launcher never started.
-  if (hookResponseMode === "post-turn") {
+  if (responseKind === "post-turn") {
     return "const reportUnavailable=(reason)=>{process.stderr.write('post-turn-safety: hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
+  }
+  // Antigravity expects a deny decision on stdout and treats the host response as handled.
+  if (providerIdentifier === "antigravity") {
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
+  }
+  // Copilot expects its own permission-decision fields when the policy hook cannot start.
+  if (providerIdentifier === "copilot") {
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
   }
   // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
   return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
@@ -206,16 +217,40 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
  * @returns response mode consumed by the launcher; never empty
  */
 function hookLaunchMode(agentId: AgentId, spec: HookSpec): string {
+  let responseKind = "policy";
   // Gruff is optional feedback, so unavailable execution is shown as a non-blocking skip.
-  if (spec.id === "gruff-code-quality") return "gruff";
+  if (spec.id === "gruff-code-quality") responseKind = "gruff";
   // Post-turn safety must return a failing scan outcome rather than an agent permission payload.
-  if (spec.id === "post-turn-safety") return "post-turn";
-  // Antigravity requires its decision JSON shape for command admission.
-  if (agentId === "antigravity") return "antigravity";
-  // Copilot requires permission-decision fields in its pre-tool response.
-  if (agentId === "copilot") return "copilot";
-  // Claude and Codex consume the standard fail-closed policy exit.
-  return "policy";
+  if (spec.id === "post-turn-safety") responseKind = "post-turn";
+
+  const deliveryContract = spec.deliveryContract;
+  const usesLegacyResultProtocol =
+    !deliveryContract || deliveryContract.resultProtocol === "legacy";
+  // Legacy hooks keep installed command parity until their detector and installer migrate together.
+  if (usesLegacyResultProtocol) {
+    // Feedback and stop hooks keep their category-specific unavailable messages on every host.
+    if (responseKind !== "policy") return responseKind;
+    // Antigravity requires its decision JSON shape for legacy command admission.
+    if (agentId === "antigravity") return "antigravity";
+    // Copilot requires permission-decision fields for legacy pre-tool output.
+    if (agentId === "copilot") return "copilot";
+    return "policy";
+  }
+
+  const canonicalHookEvent =
+    spec.event === "PreToolUse"
+      ? "pre-tool"
+      : spec.event === "PostToolUse"
+        ? "post-tool"
+        : "turn-stop";
+  return [
+    agentId,
+    responseKind,
+    deliveryContract.resultProtocol,
+    canonicalHookEvent,
+    deliveryContract.adapterVersion,
+    deliveryContract.launcherDeadlineMs,
+  ].join(":");
 }
 
 /**

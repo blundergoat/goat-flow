@@ -123,11 +123,13 @@ last_reviewed: 2026-08-09
 
 ## Lesson: Final verification gates need supported scopes and captured logs
 
-**Status:** active | **Created:** 2026-05-19
+**Status:** active | **Created:** 2026-05-19 | **Incident count:** 3 | **Latest occurrence:** 2026-08-09
 
-**What happened:** M30-M34 and 2026-08-09 M01 closeouts ran ad hoc ESLint over ignored tests and a `.mjs` outside the TypeScript project, producing tooling failures unrelated to code. The first closeout also ran `npm test` in parallel with other expensive checks; it reported one failing test but omitted the failing block. A clean captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
+**What happened:** Several closeouts ran ad hoc ESLint over ignored tests and a `.mjs` outside the TypeScript project, producing tooling failures unrelated to code. The first closeout also ran `npm test` in parallel with other expensive checks; it reported one failing test but omitted the failing block. A clean captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
 
 **Root cause:** I mixed repo-supported verification scopes with improvised paths and treated parallel final gates as interchangeable with a clean final evidence run. That made the first failure ambiguous and forced a rerun to recover the actual evidence.
+
+**Recurrence update (2026-08-09):** A runtime-adapter check again passed a workflow `.mjs` file to the TypeScript-project ESLint command. ESLint correctly rejected the unsupported path before linting source. Workflow modules instead use `node --check`, Prettier, targeted Gruff, their runtime fixtures, and the repository's supported preflight scopes. Evidence anchors: `workflow/hooks/hook-provider-adapters.mjs` (search: `Decodes bounded provider-neutral hook results`) and `scripts/preflight-checks.sh` (search: `npx eslint src/cli src/dashboard`).
 
 **Recurrence update (2026-05-19):** The same closeout also added a dashboard markdown performance sanity test whose 500KB fixture was newline-heavy. Focused runs passed, but preflight's concurrent fast-suite runner exceeded the 100ms budget. The fixture still needed to be 500KB, but it needed to measure plain markdown throughput rather than line-break parsing stress.
 

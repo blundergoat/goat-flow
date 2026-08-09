@@ -18,21 +18,17 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
-import * as managedHookLauncherModule from "../../workflow/hooks/run-with-bash.mjs";
+import { windowsTaskkillExecutablePath } from "../../workflow/hooks/run-with-bash.mjs";
+import {
+  HOOK_RESULT_OUTPUT_LIMIT_BYTES,
+  HOOK_RESULT_SCHEMA,
+} from "../../workflow/hooks/hook-provider-adapters.mjs";
 
 import {
   HOOK_TIMEOUT_MODES,
   launcherDiagnostics,
   withTempProject,
 } from "./hook-registrar.helpers.js";
-
-const windowsTaskkillExecutablePath = (
-  managedHookLauncherModule as typeof managedHookLauncherModule & {
-    windowsTaskkillExecutablePath?: (
-      environment: NodeJS.ProcessEnv,
-    ) => string | null;
-  }
-).windowsTaskkillExecutablePath;
 
 describe("hook launcher script validation", () => {
   const HOOK_LAUNCHER_PATH = resolve(
@@ -110,24 +106,23 @@ describe("hook launcher script validation", () => {
 
   /** Proves Windows cleanup uses the OS utility instead of a project-local executable. */
   it("resolves Windows tree termination from the system root", () => {
-    assert.equal(typeof windowsTaskkillExecutablePath, "function");
     assert.equal(
-      windowsTaskkillExecutablePath?.({ SystemRoot: "D:\\Windows" }),
+      windowsTaskkillExecutablePath({ SystemRoot: "D:\\Windows" }),
       "D:\\Windows\\System32\\taskkill.exe",
     );
     // An empty primary value still lets the user's host supply its equivalent WINDIR setting.
     assert.equal(
-      windowsTaskkillExecutablePath?.({
+      windowsTaskkillExecutablePath({
         SystemRoot: "",
         WINDIR: "E:\\Windows",
       }),
       "E:\\Windows\\System32\\taskkill.exe",
     );
     // A missing system root must not turn project PATH or cwd into an executable source.
-    assert.equal(windowsTaskkillExecutablePath?.({}), null);
+    assert.equal(windowsTaskkillExecutablePath({}), null);
     // A relative root could name a project folder, so it is rejected like a missing value.
     assert.equal(
-      windowsTaskkillExecutablePath?.({ SystemRoot: "project-tools" }),
+      windowsTaskkillExecutablePath({ SystemRoot: "project-tools" }),
       null,
     );
   });
@@ -213,6 +208,147 @@ describe("hook launcher script validation", () => {
         userWaitMilliseconds < 1_500,
         `${launcherDiagnostics(launcherResult)}\nelapsed_ms=${userWaitMilliseconds}`,
       );
+    });
+  });
+
+  // Fixture purpose: prove direct output parity. Side effects: writes and starts one script.
+  it("preserves legacy hook output without adapter translation", () => {
+    withTempProject((fixtureProjectPath) => {
+      const hookScriptRelativePath = ".goat-flow/hooks/legacy-output.sh";
+      const managedHookDirectoryPath =
+        createManagedHookDirectory(fixtureProjectPath);
+      writeFileSync(
+        join(managedHookDirectoryPath, "legacy-output.sh"),
+        "#!/usr/bin/env bash\nprintf 'legacy stdout\\n'\nprintf 'legacy stderr\\n' >&2\nexit 0\n",
+      );
+
+      const launcherResult = runLauncherProcess(
+        fixtureProjectPath,
+        hookScriptRelativePath,
+        "gruff",
+      );
+
+      assert.equal(
+        launcherResult.status,
+        0,
+        launcherDiagnostics(launcherResult),
+      );
+      assert.equal(launcherResult.stdout, "legacy stdout\n");
+      assert.equal(launcherResult.stderr, "legacy stderr\n");
+    });
+  });
+
+  // Fixture purpose: prove Claude-visible advice. Side effects: writes and starts one script.
+  it("adapts a bounded neutral result at the final launcher boundary", () => {
+    withTempProject((fixtureProjectPath) => {
+      const hookScriptRelativePath = ".goat-flow/hooks/envelope-result.sh";
+      const managedHookDirectoryPath =
+        createManagedHookDirectory(fixtureProjectPath);
+      const hookResultEnvelope = JSON.stringify({
+        schema: HOOK_RESULT_SCHEMA,
+        hookId: "fixture-quality",
+        event: "post-tool",
+        outcome: "advisory",
+        coverage: {
+          status: "complete",
+          attemptedUnits: 1,
+          completedUnits: 1,
+          skippedUnits: 0,
+        },
+        reasonCode: "findings-reported",
+        findings: [
+          {
+            code: "fixture-finding",
+            message: "Review the changed file",
+            target: "src/example.ts",
+          },
+        ],
+        execution: {
+          hookVersion: "1.15.1",
+          provider: "claude",
+          providerMode: "fixture",
+          adapterName: "claude-post-tool",
+          adapterVersion: "1",
+          durationMs: 12,
+        },
+      });
+      writeFileSync(
+        join(managedHookDirectoryPath, "envelope-result.sh"),
+        `#!/usr/bin/env bash\nprintf '%s\\n' '${hookResultEnvelope}'\n`,
+      );
+
+      const launcherResult = runLauncherProcess(
+        fixtureProjectPath,
+        hookScriptRelativePath,
+        `claude:gruff:${HOOK_RESULT_SCHEMA}:post-tool:1:75000`,
+      );
+
+      assert.equal(
+        launcherResult.status,
+        0,
+        launcherDiagnostics(launcherResult),
+      );
+      assert.match(launcherResult.stdout, /"hookEventName":"PostToolUse"/u);
+      assert.match(launcherResult.stdout, /"additionalContext"/u);
+      assert.doesNotMatch(launcherResult.stdout, /"schema"/u);
+    });
+  });
+
+  // Fixture purpose: reject old plain output. Side effects: writes and starts one script.
+  it("reports migrated legacy output as unavailable", () => {
+    withTempProject((fixtureProjectPath) => {
+      const hookScriptRelativePath = ".goat-flow/hooks/malformed-result.sh";
+      const managedHookDirectoryPath =
+        createManagedHookDirectory(fixtureProjectPath);
+      writeFileSync(
+        join(managedHookDirectoryPath, "malformed-result.sh"),
+        "#!/usr/bin/env bash\nprintf 'legacy finding\\n'\n",
+      );
+
+      const launcherResult = runLauncherProcess(
+        fixtureProjectPath,
+        hookScriptRelativePath,
+        `claude:gruff:${HOOK_RESULT_SCHEMA}:post-tool:1:75000`,
+      );
+
+      assert.equal(
+        launcherResult.status,
+        0,
+        launcherDiagnostics(launcherResult),
+      );
+      assert.equal(launcherResult.stdout, "");
+      assert.match(launcherResult.stderr, /not one JSON object/iu);
+      assert.match(launcherResult.stderr, /hook unavailable/iu);
+    });
+  });
+
+  // Fixture purpose: bound flooded stdout. Side effects: starts and stops one script.
+  it("stops migrated child output beyond the shared result limit", () => {
+    withTempProject((fixtureProjectPath) => {
+      const hookScriptRelativePath = ".goat-flow/hooks/oversized-result.sh";
+      const managedHookDirectoryPath =
+        createManagedHookDirectory(fixtureProjectPath);
+      const oversizedHookOutput = "x".repeat(
+        HOOK_RESULT_OUTPUT_LIMIT_BYTES + 1,
+      );
+      writeFileSync(
+        join(managedHookDirectoryPath, "oversized-result.sh"),
+        `#!/usr/bin/env bash\nprintf '%s' '${oversizedHookOutput}'\n`,
+      );
+
+      const launcherResult = runLauncherProcess(
+        fixtureProjectPath,
+        hookScriptRelativePath,
+        `claude:gruff:${HOOK_RESULT_SCHEMA}:post-tool:1:75000`,
+      );
+
+      assert.equal(
+        launcherResult.status,
+        0,
+        launcherDiagnostics(launcherResult),
+      );
+      assert.equal(launcherResult.stdout, "");
+      assert.match(launcherResult.stderr, /exceeded the 10000-byte limit/iu);
     });
   });
 

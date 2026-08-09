@@ -10,6 +10,7 @@ export const HOOK_PROVIDER_EVIDENCE_SCHEMA =
   "goat-flow.hook-provider-evidence.v1";
 export const HOOK_RESULT_SCHEMA = "goat-flow.hook-result.v1";
 export const HOOK_RESULT_FINDING_LIMIT = 20; // Cap: matches both shipped hook limits across agent UIs.
+export const HOOK_RESULT_OUTPUT_LIMIT_BYTES = 10_000; // Cap: fits Copilot's smallest documented feedback channel.
 
 /** Provider-neutral lifecycle points shown consistently across hook screens. */
 export type HookLifecycleEvent = "pre-tool" | "post-tool" | "turn-stop";
@@ -479,6 +480,16 @@ export function validateHookResultEnvelope(
   if (hookResult.findings.length > HOOK_RESULT_FINDING_LIMIT) {
     validationMessages.push(
       `findings exceed the ${HOOK_RESULT_FINDING_LIMIT}-item limit`,
+    );
+  }
+
+  // Oversized envelopes may be dropped by the host instead of reaching the user's agent.
+  if (
+    Buffer.byteLength(JSON.stringify(hookResult), "utf8") >
+    HOOK_RESULT_OUTPUT_LIMIT_BYTES
+  ) {
+    validationMessages.push(
+      `result exceeds the ${HOOK_RESULT_OUTPUT_LIMIT_BYTES}-byte limit`,
     );
   }
 

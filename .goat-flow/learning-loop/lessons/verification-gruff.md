@@ -6,7 +6,7 @@ last_reviewed: 2026-08-09
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
 **Status:** active | **Created:** 2026-05-25
-**Incident count:** 3 | **Latest occurrence:** 2026-08-09
+**Incident count:** 5 | **Latest occurrence:** 2026-08-09
 **Decision changed:** Treat a human-readable comment, boolean, compact test, or typed contract as unfinished until targeted and repository-wide analyzers accept the exact source shape.
 **Trigger phase:** VERIFY
 
@@ -15,6 +15,10 @@ last_reviewed: 2026-08-09
 **Recurrence (2026-08-09):** A hook-result cap had a plain-English rationale directly above it, but gruff-ts 0.4.0 still reported `docs.magic-threshold-without-rationale`. The same scan found eight boolean state fields without intent prefixes and one assertion loop. Using the rule's recognized same-line `Cap:` form, renaming the facts to `is...` and `has...`, and replacing the loop with explicit outcome assertions reduced the targeted result from 10 advisories to zero. Evidence anchors: `src/cli/hook-contracts.ts` (search: `Cap: matches both shipped hook limits`) and `test/unit/hook-result-contract.test.ts` (search: `assertHookOutcomeRemainsValid`).
 
 **Second recurrence (2026-08-09):** Focused tests, TypeScript, and gruff-ts passed, but full preflight still rejected two contract functions above ESLint's complexity limit and eight exported component types without external fixture use. Splitting the user-facing support chain into named provider, install, and observed-state checks, then typing the fixtures with each public component contract, cleared both repository gates. Evidence anchors: `src/cli/hook-contracts.ts` (search: `classifyProviderEvidenceState`) and `test/integration/hook-provider-contracts.test.ts` (search: `DELIVERED_RESPONSE_CHANNELS`).
+
+**Third recurrence (2026-08-09):** The first runtime-adapter scan found eight documentation-shape advisories after all 16 focused contract tests passed: two threshold comments were not in the analyzer's recognized same-line form, two functions omitted explicit error or invariant wording, and three large provider fixture clusters lacked nearby purpose comments. Adding concise contract wording at each exact source shape cleared the findings without changing behavior. Evidence anchors: `workflow/hooks/hook-provider-adapters.mjs` (search: `Error behavior: returns one bounded invalid reason`) and `test/unit/hook-provider-adapters.test.ts` (search: `Fixture purpose: compare three feedback-bearing shapes`).
+
+**Fourth recurrence (2026-08-09):** The broader launcher and registry scan found fourteen issues after focused behavior passed: two files crossed the length threshold, public contracts lacked invariant wording, and fixture comments could not express purpose and side effects as separate adjacent comments. Moving launch decoding and result preparation into the provider adapter kept the runtime files below 750 lines, splitting the registry assertions reduced fixture complexity, and one concise fixture comment now carries both required meanings. The remaining three launcher process-execution warnings match the tracked warning baseline. Evidence anchors: `workflow/hooks/hook-provider-adapters.mjs` (search: `prepareProviderHookResultDelivery`), `workflow/hooks/run-with-bash.mjs` (search: `reportProviderPolicyUnavailable`), `test/unit/hook-launcher.test.ts` (search: `Fixture purpose: prove direct output parity`), and `scripts/gruff-warning-baseline.json` (search: `946e85ebc33abfc1`).
 
 **Root cause:** I treated human-readable comments, compact boolean names, a local rename, and focused contract checks as complete before checking analyzer vocabulary, branch budgets, public type use, test structure, and parallel type surfaces.
 

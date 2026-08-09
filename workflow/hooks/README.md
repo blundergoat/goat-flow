@@ -6,6 +6,8 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 
 | Script | Event | Required? | Purpose |
 |--------|-------|-----------|---------|
+| `run-with-bash.mjs` | Managed launcher | Required with registered hooks | Resolves the selected project, enforces the launcher deadline, and preserves direct legacy output or delivers a bounded result |
+| `hook-provider-adapters.mjs` | Provider response | Required with migrated result hooks | Validates the versioned result envelope and translates it into the active coding agent's documented response shape |
 | `deny-dangerous.sh` | PreToolUse | Required | Single dispatcher that blocks destructive shell commands, direct secret-path access, `git commit` / `git push`, destructive git flags, and GitHub writes via `gh` |
 | `deny-dangerous/*.sh` | Sourced policy store | Required with `deny-dangerous.sh` | Shared destructive-shell, secret-path, repository-write policy modules plus the central `deny-dangerous-self-test.sh` |
 | `gruff-code-quality.sh` | PostToolUse | Optional | Runs the matching `gruff-*` analyzer after file edits and surfaces findings whose reported line intersects changed lines |
@@ -16,14 +18,14 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 | Purpose | Claude Code | Codex CLI | Antigravity | Copilot CLI |
 |---------|-------------|-----------|-------------|-------------|
 | Block before tool runs | PreToolUse | PreToolUse in `.codex/hooks.json` with `deny-dangerous.sh` matched to `Bash` | PreToolUse in `.agents/hooks.json` with `deny-dangerous.sh` matched to `run_command` and secret-bearing file tools | `preToolUse` in `.github/hooks/hooks.json` with `deny-dangerous.sh` |
-| Changed-line gruff quality | PostToolUse matched to `Edit` and `Write` | Unsupported until a Codex PostToolUse contract is verified; ships `PreToolUse` `deny-dangerous` only | PostToolUse matched to `write_to_file`, `replace_file_content`, and `multi_replace_file_content` | `postToolUse` entry with the shipped `gruff-code-quality.sh` command |
-| Universal post-turn safety | Stop with `post-turn-safety.sh` | Unsupported; Codex Stop-hook delivery is unverified (registered Stop hooks did not fire under codex exec 0.139.0) | Skipped; Antigravity Stop-hook delivery is unverified (hook trust gates execution; no Stop payload captured firing) | Not supported; no project-local post-turn event |
+| Changed-line gruff quality | PostToolUse matched to `Edit` and `Write` | Unsupported until Codex PostToolUse result delivery is verified | Unsupported; PostToolUse accepts `{}` but cannot return Gruff findings to the agent | `postToolUse` entry with the shipped `gruff-code-quality.sh` command |
+| Universal post-turn safety | Stop with `post-turn-safety.sh` | Unsupported; Codex Stop-hook delivery is unverified (registered Stop hooks did not fire under codex exec 0.139.0) | Skipped; Antigravity Stop-hook delivery is unverified (hook trust gates execution; no Stop payload captured firing) | Unsupported; `agentStop` delivery is unverified and Goat Flow has no current registration adapter |
 | Permission deny list | `.claude/settings.json` deny patterns | Filesystem permission profile in `.codex/config.toml`; command denies in the Bash hooks | Script-only guardrails; no provider-native file-read/file-write deny layer is claimed | Script-only guardrails; no provider-native file-read/file-write deny layer is claimed |
 | Config format | JSON | TOML + JSON | JSON | JSON |
 
 ## Setup
 
-1. Copy `deny-dangerous.sh` and `post-turn-safety.sh` to `.goat-flow/hooks/`, and copy `deny-dangerous/` to `.goat-flow/hooks/deny-dangerous/`.
+1. Copy `run-with-bash.mjs`, `deny-dangerous.sh`, and `post-turn-safety.sh` to `.goat-flow/hooks/`, and copy `deny-dangerous/` to `.goat-flow/hooks/deny-dangerous/`. Also copy `hook-provider-adapters.mjs` when enabling a versioned result hook.
 2. Copy the matching agent-config template(s) for your runtime:
    - Claude: `agent-config/claude.json` -> `.claude/settings.json`
    - Codex: `agent-config/codex.toml` -> `.codex/config.toml` and `agent-config/codex-hooks.json` -> `.codex/hooks.json`
@@ -31,7 +33,13 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
    - Copilot: `agent-config/copilot-hooks.json` -> `.github/hooks/hooks.json`
 3. `gruff-code-quality.sh` is opt-in through `.goat-flow/config.yaml`, the dashboard Hooks page, or `goat-flow hooks enable gruff-code-quality`.
 
-Claude, Codex, and Antigravity hook commands resolve the active repository root with `git rev-parse --show-toplevel`, so nested cwd sessions and linked worktrees run the `.goat-flow/hooks/` scripts checked out beside the files being edited. Claude and Antigravity then fall back to `$CLAUDE_PROJECT_DIR` for sessions whose persisted shell cwd has moved outside any git checkout; Codex has no documented project-root environment fallback and fails closed outside git. Missing `deny-dangerous.sh` still fails closed before a tool runs: Claude and Codex emit a stderr `BLOCKED:` message with exit 2, and Antigravity emits deny JSON with exit 0. Missing `post-turn-safety.sh` fails closed at Stop because the hook cannot make the promised post-turn safety check. Missing `gruff-code-quality.sh` fails soft with a short skipped diagnostic because it is an optional PostToolUse analyzer. Copilot hook commands still use bare project-local script paths.
+Generated hook commands resolve a verified managed project root before starting `run-with-bash.mjs`, so nested working directories and linked worktrees use the scripts beside the files being edited. Claude, Antigravity, and Copilot can use `CLAUDE_PROJECT_DIR` as a final configured-root fallback; Codex has no supported host-root variable and fails closed when no managed root is available. Missing policy or post-turn hooks fail closed. Missing Gruff remains a visible non-blocking skip.
+
+## Direct and Registered Results
+
+Direct `.sh` use keeps each hook's existing stdout, stderr, exit status, `--check`, and self-test interface. Existing registered hooks keep their one-word legacy launch mode and do not load the adapter. A migrated command adds a namespaced contract containing the provider, response kind, result protocol, lifecycle event, adapter version, and launcher deadline only when its detector and install path migrate together.
+
+The `goat-flow.hook-result.v1` path captures at most 10,000 combined stdout/stderr bytes, accepts one JSON object, caps findings at 20, and requires complete declared coverage before `pass`. Malformed, empty, partial, timed-out, or mismatched results become explicit unavailable outcomes. Provider adapters preserve blocking semantics; a host/event pair that cannot deliver the result remains unsupported instead of receiving weaker advice.
 
 ## Failure Modes / Runtime Contracts
 
@@ -40,6 +48,7 @@ Claude, Codex, and Antigravity hook commands resolve the active repository root 
 - Claude, Codex, and Antigravity support nested cwd inside a git checkout through the root-resolving wrapper. Outside a git checkout, `deny-dangerous.sh` fails closed unless an agent-specific project root fallback is documented and configured; today that fallback is `$CLAUDE_PROJECT_DIR` for Claude/Antigravity, not Codex. `gruff-code-quality.sh` fails soft.
 - Copilot uses direct project-local paths and therefore requires a repo-root working directory for the configured command. Nested-cwd execution is outside the current Copilot contract unless that runtime adds a portable project-root variable or root-resolving command support.
 - Directly invoked `.sh` hooks must keep executable bits. Missing `bash` is a hard runtime prerequisite for all shipped guardrails.
+- Legacy registrations do not load or install `hook-provider-adapters.mjs`. A migrated detector must add its namespaced mode and adapter file in the same propagation change so partial setup fails visibly instead of changing existing hook behavior.
 - `post-turn-safety.sh` uses an optimized Bash 4+ scanner and a bounded compatibility scanner on stock macOS Bash 3.2; both enforce the same finding, byte, and wall-clock limits. If either scanner exhausts `GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS` (default 60s), it reports an incomplete scan and exits with blocking status 2, so a partial scan cannot look clean. Exit 1 is reserved for prerequisites such as an unavailable Git root. The registered Stop timeout is 90s, deliberately above the hook budget so its own diagnostic prints before the runner intervenes.
 
 ## Post-Turn Safety

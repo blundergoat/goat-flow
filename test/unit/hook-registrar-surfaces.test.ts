@@ -145,6 +145,32 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   }
 
+  /**
+   * Proves fixture identity cannot promote delivery before a live capture exists.
+   * Invariant: deterministic evidence stays below `live-supported` in user-facing state.
+   */
+  it("keeps deterministic delivery evidence below live support", () => {
+    const denySpec = getHookSpec(HOOK_IDENTIFIER);
+    const gruffSpec = getHookSpec("gruff-code-quality");
+    assert.ok(denySpec);
+    assert.ok(gruffSpec);
+    assert.deepEqual(denySpec.deliveryContract, {
+      resultProtocol: "legacy",
+      adapterVersion: "1",
+      launcherDeadlineMs: 25_000,
+    });
+    // Missing Claude evidence fails instead of presenting a fixture as live support.
+    assert.equal(
+      denySpec.providerEvidence?.claude?.effectiveSupportGate,
+      "scenario-unverified",
+    );
+    // Missing Antigravity evidence likewise fails the undelivered-result contract.
+    assert.equal(
+      gruffSpec.providerEvidence?.antigravity?.effectiveSupportGate,
+      "result-undelivered",
+    );
+  });
+
   it("keeps generated Codex hooks PreToolUse-only", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".codex"), { recursive: true });
@@ -587,32 +613,31 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   });
 
-  it("enables gruff-code-quality for a detected Antigravity surface", () => {
+  /** Proves a detected host still cannot install feedback it cannot deliver to the agent. */
+  // Side effects: writes one disposable Antigravity config and verifies no hook is installed.
+  it("keeps Antigravity gruff feedback explicitly unsupported", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".agents"), { recursive: true });
       writeFileSync(join(root, ".agents", "hooks.json"), "{}\n");
 
       const state = applyHookState("gruff-code-quality", true, root);
 
-      assertPresent(root, [
-        ".agents/hooks.json",
+      assertPresent(root, [".agents/hooks.json"]);
+      assertMissing(root, [
         ".goat-flow/hooks/gruff-code-quality.sh",
+        ".goat-flow/hooks/hook-provider-adapters.mjs",
       ]);
       const config = JSON.parse(
         readFileSync(join(root, ".agents", "hooks.json"), "utf-8"),
-      ) as {
-        "gruff-code-quality": {
-          enabled: boolean;
-          PostToolUse: Array<{ matcher: string }>;
-        };
-      };
-      assert.equal(config["gruff-code-quality"].enabled, true);
-      assert.equal(
-        config["gruff-code-quality"].PostToolUse[0]?.matcher,
-        "write_to_file|replace_file_content|multi_replace_file_content",
+      ) as Record<string, unknown>;
+      assert.equal(config["gruff-code-quality"], undefined);
+      assert.equal(state.agents.antigravity.supported, false);
+      assert.equal(state.agents.antigravity.installed, false);
+      // A missing reason becomes empty text and fails the user-facing explanation check.
+      assert.match(
+        state.agents.antigravity.reason ?? "",
+        /cannot deliver Gruff feedback/iu,
       );
-      assert.equal(state.agents.antigravity.supported, true);
-      assert.equal(state.agents.antigravity.installed, true);
     });
   });
 

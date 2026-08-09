@@ -5,10 +5,39 @@
  * Keeping these values central makes every user-facing setup path agree.
  */
 import type { AgentId } from "../types.js";
+import type {
+  HOOK_RESULT_SCHEMA,
+  HookEffectiveState,
+} from "../hook-contracts.js";
 
 type HookEvent = "PreToolUse" | "PostToolUse" | "Stop";
 
-/** Static manifest for one shipped hook and how agents register it. */
+/**
+ * Names the result protocol, adapter, and deadline used by a registered hook.
+ * Use when setup writes a command users expect their coding agent to run.
+ * Invariant: the launcher deadline stays below the host timeout.
+ */
+export interface HookDeliveryContract {
+  resultProtocol: "legacy" | typeof HOOK_RESULT_SCHEMA;
+  adapterVersion: string;
+  launcherDeadlineMs: number;
+}
+
+/**
+ * Names deterministic adapter evidence and one host's first unmet support gate.
+ * Use when UI and audit surfaces explain why delivery is not yet verified.
+ * Invariant: fixture identity never upgrades itself into live provider proof.
+ */
+export interface HookProviderRegistryEvidence {
+  identity: string;
+  effectiveSupportGate: HookEffectiveState["status"];
+}
+
+/**
+ * Defines one hook users can install, toggle, and inspect across supported agents.
+ * Use as the shared setup, dashboard, and audit registration contract.
+ * Invariant: active hooks identify delivery; only removed-hook tombstones may omit it.
+ */
 export interface HookSpec extends Record<"togglable", boolean> {
   id: string;
   displayName: string;
@@ -21,8 +50,24 @@ export interface HookSpec extends Record<"togglable", boolean> {
   requiresConfirmDialog: boolean;
   /** Runner-side timeout agents register for this hook; omitted = agent default. */
   timeoutSec?: number;
+  /** Internal result and launcher ceiling; omitted only for removed-hook tombstones. */
+  deliveryContract?: HookDeliveryContract;
+  /** Deterministic contract identity; absence means the UI has no provider proof to show. */
+  providerEvidence?: Partial<Record<AgentId, HookProviderRegistryEvidence>>;
   unsupportedAgents?: Partial<Record<AgentId, string>>;
 }
+
+const POLICY_DELIVERY_CONTRACT: HookDeliveryContract = {
+  resultProtocol: "legacy",
+  adapterVersion: "1",
+  launcherDeadlineMs: 25_000, // Ceiling: leaves five seconds for the host to render failure.
+};
+
+const FEEDBACK_DELIVERY_CONTRACT: HookDeliveryContract = {
+  resultProtocol: "legacy",
+  adapterVersion: "1",
+  launcherDeadlineMs: 75_000, // Ceiling: leaves fifteen seconds for the host to render feedback.
+};
 
 const HOOKS: HookSpec[] = [
   {
@@ -40,6 +85,25 @@ const HOOKS: HookSpec[] = [
     // Above the shared launcher's 25s policy deadline so Goat Flow can emit
     // its protocol-specific unavailable response before supported hosts stop it.
     timeoutSec: 30,
+    deliveryContract: POLICY_DELIVERY_CONTRACT,
+    providerEvidence: {
+      claude: {
+        identity: "hook-provider-adapter.v1:claude:pre-tool",
+        effectiveSupportGate: "scenario-unverified",
+      },
+      codex: {
+        identity: "hook-provider-adapter.v1:codex:pre-tool",
+        effectiveSupportGate: "scenario-unverified",
+      },
+      antigravity: {
+        identity: "hook-provider-adapter.v1:antigravity:pre-tool",
+        effectiveSupportGate: "scenario-unverified",
+      },
+      copilot: {
+        identity: "hook-provider-adapter.v1:copilot:pre-tool",
+        effectiveSupportGate: "scenario-unverified",
+      },
+    },
   },
   {
     id: "gruff-code-quality",
@@ -56,9 +120,30 @@ const HOOKS: HookSpec[] = [
     // Above the script's internal 60s analyzer timeout so the hook's own
     // timeout/config diagnostics print before the runner kills the wrapper.
     timeoutSec: 90,
+    deliveryContract: FEEDBACK_DELIVERY_CONTRACT,
+    providerEvidence: {
+      claude: {
+        identity: "hook-provider-adapter.v1:claude:post-tool",
+        effectiveSupportGate: "scenario-unverified",
+      },
+      codex: {
+        identity: "hook-provider-adapter.v1:codex:post-tool",
+        effectiveSupportGate: "provider-capture-absent",
+      },
+      antigravity: {
+        identity: "hook-provider-adapter.v1:antigravity:post-tool",
+        effectiveSupportGate: "result-undelivered",
+      },
+      copilot: {
+        identity: "hook-provider-adapter.v1:copilot:post-tool",
+        effectiveSupportGate: "scenario-unverified",
+      },
+    },
     unsupportedAgents: {
       codex:
         "Codex goat-flow hooks are PreToolUse-only until a supported post-tool lifecycle path is verified.",
+      antigravity:
+        "Antigravity PostToolUse accepts an empty response but cannot deliver Gruff feedback to the agent.",
     },
   },
   {
@@ -77,8 +162,28 @@ const HOOKS: HookSpec[] = [
     // "scan incomplete" diagnostic prints before the runner kills the
     // wrapper; a silent mid-scan kill would mean unreported partial coverage.
     timeoutSec: 90,
+    deliveryContract: FEEDBACK_DELIVERY_CONTRACT,
+    providerEvidence: {
+      claude: {
+        identity: "hook-provider-adapter.v1:claude:turn-stop",
+        effectiveSupportGate: "scenario-unverified",
+      },
+      codex: {
+        identity: "hook-provider-adapter.v1:codex:turn-stop",
+        effectiveSupportGate: "provider-capture-absent",
+      },
+      antigravity: {
+        identity: "hook-provider-adapter.v1:antigravity:turn-stop",
+        effectiveSupportGate: "provider-capture-absent",
+      },
+      copilot: {
+        identity: "hook-provider-adapter.v1:copilot:turn-stop",
+        effectiveSupportGate: "provider-capture-absent",
+      },
+    },
     unsupportedAgents: {
-      copilot: "Copilot has no project-local post-turn hook event.",
+      copilot:
+        "Copilot agentStop delivery is unverified and has no current Goat Flow registration adapter.",
       codex:
         "Codex Stop-hook delivery is unverified: registered .codex/hooks.json Stop hooks did not fire under codex exec 0.139.0.",
       antigravity:
@@ -89,20 +194,36 @@ const HOOKS: HookSpec[] = [
 
 const HOOKS_BY_IDENTIFIER = new Map(HOOKS.map((hook) => [hook.id, hook]));
 
-// Returns a defensive copy so callers may sort or filter without mutating the
-// canonical registry that getHookSpec / readAllHookStates read from.
+/**
+ * List hook definitions without exposing the canonical array to UI sorting.
+ * Use when setup or the dashboard needs every user-visible hook.
+ *
+ * @returns Hook definitions; never empty while Goat Flow ships managed hooks.
+ */
 export function listHookSpecs(): HookSpec[] {
   return [...HOOKS];
 }
 
-// Returns null (rather than throwing) for an unknown id so callers can treat a
-// missing hook as a 404-style branch instead of an exception path.
+/**
+ * Find one hook definition for a route, toggle, or setup request.
+ * Use when unknown UI identifiers need a normal not-found result.
+ *
+ * @param hookIdentifier - requested id; empty or unknown text has no hook
+ * @returns Matching hook, or null when the user selected an unknown id
+ */
 export function getHookSpec(hookIdentifier: string): HookSpec | null {
+  // A missing match lets the UI show not found without turning user input into an exception.
   return HOOKS_BY_IDENTIFIER.get(hookIdentifier) ?? null;
 }
 
-// Guards an id before it is used as a filesystem-safe key and URL segment:
-// lowercase-kebab only, so it can never escape a directory or need encoding.
+/**
+ * Check whether a hook id is safe for URLs and managed file keys.
+ * Use before a user-supplied id reaches routing or storage.
+ *
+ * @param hookIdentifier - requested id; empty text is invalid
+ * @returns True for lowercase kebab ids; false for empty or path-shaped text
+ */
 export function isValidHookIdShape(hookIdentifier: string): boolean {
+  // Empty or path-shaped text cannot safely become a route or managed filename.
   return /^[a-z0-9][a-z0-9-]*$/u.test(hookIdentifier);
 }
