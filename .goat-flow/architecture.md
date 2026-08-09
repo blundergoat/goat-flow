@@ -19,7 +19,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | CLI diagnostics | `src/cli/diagnostics/` | Redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
 | Managed setup | `src/cli/managed-setup-command.ts`, `src/cli/managed-setup-preview.ts`, `src/cli/managed-setup-state.ts` | Hash-only dry-run classification, install admission, and local recovery state for manifest-managed template files |
 | Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML, views, and ~20 client TypeScript modules) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
-| Hook registration and proof | `src/cli/hooks-command.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | CLI/dashboard hook toggles plus explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
+| Hook registration, contracts, and proof | `src/cli/hooks-command.ts`, `src/cli/hook-contracts.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | Provider-neutral evidence/result contracts, CLI/dashboard hook toggles, and explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
 | Plan export and effort check | `src/cli/plans-export.ts`, `src/cli/plans-effort.ts`, `src/cli/plans-check.ts` | Redacted milestone export, shared estimate/Actual/work-unit grammar, and user-invoked `plans check`; `--strict` gates supplied basis arithmetic, while receipt calibration and the rough mix stay advisory, and neither mode joins audit because plans are optional local state |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
@@ -54,6 +54,7 @@ src/cli/
   constants.ts        # Shared constants
   paths.ts            # Path resolution utilities
   redact-command.ts   # Pre-write scrubber for readable session, handoff, review, quality, security, and export text
+  hook-contracts.ts   # Provider evidence, effective-state, and bounded result contracts
   hooks-runtime-evidence.ts # Explicit managed deny-hook classifier proof and metadata-only local events
   config/             # Configuration (reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
@@ -160,6 +161,18 @@ M01 timing adds `plan.time`; route/checkpoint/promotion event families and all o
 - Summary dashboard/CLI routes reuse cached or already-extracted facts and may record only cheap outcome metadata. A deep route may run a probe only through an explicit user command, with bounded execution/output and a metadata-only envelope.
 - User-level tool or MCP configuration is a user-provided local capability, not proof that its output is correct. Project-level configuration crosses a repository-controlled trust boundary and needs explicit review of origin, command, permissions, and endpoint before use.
 - External tool/MCP output is producer evidence. Durable promotion must retain producer provenance and independent verification; neither output nor forwarded instructions authorize code, GitHub, or other external writes.
+
+### Hook Provider and Result Contracts
+
+`src/cli/hook-contracts.ts` is the provider-neutral contract boundary. Provider records keep official documentation separate from an exact live capture. A capture names provider version and mode, hook and adapter versions, configuration source, trust state, event and canonical tool, observed payload fields, response channels, timeout and continuation behavior, result delivery, and model visibility. Raw payload values are not part of this committed contract.
+
+Documentation and capture records expire after 30 days. They become stale earlier when the provider version or mode, configuration source or trust, hook or adapter version, or relevant official contract changes. Documentation can establish `provider-documented`; only a fresh trusted capture with delivered results can establish `live-supported`.
+
+Every user-facing surface follows one effective-state chain: `desired` -> `provider-documented` -> `live-supported` -> `registered` -> `installed-current` -> `trusted` -> `observed-running` -> `result-delivered` -> `scenario-verified`. Disabled is neutral; absent, stale, unsupported, unregistered, outdated, unobserved, or unverified states are warnings; untrusted or observed-but-undelivered states are danger; only the complete chain is success.
+
+Hook results use `pass`, `block`, `advisory`, `incomplete`, or `unavailable`. A pass requires complete declared coverage, and findings are capped at 20 before the provider adapter runs. Adapters may translate the envelope into a host protocol, but they must preserve blocks and must not promote incomplete or unavailable work to pass.
+
+For the current security model, a user-selected checkout is trusted executable content. Project hooks protect against accidental and prompt-influenced agent actions; they are not a sandbox against a malicious branch, dependency, helper, or analyzer. Bringing hostile checkout content into scope requires a new decision that supersedes ADR-032, moves executable policy to a reviewed versioned installation, and gives project-local analyzers explicit provenance.
 
 ## Deliberate Trade-offs
 

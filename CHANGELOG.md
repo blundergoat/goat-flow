@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Hook support claims have an evidence contract** - Dated provider capture, trust, delivered results, and complete coverage are required before future adapters can report effective or passing hooks.
 - **Post-turn scan failures block cleanly** - Missing roots, parser errors, and failed scan commands now fail closed on native and Bash 3 paths.
 - **Managed hooks run safely outside Git** - Launchers find a verified Goat Flow root, reject redirected files, and stop timed-out process trees.
 - **Hook setup converges on one launcher** - Installs, sync, audits, and 1.15.0 upgrades repair stale commands without `git init`.
