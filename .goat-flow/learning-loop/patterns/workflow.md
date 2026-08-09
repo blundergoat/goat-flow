@@ -1,6 +1,6 @@
 ---
 category: workflow
-last_reviewed: 2026-05-27
+last_reviewed: 2026-08-10
 ---
 
 ## Pattern: Phase-boundary PR template for oversize work
@@ -17,7 +17,9 @@ Trigger checklist: (1) GitHub returns "exceeds 20,000 lines"; (2) reviewer asks 
 
 ## Pattern: Deny-rule grammar matrix before mirror fanout
 **Context:** Adding or changing a deny hook rule for an external CLI with subcommands, inherited flags, or pipeline use.
-**Approach:** Before syncing hook mirrors, write self-tests that cover the command grammar, not only the incident command. Include: direct write form, global flags before the topic, inherited flags after the topic, short flag forms, wrapper prefixes (`env`, `command`, `sudo` when supported), pipeline consumers (`xargs`), API write-method forms, and at least one read-only allow control. Then run the canonical self-test before copying to installed hooks. (search: `expect_block deny-dangerous`)
+**Approach:** Before syncing hook mirrors, write paired block and allow tests that cover command grammar, not only the incident command. For each recognized option, record whether it is a standalone flag, consumes the next value, accepts an attached short value, or accepts an equals value. Verify that table against the installed CLI's `--help` or local manual before coding. Include direct forms, flags before and after subcommands, short forms, supported wrappers, pipeline consumers, API write methods, and read-only controls. Probe overlapping short and long options directly. Run ShellCheck and the canonical full self-test before copying, then require byte parity and the installed full self-test.
+
+**Observed refinement (2026-08-10):** GNU Parallel's `--halt` was initially treated as a standalone flag even though the local manual defines a required value. A Bash short-option glob also shadowed `--rcfile`; ShellCheck exposed that overlap, and direct option probes showed that the first correction missed `-c` and `-cl`. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `--halt`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `A short option bundle containing`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `parallel halt value before git push`).
 
 ## Pattern: Dry-run readiness belongs beside the command
 **Context:** A command can write files, launch terminals, mutate harness config, or ask an agent to act.

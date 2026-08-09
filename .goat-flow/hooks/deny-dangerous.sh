@@ -918,6 +918,146 @@ join_shell_words_from() {
   printf '%s' "${out% }"
 }
 
+# Return the command xargs will run after its own options and operands.
+# Use this shared parser so delete and repository policies show users the same verdict.
+strip_xargs_payload_command() {
+  local developer_command="$1"
+  local -a xargs_words=()
+  split_shell_words_into xargs_words "$developer_command"
+
+  # An empty command gives xargs nothing for the policy to inspect.
+  [[ "${#xargs_words[@]}" -gt 0 ]] || return 1
+  local xargs_command_name="${xargs_words[0]##*/}"
+  # Only xargs owns this option grammar; other commands stay unchanged.
+  [[ "$xargs_command_name" == "xargs" ]] || return 1
+
+  local xargs_word_index=1
+  local xargs_word=""
+  # Skip xargs options so the first remaining word is what the user would execute.
+  while [[ "$xargs_word_index" -lt "${#xargs_words[@]}" ]]; do
+    xargs_word="${xargs_words[$xargs_word_index]}"
+    case "$xargs_word" in
+      --)
+        xargs_word_index=$((xargs_word_index + 1))
+        break
+        ;;
+      -0|--null|-r|--no-run-if-empty|-t|--verbose|-p|--interactive)
+        xargs_word_index=$((xargs_word_index + 1))
+        continue
+        ;;
+      -a|--arg-file|-I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter)
+        xargs_word_index=$((xargs_word_index + 2))
+        continue
+        ;;
+      -a?*|--arg-file=*|-I?*|-i?*|-L?*|-l?*|-n?*|-P?*|-s?*|-E?*|-e?*|-d?*|--replace=*|--max-lines=*|--max-args=*|--max-procs=*|--max-chars=*|--eof=*|--delimiter=*)
+        xargs_word_index=$((xargs_word_index + 1))
+        continue
+        ;;
+      -*)
+        xargs_word_index=$((xargs_word_index + 1))
+        continue
+        ;;
+    esac
+    break
+  done
+
+  # Missing payload means there is no downstream user command to classify.
+  [[ "$xargs_word_index" -lt "${#xargs_words[@]}" ]] || return 1
+  join_shell_words_from xargs_words "$xargs_word_index"
+}
+
+# Return the repeated command after supported watch display and timing options.
+# Use when a user asks watch to rerun Git or another policy-relevant command.
+strip_watch_payload_command() {
+  local developer_command="$1"
+  local -a watch_words=()
+  split_shell_words_into watch_words "$developer_command"
+
+  # Watch needs both its own command word and a repeated payload.
+  [[ "${#watch_words[@]}" -gt 1 ]] || return 1
+  # A similarly named executable must not inherit watch grammar.
+  [[ "${watch_words[0]##*/}" == "watch" ]] || return 1
+
+  local watch_word_index=1
+  local watch_word=""
+  # Skip only known watch options; unknown grammar remains visible and unmodified.
+  while [[ "$watch_word_index" -lt "${#watch_words[@]}" ]]; do
+    watch_word="${watch_words[$watch_word_index]}"
+    case "$watch_word" in
+      --)
+        watch_word_index=$((watch_word_index + 1))
+        break
+        ;;
+      -n|--interval|-q|--equexit|-s|--shotsdir)
+        watch_word_index=$((watch_word_index + 2))
+        continue
+        ;;
+      -n?*|--interval=*|-q?*|--equexit=*|-s?*|--shotsdir=*)
+        watch_word_index=$((watch_word_index + 1))
+        continue
+        ;;
+      -b|-c|-C|-d|--differences|-e|--errexit|-g|--chgexit|-p|--precise|-r|--no-rerun|-t|--no-title|-w|--no-wrap|-x|--exec)
+        watch_word_index=$((watch_word_index + 1))
+        continue
+        ;;
+      -*)
+        return 1
+        ;;
+    esac
+    break
+  done
+
+  # Missing payload means watch would not run a user command.
+  [[ "$watch_word_index" -lt "${#watch_words[@]}" ]] || return 1
+  join_shell_words_from watch_words "$watch_word_index"
+}
+
+# Return the command GNU parallel will invoke for the supported common option forms.
+# Use when a user feeds repeated inputs into a repository or destructive command.
+strip_parallel_payload_command() {
+  local developer_command="$1"
+  local -a parallel_words=()
+  split_shell_words_into parallel_words "$developer_command"
+
+  # Parallel needs both its own command word and a downstream payload.
+  [[ "${#parallel_words[@]}" -gt 1 ]] || return 1
+  # A similarly named executable must not inherit GNU parallel grammar.
+  [[ "${parallel_words[0]##*/}" == "parallel" ]] || return 1
+
+  local parallel_word_index=1
+  local parallel_word=""
+  # Skip common options while leaving unfamiliar grammar visible to other checks.
+  while [[ "$parallel_word_index" -lt "${#parallel_words[@]}" ]]; do
+    parallel_word="${parallel_words[$parallel_word_index]}"
+    case "$parallel_word" in
+      --)
+        parallel_word_index=$((parallel_word_index + 1))
+        break
+        ;;
+      -j|--jobs|-S|--sshlogin|--sshloginfile|--results|--joblog|--timeout|--delay|--retries|--workdir|--halt)
+        parallel_word_index=$((parallel_word_index + 2))
+        continue
+        ;;
+      -j?*|--jobs=*|-S?*|--sshlogin=*|--sshloginfile=*|--results=*|--joblog=*|--timeout=*|--delay=*|--retries=*|--workdir=*|--halt=*)
+        parallel_word_index=$((parallel_word_index + 1))
+        continue
+        ;;
+      --bar|--eta|--keep-order|-k|--line-buffer|--ungroup|--dry-run)
+        parallel_word_index=$((parallel_word_index + 1))
+        continue
+        ;;
+      -*)
+        return 1
+        ;;
+    esac
+    break
+  done
+
+  # Missing payload means parallel would not invoke a user command.
+  [[ "$parallel_word_index" -lt "${#parallel_words[@]}" ]] || return 1
+  join_shell_words_from parallel_words "$parallel_word_index"
+}
+
 __goat_git_strip_globals() {
   __goat_git_aliased_push=0
   __goat_git_rest=""
@@ -1492,6 +1632,8 @@ normalize_flock_prefix() {
   join_shell_words_from words "$i"
 }
 
+# Reveal the command a user would actually run after supported wrappers and dispatchers.
+# Use before every policy module so equivalent command shapes receive the same verdict.
 normalize_command_candidate() {
   local c="$1"
   local stripped=""
@@ -1619,6 +1761,20 @@ normalize_command_candidate() {
         ;;
       flock)
         if stripped=$(normalize_flock_prefix "$after_word"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+      watch)
+        # Reveal the repeated command so users cannot hide a blocked action behind watch.
+        if stripped=$(strip_watch_payload_command "$c"); then
+          c="$stripped"
+          continue
+        fi
+        ;;
+      parallel)
+        # Reveal the repeated command so parallel receives the same policy as a direct call.
+        if stripped=$(strip_parallel_payload_command "$c"); then
           c="$stripped"
           continue
         fi
@@ -1861,6 +2017,8 @@ strip_unquoted_shell_comments() {
   printf '%s' "$out"
 }
 
+# Prepare one shared view of a user-visible command segment for every policy module.
+# Use once per segment so shell, secret, and repository checks classify identical text.
 prepare_segment_context() {
   local cmd="$1"
   local depth="${2:-0}"
@@ -1893,7 +2051,7 @@ prepare_segment_context() {
   local pipe_stripped="${CMD_UNQUOTED//||/}"
   [[ "$pipe_stripped" == *"|"* ]] && HAS_PIPE=1
 
-  local shell_c_re="(^|[[:space:]])(ba)?sh([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-[a-zA-Z]*c[a-zA-Z]*[[:space:]]+(['\"])([^'\"]*)(['\"])"
+  local shell_c_re="(^|[[:space:]])(ba)?sh([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-[a-zA-Z]*c[a-zA-Z]*[[:space:]]+[\$]?(['\"])([^'\"]*)(['\"])"
   if [[ "$policy_cmd" =~ $shell_c_re ]]; then
     local inner_c="${BASH_REMATCH[5]}"
     if [[ -n "$inner_c" ]]; then

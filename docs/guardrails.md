@@ -28,4 +28,6 @@ Guardrails are goat-flow's runtime command-safety hooks. Each agent invokes the 
 
 ## Limitations
 
-The hooks are literal command guards, not a shell parser or general ignore system. They do not reliably catch aliases, variable indirection, encoded commands, or arbitrary interpreter code. File-read deny layers remain in agent-specific settings where the runtime supports them.
+The dispatcher is a defense-in-depth check for proposed command text. It exposes existing Git and GitHub write rules behind supported `xargs`, `find -exec`, `watch`, shell-c, and common GNU Parallel forms. It also blocks exact credential directories, protected curl file operands, and downloaded bytes passed to executable or unknown pipeline consumers. Known read-only download filters, local data passed to an explicit script file, and literal `vendor` or `target` cleanup remain available.
+
+The hook does not interpret arbitrary shell state or replace runtime permissions. Variable-computed executable names, shell aliases the policy cannot resolve, arbitrary interpreter bodies, and unsupported wrapper grammar may remain outside classification. Keep provider deny lists, filesystem permissions, process sandboxing, and operating-system credentials as the hard boundary. Inspect and run an unclear command manually.
