@@ -308,6 +308,33 @@ function hookScriptShapeFailure(projectRoot, hookScriptPath) {
   return null;
 }
 
+/** Select and validate the finite deadline for one hook response mode.
+ *
+ * @param {string} hookResponseMode - Agent response protocol; long-running feedback gets a larger ceiling.
+ * @param {NodeJS.ProcessEnv} environment - Hook environment containing an optional lower test/host override.
+ * @returns {number | null} Timeout in milliseconds, or null when the override is invalid.
+ */
+function hookLaunchTimeoutMs(hookResponseMode, environment) {
+  const timeoutCeiling =
+    hookResponseMode === "gruff" || hookResponseMode === "post-turn"
+      ? 75_000
+      : 25_000;
+  const configuredTimeout = environment.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS;
+  // Missing configuration uses the mode ceiling, which remains below supported host limits.
+  if (configuredTimeout === undefined) return timeoutCeiling;
+  // Only a plain positive decimal can lower the ceiling; signs, spaces, and fractions are ambiguous.
+  if (!/^[0-9]+$/u.test(configuredTimeout)) return null;
+  const parsedTimeout = Number(configuredTimeout);
+  if (
+    !Number.isSafeInteger(parsedTimeout) ||
+    parsedTimeout < 1 ||
+    parsedTimeout > timeoutCeiling
+  ) {
+    return null;
+  }
+  return parsedTimeout;
+}
+
 /**
  * Run one project hook through Bash while preserving its host-facing result.
  * Use when an agent invokes a managed `.sh` hook on Windows, macOS, or Linux.
@@ -370,15 +397,23 @@ export function runHookWithBash(
     );
   }
 
-  let hookEnvironment = process.env;
+  let hookEnvironment = launchOptions.environment ?? process.env;
   // A discovered Git Bash needs its own bin folder first so child tools resolve consistently.
   if (bashExecutable !== "bash") {
     // A missing PATH is valid in a restricted agent host and starts as an empty suffix.
-    const existingPath = process.env.PATH ?? "";
+    const existingPath = hookEnvironment.PATH ?? "";
     hookEnvironment = {
       ...process.env,
+      ...hookEnvironment,
       PATH: `${dirname(bashExecutable)}${delimiter}${existingPath}`,
     };
+  }
+  const launchTimeout = hookLaunchTimeoutMs(hookResponseMode, hookEnvironment);
+  if (launchTimeout === null) {
+    return reportUnavailable(
+      hookResponseMode,
+      "hook timeout configuration is invalid",
+    );
   }
   const hookExecution = spawnSync(
     bashExecutable,
@@ -386,16 +421,21 @@ export function runHookWithBash(
     {
       cwd: projectRoot,
       env: hookEnvironment,
+      timeout: launchTimeout,
+      killSignal: "SIGKILL",
       stdio: "inherit",
       windowsHide: true,
     },
   );
-  // For example, endpoint protection may stop Git Bash before the user's hook starts.
-  if (hookExecution.error) {
+  if (hookExecution.error?.code === "ETIMEDOUT") {
     return reportUnavailable(
       hookResponseMode,
-      `Bash could not start: ${hookExecution.error.message}`,
+      "hook exceeded its deadline and was killed",
     );
+  }
+  // For example, endpoint protection may stop Git Bash before the user's hook starts.
+  if (hookExecution.error) {
+    return reportUnavailable(hookResponseMode, "Bash could not start");
   }
   // A numeric status is the hook's real allow, deny, or advisory result for the user.
   if (Number.isInteger(hookExecution.status)) {

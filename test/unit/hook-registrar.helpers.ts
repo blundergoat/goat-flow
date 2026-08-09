@@ -13,11 +13,13 @@ import { spawnSync } from "node:child_process";
 import {
   closeSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   openSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -29,6 +31,24 @@ export const CLAUDE_SAFE_PAYLOAD =
   '{"tool_name":"Bash","tool_input":{"command":"echo safe"}}';
 export const CLAUDE_DANGEROUS_PAYLOAD =
   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}';
+
+export const HOOK_TIMEOUT_MODES = [
+  { mode: "policy", status: 2, stream: "stderr", pattern: /BLOCKED:/u },
+  { mode: "antigravity", status: 0, stream: "stdout", pattern: /decision/u },
+  {
+    mode: "copilot",
+    status: 0,
+    stream: "stdout",
+    pattern: /permissionDecision/u,
+  },
+  { mode: "gruff", status: 0, stream: "stderr", pattern: /skipped/u },
+  {
+    mode: "post-turn",
+    status: 2,
+    stream: "stderr",
+    pattern: /post-turn-safety/u,
+  },
+] as const;
 
 export const GENERATED_AGENT_SURFACES = [
   ".claude/settings.json",
@@ -215,6 +235,129 @@ export function installClaudeDenyHook(root: string): string {
   return readClaudeDenyLauncher(root);
 }
 
+/** Install a Codex deny hook without requiring the fixture root to be a Git repository.
+ *
+ * @param root - fixture project root
+ * @returns generated Codex launcher command, ready for literal execution
+ */
+export function installCodexDenyHook(root: string): string {
+  mkdirSync(join(root, ".codex"), { recursive: true });
+  writeFileSync(join(root, ".codex", "config.toml"), "\n");
+  applyHookState(HOOK_IDENTIFIER, true, root);
+  return readCodexDenyLauncher(root);
+}
+
+/** Corrupt one trusted launcher surface while retaining enough trace to select the candidate. */
+export const MANAGED_SHAPE_MUTATIONS: Array<{
+  name: string;
+  mutate: (root: string) => void;
+}> = [
+  {
+    name: "malformed registration",
+    mutate: (root) => writeFileSync(join(root, ".codex", "hooks.json"), "{"),
+  },
+  {
+    name: "registration without requested operands",
+    mutate: (root) =>
+      writeFileSync(
+        join(root, ".codex", "hooks.json"),
+        '{"hooks":{"PreToolUse":[{"command":"custom-tool"}]}}\n',
+      ),
+  },
+  {
+    name: "missing registration",
+    mutate: (root) => rmSync(join(root, ".codex", "hooks.json")),
+  },
+  {
+    name: "non-regular registration",
+    mutate: (root) => {
+      const registration = join(root, ".codex", "hooks.json");
+      rmSync(registration);
+      mkdirSync(registration);
+    },
+  },
+  {
+    name: "symlinked registration",
+    mutate: (root) => {
+      const registration = join(root, ".codex", "hooks.json");
+      const target = join(root, "registration-target.json");
+      writeFileSync(target, readFileSync(registration));
+      rmSync(registration);
+      symlinkSync(target, registration);
+    },
+  },
+  {
+    name: "hard-linked registration",
+    mutate: (root) =>
+      linkSync(
+        join(root, ".codex", "hooks.json"),
+        join(root, "registration-second-name.json"),
+      ),
+  },
+  {
+    name: "symlinked launcher",
+    mutate: (root) => {
+      const launcher = join(root, ".goat-flow", "hooks", "run-with-bash.mjs");
+      const target = join(root, "launcher-target.mjs");
+      writeFileSync(target, readFileSync(launcher));
+      rmSync(launcher);
+      symlinkSync(target, launcher);
+    },
+  },
+  {
+    name: "hard-linked launcher",
+    mutate: (root) =>
+      linkSync(
+        join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        join(root, "launcher-second-name.mjs"),
+      ),
+  },
+  {
+    name: "missing launcher",
+    mutate: (root) =>
+      rmSync(join(root, ".goat-flow", "hooks", "run-with-bash.mjs")),
+  },
+  {
+    name: "non-regular launcher",
+    mutate: (root) => {
+      const launcher = join(root, ".goat-flow", "hooks", "run-with-bash.mjs");
+      rmSync(launcher);
+      mkdirSync(launcher);
+    },
+  },
+  {
+    name: "symlinked requested script",
+    mutate: (root) => {
+      const script = join(root, ".goat-flow", "hooks", "deny-dangerous.sh");
+      const target = join(root, "script-target.sh");
+      writeFileSync(target, readFileSync(script));
+      rmSync(script);
+      symlinkSync(target, script);
+    },
+  },
+  {
+    name: "hard-linked requested script",
+    mutate: (root) =>
+      linkSync(
+        join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        join(root, "script-second-name.sh"),
+      ),
+  },
+  {
+    name: "missing requested script",
+    mutate: (root) =>
+      rmSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh")),
+  },
+  {
+    name: "non-regular requested script",
+    mutate: (root) => {
+      const script = join(root, ".goat-flow", "hooks", "deny-dangerous.sh");
+      rmSync(script);
+      mkdirSync(script);
+    },
+  },
+];
+
 /** One hook entry as the registrar writes it into an agent's config file. */
 export type GeneratedHookEntry = { hooks?: Array<{ command?: string }> };
 
@@ -394,6 +537,14 @@ export function runCodexLauncher(
   command: string,
   cwd: string,
   payload = CLAUDE_SAFE_PAYLOAD,
+  env: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof spawnSync> {
-  return runLauncherWithPayload(command, cwd, payload);
+  return runLauncherWithPayload(command, cwd, payload, env);
+}
+
+/** Render one captured launcher result for assertion failures. */
+export function launcherDiagnostics(
+  result: ReturnType<typeof spawnSync>,
+): string {
+  return `status=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
 }

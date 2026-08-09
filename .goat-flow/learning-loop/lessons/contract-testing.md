@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: Reference-pack wording fixes must check word budget immediately
@@ -46,18 +46,19 @@ last_reviewed: 2026-08-06
 
 **Trigger phase:** VERIFY
 
-**Incident count:** 7
+**Incident count:** 8
 
-**Latest occurrence:** 2026-08-01
+**Latest occurrence:** 2026-08-09
 
-**What happened:** Seven compactions removed durable or contract-pinned anchors:
+**What happened:** Eight prose edits removed or changed durable or contract-pinned anchors:
 
 - **2026-07-12–19:** Four compactions removed anchors; stats/contracts restored them. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`).
 - **2026-08-01:** M02/M03 changed pinned wording, split one code span, and removed “with R-ID”; contracts restored all. Evidence: `test/contract/skill-hardening-review-2.test.ts` (search: `gives goat-review findings stable IDs, harm, and distinct evidence axes`).
+- **2026-08-09:** A prose-style pass changed `Decide First` to sentence case and broke a learning-loop semantic anchor. The midpoint content audit caught `stale-semantic-anchor`; restoring `docs/skill-authoring.md` (search: `## Decide First`) preserved the reference.
 
-**Root cause:** Compacted prose had durable external anchors.
+**Root cause:** Edited prose carried durable external anchors.
 
-**Prevention:** Search indexes/contracts before compaction; run focused contracts and `stats --check`; repair anchors together.
+**Prevention:** Search indexes, contracts, and tracked semantic-anchor references before changing headings or compacting prose; run focused contracts and `stats --check`; repair anchors together.
 
 ---
 

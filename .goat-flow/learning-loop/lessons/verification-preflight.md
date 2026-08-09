@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-08
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -99,11 +99,11 @@ last_reviewed: 2026-08-08
 
 **Recurrences (2026-07-13, 2026-07-18, 2026-07-19, 2026-08-01):** M04/M09 contracts, the skill-quality truncation fixes, M07 setup-truth contracts, M10 scaffold/drift regressions, and the review-validator relationship corpus each reached behavioral GREEN before scoped Prettier rejected touched TypeScript. Evidence anchors: `test/contract/skill-hardening-shared-3.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`), `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`), and `test/unit/review-validate-verdict.test.ts` (search: `structuralValidationCases`).
 
-**Recurrences (2026-08-03, 2026-08-07):** Review/critique, writing-style, and M01 reached focused GREEN before Prettier rejected tests. M02-M05 ran the formatter first; it caught prompt and launch-test formatting before proof. Evidence anchors: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), and `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`).
+**Recurrences (2026-08-03, 2026-08-07, 2026-08-09):** M00 repeated the focused-GREEN-before-Prettier failure; M02-M05 formatted first. Evidence anchors: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`), and `test/integration/post-turn-safety-hook.helpers.ts` (search: `withCommandShim`).
 
 **Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 10 | **Latest occurrence:** 2026-08-07
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 11 | **Latest occurrence:** 2026-08-09
 
 ---
 
@@ -123,7 +123,7 @@ last_reviewed: 2026-08-08
 
 **Status:** active | **Created:** 2026-05-19
 
-**What happened:** During the M30-M34 closeout, I ran an ad hoc ESLint command that included ignored test files and a `.mjs` helper outside the TypeScript ESLint project, producing a tooling failure unrelated to the code change. The same final-gate bundle ran `npm test` in parallel with other expensive checks; it reported one failing test but the returned output did not include the failing block. A clean rerun with output captured to a temp log passed (`# tests 881`, `# pass 881`, `# fail 0`).
+**What happened:** M30-M34 and 2026-08-09 M01 closeouts ran ad hoc ESLint over ignored tests and a `.mjs` outside the TypeScript project, producing tooling failures unrelated to code. The first closeout also ran `npm test` in parallel with other expensive checks; it reported one failing test but omitted the failing block. A clean captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
 
 **Root cause:** I mixed repo-supported verification scopes with improvised paths and treated parallel final gates as interchangeable with a clean final evidence run. That made the first failure ambiguous and forced a rerun to recover the actual evidence.
 

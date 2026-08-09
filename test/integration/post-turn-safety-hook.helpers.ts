@@ -10,9 +10,15 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 export const HOOK_PATH = resolve(
@@ -160,6 +166,68 @@ export function runHook(
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, ...env },
   });
+}
+
+/**
+ * Put one deterministic command shim first on PATH for a bounded failure fixture.
+ * The supplied body exits on its target invocation; other calls fall through to
+ * the real command using the original PATH.
+ *
+ * @param command - command name intercepted by the hook
+ * @param scriptBody - Bash predicate that exits when the intended call is seen
+ * @param fn - case body, given environment overrides that activate the shim
+ */
+export function withCommandShim(
+  command: string,
+  scriptBody: string,
+  fn: (env: Record<string, string>) => void,
+): void {
+  const shimRoot = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-shim-"));
+  const originalPath = process.env.PATH ?? "";
+  try {
+    const commandPath = join(shimRoot, command);
+    writeFileSync(
+      commandPath,
+      [
+        "#!/usr/bin/env bash",
+        "set -u",
+        scriptBody,
+        `PATH="\${GOAT_FLOW_TEST_ORIGINAL_PATH:?}" exec ${command} "$@"`,
+        "",
+      ].join("\n"),
+    );
+    chmodSync(commandPath, 0o755);
+    fn({
+      PATH: `${shimRoot}${delimiter}${originalPath}`,
+      GOAT_FLOW_TEST_ORIGINAL_PATH: originalPath,
+    });
+  } finally {
+    rmSync(shimRoot, { recursive: true, force: true });
+  }
+}
+
+/** Prove an infrastructure failure blocks without masquerading as a finding. */
+export function assertHookIncomplete(
+  root: string,
+  env: Record<string, string>,
+): ReturnType<typeof spawnSync> {
+  const result = runHook(root, env);
+  assert.equal(
+    result.status,
+    2,
+    `incomplete scan should block\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`,
+  );
+  assert.match(result.stderr, /post-turn-safety: .*scan incomplete/iu);
+  assert.doesNotMatch(
+    result.stderr,
+    /fix or remove the flagged changed content/u,
+  );
+  assert.equal(
+    result.stderr.includes(root),
+    false,
+    `incomplete-scan diagnostics exposed the fixture path: ${result.stderr}`,
+  );
+  return result;
 }
 
 /**

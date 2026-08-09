@@ -7,6 +7,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { PROFILES } from "../detect/agents.js";
 import type { AgentId, AgentProfile } from "../types.js";
 import { writeFileAtomic } from "./safe-exec.js";
 import type { HookSpec } from "./hooks-registry.js";
@@ -130,22 +131,22 @@ function commandPath(hooksDirectory: string, hookScriptName: string): string {
 function unavailableHookResponseProgram(hookResponseMode: string): string {
   // Antigravity expects a deny decision on stdout and treats the host response as handled.
   if (hookResponseMode === "antigravity") {
-    return "const reportUnavailable=()=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: git repository root unavailable.'})+lineBreak);process.exit(0);};";
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
   }
   // Copilot expects its own permission-decision fields when the policy hook cannot start.
   if (hookResponseMode === "copilot") {
-    return "const reportUnavailable=()=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: git repository root unavailable.'})+lineBreak);process.exit(0);};";
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
   }
   // Optional Gruff feedback fails soft so a missing analyzer shell never blocks the user's edit.
   if (hookResponseMode === "gruff") {
-    return "const reportUnavailable=()=>{process.stderr.write('gruff-code-quality: hook unavailable: git repository root or hook launcher unavailable; skipped.'+lineBreak);process.exit(0);};";
+    return "const reportUnavailable=(reason)=>{process.stderr.write('gruff-code-quality: hook unavailable: '+reason+'; skipped.'+lineBreak);process.exit(0);};";
   }
   // Post-turn safety cannot claim a completed scan when its launcher never started.
   if (hookResponseMode === "post-turn") {
-    return "const reportUnavailable=()=>{process.stderr.write('post-turn-safety: hook unavailable: git repository root or hook launcher unavailable.'+lineBreak);process.exit(2);};";
+    return "const reportUnavailable=(reason)=>{process.stderr.write('post-turn-safety: hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
   }
   // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
-  return "const reportUnavailable=()=>{process.stderr.write('BLOCKED: Policy hook unavailable: git repository root unavailable.'+lineBreak);process.exit(2);};";
+  return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
 }
 
 /**
@@ -165,18 +166,34 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
     "const hookScriptPath=process.argv[1];",
     "const responseMode=process.argv[2];",
     "const rootEnvironmentName=process.argv[3];",
+    "const registrationPath=process.argv[4];",
+    "const bashLauncherRelativePath=process.argv[5];",
     "const lineBreak=String.fromCharCode(10);",
     unavailableResponseProgram,
+    "const isPlainObject=(value)=>value!==null&&typeof value==='object'&&!Array.isArray(value);",
+    "const normalizeOperand=(value)=>path.normalize(value).replaceAll('\\\\','/').replace(/^\\.\\//u,'');",
+    "const commandOperands=(command)=>{const tokens=command.match(/\"(?:\\\\.|[^\"\\\\])*\"|'[^']*'|\\S+/gu)||[];return tokens.map((token)=>{if(token.startsWith('\"')){try{return JSON.parse(token);}catch{return '';}}if(token.startsWith(\"'\"))return token.slice(1,-1);return token;});};",
+    "const commandNamesOperands=(command)=>{const normalized=commandOperands(command).map(normalizeOperand);return normalized.includes(normalizeOperand(hookScriptPath))&&normalized.includes(normalizeOperand(bashLauncherRelativePath));};",
+    "const registrationNamesOperands=(value)=>{if(Array.isArray(value))return value.some(registrationNamesOperands);if(!isPlainObject(value))return false;for(const [key,nested] of Object.entries(value)){if((key==='command'||key==='bash'||key==='powershell')&&typeof nested==='string'&&commandNamesOperands(nested))return true;if((Array.isArray(nested)||isPlainObject(nested))&&registrationNamesOperands(nested))return true;}return false;};",
+    "const realDirectory=(candidate)=>{try{const absolute=path.resolve(candidate);const entry=filesystem.lstatSync(absolute);if(entry.isSymbolicLink()||!entry.isDirectory())return '';const real=filesystem.realpathSync(absolute);return filesystem.lstatSync(real).isDirectory()?real:'';}catch{return '';}};",
+    "const containedRelativePath=(relativePath)=>{if(!relativePath||path.isAbsolute(relativePath))return '';const normalized=path.normalize(relativePath);return normalized==='..'||normalized.startsWith('..'+path.sep)?'':normalized;};",
+    "const managedEntryExists=(root,relativePath)=>{const normalized=containedRelativePath(relativePath);if(!normalized)return false;try{filesystem.lstatSync(path.join(root,normalized));return true;}catch{return false;}};",
+    "const managedRegularFile=(root,relativePath)=>{const normalized=containedRelativePath(relativePath);if(!normalized)return '';const parts=normalized.split(path.sep).filter(Boolean);let current=root;try{for(let index=0;index<parts.length;index+=1){current=path.join(current,parts[index]);const entry=filesystem.lstatSync(current);if(entry.isSymbolicLink())return '';if(index<parts.length-1&&!entry.isDirectory())return '';if(index===parts.length-1&&(!entry.isFile()||entry.nlink!==1))return '';}const real=filesystem.realpathSync(current);const relative=path.relative(root,real);if(relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))return '';return real;}catch{return '';}};",
+    "const inspectCandidate=(candidate)=>{const root=realDirectory(candidate);if(!root)return {state:'none',root:''};const scriptSeen=managedEntryExists(root,hookScriptPath);const registration=managedRegularFile(root,registrationPath);let registered=false;if(registration){try{const parsed=JSON.parse(filesystem.readFileSync(registration,'utf8'));registered=isPlainObject(parsed)&&registrationNamesOperands(parsed);}catch{registered=false;}}const relevant=scriptSeen||registered;if(!relevant)return {state:'none',root};const launcher=managedRegularFile(root,bashLauncherRelativePath);const script=managedRegularFile(root,hookScriptPath);return registered&&launcher&&script?{state:'complete',root}:{state:'corrupt',root};};",
+    "const visited=new Set();",
+    "const inspectOnce=(candidate)=>{const root=realDirectory(candidate);if(!root||visited.has(root))return {state:'none',root};visited.add(root);return inspectCandidate(root);};",
     "const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});",
-    "let projectRoot=gitRootLookup.status===0?gitRootLookup.stdout.trim():'';",
-    "let bashLauncherPath=projectRoot?path.join(projectRoot,'.goat-flow','hooks','run-with-bash.mjs'):'';",
-    "/* A user may leave the repo, so supported hosts can recover the project originally selected. */",
-    "if((!bashLauncherPath||!filesystem.existsSync(bashLauncherPath))&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){projectRoot=process.env[rootEnvironmentName];bashLauncherPath=path.join(projectRoot,'.goat-flow','hooks','run-with-bash.mjs');}",
-    "/* Missing managed launch code means the host must not report an unchecked hook as successful. */",
-    "if(!bashLauncherPath||!filesystem.existsSync(bashLauncherPath))reportUnavailable();",
+    "let selected={state:'none',root:''};",
+    "if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){selected=inspectOnce(gitRootLookup.stdout.trim());if(selected.state==='corrupt')reportUnavailable('managed root incomplete');}",
+    "let ancestor=realDirectory(process.cwd());",
+    "while(selected.state!=='complete'&&ancestor){const inspected=inspectOnce(ancestor);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete'){selected=inspected;break;}const parent=path.dirname(ancestor);if(parent===ancestor)break;ancestor=parent;}",
+    "if(selected.state!=='complete'&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){const inspected=inspectOnce(process.env[rootEnvironmentName]);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}",
+    "if(selected.state!=='complete')reportUnavailable('managed root unavailable');",
+    "const projectRoot=selected.root;",
+    "const bashLauncherPath=path.join(projectRoot,containedRelativePath(bashLauncherRelativePath));",
     "const hookResult=childProcess.spawnSync(process.execPath,[bashLauncherPath,hookScriptPath,responseMode],{cwd:projectRoot,stdio:'inherit'});",
     "/* A startup error or absent status means the user's hook never produced a trustworthy result. */",
-    "if(hookResult.error||!Number.isInteger(hookResult.status))reportUnavailable();",
+    "if(hookResult.error||!Number.isInteger(hookResult.status))reportUnavailable('managed launcher could not start');",
     "process.exit(hookResult.status);",
   ].join("");
 }
@@ -217,8 +234,11 @@ export function buildAgentHookCommand(
   spec: HookSpec,
 ): string {
   const hookScriptPath = commandPath(hooksDirectory, spec.primaryScript);
+  const bashLauncherPath = commandPath(hooksDirectory, "run-with-bash.mjs");
   const hookResponseMode = hookLaunchMode(agentId, spec);
-  // Codex has no supported project-root environment, so it stays fail-closed outside Git.
+  const registrationPath = PROFILES[agentId].hookConfigFile;
+  if (!registrationPath) throw new Error(`${agentId} has no hook config file`);
+  // Codex can use managed ancestors but has no supported final host-root environment fallback.
   const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
   return [
     "node",
@@ -227,6 +247,8 @@ export function buildAgentHookCommand(
     JSON.stringify(hookScriptPath),
     JSON.stringify(hookResponseMode),
     JSON.stringify(rootEnvironmentName),
+    JSON.stringify(registrationPath),
+    JSON.stringify(bashLauncherPath),
   ].join(" ");
 }
 

@@ -2,7 +2,6 @@
 
 ## Unreleased
 
-
 ## v1.15.0 - 2026-08-07
 
 - **Dashboard audits no longer run target hooks** - APIs use static evidence. Upgrade v1.9-v1.14 before checking an untrusted project.

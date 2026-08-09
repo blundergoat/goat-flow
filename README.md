@@ -9,7 +9,9 @@ GOAT Flow audits agent setup, installs guardrails and deny hooks, provides struc
 ```bash
 npx @blundergoat/goat-flow@latest
 ```
+
 Output:
+
 ```text
 What do you want to do?
   1. Start dashboard

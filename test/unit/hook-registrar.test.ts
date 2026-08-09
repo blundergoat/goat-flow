@@ -50,6 +50,10 @@ import {
   readClaudeDenyLauncher,
   readCodexDenyLauncher,
   installClaudeDenyHook,
+  installCodexDenyHook,
+  MANAGED_SHAPE_MUTATIONS,
+  HOOK_TIMEOUT_MODES,
+  launcherDiagnostics,
   readClaudeGruffCommands,
   readAntigravityGruffCommand,
   runClaudeLauncher,
@@ -178,6 +182,7 @@ describe("hook registrar: launchers and installation", () => {
       writeAgentHookState(root, PROFILES.claude, gruffSpec, true);
       writeAgentHookState(root, PROFILES.antigravity, denySpec, true);
       writeAgentHookState(root, PROFILES.antigravity, gruffSpec, true);
+      writeAgentHookState(root, PROFILES.copilot, denySpec, true);
 
       const claudeSettings = readFileSync(
         join(root, ".claude", "settings.json"),
@@ -185,6 +190,10 @@ describe("hook registrar: launchers and installation", () => {
       );
       const antigravityHooks = readFileSync(
         join(root, ".agents", "hooks.json"),
+        "utf-8",
+      );
+      const copilotHooks = readFileSync(
+        join(root, ".github", "hooks", "hooks.json"),
         "utf-8",
       );
       const claudeGruffCommands = readClaudeGruffCommands(claudeSettings);
@@ -196,10 +205,8 @@ describe("hook registrar: launchers and installation", () => {
         claudeGruffCommands.length > 0,
         "expected generated Claude gruff commands",
       );
-      assert.match(
-        claudeSettings,
-        /Policy hook unavailable: git repository root unavailable\./u,
-      );
+      assert.match(claudeSettings, /Policy hook unavailable:/u);
+      assert.match(claudeSettings, /managed root unavailable/u);
       assert.ok(
         claudeGruffCommands.every((command) =>
           command.includes("gruff-code-quality: hook unavailable"),
@@ -211,16 +218,18 @@ describe("hook registrar: launchers and installation", () => {
         ),
       );
       assert.doesNotMatch(claudeSettings, /Guard.*git repository root/u);
-      assert.match(
-        antigravityHooks,
-        /Policy hook unavailable: git repository root unavailable\./u,
-      );
+      assert.match(antigravityHooks, /Policy hook unavailable:/u);
+      assert.match(antigravityHooks, /managed root unavailable/u);
       assert.match(
         antigravityGruffCommand,
         /gruff-code-quality: hook unavailable/u,
       );
       assert.doesNotMatch(antigravityGruffCommand, /"decision":"deny"/u);
       assert.doesNotMatch(antigravityHooks, /Guard.*git repository root/u);
+      assert.match(antigravityHooks, /"timeout": 30/u);
+      assert.match(copilotHooks, /"timeoutSec": 30/u);
+      assert.equal(gruffSpec.timeoutSec, 90);
+      assert.equal(getHookSpec("post-turn-safety")?.timeoutSec, 90);
     });
   });
 
@@ -253,6 +262,7 @@ describe("hook registrar: launchers and installation", () => {
         true,
         "worktree fixture should prove central hooks exist in the active checkout",
       );
+      installClaudeDenyHook(worktree);
       assert.match(
         runGit(worktree, ["rev-parse", "--show-toplevel"]),
         /main-worktree$/u,
@@ -361,6 +371,138 @@ describe("hook registrar: launchers and installation", () => {
       assert.match(blocked.stderr, /BLOCKED: Policy/u);
     });
   });
+
+  it("launches the real guard from a managed non-Git root", () => {
+    withTempProject((root) => {
+      const launcher = installCodexDenyHook(root);
+      assert.equal(runCodexLauncher(launcher, root).status, 0);
+      const nested = join(root, "packages", "app");
+      mkdirSync(nested, { recursive: true });
+
+      const safe = runCodexLauncher(launcher, nested);
+      assert.equal(safe.status, 0, `${safe.stdout}\n${safe.stderr}`);
+      const blocked = runCodexLauncher(
+        launcher,
+        nested,
+        CLAUDE_DANGEROUS_PAYLOAD,
+      );
+      assert.equal(blocked.status, 2, `${blocked.stdout}\n${blocked.stderr}`);
+      assert.match(blocked.stderr, /BLOCKED: Policy/u);
+    });
+  });
+
+  it("selects Git first, then the nearest complete managed ancestor", () => {
+    withTempProject((root) => {
+      const outerLauncher = installCodexDenyHook(root);
+      const nestedGit = join(root, "workspace", "plain-git");
+      mkdirSync(nestedGit, { recursive: true });
+      runGit(nestedGit, ["init", "-q"]);
+      const outerResult = runCodexLauncher(outerLauncher, nestedGit);
+      assert.equal(
+        outerResult.status,
+        0,
+        `${outerResult.stdout}\n${outerResult.stderr}`,
+      );
+
+      const inner = join(root, "workspace", "managed-inner");
+      const innerLauncher = installCodexDenyHook(inner);
+      assert.equal(typeof innerLauncher, "string");
+      writeFileSync(
+        join(inner, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        "#!/usr/bin/env bash\nprintf 'INNER_MANAGED_ROOT\\n'\n",
+      );
+      const innerCwd = join(inner, "src");
+      mkdirSync(innerCwd, { recursive: true });
+      const innerResult = runCodexLauncher(outerLauncher, innerCwd);
+      assert.equal(
+        innerResult.status,
+        0,
+        `${innerResult.stdout}\n${innerResult.stderr}`,
+      );
+      assert.equal(innerResult.stdout, "INNER_MANAGED_ROOT\n");
+    });
+  });
+
+  it("skips unrelated configs but stops at a partial managed trace", () => {
+    withTempProject((root) => {
+      const launcher = installCodexDenyHook(root);
+      const unrelated = join(root, "unrelated");
+      mkdirSync(join(unrelated, ".codex"), { recursive: true });
+      writeFileSync(
+        join(unrelated, ".codex", "hooks.json"),
+        '{"hooks":{"PreToolUse":[{"command":"custom-tool"}]}}\n',
+      );
+      mkdirSync(join(unrelated, ".goat-flow", "hooks"), { recursive: true });
+      writeFileSync(
+        join(unrelated, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        "// launcher for a different managed hook\n",
+      );
+      const unrelatedResult = runCodexLauncher(launcher, unrelated);
+      assert.equal(
+        unrelatedResult.status,
+        0,
+        `${unrelatedResult.stdout}\n${unrelatedResult.stderr}`,
+      );
+
+      const partial = join(root, "partial");
+      mkdirSync(join(partial, ".goat-flow", "hooks"), { recursive: true });
+      writeFileSync(
+        join(partial, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        "#!/usr/bin/env bash\nexit 0\n",
+      );
+      const partialResult = runCodexLauncher(launcher, partial);
+      assert.equal(
+        partialResult.status,
+        2,
+        `${partialResult.stdout}\n${partialResult.stderr}`,
+      );
+      assert.match(partialResult.stderr, /managed root incomplete/iu);
+      assert.doesNotMatch(partialResult.stderr, new RegExp(root, "u"));
+    });
+  });
+
+  it("forwards stdin unchanged and gives the hook the verified root cwd", () => {
+    withTempProject((root) => {
+      const launcher = installCodexDenyHook(root);
+      const payloadPath = join(root, "captured-payload.txt");
+      const cwdPath = join(root, "captured-cwd.txt");
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        [
+          "#!/usr/bin/env bash",
+          'cat > "$GOAT_FLOW_TEST_PAYLOAD_PATH"',
+          'pwd > "$GOAT_FLOW_TEST_CWD_PATH"',
+          "",
+        ].join("\n"),
+      );
+      const nested = join(root, "deep", "cwd");
+      mkdirSync(nested, { recursive: true });
+      const payload = '{"raw":"line one\\nline two 🐐"}\n';
+      const result = runCodexLauncher(launcher, nested, payload, {
+        ...process.env,
+        GOAT_FLOW_TEST_PAYLOAD_PATH: payloadPath,
+        GOAT_FLOW_TEST_CWD_PATH: cwdPath,
+      });
+
+      assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.equal(readFileSync(payloadPath, "utf8"), payload);
+      assert.equal(readFileSync(cwdPath, "utf8").trim(), root);
+    });
+  });
+
+  for (const fixture of MANAGED_SHAPE_MUTATIONS) {
+    it(`rejects a ${fixture.name} without exposing its root`, () => {
+      withTempProject((root) => {
+        const launcher = installCodexDenyHook(root);
+        fixture.mutate(root);
+        const result = runCodexLauncher(launcher, root);
+
+        assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+        assert.match(result.stderr, /managed root incomplete/iu);
+        assert.equal(result.stderr.includes(root), false);
+      });
+    });
+  }
 });
 
 describe("hook launcher script validation", () => {
@@ -377,10 +519,16 @@ describe("hook launcher script validation", () => {
    * Run the canonical launcher exactly as agent configs do.
    * Side effect: starts one child process with the fixture project as its working directory.
    */
-  function runLauncherProcess(root: string, scriptRel: string) {
-    return spawnSync(process.execPath, [LAUNCHER, scriptRel, "policy"], {
+  function runLauncherProcess(
+    root: string,
+    scriptRel: string,
+    responseMode = "policy",
+    env: NodeJS.ProcessEnv = process.env,
+  ) {
+    return spawnSync(process.execPath, [LAUNCHER, scriptRel, responseMode], {
       cwd: root,
       encoding: "utf8" as const,
+      env,
     });
   }
 
@@ -394,12 +542,79 @@ describe("hook launcher script validation", () => {
     return hookDir;
   }
 
-  /** Diagnostic string so a failing launcher assertion names both streams. */
-  function launcherDiagnostics(
-    result: ReturnType<typeof runLauncherProcess>,
-  ): string {
-    return `status=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
+  for (const fixture of HOOK_TIMEOUT_MODES) {
+    it(`bounds ${fixture.mode} hooks with a timeout-specific response`, () => {
+      withTempProject((root) => {
+        const scriptRel = ".goat-flow/hooks/slow.sh";
+        const hookDir = makeHookDir(root);
+        writeFileSync(
+          join(hookDir, "slow.sh"),
+          "#!/usr/bin/env bash\nsleep 2 &\nwait\n",
+        );
+        const startedAt = Date.now();
+        const result = runLauncherProcess(root, scriptRel, fixture.mode, {
+          ...process.env,
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "1",
+        });
+
+        assert.equal(
+          result.status,
+          fixture.status,
+          launcherDiagnostics(result),
+        );
+        assert.match(result[fixture.stream], fixture.pattern);
+        assert.match(
+          result[fixture.stream],
+          /exceeded its deadline and was killed/u,
+        );
+        assert.ok(Date.now() - startedAt < 1_500, launcherDiagnostics(result));
+      });
+    });
   }
+
+  it("rejects invalid timeout overrides and applies mode ceilings", () => {
+    withTempProject((root) => {
+      const scriptRel = ".goat-flow/hooks/quick.sh";
+      const hookDir = makeHookDir(root);
+      writeFileSync(join(hookDir, "quick.sh"), "#!/usr/bin/env bash\nexit 0\n");
+      for (const value of ["0", "25001", "1.5", "+1", " 1", "invalid"]) {
+        const result = runLauncherProcess(root, scriptRel, "policy", {
+          ...process.env,
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: value,
+        });
+        assert.equal(
+          result.status,
+          2,
+          `${value}\n${launcherDiagnostics(result)}`,
+        );
+        assert.match(result.stderr, /timeout configuration is invalid/u);
+      }
+      const policyCeiling = runLauncherProcess(root, scriptRel, "policy", {
+        ...process.env,
+        GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "25000",
+      });
+      assert.equal(policyCeiling.status, 0, launcherDiagnostics(policyCeiling));
+      for (const mode of ["gruff", "post-turn"]) {
+        const result = runLauncherProcess(root, scriptRel, mode, {
+          ...process.env,
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "75000",
+        });
+        assert.equal(
+          result.status,
+          0,
+          `${mode}\n${launcherDiagnostics(result)}`,
+        );
+        const excessive = runLauncherProcess(root, scriptRel, mode, {
+          ...process.env,
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "75001",
+        });
+        assert.match(
+          `${excessive.stdout}${excessive.stderr}`,
+          /timeout configuration is invalid/u,
+        );
+      }
+    });
+  });
 
   it("fails closed when the managed hook script is a symlink", () => {
     withTempProject((root) => {

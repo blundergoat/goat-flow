@@ -8,7 +8,7 @@ goat-flow has two authoring surfaces:
 | `goat-flow skill new` | Scaffold a skill or playbook from a description or validate a draft location. | Skills require accepted RED evidence and confirmation; playbooks require confirmation |
 | Dashboard `Evaluate skill` | Score pasted/uploaded markdown and get improvement tips. | No |
 
-## Decide first
+## Decide First
 
 Use candidacy before drafting when the artifact shape is unclear.
 
@@ -55,11 +55,13 @@ explicit failing agent outcome, and one non-placeholder quoted rationalisation
 inside its first RED iteration. Pure playbook/reference scaffolds do not use
 this pressure gate.
 
+Replace the angle-bracket placeholders before running the command:
+
 ```bash
 node --import tsx src/cli/cli.ts skill new \
   "<workflow description>" \
-  --name <skill-name> \
-  --red-log .goat-flow/logs/sessions/YYYY-MM-DD-<skill-name>-tdd.md \
+  --name "<skill-name>" \
+  --red-log ".goat-flow/logs/sessions/YYYY-MM-DD-<skill-name>-tdd.md" \
   --agent codex
 ```
 
@@ -94,8 +96,8 @@ Draft mode never writes. It runs candidacy, compares the artifact shape to the s
 
 ```bash
 node --import tsx src/cli/cli.ts skill new --interactive \
-  --name <skill-name> \
-  --red-log .goat-flow/logs/sessions/YYYY-MM-DD-<skill-name>-tdd.md
+  --name "<skill-name>" \
+  --red-log ".goat-flow/logs/sessions/YYYY-MM-DD-<skill-name>-tdd.md"
 ```
 
 Interactive mode asks for the description and confirmation; omit `--name` when

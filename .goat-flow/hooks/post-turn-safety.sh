@@ -15,8 +15,8 @@
 #
 # Exit codes:
 #   0  clean scan, no findings
-#   1  hook cannot run (no git root or work dir); stderr explains
-#   2  findings blocked, or the scan hit its wall-clock budget before completion
+#   1  reserved for host-level hook unavailability
+#   2  findings blocked, or the scan could not complete
 #
 # Bash 4+ performance architecture (Windows Git Bash ships fork costs 10-40x
 # Linux, so its optimized scan must not spawn per line or per file):
@@ -33,6 +33,7 @@
 # bounded by the same wall-clock, file-size, and output limits.
 
 set -uo pipefail
+shopt -s extglob
 
 # Bash 3.2 ships with supported macOS versions. Keep this compatibility path
 # free of associative arrays, mapfile, and Bash-4 parameter expansions. The
@@ -43,6 +44,9 @@ fallback_reported="
 fallback_conflict_path=""
 fallback_conflict_state=0
 fallback_bail=0
+fallback_incomplete_reason=""
+fallback_workdir=""
+fallback_temp_sequence=0
 fallback_max_seconds="${GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS:-60}"
 fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
@@ -101,12 +105,75 @@ is_reference_or_interpolation() {
   return 1
 }
 
+fallback_mark_incomplete() {
+  if [ -z "$fallback_incomplete_reason" ]; then
+    fallback_incomplete_reason="$1"
+  fi
+  fallback_bail=1
+}
+
 fallback_budget_check() {
+  if [ "$fallback_bail" -ne 0 ]; then
+    return 1
+  fi
   if [ "$SECONDS" -ge "$fallback_max_seconds" ]; then
-    fallback_bail=1
+    fallback_mark_incomplete "budget ${fallback_max_seconds}s exceeded"
     return 1
   fi
   return 0
+}
+
+fallback_next_temp_path() {
+  fallback_temp_sequence=$((fallback_temp_sequence + 1))
+  FALLBACK_TEMP_PATH="$fallback_workdir/$1-$fallback_temp_sequence"
+}
+
+fallback_lower() {
+  if ! FALLBACK_LOWER=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]'); then
+    fallback_mark_incomplete "text normalization command failed"
+    FALLBACK_LOWER=""
+    return 1
+  fi
+  return 0
+}
+
+fallback_trim() {
+  FALLBACK_TRIMMED="${1##+([[:space:]])}"
+  FALLBACK_TRIMMED="${FALLBACK_TRIMMED%%+([[:space:]])}"
+}
+
+fallback_normalize_key() {
+  local raw="$1"
+  local first=""
+  local second=""
+  local c
+  local i
+  local n
+
+  n=${#raw}
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    c="${raw:$i:1}"
+    if [ "$i" -gt 0 ] && [[ "${raw:$((i - 1)):1}" == [[:lower:][:digit:]] && "$c" == [[:upper:]] ]]; then
+      first="${first}_"
+    fi
+    first="${first}${c}"
+    i=$((i + 1))
+  done
+
+  n=${#first}
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    c="${first:$i:1}"
+    if [ "$i" -gt 0 ] && [ "$((i + 1))" -lt "$n" ] && [[ "${first:$((i - 1)):1}" == [[:upper:]] && "$c" == [[:upper:]] && "${first:$((i + 1)):1}" == [[:lower:]] ]]; then
+      second="${second}_"
+    fi
+    second="${second}${c}"
+    i=$((i + 1))
+  done
+
+  fallback_lower "$second" || return 1
+  FALLBACK_NORMALIZED_KEY="${FALLBACK_LOWER//-/_}"
 }
 
 fallback_report() {
@@ -128,7 +195,10 @@ $path|$family
 
 fallback_is_placeholder() {
   local value
-  value=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  if ! fallback_lower "$1"; then
+    return 0
+  fi
+  value="$FALLBACK_LOWER"
   case "$value" in
     "" | akiaiosfodnn7example | asiaiosfodnn7example)
       return 0
@@ -157,7 +227,8 @@ suffix_ends_assignment() {
     # A bare statement terminator, as in `export TOKEN="abc123";`.
     ";") return 0 ;;
     ";"*)
-      after_terminator=$(printf '%s' "${1#;}" | sed 's/^[[:space:]]*//')
+      fallback_trim "${1#;}"
+      after_terminator="$FALLBACK_TRIMMED"
       # Only spacing or a trailing comment after the semicolon, still one value.
       case "$after_terminator" in
         "" | \#*) return 0 ;;
@@ -171,7 +242,8 @@ suffix_ends_assignment() {
 fallback_is_env_assignment_file() {
   local basename
   local lower_path
-  lower_path=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  fallback_lower "$1" || return 1
+  lower_path="$FALLBACK_LOWER"
   basename="${lower_path##*/}"
   case "$basename" in
     .env* | *.env | *.env.* | dockerfile | dockerfile.* | *.dockerfile | *.sh | *.bash | *.zsh | *.ksh | *.yaml | *.yml | *.ini | *.toml | *.properties | *.conf | *.cfg)
@@ -184,7 +256,8 @@ fallback_is_env_assignment_file() {
 fallback_is_dockerfile_path() {
   local basename
   local lower_path
-  lower_path=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  fallback_lower "$1" || return 1
+  lower_path="$FALLBACK_LOWER"
   basename="${lower_path##*/}"
   case "$basename" in
     dockerfile | dockerfile.* | *.dockerfile)
@@ -209,8 +282,8 @@ fallback_literal_assignment_value() {
   local value_first_segment_lower
 
   FALLBACK_LITERAL_VALUE=""
-  raw_assignment_value=$(printf '%s' "$1" |
-    sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  fallback_trim "$1"
+  raw_assignment_value="$FALLBACK_TRIMMED"
   # Keep language-formatted strings in the allowed expression path.
   case "$raw_assignment_value" in
     [fF]\"* | [fF]\'* | [fF][rR]\"* | [fF][rR]\'* | [rR][fF]\"* | [rR][fF]\'*)
@@ -232,8 +305,8 @@ fallback_literal_assignment_value() {
       # References stay allowed because they do not embed a credential.
       is_reference_or_interpolation "$literal_value" && return 1
       text_after_closing_quote="${text_after_opening_quote#*\"}"
-      text_after_closing_quote=$(printf '%s' "$text_after_closing_quote" |
-        sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+      fallback_trim "$text_after_closing_quote"
+      text_after_closing_quote="$FALLBACK_TRIMMED"
       # Only an assignment-ending suffix may follow the closing quote.
       suffix_ends_assignment "$text_after_closing_quote" || return 1
       FALLBACK_LITERAL_VALUE="$literal_value"
@@ -249,8 +322,8 @@ fallback_literal_assignment_value() {
       # References stay allowed because they do not embed a credential.
       is_reference_or_interpolation "$literal_value" && return 1
       text_after_closing_quote="${text_after_opening_quote#*\'}"
-      text_after_closing_quote=$(printf '%s' "$text_after_closing_quote" |
-        sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+      fallback_trim "$text_after_closing_quote"
+      text_after_closing_quote="$FALLBACK_TRIMMED"
       # Only an assignment-ending suffix may follow the closing quote.
       suffix_ends_assignment "$text_after_closing_quote" || return 1
       FALLBACK_LITERAL_VALUE="$literal_value"
@@ -260,8 +333,8 @@ fallback_literal_assignment_value() {
 
   # Remove a trailing user comment before classifying an unquoted value.
   unquoted_assignment_value="${raw_assignment_value%%#*}"
-  unquoted_assignment_value=$(printf '%s' "$unquoted_assignment_value" |
-    sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  fallback_trim "$unquoted_assignment_value"
+  unquoted_assignment_value="$FALLBACK_TRIMMED"
   # An empty value gives the user no credential to rotate.
   [ -n "$unquoted_assignment_value" ] || return 1
   # Expression punctuation keeps ordinary code out of credential warnings.
@@ -278,7 +351,8 @@ fallback_literal_assignment_value() {
   # Dotted config references stay allowed unless their first segment is token-like.
   if [[ "$unquoted_assignment_value" =~ $dotted_identifier_re ]]; then
     value_first_segment="${unquoted_assignment_value%%.*}"
-    value_first_segment_lower=$(printf '%s' "$value_first_segment" | tr '[:upper:]' '[:lower:]')
+    fallback_lower "$value_first_segment" || return 1
+    value_first_segment_lower="$FALLBACK_LOWER"
     case "$value_first_segment_lower" in
       app | application | cfg | conf | config | configs | configuration | constant | constants | context | credentials | credential | creds | ctx | default | defaults | env | environ | environment | os | process | self | setting | settings | this)
         return 1
@@ -314,9 +388,10 @@ fallback_scan_literal_assignment() {
   local literal_value
   local normalized_credential_key
 
-  normalized_credential_key=$(printf '%s' "$credential_key_text" |
-    sed -E 's/([[:lower:][:digit:]])([[:upper:]])/\1_\2/g; s/([[:upper:]])([[:upper:]][[:lower:]])/\1_\2/g' |
-    tr '[:upper:]-' '[:lower:]_')
+  if ! fallback_normalize_key "$credential_key_text"; then
+    return 0
+  fi
+  normalized_credential_key="$FALLBACK_NORMALIZED_KEY"
   case "$normalized_credential_key" in
     tokens | *tokens | tokenizer | tokeniser | tokenize | *tokenizer* | *tokeniser* | *tokenize* | *_count | *_index | *_id | *_name | *_type | *_header | *_url | *_path | *_list | *_re | *_pattern | *_field | *not_secret | *not_a_secret | *non_secret | *no_secret | *not_token | *not_a_token | *non_token | *no_token | *not_password | *not_a_password | *non_password | *no_password | *not_api_key | *not_an_api_key | *non_api_key | *no_api_key | *not_private_key | *not_a_private_key | *non_private_key | *no_private_key)
       return 0
@@ -365,9 +440,10 @@ fallback_scan_dockerfile_assignment() {
   local docker_env_word_re='^([A-Za-z_][A-Za-z0-9_-]*)=(.*)$'
 
   [[ "$line" =~ $docker_instruction_re ]] || return 0
-  instruction=$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')
-  payload=$(printf '%s' "${BASH_REMATCH[2]}" |
-    sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  fallback_lower "${BASH_REMATCH[1]}" || return 0
+  instruction="$FALLBACK_LOWER"
+  fallback_trim "${BASH_REMATCH[2]}"
+  payload="$FALLBACK_TRIMMED"
   [ -n "$payload" ] || return 0
 
   if [ "$instruction" = "env" ]; then
@@ -480,15 +556,29 @@ fallback_diff_path_within_byte_cap() {
 
   # A staged scan measures exactly what the user placed in the index.
   if [ "$uses_staged_blob" -eq 1 ]; then
-    changed_file_bytes=$(git -C "$repository_root" cat-file -s ":$changed_file_path" 2>/dev/null | tr -d '[:space:]')
+    if ! changed_file_bytes=$(git -C "$repository_root" cat-file -s ":$changed_file_path" 2>/dev/null); then
+      fallback_mark_incomplete "staged byte-count command failed"
+      return 1
+    fi
   else
     worktree_file_path="$repository_root/$changed_file_path"
-    # Missing or unreadable worktree content cannot be scanned for the user.
-    [ -f "$worktree_file_path" ] && [ -r "$worktree_file_path" ] || return 1
-    changed_file_bytes=$(wc -c <"$worktree_file_path" 2>/dev/null | tr -d '[:space:]')
+    # A selected file that vanishes or becomes unreadable leaves the scan incomplete.
+    if [ ! -f "$worktree_file_path" ] || [ ! -r "$worktree_file_path" ]; then
+      fallback_mark_incomplete "selected worktree content became unavailable"
+      return 1
+    fi
+    if ! changed_file_bytes=$(wc -c <"$worktree_file_path" 2>/dev/null); then
+      fallback_mark_incomplete "byte-count command failed"
+      return 1
+    fi
   fi
   # An empty or invalid size cannot prove that the file fits the scan limit.
-  case "$changed_file_bytes" in '' | *[!0-9]*) return 1 ;; esac
+  case "$changed_file_bytes" in
+    '' | *[!0-9[:space:]]*)
+      fallback_mark_incomplete "byte-count command returned invalid output"
+      return 1
+      ;;
+  esac
   # Files over the limit are skipped consistently on both supported shells.
   [ "$changed_file_bytes" -le "$fallback_max_bytes" ]
 }
@@ -527,6 +617,8 @@ fallback_scan_diff() {
   local changed_file_path=""
   local diff_argument
   local diff_line
+  local diff_stream
+  local expect_file_header=0
   local scan_changed_file=0
   local uses_staged_blob=0
 
@@ -541,25 +633,54 @@ fallback_scan_diff() {
 
   fallback_conflict_path=""
   fallback_conflict_state=0
+  fallback_next_temp_path "diff-stream"
+  diff_stream="$FALLBACK_TEMP_PATH"
+  if ! git -C "$repository_root" \
+    -c core.quotepath=off \
+    -c diff.noprefix=false \
+    -c diff.mnemonicprefix=false \
+    -c diff.srcprefix=a/ \
+    -c diff.dstprefix=b/ \
+    diff --no-ext-diff --no-color --unified=0 "$@" >"$diff_stream" 2>/dev/null; then
+    fallback_mark_incomplete "Git diff command failed"
+    return 1
+  fi
   # Read every added diff line, including a final line without a newline.
   while IFS= read -r diff_line || [ -n "$diff_line" ]; do
     fallback_budget_check || break
     case "$diff_line" in
-      '+++ /dev/null')
+      'diff --git '*)
+        expect_file_header=1
         changed_file_path=""
         scan_changed_file=0
         ;;
-      '+++ '*)
-        if fallback_decode_diff_path "$diff_line"; then
-          changed_file_path="$FALLBACK_DIFF_PATH"
-        else
+      '+++ /dev/null')
+        if [ "$expect_file_header" -eq 1 ]; then
+          expect_file_header=0
           changed_file_path=""
-        fi
-        # Scan this file only when its selected content fits the user's byte cap.
-        if [ -n "$changed_file_path" ] && fallback_diff_path_within_byte_cap "$repository_root" "$changed_file_path" "$uses_staged_blob"; then
-          scan_changed_file=1
-        else
           scan_changed_file=0
+        elif [ -n "$changed_file_path" ] && [ "$scan_changed_file" -eq 1 ]; then
+          fallback_scan_line "$changed_file_path" "${diff_line#+}"
+        fi
+        ;;
+      '+++ '*)
+        if [ "$expect_file_header" -eq 1 ]; then
+          expect_file_header=0
+          if fallback_decode_diff_path "$diff_line"; then
+            changed_file_path="$FALLBACK_DIFF_PATH"
+          else
+            changed_file_path=""
+          fi
+          # Scan this file only when its selected content fits the user's byte cap.
+          if [ -n "$changed_file_path" ] && fallback_diff_path_within_byte_cap "$repository_root" "$changed_file_path" "$uses_staged_blob"; then
+            scan_changed_file=1
+          else
+            scan_changed_file=0
+            [ "$fallback_bail" -eq 0 ] || break
+          fi
+        elif [ -n "$changed_file_path" ] && [ "$scan_changed_file" -eq 1 ]; then
+          # Outside the one accepted header slot, +++-shaped text is content.
+          fallback_scan_line "$changed_file_path" "${diff_line#+}"
         fi
         ;;
       +*)
@@ -569,15 +690,11 @@ fallback_scan_diff() {
         fi
         ;;
     esac
-  done < <(
-    git -C "$repository_root" \
-      -c core.quotepath=off \
-      -c diff.noprefix=false \
-      -c diff.mnemonicprefix=false \
-      -c diff.srcprefix=a/ \
-      -c diff.dstprefix=b/ \
-      diff --no-ext-diff --no-color --unified=0 "$@" 2>/dev/null
-  )
+  done <"$diff_stream"
+}
+
+fallback_open_scan_file() {
+  exec 3<"$1"
 }
 
 fallback_scan_file() {
@@ -586,49 +703,113 @@ fallback_scan_file() {
   local full_path="$root/$path"
   local size
   local line
+  local grep_status
 
   [ -f "$full_path" ] && [ ! -L "$full_path" ] || return 0
-  LC_ALL=C grep -Iq . "$full_path" 2>/dev/null || return 0
-  size=$(wc -c <"$full_path" 2>/dev/null | tr -d '[:space:]')
-  case "$size" in '' | *[!0-9]*) return 0 ;; esac
+  LC_ALL=C grep -Iq . "$full_path" 2>/dev/null
+  grep_status=$?
+  case "$grep_status" in
+    0) ;;
+    1) return 0 ;;
+    *)
+      fallback_mark_incomplete "binary-content gate failed"
+      return 1
+      ;;
+  esac
+  if ! size=$(wc -c <"$full_path" 2>/dev/null); then
+    fallback_mark_incomplete "byte-count command failed"
+    return 1
+  fi
+  case "$size" in
+    '' | *[!0-9[:space:]]*)
+      fallback_mark_incomplete "byte-count command returned invalid output"
+      return 1
+      ;;
+  esac
   [ "$size" -le "$fallback_max_bytes" ] || return 0
+
+  if ! fallback_open_scan_file "$full_path" 2>/dev/null; then
+    fallback_mark_incomplete "selected content became unreadable"
+    return 1
+  fi
 
   fallback_conflict_path=""
   fallback_conflict_state=0
   while IFS= read -r line || [ -n "$line" ]; do
     fallback_scan_line "$path" "$line" || break
-  done <"$full_path"
+  done <&3
+  exec 3<&-
 }
 
 fallback_main() {
   local root
   local path
+  local path_list
+  local head_status
 
   case "$fallback_max_seconds" in '' | *[!0-9]*) fallback_max_seconds=60 ;; esac
   case "$fallback_max_bytes" in '' | *[!0-9]*) fallback_max_bytes=1048576 ;; esac
   case "$fallback_max_findings" in '' | *[!0-9]*) fallback_max_findings=20 ;; esac
 
-  root=$(git rev-parse --show-toplevel 2>/dev/null) || root=""
-  if [ -z "$root" ]; then
-    printf 'post-turn-safety: git repository root unavailable; cannot scan changed content.\n' >&2
-    return 1
+  if ! root=$(git rev-parse --show-toplevel 2>/dev/null) || [ -z "$root" ]; then
+    printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+    return 2
   fi
 
-  if git -C "$root" rev-parse --verify HEAD >/dev/null 2>&1; then
+  if ! cd "$root" 2>/dev/null; then
+    printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
+    return 2
+  fi
+
+  if ! fallback_workdir=$(mktemp -d 2>/dev/null) || [ -z "$fallback_workdir" ]; then
+    printf 'post-turn-safety: scan incomplete (scan workspace unavailable).\n' >&2
+    return 2
+  fi
+  trap 'rm -rf "$fallback_workdir"' EXIT
+
+  git -C "$root" rev-parse --verify HEAD >/dev/null 2>&1
+  head_status=$?
+  if [ "$head_status" -eq 0 ]; then
     fallback_scan_diff "$root" HEAD
-    fallback_scan_diff "$root" --cached
+    if [ "$fallback_bail" -eq 0 ]; then
+      fallback_scan_diff "$root" --cached
+    fi
+  elif [ "$head_status" -eq 128 ]; then
+    fallback_next_temp_path "tracked-paths"
+    path_list="$FALLBACK_TEMP_PATH"
+    if git -C "$root" ls-files -z >"$path_list" 2>/dev/null; then
+      while IFS= read -r -d '' path; do
+        fallback_budget_check || break
+        fallback_scan_file "$root" "$path"
+        [ "$fallback_bail" -eq 0 ] || break
+      done <"$path_list"
+    else
+      fallback_mark_incomplete "Git tracked-path inventory failed"
+    fi
+    if [ "$fallback_bail" -eq 0 ]; then
+      fallback_scan_diff "$root" --cached --root
+    fi
   else
-    while IFS= read -r -d '' path; do
-      fallback_budget_check || break
-      fallback_scan_file "$root" "$path"
-    done < <(git -C "$root" ls-files -z 2>/dev/null)
-    fallback_scan_diff "$root" --cached --root
+    fallback_mark_incomplete "Git HEAD inspection failed"
   fi
 
-  while IFS= read -r -d '' path; do
-    fallback_budget_check || break
-    fallback_scan_file "$root" "$path"
-  done < <(git -C "$root" ls-files --others --exclude-standard -z 2>/dev/null)
+  if [ "$fallback_bail" -eq 0 ]; then
+    fallback_next_temp_path "untracked-paths"
+    path_list="$FALLBACK_TEMP_PATH"
+    if git -C "$root" ls-files --others --exclude-standard -z >"$path_list" 2>/dev/null; then
+      while IFS= read -r -d '' path; do
+        fallback_budget_check || break
+        fallback_scan_file "$root" "$path"
+        [ "$fallback_bail" -eq 0 ] || break
+      done <"$path_list"
+    else
+      fallback_mark_incomplete "Git untracked-path inventory failed"
+    fi
+  fi
+
+  if [ "$fallback_bail" -ne 0 ]; then
+    printf 'post-turn-safety: Bash 3 compatibility scan incomplete (%s).\n' "$fallback_incomplete_reason" >&2
+  fi
 
   if [ "$fallback_findings" -gt 0 ]; then
     if [ "$fallback_findings" -gt "$fallback_max_findings" ]; then
@@ -637,9 +818,7 @@ fallback_main() {
     printf 'post-turn-safety: fix or remove the flagged changed content before stopping.\n' >&2
     return 2
   fi
-  # An incomplete compatibility scan must block instead of showing a clean turn.
   if [ "$fallback_bail" -ne 0 ]; then
-    printf 'post-turn-safety: Bash 3 compatibility scan incomplete (budget %ss exceeded).\n' "$fallback_max_seconds" >&2
     return 2
   fi
   return 0
@@ -679,12 +858,46 @@ merge_conflict_scan_state=0
 # files (never under-counts) so the incomplete-scan message stays honest.
 BAIL=0
 PENDING_FILES=0
+INCOMPLETE_REASON=""
+INCOMPLETE_KIND=""
+TEMP_FILE_SEQUENCE=0
+
+mark_scan_incomplete() {
+  if [ -z "$INCOMPLETE_REASON" ]; then
+    INCOMPLETE_KIND="$1"
+    INCOMPLETE_REASON="$2"
+  fi
+  BAIL=1
+}
 
 budget_check() {
   if ((BAIL == 0)) && ((SECONDS >= MAX_SECONDS)); then
-    BAIL=1
+    mark_scan_incomplete "budget" "budget ${MAX_SECONDS}s exceeded"
   fi
   ((BAIL == 0))
+}
+
+next_temp_path() {
+  TEMP_FILE_SEQUENCE=$((TEMP_FILE_SEQUENCE + 1))
+  TEMP_PATH="$WORKDIR/$1-$TEMP_FILE_SEQUENCE"
+}
+
+# Grep exit 1 is its documented no-match result. Any other non-zero status
+# means candidate selection or content gating did not complete.
+capture_grep_output() {
+  local output="$1"
+  local failure_reason="$2"
+  local status
+  shift 2
+
+  LC_ALL=C grep "$@" >"$output" 2>/dev/null
+  status=$?
+  GREP_STATUS=$status
+  if [ "$status" -gt 1 ]; then
+    mark_scan_incomplete "command" "$failure_reason"
+    return 1
+  fi
+  return 0
 }
 
 repo_root() {
@@ -1141,17 +1354,30 @@ CONTENT_STEM_RE="${STEM_BODY_RE}"
 declare -A SCANNABLE=()
 gate_scannable_files() {
   local -a batch=() chunk=() sizes=()
-  local path line size i count total_lines
+  local path line size i count total_lines sizes_output grep_output
 
   for path in "$@"; do
     if [ ! -f "$path" ] || [ ! -r "$path" ] || [ -L "$path" ]; then
       continue
     fi
     if [[ "$path" == *$'\n'* ]]; then
-      size="$(wc -c <"$path" 2>/dev/null | tr -d '[:space:]')"
-      case "$size" in '' | *[!0-9]*) continue ;; esac
+      if ! size="$(wc -c <"$path" 2>/dev/null)"; then
+        mark_scan_incomplete "command" "byte-count command failed"
+        return 1
+      fi
+      case "$size" in
+        '' | *[!0-9[:space:]]*)
+          mark_scan_incomplete "command" "byte-count command returned invalid output"
+          return 1
+          ;;
+      esac
       [ "$size" -le "$MAX_FILE_BYTES" ] || continue
-      LC_ALL=C grep -Iq . "$path" 2>/dev/null && SCANNABLE["$path"]=1
+      next_temp_path "binary-gate"
+      grep_output="$TEMP_PATH"
+      if ! capture_grep_output "$grep_output" "binary-content gate failed" -Iq . "$path"; then
+        return 1
+      fi
+      if [ "$GREP_STATUS" -eq 0 ]; then SCANNABLE["$path"]=1; fi
       continue
     fi
     batch+=("$path")
@@ -1163,8 +1389,14 @@ gate_scannable_files() {
     chunk=("${@:1:CHUNK_SIZE}")
     if (($# > CHUNK_SIZE)); then shift "$CHUNK_SIZE"; else shift $#; fi
 
+    next_temp_path "byte-count"
+    sizes_output="$TEMP_PATH"
+    if ! wc -c -- "${chunk[@]}" >"$sizes_output" 2>/dev/null; then
+      mark_scan_incomplete "command" "byte-count command failed"
+      return 1
+    fi
     sizes=()
-    mapfile -t sizes < <(wc -c -- "${chunk[@]}" 2>/dev/null || true)
+    mapfile -t sizes <"$sizes_output"
     count=${#chunk[@]}
     total_lines=${#sizes[@]}
     if { ((count == 1)) && ((total_lines == 1)); } || { ((count > 1)) && ((total_lines == count + 1)); }; then
@@ -1176,24 +1408,25 @@ gate_scannable_files() {
       done
     else
       # Unexpected wc output shape (e.g. a file vanished mid-run): probe the
-      # chunk per file so a shifted index can never mis-gate a neighbor.
-      for ((i = 0; i < count; i++)); do
-        size="$(wc -c <"${chunk[i]}" 2>/dev/null | tr -d '[:space:]')"
-        case "$size" in '' | *[!0-9]*) continue ;; esac
-        if [ "$size" -le "$MAX_FILE_BYTES" ]; then
-          SCANNABLE["${chunk[i]}"]=2
-        fi
-      done
+      # chunk per file only after marking the scan incomplete; shifted output
+      # cannot safely prove that any neighboring path stayed within the cap.
+      mark_scan_incomplete "command" "byte-count command returned invalid output"
+      return 1
     fi
 
     # Only paths marked 2 (size gate passed) are promoted to 1 (scannable);
     # leftover 2 markers fail every "= 1" admission test downstream, so they
     # need no separate cleanup.
+    next_temp_path "binary-gate"
+    grep_output="$TEMP_PATH"
+    if ! capture_grep_output "$grep_output" "binary-content gate failed" -IlZ -e . -- "${chunk[@]}"; then
+      return 1
+    fi
     while IFS= read -r -d '' path; do
       if [ "${SCANNABLE[$path]:-0}" = 2 ]; then
         SCANNABLE["$path"]=1
       fi
-    done < <(LC_ALL=C grep -IlZ -e . -- "${chunk[@]}" 2>/dev/null || true)
+    done <"$grep_output"
   done
 }
 
@@ -1244,12 +1477,23 @@ scan_diff_stream() {
   local -a global_hits=() stem_hits=()
   local ai=0 bi=0 an bn hit line from_global
   local cur_path="" cur_active=0 cur_env=0 expect_header=0 rest
+  local global_output stem_output
 
   # -a forces text handling of odd bytes; -U keeps CR bytes at end of line
   # (Windows grep builds strip them in text mode, which would alter the line
   # content scan_line sees compared to the original `read -r` loop).
-  mapfile -t global_hits < <(LC_ALL=C grep -aUnE "$DIFF_GLOBAL_RE" "$stream" 2>/dev/null || true)
-  mapfile -t stem_hits < <(LC_ALL=C grep -iaUnE "$DIFF_STEM_RE" "$stream" 2>/dev/null || true)
+  next_temp_path "diff-global-hits"
+  global_output="$TEMP_PATH"
+  if ! capture_grep_output "$global_output" "diff candidate grep failed" -aUnE "$DIFF_GLOBAL_RE" "$stream"; then
+    return 1
+  fi
+  next_temp_path "diff-stem-hits"
+  stem_output="$TEMP_PATH"
+  if ! capture_grep_output "$stem_output" "diff candidate grep failed" -iaUnE "$DIFF_STEM_RE" "$stream"; then
+    return 1
+  fi
+  mapfile -t global_hits <"$global_output"
+  mapfile -t stem_hits <"$stem_output"
 
   while ((ai < ${#global_hits[@]} || bi < ${#stem_hits[@]})); do
     budget_check || return 0
@@ -1324,24 +1568,32 @@ run_diff_batch() {
   local mode="$1"
   shift
   local -a chunk=()
-  local stream="$WORKDIR/diff-stream"
+  local stream
 
   while (($# > 0)); do
     budget_check || return 0
     chunk=("${@:1:CHUNK_SIZE}")
     if (($# > CHUNK_SIZE)); then shift "$CHUNK_SIZE"; else shift $#; fi
+    next_temp_path "diff-stream"
+    stream="$TEMP_PATH"
     if [ "$mode" = "cached" ]; then
-      git -c core.quotepath=off -c diff.noprefix=false -c diff.mnemonicprefix=false \
+      if ! git -c core.quotepath=off -c diff.noprefix=false -c diff.mnemonicprefix=false \
         -c diff.srcprefix=a/ -c diff.dstprefix=b/ \
         diff --cached --no-ext-diff --no-color --unified=0 -- "${chunk[@]}" \
-        >"$stream" 2>/dev/null || true
+        >"$stream" 2>/dev/null; then
+        mark_scan_incomplete "command" "Git diff command failed"
+        return 1
+      fi
     else
-      git -c core.quotepath=off -c diff.noprefix=false -c diff.mnemonicprefix=false \
+      if ! git -c core.quotepath=off -c diff.noprefix=false -c diff.mnemonicprefix=false \
         -c diff.srcprefix=a/ -c diff.dstprefix=b/ \
         diff --no-ext-diff --no-color --unified=0 HEAD -- "${chunk[@]}" \
-        >"$stream" 2>/dev/null || true
+        >"$stream" 2>/dev/null; then
+        mark_scan_incomplete "command" "Git diff command failed"
+        return 1
+      fi
     fi
-    scan_diff_stream "$stream"
+    scan_diff_stream "$stream" || return 1
   done
 }
 
@@ -1355,7 +1607,7 @@ scan_content_files() {
   local -a files=("$@") env_files=() g_path=() g_ln=() g_line=() s_path=() s_ln=() s_line=()
   local -A file_order=()
   local -a chunk=()
-  local path rest i gi si cur=""
+  local path rest i gi si cur="" grep_output
 
   ((${#files[@]} > 0)) || return 0
   for ((i = 0; i < ${#files[@]}; i++)); do
@@ -1370,11 +1622,16 @@ scan_content_files() {
     budget_check || return 0
     chunk=("${@:1:CHUNK_SIZE}")
     if (($# > CHUNK_SIZE)); then shift "$CHUNK_SIZE"; else shift $#; fi
+    next_temp_path "content-global-hits"
+    grep_output="$TEMP_PATH"
+    if ! capture_grep_output "$grep_output" "content candidate grep failed" -aUHnZE --null -e "$CONTENT_GLOBAL_RE" -- "${chunk[@]}"; then
+      return 1
+    fi
     while IFS= read -r -d '' path && IFS= read -r rest; do
       g_path+=("$path")
       g_ln+=("${rest%%:*}")
       g_line+=("${rest#*:}")
-    done < <(LC_ALL=C grep -aUHnZE --null -e "$CONTENT_GLOBAL_RE" -- "${chunk[@]}" 2>/dev/null || true)
+    done <"$grep_output"
   done
 
   set -- ${env_files[@]+"${env_files[@]}"}
@@ -1382,11 +1639,16 @@ scan_content_files() {
     budget_check || return 0
     chunk=("${@:1:CHUNK_SIZE}")
     if (($# > CHUNK_SIZE)); then shift "$CHUNK_SIZE"; else shift $#; fi
+    next_temp_path "content-stem-hits"
+    grep_output="$TEMP_PATH"
+    if ! capture_grep_output "$grep_output" "content candidate grep failed" -iaUHnZE --null -e "$CONTENT_STEM_RE" -- "${chunk[@]}"; then
+      return 1
+    fi
     while IFS= read -r -d '' path && IFS= read -r rest; do
       s_path+=("$path")
       s_ln+=("${rest%%:*}")
       s_line+=("${rest#*:}")
-    done < <(LC_ALL=C grep -iaUHnZE --null -e "$CONTENT_STEM_RE" -- "${chunk[@]}" 2>/dev/null || true)
+    done <"$grep_output"
   done
 
   gi=0
@@ -1428,62 +1690,82 @@ scan_content_files() {
 
 COLLECTED=()
 collect_z() {
-  local path
+  local path output
   COLLECTED=()
+  next_temp_path "path-inventory"
+  output="$TEMP_PATH"
+  if ! "$@" >"$output" 2>/dev/null; then
+    mark_scan_incomplete "command" "Git path inventory failed"
+    return 1
+  fi
   while IFS= read -r -d '' path; do
     COLLECTED+=("$path")
-  done < <("$@" 2>/dev/null || true)
+  done <"$output"
 }
 
 main() {
   local root
-  root="$(repo_root)"
-  if [ -z "$root" ]; then
-    printf 'post-turn-safety: git repository root unavailable; cannot scan changed content.\n' >&2
-    return 1
+  local WORKDIR
+  local head_status
+  if ! root="$(repo_root)" || [ -z "$root" ]; then
+    printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
+    return 2
   fi
 
-  cd "$root" || {
-    printf 'post-turn-safety: cannot enter repository root %s.\n' "$root" >&2
-    return 1
+  cd "$root" 2>/dev/null || {
+    printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
+    return 2
   }
 
-  local head_present=0
-  if has_head; then head_present=1; fi
-
-  local -a worktree_paths=() cached_paths=() untracked_paths=()
-  if ((head_present)); then
-    collect_z git diff --name-only -z --diff-filter=ACMR HEAD --
-  else
-    collect_z git ls-files -z
-  fi
-  worktree_paths=(${COLLECTED[@]+"${COLLECTED[@]}"})
-  collect_z git diff --cached --name-only -z --diff-filter=ACMR --
-  cached_paths=(${COLLECTED[@]+"${COLLECTED[@]}"})
-  collect_z git ls-files --others --exclude-standard -z
-  untracked_paths=(${COLLECTED[@]+"${COLLECTED[@]}"})
-
-  # Fast exit: nothing changed, staged, or untracked, so there is nothing to
-  # scan and no batch work to set up.
-  if ((${#worktree_paths[@]} == 0 && ${#cached_paths[@]} == 0 && ${#untracked_paths[@]} == 0)); then
-    return 0
-  fi
-
-  local WORKDIR
   WORKDIR="$(mktemp -d 2>/dev/null)" || WORKDIR=""
   if [ -z "$WORKDIR" ]; then
-    printf 'post-turn-safety: cannot create scan work directory; cannot scan changed content.\n' >&2
-    return 1
+    printf 'post-turn-safety: scan incomplete (scan workspace unavailable).\n' >&2
+    return 2
   fi
   # shellcheck disable=SC2064
   trap "rm -rf '$WORKDIR'" EXIT
+
+  local head_present=0
+  has_head
+  head_status=$?
+  if [ "$head_status" -eq 0 ]; then
+    head_present=1
+  elif [ "$head_status" -ne 128 ]; then
+    mark_scan_incomplete "command" "Git HEAD inspection failed"
+  fi
+
+  local -a worktree_paths=() cached_paths=() untracked_paths=()
+  if ((BAIL == 0)); then
+    if ((head_present)); then
+      collect_z git diff --name-only -z --diff-filter=ACMR HEAD --
+    else
+      collect_z git ls-files -z
+    fi
+    worktree_paths=(${COLLECTED[@]+"${COLLECTED[@]}"})
+  fi
+  if ((BAIL == 0)); then
+    collect_z git diff --cached --name-only -z --diff-filter=ACMR --
+    cached_paths=(${COLLECTED[@]+"${COLLECTED[@]}"})
+  fi
+  if ((BAIL == 0)); then
+    collect_z git ls-files --others --exclude-standard -z
+    untracked_paths=(${COLLECTED[@]+"${COLLECTED[@]}"})
+  fi
+
+  # Fast exit: nothing changed, staged, or untracked, so there is nothing to
+  # scan and no batch work to set up.
+  if ((BAIL == 0 && ${#worktree_paths[@]} == 0 && ${#cached_paths[@]} == 0 && ${#untracked_paths[@]} == 0)); then
+    return 0
+  fi
 
   PENDING_FILES=$((${#worktree_paths[@]} + ${#cached_paths[@]} + ${#untracked_paths[@]}))
 
   # One gate pass covers every path scanned from worktree content: the tracked
   # pass-1 set and the untracked set (plus the ls-files set when HEAD is
   # unborn, which is content-scanned like untracked files).
-  gate_scannable_files ${worktree_paths[@]+"${worktree_paths[@]}"} ${untracked_paths[@]+"${untracked_paths[@]}"}
+  if ((BAIL == 0)); then
+    gate_scannable_files ${worktree_paths[@]+"${worktree_paths[@]}"} ${untracked_paths[@]+"${untracked_paths[@]}"}
+  fi
 
   # Pass 1: tracked changes (worktree vs HEAD), or full index contents when
   # HEAD is unborn. Mirrors scan_tracked_changes/scan_worktree_diff_file.
@@ -1518,16 +1800,20 @@ main() {
     local -A dirty_vs_index=()
     if ((head_present)); then
       collect_z git diff --name-only -z --
-      for path in ${COLLECTED[@]+"${COLLECTED[@]}"}; do
-        dirty_vs_index["$path"]=1
-      done
+      if ((BAIL == 0)); then
+        for path in ${COLLECTED[@]+"${COLLECTED[@]}"}; do
+          dirty_vs_index["$path"]=1
+        done
+      fi
     fi
     local -a cached_candidates=()
-    for path in ${cached_paths[@]+"${cached_paths[@]}"}; do
-      if ((head_present == 0)) || [ -n "${dirty_vs_index[$path]:-}" ] || [ -z "${pass1_scanned[$path]:-}" ]; then
-        cached_candidates+=("$path")
-      fi
-    done
+    if ((BAIL == 0)); then
+      for path in ${cached_paths[@]+"${cached_paths[@]}"}; do
+        if ((head_present == 0)) || [ -n "${dirty_vs_index[$path]:-}" ] || [ -z "${pass1_scanned[$path]:-}" ]; then
+          cached_candidates+=("$path")
+        fi
+      done
+    fi
 
     # Staged-size gate, batched: mirrors is_scannable_staged_file, which only
     # checks the index blob size (`git cat-file -s :path`).
@@ -1535,22 +1821,43 @@ main() {
     if ((${#cached_candidates[@]} > 0)); then
       local -a batch_check_in=()
       local -a sizes=()
-      local i
+      local i blob_size sizes_output cat_status
       for path in "${cached_candidates[@]}"; do
         if [[ "$path" == *$'\n'* ]]; then
-          local blob_size
-          blob_size="$(git cat-file -s ":$path" 2>/dev/null | tr -d '[:space:]')"
-          case "$blob_size" in '' | *[!0-9]*) continue ;; esac
+          if ! blob_size="$(git cat-file -s ":$path" 2>/dev/null)"; then
+            mark_scan_incomplete "command" "staged byte-count command failed"
+            break
+          fi
+          case "$blob_size" in
+            '' | *[!0-9[:space:]]*)
+              mark_scan_incomplete "command" "staged byte-count command returned invalid output"
+              break
+              ;;
+          esac
           [ "$blob_size" -le "$MAX_FILE_BYTES" ] && cached_scan+=("$path")
           continue
         fi
         batch_check_in+=("$path")
       done
-      if ((${#batch_check_in[@]} > 0)); then
-        mapfile -t sizes < <(printf ':%s\n' "${batch_check_in[@]}" | git cat-file --batch-check='%(objectsize)' 2>/dev/null || true)
-        for ((i = 0; i < ${#batch_check_in[@]} && i < ${#sizes[@]}; i++)); do
+      if ((BAIL == 0 && ${#batch_check_in[@]} > 0)); then
+        next_temp_path "staged-byte-count"
+        sizes_output="$TEMP_PATH"
+        printf ':%s\n' "${batch_check_in[@]}" | git cat-file --batch-check='%(objectsize)' >"$sizes_output" 2>/dev/null
+        cat_status=$?
+        if [ "$cat_status" -ne 0 ]; then
+          mark_scan_incomplete "command" "staged byte-count command failed"
+        else
+          mapfile -t sizes <"$sizes_output"
+        fi
+        if ((BAIL == 0 && ${#sizes[@]} != ${#batch_check_in[@]})); then
+          mark_scan_incomplete "command" "staged byte-count command returned incomplete output"
+        fi
+        for ((i = 0; BAIL == 0 && i < ${#batch_check_in[@]}; i++)); do
           case "${sizes[i]}" in
-            '' | *[!0-9]*) continue ;;
+            '' | *[!0-9[:space:]]*)
+              mark_scan_incomplete "command" "staged byte-count command returned invalid output"
+              break
+              ;;
           esac
           if ((sizes[i] <= MAX_FILE_BYTES)); then
             cached_scan+=("${batch_check_in[i]}")
@@ -1558,9 +1865,11 @@ main() {
         done
       fi
     fi
-    DIFF_FILES_DONE=0
-    run_diff_batch cached ${cached_scan[@]+"${cached_scan[@]}"}
-    PENDING_FILES=$((PENDING_FILES - (BAIL ? DIFF_FILES_DONE : ${#cached_paths[@]})))
+    if ((BAIL == 0)); then
+      DIFF_FILES_DONE=0
+      run_diff_batch cached ${cached_scan[@]+"${cached_scan[@]}"}
+      PENDING_FILES=$((PENDING_FILES - (BAIL ? DIFF_FILES_DONE : ${#cached_paths[@]})))
+    fi
   fi
 
   # Untracked pass: full-content scan of non-ignored untracked files, mirroring
@@ -1578,8 +1887,12 @@ main() {
 
   # An incomplete native scan must block instead of showing a clean turn.
   if ((BAIL)); then
-    ((PENDING_FILES > 0)) || PENDING_FILES=1
-    printf 'post-turn-safety: scan incomplete, %s file(s) unscanned (budget %ss exceeded; raise GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS to scan more).\n' "$PENDING_FILES" "$MAX_SECONDS" >&2
+    if [ "$INCOMPLETE_KIND" = "budget" ]; then
+      ((PENDING_FILES > 0)) || PENDING_FILES=1
+      printf 'post-turn-safety: scan incomplete, %s file(s) unscanned (budget %ss exceeded; raise GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS to scan more).\n' "$PENDING_FILES" "$MAX_SECONDS" >&2
+    else
+      printf 'post-turn-safety: scan incomplete (%s).\n' "$INCOMPLETE_REASON" >&2
+    fi
   fi
 
   if [ "$findings" -gt 0 ]; then

@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -201,6 +201,8 @@ last_reviewed: 2026-08-07
 **Recurrence 2026-08-02:** The PR #57 scanner-parity fix first lost the raw assignment key because a placeholder helper overwrote Bash's global `BASH_REMATCH`, then broader forced-fallback fixtures exposed Docker space-form and multi-assignment drift, dotted config-reference drift, npm secondary-assignment drift, and quoted-password mismatches. The complete native-versus-fallback finding-set comparison caught these after the initial named examples agreed. Capture regex matches before calling helpers, and compare normalized findings across the full existing block-and-allow corpus rather than treating a few equal exit codes as parity. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_literal_credential_assignment`), and `test/integration/post-turn-safety-hook.helpers.ts` (search: `hookFindingSignatures`).
 
 **Recurrence 2026-08-02:** PR #57 review found `plans time` rejecting `stop --discard-open` under the clock reversal whose own error names discard as the remedy. The suite had a discard case and a reversal case; neither crossed. Rule: when an error names a recovery path, test that path under the condition raising it. Evidence: `src/cli/plans-time.ts` (search: `if (transition.discardOpen) return;`), `test/unit/plans-time.test.ts` (search: `lets discard-open recover a span the clock reversed under`).
+
+**Recurrence 2026-08-09:** M00's named failure cases went green before a complete command/read-boundary inventory found unchecked compatibility `tr` normalization and the selected-file open. Inventory every external command, redirection, and direct content read before treating named reproductions as completeness proof. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `fallback_lower`), `workflow/hooks/post-turn-safety.sh` (search: `fallback_open_scan_file`), and `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `blocks when selected content disappears after byte counting`).
 
 ---
 

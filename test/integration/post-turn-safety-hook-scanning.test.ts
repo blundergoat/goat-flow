@@ -6,7 +6,8 @@
  * scanner behaves as asserted, not a reimplementation of it.
  */
 import assert from "node:assert/strict";
-import { readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 
@@ -27,6 +28,9 @@ import {
   runGit,
   commitAll,
   runHook,
+  hookFindingSignatures,
+  withCommandShim,
+  assertHookIncomplete,
   assertHookAllows,
   assertHookBlocks,
   TEST_CLIENT_SECRET,
@@ -36,6 +40,177 @@ import {
 } from "./post-turn-safety-hook.helpers.js";
 
 describe("post-turn-safety hook: git states and batched scanning", () => {
+  function assertIncompleteOnBothScanners(
+    root: string,
+    env: Record<string, string> = {},
+  ): void {
+    for (const forceFallback of ["0", "1"]) {
+      assertHookIncomplete(root, {
+        ...env,
+        [FORCE_BASH3_ENV_KEY]: forceFallback,
+      });
+    }
+  }
+
+  describe("incomplete scan failures", () => {
+    it("blocks when the repository root is unavailable on both paths", () => {
+      const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-no-git-"));
+      try {
+        assertIncompleteOnBothScanners(root);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+
+    it("blocks when the reported repository root cannot be entered", () => {
+      withTempRepo((root) => {
+        withCommandShim(
+          "git",
+          [
+            'if [ "$1" = "rev-parse" ] && [ "${2:-}" = "--show-toplevel" ]; then',
+            '  printf "%s\\n" "$GOAT_FLOW_TEST_MISSING_ROOT"',
+            "  exit 0",
+            "fi",
+          ].join("\n"),
+          (shimEnv) => {
+            assertIncompleteOnBothScanners(root, {
+              ...shimEnv,
+              GOAT_FLOW_TEST_MISSING_ROOT: join(root, "missing-root"),
+            });
+          },
+        );
+      });
+    });
+
+    it("blocks when the scan workspace cannot be created", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+        withCommandShim("mktemp", "exit 2", (shimEnv) => {
+          assertIncompleteOnBothScanners(root, shimEnv);
+        });
+      });
+    });
+
+    it("blocks when Git cannot inventory untracked files", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+        withCommandShim(
+          "git",
+          'case " $* " in *" ls-files --others --exclude-standard -z "*) exit 2 ;; esac',
+          (shimEnv) => {
+            assertIncompleteOnBothScanners(root, shimEnv);
+          },
+        );
+      });
+    });
+
+    it("blocks when Git cannot produce a tracked diff", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "safe=1\n");
+        commitAll(root, "add tracked diff fixture");
+        writeFile(root, "settings.env", "safe=2\n");
+        withCommandShim(
+          "git",
+          'case " $* " in *" diff "*" --unified=0 "*) exit 2 ;; esac',
+          (shimEnv) => {
+            assertIncompleteOnBothScanners(root, shimEnv);
+          },
+        );
+      });
+    });
+
+    it("blocks when a native candidate grep fails", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "safe=1\n");
+        withCommandShim(
+          "grep",
+          'case " $* " in *" -aUHnZE "*|*" -iaUHnZE "*) exit 2 ;; esac',
+          (shimEnv) => {
+            assertHookIncomplete(root, {
+              ...shimEnv,
+              [FORCE_BASH3_ENV_KEY]: "0",
+            });
+          },
+        );
+      });
+    });
+
+    it("blocks when the binary-content gate fails on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "safe=1\n");
+        withCommandShim(
+          "grep",
+          'case " $* " in *" -IlZ "*|*" -Iq "*) exit 2 ;; esac',
+          (shimEnv) => {
+            assertIncompleteOnBothScanners(root, shimEnv);
+          },
+        );
+      });
+    });
+
+    it("blocks when byte counting fails on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "safe=1\n");
+        withCommandShim("wc", "exit 2", (shimEnv) => {
+          assertIncompleteOnBothScanners(root, shimEnv);
+        });
+      });
+    });
+
+    it("blocks when selected content disappears after byte counting", () => {
+      withTempRepo((root) => {
+        withCommandShim(
+          "wc",
+          [
+            'PATH="$GOAT_FLOW_TEST_ORIGINAL_PATH" wc "$@"',
+            "status=$?",
+            'rm -f -- "$GOAT_FLOW_TEST_VANISH_PATH"',
+            'exit "$status"',
+          ].join("\n"),
+          (shimEnv) => {
+            for (const forceFallback of ["0", "1"]) {
+              writeFile(root, "settings.env", "safe=1\n");
+              assertHookIncomplete(root, {
+                ...shimEnv,
+                GOAT_FLOW_TEST_VANISH_PATH: join(root, "settings.env"),
+                [FORCE_BASH3_ENV_KEY]: forceFallback,
+              });
+            }
+          },
+        );
+      });
+    });
+
+    it("blocks when fallback text normalization fails", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+        withCommandShim("tr", "exit 2", (shimEnv) => {
+          assertHookIncomplete(root, {
+            ...shimEnv,
+            [FORCE_BASH3_ENV_KEY]: "1",
+          });
+        });
+      });
+    });
+
+    it("blocks when staged blob sizing fails on both paths", () => {
+      withTempRepo((root) => {
+        writeFile(root, "settings.env", "safe=1\n");
+        commitAll(root, "add staged size fixture");
+        writeFile(root, "settings.env", "safe=2\n");
+        runGit(root, ["add", "settings.env"]);
+        writeFile(root, "settings.env", "safe=1\n");
+        withCommandShim(
+          "git",
+          'case " $* " in *" cat-file "*) exit 2 ;; esac',
+          (shimEnv) => {
+            assertIncompleteOnBothScanners(root, shimEnv);
+          },
+        );
+      });
+    });
+  });
+
   it("detects new hazards added to files that were already dirty", () => {
     withTempRepo((root) => {
       writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
@@ -268,6 +443,11 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
         nativeResult.status,
         diagnostics,
       );
+      assert.deepStrictEqual(
+        hookFindingSignatures(compatibilityResult.stderr),
+        hookFindingSignatures(nativeResult.stderr),
+        diagnostics,
+      );
       // A supplied warning pattern confirms both paths explain the same user action.
       if (expectedPattern) {
         assert.match(nativeResult.stderr, expectedPattern, diagnostics);
@@ -356,6 +536,29 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
           root,
           "conflict.txt",
           "<<<<<<< HEAD\nleft\n=======\nright\n>>>>>>> branch\n",
+        );
+
+        assertScannerParity(root, 2, /merge conflict marker/u);
+      });
+    });
+
+    it("does not let added content impersonate a fallback diff header", () => {
+      withTempRepo((root) => {
+        writeFile(root, "conflict.txt", "safe\n");
+        commitAll(root, "add fallback frame fixture");
+        writeFile(
+          root,
+          "conflict.txt",
+          [
+            "safe",
+            "++ b/nonexistent.env",
+            "<<<<<<< HEAD",
+            "left",
+            "=======",
+            "right",
+            ">>>>>>> branch",
+            "",
+          ].join("\n"),
         );
 
         assertScannerParity(root, 2, /merge conflict marker/u);
