@@ -93,6 +93,27 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     );
   });
 
+  /*
+   * A user starting a Standard plan needs an ISSUE.md beside the milestone files.
+   * The format reference guides that artifact and must stay unchanged.
+   */
+  it("writes the user-facing ISSUE artifact without treating its format reference as output", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const planGuidance = readProjectFile(skillPath);
+
+      assert.match(
+        planGuidance,
+        /\*\*ISSUE\.md:\*\* Standard\+ writes `ISSUE\.md` using `references\/issue-format\.md`/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        planGuidance,
+        /Standard\+ writes `references\/issue-format\.md`/u,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps public goat-plan consumers aligned with proportional planning", () => {
     const presetCatalog = JSON.parse(
       readProjectFile("src/dashboard/preset-prompts.json"),

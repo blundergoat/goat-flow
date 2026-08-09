@@ -34,7 +34,11 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
           "Boundary Commands",
         );
         assert.match(boundaryCommands, /\*\*NEVER:\*\*/, skillPath);
-        assert.match(boundaryCommands, /\*\*ALWAYS:\*\*/, skillPath);
+        assert.match(
+          boundaryCommands,
+          /\*\*ALWAYS(?: in Diagnose mode)?:\*\*/u,
+          skillPath,
+        );
         assert.match(boundaryCommands, /\*\*DEFER TO:\*\*/, skillPath);
       });
     });

@@ -51,7 +51,6 @@ import {
   readCodexDenyLauncher,
   installClaudeDenyHook,
   installCodexDenyHook,
-  MANAGED_SHAPE_MUTATIONS,
   HOOK_TIMEOUT_MODES,
   launcherDiagnostics,
   readClaudeGruffCommands,
@@ -490,23 +489,10 @@ describe("hook registrar: launchers and installation", () => {
     });
   });
 
-  for (const fixture of MANAGED_SHAPE_MUTATIONS) {
-    it(`rejects a ${fixture.name} without exposing its root`, () => {
-      withTempProject((root) => {
-        const launcher = installCodexDenyHook(root);
-        fixture.mutate(root);
-        const result = runCodexLauncher(launcher, root);
-
-        assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
-        assert.match(result.stderr, /managed root incomplete/iu);
-        assert.equal(result.stderr.includes(root), false);
-      });
-    });
-  }
 });
 
 describe("hook launcher script validation", () => {
-  const LAUNCHER = resolve(
+  const HOOK_LAUNCHER_PATH = resolve(
     import.meta.dirname,
     "..",
     "..",
@@ -517,39 +503,57 @@ describe("hook launcher script validation", () => {
 
   /**
    * Run the canonical launcher exactly as agent configs do.
-   * Side effect: starts one child process with the fixture project as its working directory.
+   * Use this to observe the status and message an agent receives from a fixture hook.
+   *
+   * @param fixtureProjectPath - Non-empty project path; an empty path cannot host the fixture hook.
+   * @param hookScriptRelativePath - Non-empty managed hook path shown to the launcher.
+   * @param responseMode - Agent response format; empty or omitted uses fail-closed policy output.
+   * @param hookEnvironment - Launch environment; missing keys keep the user's current environment.
+   * @returns Completed launcher result; empty output is valid for a hook that has nothing to report.
    */
   function runLauncherProcess(
-    root: string,
-    scriptRel: string,
+    fixtureProjectPath: string,
+    hookScriptRelativePath: string,
     responseMode = "policy",
-    env: NodeJS.ProcessEnv = process.env,
+    hookEnvironment: NodeJS.ProcessEnv = process.env,
   ) {
-    return spawnSync(process.execPath, [LAUNCHER, scriptRel, responseMode], {
-      cwd: root,
-      encoding: "utf8" as const,
-      env,
-    });
+    return spawnSync(
+      process.execPath,
+      [HOOK_LAUNCHER_PATH, hookScriptRelativePath, responseMode],
+      {
+        cwd: fixtureProjectPath,
+        encoding: "utf8" as const,
+        env: hookEnvironment,
+      },
+    );
   }
 
   /**
    * Create the managed hooks directory inside a fixture project.
-   * Side effect: writes the `.goat-flow/hooks` directory tree under the temporary project.
+   * Use this before writing the hook a simulated agent will launch.
+   *
+   * @param fixtureProjectPath - Non-empty project path; empty would escape the intended fixture.
+   * @returns Created hook directory; never empty because it is rooted in the fixture project.
    */
-  function makeHookDir(root: string): string {
-    const hookDir = join(root, ".goat-flow", "hooks");
-    mkdirSync(hookDir, { recursive: true });
-    return hookDir;
+  function createManagedHookDirectory(fixtureProjectPath: string): string {
+    const managedHookDirectoryPath = join(
+      fixtureProjectPath,
+      ".goat-flow",
+      "hooks",
+    );
+    mkdirSync(managedHookDirectoryPath, { recursive: true });
+    return managedHookDirectoryPath;
   }
 
+  // Every supported agent mode must turn the same deadline into its own user-facing response.
   for (const fixture of HOOK_TIMEOUT_MODES) {
     it(`bounds ${fixture.mode} hooks with a timeout-specific response`, () => {
       withTempProject((root) => {
         const scriptRel = ".goat-flow/hooks/slow.sh";
-        const hookDir = makeHookDir(root);
+        const hookDir = createManagedHookDirectory(root);
         writeFileSync(
           join(hookDir, "slow.sh"),
-          "#!/usr/bin/env bash\nsleep 2 &\nwait\n",
+          "#!/usr/bin/env bash\nwhile :; do :; done\n",
         );
         const startedAt = Date.now();
         const result = runLauncherProcess(root, scriptRel, fixture.mode, {
@@ -572,11 +576,58 @@ describe("hook launcher script validation", () => {
     });
   }
 
+  /*
+   * A user's hook may start a formatter child before its deadline expires.
+   * The agent must receive its timeout response without waiting for that child to finish.
+   */
+  it("returns promptly after a started hook descendant exceeds its deadline", () => {
+    withTempProject((fixtureProjectPath) => {
+      const hookScriptRelativePath = ".goat-flow/hooks/started-child.sh";
+      const managedHookDirectoryPath =
+        createManagedHookDirectory(fixtureProjectPath);
+      const childStartedMarkerPath = join(
+        managedHookDirectoryPath,
+        "child-started.marker",
+      );
+      writeFileSync(
+        join(managedHookDirectoryPath, "started-child.sh"),
+        "#!/usr/bin/env bash\nsleep 2 &\nprintf 'started\\n' > .goat-flow/hooks/child-started.marker\nwait\n",
+      );
+      const launchStartedAt = Date.now();
+      const launcherResult = runLauncherProcess(
+        fixtureProjectPath,
+        hookScriptRelativePath,
+        "gruff",
+        {
+          ...process.env,
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "250",
+        },
+      );
+      const userWaitMilliseconds = Date.now() - launchStartedAt;
+
+      assert.equal(
+        launcherResult.status,
+        0,
+        launcherDiagnostics(launcherResult),
+      );
+      assert.match(
+        launcherResult.stderr,
+        /exceeded its deadline and was killed/u,
+      );
+      assert.equal(readFileSync(childStartedMarkerPath, "utf8"), "started\n");
+      assert.ok(
+        userWaitMilliseconds < 1_500,
+        `${launcherDiagnostics(launcherResult)}\nelapsed_ms=${userWaitMilliseconds}`,
+      );
+    });
+  });
+
   it("rejects invalid timeout overrides and applies mode ceilings", () => {
     withTempProject((root) => {
       const scriptRel = ".goat-flow/hooks/quick.sh";
-      const hookDir = makeHookDir(root);
+      const hookDir = createManagedHookDirectory(root);
       writeFileSync(join(hookDir, "quick.sh"), "#!/usr/bin/env bash\nexit 0\n");
+      // Invalid values model settings a user mistyped or copied with unsupported syntax.
       for (const value of ["0", "25001", "1.5", "+1", " 1", "invalid"]) {
         const result = runLauncherProcess(root, scriptRel, "policy", {
           ...process.env,
@@ -594,6 +645,7 @@ describe("hook launcher script validation", () => {
         GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "25000",
       });
       assert.equal(policyCeiling.status, 0, launcherDiagnostics(policyCeiling));
+      // Long-running feedback modes accept their larger ceiling but reject anything above it.
       for (const mode of ["gruff", "post-turn"]) {
         const result = runLauncherProcess(root, scriptRel, mode, {
           ...process.env,
@@ -618,7 +670,7 @@ describe("hook launcher script validation", () => {
 
   it("fails closed when the managed hook script is a symlink", () => {
     withTempProject((root) => {
-      const hookDir = makeHookDir(root);
+      const hookDir = createManagedHookDirectory(root);
       const redirectTarget = join(root, "innocent-looking.sh");
       writeFileSync(redirectTarget, "#!/usr/bin/env bash\nexit 0\n");
       symlinkSync(redirectTarget, join(hookDir, "deny-dangerous.sh"));
@@ -635,7 +687,7 @@ describe("hook launcher script validation", () => {
 
   it("fails closed when the managed hook path is not a regular file", () => {
     withTempProject((root) => {
-      const hookDir = makeHookDir(root);
+      const hookDir = createManagedHookDirectory(root);
       mkdirSync(join(hookDir, "deny-dangerous.sh"));
 
       const result = runLauncherProcess(
@@ -650,7 +702,7 @@ describe("hook launcher script validation", () => {
 
   it("fails closed when the managed hook script has extra hard links", () => {
     withTempProject((root) => {
-      const hookDir = makeHookDir(root);
+      const hookDir = createManagedHookDirectory(root);
       const scriptPath = join(hookDir, "deny-dangerous.sh");
       writeFileSync(scriptPath, "#!/usr/bin/env bash\nexit 0\n");
       linkSync(scriptPath, join(root, "second-name.sh"));
@@ -689,61 +741,6 @@ describe("hook launcher script validation", () => {
       } finally {
         rmSync(outsideHooks, { recursive: true, force: true });
       }
-    });
-  });
-});
-
-describe("hook registrar: unrelated hook preservation", () => {
-  // The user's own Stop hook is called `custom-post-turn-safety.sh`, which merely contains the
-  // managed name, so a wrong claim would delete their guard when the managed hook is switched off.
-  // This fixture writes their settings file and toggles the hook, because only the off step deletes it.
-  it("preserves user hooks whose names merely contain a managed script name", () => {
-    withTempProject((root) => {
-      mkdirSync(join(root, ".claude"), { recursive: true });
-      writeFileSync(
-        join(root, ".claude", "settings.json"),
-        `${JSON.stringify(
-          {
-            hooks: {
-              Stop: [
-                {
-                  hooks: [
-                    {
-                      type: "command",
-                      command: "bash .claude/hooks/custom-post-turn-safety.sh",
-                      timeout: 30,
-                    },
-                  ],
-                },
-              ],
-            },
-          },
-          null,
-          2,
-        )}\n`,
-      );
-
-      applyHookState("post-turn-safety", true, root);
-      const afterEnable = readFileSync(
-        join(root, ".claude", "settings.json"),
-        "utf-8",
-      );
-      assert.match(
-        afterEnable,
-        /custom-post-turn-safety\.sh/u,
-        "managed registration must not claim the user's similarly named hook",
-      );
-
-      applyHookState("post-turn-safety", false, root);
-      const afterDisable = readFileSync(
-        join(root, ".claude", "settings.json"),
-        "utf-8",
-      );
-      assert.match(
-        afterDisable,
-        /custom-post-turn-safety\.sh/u,
-        "managed removal must not delete the user's similarly named hook",
-      );
     });
   });
 });

@@ -30,6 +30,9 @@ import {
   readAntigravitySafetyCommand,
   writePostTurnCapableSurfaces,
   verifyAgentHookRegistrationMatrix,
+  installCodexDenyHook,
+  MANAGED_SHAPE_MUTATIONS,
+  runCodexLauncher,
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: surface detection, toggles, and sync", () => {
@@ -629,6 +632,84 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         ".claude/hooks/guard-common.sh",
         ".claude/hooks/guard-secret-paths.sh",
       ]);
+    });
+  });
+});
+
+describe("hook registrar: managed surface preservation", () => {
+  // Each malformed managed root represents a user project the launcher must reject safely.
+  for (const fixture of MANAGED_SHAPE_MUTATIONS) {
+    it(`rejects a ${fixture.name} without exposing its root`, () => {
+      withTempProject((fixtureProjectPath) => {
+        const installedLauncher = installCodexDenyHook(fixtureProjectPath);
+        fixture.mutate(fixtureProjectPath);
+        const launcherResult = runCodexLauncher(
+          installedLauncher,
+          fixtureProjectPath,
+        );
+
+        assert.equal(
+          launcherResult.status,
+          2,
+          `${launcherResult.stdout}\n${launcherResult.stderr}`,
+        );
+        assert.match(launcherResult.stderr, /managed root incomplete/iu);
+        assert.equal(
+          launcherResult.stderr.includes(fixtureProjectPath),
+          false,
+        );
+      });
+    });
+  }
+
+  // The user's own Stop hook merely contains the managed name, so toggling must preserve it.
+  it("preserves user hooks whose names merely contain a managed script name", () => {
+    withTempProject((fixtureProjectPath) => {
+      mkdirSync(join(fixtureProjectPath, ".claude"), { recursive: true });
+      writeFileSync(
+        join(fixtureProjectPath, ".claude", "settings.json"),
+        `${JSON.stringify(
+          {
+            hooks: {
+              Stop: [
+                {
+                  hooks: [
+                    {
+                      type: "command",
+                      command: "bash .claude/hooks/custom-post-turn-safety.sh",
+                      timeout: 30,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      applyHookState("post-turn-safety", true, fixtureProjectPath);
+      const settingsAfterEnable = readFileSync(
+        join(fixtureProjectPath, ".claude", "settings.json"),
+        "utf-8",
+      );
+      assert.match(
+        settingsAfterEnable,
+        /custom-post-turn-safety\.sh/u,
+        "managed registration must not claim the user's similarly named hook",
+      );
+
+      applyHookState("post-turn-safety", false, fixtureProjectPath);
+      const settingsAfterDisable = readFileSync(
+        join(fixtureProjectPath, ".claude", "settings.json"),
+        "utf-8",
+      );
+      assert.match(
+        settingsAfterDisable,
+        /custom-post-turn-safety\.sh/u,
+        "managed removal must not delete the user's similarly named hook",
+      );
     });
   });
 });

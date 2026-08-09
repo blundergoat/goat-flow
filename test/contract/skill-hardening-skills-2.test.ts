@@ -332,6 +332,57 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     );
   });
 
+  /*
+   * A user receiving a 100/100 critique still sees what the meta-audit found.
+   * The clean attestation keeps the required section honest and non-empty.
+   */
+  it("renders truthful goat-critique meta-audit issues for clean results", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
+      const outputFormat = readMarkdownSection(skillPath, "Output Format");
+
+      assert.match(
+        synthesis,
+        /at 100\/100 write exactly `No failed meta-audit checks\.`/u,
+        skillPath,
+      );
+      assert.match(synthesis, /Never invent issues/u, skillPath);
+      assert.match(
+        outputFormat,
+        /## Auto-Detected Issues  <!-- failures or exact clean attestation; always present -->/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        outputFormat,
+        /## Auto-Detected Issues[^\n]+if any/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/rubric-examples.md",
+      ),
+      (referencePath) => {
+        const metaAudit = readMarkdownSection(
+          referencePath,
+          "Meta-audit rubric (Phase 5.5)",
+        );
+        assert.match(
+          metaAudit,
+          /When all 10 checks pass, write exactly `No failed meta-audit checks\.`/u,
+          referencePath,
+        );
+        assert.match(
+          metaAudit,
+          /A clean attestation is not an issue and must not be expanded into one/u,
+          referencePath,
+        );
+      },
+    );
+  });
+
   it("keeps goat-critique lifecycle aligned with its accepted decision and public guidance", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
