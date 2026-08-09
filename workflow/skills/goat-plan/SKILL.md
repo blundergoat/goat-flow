@@ -11,7 +11,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 
 ## When to Use
 
-Use when work needs milestone tracking: milestones, replans, rescope, or resume-from-plan. Files live in `.goat-flow/plans/<active>/`.
+Use for milestones, replans, rescope, or resume-from-plan. Files live in `.goat-flow/plans/<active>/`.
 
 ## Boundary Commands
 
@@ -54,9 +54,9 @@ R. **Reconcile Existing Plan State** - explicit reconcile/audit/refresh. Compare
 3. **Small File-Write** - Hotfix / Small Feature scope (1-2 milestones, low blast radius), no analysis signals. Same write path as Mode 4; the only difference is ceremony - concise milestone files, not full ones. Write directly to `.goat-flow/plans/<active>/`.
 4. **File-Write (default at Standard+)** - implementation signals ("create milestones", "set up the plan", "start planning") OR Standard / System / Infrastructure scope with a clear objective and no analysis signals. Write full milestone files directly to `.goat-flow/plans/<active>/`.
 
-If ambiguous, ask. Never silently pick.
+If ambiguous, ask; never guess.
 
-**Minimum viable input:** What to build. Everything else can be inferred or asked.
+**Minimum input:** What to build. Infer or ask everything else.
 
 **CHECKPOINT (Path-Only Intake):** "Mode: Path-Only Intake. Orientation summary for [path]: [status]. Active plan pointer: [state]. Next action needed from user."
 
@@ -94,7 +94,7 @@ Each item states the claim and evidence with a proof-class tag. Omit inapplicabl
 
 **Tasks:** Use one action, target, and done condition. Put rationale, paths, and proof beneath the task only when needed. Pin paths when downstream work depends on them.
 
-**Effort estimate (agent-time):** Count task, proof, mid-proof, and admin units; never use human wall-clock intuition. Start a `plans time` receipt first; switch category when work kind changes. Plan-level target: ~70% product work, ~20% proof, ~10% everything else—a flexible guide, not a quota. Remove duplicate proof; retain justified deviations. Optional `Forecast range:` carries a `likely` equal to the headline.
+**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin entry; exclude `[HUMAN]`/zero-minute items. `Forecast basis:` records `<n> agent work units` plus rates. Use `0.5-2.5-10 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Start a `plans time` receipt first. Optional `Forecast range:` stays legacy-compatible; a basis derives headline/range.
 
 **Cold-start bar:** A fresh agent can identify relevant files, conventions, scope, commands, and recovery steps without prior conversation.
 

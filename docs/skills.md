@@ -186,7 +186,9 @@ flowchart TD
 
 **Planning lenses:** Prove It Works, Make It Real, Make It Solid, and Make It Shine are optional planning lenses, not required phases. A spike exists only for a named uncertainty. Lenses merge or disappear when they do not reduce uncertainty, deliver independent value, or create a real decision gate.
 
-**Artifacts and proof:** Small plans target one screen. Standard overviews put outcome, budget, must-deliver scope, exclusions, risk, proof, and next action first. Milestones keep tasks executable for a fresh agent, organise proof as claim → evidence, give each command one home, and omit empty sections.
+**Artifacts and proof:** Small plans target one screen. Standard overviews put outcome, budget, must-deliver scope, exclusions, risk, proof, and next action first. Milestones keep tasks executable for a fresh agent, organise proof as claim → evidence, give each command one home, and omit empty sections. Delivery bands in `ISSUE.md` are roll-ups of milestone forecasts, never inputs used to size those milestones.
+
+**Agent-time forecasts:** Count positive agent-owned Task, Proof, Mid-proof, and admin entries; exclude `[HUMAN]` and zero-minute items. Below three matching receipt-backed bases, multiply the count by the `0.5-2.5-10 min/unit` cold-start prior and record the inputs in `Forecast basis:`. At three or more samples, use the low-median-high rates shown by `plans check`. A changed scope or `reforecast required` advisory blocks implementation until the basis, range, headline, and item estimates agree.
 
 **Execution and recovery:** Authorized build/change requests may return to ordinary ACT without another implementation-approval pause. Every milestone still stops on invalidated assumptions, kill criteria, changed scope, or conflicting evidence. Fresh proof records actual effort before the blocking human gate. Reconciliation remains read-only, and plan state remains local workflow context.
 

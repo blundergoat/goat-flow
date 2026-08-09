@@ -8,7 +8,9 @@ import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
 import {
+  countAgentWorkUnits,
   isNumericActual,
+  validateForecastBasis,
   type PlanEffortNumericActual,
   type PlanEffortSplit,
 } from "./plans-effort.js";
@@ -117,6 +119,8 @@ function isValidationWarning(
 
   // Drifted range notation is as fatal as a drifted estimate: both hide real numbers.
   if (warning === "forecast range not parseable") return true;
+  // An unreadable basis hides the work-unit count and provenance behind the headline.
+  if (warning === "forecast basis not parseable") return true;
   if (!strict) return false;
   return isStrictValidationWarning(warning, receiptIsClaimed, receiptIsActive);
 }
@@ -241,6 +245,33 @@ function collectForecastRangeErrors(record: PlanExportRecord): string[] {
     );
   }
   return errors;
+}
+
+/**
+ * Check that optional work-unit inputs match the authored plan and forecast.
+ *
+ * @param record - parsed milestone; a missing basis preserves legacy compatibility
+ * @returns source-labelled errors; empty means the basis is absent or fully reconciled
+ */
+function collectForecastBasisErrors(record: PlanExportRecord): string[] {
+  const forecastBasis = record.effort?.forecastBasis;
+
+  // Plans without the opt-in field keep their existing estimate contract and receive no error.
+  if (!forecastBasis) return [];
+
+  // Missing plan/admin time contributes no unit, matching what the author sees in the milestone.
+  const countedAgentWorkUnits = countAgentWorkUnits([
+    ...record.tasks,
+    ...record.testingGateItems,
+    ...record.midProofItems,
+    record.planAdminEstimate ?? {},
+  ]);
+  // Prefix each shared validation message with the milestone the user needs to edit.
+  return validateForecastBasis(
+    forecastBasis,
+    record.effort?.forecastRange,
+    countedAgentWorkUnits,
+  ).map((forecastProblem) => `${record.sourceFile}: ${forecastProblem}`);
 }
 
 /** Require estimates on every work item that participates in the selected mode. */
@@ -603,6 +634,7 @@ function collectMilestoneErrors(
   errors.push(...collectSplitErrors(record, strict));
   errors.push(...collectCoverageErrors(record, strict));
   errors.push(...collectForecastRangeErrors(record));
+  errors.push(...collectForecastBasisErrors(record));
   if (strict) {
     errors.push(...collectActualErrors(record));
   }

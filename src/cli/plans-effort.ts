@@ -2,8 +2,9 @@
  * Effort-estimate notation parser for goat-plan milestones - the shared grammar
  * behind `plans export` (which carries the fields into bundles) and
  * `plans check` (which audits their arithmetic). Owns the `Effort estimate:`
- * line, counted-work `(est: n min category)` entries, and category sums, so the
- * notation is parsed one way everywhere a user sees it reported.
+ * line, countable `Forecast basis:`, forecast range, counted-work
+ * `(est: n min category)` entries, and category sums. This keeps the numbers a
+ * plan author reviews consistent across checks and portable exports.
  */
 
 /** Effort category vocabulary from goat-plan's estimation notation. */
@@ -63,6 +64,19 @@ export interface PlanEffortForecastRange {
 }
 
 /**
+ * Countable inputs behind a milestone forecast.
+ * Users can review the work-unit count, per-unit rates, and evidence source
+ * instead of trusting an unexplained duration estimate.
+ */
+export interface PlanEffortForecastBasis {
+  agentWorkUnits: number;
+  lowMinutesPerUnit: number;
+  likelyMinutesPerUnit: number;
+  highMinutesPerUnit: number;
+  source: string;
+}
+
+/**
  * Parsed `Effort estimate:` milestone line in agent-time minutes.
  * Records omit this entirely when a milestone predates effort estimation -
  * legacy plans are valid local state and must stay noise-free.
@@ -71,6 +85,7 @@ export interface PlanExportEffort {
   totalMinutes: number;
   split?: PlanEffortSplit;
   actual?: PlanEffortActual;
+  forecastBasis?: PlanEffortForecastBasis;
   forecastRange?: PlanEffortForecastRange;
 }
 
@@ -110,6 +125,13 @@ const PLAN_ADMIN_PATTERN = /^\s*(\d+)\s*min(?:ute)?s?\s+other\s*$/iu;
  */
 const FORECAST_RANGE_PATTERN =
   /^\s*(\d+)\s*-\s*(\d+)\s+agent-time minutes on one recorded-unpaused milestone timeline;\s*likely\s+(\d+)\s*(?:;\s*(.+))?$/iu;
+
+/** Countable forecast inputs with decimal minute-per-unit rates and visible provenance. */
+const FORECAST_BASIS_PATTERN =
+  /^\s*(\d+)\s+agent work units;\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s+min\/unit low-likely-high;\s*source:\s*(\S(?:.*\S)?)\s*$/iu;
+
+/** A `[HUMAN]` prefix keeps approval time outside coding-agent forecasts. */
+const HUMAN_ONLY_WORK_PATTERN = /^\s*\[human\](?:\s|$)/iu;
 
 /**
  * Narrow a regex-captured category word to the effort vocabulary without casting.
@@ -154,6 +176,14 @@ function readCapturedSplit(
 function readSafeMinutes(value: string): number | undefined {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+/** Parse a positive decimal rate without accepting infinity or unsafe magnitudes. */
+function readSafePositiveRate(value: string | undefined): number | undefined {
+  // Missing rate text means the user did not supply the full low-likely-high basis.
+  if (value === undefined) return undefined;
+  const parsedRate = Number(value);
+  return Number.isFinite(parsedRate) && parsedRate > 0 ? parsedRate : undefined;
 }
 
 /** Numeric fields shared by estimate and Actual declarations. */
@@ -326,6 +356,155 @@ function parseForecastRangeValue(
 }
 
 /**
+ * Parse the countable units and evidence source behind an optional forecast.
+ *
+ * @param value - text after `Forecast basis:`; empty means a legacy or point estimate
+ * @param warnings - fixed warning sink; empty stays unchanged for users
+ * @returns parsed basis; undefined means the field is absent or cannot be reviewed safely
+ */
+function parseForecastBasisValue(
+  value: string,
+  warnings: string[],
+): PlanEffortForecastBasis | undefined {
+  const normalizedBasis = value.trim();
+
+  // No basis is valid compatibility state for plans written before work-unit forecasting.
+  if (normalizedBasis.length === 0) return undefined;
+
+  const basisMatch = normalizedBasis.match(FORECAST_BASIS_PATTERN);
+  const agentWorkUnits = basisMatch?.[1]
+    ? readSafeMinutes(basisMatch[1])
+    : undefined;
+  const lowMinutesPerUnit = readSafePositiveRate(basisMatch?.[2]);
+  const likelyMinutesPerUnit = readSafePositiveRate(basisMatch?.[3]);
+  const highMinutesPerUnit = readSafePositiveRate(basisMatch?.[4]);
+  const forecastSource = basisMatch?.[5]?.trim();
+
+  // A partial or zero-unit basis cannot explain the duration shown to the user.
+  if (
+    agentWorkUnits === undefined ||
+    agentWorkUnits === 0 ||
+    lowMinutesPerUnit === undefined ||
+    likelyMinutesPerUnit === undefined ||
+    highMinutesPerUnit === undefined ||
+    !forecastSource
+  ) {
+    warnings.push("forecast basis not parseable");
+    return undefined;
+  }
+
+  return {
+    agentWorkUnits,
+    lowMinutesPerUnit,
+    likelyMinutesPerUnit,
+    highMinutesPerUnit,
+    source: forecastSource,
+  };
+}
+
+/** Candidate estimate that may count as one coding-agent work unit. */
+interface AgentWorkUnitCandidate extends TaskEstimateFields {
+  text?: string;
+}
+
+/**
+ * Count positive-time agent-owned checklist and plan/admin items.
+ *
+ * @param workItems - estimate-bearing items; empty means the plan declares zero agent units
+ * @returns countable agent work units; `[HUMAN]` and zero-minute items contribute zero
+ */
+export function countAgentWorkUnits(
+  workItems: readonly AgentWorkUnitCandidate[],
+): number {
+  // Evaluate every visible checklist/admin item once so the displayed count is reproducible.
+  return workItems.filter((workItem) => {
+    // Missing minutes are unestimated from the user's view, so they cannot become forecast units.
+    const estimatedAgentMinutes = workItem.estimateMinutes ?? 0;
+    const hasPositiveAgentTime = estimatedAgentMinutes > 0;
+    // Plan/admin has no checkbox text; only an explicit `[HUMAN]` label removes a timed item.
+    const visibleWorkItemText = workItem.text ?? "";
+    const isHumanOnly = HUMAN_ONLY_WORK_PATTERN.test(visibleWorkItemText);
+    return hasPositiveAgentTime && !isHumanOnly;
+  }).length;
+}
+
+/**
+ * Convert one work-unit basis into the whole-minute range shown in a plan.
+ *
+ * @param basis - positive unit count and rates; absent is handled before calling
+ * @returns outward-rounded low/high minutes and nearest-minute likely duration
+ */
+export function deriveForecastRangeFromBasis(
+  basis: PlanEffortForecastBasis,
+): Omit<PlanEffortForecastRange, "rationale"> {
+  const lowMinutes = Math.max(
+    1,
+    Math.floor(basis.agentWorkUnits * basis.lowMinutesPerUnit),
+  );
+  const likelyMinutes = Math.max(
+    1,
+    Math.round(basis.agentWorkUnits * basis.likelyMinutesPerUnit),
+  );
+  const highMinutes = Math.max(
+    1,
+    Math.ceil(basis.agentWorkUnits * basis.highMinutesPerUnit),
+  );
+  return { lowMinutes, likelyMinutes, highMinutes };
+}
+
+/**
+ * Validate that a countable basis still matches plan scope and its displayed range.
+ *
+ * @param forecastBasis - parsed units and rates the user supplied
+ * @param forecastRange - displayed output; undefined means the user omitted the derived range
+ * @param countedAgentWorkUnits - current positive agent-owned items; zero means no agent work remains declared
+ * @returns plain user-facing problems; empty means the basis and displayed range agree
+ */
+export function validateForecastBasis(
+  forecastBasis: PlanEffortForecastBasis,
+  forecastRange: PlanEffortForecastRange | undefined,
+  countedAgentWorkUnits: number,
+): string[] {
+  const validationProblems: string[] = [];
+
+  // A scope edit changes the checklist count, so the old duration no longer represents the plan.
+  if (forecastBasis.agentWorkUnits !== countedAgentWorkUnits) {
+    validationProblems.push(
+      `forecast basis declares ${forecastBasis.agentWorkUnits} agent work units but the plan contains ${countedAgentWorkUnits}`,
+    );
+  }
+
+  // Ordered per-unit rates give the user a real low-likely-high uncertainty band.
+  if (
+    forecastBasis.lowMinutesPerUnit > forecastBasis.likelyMinutesPerUnit ||
+    forecastBasis.likelyMinutesPerUnit > forecastBasis.highMinutesPerUnit
+  ) {
+    validationProblems.push(
+      "forecast basis must satisfy low <= likely <= high minutes per unit",
+    );
+  }
+
+  // A basis without its visible output leaves the user unable to review the duration.
+  if (!forecastRange) {
+    validationProblems.push("Forecast basis requires a derived Forecast range");
+    return validationProblems;
+  }
+
+  const derivedRange = deriveForecastRangeFromBasis(forecastBasis);
+  // Changed units or rates must flow through to all three displayed forecast values.
+  if (
+    derivedRange.lowMinutes !== forecastRange.lowMinutes ||
+    derivedRange.likelyMinutes !== forecastRange.likelyMinutes ||
+    derivedRange.highMinutes !== forecastRange.highMinutes
+  ) {
+    validationProblems.push(
+      `forecast basis derives ${derivedRange.lowMinutes}-${derivedRange.highMinutes} agent-time minutes; likely ${derivedRange.likelyMinutes}, but Forecast range says ${forecastRange.lowMinutes}-${forecastRange.highMinutes}; likely ${forecastRange.likelyMinutes}`,
+    );
+  }
+  return validationProblems;
+}
+
+/**
  * Sum parsed work estimates by category for downstream arithmetic checking.
  *
  * @param tasks - work items that may carry estimate fields
@@ -364,6 +543,7 @@ export function sumTaskEstimates(
  * @param warnings - record warning sink receiving fixed-string parse warnings
  * @param actualFieldValue - optional structured Actual text; empty means no completed-work comparison is available
  * @param forecastRangeFieldValue - optional `Forecast range:` text; empty means the milestone forecasts one point
+ * @param forecastBasisFieldValue - optional countable forecast inputs; empty preserves legacy plans
  * @returns parsed effort fields; undefined means the line is absent or unusable
  */
 export function parseEffortLineValue(
@@ -371,7 +551,14 @@ export function parseEffortLineValue(
   warnings: string[],
   actualFieldValue = "",
   forecastRangeFieldValue = "",
+  forecastBasisFieldValue = "",
 ): PlanExportEffort | undefined {
+  // Parse the basis first so malformed user input warns even when the effort headline is absent.
+  const forecastBasis = parseForecastBasisValue(
+    forecastBasisFieldValue,
+    warnings,
+  );
+
   // Parse the band first so drifted range notation still warns on a legacy milestone.
   const forecastRange = parseForecastRangeValue(
     forecastRangeFieldValue,
@@ -402,8 +589,13 @@ export function parseEffortLineValue(
   const effort: PlanExportEffort = {
     totalMinutes: parsedNumbers.totalMinutes,
   };
+  // A missing split keeps headline-only legacy estimates intact for export users.
   if (parsedNumbers.split) effort.split = parsedNumbers.split;
+  // Before work finishes, no Actual is expected in the milestone users review.
   if (actual) effort.actual = actual;
+  // Plans written before countable forecasting keep this field absent without migration noise.
+  if (forecastBasis) effort.forecastBasis = forecastBasis;
+  // A point estimate intentionally has no range, so exports omit the field rather than inventing one.
   if (forecastRange) effort.forecastRange = forecastRange;
   return effort;
 }
@@ -511,6 +703,18 @@ export function renderForecastRangeLine(
   const rationaleText = range.rationale ? `; ${range.rationale}` : "";
 
   return `**Forecast range:** ${range.lowMinutes}-${range.highMinutes} agent-time minutes on one recorded-unpaused milestone timeline; likely ${range.likelyMinutes}${rationaleText}`;
+}
+
+/**
+ * Render the work-unit inputs users can review beside a forecast range.
+ *
+ * @param basis - parsed count, per-unit rates, and provenance; source must be non-empty
+ * @returns one standalone `**Forecast basis:**` Markdown line
+ */
+export function renderForecastBasisLine(
+  basis: PlanEffortForecastBasis,
+): string {
+  return `**Forecast basis:** ${basis.agentWorkUnits} agent work units; ${basis.lowMinutesPerUnit}-${basis.likelyMinutesPerUnit}-${basis.highMinutesPerUnit} min/unit low-likely-high; source: ${basis.source}`;
 }
 
 /**

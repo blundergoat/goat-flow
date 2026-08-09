@@ -255,7 +255,7 @@ last_reviewed: 2026-08-09
 
 **Recurrence update (2026-08-04):** A broad Markdown evidence scan initially admitted a gitignored nested plan README; adversarial review also exposed a permissive log-README rule and omitted tool-cache roots. The gate now admits only enumerated committed local-state READMEs and excludes ignored agent/tool roots. Evidence: `src/cli/audit/check-content-quality.ts` (search: `COMMITTED_LOCAL_STATE_READMES`).
 
-**2026-08-09:** M02 crossed this bucket cap, then index regeneration pulled an unrelated lesson into its rollback patch. Compact first and diff generated files before scoping them. Evidence: `src/cli/learning-loop-index/generate.ts` (search: `generateIndexes`).
+**2026-08-09:** M02 crossed this bucket cap and index regeneration pulled an unrelated lesson into its rollback patch. Later, `stats --check` rejected two M00 drafts that cited ignored plan paths. Compact before indexing; diff generated files; cite tracked sources. Evidence anchors: `src/cli/learning-loop-index/generate.ts` (search: `generateIndexes`) and `src/cli/facts/shared/learning-loop-common.ts` (search: `Local-state paths (plans/scratchpad/logs)`).
 
 **Root cause:** Filesystem/path checks prove that a local path currently resolves, not that the reference is committed, portable, or appropriate for a durable lesson/ADR. Ignored local workspaces and external examples require different citation forms from repo-local files.
 

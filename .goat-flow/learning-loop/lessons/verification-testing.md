@@ -280,9 +280,11 @@ last_reviewed: 2026-08-09
 **Status:** active | **Created:** 2026-08-09
 **Decision changed:** Inspect every target after a failed multi-file patch; never assume the operation was atomic.
 **Trigger phase:** ACT
-**Incident count:** 1 | **Latest occurrence:** 2026-08-09
+**Incident count:** 2 | **Latest occurrence:** 2026-08-09
 
 **What happened:** During peer-plan synthesis, one patch updated the roadmap issue and provider-contract milestone, then failed when a later post-turn hunk used a near-match instead of the file's exact wording. The failure named only the unmatched hunk, which made the operation look rejected as a whole; a target-by-target read showed the earlier file edits had persisted.
+
+**Recurrence:** While preparing the M00 rollback patch in disposable copies, a malformed Markdown-list hunk failed after earlier file hunks in the same request. A target-by-target diff found no retained edits this time. The patch surface has now shown both partial and atomic-looking failures, so inspection remains the recovery contract.
 
 **Root cause:** I treated a multi-file patch as a transaction and reasoned from the final failing hunk instead of checking the state of every target. The retry therefore risked applying already-landed edits twice or building new hunks against stale bytes.
 

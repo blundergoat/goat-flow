@@ -14,6 +14,9 @@ Use one file, at most 500 words and 40 nonblank lines. Omit every untriggered se
 
 **Status:** not-started
 **Effort estimate:** ~<total> min agent-time (<product> product / <proof> proof / <other> other)
+**Forecast basis:** <units/rates/source; use Effort Estimates grammar>
+**Forecast range:** <derived low/likely/high; use Effort Estimates grammar>
+**Plan/admin overhead:** <n> min other
 **Scope:** <included result>; not included: <one tempting exclusion>
 
 ## Tasks
@@ -40,7 +43,10 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 **Planned at:** `<sha>`, YYYY-MM-DD
 **Depends on:** <local milestone IDs or none>
 **Effort estimate:** ~<total> min agent-time (<product> product / <proof> proof / <other> other)
+**Forecast basis:** <units/rates/source; use Effort Estimates grammar>
+**Forecast range:** <derived low/likely/high; use Effort Estimates grammar>
 **Actual:** _
+**Plan/admin overhead:** <n> min other
 
 ## Objective
 <Binary outcome this milestone proves or delivers.>
@@ -110,7 +116,9 @@ High-risk detail has no safety-reducing hard cap; output above 1,200 words names
 
 ## Effort Estimates
 
-- Count files read or edited, commands, and integration cycles before converting to agent-time.
+- Count positive agent-owned Task/Proof/Mid-proof items plus one positive admin entry; `[HUMAN]`/zero-minute items are excluded from agent work units.
+- Use cold `0.5-2.5-10 min/unit` below three matching measured bases; otherwise use `plans check` low-median-high rates.
+- Multiply units by rates: floor low (minimum one), round likely/headline, and ceil high. Reforecast all estimates before implementation after scope change or `reforecast required`.
 - Separate agent-time from human waiting; exact minutes are calibration inputs, not promises.
 - Split product, proof, and other work so imbalance remains visible.
 - Treat roughly 70/20/10 as a diagnostic guide, never a quota or pass/fail gate.
@@ -146,17 +154,18 @@ goat-flow plans time stop <milestone-file> --finalize  # close the timeline at t
 | `unavailable: <reason>` | No timing was recorded and no honest number exists. |
 | `incomplete: <reason>` | A span was discarded, so the total under-reports real elapsed time. |
 
-### Optional forecast ranges
+### Forecast bases and ranges
 
 ```markdown
+**Forecast basis:** <units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <cold-start prior or local receipt history>
 **Forecast range:** <low>-<high> agent-time minutes on one recorded-unpaused milestone timeline; likely <n>; <confidence and why>
 ```
 
-Optional by contract: plans that forecast a single point stay valid and need no migration. When the band is present, `likely` must equal the `Effort estimate` headline and every value uses that same unit.
+Legacy point estimates need no migration. A supplied basis must match agent work units, derive its range/headline, and exclude `[HUMAN]`/zero-minute items.
 
 ### Calibration
 
-`plans check` reports estimate-to-Actual ratios from raw receipt seconds, plus a plan median and observed bounds. Only `complete` milestones carrying `measured` Actuals qualify, because `complete` is the human ratification signal - a milestone still at `human-verification-pending` calibrates nothing however good its receipt. Below three eligible samples the report says `uncalibrated` instead of offering a multiplier. The output is informational: it never rewrites a forecast or changes strict pass/fail.
+`plans check` keeps estimate-to-Actual ratios and also divides raw receipt seconds by matching agent work units. Only `complete` milestones with `measured` Actuals qualify; `human-verification-pending` calibrates nothing before ratification. Below three matching bases it keeps the cold-start prior. At three or more it reports local low-median-high min/unit rates and names unfinished stale forecasts as `reforecast required`. The CLI stays advisory and never rewrites files; goat-plan blocks implementation until that advisory is resolved.
 
 One milestone landing far from its estimate is a data point, not a correction factor. An early goat-debug milestone estimated two hours and self-reported 256 active seconds. Under this contract that Actual is `retrospective` rather than `measured`, so it cannot calibrate anything - and even if it could, a single ratio would have mis-sized every later milestone.
 

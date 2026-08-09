@@ -9,6 +9,7 @@
 - **Clean critiques stay truthful** - A 100/100 meta-audit keeps its results section and states that no checks failed.
 - **Plans keep issue templates read-only** - Standard+ creates `ISSUE.md` beside milestones instead of overwriting shared guidance.
 - **Hook registration checks fit consumer projects** - Verification scans present configs, shows file names, and fails when none exist.
+- **Plan forecasts expose countable inputs** - Work-unit bases round-trip through exports, strict checks catch stale scope math, and measured receipts prompt the next reforecast.
 
 ## v1.15.0 - 2026-08-07
 

@@ -8,7 +8,13 @@
  * anything honest. Reporting a ratio from one or two samples would tell an author their
  * estimating is off when all it really shows is noise, so the summary stays silent instead.
  */
-import { isNumericActual, type PlanEffortSplit } from "./plans-effort.js";
+import {
+  countAgentWorkUnits,
+  deriveForecastRangeFromBasis,
+  isNumericActual,
+  type PlanEffortForecastBasis,
+  type PlanEffortSplit,
+} from "./plans-effort.js";
 import type { PlanExportRecord } from "./plans-export.js";
 
 /** Plan-level effort-mix target percentages from goat-plan's estimation guidance. */
@@ -129,6 +135,14 @@ interface CalibrationSample {
   estimatedMinutes: number;
 }
 
+/** One receipt-backed outcome normalized by the plan's countable agent work units. */
+interface WorkUnitCalibrationSample {
+  sourceFile: string;
+  measuredSeconds: number;
+  agentWorkUnits: number;
+  minutesPerUnit: number;
+}
+
 /**
  * Turn one milestone into a calibration sample, or nothing when it is ineligible.
  *
@@ -176,6 +190,52 @@ function collectCalibrationSamples(
     .filter((sample): sample is CalibrationSample => sample !== undefined);
 }
 
+/**
+ * Normalize one eligible receipt by its verified forecast-basis unit count.
+ *
+ * @param record - completed milestone; absent or stale basis means no unit evidence
+ * @returns one minutes-per-unit sample; undefined keeps unreviewable data out
+ */
+function readWorkUnitCalibrationSample(
+  record: PlanExportRecord,
+): WorkUnitCalibrationSample | undefined {
+  const calibrationSample = readCalibrationSample(record);
+  const forecastBasis = record.effort?.forecastBasis;
+
+  // Both a receipt-backed Actual and a parsed basis are required to compare like with like.
+  if (!calibrationSample || !forecastBasis) return undefined;
+
+  const countedAgentWorkUnits = countAgentWorkUnits([
+    ...record.tasks,
+    ...record.testingGateItems,
+    ...record.midProofItems,
+    record.planAdminEstimate ?? {},
+  ]);
+
+  // A stale declared count cannot become evidence for the next user's forecast.
+  if (countedAgentWorkUnits !== forecastBasis.agentWorkUnits) return undefined;
+
+  return {
+    sourceFile: record.sourceFile,
+    measuredSeconds: calibrationSample.measuredSeconds,
+    agentWorkUnits: countedAgentWorkUnits,
+    minutesPerUnit:
+      calibrationSample.measuredSeconds / 60 / countedAgentWorkUnits,
+  };
+}
+
+/** Select completed milestones whose receipts have a matching countable basis. */
+function collectWorkUnitCalibrationSamples(
+  records: PlanExportRecord[],
+): WorkUnitCalibrationSample[] {
+  // Only receipt-backed milestones with a matching basis can guide the next user's forecast.
+  return records
+    .map(readWorkUnitCalibrationSample)
+    .filter(
+      (sample): sample is WorkUnitCalibrationSample => sample !== undefined,
+    );
+}
+
 /** Middle value of a sorted ratio list, averaging the pair when the count is even. */
 function medianRatio(sortedRatios: number[]): number {
   const middle = Math.floor(sortedRatios.length / 2);
@@ -186,6 +246,144 @@ function medianRatio(sortedRatios: number[]): number {
 /** Format a ratio the way the report shows it, so comparisons stay eyeball-able. */
 function renderRatio(ratio: number): string {
   return `${ratio.toFixed(2)}x`;
+}
+
+/** Format a per-unit rate at the precision authors copy into `Forecast basis:`. */
+function renderMinutesPerUnit(minutesPerUnit: number): string {
+  return minutesPerUnit.toFixed(2);
+}
+
+/** Local low, median, and high rates derived from completed receipt evidence. */
+interface LocalWorkUnitRates {
+  lowMinutesPerUnit: number;
+  likelyMinutesPerUnit: number;
+  highMinutesPerUnit: number;
+}
+
+/** Convert sorted receipt samples into the local rates used for the next forecast. */
+function readLocalWorkUnitRates(
+  workUnitSamples: WorkUnitCalibrationSample[],
+): LocalWorkUnitRates {
+  // Sorting measured rates exposes the observed low/high and the robust middle outcome.
+  const sortedRates = workUnitSamples
+    .map((workUnitSample) => workUnitSample.minutesPerUnit)
+    .sort((leftRate, rightRate) => leftRate - rightRate);
+  // This path needs three samples, so the fallbacks only protect direct empty helper use.
+  return {
+    lowMinutesPerUnit: sortedRates[0] ?? 0,
+    likelyMinutesPerUnit: medianRatio(sortedRates),
+    highMinutesPerUnit: sortedRates.at(-1) ?? 0,
+  };
+}
+
+/** Compare copied two-decimal local rates with an unfinished milestone's basis. */
+function basisMatchesLocalRates(
+  forecastBasis: PlanEffortForecastBasis,
+  localMinutesPerUnitRates: LocalWorkUnitRates,
+): boolean {
+  return (
+    renderMinutesPerUnit(forecastBasis.lowMinutesPerUnit) ===
+      renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit) &&
+    renderMinutesPerUnit(forecastBasis.likelyMinutesPerUnit) ===
+      renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit) &&
+    renderMinutesPerUnit(forecastBasis.highMinutesPerUnit) ===
+      renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit)
+  );
+}
+
+/** Lifecycle states where a fresh forecast can still guide remaining agent work. */
+const REFORECASTABLE_STATUSES = new Set([
+  "not-started",
+  "in-progress",
+  "testing-gate",
+]);
+
+/**
+ * Tell authors exactly which unfinished milestones still use a stale basis.
+ *
+ * @param records - plan milestones; completed and human-wait states are skipped
+ * @param localMinutesPerUnitRates - receipt-derived rates; never empty after three samples
+ * @returns one actionable line per stale milestone; empty means no reforecast is needed
+ */
+function renderRequiredReforecasts(
+  records: PlanExportRecord[],
+  localMinutesPerUnitRates: LocalWorkUnitRates,
+): string[] {
+  // Review each milestone separately so the CLI names exactly where the user must edit.
+  return records.flatMap((milestoneRecord) => {
+    const forecastBasis = milestoneRecord.effort?.forecastBasis;
+    const milestoneStatus = milestoneRecord.status.trim().toLowerCase();
+
+    // Finished, blocked, abandoned, and basis-free plans have no actionable unit forecast here.
+    if (!forecastBasis || !REFORECASTABLE_STATUSES.has(milestoneStatus)) {
+      return [];
+    }
+
+    // Missing plan/admin time contributes no unit, matching the milestone's visible checklist.
+    const countedAgentWorkUnits = countAgentWorkUnits([
+      ...milestoneRecord.tasks,
+      ...milestoneRecord.testingGateItems,
+      ...milestoneRecord.midProofItems,
+      milestoneRecord.planAdminEstimate ?? {},
+    ]);
+
+    // Count drift already has a strict error, so do not layer a misleading duration on top.
+    if (countedAgentWorkUnits !== forecastBasis.agentWorkUnits) return [];
+
+    // Matching two-decimal rates mean the author already applied the available evidence.
+    if (basisMatchesLocalRates(forecastBasis, localMinutesPerUnitRates)) {
+      return [];
+    }
+
+    const locallyCalibratedBasis: PlanEffortForecastBasis = {
+      ...forecastBasis,
+      lowMinutesPerUnit: Number(
+        renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit),
+      ),
+      likelyMinutesPerUnit: Number(
+        renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit),
+      ),
+      highMinutesPerUnit: Number(
+        renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit),
+      ),
+    };
+    const locallyCalibratedRange = deriveForecastRangeFromBasis(
+      locallyCalibratedBasis,
+    );
+    return [
+      `reforecast required: ${milestoneRecord.sourceFile} - ${countedAgentWorkUnits} agent work units imply ${locallyCalibratedRange.lowMinutes}-${locallyCalibratedRange.highMinutes} agent-time minutes; likely ${locallyCalibratedRange.likelyMinutes} from local evidence; use ${renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit)}-${renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit)}-${renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit)} min/unit before implementation`,
+    ];
+  });
+}
+
+/**
+ * Render the countable calibration and any next-milestone reforecast action.
+ *
+ * @param records - every milestone in the plan directory; empty yields uncalibrated
+ * @returns unit evidence and advisories; these lines never mutate files or fail the check
+ */
+function renderWorkUnitCalibrationSummary(
+  records: PlanExportRecord[],
+): string[] {
+  const workUnitSamples = collectWorkUnitCalibrationSamples(records);
+
+  // Fewer than three receipts cannot replace the conservative cold-start prior.
+  if (workUnitSamples.length < MINIMUM_CALIBRATION_SAMPLES) {
+    return [
+      `work-unit calibration: uncalibrated - ${workUnitSamples.length} of ${MINIMUM_CALIBRATION_SAMPLES} eligible measured samples with countable bases`,
+    ];
+  }
+
+  const localMinutesPerUnitRates = readLocalWorkUnitRates(workUnitSamples);
+  return [
+    `work-unit calibration: ${workUnitSamples.length} eligible measured samples - median ${renderMinutesPerUnit(localMinutesPerUnitRates.likelyMinutesPerUnit)} min/unit, observed ${renderMinutesPerUnit(localMinutesPerUnitRates.lowMinutesPerUnit)}-${renderMinutesPerUnit(localMinutesPerUnitRates.highMinutesPerUnit)} min/unit`,
+    // Each sample line lets the author verify the summary from raw seconds and unit count.
+    ...workUnitSamples.map(
+      (workUnitSample) =>
+        `work-unit sample: ${workUnitSample.sourceFile} ${renderMinutesPerUnit(workUnitSample.minutesPerUnit)} min/unit (${workUnitSample.measuredSeconds}s / ${workUnitSample.agentWorkUnits} units)`,
+    ),
+    ...renderRequiredReforecasts(records, localMinutesPerUnitRates),
+  ];
 }
 
 /**
@@ -203,23 +401,33 @@ function renderRatio(ratio: number): string {
 export function renderCalibrationSummary(
   records: PlanExportRecord[],
 ): string[] {
-  const samples = collectCalibrationSamples(records);
-  if (samples.length < MINIMUM_CALIBRATION_SAMPLES) {
-    return [
-      `calibration: uncalibrated - ${samples.length} of ${MINIMUM_CALIBRATION_SAMPLES} eligible measured samples`,
+  const estimateComparisonSamples = collectCalibrationSamples(records);
+  let estimateComparisonLines: string[];
+
+  // Thin history stays explicitly uncalibrated instead of manufacturing a correction factor.
+  if (estimateComparisonSamples.length < MINIMUM_CALIBRATION_SAMPLES) {
+    estimateComparisonLines = [
+      `calibration: uncalibrated - ${estimateComparisonSamples.length} of ${MINIMUM_CALIBRATION_SAMPLES} eligible measured samples`,
+    ];
+  } else {
+    // With enough history, sort outcomes so users see the median and full observed spread.
+    const sortedRatios = estimateComparisonSamples
+      .map((estimateComparison) => estimateComparison.ratio)
+      .sort((leftRatio, rightRatio) => leftRatio - rightRatio);
+    // Three or more samples guarantee both ends; fallbacks keep the formatter total.
+    const lowestRatio = sortedRatios[0] ?? 0;
+    const highestRatio = sortedRatios.at(-1) ?? 0;
+    estimateComparisonLines = [
+      `calibration: ${estimateComparisonSamples.length} eligible measured samples - median ${renderRatio(medianRatio(sortedRatios))}, observed ${renderRatio(lowestRatio)}-${renderRatio(highestRatio)}`,
+      // Per-milestone lines let the author verify the median against each receipt.
+      ...estimateComparisonSamples.map(
+        (estimateComparison) =>
+          `calibration sample: ${estimateComparison.sourceFile} ${renderRatio(estimateComparison.ratio)} (${estimateComparison.measuredSeconds}s measured / ${estimateComparison.estimatedMinutes} min estimated)`,
+      ),
     ];
   }
-
-  const sortedRatios = samples
-    .map((sample) => sample.ratio)
-    .sort((a, b) => a - b);
-  const lowest = sortedRatios[0] ?? 0;
-  const highest = sortedRatios[sortedRatios.length - 1] ?? 0;
   return [
-    `calibration: ${samples.length} eligible measured samples - median ${renderRatio(medianRatio(sortedRatios))}, observed ${renderRatio(lowest)}-${renderRatio(highest)}`,
-    ...samples.map(
-      (sample) =>
-        `calibration sample: ${sample.sourceFile} ${renderRatio(sample.ratio)} (${sample.measuredSeconds}s measured / ${sample.estimatedMinutes} min estimated)`,
-    ),
+    ...estimateComparisonLines,
+    ...renderWorkUnitCalibrationSummary(records),
   ];
 }

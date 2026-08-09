@@ -88,6 +88,7 @@ interface EstimatedMilestoneOptions {
   proofHeading?: string;
   testingGateLines?: string[];
   midProofLines?: string[];
+  forecastBasisLine?: string;
   forecastRangeLine?: string;
 }
 
@@ -109,6 +110,7 @@ export function estimatedMilestoneBody(
     `Status: ${options.status ?? "not-started"}`,
     `Depends on: ${options.dependsOn ?? "none"}`,
     effortLine,
+    ...(options.forecastBasisLine ? [options.forecastBasisLine] : []),
     ...(options.forecastRangeLine ? [options.forecastRangeLine] : []),
     ...(options.actualLine ? [options.actualLine] : []),
     ...(options.planAdminOverhead
@@ -358,6 +360,39 @@ export function eligibleSampleBody(
         actualLine: `Actual: measured: ~${minutes} min agent-time (${minutes} product / 0 proof / 0 other) - receipt ${productSeconds} recorded-unpaused seconds`,
         planAdminOverhead: "1 min other",
         testingGateLines: ["- [x] Run typecheck (est: 2 min proof)"],
+      },
+    ),
+    productSeconds,
+    milestoneId,
+  );
+}
+
+/**
+ * Build one completed sample whose measured receipt can teach later plans minutes per work unit.
+ *
+ * @param productSeconds - recorded agent seconds; zero means a completed instant fixture
+ * @param milestoneId - visible milestone ID used by the title and receipt; empty produces an invalid fixture
+ * @returns a complete three-unit milestone with a structured forecast basis and finalized receipt
+ */
+export function eligibleWorkUnitSampleBody(
+  productSeconds: number,
+  milestoneId = "M01",
+): string {
+  const measuredMinutes = Math.round(productSeconds / 60);
+  return withProductReceipt(
+    estimatedMilestoneBody(
+      "Effort estimate: ~9 min agent-time (3 product / 3 proof / 3 other)",
+      ["- [x] Build the thing (est: 3 min product)"],
+      {
+        title: `${milestoneId}: Work-unit sample`,
+        status: "complete",
+        actualLine: `Actual: measured: ~${measuredMinutes} min agent-time (${measuredMinutes} product / 0 proof / 0 other) - receipt ${productSeconds} recorded-unpaused seconds`,
+        forecastBasisLine:
+          "Forecast basis: 3 agent work units; 0.5-3-10 min/unit low-likely-high; source: recorded planning basis",
+        forecastRangeLine:
+          "Forecast range: 1-30 agent-time minutes on one recorded-unpaused milestone timeline; likely 9; derived from the recorded planning basis",
+        planAdminOverhead: "3 min other",
+        testingGateLines: ["- [x] Run typecheck (est: 3 min proof)"],
       },
     ),
     productSeconds,

@@ -81,6 +81,16 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         assert.match(issueGuidance, /= <agent-time range>/u, issuePath);
         assert.match(
           issueGuidance,
+          /delivery band.*derived from.*milestone forecast/isu,
+          `${issuePath}: ISSUE delivery bands are not derived from milestones`,
+        );
+        assert.match(
+          issueGuidance,
+          /never.*input.*milestone estimate/isu,
+          `${issuePath}: ISSUE bands can still anchor milestone estimates`,
+        );
+        assert.match(
+          issueGuidance,
           /800 words and 60 nonblank lines/u,
           issuePath,
         );

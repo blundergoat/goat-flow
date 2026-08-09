@@ -168,24 +168,27 @@ last_reviewed: 2026-08-09
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Derive an estimate by counting task, proof, and admin units, then converting once. Never write an hours figure first and decompose backwards from it.
 **Trigger phase:** SCOPE
-**Incident count:** 1
-**Latest occurrence:** 2026-08-02
+**Incident count:** 2
+**Latest occurrence:** 2026-08-09
 
 **What happened:** Two plans authored days apart under the same goat-plan guidance produced opposite calibration. goat-debug-improve budgeted 715 minutes; its two receipt-backed milestones measured 273s and 1043s - ratios of 0.05x and 0.13x. Its three earlier milestones show the same shape (180/190/120 minutes estimated against 15/10/4 reported). effort-estimation-timing, estimated by the same author, measured 1.54x, 1.13x, and 0.79x - every milestone inside its declared forecast range.
 
-**Root cause:** The two plans derived their numbers differently. goat-debug-improve's brief opens with a duration - "9.5-15 hours coding-agent time" - and the per-milestone splits were apportioned out of that total, so wall-clock intuition set the scale and the categories only divided it. effort-estimation-timing carried a `Forecast basis` naming countable units (contract and RED fixtures 7, timing command and safe writer 6, proof cycles 6, administration 2) which summed upward into the headline. Counting produces agent-time; converting from hours reproduces human intuition wearing agent-time units.
+**Root cause:** The plans derived their numbers differently. goat-debug-improve's brief opens with a duration - "9.5-15 hours coding-agent time" - and the per-milestone splits were apportioned out of that total, so wall-clock intuition set the scale and the categories only divided it. effort-estimation-timing carried a `Forecast basis` naming countable units (contract and RED fixtures 7, timing command and safe writer 6, proof cycles 6, administration 2) which summed upward into the headline. Counting produces agent-time; converting from hours reproduces human intuition wearing agent-time units.
 
-**Recurrence 2026-08-09:** The active 1.15.1 plan estimated M00, M01, and M02 at 150, 165, and 145 minutes; prospective receipts measured 28, 29, and 102 minutes, or 0.19x, 0.18x, and 0.70x. The user flagged the persistent overestimate. One multiplier cannot calibrate short deterministic hook work and delegation-heavy skill proof; future forecasts must count those work units separately and reforecast after the first RED. The ignored milestone receipts are current-run context, not durable evidence.
+**Recurrence 2026-08-09:** The active 1.15.1 plan estimated M00, M01, and M02 at 150, 165, and 145 minutes; prospective receipts measured 28, 29, and 102 minutes, or 0.19x, 0.18x, and 0.70x. The user flagged the persistent overestimate. A retrospective comparison added six receipt-backed gruff-php 0.5.2 milestones. Across all nine samples, duration-first estimates totalled 1,200 minutes against 276.25 measured minutes: 4.34 times actual in aggregate, with a 5.70-times median overestimate.
+
+**Method comparison:** The nine milestones contained 99 positive agent-owned Task, Proof, Mid-proof, and admin units. Applying a cold `0.5-2.5-10 min/unit` prior produced a 247.5-minute likely total, 10.4% below the measured total, and all nine outcomes landed inside their derived low/high bands. Leave-one-out local rates covered seven of nine outcomes with 36.5% median absolute percentage error. This is a retrospective backtest, not proof that the next forecast will land; its value is showing that countable inputs materially outperform a duration chosen first.
 
 **Prevention:**
-1. Write the unit count before any minute figure: files touched, commands run, proof cycles, integration cycles. The headline is the sum, never the input.
+1. Count positive agent-owned Task, Proof, Mid-proof, and admin entries before writing any minute figure. Exclude `[HUMAN]` and zero-minute items. The headline is the result, never the input.
 2. Treat any estimate expressed first as hours as unvalidated. Decomposing a duration into product/proof/other does not convert it into agent-time.
-3. A `Forecast basis` line that names its countable groups is the artifact that makes an estimate auditable later; a bare total is not.
+3. Record `<units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <evidence>` in `Forecast basis:`. Derive low by flooring (minimum one), likely by rounding, and high by ceiling.
 4. Do not carry an inflated plan's estimates into calibration. Untagged retrospective Actuals are excluded for exactly this reason.
-5. Suspect the method, not the milestone, when a whole plan misses one direction by an order of magnitude.
-6. Publish low/likely/high forecasts by comparable task class, and update the live forecast after the first failing reproduction or sequential gate while preserving the original estimate.
+5. Below three matching completed, measured bases, use the conservative cold-start prior. At three or more, use the observed low, median, and high minutes per unit reported by `plans check`.
+6. Recount and reforecast before implementation whenever scope changes or the CLI prints `reforecast required`; preserve the original estimate for calibration.
+7. Derive an ISSUE delivery band by summing milestone forecasts. Never feed a plan-wide duration down into milestone estimates.
 
-**Evidence anchors:** `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) computes ratios from raw receipt seconds; `workflow/skills/goat-plan/SKILL.md` (search: `Effort estimate (agent-time)`) already requires counted units and forbids wall-clock intuition - this lesson is measured evidence that the rule is load-bearing rather than stylistic.
+**Evidence anchors:** `src/cli/plans-effort.ts` (search: `export function countAgentWorkUnits`) owns the unit definition and deterministic range math; `src/cli/plans-check-summary.ts` (search: `function renderRequiredReforecasts`) turns three matching receipt-backed bases into a visible next action; `workflow/skills/goat-plan/SKILL.md` (search: `Effort estimate (agent-time)`) makes that action block implementation. The raw cross-project receipts remain local plan state; the aggregate comparison above is the durable derived record.
 
 ---
 

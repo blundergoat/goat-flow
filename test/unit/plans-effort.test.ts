@@ -1,7 +1,8 @@
 /**
  * Verifies the effort-estimate notation grammar directly: milestone effort
- * lines, per-task est entries, and category sums parse one way for both
- * `plans export` and `plans check`, with legacy absence staying warning-free.
+ * lines, countable forecast inputs, per-task entries, and category sums parse
+ * one way for both `plans export` and `plans check`. Legacy absence stays
+ * warning-free so existing users can adopt the new basis deliberately.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -12,6 +13,7 @@ import {
   readTaskEstimate,
   renderActualLine,
   renderEffortLine,
+  renderForecastBasisLine,
   sumTaskEstimates,
 } from "../../src/cli/plans-effort.js";
 
@@ -28,6 +30,46 @@ describe("plans effort notation", () => {
       split: { product: 18, proof: 5, other: 2 },
     });
     assert.deepEqual(warnings, []);
+  });
+
+  it("parses and renders the countable basis behind a forecast", () => {
+    const warnings: string[] = [];
+    const effort = parseEffortLineValue(
+      "~30 min agent-time (20 product / 8 proof / 2 other)",
+      warnings,
+      "",
+      "6-120 agent-time minutes on one recorded-unpaused milestone timeline; likely 30; uncalibrated",
+      "12 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
+    );
+
+    assert.deepEqual(effort?.forecastBasis, {
+      agentWorkUnits: 12,
+      lowMinutesPerUnit: 0.5,
+      likelyMinutesPerUnit: 2.5,
+      highMinutesPerUnit: 10,
+      source: "cold-start prior",
+    });
+    assert.equal(
+      effort?.forecastBasis
+        ? renderForecastBasisLine(effort.forecastBasis)
+        : "",
+      "**Forecast basis:** 12 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
+    );
+    assert.deepEqual(warnings, []);
+  });
+
+  it("warns when a supplied forecast basis cannot be counted", () => {
+    const warnings: string[] = [];
+
+    parseEffortLineValue(
+      "~30 min agent-time (20 product / 8 proof / 2 other)",
+      warnings,
+      "",
+      "",
+      "roughly twelve tasks at a few minutes each",
+    );
+
+    assert.deepEqual(warnings, ["forecast basis not parseable"]);
   });
 
   it("parses a structured Actual tail with an optional reason", () => {

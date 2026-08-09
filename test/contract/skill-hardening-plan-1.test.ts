@@ -33,6 +33,21 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       assert.match(breakdown, /Start a `plans time` receipt first/u, skillPath);
       assert.match(breakdown, /Optional `Forecast range:`/u, skillPath);
       assert.match(
+        breakdown,
+        /Forecast basis.*agent work units/u,
+        `${skillPath}: forecast inputs are not countable`,
+      );
+      assert.match(
+        breakdown,
+        /0\.5-2\.5-10 min\/unit/u,
+        `${skillPath}: cold-start prior is missing`,
+      );
+      assert.match(
+        breakdown,
+        /scope changes.*reforecast.*before implementation/isu,
+        `${skillPath}: scope drift does not block on a fresh forecast`,
+      );
+      assert.match(
         betweenMilestones,
         /Finalize the receipt before `Actual:`/u,
         skillPath,
@@ -58,6 +73,11 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         assertTimingObligationsDocumented(
           readMarkdownSection(referencePath, "Effort Estimates"),
           referencePath,
+        );
+        assert.match(
+          readMarkdownSection(referencePath, "Effort Estimates"),
+          /\[HUMAN\].*excluded.*agent work units/isu,
+          `${referencePath}: human-only work is not excluded from agent forecasts`,
         );
       },
     );
@@ -313,15 +333,14 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       assert.match(skillGuidance, /Effort estimate \(agent-time\)/, skillPath);
       assert.match(
         skillGuidance,
-        /never use human wall-clock intuition/,
+        /Never use duration intuition/,
         skillPath,
       );
       assert.match(
         skillGuidance,
-        /Plan-level target: ~70% product work, ~20% proof, ~10% everything else/,
+        /~70\/20\/10 stays advisory/,
         skillPath,
       );
-      assert.match(skillGuidance, /a flexible guide, not a quota/, skillPath);
       assert.match(
         skillGuidance,
         /goat-flow plans check \.goat-flow\/plans\/<active> --strict/,

@@ -140,8 +140,8 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 **Status:** active | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Stage a rename before registering its destination; search all tracked files, not only Markdown, for old paths.
 **Trigger phase:** VERIFY
-**Incident count:** 5
-**Latest occurrence:** 2026-07-27
+**Incident count:** 6
+**Latest occurrence:** 2026-08-09
 
 **Symptoms:** A renamed or moved file breaks links in multiple documents. Dense pointer maps mean one stale path can mislead setup, glossary, or architecture readers at multiple entry points.
 
@@ -152,9 +152,7 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 - `workflow/setup/01-system-overview.md` → `NEXT:` links and numbered-step references hard-link the setup flow across multiple files; renaming one step file breaks the flow.
 - `.goat-flow/architecture.md` → component/location tables point readers at concrete paths across `src/`, `workflow/`, and `.goat-flow/`; stale paths here become wrong architecture guidance, not cosmetic drift.
 
-**Recurrence update (2026-07-27):**
-- M01 registered the new path before M02 created it, so audit failed with `commit-guidance: evidence_path does not exist`. Enforcer: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`); pointer: `src/cli/audit/harness/check-verification.ts` (search: `const commitGuidance`). The update waited for the rename.
-- M02's docs inventory missed two paths in `scripts/profile-dashboard-audit.mjs`; a tracked sweep found its synthetic Copilot builder (search: `Synthetic. Commit rules`) before closeout.
+**Recurrences:** On 2026-07-27, M01 registered a destination before M02 created it, so audit failed `evidence_path does not exist`; M02 also missed two synthetic config references. On 2026-08-09, correcting M02's timeout premise left removed-phrase anchors in two roadmaps and two analysis reports; `rg --hidden --no-ignore` caught them. The roadmap files are gitignored, so their same-session before/after sweep is not a durable anchor. Enforcers: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`), `scripts/profile-dashboard-audit.mjs` (search: `Synthetic. Commit rules`), and `src/cli/facts/shared/search-anchors.ts` (search: `Validate one parsed citation`).
 
 ~~**Evidence (historical - resolved):** the M13 Phase 3 setup-step renumber left three stale pointers - `.goat-flow/glossary.md` and an evidence-lifecycle ADR entry at removed `workflow/setup/09-customise-to-project.md`, and `.goat-flow/learning-loop/decisions/ADR-011-sbao-mob-core-features.md` at removed `05-install-skills.md`~~ (resolved: now `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`; the ADR carrying the second pointer later left the active set).
 
