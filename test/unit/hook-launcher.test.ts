@@ -1,0 +1,366 @@
+/**
+ * How managed hooks behave after an agent launches them: deadlines bound the user's wait,
+ * response modes stay stable, and unsafe script shapes fail closed.
+ * Every case runs the canonical launcher against a disposable project so the result matches
+ * what an agent and user would see without touching a real project.
+ */
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import {
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { describe, it } from "node:test";
+
+import {
+  HOOK_TIMEOUT_MODES,
+  launcherDiagnostics,
+  withTempProject,
+} from "./hook-registrar.helpers.js";
+
+describe("hook launcher script validation", () => {
+  const HOOK_LAUNCHER_PATH = resolve(
+    import.meta.dirname,
+    "..",
+    "..",
+    "workflow",
+    "hooks",
+    "run-with-bash.mjs",
+  );
+
+  /**
+   * Run the canonical launcher exactly as agent configs do.
+   * Use this to observe the status and message an agent receives from a fixture hook.
+   *
+   * @param fixtureProjectPath - Non-empty project path; an empty path cannot host the fixture hook.
+   * @param hookScriptRelativePath - Non-empty managed hook path shown to the launcher.
+   * @param responseMode - Agent response format; empty or omitted uses fail-closed policy output.
+   * @param hookEnvironment - Launch environment; missing keys keep the user's current environment.
+   * @returns Completed launcher result; empty output is valid for a hook that has nothing to report.
+   */
+  function runLauncherProcess(
+    fixtureProjectPath: string,
+    hookScriptRelativePath: string,
+    responseMode = "policy",
+    hookEnvironment: NodeJS.ProcessEnv = process.env,
+  ) {
+    return spawnSync(
+      process.execPath,
+      [HOOK_LAUNCHER_PATH, hookScriptRelativePath, responseMode],
+      {
+        cwd: fixtureProjectPath,
+        encoding: "utf8" as const,
+        env: hookEnvironment,
+      },
+    );
+  }
+
+  /**
+   * Create the managed hooks directory inside a fixture project.
+   * Use this before writing the hook a simulated agent will launch.
+   * Side effect: writes only the fixture directory tree the test removes afterward.
+   *
+   * @param fixtureProjectPath - Non-empty project path; empty would escape the intended fixture.
+   * @returns Created hook directory; never empty because it is rooted in the fixture project.
+   */
+  function createManagedHookDirectory(fixtureProjectPath: string): string {
+    const managedHookDirectoryPath = join(
+      fixtureProjectPath,
+      ".goat-flow",
+      "hooks",
+    );
+    mkdirSync(managedHookDirectoryPath, { recursive: true });
+    return managedHookDirectoryPath;
+  }
+
+  /**
+   * Write a hook that exits immediately and return the path an agent would launch.
+   * Use this when only timeout configuration, not hook work, is under test.
+   * Side effects: writes one executable-shaped script inside the disposable project.
+   *
+   * @param fixtureProjectPath - Non-empty fixture root; empty would escape test cleanup.
+   * @returns Non-empty project-relative hook path used by the launcher.
+   */
+  function writeQuickHook(fixtureProjectPath: string): string {
+    const hookScriptRelativePath = ".goat-flow/hooks/quick.sh";
+    const managedHookDirectoryPath =
+      createManagedHookDirectory(fixtureProjectPath);
+    writeFileSync(
+      join(managedHookDirectoryPath, "quick.sh"),
+      "#!/usr/bin/env bash\nexit 0\n",
+    );
+    return hookScriptRelativePath;
+  }
+
+  // Every supported agent mode must turn the same deadline into its own user-facing response.
+  for (const fixture of HOOK_TIMEOUT_MODES) {
+    /**
+     * Starts a disposable busy-loop hook because every agent mode must render the same deadline.
+     * Fixture purpose: exposes the exact timeout status and message a user receives.
+     */
+    it(`bounds ${fixture.mode} hooks with a timeout-specific response`, () => {
+      withTempProject((root) => {
+        const scriptRel = ".goat-flow/hooks/slow.sh";
+        const hookDir = createManagedHookDirectory(root);
+        writeFileSync(
+          join(hookDir, "slow.sh"),
+          "#!/usr/bin/env bash\nwhile :; do :; done\n",
+        );
+        const startedAt = Date.now();
+        const result = runLauncherProcess(root, scriptRel, fixture.mode, {
+          ...process.env,
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "1",
+        });
+
+        assert.equal(
+          result.status,
+          fixture.status,
+          launcherDiagnostics(result),
+        );
+        assert.match(result[fixture.stream], fixture.pattern);
+        assert.match(
+          result[fixture.stream],
+          /exceeded its deadline and was killed/u,
+        );
+        assert.ok(Date.now() - startedAt < 1_500, launcherDiagnostics(result));
+      });
+    });
+  }
+
+  /*
+   * A user's hook may start a formatter child before its deadline expires.
+   * The agent must receive its timeout response without waiting for that child to finish.
+   * Fixture purpose: the marker distinguishes a started child from an early Bash kill.
+   * Side effects: writes a marker and starts a sleeping child inside a disposable project.
+   */
+  it("returns promptly after a started hook descendant exceeds its deadline", () => {
+    withTempProject((fixtureProjectPath) => {
+      const hookScriptRelativePath = ".goat-flow/hooks/started-child.sh";
+      const managedHookDirectoryPath =
+        createManagedHookDirectory(fixtureProjectPath);
+      const childStartedMarkerPath = join(
+        managedHookDirectoryPath,
+        "child-started.marker",
+      );
+      // Fixture purpose: the marker proves a user's slower formatter child started before timeout.
+      writeFileSync(
+        join(managedHookDirectoryPath, "started-child.sh"),
+        "#!/usr/bin/env bash\nsleep 2 &\nprintf 'started\\n' > .goat-flow/hooks/child-started.marker\nwait\n",
+      );
+      const launchStartedAt = Date.now();
+      const launcherResult = runLauncherProcess(
+        fixtureProjectPath,
+        hookScriptRelativePath,
+        "gruff",
+        {
+          ...process.env,
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "250",
+        },
+      );
+      const userWaitMilliseconds = Date.now() - launchStartedAt;
+
+      assert.equal(
+        launcherResult.status,
+        0,
+        launcherDiagnostics(launcherResult),
+      );
+      assert.match(
+        launcherResult.stderr,
+        /exceeded its deadline and was killed/u,
+      );
+      assert.equal(readFileSync(childStartedMarkerPath, "utf8"), "started\n");
+      assert.ok(
+        userWaitMilliseconds < 1_500,
+        `${launcherDiagnostics(launcherResult)}\nelapsed_ms=${userWaitMilliseconds}`,
+      );
+    });
+  });
+
+  const invalidPolicyTimeoutValues = [
+    "0",
+    "25001",
+    "1.5",
+    "+1",
+    " 1",
+    "invalid",
+  ];
+  // Separate names show exactly which mistyped user setting stopped being rejected.
+  for (const invalidTimeoutMilliseconds of invalidPolicyTimeoutValues) {
+    /** Starts a disposable quick hook because invalid settings must fail before user work begins. */
+    it(`rejects invalid policy timeout ${JSON.stringify(invalidTimeoutMilliseconds)}`, () => {
+      withTempProject((fixtureProjectPath) => {
+        const hookScriptRelativePath = writeQuickHook(fixtureProjectPath);
+        const launcherResult = runLauncherProcess(
+          fixtureProjectPath,
+          hookScriptRelativePath,
+          "policy",
+          {
+            ...process.env,
+            GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: invalidTimeoutMilliseconds,
+          },
+        );
+
+        assert.equal(
+          launcherResult.status,
+          2,
+          launcherDiagnostics(launcherResult),
+        );
+        assert.match(
+          launcherResult.stderr,
+          /timeout configuration is invalid/u,
+        );
+      });
+    });
+  }
+
+  /** Starts a disposable quick hook to prove the user's policy ceiling remains accepted. */
+  it("accepts the policy timeout ceiling", () => {
+    withTempProject((fixtureProjectPath) => {
+      const hookScriptRelativePath = writeQuickHook(fixtureProjectPath);
+      const policyCeilingResult = runLauncherProcess(
+        fixtureProjectPath,
+        hookScriptRelativePath,
+        "policy",
+        {
+          ...process.env,
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "25000",
+        },
+      );
+      assert.equal(
+        policyCeilingResult.status,
+        0,
+        launcherDiagnostics(policyCeilingResult),
+      );
+    });
+  });
+
+  const feedbackResponseModes = ["gruff", "post-turn"];
+  // Separate names show whether a user-facing feedback mode changed its larger ceiling.
+  for (const feedbackResponseMode of feedbackResponseModes) {
+    /** Starts a disposable quick hook to prove the documented feedback ceiling remains usable. */
+    it(`accepts the ${feedbackResponseMode} timeout ceiling`, () => {
+      withTempProject((fixtureProjectPath) => {
+        const hookScriptRelativePath = writeQuickHook(fixtureProjectPath);
+        const launcherResult = runLauncherProcess(
+          fixtureProjectPath,
+          hookScriptRelativePath,
+          feedbackResponseMode,
+          {
+            ...process.env,
+            GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "75000",
+          },
+        );
+
+        assert.equal(
+          launcherResult.status,
+          0,
+          launcherDiagnostics(launcherResult),
+        );
+      });
+    });
+
+    /** Starts a disposable quick hook because values above the feedback ceiling must be rejected. */
+    it(`rejects values above the ${feedbackResponseMode} timeout ceiling`, () => {
+      withTempProject((fixtureProjectPath) => {
+        const hookScriptRelativePath = writeQuickHook(fixtureProjectPath);
+        const launcherResult = runLauncherProcess(
+          fixtureProjectPath,
+          hookScriptRelativePath,
+          feedbackResponseMode,
+          {
+            ...process.env,
+            GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "75001",
+          },
+        );
+
+        assert.match(
+          `${launcherResult.stdout}${launcherResult.stderr}`,
+          /timeout configuration is invalid/u,
+        );
+      });
+    });
+  }
+
+  it("fails closed when the managed hook script is a symlink", () => {
+    withTempProject((root) => {
+      const hookDir = createManagedHookDirectory(root);
+      const redirectTarget = join(root, "innocent-looking.sh");
+      writeFileSync(redirectTarget, "#!/usr/bin/env bash\nexit 0\n");
+      symlinkSync(redirectTarget, join(hookDir, "deny-dangerous.sh"));
+
+      const result = runLauncherProcess(
+        root,
+        ".goat-flow/hooks/deny-dangerous.sh",
+      );
+      assert.equal(result.status, 2, launcherDiagnostics(result));
+      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+      assert.match(result.stderr, /symlink/u);
+    });
+  });
+
+  it("fails closed when the managed hook path is not a regular file", () => {
+    withTempProject((root) => {
+      const hookDir = createManagedHookDirectory(root);
+      mkdirSync(join(hookDir, "deny-dangerous.sh"));
+
+      const result = runLauncherProcess(
+        root,
+        ".goat-flow/hooks/deny-dangerous.sh",
+      );
+      assert.equal(result.status, 2, launcherDiagnostics(result));
+      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+      assert.match(result.stderr, /regular file/u);
+    });
+  });
+
+  it("fails closed when the managed hook script has extra hard links", () => {
+    withTempProject((root) => {
+      const hookDir = createManagedHookDirectory(root);
+      const scriptPath = join(hookDir, "deny-dangerous.sh");
+      writeFileSync(scriptPath, "#!/usr/bin/env bash\nexit 0\n");
+      linkSync(scriptPath, join(root, "second-name.sh"));
+
+      const result = runLauncherProcess(
+        root,
+        ".goat-flow/hooks/deny-dangerous.sh",
+      );
+      assert.equal(result.status, 2, launcherDiagnostics(result));
+      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+      assert.match(result.stderr, /hard link/u);
+    });
+  });
+
+  // The hook path text stays inside the project, so only resolving the symlinked parent directory
+  // reveals that the script really lives elsewhere. This fixture writes a project plus an outside
+  // directory and spawns the launcher, because path text alone cannot prove containment.
+  it("fails closed when a symlinked parent directory escapes the project root", () => {
+    withTempProject((root) => {
+      const outsideHooks = mkdtempSync(join(tmpdir(), "goat-flow-outside-"));
+      try {
+        writeFileSync(
+          join(outsideHooks, "deny-dangerous.sh"),
+          "#!/usr/bin/env bash\nexit 0\n",
+        );
+        mkdirSync(join(root, ".goat-flow"), { recursive: true });
+        symlinkSync(outsideHooks, join(root, ".goat-flow", "hooks"));
+
+        const result = runLauncherProcess(
+          root,
+          ".goat-flow/hooks/deny-dangerous.sh",
+        );
+        assert.equal(result.status, 2, launcherDiagnostics(result));
+        assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
+        assert.match(result.stderr, /escaped the project root/u);
+      } finally {
+        rmSync(outsideHooks, { recursive: true, force: true });
+      }
+    });
+  });
+});

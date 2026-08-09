@@ -654,15 +654,15 @@ describe("hook registrar: managed surface preservation", () => {
           `${launcherResult.stdout}\n${launcherResult.stderr}`,
         );
         assert.match(launcherResult.stderr, /managed root incomplete/iu);
-        assert.equal(
-          launcherResult.stderr.includes(fixtureProjectPath),
-          false,
-        );
+        assert.equal(launcherResult.stderr.includes(fixtureProjectPath), false);
       });
     });
   }
 
-  // The user's own Stop hook merely contains the managed name, so toggling must preserve it.
+  /**
+   * Writes and toggles a disposable Stop hook because a similar filename must remain user-owned.
+   * Fixture purpose: catches broad matching that would delete a user's existing safety hook.
+   */
   it("preserves user hooks whose names merely contain a managed script name", () => {
     withTempProject((fixtureProjectPath) => {
       mkdirSync(join(fixtureProjectPath, ".claude"), { recursive: true });
