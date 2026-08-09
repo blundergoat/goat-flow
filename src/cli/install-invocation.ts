@@ -215,16 +215,44 @@ export function isWslBashPath(candidate: string): boolean {
 }
 
 /**
+ * Resolve Windows' built-in PATH lookup without searching the user's selected project.
+ * Use before setup asks Windows where Bash or Git is installed.
+ *
+ * @param environment - Host folders; missing or empty roots disable PATH lookup.
+ * @returns Absolute System32 `where.exe`, or `null` when the host root is unavailable or relative.
+ */
+export function windowsWhereExecutablePath(
+  environment: NodeJS.ProcessEnv,
+): string | null {
+  // An empty SystemRoot falls back to WINDIR; neither value may resolve from the project.
+  const windowsSystemRoot = environment.SystemRoot || environment.WINDIR || "";
+  // A missing or relative root cannot identify the operating system's trusted utility.
+  if (!win32.isAbsolute(windowsSystemRoot)) {
+    return null;
+  }
+  return win32.join(windowsSystemRoot, "System32", "where.exe");
+}
+
+/**
  * Ask Windows PATH for one executable while preparing an install or hook launch.
  * A missing command, timeout, or lookup error returns no choices instead of crashing the UI flow.
  * Side effect: starts `where.exe`; all process errors recover to standard-location discovery.
  *
  * @param executable - Bash or Git requested by setup; an empty value is impossible by type
+ * @param environment - Host folders; missing system roots skip PATH lookup
  * @returns matching executable paths in PATH order; empty means setup must try standard locations
  */
-function whereWindowsExecutable(executable: "bash" | "git"): string[] {
+function whereWindowsExecutable(
+  executable: "bash" | "git",
+  environment: NodeJS.ProcessEnv = process.env,
+): string[] {
   try {
-    const windowsPathOutput = execFileSync("where", [executable], {
+    const whereExecutablePath = windowsWhereExecutablePath(environment);
+    // Without a trusted absolute utility path, known Git locations are safer than project lookup.
+    if (whereExecutablePath === null) {
+      return [];
+    }
+    const windowsPathOutput = execFileSync(whereExecutablePath, [executable], {
       encoding: "utf-8",
       timeout: 5000,
     });
@@ -322,8 +350,10 @@ export function discoverWindowsBashCandidates(
   const environment = options.environment ?? process.env;
   // Production checks the real filesystem; tests may describe a Windows layout on another host.
   const pathExists = options.pathExists ?? existsSync;
-  // Production asks Windows PATH; tests can provide deterministic Bash and Git results.
-  const runWhere = options.runWhere ?? whereWindowsExecutable;
+  // Production asks System32 `where.exe`; tests can provide deterministic Bash and Git results.
+  const runWhere =
+    options.runWhere ??
+    ((executable) => whereWindowsExecutable(executable, environment));
   const pathBashCandidates = [...runWhere("bash")];
   // Only recognized Git layouts can offer a trustworthy adjacent Bash executable.
   const gitDerivedBashCandidates = runWhere("git")

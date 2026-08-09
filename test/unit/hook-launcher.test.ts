@@ -18,12 +18,21 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
+import * as managedHookLauncherModule from "../../workflow/hooks/run-with-bash.mjs";
 
 import {
   HOOK_TIMEOUT_MODES,
   launcherDiagnostics,
   withTempProject,
 } from "./hook-registrar.helpers.js";
+
+const windowsTaskkillExecutablePath = (
+  managedHookLauncherModule as typeof managedHookLauncherModule & {
+    windowsTaskkillExecutablePath?: (
+      environment: NodeJS.ProcessEnv,
+    ) => string | null;
+  }
+).windowsTaskkillExecutablePath;
 
 describe("hook launcher script validation", () => {
   const HOOK_LAUNCHER_PATH = resolve(
@@ -98,6 +107,30 @@ describe("hook launcher script validation", () => {
     );
     return hookScriptRelativePath;
   }
+
+  /** Proves Windows cleanup uses the OS utility instead of a project-local executable. */
+  it("resolves Windows tree termination from the system root", () => {
+    assert.equal(typeof windowsTaskkillExecutablePath, "function");
+    assert.equal(
+      windowsTaskkillExecutablePath?.({ SystemRoot: "D:\\Windows" }),
+      "D:\\Windows\\System32\\taskkill.exe",
+    );
+    // An empty primary value still lets the user's host supply its equivalent WINDIR setting.
+    assert.equal(
+      windowsTaskkillExecutablePath?.({
+        SystemRoot: "",
+        WINDIR: "E:\\Windows",
+      }),
+      "E:\\Windows\\System32\\taskkill.exe",
+    );
+    // A missing system root must not turn project PATH or cwd into an executable source.
+    assert.equal(windowsTaskkillExecutablePath?.({}), null);
+    // A relative root could name a project folder, so it is rejected like a missing value.
+    assert.equal(
+      windowsTaskkillExecutablePath?.({ SystemRoot: "project-tools" }),
+      null,
+    );
+  });
 
   // Every supported agent mode must turn the same deadline into its own user-facing response.
   for (const fixture of HOOK_TIMEOUT_MODES) {

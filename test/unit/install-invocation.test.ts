@@ -6,6 +6,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import * as installerInvocationModule from "../../src/cli/install-invocation.js";
 import {
   buildInstallerInvocation,
   buildInstallerSpawnSpec,
@@ -16,7 +17,26 @@ import {
   toBashPath,
 } from "../../src/cli/install-invocation.js";
 
+const windowsWhereExecutablePath = (
+  installerInvocationModule as typeof installerInvocationModule & {
+    windowsWhereExecutablePath?: (
+      environment: NodeJS.ProcessEnv,
+    ) => string | null;
+  }
+).windowsWhereExecutablePath;
+
 describe("discoverWindowsBashCandidates", () => {
+  /** Proves setup never resolves its PATH lookup utility from the user's selected project. */
+  it("resolves Windows PATH lookup from the system root", () => {
+    assert.equal(typeof windowsWhereExecutablePath, "function");
+    assert.equal(
+      windowsWhereExecutablePath?.({ SystemRoot: "D:\\Windows" }),
+      "D:\\Windows\\System32\\where.exe",
+    );
+    // Missing host context means setup skips PATH lookup and tries known Git locations.
+    assert.equal(windowsWhereExecutablePath?.({}), null);
+  });
+
   /** Proves setup can find the default Git Bash even when PATH offers only WSL. */
   it("finds a default Git for Windows install when PATH exposes only WSL", () => {
     const defaultGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";

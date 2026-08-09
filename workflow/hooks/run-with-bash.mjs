@@ -19,16 +19,47 @@ import {
 import { fileURLToPath } from "node:url";
 
 /**
+ * Resolve one fixed Windows system utility without searching the user's project or PATH.
+ * Use only for launcher-owned OS commands whose filenames are supplied by this module.
+ *
+ * @param {NodeJS.ProcessEnv} environment - Host folders; missing or empty roots disable the utility.
+ * @param {string} utilityFileName - Fixed basename; empty or path-shaped input is rejected.
+ * @returns {string | null} Absolute System32 path, or null when either trusted component is missing.
+ */
+function windowsSystemUtilityPath(environment, utilityFileName) {
+  // An empty SystemRoot falls back to WINDIR; neither value may resolve from the project.
+  const windowsSystemRoot = environment.SystemRoot || environment.WINDIR || "";
+  // A missing root or path-shaped filename could escape the trusted System32 directory.
+  if (
+    !win32.isAbsolute(windowsSystemRoot) ||
+    utilityFileName.length === 0 ||
+    win32.basename(utilityFileName) !== utilityFileName
+  ) {
+    return null;
+  }
+  return win32.join(windowsSystemRoot, "System32", utilityFileName);
+}
+
+/**
  * Find Windows executables the user can already launch from PATH.
  * Use during setup and hook startup before checking standard Git folders.
  * Side effect: starts `where.exe`; lookup errors return no matches for fallback discovery.
  *
  * @param {string} executableName - Name to locate; empty produces no usable matches.
+ * @param {NodeJS.ProcessEnv} environment - Host folders; missing system roots skip PATH lookup.
  * @returns {string[]} Command paths; empty means PATH provided no match.
  */
-function whereWindowsExecutable(executableName) {
+function whereWindowsExecutable(executableName, environment = process.env) {
   try {
-    const windowsPathLookup = spawnSync("where", [executableName], {
+    const whereExecutablePath = windowsSystemUtilityPath(
+      environment,
+      "where.exe",
+    );
+    // Without a trusted absolute utility path, fallback locations remain safer than project lookup.
+    if (whereExecutablePath === null) {
+      return [];
+    }
+    const windowsPathLookup = spawnSync(whereExecutablePath, [executableName], {
       encoding: "utf8",
       timeout: 5000,
       windowsHide: true,
@@ -117,6 +148,17 @@ function standardWindowsGitBashLocations(environment) {
 }
 
 /**
+ * Resolve Windows' built-in tree terminator without searching the user's project or PATH.
+ * Use when a timed-out hook must stop Bash and every child tool it started.
+ *
+ * @param {NodeJS.ProcessEnv} environment - Host folders; missing or empty roots disable tree kill.
+ * @returns {string | null} Absolute taskkill path, or null when the host root is unavailable or relative.
+ */
+export function windowsTaskkillExecutablePath(environment) {
+  return windowsSystemUtilityPath(environment, "taskkill.exe");
+}
+
+/**
  * Discover Windows Bash choices even when Git is absent from PATH.
  * Use before install admission and each managed hook launch.
  *
@@ -128,8 +170,11 @@ export function discoverWindowsBashCandidates(options = {}) {
   const windowsEnvironment = options.environment ?? process.env;
   // Normal launches verify derived paths on disk; tests can model installed files.
   const pathExists = options.pathExists ?? existsSync;
-  // Normal launches use Windows `where`; tests can return deterministic PATH results.
-  const runWhere = options.runWhere ?? whereWindowsExecutable;
+  // Normal launches use System32 `where.exe`; tests can return deterministic PATH results.
+  const runWhere =
+    options.runWhere ??
+    ((executableName) =>
+      whereWindowsExecutable(executableName, windowsEnvironment));
   const pathBashCandidates = [...runWhere("bash")];
   // Unfamiliar Git layouts return null and cannot help the user locate Bash.
   const gitDerivedBashCandidates = runWhere("git")
@@ -342,9 +387,10 @@ function hookLaunchTimeoutMs(hookResponseMode, environment) {
  *
  * @param {import("node:child_process").ChildProcess} hookProcess - Started Bash process; a missing PID means launch failed before user work began.
  * @param {NodeJS.Platform} hostPlatform - Active host; an empty value cannot select a safe platform-specific tree kill.
+ * @param {NodeJS.ProcessEnv} hookEnvironment - Host folders; missing Windows roots use direct-process cleanup only.
  * @returns {void} No result; an already-finished process means the user's cleanup is complete.
  */
-function stopHookProcessTree(hookProcess, hostPlatform) {
+function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
   // A failed launch has no process tree to keep the user's agent waiting.
   if (!hookProcess.pid) {
     return;
@@ -353,8 +399,15 @@ function stopHookProcessTree(hookProcess, hostPlatform) {
   try {
     // Windows needs its built-in tree-kill command because Node kills only the direct process.
     if (hostPlatform === "win32") {
+      const taskkillExecutablePath =
+        windowsTaskkillExecutablePath(hookEnvironment);
+      // Without a trusted absolute system path, only the known Bash process is safe to stop.
+      if (taskkillExecutablePath === null) {
+        hookProcess.kill("SIGKILL");
+        return;
+      }
       const windowsTreeKillResult = spawnSync(
-        "taskkill",
+        taskkillExecutablePath,
         ["/pid", String(hookProcess.pid), "/T", "/F"],
         {
           stdio: "ignore",
@@ -414,7 +467,7 @@ function runHookProcessUntilDeadline(
     let hasHookReachedDeadline = false;
     const launchDeadlineTimer = setTimeout(() => {
       hasHookReachedDeadline = true;
-      stopHookProcessTree(hookProcess, hostPlatform);
+      stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment);
       hookProcess.unref();
       // A deadline has no trustworthy exit code or startup error; the user receives the timeout outcome.
       deliverHookResult(null, null);

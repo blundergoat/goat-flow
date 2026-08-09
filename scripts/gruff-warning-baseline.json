@@ -123,8 +123,13 @@
       "stableIdentity": "946e85ebc33abfc1",
       "ruleId": "security.process-exec",
       "file": "workflow/hooks/run-with-bash.mjs",
-      "rationale": "Hook launcher asynchronously spawns validated Bash via argv with shell: false so it can stop a timed-out process tree.",
+      "rationale": "Hook launcher spawns validated Bash and an absolute SystemRoot taskkill path via argv with shell: false to stop timed-out process trees.",
       "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "parameter",
+          "shellEnabled": false
+        },
         {
           "callName": "spawn",
           "argumentSource": "parameter",
