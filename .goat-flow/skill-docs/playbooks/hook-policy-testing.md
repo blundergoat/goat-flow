@@ -142,9 +142,29 @@ Every supported agent must call the installed central dispatcher rather than a
 private copy. Confirm current configuration and manifest pointers:
 
 ```bash
-rg -n '\.goat-flow/hooks/deny-dangerous\.sh' \
-  .claude/settings.json .codex/hooks.json .github/hooks/hooks.json \
+registration_files=()
+
+# Check only registration files present in the user's selected project.
+for registration_file in \
+  .claude/settings.json \
+  .codex/hooks.json \
+  .github/hooks/hooks.json \
   workflow/manifest.json
+do
+  # A present file can prove that the user's agent loads the central dispatcher.
+  if test -f "$registration_file"; then
+    registration_files+=("$registration_file")
+  fi
+done
+
+# No supported file means this project has no registration surface to verify.
+if test "${#registration_files[@]}" -eq 0; then
+  printf '%s\n' 'No supported agent registration files found.' >&2
+  exit 1
+fi
+
+rg -n --with-filename \
+  '\.goat-flow/hooks/deny-dangerous\.sh' "${registration_files[@]}"
 ```
 
 Then run the structural checks that detect packaging or registration drift:

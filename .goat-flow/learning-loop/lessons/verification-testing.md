@@ -23,8 +23,13 @@ last_reviewed: 2026-08-09
 ## Lesson: Timeout completion needs a deadline independent of child close
 
 **Status:** active | **Created:** 2026-07-12
+**Decision changed:** Treat a timeout response as incomplete proof until the host-facing call also returns within its wall-clock bound.
+**Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-09
 
 **What happened:** The seven-skill pressure matrix reproduced a preflight runner that exceeded its hard timeout window after process-group escalation. A detached test helper escaped the group, inherited stdout/stderr, and held those pipes open, so Node delayed the child's `close` event after the direct process exited.
+
+**Recurrence 2026-08-09:** M03 preflight first reported `bounds gruff hooks with a timeout-specific response` as transient because its automatic full-suite retry passed. Running that named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound. The unchanged baseline launcher uses a synchronous timeout around Bash, while the fixture's background process can retain the caller's captured output pipes after Bash is killed. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `hook exceeded its deadline and was killed`) and `test/unit/hook-registrar.test.ts` (search: `bounds ${fixture.mode} hooks with a timeout-specific response`).
 
 **Root cause:** The timeout path bounded process termination but used `close` as its only result-delivery event. An escaped descriptor holder could therefore hide a known timeout result.
 
@@ -149,6 +154,8 @@ last_reviewed: 2026-08-09
 **Recurrence 2026-08-03:** The first GREEN wording for oversized review scope and critique context merging pushed `goat-review` and `goat-critique` from 2495/2494 words to 2592/2531. The focused skill-contract run rejected both before broader verification; budget-neutral rewrites finished at 2498/2495. Evidence anchors: `workflow/skills/goat-review/SKILL.md` (search: `never guess commit windows`), `workflow/skills/goat-critique/SKILL.md` (search: `never replace baseline context`), `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`). TDD receipts: `.goat-flow/logs/sessions/2026-08-03-goat-review-tdd.md` and `.goat-flow/logs/sessions/2026-08-03-goat-critique-tdd.md`.
 
 **Recurrence 2026-08-09:** A new milestone roadmap first failed strict validation because six mid-implementation proof items had no parseable estimates. After that arithmetic was corrected, `plans check --strict` passed while 24 `Read first` anchors still named stale paths or paraphrases absent from their files. A separate exact path and `rg -F` anchor audit exposed the cold-start failures. Treat each validator as proof only of its named contract: run strict plan validation for structure and estimates, then independently verify every referenced path and semantic anchor. Evidence anchors: `src/cli/plans-check.ts` (search: `mid-proof item(s) missing an (est: ...) entry`) and `test/unit/plans-check-lifecycle.test.ts` (search: `strict mode rejects unestimated testing and mid-proof work`).
+
+**Recurrence 2026-08-09:** M03 correctly qualified goat-debug's boundary command as `ALWAYS in Diagnose mode`, but the first full `npm test` run exposed a shared contract that still required the exact unqualified `ALWAYS` label. The focused goat-debug contract passed because it covered the new wording; the shared contract now accepts only the canonical label or that explicit Diagnose qualifier. Evidence anchors: `workflow/skills/goat-debug/SKILL.md` (search: `ALWAYS in Diagnose mode`) and `test/contract/skill-hardening-shared-1.test.ts` (search: `keeps canonical skill boundaries explicit and route-focused`).
 
 **Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN.
 ---

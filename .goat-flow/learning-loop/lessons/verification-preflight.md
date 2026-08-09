@@ -101,11 +101,11 @@ last_reviewed: 2026-08-09
 
 **Recurrences (2026-08-03, 2026-08-07, 2026-08-09):** M00 repeated the focused-GREEN-before-Prettier failure; M02-M05 formatted first. Evidence anchors: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`), and `test/integration/post-turn-safety-hook.helpers.ts` (search: `withCommandShim`).
 
-**2026-08-09:** M02 repeated this. Evidence: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`).
+**2026-08-09 M02/M03:** `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`); `test/contract/skill-hardening-skills-2.test.ts` (search: `truthful goat-critique`); `test/unit/hook-registrar.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
 
 **Prevention:** Format touched TypeScript before focused proof; retain Prettier in final verification.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 12 | **Latest occurrence:** 2026-08-09
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 14 | **Latest occurrence:** 2026-08-09
 
 ---
 
@@ -137,7 +137,7 @@ last_reviewed: 2026-08-09
 
 **Recurrence update (2026-07-03):** 1.13.0 milestones each passed their per-file scoped gates, yet the closing `npm run publish:check` failed three ways only a full-tree run surfaces: (1) an integration assertion still matched a CDN string after an asset was vendored locally (`test/integration/dashboard-server.test.ts`, `alpinejs@3` → `/assets/alpine.js`); (2) `appendQualityReportContract` shipped at complexity 21 because scoped eslint had only run the file's own diff, never the whole `src/cli` tree - as in the M01 recurrence above, route branchy `full ? a : b` / `if (full)` lines through small `pushVariant`/`pushFull` helpers so each decision sits in the helper's scope; (3) deleting the `coming-soon` dashboard view left its name in three prose lists (`.goat-flow/code-map.md`, `docs/dashboard.md`, `.goat-flow/architecture.md`) and orphaned 7 backticked learning-loop refs, tripping the round-trip fixture's embedded preflight. Prevention: when a milestone deletes files, moves symbols between modules, or swaps a served asset, run `npm run publish:check` as the FINAL gate - the fast suite and scoped eslint do not exercise full-tree complexity, cold-path doc drift, or learning-loop ref integrity.
 
-**Recurrence update (2026-07-12):** M02 policy-contract verification ran targeted ESLint against `test/contract/command-phrases.test.ts`; the normal command returned only an ignored-file warning, and `--no-ignore` then failed because the test is outside ESLint's configured TypeScript project. The focused Node test and `npm run typecheck` were the supported gates. After those two failed attempts, verification rewound to the repository-supported scopes instead of forcing ad hoc lint coverage. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`).
+**Recurrences (2026-07-12, 2026-08-09):** M02/M03 aimed ESLint at ignored tests; `--no-ignore` then failed outside the parser project. M03 also omitted Gruff's `analyse` subcommand. Supported Node tests, typecheck, Prettier, and `gruff-ts analyse <file>` produced valid evidence. Anchors: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`); `test/unit/playbook-contract.test.ts` (search: `assertRegistrationCommandForEachPlaybook`).
 
 **Recurrence update (2026-07-12):** M29's testing gate again listed ignored unit/integration test files in a targeted `npx eslint --max-warnings 0` command. ESLint reported three ignored-file warnings and exited 1 even though the changed source had no lint error. The gate was corrected to lint only the three changed `src/cli/audit/` files; TypeScript, Prettier, and focused Node tests remain the supported verification for the ignored test files. Evidence anchor: `eslint.config.mjs` (search: `"test/**"`) - test files are intentionally outside this repo's ESLint scope.
 
@@ -297,6 +297,7 @@ last_reviewed: 2026-08-09
 
 **Status:** active | **Created:** 2026-06-07
 **Decision changed:** Validate every persisted semantic anchor against its source with the literal search shape a future agent will run.
+**Incident count:** 4 | **Latest occurrence:** 2026-08-09
 
 **What happened:** During the M04 review-cleanup verification, a stale-path `rg` sweep embedded a Markdown-formatted fragment inside a double-quoted shell pattern. Bash treated the backticks around `decisions/` as command substitution, printed `/bin/bash: line 1: decisions/: No such file or directory`, and then ran `rg` with a mangled pattern that produced noisy, unusable output.
 
@@ -308,7 +309,7 @@ last_reviewed: 2026-08-09
 
 **Recurrence update (2026-06-10):** The same failure recurred while proving the M06b lifecycle sentence across docs: a double-quoted `rg` fixed-string pattern containing `` `goat-flow index` `` and `` `goat-flow stats --check` `` triggered command substitution, ran the CLI commands, and produced a mangled regex error instead of useful grep evidence. The corrected proof used `rg -n -F 'Re-run `goat-flow index` ...' ...` with single quotes around the whole fixed-string pattern.
 
-**Recurrence update (2026-08-01):** M06 learning retrieval again placed backticked lesson titles inside a double-quoted `rg` expression. The PreToolUse hook blocked the command before Bash could substitute anything, so no search evidence was produced and no repository write occurred. The corrected retrieval searched plain semantic tokens inside single quotes, then opened the matched source entries directly.
+**Recurrences (2026-08-01, 2026-08-09):** PreToolUse blocked double-quoted `rg` patterns containing Markdown backticks before Bash ran them; no writes occurred. Both reruns used plain single-quoted semantic tokens.
 
 **Recurrence update (2026-08-02):** An effort-estimation milestone cited a prose rendering of an architecture sentence as its `(search: ...)` anchor, but the source wrapped `EvidenceEnvelope` in Markdown backticks. The fixed-string verification could not match the persisted anchor. The plan now anchors on the exact `## Local Data and Evidence Budget` heading, which is both literal and formatting-independent.
 

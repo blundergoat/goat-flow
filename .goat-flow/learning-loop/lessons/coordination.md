@@ -1,6 +1,21 @@
 ---
 category: coordination
-last_reviewed: 2026-08-08
+last_reviewed: 2026-08-09
+---
+
+## Lesson: Git status cannot prove milestone work disappeared after HEAD moves
+
+**Status:** active | **Created:** 2026-08-09
+**Decision changed:** Compare the recorded baseline tree, current HEAD, and file hashes before attempting recovery when a changed path disappears from `git status`.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-09
+
+**What happened:** During M03 verification, goat-debug paths disappeared from `git status`, so I paused writes on the assumption that a test process had restored them. The files still had the expected hashes and differed from the recorded M03 baseline tree; current HEAD had advanced to a user-created commit that already contained those changes.
+
+**Root cause:** I read `git status` as a comparison with the milestone's recorded baseline. It compares the index and working tree with current HEAD, so a commit made during the milestone can make preserved work disappear from status without removing it.
+
+**Prevention:** Before restoring or recreating apparently missing work, compare `git diff <recorded-tree>`, `git diff HEAD`, `git log -1`, and hashes for the affected mirrors. Treat an unexpected HEAD change as shared-workspace evidence to reconcile, not proof of data loss. Evidence anchor: `workflow/skills/goat-debug/SKILL.md` (search: `ALWAYS in Diagnose mode`).
+
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -77,14 +92,16 @@ last_reviewed: 2026-08-08
 **Status:** active | **Created:** 2026-05-01
 **Decision changed:** Run the plan arithmetic gate immediately after writing estimates, then independently derive every ISSUE-level roll-up from the validated milestone headlines.
 **Trigger phase:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-08-07
+**Incident count:** 4
+**Latest occurrence:** 2026-08-09
 
 **What happened:** Programme headline stated ~33 weekends (council's estimate). Phase breakdowns summed to ~26. The gap was unexplained - some combination of CF items, overhead, and double-counted shared infrastructure. The headline lost legitimacy when the math didn't add up.
 
 **Recurrence 2026-08-04:** The quality-findings milestone declared 70 minutes as 45 product / 20 proof / 5 other, but its proof tasks summed to 28 minutes. `plans check` rejected the artifact with the category-overrun diagnostic; the estimate was corrected to 78 minutes before implementation continued. Evidence anchor: `src/cli/plans-check.ts` (search: `task estimates`).
 
 **Recurrence 2026-08-07:** Strict plan validation confirmed every milestone's internal arithmetic, but I manually transcribed the M06-M12 sum as 13.25 hours. The validated headlines totalled 815 minutes, or about 13.6 hours. A separate cross-artifact arithmetic pass caught the mismatch before delivery.
+
+**Recurrence 2026-08-09:** Expanding M03 for a runtime-hook repair added 20 product minutes and 20 proof minutes, but I initially left its headline split at 140 product / 110 proof. Strict validation reported counted totals of 160 / 130; the live estimate was corrected while the original 260-minute baseline stayed explicit in Forecast calibration. Evidence anchor: `src/cli/plans-check.ts` (search: `counted work`).
 
 **Prevention:** Programme documents should show effort accounting explicitly and derive each roll-up from the milestone headlines after strict validation. If two totals intentionally differ, name the accounting difference; do not transcribe a mental sum into the summary.
 
@@ -127,8 +144,8 @@ last_reviewed: 2026-08-08
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** VERIFY
-**Incident count:** 1
-**Latest occurrence:** 2026-08-02
+**Incident count:** 2
+**Latest occurrence:** 2026-08-09
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
 
@@ -158,12 +175,15 @@ last_reviewed: 2026-08-08
 
 **Root cause:** The two plans derived their numbers differently. goat-debug-improve's brief opens with a duration - "9.5-15 hours coding-agent time" - and the per-milestone splits were apportioned out of that total, so wall-clock intuition set the scale and the categories only divided it. effort-estimation-timing carried a `Forecast basis` naming countable units (contract and RED fixtures 7, timing command and safe writer 6, proof cycles 6, administration 2) which summed upward into the headline. Counting produces agent-time; converting from hours reproduces human intuition wearing agent-time units.
 
+**Recurrence 2026-08-09:** The active 1.15.1 plan estimated M00, M01, and M02 at 150, 165, and 145 minutes; prospective receipts measured 28, 29, and 102 minutes, or 0.19x, 0.18x, and 0.70x. The user flagged the persistent overestimate. One multiplier cannot calibrate short deterministic hook work and delegation-heavy skill proof; future forecasts must count those work units separately and reforecast after the first RED. The ignored milestone receipts are current-run context, not durable evidence.
+
 **Prevention:**
 1. Write the unit count before any minute figure: files touched, commands run, proof cycles, integration cycles. The headline is the sum, never the input.
 2. Treat any estimate expressed first as hours as unvalidated. Decomposing a duration into product/proof/other does not convert it into agent-time.
 3. A `Forecast basis` line that names its countable groups is the artifact that makes an estimate auditable later; a bare total is not.
 4. Do not carry an inflated plan's estimates into calibration. Untagged retrospective Actuals are excluded for exactly this reason.
 5. Suspect the method, not the milestone, when a whole plan misses one direction by an order of magnitude.
+6. Publish low/likely/high forecasts by comparable task class, and update the live forecast after the first failing reproduction or sequential gate while preserving the original estimate.
 
 **Evidence anchors:** `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) computes ratios from raw receipt seconds; `workflow/skills/goat-plan/SKILL.md` (search: `Effort estimate (agent-time)`) already requires counted units and forbids wall-clock intuition - this lesson is measured evidence that the rule is load-bearing rather than stylistic.
 
@@ -174,12 +194,14 @@ last_reviewed: 2026-08-08
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Switch the receipt category at the work boundary, not at the milestone boundary; a stale category is a silent data error, not a rounding detail.
 **Trigger phase:** VERIFY
-**Incident count:** 2
-**Latest occurrence:** 2026-08-04
+**Incident count:** 3
+**Latest occurrence:** 2026-08-09
 
 **What happened:** Effort-estimation-timing M02 opened a `product` span and left it open across implementation, a full test-suite run, lint, format, and unused-export checks. The finalized receipt reported 1112 product / 99 proof seconds. The total (1354s) was correct and system-stamped, but the split was badly wrong - most of that "product" time was proof. Nothing flagged it: the receipt was open, finalized cleanly, reconciled against the Actual, and passed strict validation, because the CLI can only stamp the category it was given.
 
 **Recurrence 2026-08-04:** The quality-findings milestone left its first `product` span open through focused content tests, both 327-case hook corpora, the interleaved benchmark, and skill contract runs. The category switched only for final repository verification. The receipt total remains prospective, but its product/proof split is knowingly inaccurate and must be disclosed rather than used for calibration.
+
+**Recurrence 2026-08-09:** M03 left its first `product` span open across goat-debug RED confirmation, delegated pressure runs, and the deployment test matrix, then into goat-critique RED. The mistake was caught after 1,604 seconds when the user challenged forecast quality; the receipt switched to `proof` immediately. Total elapsed time remains prospective, but the first segment's category is knowingly mixed and cannot calibrate product-versus-proof rates.
 
 **Root cause:** Starting a receipt feels like the whole discipline, so category maintenance gets treated as optional bookkeeping. A single long span is also the path of least resistance - `stop` then `start` is two commands, while doing nothing is zero. The resulting split carries the full authority of a `measured` Actual while being no better than a guess.
 

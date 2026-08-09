@@ -6,7 +6,7 @@
  * resolves the System32 WSL shim by accident. The launcher preserves stdin,
  * stdout, stderr, cwd, and the hook's exit status.
  */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import {
   delimiter,
@@ -336,15 +336,128 @@ function hookLaunchTimeoutMs(hookResponseMode, environment) {
 }
 
 /**
+ * Stop a timed-out hook and the child tools it started.
+ * Use when the user's deadline expires so formatter or scanner children cannot keep the agent waiting.
+ * Side effect: force-stops the started process tree; errors recover when work already ended.
+ *
+ * @param {import("node:child_process").ChildProcess} hookProcess - Started Bash process; a missing PID means launch failed before user work began.
+ * @param {NodeJS.Platform} hostPlatform - Active host; an empty value cannot select a safe platform-specific tree kill.
+ * @returns {void} No result; an already-finished process means the user's cleanup is complete.
+ */
+function stopHookProcessTree(hookProcess, hostPlatform) {
+  // A failed launch has no process tree to keep the user's agent waiting.
+  if (!hookProcess.pid) {
+    return;
+  }
+
+  try {
+    // Windows needs its built-in tree-kill command because Node kills only the direct process.
+    if (hostPlatform === "win32") {
+      const windowsTreeKillResult = spawnSync(
+        "taskkill",
+        ["/pid", String(hookProcess.pid), "/T", "/F"],
+        {
+          stdio: "ignore",
+          timeout: 1_000,
+          windowsHide: true,
+        },
+      );
+      // A missing or failed taskkill still lets the user escape the direct Bash process.
+      if (windowsTreeKillResult.status !== 0) {
+        hookProcess.kill("SIGKILL");
+      }
+      return;
+    }
+    // POSIX descendants share the detached Bash group, so one signal ends the whole hook tree.
+    process.kill(-hookProcess.pid, "SIGKILL");
+  } catch {
+    // For example, the hook may finish between the UI deadline and the cleanup signal.
+  }
+}
+
+/**
+ * Run one verified hook until it exits, fails to start, or reaches the user's deadline.
+ * Use after path and Bash validation so the agent receives one bounded launch result.
+ *
+ * @param {string} bashExecutable - Resolved Bash command; empty would fail through the launch-error result.
+ * @param {string} hookScriptPath - Non-empty verified script path inside the user's project.
+ * @param {string} projectRoot - Non-empty selected project used as the hook's working directory.
+ * @param {NodeJS.ProcessEnv} hookEnvironment - Hook environment; missing values remain unavailable to the script.
+ * @param {number} launchTimeout - Positive deadline in milliseconds; zero would time out immediately.
+ * @param {NodeJS.Platform} hostPlatform - Active host used for process-tree cleanup.
+ * @returns {Promise<{status: number | null, timedOut: boolean, launchError: Error | null}>} Result for the user; null status means Bash never produced an exit code.
+ */
+function runHookProcessUntilDeadline(
+  bashExecutable,
+  hookScriptPath,
+  projectRoot,
+  hookEnvironment,
+  launchTimeout,
+  hostPlatform,
+) {
+  return new Promise((resolveHookResult) => {
+    const validatedBashExecutable =
+      bashExecutable === "bash" ? "bash" : bashExecutable;
+    const hookProcess = spawn(
+      validatedBashExecutable,
+      [hookScriptPath.replace(/\\/gu, "/")],
+      {
+        cwd: projectRoot,
+        detached: hostPlatform !== "win32",
+        env: hookEnvironment,
+        shell: false,
+        stdio: "inherit",
+        windowsHide: true,
+      },
+    );
+    let hasDeliveredHookResult = false;
+    let hasHookReachedDeadline = false;
+    const launchDeadlineTimer = setTimeout(() => {
+      hasHookReachedDeadline = true;
+      stopHookProcessTree(hookProcess, hostPlatform);
+    }, launchTimeout);
+
+    /**
+     * Deliver the first terminal result and discard later close/error events.
+     * Use when Bash either exits or fails so the agent receives one response.
+     *
+     * @param {number | null} hookStatus - Hook exit code; null means no user-visible status was produced.
+     * @param {Error | null} launchError - Startup error; null means Bash started successfully.
+     * @returns {void} No return value; resolving the promise resumes the user's agent.
+     */
+    function deliverHookResult(hookStatus, launchError) {
+      // A launch error can be followed by close, but the user must receive only the first result.
+      if (hasDeliveredHookResult) {
+        return;
+      }
+      hasDeliveredHookResult = true;
+      clearTimeout(launchDeadlineTimer);
+      resolveHookResult({
+        status: hookStatus,
+        timedOut: hasHookReachedDeadline,
+        launchError,
+      });
+    }
+
+    hookProcess.once("error", (launchError) => {
+      deliverHookResult(null, launchError);
+    });
+    hookProcess.once("close", (hookStatus) => {
+      deliverHookResult(hookStatus, null);
+    });
+  });
+}
+
+/**
  * Run one project hook through Bash while preserving its host-facing result.
  * Use when an agent invokes a managed `.sh` hook on Windows, macOS, or Linux.
  *
  * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
  * @param {string} hookResponseMode - Agent response protocol; empty uses policy behavior.
  * @param {object} launchOptions - Test/platform overrides; omitted values use the live project.
- * @returns {number} Hook exit status, or the protocol-specific unavailable result.
+ * @returns {Promise<number>} Hook exit status, or the protocol-specific unavailable result.
  */
-export function runHookWithBash(
+export async function runHookWithBash(
   hookScriptArgument,
   hookResponseMode = "policy",
   launchOptions = {},
@@ -415,26 +528,23 @@ export function runHookWithBash(
       "hook timeout configuration is invalid",
     );
   }
-  const hookExecution = spawnSync(
+  const hookExecution = await runHookProcessUntilDeadline(
     bashExecutable,
-    [hookScriptPath.replace(/\\/gu, "/")],
-    {
-      cwd: projectRoot,
-      env: hookEnvironment,
-      timeout: launchTimeout,
-      killSignal: "SIGKILL",
-      stdio: "inherit",
-      windowsHide: true,
-    },
+    hookScriptPath,
+    projectRoot,
+    hookEnvironment,
+    launchTimeout,
+    hostPlatform,
   );
-  if (hookExecution.error?.code === "ETIMEDOUT") {
+  // A deadline means the hook tree was stopped before the user-facing response is rendered.
+  if (hookExecution.timedOut) {
     return reportUnavailable(
       hookResponseMode,
       "hook exceeded its deadline and was killed",
     );
   }
   // For example, endpoint protection may stop Git Bash before the user's hook starts.
-  if (hookExecution.error) {
+  if (hookExecution.launchError) {
     return reportUnavailable(hookResponseMode, "Bash could not start");
   }
   // A numeric status is the hook's real allow, deny, or advisory result for the user.
@@ -466,5 +576,8 @@ if (launchedAsProgram) {
   const hookScriptArgument = process.argv[2] ?? "";
   // A missing response mode uses the normal fail-closed policy response.
   const hookResponseMode = process.argv[3] ?? "policy";
-  process.exitCode = runHookWithBash(hookScriptArgument, hookResponseMode);
+  process.exitCode = await runHookWithBash(
+    hookScriptArgument,
+    hookResponseMode,
+  );
 }

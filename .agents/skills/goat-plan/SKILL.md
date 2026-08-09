@@ -147,11 +147,11 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 ### File Artifact Rules (Modes 3 and 4)
 
-For a fresh plan, create a slugged directory, update `.goat-flow/plans/.active` in the same batch, and write one zero-padded `M*.md` file per milestone.
+For fresh plans, create a slugged directory, update `.goat-flow/plans/.active` in that batch, and write one zero-padded `M*.md` per milestone.
 
 **Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty and `N/A` sections. Use the Phase 1 core, claim-based Proof, and one command source.
 
-**ISSUE.md:** Standard+ writes `references/issue-format.md`; Small only for a requested GitHub brief, multiple milestones, or shared requirements/budget.
+**ISSUE.md:** Standard+ writes `ISSUE.md` using `references/issue-format.md` as read-only guidance; Small only for a requested GitHub brief, multiple milestones, or shared requirements/budget.
 
 **Backlog:** When deferred items exist, write `backlog.md` with Next, Later, and Maybe tiers.
 

@@ -3,8 +3,12 @@
 ## Unreleased
 
 - **Post-turn scan failures block cleanly** - Missing roots, parser errors, and failed scan commands now fail closed on native and Bash 3 paths.
-- **Managed hooks run safely outside Git** - Launchers find a verified Goat Flow root, reject redirected files, and bound child execution.
+- **Managed hooks run safely outside Git** - Launchers find a verified Goat Flow root, reject redirected files, and stop timed-out process trees.
 - **Hook setup converges on one launcher** - Installs, sync, audits, and 1.15.0 upgrades repair stale commands without `git init`.
+- **goat-debug keeps onboarding investigative** - Investigate mode no longer inherits bug hypotheses, reproduction, or minimisation.
+- **Clean critiques stay truthful** - A 100/100 meta-audit keeps its results section and states that no checks failed.
+- **Plans keep issue templates read-only** - Standard+ creates `ISSUE.md` beside milestones instead of overwriting shared guidance.
+- **Hook registration checks fit consumer projects** - Verification scans present configs, shows file names, and fails when none exist.
 
 ## v1.15.0 - 2026-08-07
 

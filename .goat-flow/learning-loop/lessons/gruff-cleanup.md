@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -170,8 +170,8 @@ last_reviewed: 2026-08-07
 **Status:** active | **Created:** 2026-07-13
 **Decision changed:** Generate one named test per matrix value and keep the assertion in that test callback; shared helpers return evidence instead of hiding assertions.
 **Trigger phase:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-08-07
+**Incident count:** 4
+**Latest occurrence:** 2026-08-09
 
 **What happened:** The first M03 cross-agent install matrix wrapped assertions for all four agents inside two test-level loops. Gruff reported `test-quality.loop-in-test`; moving the work into named per-agent helpers then exposed `test-quality.no-assertions` because the visible test callbacks only called those helpers. The behavior suite passed both shapes, but its TAP output and analyzer evidence could not prove each named case owned an assertion.
 
@@ -182,3 +182,5 @@ last_reviewed: 2026-08-07
 **Recurrence 2026-07-13:** M14's evidence-envelope and local-data contract tests initially asserted matrix values inside test-level loops. Gruff again reported `test-quality.loop-in-test`; named cases restored direct, user-visible failure localization and produced `A`, composite `100`, with 0 findings. Evidence anchors: `test/unit/evidence-envelope.test.ts` (search: `FORBIDDEN_RAW_PAYLOAD_KEYS`) and `test/contract/local-data-contract.test.ts` (search: `LOCAL_STATE_README_ENTRIES`).
 
 **Recurrence 2026-08-07:** M04 initially checked nine staged-only prompt phrases inside one bounded-saver test loop. Direct Gruff analysis reported a new `test-quality.loop-in-test` advisory. Registering one named test per phrase kept a direct assertion and made the failed contract visible in TAP; the focused suite passed 45 tests and the rerun removed the new finding. Evidence anchor: `test/unit/quality-report-contract.test.ts` (search: `keeps bounded-saver prompts free of staged-only guidance`).
+
+**Recurrence 2026-08-09:** Three hook-registration tests each looped over the two shipped playbook copies. Gruff reported three `test-quality.loop-in-test` advisories; one named mirror runner moved iteration out of the tests while assertion callbacks retained path-labelled failures. The rerun reported 0 findings. Evidence: `test/unit/playbook-contract.test.ts` (search: `assertRegistrationCommandForEachPlaybook`).

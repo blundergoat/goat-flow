@@ -1,6 +1,6 @@
 ---
 category: integration-verification
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: Manifest canonical vs stale_names misclassification silently broke skill installs
@@ -196,3 +196,18 @@ A third incident added a Claude/reporting-only relationship ahead of the owner r
 **Root cause:** I validated the authoring layout I had produced instead of the repository's consumer contract. A Markdown reader could infer the intended fields, while `parseMilestoneMarkdown` intentionally recognizes a narrower portable schema.
 
 **Fix and prevention:** Treat the canonical example as an executable consumer fixture, not prose. Cover compact and expanded representations through `parseMilestoneMarkdown`, run `goat-flow plans check <plan-path> --strict`, require exporter records to have zero warnings, and resolve every cited path plus exact semantic search string before handoff. Parser changes also run scoped ESLint before full preflight. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Other portable anchors are Status, compact or section Scope, Tasks, Proof, Exit/Exit criteria, and Stop/rescope. Evidence anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`), `src/cli/plans-export.ts` (search: `readStopMarkdown`), and `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
+
+---
+
+## Lesson: Command output shape must survive one and many selected files
+
+**Status:** active | **Created:** 2026-08-09
+**Decision changed:** Execute documented search commands with one, many, and zero selected files before treating their output as stable.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-09
+
+**What happened:** Present-file selection fixed hook-registration exit handling, but the first GREEN run passed only one consumer config to `rg`. Ripgrep then omitted the filename, so users saw the matching line without knowing which registration file supplied it; the focused suite reported 8/9 until `--with-filename` made single- and multi-file output consistent.
+
+**Root cause:** The command relied on ripgrep's input-count-dependent filename default while its output was evidence about file ownership.
+
+**Prevention:** When a documented command selects optional files, execute its literal body with one, many, and zero inputs. Require explicit path-labelled output when users need to identify the source, and require a named failure for empty selection. Evidence: `test/unit/playbook-contract.test.ts` (search: `runs the documented registration command in a consumer checkout`).

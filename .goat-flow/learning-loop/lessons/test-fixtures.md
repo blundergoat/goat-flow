@@ -123,7 +123,7 @@ last_reviewed: 2026-08-09
 **Status:** active | **Created:** 2026-04-27
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** VERIFY
-**Incident count:** 7 | **Latest occurrence:** 2026-08-07
+**Incident count:** 8 | **Latest occurrence:** 2026-08-09
 
 **What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
 
@@ -142,6 +142,8 @@ last_reviewed: 2026-08-09
 **Recurrence 2026-08-07 (plans time):** Replacing the timing test's inline milestone body with the shared canonical builder invalidated the editor-save substitution. The no-op replacement made the expected concurrent-edit error disappear. Anchoring the edit to text the shared builder emits and asserting that the replacement changed the fixture restored the intended proof. Evidence anchor: `test/unit/plans-time.test.ts` (search: `preserves an in-place user edit detected before atomic replacement`).
 
 **Recurrence 2026-08-07 (quality history):** The first impossible-date streak fixture placed `2026-02-30` beside a June report. The existing 30-day cutoff already broke continuity, so the test passed without proving that an impossible date cannot bridge a streak. Moving the surrounding dates within 30 days made the pre-fix test fail on JavaScript's calendar normalization and isolated the new rule. Evidence anchor: `test/unit/quality-diff-delta-tag.test.ts` (search: `an invalid legacy date`).
+
+**Recurrence 2026-08-09 (goat-plan contract):** The first RED asked the H2-only `readMarkdownSection` helper for an H3 artifact section, so it failed before reaching the write-target contradiction. Reading the complete installed skill produced the intended RED twice. Evidence: `test/contract/skill-hardening-plan-2.test.ts` (search: `writes the user-facing ISSUE artifact`).
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
@@ -244,7 +246,7 @@ last_reviewed: 2026-08-09
 
 **Recurrence 2026-08-02 (same hardening run):** After correcting fact provenance, a hypothesis evaluator prompt explicitly requested “What would disconfirm each.” The evaluator returned good falsifiers, but the prompt had named the target field and therefore measured recitation rather than unaided technique use. The host excluded the run and rewound after the second scenario-method correction. This is the same isolation failure at a different layer: the fixture supplied the decision it claimed to test.
 
-**Recurrence 2026-08-09:** A goat-debug GREEN evaluator chose the correct Investigate path, but the prompt's three-call cap and ban on other reads prevented the skill's mandatory learning-loop retrieval. The pass was discarded because that artificial conflict could decide the clarity result independently of the Diagnose-versus-Investigate rule. Evidence anchor: `workflow/skills/goat-debug/SKILL.md` (search: `Footgun check`).
+**Recurrence 2026-08-09:** A goat-debug GREEN evaluator chose the correct Investigate path, but the prompt's three-call cap and ban on other reads prevented the skill's mandatory learning-loop retrieval. The pass was discarded because that artificial conflict could decide the clarity result independently of the Diagnose-versus-Investigate rule. Evidence anchor: `workflow/skills/goat-debug/SKILL.md` (search: `Footgun check`). The redacted current-run context is `.goat-flow/logs/sessions/2026-08-09-goat-debug-tdd.md`; it is local evidence, not a durable source anchor.
 
 **Prevention:** Before using a pressure or application fixture, compare every option and prompt restriction with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend incidents, block mandatory reads, or ask the evaluator to recite the target technique. Keep non-target obligations equal so only the tested rule explains the result.
 

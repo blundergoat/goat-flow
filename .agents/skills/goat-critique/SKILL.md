@@ -139,10 +139,10 @@ Produce the prime critique. Lead with a **Verdict** block:
 - If differential mode: append delta block (`Resolved: N | Regressed: M | New: K | Unchanged: J` vs prior critique)
 
 Then the full critique:
-- Consensus findings (preserved as-is)
-- Resolved split findings (with resolution rationale)
-- Human-directed findings (from Phase 4 clarification responses)
-- Verified unique findings (survived cross-examination)
+- Consensus findings, unchanged
+- Resolved splits with rationale
+- Phase 4 human-directed findings
+- Verified unique findings
 - Retracted findings (listed so user sees what was considered and dismissed)
 
 **Open questions:** Items with INFERRED-only evidence, inconclusive single-agent findings, or unvalidated assumptions go here - not as recommendations. Each open question states: confidence, evidence needed to resolve, revisit trigger.
@@ -151,7 +151,7 @@ Then the full critique:
 
 **Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion. Every synthesised finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`.
 
-**Phase 5.5 - Meta-audit.** Give a 2-call meta-agent only the Phase 5 draft and the 10 checks in `references/rubric-examples.md`. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Before presentation, insert non-empty `## Auto-Detected Issues`; add `Meta-score: N/100` to the verdict.
+**Phase 5.5 - Meta-audit.** Give a 2-call meta-agent only the Phase 5 draft and the 10 checks in `references/rubric-examples.md`. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict.
 
 **BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." After plan critique, suggest `/goat-plan`.
 
@@ -208,7 +208,7 @@ Use this for the Phase 5 gate response. Omit `## Outcomes` until Phase 5.6.
 ## Control Group Delta
 ## Validated Findings  <!-- source pool for Recommended Changes; every finding includes proof class -->
 ## Cross-Examination Results
-## Auto-Detected Issues  <!-- from Phase 5.5 meta-audit, if any -->
+## Auto-Detected Issues  <!-- failures or exact clean attestation; always present -->
 ## Retracted Findings
 ## Human Decisions
 ## Strengths
