@@ -16,9 +16,12 @@ import {
   readAgentHookState,
   writeAgentHookState,
 } from "../../src/cli/server/agent-hook-writer.js";
-import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import {
+  getHookSpec,
+  type HookDeliveryContract,
+  type HookProviderRegistryEvidence,
+} from "../../src/cli/server/hooks-registry.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
-
 import {
   HOOK_IDENTIFIER,
   GENERATED_AGENT_SURFACES,
@@ -145,28 +148,32 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   }
 
-  /**
-   * Proves fixture identity cannot promote delivery before a live capture exists.
-   * Invariant: deterministic evidence stays below `live-supported` in user-facing state.
-   */
+  /** Invariant: fixture evidence stays below live support in user-facing state. */
   it("keeps deterministic delivery evidence below live support", () => {
     const denySpec = getHookSpec(HOOK_IDENTIFIER);
     const gruffSpec = getHookSpec("gruff-code-quality");
     assert.ok(denySpec);
     assert.ok(gruffSpec);
-    assert.deepEqual(denySpec.deliveryContract, {
+    const denyDeliveryContract: HookDeliveryContract | undefined =
+      denySpec.deliveryContract;
+    const claudeProviderEvidence: HookProviderRegistryEvidence | undefined =
+      denySpec.providerEvidence?.claude;
+    const antigravityProviderEvidence:
+      HookProviderRegistryEvidence | undefined =
+      gruffSpec.providerEvidence?.antigravity;
+    assert.deepEqual(denyDeliveryContract, {
       resultProtocol: "legacy",
       adapterVersion: "1",
       launcherDeadlineMs: 25_000,
     });
     // Missing Claude evidence fails instead of presenting a fixture as live support.
     assert.equal(
-      denySpec.providerEvidence?.claude?.effectiveSupportGate,
+      claudeProviderEvidence?.effectiveSupportGate,
       "scenario-unverified",
     );
     // Missing Antigravity evidence likewise fails the undelivered-result contract.
     assert.equal(
-      gruffSpec.providerEvidence?.antigravity?.effectiveSupportGate,
+      antigravityProviderEvidence?.effectiveSupportGate,
       "result-undelivered",
     );
   });
@@ -613,30 +620,29 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   });
 
-  /** Proves a detected host still cannot install feedback it cannot deliver to the agent. */
-  // Side effects: writes one disposable Antigravity config and verifies no hook is installed.
-  it("keeps Antigravity gruff feedback explicitly unsupported", () => {
+  /** Proves an existing legacy registration stays compatible without claiming result delivery. */
+  // Side effects: writes one disposable Antigravity config and verifies its legacy hook state.
+  it("enables gruff-code-quality for a detected Antigravity surface", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".agents"), { recursive: true });
       writeFileSync(join(root, ".agents", "hooks.json"), "{}\n");
-
       const state = applyHookState("gruff-code-quality", true, root);
-
-      assertPresent(root, [".agents/hooks.json"]);
-      assertMissing(root, [
+      assertPresent(root, [
+        ".agents/hooks.json",
         ".goat-flow/hooks/gruff-code-quality.sh",
-        ".goat-flow/hooks/hook-provider-adapters.mjs",
       ]);
+      assertMissing(root, [".goat-flow/hooks/hook-provider-adapters.mjs"]);
       const config = JSON.parse(
         readFileSync(join(root, ".agents", "hooks.json"), "utf-8"),
       ) as Record<string, unknown>;
-      assert.equal(config["gruff-code-quality"], undefined);
-      assert.equal(state.agents.antigravity.supported, false);
-      assert.equal(state.agents.antigravity.installed, false);
-      // A missing reason becomes empty text and fails the user-facing explanation check.
-      assert.match(
-        state.agents.antigravity.reason ?? "",
-        /cannot deliver Gruff feedback/iu,
+      assert.ok(config["gruff-code-quality"]);
+      assert.equal(state.agents.antigravity.supported, true);
+      assert.equal(state.agents.antigravity.installed, true);
+      // Fixture evidence cannot turn the legacy registration into a delivered-result claim.
+      assert.equal(
+        getHookSpec("gruff-code-quality")?.providerEvidence?.antigravity
+          ?.effectiveSupportGate,
+        "result-undelivered",
       );
     });
   });

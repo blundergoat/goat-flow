@@ -1,9 +1,8 @@
 // goat-flow-hook-version: 1.15.0
 /**
  * Cross-platform launcher for goat-flow's Bash hook scripts.
- * Agent hook commands reach this file through Node so native Windows never
- * resolves the System32 WSL shim by accident. The launcher preserves stdin,
- * stdout, stderr, cwd, and the hook's exit status.
+ * Agent hook commands use Node so native Windows avoids the System32 WSL shim.
+ * The launcher preserves the user's stdin, output, cwd, deadline, and hook status.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
@@ -28,8 +27,7 @@ const LEGACY_HOOK_DEADLINES_MS = new Map([
 ]);
 
 /**
- * Resolve one fixed Windows system utility without searching the user's project or PATH.
- * Use only for launcher-owned OS commands whose filenames are supplied by this module.
+ * Resolve a fixed hook-owned Windows utility without searching the project or PATH.
  *
  * @param {NodeJS.ProcessEnv} environment - Host folders; missing or empty roots disable the utility.
  * @param {string} utilityFileName - Fixed basename; empty or path-shaped input is rejected.
@@ -50,8 +48,7 @@ function windowsSystemUtilityPath(environment, utilityFileName) {
 }
 
 /**
- * Find Windows executables the user can already launch from PATH.
- * Use during setup and hook startup before checking standard Git folders.
+ * Find Windows executables the user can launch before checking standard Git folders.
  * Side effect: starts `where.exe`; lookup errors return no matches for fallback discovery.
  *
  * @param {string} executableName - Name to locate; empty produces no usable matches.
@@ -90,8 +87,7 @@ function whereWindowsExecutable(executableName, environment = process.env) {
 }
 
 /**
- * Derive Git Bash from a Git for Windows executable the user can run.
- * Use when Git is on PATH but its sibling Bash directory is not.
+ * Derive Git Bash when the user's Git is on PATH but its sibling Bash is not.
  *
  * @param {string} gitExecutablePath - Located Git path; empty cannot identify its install.
  * @returns {string | null} Adjacent Bash path, or null when Git's layout is unfamiliar.
@@ -112,8 +108,7 @@ function bashBesideWindowsGit(gitExecutablePath) {
 }
 
 /**
- * List conventional Git Bash locations configured for this Windows user.
- * Use after PATH-derived choices so custom installs keep their intended priority.
+ * List conventional Git Bash locations after the user's PATH-derived choices.
  *
  * @param {NodeJS.ProcessEnv} environment - Windows folders; missing values omit that location.
  * @returns {string[]} Candidate Bash paths; always includes the default system install.
@@ -140,8 +135,7 @@ function standardWindowsGitBashLocations(environment) {
 }
 
 /**
- * Resolve Windows' built-in tree terminator without searching the user's project or PATH.
- * Use when a timed-out hook must stop Bash and every child tool it started.
+ * Resolve Windows' tree terminator when a timed-out hook must stop every child tool.
  *
  * @param {NodeJS.ProcessEnv} environment - Host folders; missing or empty roots disable tree kill.
  * @returns {string | null} Absolute taskkill path, or null when the host root is unavailable or relative.
@@ -151,8 +145,7 @@ export function windowsTaskkillExecutablePath(environment) {
 }
 
 /**
- * Discover Windows Bash choices even when Git is absent from PATH.
- * Use before install admission and each managed hook launch.
+ * Discover Windows Bash choices before setup or a managed hook launch.
  *
  * @param {object} options - Test seams; omitted values use the user's live Windows host.
  * @returns {string[]} Ordered Bash paths; empty means setup cannot run Bash hooks.
@@ -191,8 +184,7 @@ export function discoverWindowsBashCandidates(options = {}) {
 }
 
 /**
- * Identify Windows launchers that enter WSL instead of Git Bash.
- * Use before setup accepts a Bash candidate for native Windows hooks.
+ * Identify WSL launchers before setup accepts a native Windows Bash choice.
  *
  * @param {string} candidatePath - Discovered path; empty is treated as a non-WSL path.
  * @returns {boolean} True when choosing this path would leave native Windows.
@@ -206,8 +198,7 @@ export function isWslBashPath(candidatePath) {
 }
 
 /**
- * Select the first native Windows Bash candidate in discovery order.
- * Use for install admission and hook execution so both paths agree.
+ * Select the first native Windows Bash for consistent setup and hook execution.
  *
  * @param {string[]} candidatePaths - Discovered paths; blanks do not represent an install.
  * @returns {string | null} Usable Bash path, or null when the user must install Git Bash.
@@ -226,8 +217,7 @@ export function pickWindowsBashPath(candidatePaths) {
 }
 
 /**
- * Write a policy startup failure in the active provider's permission schema.
- * Use before a proposed tool runs; null leaves non-policy output to its hook category.
+ * Write a policy startup failure before a proposed tool runs; null leaves category output.
  *
  * @param {string} providerIdentifier - active host; empty or unknown text has no JSON policy shape
  * @param {string} unavailableReason - non-empty explanation shown with the deny decision
@@ -263,8 +253,7 @@ function reportProviderPolicyUnavailable(
 }
 
 /**
- * Report a launcher failure in the response format the user's agent expects.
- * Use when a hook cannot run, preserving fail-open or fail-closed policy.
+ * Report a failed hook launch while preserving the user's host response policy.
  *
  * @param {string} hookResponseMode - Agent protocol; empty or unknown fails closed.
  * @param {string} userFacingReason - Practical failure detail; empty gives a generic message.
@@ -282,7 +271,7 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
     hookResponseMode === "gruff" || hookResponseMode === "post-turn"
       ? hookResponseMode
       : namespacedModeParts[1] || "policy";
-  // Concatenation avoids nested templates that confuse simple block scanners.
+  // Concatenate because a template literal nested in another can confuse block scanners.
   const unavailableReason =
     "Policy hook unavailable: " + userFacingReason + ".";
   // Feedback and stop failures bypass permission JSON and keep their own category.
@@ -317,8 +306,8 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
 }
 
 /**
- * Refuse a managed hook whose file on disk could redirect execution.
- * Use before Bash starts; rejected shapes become a visible unavailable result.
+ * Refuse a managed hook whose file shape could redirect the user's execution.
+ * Use before Bash starts so rejected shapes become a visible unavailable result.
  * Error behavior: never throws; path races return "hook script was not found".
  *
  * @param {string} projectRoot - Project the user selected; the hook must resolve inside it.
@@ -376,8 +365,7 @@ function hookScriptShapeFailure(projectRoot, hookScriptPath) {
 }
 
 /**
- * Select a finite deadline below the registered coding-agent host timeout.
- * Use after launch-contract validation; invalid user overrides return null.
+ * Select a safe user wait below the host deadline; invalid overrides return null.
  *
  * @param {number} timeoutCeiling - validated host deadline; zero or missing values are rejected earlier
  * @param {NodeJS.ProcessEnv} environment - Hook environment containing an optional lower test/host override.
@@ -401,8 +389,7 @@ function hookLaunchTimeoutMs(timeoutCeiling, environment) {
 }
 
 /**
- * Stop a timed-out hook and the child tools it started.
- * Use when the user's deadline expires so formatter or scanner children cannot keep the agent waiting.
+ * Stop a timed-out hook so child tools cannot keep the user's agent waiting.
  * Side effects: mutates process state by force-stopping the tree; errors recover after work ends.
  *
  * @param {import("node:child_process").ChildProcess} hookProcess - Started Bash process; a missing PID means launch failed before user work began.
@@ -415,7 +402,6 @@ function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
   if (!hookProcess.pid) {
     return;
   }
-
   try {
     // Windows needs its built-in tree-kill command because Node kills only the direct process.
     if (hostPlatform === "win32") {
@@ -449,8 +435,7 @@ function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
 }
 
 /**
- * Run one verified hook until it exits, fails to start, or reaches the user's deadline.
- * Use after path and Bash validation so the agent receives one bounded launch result.
+ * Run a verified hook until it exits, fails, or reaches the user's deadline.
  *
  * @param {string} bashExecutable - Resolved Bash command; empty would fail through the launch-error result.
  * @param {string} hookScriptPath - Non-empty verified script path inside the user's project.
@@ -523,7 +508,6 @@ function runHookProcessUntilDeadline(
         hasExceededOutputLimit,
       });
     }
-
     /**
      * Retain one migrated-hook stream chunk or stop the tree before it floods user feedback.
      * Use for stdout and stderr because either channel can exhaust the shared host limit.
@@ -560,7 +544,6 @@ function runHookProcessUntilDeadline(
         captureHookOutputChunk("stderr", outputChunk);
       });
     }
-
     hookProcess.once("error", (launchError) => {
       // A launch failure has no hook exit status for the user.
       deliverHookResult(null, launchError);
@@ -573,45 +556,7 @@ function runHookProcessUntilDeadline(
 }
 
 /**
- * Deliver one captured neutral result through the registered provider contract.
- * Use after a migrated hook exits so invalid, oversized, or unsupported output stays unavailable.
- * Side effects: writes only bounded diagnostics and the final host response to process streams.
- *
- * @param {{status: number | null, stdout: string, stderr: string, hasExceededOutputLimit: boolean}} hookExecution - captured child result; empty streams mean the hook emitted no detail
- * @param {{providerIdentifier: string, hookEvent: string, adapterVersion: string}} launchContract - registered host identity; empty fields cannot establish delivery
- * @param {string} hookResponseMode - complete launch mode; empty text falls back to fail-closed output
- * @param {object} providerAdapterRuntime - loaded adapter methods; empty or missing runtime cannot translate a result
- * @returns {number} host exit status; invalid or unsupported delivery uses the mode's unavailable policy
- */
-function deliverProviderHookResult(
-  hookExecution,
-  launchContract,
-  hookResponseMode,
-  providerAdapterRuntime,
-) {
-  const providerHookDelivery =
-    providerAdapterRuntime.prepareProviderHookResultDelivery(
-      hookExecution,
-      launchContract,
-    );
-  // Empty stderr means neither the child nor adapter has a human-only diagnostic.
-  if (providerHookDelivery.stderr.length > 0) {
-    process.stderr.write(providerHookDelivery.stderr);
-  }
-  // An unavailable translation uses the registered fail-open or fail-closed policy.
-  if (providerHookDelivery.state !== "delivered") {
-    return reportUnavailable(hookResponseMode, providerHookDelivery.reason);
-  }
-  // Empty stdout is the documented clean response for several host/event combinations.
-  if (providerHookDelivery.stdout.length > 0) {
-    process.stdout.write(providerHookDelivery.stdout);
-  }
-  return providerHookDelivery.exitCode;
-}
-
-/**
- * Run one project hook through Bash while preserving its host-facing result.
- * Use when an agent invokes a managed `.sh` hook on Windows, macOS, or Linux.
+ * Run a managed project hook through Bash while preserving its host-facing result.
  *
  * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
  * @param {string} hookResponseMode - Agent response protocol; empty uses policy behavior.
@@ -749,12 +694,24 @@ export async function runHookWithBash(
   }
   // Migrated hooks use the bounded neutral result and final provider adapter path.
   if (providerAdapterRuntime !== null) {
-    return deliverProviderHookResult(
-      hookExecution,
-      launchContract,
-      hookResponseMode,
-      providerAdapterRuntime,
-    );
+    const providerHookDelivery =
+      providerAdapterRuntime.prepareProviderHookResultDelivery(
+        hookExecution,
+        launchContract,
+      );
+    // Empty stderr means neither the child nor adapter has a human-only diagnostic.
+    if (providerHookDelivery.stderr.length > 0) {
+      process.stderr.write(providerHookDelivery.stderr);
+    }
+    // An unavailable translation uses the registered fail-open or fail-closed policy.
+    if (providerHookDelivery.state !== "delivered") {
+      return reportUnavailable(hookResponseMode, providerHookDelivery.reason);
+    }
+    // Empty stdout is the documented clean response for several host/event combinations.
+    if (providerHookDelivery.stdout.length > 0) {
+      process.stdout.write(providerHookDelivery.stdout);
+    }
+    return providerHookDelivery.exitCode;
   }
   // A numeric status is the hook's real allow, deny, or advisory result for the user.
   if (Number.isInteger(hookExecution.status)) {

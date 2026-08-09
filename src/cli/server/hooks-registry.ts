@@ -142,8 +142,6 @@ const HOOKS: HookSpec[] = [
     unsupportedAgents: {
       codex:
         "Codex goat-flow hooks are PreToolUse-only until a supported post-tool lifecycle path is verified.",
-      antigravity:
-        "Antigravity PostToolUse accepts an empty response but cannot deliver Gruff feedback to the agent.",
     },
   },
   {
