@@ -170,7 +170,7 @@ last_reviewed: 2026-08-09
 **Status:** active | **Created:** 2026-07-13
 **Decision changed:** Generate one named test per matrix value and keep the assertion in that test callback; shared helpers return evidence instead of hiding assertions.
 **Trigger phase:** VERIFY
-**Incident count:** 4
+**Incident count:** 5
 **Latest occurrence:** 2026-08-09
 
 **What happened:** The first M03 cross-agent install matrix wrapped assertions for all four agents inside two test-level loops. Gruff reported `test-quality.loop-in-test`; moving the work into named per-agent helpers then exposed `test-quality.no-assertions` because the visible test callbacks only called those helpers. The behavior suite passed both shapes, but its TAP output and analyzer evidence could not prove each named case owned an assertion.
@@ -184,3 +184,5 @@ last_reviewed: 2026-08-09
 **Recurrence 2026-08-07:** M04 initially checked nine staged-only prompt phrases inside one bounded-saver test loop. Direct Gruff analysis reported a new `test-quality.loop-in-test` advisory. Registering one named test per phrase kept a direct assertion and made the failed contract visible in TAP; the focused suite passed 45 tests and the rerun removed the new finding. Evidence anchor: `test/unit/quality-report-contract.test.ts` (search: `keeps bounded-saver prompts free of staged-only guidance`).
 
 **Recurrence 2026-08-09:** Three hook-registration tests each looped over the two shipped playbook copies. Gruff reported three `test-quality.loop-in-test` advisories; one named mirror runner moved iteration out of the tests while assertion callbacks retained path-labelled failures. The rerun reported 0 findings. Evidence: `test/unit/playbook-contract.test.ts` (search: `assertRegistrationCommandForEachPlaybook`).
+
+**Recurrence 2026-08-09:** The hook launcher suite checked six invalid settings and two feedback ceilings inside one test-level loop. Gruff reported `test-quality.loop-in-test`; registering named cases outside the test callbacks gave every value a direct assertion and distinct TAP result. The final focused analysis reported 0 advisories. Evidence anchor: `test/unit/hook-launcher.test.ts` (search: `Separate names show exactly which mistyped user setting`).

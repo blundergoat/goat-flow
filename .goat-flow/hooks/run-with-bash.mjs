@@ -338,7 +338,7 @@ function hookLaunchTimeoutMs(hookResponseMode, environment) {
 /**
  * Stop a timed-out hook and the child tools it started.
  * Use when the user's deadline expires so formatter or scanner children cannot keep the agent waiting.
- * Side effect: force-stops the started process tree; errors recover when work already ended.
+ * Side effects: mutates process state by force-stopping the tree; errors recover after work ends.
  *
  * @param {import("node:child_process").ChildProcess} hookProcess - Started Bash process; a missing PID means launch failed before user work began.
  * @param {NodeJS.Platform} hostPlatform - Active host; an empty value cannot select a safe platform-specific tree kill.
@@ -415,6 +415,9 @@ function runHookProcessUntilDeadline(
     const launchDeadlineTimer = setTimeout(() => {
       hasHookReachedDeadline = true;
       stopHookProcessTree(hookProcess, hostPlatform);
+      hookProcess.unref();
+      // A deadline has no trustworthy exit code or startup error; the user receives the timeout outcome.
+      deliverHookResult(null, null);
     }, launchTimeout);
 
     /**
@@ -440,9 +443,11 @@ function runHookProcessUntilDeadline(
     }
 
     hookProcess.once("error", (launchError) => {
+      // A launch failure has no hook exit status for the user.
       deliverHookResult(null, launchError);
     });
     hookProcess.once("close", (hookStatus) => {
+      // A normal close has no launch error to show the user.
       deliverHookResult(hookStatus, null);
     });
   });

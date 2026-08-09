@@ -123,10 +123,10 @@
       "stableIdentity": "946e85ebc33abfc1",
       "ruleId": "security.process-exec",
       "file": "workflow/hooks/run-with-bash.mjs",
-      "rationale": "Hook launcher spawns Bash via argv with shell: false by design; surfaced when the M03 nested-template refactor let the analyzer parse this file correctly.",
+      "rationale": "Hook launcher asynchronously spawns validated Bash via argv with shell: false so it can stop a timed-out process tree.",
       "occurrences": [
         {
-          "callName": "spawnSync",
+          "callName": "spawn",
           "argumentSource": "parameter",
           "shellEnabled": false
         }

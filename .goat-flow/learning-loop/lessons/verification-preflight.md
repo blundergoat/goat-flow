@@ -101,7 +101,7 @@ last_reviewed: 2026-08-09
 
 **Recurrences (2026-08-03, 2026-08-07, 2026-08-09):** M00 repeated the focused-GREEN-before-Prettier failure; M02-M05 formatted first. Evidence anchors: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`), and `test/integration/post-turn-safety-hook.helpers.ts` (search: `withCommandShim`).
 
-**2026-08-09 M02/M03:** `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`); `test/contract/skill-hardening-skills-2.test.ts` (search: `truthful goat-critique`); `test/unit/hook-registrar.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
+**2026-08-09 M02/M03:** `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`); `test/contract/skill-hardening-skills-2.test.ts` (search: `truthful goat-critique`); `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
 
 **Prevention:** Format touched TypeScript before focused proof; retain Prettier in final verification.
 
