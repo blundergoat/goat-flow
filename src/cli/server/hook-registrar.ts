@@ -178,6 +178,7 @@ function isSupportedAgent(agent: AgentProfile): boolean {
   );
 }
 
+/** Return the registry reason shown when this hook cannot protect the selected agent. */
 function unsupportedReasonForSpec(
   spec: HookSpec,
   agent: AgentProfile,
@@ -202,6 +203,7 @@ function assertWithinProject(projectPath: string, targetPath: string): void {
   throw new HookRegistrarError("Refusing to write outside project path", 400);
 }
 
+/** Resolve one managed hook script inside the project selected in the UI. */
 function scriptTarget(
   projectPath: string,
   agent: AgentProfile,
@@ -736,7 +738,8 @@ function effectiveStateRepair(
     case "disabled":
       return {
         command: null,
-        summary: "The hook is intentionally disabled; enable it when this coverage is wanted.",
+        summary:
+          "The hook is intentionally disabled; enable it when this coverage is wanted.",
       };
     case "provider-undocumented":
     case "provider-documentation-stale":
@@ -808,12 +811,7 @@ function effectiveAgentState(
   effectiveStateFacts.isCurrentVersionInstalled = isCurrentVersionInstalled;
   effectiveStateFacts.isTrusted = isTrusted;
   const effectiveState = classifyHookEffectiveState(effectiveStateFacts);
-  const repair = effectiveStateRepair(
-    projectPath,
-    agent,
-    spec,
-    effectiveState,
-  );
+  const repair = effectiveStateRepair(projectPath, agent, spec, effectiveState);
   return {
     effectiveState,
     effectiveStateLabel: HOOK_EFFECTIVE_STATE_LABELS[effectiveState.status],

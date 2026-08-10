@@ -43,7 +43,7 @@ Per-artifact quality view for installed skills and shared references. Shows dete
 
 ### Hooks
 
-Manage shipped guardrails and quality hooks for the selected project. Lists each registered hook (`deny-dangerous`, `gruff-code-quality`, `post-turn-safety`) with its current enabled/disabled state and the agents it is wired into (Claude, Codex, Antigravity, Copilot). Toggles update `.goat-flow/config.yaml` and reconcile per-agent hook config files. The Hooks view shows Gruff as supported for Claude and Copilot, pending live proof for Codex, and unsupported for Antigravity because its PostToolUse channel cannot return feedback. `post-turn-safety` remains unsupported for Codex and Antigravity until their Stop-hook delivery is verified. Copilot has no project-local post-turn event, so `post-turn-safety` is shown as unsupported rather than installed. Mirrors the `goat-flow hooks <list|enable|disable|sync>` CLI.
+Manage shipped guardrails and quality hooks for the selected project. Each agent row separates the desired toggle from its effective state across provider evidence, exact registration, current installed bytes, trusted paths, observed execution, delivered results, and configured scenarios. Only `effective` is green. Warning and danger rows name the first broken link and show a copyable repair command when Goat Flow owns one; provider evidence gaps stay explicit without an invented command. Toggles update `.goat-flow/config.yaml` and reconcile per-agent hook config files. The view uses the same registry labels as `goat-flow hooks list`, `audit`, and the `/api/hooks` response.
 
 ### Projects
 
@@ -96,7 +96,7 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
-| `/api/audit` | GET | Run audit, return JSON results including per-agent advisory enforcement matrices |
+| `/api/audit` | GET | Run audit and return JSON results, including effective `hookCoverage` and per-agent advisory enforcement matrices |
 | `/api/setup` | GET | Generate setup prompt |
 | `/api/setup/detect` | GET | Detect project stack and agents |
 | `/api/quality` | GET | Generate quality-assessment prompt, including `auditCacheStatus` (`hit`, `miss`, or `bypass`) for dashboard cache visibility |
@@ -113,7 +113,7 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/projects/list` | GET | List registered projects from saved dashboard state, including identity-keyed project records |
 | `/api/projects/list` | POST | Save the dashboard's registered project list and migrate it to identity-keyed records |
 | `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) plus dashboard project identity |
-| `/api/hooks` | GET | Registered hook state for the selected project (each hook's enabled/disabled state and wired agents) |
+| `/api/hooks` | GET | Desired and effective hook state for the selected project, including per-agent severity, first broken link, and repair guidance |
 | `/api/hooks/:hookId/toggle` | POST | Enable or disable one hook; updates `.goat-flow/config.yaml` and reconciles per-agent hook config files |
 | `/api/terminal/create` | POST | Start a terminal session; accepts `accessMode: "workspace" | "reporting"`, applies supported runner-specific reporting enforcement, and defaults omitted values to `workspace` |
 | `/api/terminal/list` | GET | List active terminal sessions |

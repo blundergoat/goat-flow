@@ -698,9 +698,10 @@ function hasRetiredDenyRegistration(
   // Other hooks have no retired split identifiers in this migration.
   if (spec.id !== "deny-dangerous") return false;
   const serializedConfig = JSON.stringify(config);
-  return [...LEGACY_DENY_DANGEROUS_HOOK_IDS, ...LEGACY_DENY_DANGEROUS_SCRIPT_NAMES].some(
-    (retiredIdentifier) => serializedConfig.includes(retiredIdentifier),
-  );
+  return [
+    ...LEGACY_DENY_DANGEROUS_HOOK_IDS,
+    ...LEGACY_DENY_DANGEROUS_SCRIPT_NAMES,
+  ].some((retiredIdentifier) => serializedConfig.includes(retiredIdentifier));
 }
 
 /** Name the first exact registration link setup must repair for the selected agent. */
@@ -728,17 +729,13 @@ function registrationIssue(
   }
   // A stale generated command can carry the wrong response adapter or launcher contract.
   if (
-    !eventEntries.some((entry) =>
-      entryMatchesSpecCommand(entry, agent, spec),
-    )
+    !eventEntries.some((entry) => entryMatchesSpecCommand(entry, agent, spec))
   ) {
     return "command-or-response-mismatch";
   }
   // A stale host deadline can kill the hook before its own result reaches the user.
   if (
-    !eventEntries.some((entry) =>
-      entryMatchesSpecTimeout(entry, agent, spec),
-    )
+    !eventEntries.some((entry) => entryMatchesSpecTimeout(entry, agent, spec))
   ) {
     return "timeout-mismatch";
   }

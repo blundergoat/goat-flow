@@ -19,6 +19,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
 
+import { runAudit } from "../../src/cli/audit/audit.js";
+import {
+  renderAuditJson,
+  renderAuditText,
+} from "../../src/cli/audit/render.js";
+import { createFS } from "../../src/cli/facts/fs.js";
 import {
   readAllHookStates,
   syncHookStates,
@@ -102,7 +108,9 @@ function enableGruffForProject(projectPath: string): void {
 }
 
 /** Read the managed Claude fixture after sync so one exact registration field can be changed. */
-function readClaudeHookSettings(projectPath: string): ClaudeHookSettingsFixture {
+function readClaudeHookSettings(
+  projectPath: string,
+): ClaudeHookSettingsFixture {
   return JSON.parse(
     readFileSync(join(projectPath, ".claude", "settings.json"), "utf-8"),
   ) as ClaudeHookSettingsFixture;
@@ -160,7 +168,7 @@ describe("effective hook state", () => {
     );
   });
 
-  // Editing an installed script makes its bundled-version link stale without hiding registration.
+  // Fixture purpose: writes a temporary user customization; suite cleanup removes the project.
   it("names installed byte drift as a stale installation", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
@@ -178,10 +186,7 @@ describe("effective hook state", () => {
 
     assert.equal(postTurnState.isRegistered, true);
     assert.equal(postTurnState.isCurrentVersionInstalled, false);
-    assert.equal(
-      postTurnState.installationIssue,
-      "installed-version-mismatch",
-    );
+    assert.equal(postTurnState.installationIssue, "installed-version-mismatch");
     assert.deepEqual(postTurnState.effectiveState, {
       status: "installation-stale",
       severity: "warning",
@@ -194,7 +199,11 @@ describe("effective hook state", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     const configPath = join(projectPath, ".claude", "settings.json");
-    const linkedConfigPath = join(projectPath, ".claude", "linked-settings.json");
+    const linkedConfigPath = join(
+      projectPath,
+      ".claude",
+      "linked-settings.json",
+    );
     linkSync(configPath, linkedConfigPath);
     const denyHookState = claudeHookState(projectPath, "deny-dangerous");
 
@@ -274,8 +283,7 @@ describe("effective hook state", () => {
         matcher: "Bash",
         hooks: [
           {
-            command:
-              "bash .goat-flow/hooks/guard-secret-paths.sh",
+            command: "bash .goat-flow/hooks/guard-secret-paths.sh",
           },
         ],
       },
@@ -285,6 +293,38 @@ describe("effective hook state", () => {
       claudeHookState(projectPath, "deny-dangerous").registrationIssue,
       "retired-registration",
     );
+  });
+
+  // Audit users must see the registrar's exact state and repair without audit editing their setup.
+  it("keeps audit JSON and terminal coverage aligned with read-only hook state", () => {
+    const projectPath = createClaudeProject();
+    syncHookStates(projectPath);
+    const settingsPath = join(projectPath, ".claude", "settings.json");
+    const settingsBeforeAudit = readFileSync(settingsPath, "utf-8");
+
+    const auditReport = runAudit(createFS(projectPath), projectPath, {
+      agentFilter: "claude",
+      harness: false,
+      denyMechanismEvidenceLevel: "present-only",
+    });
+    const directDenyState = claudeHookState(projectPath, "deny-dangerous");
+    const auditDenyState = requiredHook(
+      auditReport.hookCoverage.hooks,
+      "deny-dangerous",
+    ).agents.claude;
+    const jsonReport = JSON.parse(renderAuditJson(auditReport)) as {
+      hookCoverage: typeof auditReport.hookCoverage;
+    };
+    const terminalReport = renderAuditText(auditReport);
+
+    assert.equal(auditReport.hookCoverage.status, "fail");
+    assert.deepEqual(auditDenyState, directDenyState);
+    assert.deepEqual(jsonReport.hookCoverage, auditReport.hookCoverage);
+    assert.match(terminalReport, /Effective Hook Coverage:/u);
+    assert.match(terminalReport, /deny-dangerous\/claude:/u);
+    assert.match(terminalReport, /scenario unverified/u);
+    assert.match(terminalReport, /hooks verify .*--scenario deny-hook/u);
+    assert.equal(readFileSync(settingsPath, "utf-8"), settingsBeforeAudit);
   });
 
   // Provider exclusions remain visible even when shared files happen to exist for another agent.
@@ -327,21 +367,20 @@ describe("effective hook state", () => {
     );
   });
 
-  // A user may have added a conflict marker before ending the turn; the exact Stop command must find it.
+  /**
+   * Fixture purpose: prove finding and incomplete output through the user's exact Stop command.
+   * Side effects: writes one merge-conflict file in a disposable Git project removed by cleanup.
+   * Invariant: the configured command reports both result classes without provider invocation.
+   */
   it("replays finding and incomplete results through the configured Stop command", () => {
     const projectPath = createClaudeProject();
     initializeDisposableGitProject(projectPath);
     mkdirSync(join(projectPath, "src"), { recursive: true });
     writeFileSync(
       join(projectPath, "src", "example.txt"),
-      [
-        "<<<<<<< HEAD",
-        "left",
-        "=======",
-        "right",
-        ">>>>>>> branch",
-        "",
-      ].join("\n"),
+      ["<<<<<<< HEAD", "left", "=======", "right", ">>>>>>> branch", ""].join(
+        "\n",
+      ),
     );
     syncHookStates(projectPath);
 

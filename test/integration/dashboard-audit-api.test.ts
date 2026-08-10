@@ -104,6 +104,10 @@ describe("dashboard /api/audit", () => {
       status: value.status,
       target: value.target,
       overall: expectRecord(value.overall, "Dashboard report overall").status,
+      hookCoverage: expectRecord(
+        value.hookCoverage,
+        "Dashboard report hookCoverage",
+      ).status,
       setup: expectRecord(scopes.setup, "Dashboard report scopes.setup").status,
       agent: expectRecord(scopes.agent, "Dashboard report scopes.agent").status,
       harness: expectRecord(scopes.harness, "Dashboard report scopes.harness")
@@ -344,6 +348,26 @@ describe("dashboard /api/audit", () => {
     const report = assertDashboardReport(body);
     const scoresById = dashboardScoresById(report);
     assertAgentScoresInclude(scoresById, ["claude", "codex", "copilot"]);
+  });
+
+  it("returns the same effective hook states from audit and Hooks APIs", async () => {
+    const auditResponse = await fetchJson(
+      `/api/audit?path=${encodeURIComponent(PROJECT_PATH)}&fresh=true`,
+    );
+    const hooksResponse = await fetchJson(
+      `/api/hooks?path=${encodeURIComponent(PROJECT_PATH)}`,
+    );
+    assert.equal(auditResponse.res.status, 200);
+    assert.equal(hooksResponse.res.status, 200);
+
+    const dashboardReport = assertDashboardReport(auditResponse.body);
+    const auditCoverage = expectRecord(
+      dashboardReport.hookCoverage,
+      "Dashboard report hookCoverage",
+    );
+    const hooksPayload = expectRecord(hooksResponse.body, "Hooks response");
+
+    assert.deepEqual(auditCoverage.hooks, hooksPayload.hooks);
   });
 
   it("serves cache hits under budget without rerunning audit computation", async () => {

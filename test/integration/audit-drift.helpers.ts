@@ -260,6 +260,10 @@ export function writeHookFixtures(root: string): void {
     join(root, "workflow", "hooks", "run-with-bash.mjs"),
     HOOK_LAUNCHER_STUB,
   );
+  writeFileSync(
+    join(root, "workflow", "hooks", "hook-provider-adapters.mjs"),
+    HOOK_LAUNCHER_STUB,
+  );
   // Canonical policy modules represent the hook package future users receive.
   for (const hookLibFile of [
     "patterns-shell.sh",
@@ -301,6 +305,10 @@ export function writeHookFixtures(root: string): void {
   );
   writeFileSync(
     join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
+    HOOK_LAUNCHER_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "hooks", "hook-provider-adapters.mjs"),
     HOOK_LAUNCHER_STUB,
   );
   writeFileSync(

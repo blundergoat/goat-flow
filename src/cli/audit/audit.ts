@@ -58,7 +58,9 @@ function buildHookCoverageReport(
   const hooks = readAllHookStates(projectPath);
   const selectedHookSurfaces = hooks.flatMap((hook) =>
     Object.entries(hook.agents)
-      .filter(([agentId]) => selectedAgent === null || agentId === selectedAgent)
+      .filter(
+        ([agentId]) => selectedAgent === null || agentId === selectedAgent,
+      )
       .map(([, agentState]) => ({ hook, agentState })),
   );
   const requiredHookSurfaces = selectedHookSurfaces.filter(

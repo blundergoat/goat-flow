@@ -406,21 +406,23 @@ npx @blundergoat/goat-flow@latest dashboard --dev         # Live reload mode
 Manage the project's registered guardrail, quality, and safety hooks (`deny-dangerous`, `gruff-code-quality`, `post-turn-safety`) in `.goat-flow/config.yaml`, then reconcile the per-agent hook config files so every agent stays in sync.
 
 ```bash
-npx @blundergoat/goat-flow@latest hooks list                        # Show each hook's enabled/disabled state
+npx @blundergoat/goat-flow@latest hooks list                        # Show desired and per-agent effective state
 npx @blundergoat/goat-flow@latest hooks list --json                 # Machine-readable hook state
 npx @blundergoat/goat-flow@latest hooks enable gruff-code-quality   # Enable one hook and sync agent configs
 npx @blundergoat/goat-flow@latest hooks disable gruff-code-quality  # Disable one hook and sync agent configs
 npx @blundergoat/goat-flow@latest hooks sync                         # Re-apply config.yaml hook state to agent configs
-npx @blundergoat/goat-flow@latest hooks verify . --agent codex --scenario deny-hook
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario deny-hook
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-turn-hook
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook
 ```
 
 `enable` and `disable` require a `<hook-id>` (exit 2 if omitted). `sync` re-applies the `.goat-flow/config.yaml` hook state to every agent's hook config without changing which hooks are enabled.
 
-`hooks verify` requires both `--agent <id>` and the explicit `--scenario deny-hook` choice. It runs four fixed inert classifier operands—secret shell read, remote pipe to shell, repository push, and a read-only control—through the selected checkout's registered managed script with `shell: false`, a five-second timeout, and bounded output capture. The operands are arguments to `--check`; they are inspected, never executed. Because the selected checkout's hook code does execute, use this only for a checkout you trust or pass `--untrusted-target` to return explicit `unsupported` results without starting it.
+`hooks verify` requires `--agent <id>` and one explicit scenario group: `deny-hook`, `post-turn-hook`, or `gruff-hook`. It sends fixed provider-shaped inputs through the exact command generated for the selected agent, with a five-second timeout and bounded output capture. The deny group checks three blocked commands and one read-only control. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. Because the selected checkout's hook code does execute, use this only for a checkout you trust or pass `--untrusted-target` to return explicit `unsupported` results without starting it.
 
-Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an exact expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. Reports and `hook.verify` events carry scenario ids, verdict metadata, evidence level, duration, and reason codes—not command operands, stdout, or stderr.
+Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an accepted expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. Reports and `hook.verify` events carry hook and scenario ids, verdict metadata, evidence level, duration, and reason codes—not input payloads, command operands, findings, stdout, or stderr.
 
-The hook's self-test remains its broad internal regression corpus. `hooks verify` proves the four fixed classifier decisions against this checkout's managed installed script and registration state. It does not launch the external coding agent, prove provider-side hook delivery, or change the cost or semantics of `audit --harness`; audit may still report its own registration, self-test, and runtime-shaped smoke evidence without claiming this deep scenario report ran.
+Hook self-tests remain the broad internal regression corpus. `hooks verify` proves fixed outcomes at this checkout's exact configured-command boundary. It does not launch the external coding agent, prove provider-side hook delivery or model visibility, promote a live-support state, or change the cost or semantics of `audit --harness`.
 
 ## Workflow Examples
 

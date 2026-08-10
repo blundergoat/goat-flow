@@ -50,14 +50,8 @@ describe("dashboard Hooks view", () => {
     assert.match(html, /state\.repairCommand \|\| state\.repairSummary/u);
     assert.doesNotMatch(html, /installed and enforced/u);
     assert.match(appSource, /hookHasIneffectiveCoverage\(hook: HookState\)/u);
-    assert.match(
-      appSource,
-      /state\.effectiveState\.status === "effective"/u,
-    );
-    assert.match(
-      appSource,
-      /state\.effectiveState\.severity === "success"/u,
-    );
+    assert.match(appSource, /state\.effectiveState\.status === "effective"/u);
+    assert.match(appSource, /state\.effectiveState\.severity === "success"/u);
   });
 
   it("keeps Codex non-PreToolUse exclusions paired with reasons", () => {

@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
@@ -123,7 +123,7 @@ last_reviewed: 2026-08-09
 **Status:** active | **Created:** 2026-04-27
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** VERIFY
-**Incident count:** 8 | **Latest occurrence:** 2026-08-09
+**Incident count:** 9 | **Latest occurrence:** 2026-08-10
 
 **What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
 
@@ -145,7 +145,9 @@ last_reviewed: 2026-08-09
 
 **Recurrence 2026-08-09 (goat-plan contract):** The first RED asked the H2-only `readMarkdownSection` helper for an H3 artifact section, so it failed before reaching the write-target contradiction. Reading the complete installed skill produced the intended RED twice. Evidence: `test/contract/skill-hardening-plan-2.test.ts` (search: `writes the user-facing ISSUE artifact`).
 
-**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+**Recurrence 2026-08-10 (hook coverage):** A configured-hook drift fixture installed the optional Gruff script but omitted its registry-declared provider adapter, so the exact template check failed before reaching the intended config assertion. The same verification batch found a direct audit-renderer fixture without the new required `hookCoverage` field; source typecheck did not inspect that test file, and both text renderers crashed. Adding the adapter to both fixture mirrors and completing the direct report shape restored the intended proofs. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `hook-provider-adapters.mjs`), `test/contract/command-phrases.test.ts` (search: `hookCoverage:`), and `src/cli/server/hooks-registry.ts` (search: `scriptFiles:`).
+
+**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. When an exported report schema or a hook's `scriptFiles` contract grows, update direct report builders and both source/installed fixture mirrors before running consumer assertions. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
 ---
 

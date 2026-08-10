@@ -48,11 +48,7 @@ type HookRuntimeReasonCode =
   | "evidence-write-failed";
 
 type HookProbeExpected =
-  | "blocked"
-  | "allowed"
-  | "typed-result"
-  | "incomplete"
-  | "advisory";
+  "blocked" | "allowed" | "typed-result" | "incomplete" | "advisory";
 type HookProbeObserved =
   | "blocked"
   | "allowed"
@@ -99,8 +95,7 @@ interface HookRuntimeScenarioResult {
   observed: HookProbeObserved;
   verdict: HookRuntimeVerdict;
   evidenceLevel:
-    | typeof MANAGED_HOOK_PROOF_LEVEL
-    | typeof CONFIGURED_HOOK_PROOF_LEVEL;
+    typeof MANAGED_HOOK_PROOF_LEVEL | typeof CONFIGURED_HOOK_PROOF_LEVEL;
   durationMs: number;
   reasonCode: HookRuntimeReasonCode;
   wasEvidenceRecorded: boolean;
@@ -782,7 +777,8 @@ const GRUFF_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
   },
   {
     id: "source-dependency-result",
-    label: "A source edit reports its available, incomplete, or clean analyzer result",
+    label:
+      "A source edit reports its available, incomplete, or clean analyzer result",
     expected: "typed-result",
     payload: JSON.stringify({
       tool_name: "Edit",
@@ -907,7 +903,11 @@ function classifyPostTurnProbe(
     return "incomplete";
   }
   // A concrete content finding asks the coding agent to continue fixing the user's change.
-  if (/fix or remove the flagged changed content|post-turn-safety: .* at /iu.test(capturedProcessText)) {
+  if (
+    /fix or remove the flagged changed content|post-turn-safety: .* at /iu.test(
+      capturedProcessText,
+    )
+  ) {
     return "finding";
   }
   // A quiet zero exit is the hook's complete clean result for the selected checkout.
@@ -1060,21 +1060,21 @@ export function verifyManagedConfiguredHook(
       "unsupported",
       "target-marked-untrusted",
     );
-  // Missing registry metadata is an internal error, not a provider limitation.
+    // Missing registry metadata is an internal error, not a provider limitation.
   } else if (hookState.reasonCode === "hook-registry-missing") {
     scenarioResults = skippedConfiguredScenarioResults(
       scenarios,
       "error",
       "hook-registry-missing",
     );
-  // Unsupported providers remain explicit and never run a shared file accidentally.
+    // Unsupported providers remain explicit and never run a shared file accidentally.
   } else if (!hookState.isSupported) {
     scenarioResults = skippedConfiguredScenarioResults(
       scenarios,
       "unsupported",
       "agent-hook-unsupported",
     );
-  // Disabled, absent, stale, or untrusted local setup cannot provide configured-command proof.
+    // Disabled, absent, stale, or untrusted local setup cannot provide configured-command proof.
   } else if (
     !hookState.enabled ||
     !hookState.installed ||
