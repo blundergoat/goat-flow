@@ -201,7 +201,7 @@ last_reviewed: 2026-08-10
 
 ## Lesson: Configured hook smoke must verify the registered guard path
 
-**Status:** active | **Created:** 2026-05-27 | **Incident count:** 7 | **Latest occurrence:** 2026-08-09
+**Status:** active | **Created:** 2026-05-27 | **Incident count:** 8 | **Latest occurrence:** 2026-08-10
 
 **Decision changed:** Treat configured replay as a safe-and-dangerous semantic matrix, and make mocks identify the command boundary rather than infer it from call order.
 
@@ -225,6 +225,8 @@ last_reviewed: 2026-08-10
 
 **Recurrence 2026-08-09 (partial hook propagation):** A dormant adapter changed legacy commands and file lists before installer propagation, so the cross-agent matrix passed only 1 of 13 cases. Protocol-gating adapter loads and namespaced modes restored 12; deferring a separate Antigravity support removal restored 13 of 13. Evidence anchors: `src/cli/server/agent-hook-writer.ts` (search: `usesLegacyResultProtocol`), `workflow/hooks/run-with-bash.mjs` (search: `LEGACY_HOOK_DEADLINES_MS`), and `test/integration/setup-install-agent-matrix.test.ts` (search: `diverged between installer and writer`).
 
+**Recurrence 2026-08-10 (standalone protocol precedence):** The TypeScript writer chose the Gruff response kind before provider-specific policy output, while the standalone installer checked Copilot first. The cross-agent matrix passed 43 of 44 cases and read Copilot Gruff as uninstalled because its generated command differed. Matching response-kind precedence restored installer/writer parity. Evidence anchors: `workflow/install-goat-flow.sh` (search: `responseKind === "gruff"`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `diverged between installer and writer`).
+
 **Prevention:** Verify configured guard replay as well as direct self-tests. Run safe and dangerous payloads from each audited cwd, require policy-specific denial text, reject hidden script paths, and fail on exit 126/127. Test doubles branch on payload and command shape, never spawn order. Build single-axis drift fixtures from the canonical command, then grep renamed outcomes and rerun their message assertions. A non-empty `unsupportedAgents` reason means unsupported. Protocol seams keep legacy commands and files unchanged; support changes update writer and installer atomically. Test both launcher decoding and startup output when a generated mode changes. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`), `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
 
 ## Lesson: Hook parser regressions need false-positive grammar probes
@@ -236,18 +238,6 @@ last_reviewed: 2026-08-10
 **Root cause:** The tests covered obvious dangerous strings and a few equals-valued options, but not valid long-option space forms, shell comments, or dotted query syntax that resembles key-file extensions.
 
 **Prevention:** For shell hooks, build regression matrices from valid CLI grammar and common inert syntax, not only incident strings. Include single-dash and double-dash eval flags, equals-valued and space-valued global options, unquoted shell comments, quoted `#`, jq/yq dotted queries, and filename controls such as `private.key`, `deploy.pem`, and `prod.pfx`. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `powershell double-dash command remove-item`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git --git-dir push`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `jq bare key query`).
-
-## Lesson: Missing-helper self-tests must close stdin
-
-**Status:** active | **Created:** 2026-05-27
-
-**What happened:** `deny-dangerous-self-test.sh --self-test=full` hung on an interactive terminal while copying a thin hook into a temp directory without `deny-dangerous.sh`. The copied hook hit the missing-helper branch before `--check` parsing, then read from the inherited terminal instead of receiving closed stdin.
-
-**Root cause:** The missing-dependency test proved fail-closed behavior only when stdin was already closed. Interactive terminals changed the control flow enough to hide the PASS/FAIL line behind a blocked read.
-
-**Prevention:** Any self-test that intentionally runs a degraded hook or helper must redirect stdin from `/dev/null`, and smoke mode should include the missing-helper branch so startup failures are caught quickly. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `run_common_dependency_checks`).
-
----
 
 ## Lesson: Normalize agent hook payload variants before field access
 

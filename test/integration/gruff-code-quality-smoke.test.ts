@@ -98,7 +98,7 @@ function runHookSelfTest(
   hookPath: string,
   pathPrefix: string,
 ): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", [hookPath, "--self-test=smoke"], {
+  return spawnSync("bash", [hookPath, "--self-test"], {
     cwd: makeRoot(),
     encoding: "utf-8",
     env: { ...process.env, PATH: pathPrefix },

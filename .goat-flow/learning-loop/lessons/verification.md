@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: I edited a dead code path because I assumed one implementation
@@ -247,3 +247,15 @@ last_reviewed: 2026-08-09
 3. Session logs already use unique filenames - extend this pattern to footgun/lesson entries when multi-agent mode is detected
 
 ---
+
+## Lesson: Expected classifier statuses must be captured around `set -e`
+
+**Status:** active | **Created:** 2026-08-10
+**Decision changed:** Capture expected nonzero helper statuses before restoring shell fail-fast mode.
+**Trigger phase:** VERIFY
+
+**What happened:** Gruff range classification correctly returned distinct statuses for deletion-only and unavailable hunks, but the legacy caller assigned the result under `set -e`. The shell exited with status 10 or 11 before the existing fail-soft skip branch ran.
+
+**Root cause:** I added meaningful nonzero returns to a shared helper without auditing every caller for shell error-mode semantics. A command substitution assignment is still a failing command under `set -e`.
+
+**Prevention:** When a shell helper uses nonzero statuses as data, wrap each call in `set +e`, capture `$?` immediately, restore `set -e`, and test the top-level script exit as well as its message. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `range_status=$?`) and `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not print whole-file findings when no changed range is available`).

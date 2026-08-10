@@ -18,6 +18,7 @@ import {
 import { computeContent } from "./audit-content.js";
 import { shouldAutoRunDrift } from "./audit-drift-policy.js";
 import { createAuditFactsView } from "./audit-facts-view.js";
+import { readAllHookStates } from "../server/hook-registrar.js";
 import {
   labelEvidencePathBases,
   validateRegisteredCheckProvenance,
@@ -39,6 +40,7 @@ import type {
   AuditConcern,
   AuditConcernKey,
   AuditFactProfile,
+  AuditHookCoverageReport,
   AuditReport,
   AuditScope,
   AuditScopeName,
@@ -47,6 +49,52 @@ import type {
   ContentReport,
   HarnessCheck,
 } from "./types.js";
+
+/** Build one offline hook-coverage section without running target hooks or provider agents. */
+function buildHookCoverageReport(
+  projectPath: string,
+  selectedAgent: AgentId | null,
+): AuditHookCoverageReport {
+  const hooks = readAllHookStates(projectPath);
+  const selectedHookSurfaces = hooks.flatMap((hook) =>
+    Object.entries(hook.agents)
+      .filter(([agentId]) => selectedAgent === null || agentId === selectedAgent)
+      .map(([, agentState]) => ({ hook, agentState })),
+  );
+  const requiredHookSurfaces = selectedHookSurfaces.filter(
+    ({ hook, agentState }) => hook.enabled && agentState.supported,
+  );
+  const requiredIneffective = requiredHookSurfaces.filter(
+    ({ agentState }) => agentState.effectiveState.status !== "effective",
+  ).length;
+  const selectedAgents = (
+    selectedAgent === null
+      ? Object.keys(hooks[0]?.agents ?? {})
+      : [selectedAgent]
+  ) as AgentId[];
+  return {
+    status: requiredIneffective === 0 ? "pass" : "fail",
+    selectedAgents,
+    summary: {
+      selectedSurfaces: selectedHookSurfaces.length,
+      requiredSurfaces: requiredHookSurfaces.length,
+      requiredIneffective,
+      effective: selectedHookSurfaces.filter(
+        ({ agentState }) => agentState.effectiveState.severity === "success",
+      ).length,
+      warning: selectedHookSurfaces.filter(
+        ({ agentState }) => agentState.effectiveState.severity === "warning",
+      ).length,
+      danger: selectedHookSurfaces.filter(
+        ({ agentState }) => agentState.effectiveState.severity === "danger",
+      ).length,
+      disabled: selectedHookSurfaces.filter(
+        ({ agentState }) => agentState.effectiveState.severity === "neutral",
+      ).length,
+    },
+    hooks,
+  };
+}
 
 export { createAuditFactsView } from "./audit-facts-view.js";
 
@@ -393,6 +441,10 @@ function runAuditFromContext(
     harness?.concerns ?? null,
     enforcement,
   );
+  const hookCoverage = buildHookCoverageReport(
+    projectPath,
+    options.agentFilter,
+  );
 
   return {
     command: "audit",
@@ -406,6 +458,7 @@ function runAuditFromContext(
     },
     concerns: harness?.concerns ?? null,
     enforcement,
+    hookCoverage,
     drift,
     content,
     overall: { status },

@@ -4,6 +4,7 @@
  */
 import type { CheckEvidence } from "../audit/provenance-types.js";
 import type {
+  AuditHookCoverageReport,
   CheckAssurance,
   CheckDisplayStatus,
   CheckEvidenceKind,
@@ -186,6 +187,8 @@ export interface DashboardReport {
   overall: {
     status: string;
   };
+  /** Same effective-hook chain returned by CLI audit JSON and the Hooks endpoint. */
+  hookCoverage: AuditHookCoverageReport;
   learningLoop: {
     recordCount: number;
     footgunCount: number;

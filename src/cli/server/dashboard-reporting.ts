@@ -620,6 +620,7 @@ export function buildDashboardReport(
       ...(auditRpt.scopes.harness ? { harness: auditRpt.scopes.harness } : {}),
     },
     overall: auditRpt.overall,
+    hookCoverage: auditRpt.hookCoverage,
     learningLoop: null,
     recentLessons: [],
     target: auditRpt.target,
@@ -660,15 +661,20 @@ function readConfigVersion(projectPath: string): string | null {
 
 /** Validate persisted cache JSON before trusting it as a dashboard report. */
 function isAuditCacheEnvelope(value: unknown): value is AuditCacheEnvelope {
+  // Null or primitive cache data cannot carry a dashboard report.
   if (typeof value !== "object" || value === null) return false;
   const envelope = value as Record<string, unknown>;
+  const cachedReport = envelope.report;
   return (
     typeof envelope.packageVersion === "string" &&
     typeof envelope.configVersion === "string" &&
     typeof envelope.cachedAt === "string" &&
     typeof envelope.signature === "string" &&
-    typeof envelope.report === "object" &&
-    envelope.report !== null
+    typeof cachedReport === "object" &&
+    cachedReport !== null &&
+    "hookCoverage" in cachedReport &&
+    typeof cachedReport.hookCoverage === "object" &&
+    cachedReport.hookCoverage !== null
   );
 }
 

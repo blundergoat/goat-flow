@@ -2,97 +2,24 @@
 
 # gruff-code-quality.sh
 # goat-flow-hook-version: 1.15.0
-#
-# Purpose:
-#   Optional PostToolUse hook that runs the matching gruff analyzer after
-#   a file edit (Edit / Write, or a multi-file edit payload) and surfaces only
-#   findings tied to the lines just changed. This keeps the quality feedback on
-#   the agent's current work instead of forcing cleanup of unrelated debt
-#   elsewhere in the same file.
-#
-# Supported analyzers:
-#   - gruff-ts for .ts / .tsx / .mts / .cts / .js / .jsx / .mjs / .cjs
-#   - gruff-php for .php
-#   - gruff-go for .go
-#   - gruff-rs for .rs
-#   - gruff-py for .py
-#
-# Runtime contract:
-#   Payload is read from stdin as agent PostToolUse JSON. The hook prefers
-#   an edited file path from the payload, then falls back to git-changed
-#   supported files for runtimes that only expose the completed file tool
-#   event. It also needs a matching `.gruff-*.yaml` or `.gruff-*.yml` config at
-#   the repo root, a matching gruff binary, and jq >= 1.6 for JSON filtering
-#   (jq 1.5 is untested). Missing prerequisites fail soft: the edit is not
-#   blocked and whole-file gruff output is not printed as a fallback. If a config
-#   is present but the matching binary cannot be found, the hook prints a
-#   one-line stderr diagnostic instead of silently leaving that language
-#   uncovered.
-#
-# Binary discovery:
-#   Discovery covers standard install locations only: vendor/bin,
-#   node_modules/.bin, bin, .venv/bin, ~/.local/bin, then PATH. It deliberately
-#   does not auto-discover `*/.venv/bin` or build-output directories. Monorepos
-#   with a deliberately managed analyzer in a non-standard location can opt in
-#   explicitly, either per repo in `.goat-flow/config.yaml` under
-#   `hooks.gruff-code-quality.binaries.<lang>` (e.g. `binaries: { py:
-#   strands_agents/.venv/bin/gruff-py }`; the value must be a repo-relative
-#   path that stays inside the repo and names an executable file), or per
-#   machine with `GRUFF_TS_BIN`, `GRUFF_PHP_BIN`, `GRUFF_GO_BIN`,
-#   `GRUFF_RS_BIN`, or `GRUFF_PY_BIN` naming an executable path. The env
-#   override wins over the config entry; either override names the exact
-#   executable - the hook never searches arbitrary subtrees.
-#   Timeout defaults to 60s via `GRUFF_CODE_QUALITY_TIMEOUT_SECONDS`; set
-#   `GRUFF_TS_TIMEOUT_SECONDS`, `GRUFF_PHP_TIMEOUT_SECONDS`,
-#   `GRUFF_GO_TIMEOUT_SECONDS`, `GRUFF_RS_TIMEOUT_SECONDS`, or
-#   `GRUFF_PY_TIMEOUT_SECONDS` for a language-specific override.
-#
-# Changed-line model:
-#   Prefer changed ranges from the PostToolUse payload when present.
-#   Otherwise parse `git diff HEAD --unified=0 -- <file>` for tracked files,
-#   falling back to the index diff only on unborn branches with no HEAD.
-#   New/untracked files are treated as fully changed. If no range can be
-#   derived, the hook exits quietly apart from a short stderr diagnostic.
-#   Analyzers with native changed-region support own the filtering: any analyzer
-#   advertising `--changed-ranges`, `--changed-scope`, and `--no-baseline` is
-#   invoked with those flags so symbol-aware scope is used and adoption baselines
-#   do not hide agent feedback. Other analyzers use the portable primary-line
-#   fallback above. Either way the surfaced findings are severity-sorted,
-#   floored, and capped identically.
-#
-# Output:
-#   Prints a scope/tally header
-#   `gruff-code-quality: <binary> <path> changed-lines=<ranges>; <n> on changed
-#   lines: <e> error, <w> warning, <a> advisory`, then one canonical finding line
-#   per surfaced finding `- [severity] file:line ruleId - message` (matching
-#   gruff's native CLI per-finding line so hook and analyzer output read
-#   identically). Findings on changed lines are sorted error -> warning ->
-#   advisory so the highest-value land first; they are floored at
-#   GRUFF_CODE_QUALITY_MIN_SEVERITY (default advisory) and capped at
-#   GRUFF_CODE_QUALITY_MAX_FINDINGS (default 20) with a "(<m> more on changed
-#   lines)" note when the cap hides some. A trailing line reports findings dropped
-#   below the floor and the count of same-file findings outside the changed
-#   ranges. The playbook footer is printed only when at least one changed-line
-#   finding is shown. If the analyzer reports the edited file as ignored by
-#   its `paths.ignore` config, the hook instead prints a single
-#   `skipped <path> - out of scope` line and surfaces no findings, so the
-#   agent does not try to fix a file the project deliberately excludes. Exit
-#   status stays 0 for analyzer findings and fail-soft diagnostics.
+# Runs the matching Gruff analyzer after a user or agent edits a supported file.
+# It attributes line/symbol findings to the edit while retaining file/project findings.
+# Package-local configs select monorepo targets; explicit overrides cover other layouts.
+# Migrated launches emit one bounded result for provider adaptation; older launches keep text.
+# Use this hook for immediate review feedback, not as proof that project-wide checks passed.
 
 set -euo pipefail
 
-# Bash 4.4+ required - the same baseline the deny-dangerous guard enforces. This
-# hook uses declare -A (capability cache), mapfile (main), and ${var,,} case-folding;
-# on bash 3.2 (notably macOS /bin/bash) those fail mid-run with a cryptic error.
-# Detect the unsupported shell up front and fail soft (exit 0, the hook's standard
-# "skipped" disposition) with the same guidance deny-dangerous gives.
+# A user on stock macOS Bash needs a clear setup message before newer syntax runs.
 if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) )); then
   printf 'gruff-code-quality: requires bash 4.4+ (got %s); skipped. On macOS install Homebrew bash and invoke /usr/local/bin/bash or /opt/homebrew/bin/bash explicitly.\n' "${BASH_VERSION:-unknown}" >&2
   exit 0
 fi
 
 FOOTER="For triage: consult .goat-flow/skill-docs/playbooks/gruff-code-quality.md"
-SUPPORTED_TOOLS=" edit write multiedit write_to_file replace_file_content multi_replace_file_content "
+HOOK_VERSION="1.15.0"
+HOOK_RESULT_SCHEMA="goat-flow.hook-result.v1"
+SUPPORTED_TOOLS=" edit write multiedit apply_patch write_to_file replace_file_content multi_replace_file_content "
 SKIP_DIR_PATTERN='(^|/)(node_modules|vendor|\.goat-flow|dist|build|coverage|\.git|target|\.venv|\.mypy_cache|\.pytest_cache|\.ruff_cache)(/|$)'
 BINARY_SEARCH_PATHS='vendor/bin, node_modules/.bin, bin, .venv/bin, ~/.local/bin, PATH'
 GRUFF_CODE_QUALITY_TIMEOUT_SECONDS="${GRUFF_CODE_QUALITY_TIMEOUT_SECONDS:-60}"
@@ -105,6 +32,73 @@ GRUFF_CODE_QUALITY_MAX_FINDINGS="${GRUFF_CODE_QUALITY_MAX_FINDINGS:-20}"
 GRUFF_CODE_QUALITY_MIN_SEVERITY="${GRUFF_CODE_QUALITY_MIN_SEVERITY:-advisory}"
 # Per-binary cache of gruff.hook.v1 capabilities JSON ("" = analyzer is pre-contract).
 declare -A HOOK_CAPS_CACHE
+
+FILE_RESULT_PRIORITY=0
+FILE_RESULT_OUTCOME="pass"
+FILE_RESULT_REASON_CODE="completed-clean"
+FILE_RESULT_FINDINGS='[]'
+FILE_RESULT_COMPLETED=0
+FILE_RESULT_VERIFIED=0
+FILE_RESULT_BINARY=""
+
+# Reset one edited file before prerequisites, Git scope, and its analyzer are checked.
+reset_file_result() {
+  FILE_RESULT_PRIORITY=80
+  FILE_RESULT_OUTCOME="unavailable"
+  FILE_RESULT_REASON_CODE="hook-unavailable"
+  FILE_RESULT_FINDINGS='[]'
+  FILE_RESULT_COMPLETED=0
+  FILE_RESULT_VERIFIED=0
+  FILE_RESULT_BINARY=""
+}
+
+# Record what the user should understand about one file after Gruff finishes or stops.
+record_file_result() {
+  local priority="$1" outcome="$2" reason_code="$3" finding_code="$4"
+  local finding_message="$5" finding_target="$6" completed="$7" verified="$8"
+  FILE_RESULT_PRIORITY="$priority"
+  FILE_RESULT_OUTCOME="$outcome"
+  FILE_RESULT_REASON_CODE="$reason_code"
+  FILE_RESULT_COMPLETED="$completed"
+  FILE_RESULT_VERIFIED="$verified"
+  # An empty code means the analyzer completed cleanly and needs no UI detail.
+  if [[ -z "$finding_code" ]]; then
+    FILE_RESULT_FINDINGS='[]'
+    return 0
+  fi
+  # A host without jq cannot safely interpolate analyzer text into provider JSON.
+  if ! command -v jq >/dev/null 2>&1; then
+    FILE_RESULT_FINDINGS='[]'
+    return 0
+  fi
+  FILE_RESULT_FINDINGS="$(jq -cn \
+    --arg code "$finding_code" \
+    --arg message "$finding_message" \
+    --arg target "$finding_target" \
+    '[{code: $code, message: $message, target: $target}]')"
+}
+
+# Convert surfaced analyzer details into the bounded finding list shown in the coding-agent UI.
+record_report_result() {
+  local report_json="$1" rel_path="$2" binary="$3"
+  local total
+  total="$(printf '%s' "$report_json" | jq -r '.total // 0')"
+  FILE_RESULT_BINARY="$binary"
+  # Any attributable finding becomes advisory feedback while still proving analyzer health.
+  if [[ "$total" =~ ^[0-9]+$ && "$total" -gt 0 ]]; then
+    FILE_RESULT_PRIORITY=20
+    FILE_RESULT_OUTCOME="advisory"
+    FILE_RESULT_REASON_CODE="findings-reported"
+    FILE_RESULT_FINDINGS="$(printf '%s' "$report_json" | jq -c --arg target "$rel_path" '
+      [(.resultFindings // [])[] | .target = $target] | .[0:20]
+    ')"
+    FILE_RESULT_COMPLETED=1
+    FILE_RESULT_VERIFIED=1
+    return 0
+  fi
+  record_file_result 0 "pass" "completed-clean" "" "" "$rel_path" 1 1
+  FILE_RESULT_BINARY="$binary"
+}
 
 # Payload extraction stays jq-first for correctness but keeps small regex
 # fallbacks so unsupported tools and paths can still be skipped when jq is
@@ -186,6 +180,40 @@ json_file_paths() {
   '
 }
 
+# Read patch or command text that may name files without a file_path field.
+json_patch_texts() {
+  local input="$1"
+  json_field "$input" '
+    [
+      .tool_input.patch?,
+      .tool_input.command?,
+      .toolCall.args.patch?,
+      .toolCall.args.command?,
+      .toolArgs.patch?,
+      .toolArgs.command?,
+      .tool_args.patch?,
+      .tool_args.command?
+    ] | map(select(type == "string" and length > 0)) | .[]
+  '
+}
+
+# Extract only patch-declared targets, such as a user's `*** Update File: src/app.ts` edit.
+patch_file_paths() {
+  local input="$1"
+  json_patch_texts "$input" | awk '
+    /^\*\*\* (Add|Update|Delete) File: / {
+      sub(/^\*\*\* (Add|Update|Delete) File: /, "")
+      print
+      next
+    }
+    /^\+\+\+ (b\/)?[^/]/ {
+      sub(/^\+\+\+ /, "")
+      sub(/^b\//, "")
+      if ($0 != "/dev/null") print
+    }
+  '
+}
+
 fallback_tool_name() {
   local input="$1"
   if [[ "$input" =~ \"tool_name\"[[:space:]]*:[[:space:]]*\"([^\"]+)\" ]]; then
@@ -209,6 +237,24 @@ fallback_file_paths() {
 supported_tool() {
   local tool_name="${1,,}"
   [[ "$SUPPORTED_TOOLS" == *" $tool_name "* ]]
+}
+
+# Accept a shell event only when its command contains an actual apply_patch document.
+payload_invokes_apply_patch() {
+  local payload="$1"
+  local patch_text
+  patch_text="$(json_patch_texts "$payload")"
+  [[ "$patch_text" == *"apply_patch"* && "$patch_text" == *"*** Begin Patch"* ]]
+}
+
+# Decide whether this completed tool can identify files the user just changed.
+supported_payload_tool() {
+  local tool_name="$1" payload="$2"
+  # Normal edit/write tools already carry a supported provider name.
+  if supported_tool "$tool_name"; then
+    return 0
+  fi
+  payload_invokes_apply_patch "$payload"
 }
 
 repo_root() {
@@ -235,6 +281,53 @@ absolute_path() {
     /*) printf '%s' "$file_path" ;;
     *) printf '%s/%s' "$root" "$file_path" ;;
   esac
+}
+
+# Map an edited file to the nearest ancestor config a monorepo user selected for it.
+analyzer_target_for_path() {
+  local root="$1" rel_path="$2" binary="$3"
+  local candidate_rel_dir target_root target_rel_path yaml_config yml_config
+  candidate_rel_dir="${rel_path%/*}"
+  # A root-level file has no directory segment before its name.
+  if [[ "$candidate_rel_dir" == "$rel_path" ]]; then
+    candidate_rel_dir="."
+  fi
+  while :; do
+    # The root candidate uses the project directory itself, not a literal `/.` path in output.
+    if [[ "$candidate_rel_dir" == "." ]]; then
+      target_root="$root"
+      target_rel_path="$rel_path"
+    else
+      target_root="$root/$candidate_rel_dir"
+      target_rel_path="${rel_path#"$candidate_rel_dir"/}"
+    fi
+    yaml_config="$target_root/.${binary}.yaml"
+    yml_config="$target_root/.${binary}.yml"
+    # Two configs at the same target are ambiguous to users and must be resolved explicitly.
+    if [[ -f "$yaml_config" && -f "$yml_config" ]]; then
+      return 2
+    fi
+    # The nearest single config owns the edited file and its analyzer working directory.
+    if [[ -f "$yaml_config" ]]; then
+      printf '%s\t%s\t%s' "$target_root" "$target_rel_path" "$yaml_config"
+      return 0
+    fi
+    # The alternate extension has the same target semantics.
+    if [[ -f "$yml_config" ]]; then
+      printf '%s\t%s\t%s' "$target_root" "$target_rel_path" "$yml_config"
+      return 0
+    fi
+    # Reaching the repository root means no analyzer was configured for this file.
+    if [[ "$candidate_rel_dir" == "." ]]; then
+      return 1
+    fi
+    # Nested paths move one ancestor at a time; one-segment paths move to root.
+    if [[ "$candidate_rel_dir" == */* ]]; then
+      candidate_rel_dir="${candidate_rel_dir%/*}"
+    else
+      candidate_rel_dir="."
+    fi
+  done
 }
 
 variant_for_path() {
@@ -272,25 +365,54 @@ supported_candidate_path() {
   [[ -n "$binary" ]]
 }
 
+# Run Git diff without project-configured programs transforming the user's source.
+run_safe_git_diff() {
+  local root="$1"
+  shift
+  GIT_EXTERNAL_DIFF='' GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 \
+    git -C "$root" diff --no-ext-diff --no-textconv "$@"
+}
+
+# List dirty supported files only when every Git source completed successfully.
 git_changed_supported_paths() {
   local root="$1"
-  local rel_path
-  {
-    git -C "$root" diff --name-only --diff-filter=ACMR -- 2>/dev/null || true
-    git -C "$root" diff --cached --name-only --diff-filter=ACMR -- 2>/dev/null || true
-    git -C "$root" ls-files --others --exclude-standard -- 2>/dev/null || true
-  } | while IFS= read -r rel_path; do
+  local rel_path unstaged_paths staged_paths untracked_paths combined_paths
+  # A failed working-tree query cannot justify choosing files from partial output.
+  if ! unstaged_paths="$(run_safe_git_diff "$root" --name-only --diff-filter=ACMR --)"; then
+    printf 'gruff-code-quality: Git could not list working-tree changes\n' >&2
+    return 1
+  fi
+  # Staged edits are separate user work and must be included without text converters.
+  if ! staged_paths="$(run_safe_git_diff "$root" --cached --name-only --diff-filter=ACMR --)"; then
+    printf 'gruff-code-quality: Git could not list staged changes\n' >&2
+    return 1
+  fi
+  # Untracked source files have no diff hunk, so Git must identify them explicitly.
+  if ! untracked_paths="$(GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 git -C "$root" ls-files --others --exclude-standard --)"; then
+    printf 'gruff-code-quality: Git could not list untracked files\n' >&2
+    return 1
+  fi
+  combined_paths="${unstaged_paths}${unstaged_paths:+$'\n'}${staged_paths}${staged_paths:+$'\n'}${untracked_paths}"
+  printf '%s\n' "$combined_paths" | while IFS= read -r rel_path; do
+    # Only supported source files can map to a Gruff analyzer.
     if supported_candidate_path "$rel_path"; then
       printf '%s\n' "$rel_path"
     fi
-  done | awk '!seen[$0]++'
+  done | awk 'length($0) && !seen[$0]++'
 }
 
 payload_file_paths() {
   local payload="$1"
-  local paths
+  local paths patch_paths
   paths="$(json_file_paths "$payload" || true)"
+  patch_paths="$(patch_file_paths "$payload" || true)"
+  # Patch markers are the trustworthy targets when a provider omits file_path.
+  if [[ -n "$patch_paths" ]]; then
+    paths="${paths}${paths:+$'\n'}${patch_paths}"
+  fi
+  # A restricted host may lack jq, so retain the small direct-path fallback.
   [[ -n "$paths" ]] || paths="$(fallback_file_paths "$payload")"
+  # Empty path sets mean the completed tool did not identify analyzable user content.
   if [[ -n "$paths" ]]; then
     printf '%s\n' "$paths" | awk 'length($0) && !seen[$0]++'
   fi
@@ -302,6 +424,7 @@ payload_supported_file_paths() {
   local file_path rel_path normalized_root
   normalized_root="${root//\\//}"
   payload_file_paths "$payload" | while IFS= read -r file_path; do
+    # Blank provider fields cannot name a file the user edited.
     [[ -n "$file_path" ]] || continue
     file_path="${file_path//\\//}"
     case "$file_path" in
@@ -454,6 +577,7 @@ resolve_config_binary() {
 discover_binary() {
   local root="$1"
   local binary="$2"
+  local target_root="${3:-$root}"
   local candidate env_name override config_override resolved
   env_name="$(binary_env_name "$binary")"
   override="${!env_name:-}"
@@ -472,12 +596,17 @@ discover_binary() {
     return 0
   fi
   for candidate in \
+    "$target_root/vendor/bin/$binary" \
+    "$target_root/node_modules/.bin/$binary" \
+    "$target_root/bin/$binary" \
+    "$target_root/.venv/bin/$binary" \
     "$root/vendor/bin/$binary" \
     "$root/node_modules/.bin/$binary" \
     "$root/bin/$binary" \
     "$root/.venv/bin/$binary" \
     "${HOME:-}/.local/bin/$binary"
   do
+    # Package-local candidates precede repo-root and user PATH choices for this edited file.
     if [[ -n "$candidate" && -x "$candidate" ]]; then
       printf '%s' "$candidate"
       return 0
@@ -545,20 +674,89 @@ payload_ranges() {
 
 parse_diff_ranges() {
   local diff_output="$1"
-  local line ranges start count end
+  local line ranges start count end saw_hunk
   local hunk_re='^@@ -[0-9]+(,[0-9]+)? \+([0-9]+)(,([0-9]+))? @@'
   ranges=""
+  saw_hunk=0
   while IFS= read -r line; do
+    # Each hunk describes the new-file lines attributable to the completed edit.
     if [[ "$line" =~ $hunk_re ]]; then
+      saw_hunk=1
       start="${BASH_REMATCH[2]}"
       count="${BASH_REMATCH[4]}"
+      # A missing count means Git's compact one-line hunk form.
       [[ -n "$count" ]] || count=1
+      # Zero added lines is a deletion-only hunk with no remaining code to analyze.
       [[ "$count" -eq 0 ]] && continue
       end=$((start + count - 1))
       ranges="${ranges}${ranges:+,}${start}-${end}"
     fi
   done <<< "$diff_output"
-  printf '%s' "$ranges"
+  # Positive ranges let Gruff attribute findings to remaining source.
+  if [[ -n "$ranges" ]]; then
+    printf '%s' "$ranges"
+    return 0
+  fi
+  # A hunk with no added lines is a completed not-applicable deletion analysis.
+  if [[ "$saw_hunk" -eq 1 ]]; then
+    return 10
+  fi
+  return 11
+}
+
+# Read the apply_patch operation for one repo-relative path.
+patch_operation_for_path() {
+  local payload="$1" rel_path="$2"
+  json_patch_texts "$payload" | awk -v wanted="$rel_path" '
+    /^\*\*\* (Add|Update|Delete) File: / {
+      operation = $2
+      path = $0
+      sub(/^\*\*\* (Add|Update|Delete) File: /, "", path)
+      if (path == wanted) {
+        print tolower(operation)
+        exit
+      }
+    }
+  '
+}
+
+# Read numbered new-file hunks for one apply_patch target; empty means Git must derive them.
+patch_ranges_for_path() {
+  local payload="$1" rel_path="$2"
+  json_patch_texts "$payload" | awk -v wanted="$rel_path" '
+    /^\*\*\* (Add|Update|Delete) File: / {
+      path = $0
+      sub(/^\*\*\* (Add|Update|Delete) File: /, "", path)
+      active = (path == wanted)
+      next
+    }
+    active && /^@@ -[0-9]+(,[0-9]+)? \+[0-9]+(,[0-9]+)? @@/ {
+      plus = $0
+      sub(/^.* \+/, "", plus)
+      sub(/ .*/, "", plus)
+      split(plus, fields, ",")
+      start = fields[1] + 0
+      count = (fields[2] == "" ? 1 : fields[2] + 0)
+      if (count > 0) {
+        end = start + count - 1
+        ranges = ranges (ranges == "" ? "" : ",") start "-" end
+      }
+    }
+    END { print ranges }
+  '
+}
+
+# Return the former path when Git identifies this edited path as a rename destination.
+# Use before hunk parsing so a rename plus edits compares both names instead of treating
+# the destination as a wholly new file; empty means the file was not renamed.
+rename_source_for_path() {
+  local name_status_output="$1" rel_path="$2"
+  printf '%s\n' "$name_status_output" | awk -F '\t' -v wanted="$rel_path" '
+    $1 ~ /^R[0-9]+$/ && $3 == wanted {
+      print $2
+      exit
+    }
+  '
 }
 
 git_diff_ranges() {
@@ -566,22 +764,69 @@ git_diff_ranges() {
   local rel_path="$2"
   local abs_path="$3"
   local allow_cached_fallback="${4:-1}"
-  local diff_output
-  if ! git -C "$root" ls-files --error-unmatch -- "$rel_path" >/dev/null 2>&1; then
+  local diff_output tracked_path ranges range_status head_status
+  local name_status_output rename_source_path
+  # A listing error means Git cannot establish whether this is a new user file.
+  if ! tracked_path="$(GIT_CONFIG_NOSYSTEM=1 git -C "$root" ls-files -- "$rel_path")"; then
+    return 12
+  fi
+  # New files are wholly attributable because Git has no earlier line map.
+  if [[ -z "$tracked_path" ]]; then
+    # A missing new file has no remaining content to analyze.
     if [[ -f "$abs_path" ]]; then
       all_file_range "$abs_path"
+      return 0
     fi
-    return
+    return 10
   fi
-  if git -C "$root" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
-    diff_output="$(git -C "$root" diff HEAD --unified=0 -- "$rel_path" 2>/dev/null || true)"
-  else
-    diff_output="$(git -C "$root" diff --unified=0 -- "$rel_path" 2>/dev/null || true)"
+  set +e
+  GIT_CONFIG_NOSYSTEM=1 git -C "$root" rev-parse --verify --quiet HEAD >/dev/null 2>&1
+  head_status=$?
+  set -e
+  # A normal repository compares the user's current file against HEAD.
+  if [[ "$head_status" -eq 0 ]]; then
+    # Rename discovery needs the full change set because a destination-only pathspec hides its source.
+    if ! name_status_output="$(run_safe_git_diff "$root" --name-status --find-renames HEAD --)"; then
+      return 12
+    fi
+    rename_source_path="$(rename_source_for_path "$name_status_output" "$rel_path")"
+    # A renamed file compares both names so only real content edits become attributable ranges.
+    if [[ -n "$rename_source_path" ]]; then
+      if ! diff_output="$(run_safe_git_diff "$root" HEAD --unified=0 -- "$rename_source_path" "$rel_path")"; then
+        return 12
+      fi
+    # A normal edit needs only its declared project-relative path.
+    elif ! diff_output="$(run_safe_git_diff "$root" HEAD --unified=0 -- "$rel_path")"; then
+      return 12
+    fi
+  # An unborn branch has no HEAD, so working-tree and staged content are queried separately.
+  elif [[ "$head_status" -eq 1 ]]; then
+    if ! diff_output="$(run_safe_git_diff "$root" --unified=0 -- "$rel_path")"; then
+      return 12
+    fi
+    # An empty working-tree diff may still have the user's first staged version.
     if [[ -z "$diff_output" && "$allow_cached_fallback" -eq 1 ]]; then
-      diff_output="$(git -C "$root" diff --cached --unified=0 -- "$rel_path" 2>/dev/null || true)"
+      if ! diff_output="$(run_safe_git_diff "$root" --cached --unified=0 -- "$rel_path")"; then
+        return 12
+      fi
     fi
+  else
+    return 12
   fi
-  parse_diff_ranges "$diff_output"
+  set +e
+  ranges="$(parse_diff_ranges "$diff_output")"
+  range_status=$?
+  set -e
+  # A normal hunk returns its attributable new-file ranges.
+  if [[ "$range_status" -eq 0 ]]; then
+    printf '%s' "$ranges"
+    return 0
+  fi
+  # Non-empty rename, binary, or deletion output is explicitly not applicable.
+  if [[ -n "$diff_output" ]]; then
+    return 10
+  fi
+  return 11
 }
 
 changed_ranges() {
@@ -591,15 +836,39 @@ changed_ranges() {
   local abs_path="$4"
   local file_count="${5:-1}"
   local allow_cached_fallback="${6:-1}"
-  local ranges
+  local ranges patch_operation
+  patch_operation="$(patch_operation_for_path "$payload" "$rel_path")"
+  # A deleted file has no remaining source for an after-edit analyzer.
+  if [[ "$patch_operation" == "delete" ]]; then
+    return 10
+  fi
+  # New patch files are wholly attributable, including edits without numbered hunks.
+  if [[ "$patch_operation" == "add" ]]; then
+    ranges="$(all_file_range "$abs_path")"
+    # An empty added file is valid but has no analyzable lines.
+    if [[ -z "$ranges" ]]; then
+      return 10
+    fi
+    printf '%s' "$ranges"
+    return 0
+  fi
+  # Numbered update hunks can identify scope before the working tree is otherwise inspected.
+  if [[ "$patch_operation" == "update" ]]; then
+    ranges="$(patch_ranges_for_path "$payload" "$rel_path")"
+    if [[ -n "$ranges" ]]; then
+      printf '%s' "$ranges"
+      return 0
+    fi
+  fi
   # Payload changed_ranges is a single flat list with no per-file attribution.
   # Trust it only for single-file edits; multi-file payloads derive per-file
   # ranges from git so one file's ranges are not applied to every file.
   if [[ "$file_count" -le 1 ]]; then
     ranges="$(payload_ranges "$payload")"
+    # Provider ranges are used only when they belong to this single edited file.
     if [[ -n "$ranges" ]]; then
       printf '%s' "$ranges"
-      return
+      return 0
     fi
   fi
   git_diff_ranges "$root" "$rel_path" "$abs_path" "$allow_cached_fallback"
@@ -649,7 +918,7 @@ self_test() {
     printf 'gruff-code-quality self-test: single-file payload range failed\n' >&2
     return 1
   }
-  [[ -z "$(changed_ranges "$payload" "/nonexistent" "src/a.mts" "/nonexistent/src/a.mts" 2)" ]] || {
+  [[ -z "$(changed_ranges "$payload" "/nonexistent" "src/a.mts" "/nonexistent/src/a.mts" 2 2>/dev/null)" ]] || {
     printf 'gruff-code-quality self-test: multi-file payload range sharing not suppressed\n' >&2
     return 1
   }
@@ -925,6 +1194,7 @@ run_gruff_json() {
   local file_path="$4"
   local ranges="$5"
   local scope="${6:-symbol}"
+  local target_root="${7:-.}"
   local args timeout_seconds
   args=(analyse)
   if [[ "$help" == *"--format"* ]]; then
@@ -943,11 +1213,13 @@ run_gruff_json() {
 
   timeout_seconds="$(normalized_timeout_seconds "$binary")"
 
+  # Hosts with GNU timeout keep slow analysis inside the coding-agent feedback window.
   if command -v timeout >/dev/null 2>&1; then
-    timeout "$timeout_seconds" "$binary_path" "${args[@]}" "$file_path" 2>&1
+    (cd "$target_root" && timeout "$timeout_seconds" "$binary_path" "${args[@]}" "$file_path" 2>&1)
     return $?
   fi
-  "$binary_path" "${args[@]}" "$file_path" 2>&1
+  # A host without timeout still runs from the package whose config owns this edited file.
+  (cd "$target_root" && "$binary_path" "${args[@]}" "$file_path" 2>&1)
 }
 
 valid_gruff_json() {
@@ -1068,6 +1340,8 @@ changed_findings_report() {
         surfaced: ($surfaced | length),
         floored: (($all | length) - ($surfaced | length)),
         more: (if ($surfaced | length) > $max then ($surfaced | length) - $max else 0 end),
+        resultFindings: [ limit($max; $surfaced[])
+          | {code: .ruleId, message: ("[" + .sev + "] " + .message), target: .file} ],
         lines: [ limit($max; $surfaced[]) | "- [\(.sev)] \(.file):\(.line) \(.ruleId) - \(.message)" ] }
   ' 2>/dev/null || true
 }
@@ -1205,6 +1479,7 @@ print_reviewability_guidance() {
   return 0
 }
 
+# Show attributable totals without labelling structural findings as changed-line-only.
 print_scope_header() {
   local binary="$1"
   local rel_path="$2"
@@ -1213,8 +1488,10 @@ print_scope_header() {
   local err="$5"
   local warn="$6"
   local adv="$7"
-  printf 'gruff-code-quality: %s %s changed-lines=%s; %s on changed lines: %s error, %s warning, %s advisory\n' \
-    "$binary" "$rel_path" "$ranges" "$total" "$err" "$warn" "$adv"
+  local edit_total="${8:-$total}"
+  local structural_total="${9:-0}"
+  printf 'gruff-code-quality: %s %s edit-ranges=%s; %s attributable finding(s) (edit=%s, file/project=%s): %s error, %s warning, %s advisory\n' \
+    "$binary" "$rel_path" "$ranges" "$total" "$edit_total" "$structural_total" "$err" "$warn" "$adv"
 }
 
 # Probe a binary's gruff.hook.v1 capabilities once per binary (cached for the
@@ -1274,6 +1551,7 @@ hook_v1_report() {
         )
       | { sev: ((.severity // "advisory") | tostring | ascii_downcase),
           rank: sev_rank(.severity // ""),
+          scope: (.scope // "line"),
           file: (.file // .filePath // .path // ""),
           line: (if ((.scope // "line") == "file" or (.scope // "line") == "project")
                  then null else (.line // null) end),
@@ -1282,127 +1560,142 @@ hook_v1_report() {
     | ($all | sort_by([ (3 - .rank), .file, (.line // 0), .ruleId ])) as $sorted
     | [ $sorted[] | select(.rank >= $floor_rank) ] as $surfaced
     | { total: ($all | length),
+        editTotal: ([ $all[] | select(.scope != "file" and .scope != "project") ] | length),
+        structuralTotal: ([ $all[] | select(.scope == "file" or .scope == "project") ] | length),
         e: ([ $all[] | select(.rank == 3) ] | length),
         w: ([ $all[] | select(.rank == 2) ] | length),
         a: ([ $all[] | select(.rank == 1) ] | length),
         surfaced: ($surfaced | length),
         floored: (($all | length) - ($surfaced | length)),
         more: (if ($surfaced | length) > $max then ($surfaced | length) - $max else 0 end),
+        resultFindings: [ limit($max; $surfaced[])
+          | {code: .ruleId, message: ("[" + .sev + "] " + .message), target: .file} ],
         lines: [ limit($max; $surfaced[])
                  | "- [\(.sev)] \(.file)\(if .line != null then ":" + (.line | tostring) else "" end) \(.ruleId) - \(.message)" ] }
   ' 2>/dev/null || true
 }
 
-# Contract path: the analyzer owns scoping/metadata/remediation/new-only; the
-# hook calls `<binary> hook --format json --changed-ranges <ranges> <file>` and
-# renders the envelope. Relays config-schema errors (B8) and ignore verdicts
-# (B7) from the envelope, then prints the same scope header / findings / footer
-# as the legacy path. Findings never set a non-zero exit.
+# Run a versioned analyzer exchange and retain a typed result for the provider adapter.
 process_file_contract() {
-  local binary_path="$1" binary="$2" rel_path="$3" ranges="$4" caps="$5"
-  local output status timeout_seconds report_json suppressed
+  local binary_path="$1" binary="$2" rel_path="$3" target_root="$4"
+  local target_rel_path="$5" ranges="$6"
+  local output status timeout_seconds report_json suppressed analyzer_error_path analyzer_error
   local config_error ignored_match scope_fields
-  local max_findings floor_rank total err warn adv surfaced floored more
+  local max_findings floor_rank total edit_total structural_total err warn adv surfaced floored more
 
   timeout_seconds="$(normalized_timeout_seconds "$binary")"
-
-  # Ranges are applied by this hook rather than by the analyzer. Passing `--changed-ranges`
-  # makes the analyzer drop every `scope=file` finding - too long, no file overview, import
-  # cycle - because none of them sit on a changed line. That is how a file grows past the size
-  # gate forever while every edit reports clean: the warning is never emitted, not ignored.
-  # Asking for the whole file and filtering here lets file-scope findings through while
-  # line-scope findings stay confined to what the agent actually touched.
-
-  # Scope to the changed lines and let the analyzer return the attributable
-  # findings. Capture stdout ONLY: the gruff.hook.v1 envelope is JSON on stdout,
-  # and any analyzer/git diagnostics on stderr (e.g. "path not in HEAD") would
-  # corrupt the JSON if merged in. New-only file/project surfacing via `--diff`
-  # is intentionally NOT requested here: a single `--diff` pass also new-only-
-  # filters line/symbol findings, hiding pre-existing findings on the very lines
-  # the agent edited (confirmed across all five analyzers). See M02 for the
-  # scope-specific combined-mode fix that re-enables it.
-  #
-  # Ranges are applied by this hook rather than by the analyzer, and that is a deliberate
-  # trade. Passing `--changed-ranges` gives symbol-aware scoping, but it also makes the
-  # analyzer drop every `scope=file` finding - over the size gate, no file overview, import
-  # cycle - because none of them sit on a changed line. That is how a file grows past the size
-  # gate indefinitely while every single edit reports clean: the warning is never emitted, so
-  # there is nothing for an agent to ignore. Structural visibility is worth more than symbol
-  # widening, so the whole file is requested and `hook_v1_report` keeps file-scope findings
-  # while confining line and symbol findings to the lines actually edited. The call is direct
-  # rather than through an argument array: an empty array expanded with "${arr[@]}" is an
-  # unbound-variable error on the stock macOS Bash 3.2 this hook must run on.
+  analyzer_error_path="$(mktemp)"
   set +e
+  # A host with timeout support bounds the analyzer before the coding agent UI deadline.
   if command -v timeout >/dev/null 2>&1; then
-    output="$(timeout "$timeout_seconds" "$binary_path" hook --format json "$rel_path" 2>/dev/null)"
+    output="$(cd "$target_root" && timeout "$timeout_seconds" "$binary_path" hook --format json "$target_rel_path" 2>"$analyzer_error_path")"
   else
-    output="$("$binary_path" hook --format json "$rel_path" 2>/dev/null)"
+    output="$(cd "$target_root" && "$binary_path" hook --format json "$target_rel_path" 2>"$analyzer_error_path")"
   fi
   status=$?
   set -e
+  analyzer_error="$(<"$analyzer_error_path")"
+  rm -f "$analyzer_error_path"
 
+  # A user-facing timeout must never be translated into a clean edit.
   if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
-    printf 'gruff-code-quality: %s hook exceeded %ss or was killed; skipped. Raise %s or GRUFF_CODE_QUALITY_TIMEOUT_SECONDS if this analyzer needs more time.\n' "$binary" "$timeout_seconds" "$(timeout_env_name "$binary")" >&2
+    record_file_result 70 "incomplete" "execution-timeout" "analyzer-timeout" \
+      "$binary exceeded ${timeout_seconds}s while checking this edit" "$rel_path" 0 0
+    printf 'gruff-code-quality: %s exceeded %ss; analysis incomplete\n' "$binary" "$timeout_seconds" >&2
     return 0
   fi
-  [[ -n "$output" ]] || return 0
-  # Accept any well-formed envelope: a findings array (normal), a config object
-  # (B8 schema error, which a port may emit without findings), or an ignored
-  # object (B7 verdict, likewise). Requiring `.findings` here would let a port
-  # that omits it on a config error or ignore verdict swallow that signal.
-  if ! printf '%s' "$output" | jq -e 'type == "object" and ((.findings | type == "array") or (.config | type == "object") or (.ignored | type == "object"))' >/dev/null 2>&1; then
-    printf 'gruff-code-quality: %s hook returned non-JSON; skipped\n' "$binary" >&2
+  # Contract analyzers use exit zero; any other status means the exchange failed.
+  if [[ "$status" -ne 0 ]]; then
+    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-failed" \
+      "${analyzer_error:-$binary exited $status without a complete result}" "$rel_path" 0 0
+    printf 'gruff-code-quality: %s failed for %s: %s\n' "$binary" "$rel_path" "${analyzer_error:-exit $status}" >&2
+    return 0
+  fi
+  # Exit-zero silence is an invalid response, not evidence that the edited file is clean.
+  if [[ -z "$output" ]]; then
+    record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+      "$binary returned no result for this edit" "$rel_path" 0 0
+    printf 'gruff-code-quality: %s returned no result for %s\n' "$binary" "$rel_path" >&2
+    return 0
+  fi
+  # A schema mismatch means the user cannot trust any finding or clean claim in the payload.
+  if ! printf '%s' "$output" | jq -e '
+    type == "object"
+    and .contractVersion == "gruff.hook.v1"
+    and ((.findings | type == "array") or (.config | type == "object") or (.ignored | type == "object"))
+  ' >/dev/null 2>&1; then
+    record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+      "$binary returned malformed or unsupported result JSON" "$rel_path" 0 0
+    printf 'gruff-code-quality: %s returned an invalid result for %s\n' "$binary" "$rel_path" >&2
     return 0
   fi
 
   config_error="$(config_error_message "$output")"
+  # A rejected project config explains why no reliable analysis reached the UI.
   if [[ -n "$config_error" ]]; then
-    printf 'gruff-code-quality: %s could not analyse %s - %s\n' "$binary" "$rel_path" "${config_error:-project gruff config rejected}"
+    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-config-invalid" \
+      "$config_error" "$rel_path" 0 0
+    printf 'gruff-code-quality: %s could not analyse %s - %s\n' "$binary" "$rel_path" "$config_error"
     return 0
   fi
 
-  # Match the ignored entry against the edited file the same way the legacy
-  # ignored_descriptor does: normalize slashes and a leading ./, read the entry
-  # path from `.path` or `.file`, and accept an exact or trailing-segment match
-  # so a port that echoes ./src/x.ts, a back-slashed path, or an absolute path
-  # still resolves to the edited file.
-  ignored_match="$(printf '%s' "$output" | jq -r --arg p "$rel_path" 'def norm: tostring | gsub("\\\\"; "/") | sub("^\\./"; ""); ($p | norm) as $rel | first((.ignored.paths // [])[] | ((.path? // .file? // "") | norm) as $ip | select($ip == $rel or ($ip | endswith("/" + $rel))) | (.source // "config") + (if (.pattern // "") != "" then " " + .pattern else "" end)) // empty' 2>/dev/null || true)"
+  ignored_match="$(printf '%s' "$output" | jq -r --arg p "$target_rel_path" '
+    def norm: tostring | gsub("\\\\"; "/") | sub("^\\./"; "");
+    ($p | norm) as $rel
+    | first((.ignored.paths // [])[]
+      | ((.path? // .file? // "") | norm) as $ignored_path
+      | select($ignored_path == $rel or ($ignored_path | endswith("/" + $rel)))
+      | (.source // "config") + (if (.pattern // "") != "" then " " + .pattern else "" end))
+      // empty
+  ' 2>/dev/null || true)"
+  # An ignored file completed a valid exchange but is intentionally outside project scope.
   if [[ -n "$ignored_match" ]]; then
-    printf 'gruff-code-quality: skipped %s %s - ignored by %s; out of scope, do not modify to satisfy gruff.\n' "$binary" "$rel_path" "$ignored_match"
+    record_file_result 20 "advisory" "findings-reported" "analysis-not-applicable" \
+      "This file is ignored by $ignored_match, so Gruff did not request changes" "$rel_path" 1 1
+    FILE_RESULT_BINARY="$binary"
+    printf 'gruff-code-quality: skipped %s %s - ignored by %s; out of scope\n' "$binary" "$rel_path" "$ignored_match"
     return 0
   fi
 
   max_findings="$GRUFF_CODE_QUALITY_MAX_FINDINGS"
+  # Invalid user configuration falls back to the shared provider-safe cap.
   [[ "$max_findings" =~ ^[0-9]+$ && "$max_findings" -ge 1 ]] || max_findings=20
   floor_rank="$(min_severity_rank "$GRUFF_CODE_QUALITY_MIN_SEVERITY")"
-
   report_json="$(hook_v1_report "$output" "$floor_rank" "$max_findings" "$ranges")"
-  [[ -n "$report_json" ]] || report_json='{"total":0,"e":0,"w":0,"a":0,"surfaced":0,"floored":0,"more":0,"lines":[]}'
+  # A failed projection is itself an invalid analyzer response.
+  if [[ -z "$report_json" ]]; then
+    record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+      "$binary result could not be projected into feedback" "$rel_path" 0 0
+    return 0
+  fi
+  record_report_result "$report_json" "$rel_path" "$binary"
   suppressed="$(printf '%s' "$output" | jq -r '.suppressed.count // 0' 2>/dev/null || true)"
+  # Missing suppression metadata means no hidden count is shown to the user.
   [[ "$suppressed" =~ ^[0-9]+$ ]] || suppressed=0
 
-  scope_fields="$(printf '%s' "$report_json" | jq -r '[.total,.e,.w,.a,.surfaced,.floored,.more] | @tsv' 2>/dev/null || true)"
-  IFS=$'\t' read -r total err warn adv surfaced floored more <<< "$scope_fields"
-  [[ "$total" =~ ^[0-9]+$ ]] || total=0
-  [[ "$surfaced" =~ ^[0-9]+$ ]] || surfaced=0
-  [[ "$floored" =~ ^[0-9]+$ ]] || floored=0
-  [[ "$more" =~ ^[0-9]+$ ]] || more=0
-
+  scope_fields="$(printf '%s' "$report_json" | jq -r '[.total,.editTotal,.structuralTotal,.e,.w,.a,.surfaced,.floored,.more] | @tsv')"
+  IFS=$'\t' read -r total edit_total structural_total err warn adv surfaced floored more <<< "$scope_fields"
+  # Findings or analyzer-owned suppression justify a concise scope summary.
   if [[ "$total" -gt 0 || "$suppressed" -gt 0 ]]; then
-    print_scope_header "$binary" "$rel_path" "$ranges" "$total" "$err" "$warn" "$adv"
+    print_scope_header "$binary" "$rel_path" "$ranges" "$total" "$err" "$warn" "$adv" "$edit_total" "$structural_total"
   fi
+  # Only surfaced findings consume the user's immediate review context.
   if [[ "$surfaced" -gt 0 ]]; then
-    printf '%s' "$report_json" | jq -r '.lines[]' 2>/dev/null || true
+    printf '%s' "$report_json" | jq -r '.lines[]'
   fi
+  # The bounded cap is visible so users know additional attributable findings exist.
   if [[ "$more" -gt 0 ]]; then
-    printf 'gruff-code-quality: (%s more on changed lines; raise GRUFF_CODE_QUALITY_MAX_FINDINGS to list them)\n' "$more"
+    printf 'gruff-code-quality: %s more attributable finding(s) were capped\n' "$more"
   fi
+  # A project severity floor remains visible instead of masquerading as zero findings.
   if [[ "$floored" -gt 0 ]]; then
-    printf 'gruff-code-quality: %s finding(s) below GRUFF_CODE_QUALITY_MIN_SEVERITY=%s not listed\n' "$floored" "${GRUFF_CODE_QUALITY_MIN_SEVERITY:-advisory}"
+    printf 'gruff-code-quality: %s attributable finding(s) below the configured floor\n' "$floored"
   fi
+  # Analyzer-owned suppression reports unrelated debt without asking the user to fix it.
   if [[ "$suppressed" -gt 0 ]]; then
     printf 'gruff-code-quality: suppressed %s finding(s) outside the changed scope\n' "$suppressed"
   fi
+  # Practical guidance appears only when the user has a finding to address.
   if [[ "$surfaced" -gt 0 ]]; then
     print_reviewability_guidance "$report_json"
     printf '%s\n' "$FOOTER"
@@ -1419,7 +1712,7 @@ process_file() {
   local rel_path abs_path binary binary_path config_file config_rel
   local binary_env binary_override config_error
   local config_binary config_key resolved_binary
-  local ranges help output status suppressed ignored_desc uses_native_regions
+  local ranges range_status help output status suppressed ignored_desc uses_native_regions
   local max_findings floor_rank report_json scope_fields changed_scope
   local total err warn adv surfaced floored more
 
@@ -1469,8 +1762,12 @@ process_file() {
     return 0
   fi
 
+  set +e
   ranges="$(changed_ranges "$payload" "$root" "$rel_path" "$abs_path" "$file_count" "$allow_cached_fallback")"
-  if [[ -z "$ranges" ]]; then
+  range_status=$?
+  set -e
+  # Legacy launches keep their established fail-soft skip for every unavailable range state.
+  if [[ "$range_status" -ne 0 || -z "$ranges" ]]; then
     printf 'gruff-code-quality: no changed lines detected for %s; skipping gruff output\n' "$rel_path" >&2
     return 0
   fi
@@ -1481,7 +1778,7 @@ process_file() {
   local hook_caps
   hook_caps="$(hook_capabilities "$binary_path" "$binary")"
   if [[ -n "$hook_caps" ]]; then
-    process_file_contract "$binary_path" "$binary" "$rel_path" "$ranges" "$hook_caps"
+    process_file_contract "$binary_path" "$binary" "$rel_path" "$root" "$rel_path" "$ranges"
     return 0
   fi
 
@@ -1546,6 +1843,9 @@ process_file() {
   ignored_desc="$(ignored_descriptor "$output" "$rel_path" "$abs_path")"
   if [[ -n "$ignored_desc" ]]; then
     printf 'gruff-code-quality: skipped %s %s - %s; out of scope, do not modify to satisfy gruff.\n' "$binary" "$rel_path" "$ignored_desc"
+    record_file_result 20 "advisory" "findings-reported" "analysis-not-applicable" \
+      "This file is $ignored_desc" "$rel_path" 1 1
+    FILE_RESULT_BINARY="$binary"
     return 0
   fi
 
@@ -1560,6 +1860,7 @@ process_file() {
 
   report_json="$(changed_findings_report "$output" "$rel_path" "$abs_path" "$ranges" "$floor_rank" "$max_findings" "$uses_native_regions")"
   [[ -n "$report_json" ]] || report_json='{"total":0,"e":0,"w":0,"a":0,"surfaced":0,"floored":0,"more":0,"lines":[]}'
+  record_report_result "$report_json" "$rel_path" "$binary"
   if [[ "$uses_native_regions" -eq 1 ]]; then
     suppressed="$(native_suppressed_count "$output")"
   else
@@ -1595,85 +1896,441 @@ process_file() {
   return 0
 }
 
-# Confirm once per session that the hook actually ran and which analyzer answered.
-#
-# Every failure path here is deliberately soft - missing jq, missing binary, missing config,
-# timeout - so an agent that never sees output cannot tell "your code is clean" from "the
-# hook has been dead all session". One line on the first run makes silence afterwards mean
-# something. The marker lives under the gitignored logs tree and is keyed by pid so it
-# neither pollutes the repo nor persists past this session.
-announce_liveness() {
-  local root="$1"
-  local sample_path="$2"
-  local marker_dir="$root/.goat-flow/logs/events"
-  local marker="$marker_dir/.gruff-hook-alive.$PPID"
-  [[ -e "$marker" ]] && return 0
-  mkdir -p "$marker_dir" 2>/dev/null || return 0
+# Produce one provider-neutral state for an edited file while registrations migrate.
+# Use from result-mode launchers: package selection, Git attribution, and analyzer
+# validation all finish before the provider adapter decides what the user sees.
+process_file_result() {
+  local payload="$1" root="$2" file_path="$3" file_count="${4:-1}"
+  local allow_cached_fallback="${5:-1}"
+  local rel_path abs_path binary target_details target_status
+  local target_root target_rel_path config_file binary_path ranges range_status
+  local hook_caps help output status uses_native_regions changed_scope
+  local config_error ignored_desc report_json floor_rank max_findings
 
-  # Markers are keyed by session pid, so ended sessions would otherwise leave one file each
-  # forever. Prune markers whose owning process is gone before writing this session's.
-  local stale_marker stale_pid
-  for stale_marker in "$marker_dir"/.gruff-hook-alive.*; do
-    [[ -e "$stale_marker" ]] || continue
-    stale_pid="${stale_marker##*.}"
-    [[ "$stale_pid" =~ ^[0-9]+$ ]] || continue
-    kill -0 "$stale_pid" 2>/dev/null || rm -f "$stale_marker" 2>/dev/null
-  done
+  reset_file_result
 
-  : >"$marker" 2>/dev/null || return 0
-
-  local binary binary_path
-  binary="$(variant_for_path "$sample_path" 2>/dev/null || true)"
-  [[ -n "$binary" ]] || return 0
-  binary_path="$(discover_binary "$root" "$binary" 2>/dev/null || true)"
-  if [[ -z "$binary_path" ]]; then
-    printf 'gruff-code-quality: active, but no %s binary resolved - findings will NOT be reported this session.\n' "$binary" >&2
+  # An empty provider path cannot identify user content for Gruff to inspect.
+  if [[ -z "$file_path" ]]; then
+    record_file_result 60 "incomplete" "input-invalid" "edited-path-missing" \
+      "The completed edit did not name a file" "project" 0 0
     return 0
   fi
-  # stderr, not stdout: stdout is reserved for findings, and several contracts require the
-  # hook to stay completely silent there when it has nothing to report. Operational
-  # diagnostics already go to stderr, so this joins them.
-  printf 'gruff-code-quality: active (%s); from here, no output for an edit means no findings on the changed lines.\n' "$binary" >&2
+  rel_path="$(relative_path "$root" "$file_path")"
+  abs_path="$(absolute_path "$root" "$rel_path")"
+  # A path outside the selected project cannot be attributed to this user edit.
+  if [[ "$rel_path" == ".." || "$rel_path" == ../* || "$rel_path" == */../* || "$abs_path" != "$root"/* ]]; then
+    record_file_result 60 "incomplete" "input-invalid" "edited-path-outside-project" \
+      "The completed edit named a path outside the selected project" "$rel_path" 0 0
+    return 0
+  fi
+
+  binary="$(variant_for_path "$rel_path" || true)"
+  # Unsupported extensions have no analyzer contract and cannot produce a clean badge.
+  if [[ -z "$binary" ]]; then
+    record_file_result 20 "advisory" "findings-reported" "analysis-not-applicable" \
+      "No Gruff analyzer supports this file type" "$rel_path" 0 0
+    return 0
+  fi
+  FILE_RESULT_BINARY="$binary"
+
+  set +e
+  target_details="$(analyzer_target_for_path "$root" "$rel_path" "$binary")"
+  target_status=$?
+  set -e
+  # Two config extensions at one package leave the user's intended analyzer ambiguous.
+  if [[ "$target_status" -eq 2 ]]; then
+    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-config-ambiguous" \
+      "Both .${binary}.yaml and .${binary}.yml exist for this file" "$rel_path" 0 0
+    return 0
+  fi
+  # A missing ancestor config means the file was not covered, never that it was clean.
+  if [[ "$target_status" -ne 0 || -z "$target_details" ]]; then
+    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-config-missing" \
+      "No .${binary}.yaml or .${binary}.yml config owns this edited file" "$rel_path" 0 0
+    return 0
+  fi
+  IFS=$'\t' read -r target_root target_rel_path config_file <<< "$target_details"
+
+  binary_path="$(discover_binary "$root" "$binary" "$target_root")"
+  # A configured file without an executable analyzer is an unavailable check.
+  if [[ -z "$binary_path" ]]; then
+    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-binary-missing" \
+      "$binary could not be resolved for ${config_file#"$root"/}" "$rel_path" 0 0
+    return 0
+  fi
+  # jq validates analyzer responses before any clean or finding state reaches the UI.
+  if ! command -v jq >/dev/null 2>&1; then
+    record_file_result 80 "unavailable" "hook-unavailable" "result-parser-missing" \
+      "jq is unavailable, so Gruff output cannot be validated" "$rel_path" 0 0
+    return 0
+  fi
+
+  set +e
+  ranges="$(changed_ranges "$payload" "$root" "$rel_path" "$abs_path" "$file_count" "$allow_cached_fallback")"
+  range_status=$?
+  set -e
+  # A deletion or binary-only edit leaves no source lines for after-edit analysis.
+  if [[ "$range_status" -eq 10 ]]; then
+    record_file_result 20 "advisory" "findings-reported" "analysis-not-applicable" \
+      "This edit has no remaining source lines for Gruff to analyze" "$rel_path" 0 0
+    return 0
+  fi
+  # A Git command failure makes changed-scope coverage explicitly incomplete.
+  if [[ "$range_status" -eq 12 ]]; then
+    record_file_result 60 "incomplete" "coverage-incomplete" "git-scope-failed" \
+      "Git could not derive trustworthy changed ranges for this edit" "$rel_path" 0 0
+    return 0
+  fi
+  # Missing hunks cannot support a reliable clean result for a tracked file.
+  if [[ "$range_status" -ne 0 || -z "$ranges" ]]; then
+    record_file_result 60 "incomplete" "coverage-incomplete" "git-scope-unavailable" \
+      "No trustworthy changed ranges were available for this edited file" "$rel_path" 0 0
+    return 0
+  fi
+
+  hook_caps="$(hook_capabilities "$binary_path" "$binary")"
+  # Capability-aware analyzers preserve clean, finding, invalid, failed, and timeout states.
+  if [[ -n "$hook_caps" ]]; then
+    process_file_contract "$binary_path" "$binary" "$rel_path" "$target_root" "$target_rel_path" "$ranges"
+    return 0
+  fi
+
+  help="$(analyse_help "$binary_path")"
+  # A legacy analyzer without JSON cannot prove what happened to this edit.
+  if ! supports_json_format "$help"; then
+    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-capability-unsupported" \
+      "$binary does not expose JSON analysis output" "$rel_path" 0 0
+    return 0
+  fi
+  uses_native_regions=0
+  # Native changed-region support lets Gruff expand an edited line to its symbol.
+  if supports_native_changed_regions "$help"; then
+    uses_native_regions=1
+  fi
+  changed_scope="symbol"
+  # A whole-file edit also needs file-level findings such as size or missing overview.
+  if [[ "$ranges" == "$(all_file_range "$abs_path")" ]]; then
+    changed_scope="file"
+  fi
+
+  set +e
+  output="$(run_gruff_json "$binary_path" "$binary" "$help" "$target_rel_path" "$ranges" "$changed_scope" "$target_root")"
+  status=$?
+  set -e
+  # A timeout is incomplete analysis even though the editing tool itself finished.
+  if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
+    record_file_result 70 "incomplete" "execution-timeout" "analyzer-timeout" \
+      "$binary exceeded the configured feedback deadline" "$rel_path" 0 0
+    return 0
+  fi
+  # Exit-zero silence is not evidence that a legacy analyzer completed cleanly.
+  if [[ -z "$output" ]]; then
+    record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+      "$binary returned no analysis result" "$rel_path" 0 0
+    return 0
+  fi
+  # Non-JSON output cannot safely become a finding or clean state.
+  if ! valid_gruff_json "$output"; then
+    record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+      "$binary returned non-JSON analysis output after exit $status" "$rel_path" 0 0
+    return 0
+  fi
+
+  config_error="$(config_error_message "$output")"
+  # A rejected config explains why no reliable analysis reached the user.
+  if [[ -n "$config_error" ]]; then
+    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-config-invalid" \
+      "$config_error" "$rel_path" 0 0
+    return 0
+  fi
+  ignored_desc="$(ignored_descriptor "$output" "$target_rel_path" "$abs_path")"
+  # An analyzer-confirmed ignore is a verified not-applicable state, not a clean scan.
+  if [[ -n "$ignored_desc" ]]; then
+    record_file_result 20 "advisory" "findings-reported" "analysis-not-applicable" \
+      "This file is $ignored_desc" "$rel_path" 1 1
+    FILE_RESULT_BINARY="$binary"
+    return 0
+  fi
+
+  max_findings="$GRUFF_CODE_QUALITY_MAX_FINDINGS"
+  # Invalid user configuration falls back to the shared provider-safe cap.
+  if ! [[ "$max_findings" =~ ^[0-9]+$ && "$max_findings" -ge 1 ]]; then
+    max_findings=20
+  fi
+  floor_rank="$(min_severity_rank "$GRUFF_CODE_QUALITY_MIN_SEVERITY")"
+  report_json="$(changed_findings_report "$output" "$target_rel_path" "$abs_path" "$ranges" "$floor_rank" "$max_findings" "$uses_native_regions")"
+  # A failed projection is invalid analyzer output rather than a zero-finding result.
+  if [[ -z "$report_json" ]]; then
+    record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+      "$binary output could not be projected into bounded feedback" "$rel_path" 0 0
+    return 0
+  fi
+  record_report_result "$report_json" "$rel_path" "$binary"
   return 0
 }
 
+# Read the provider's stable conversation identity for health deduplication.
+# Use after a validated analyzer response; empty means the host supplied no session key.
+payload_session_identifier() {
+  local payload="$1"
+  json_field "$payload" '
+    [
+      .session_id,
+      .sessionId,
+      .session.id,
+      .conversation_id,
+      .conversationId
+    ] | map(select(type == "string" and length > 0)) | first
+  '
+}
+
+# Announce analyzer health once per provider session, project, hook version, and day.
+# Use only after schema-valid work; malformed markers are replaced and findings are
+# never deduplicated, so a user sees every actionable result from later edits.
+announce_verified_health() {
+  local root="$1" payload="$2" binary="$3"
+  local session_identifier health_day marker_directory identity checksum marker expected current
+  session_identifier="$(payload_session_identifier "$payload")"
+  # A host without session identity gets honest repeated health instead of a false dedupe.
+  if [[ -z "$session_identifier" ]]; then
+    printf 'gruff-code-quality: verified analyzer exchange (%s); session id unavailable, so health will be announced again.\n' "$binary" >&2
+    return 0
+  fi
+  health_day="${GRUFF_CODE_QUALITY_HEALTH_DAY:-$(date -u +%F)}"
+  marker_directory="$root/.goat-flow/logs/events"
+  # An unwritable event directory cannot weaken the analyzer result already produced.
+  if ! mkdir -p "$marker_directory" 2>/dev/null; then
+    printf 'gruff-code-quality: verified analyzer exchange (%s); health marker could not be stored.\n' "$binary" >&2
+    return 0
+  fi
+  identity="${session_identifier}|${root}|${HOOK_VERSION}|${health_day}"
+  checksum="$(printf '%s' "$identity" | cksum | awk '{print $1}')"
+  marker="$marker_directory/.gruff-hook-health.$checksum"
+  printf -v expected 'schema=gruff-hook-health.v1\nsession=%s\nproject=%s\nhookVersion=%s\nday=%s\nbinary=%s\n' \
+    "$session_identifier" "$root" "$HOOK_VERSION" "$health_day" "$binary"
+  current=""
+  # A well-formed matching marker means this session already saw verified health today.
+  if [[ -f "$marker" ]]; then
+    current="$(<"$marker")"$'\n'
+    if [[ "$current" == "$expected" ]]; then
+      return 0
+    fi
+  fi
+  printf '%s' "$expected" > "$marker"
+  printf 'gruff-code-quality: verified analyzer exchange (%s); health is current for this session.\n' "$binary" >&2
+}
+
+# Emit the bounded result the launcher validates before translating it for a provider.
+# Use once per migrated invocation; even incomplete work produces one JSON object so
+# the user can distinguish clean analysis from unavailable or partial coverage.
+emit_hook_result() {
+  local outcome="$1" coverage_status="$2" attempted_units="$3"
+  local completed_units="$4" skipped_units="$5" reason_code="$6"
+  local findings_json="$7" duration_ms="$8"
+  local provider provider_mode adapter_version adapter_name event
+  provider="${GOAT_FLOW_HOOK_PROVIDER:-claude}"
+  provider_mode="${GOAT_FLOW_HOOK_PROVIDER_MODE:-managed}"
+  adapter_version="${GOAT_FLOW_HOOK_ADAPTER_VERSION:-1}"
+  event="${GOAT_FLOW_HOOK_EVENT:-post-tool}"
+  adapter_name="${provider}-${event}"
+  # jq is the same parser required for analyzer validation and safe JSON escaping.
+  if command -v jq >/dev/null 2>&1; then
+    jq -cn \
+      --arg schema "$HOOK_RESULT_SCHEMA" \
+      --arg hook_id "gruff-code-quality" \
+      --arg event "$event" \
+      --arg outcome "$outcome" \
+      --arg coverage_status "$coverage_status" \
+      --argjson attempted_units "$attempted_units" \
+      --argjson completed_units "$completed_units" \
+      --argjson skipped_units "$skipped_units" \
+      --arg reason_code "$reason_code" \
+      --argjson findings "$findings_json" \
+      --arg hook_version "$HOOK_VERSION" \
+      --arg provider "$provider" \
+      --arg provider_mode "$provider_mode" \
+      --arg adapter_name "$adapter_name" \
+      --arg adapter_version "$adapter_version" \
+      --argjson duration_ms "$duration_ms" '
+        {
+          schema: $schema,
+          hookId: $hook_id,
+          event: $event,
+          outcome: $outcome,
+          coverage: {
+            status: $coverage_status,
+            attemptedUnits: $attempted_units,
+            completedUnits: $completed_units,
+            skippedUnits: $skipped_units
+          },
+          reasonCode: $reason_code,
+          findings: $findings,
+          execution: {
+            hookVersion: $hook_version,
+            provider: $provider,
+            providerMode: $provider_mode,
+            adapterName: $adapter_name,
+            adapterVersion: $adapter_version,
+            durationMs: $duration_ms
+          }
+        }
+      '
+    return 0
+  fi
+  # A minimal fixed envelope keeps parser loss visible without interpolating unsafe text.
+  printf '%s\n' '{"schema":"goat-flow.hook-result.v1","hookId":"gruff-code-quality","event":"post-tool","outcome":"unavailable","coverage":{"status":"none","attemptedUnits":0,"completedUnits":0,"skippedUnits":0},"reasonCode":"hook-unavailable","findings":[{"code":"result-parser-missing","message":"jq is unavailable, so Gruff could not emit validated feedback","target":"project"}],"execution":{"hookVersion":"1.15.0","provider":"claude","providerMode":"fallback","adapterName":"claude-post-tool","adapterVersion":"1","durationMs":0}}'
+}
+
 main() {
-  local payload tool_name root file_path payload_paths allow_cached_fallback
+  local payload tool_name root file_path payload_paths all_payload_paths allow_cached_fallback
+  local migrated_result_mode started_seconds duration_ms changed_paths git_status
+  local attempted_units completed_units skipped_units coverage_status
+  local best_priority best_outcome best_reason findings_json verified_exchange verified_binary
+  local diagnostic_path
   local -a file_paths
-  if [[ "${1:-}" == "--self-test=smoke" ]]; then
+  # Bare and explicit smoke forms give users the same safe installation check.
+  if [[ "${1:-}" == "--self-test" || "${1:-}" == "--self-test=smoke" ]]; then
     self_test
     exit $?
   fi
 
+  started_seconds="$SECONDS"
+  migrated_result_mode=0
+  # Managed launchers provide all four fields before requesting a neutral result.
+  if [[ -n "${GOAT_FLOW_HOOK_PROVIDER:-}" && -n "${GOAT_FLOW_HOOK_EVENT:-}" && -n "${GOAT_FLOW_HOOK_PROVIDER_MODE:-}" && -n "${GOAT_FLOW_HOOK_ADAPTER_VERSION:-}" ]]; then
+    migrated_result_mode=1
+  fi
   payload="$(read_stdin)"
   tool_name="$(json_tool_name "$payload" || true)"
+  # Restricted hosts may need the small direct-field fallback to identify the completed tool.
   [[ -n "$tool_name" ]] || tool_name="$(fallback_tool_name "$payload" || true)"
-  supported_tool "$tool_name" || exit 0
+  # Unregistered tool events remain silent for legacy users and explicit for migrated adapters.
+  if ! supported_payload_tool "$tool_name" "$payload"; then
+    if [[ "$migrated_result_mode" -eq 1 ]]; then
+      duration_ms=$(( (SECONDS - started_seconds) * 1000 ))
+      emit_hook_result "incomplete" "none" 0 0 0 "input-invalid" \
+        '[{"code":"unsupported-tool-payload","message":"The completed tool did not identify a supported source edit","target":"project"}]' "$duration_ms"
+    fi
+    exit 0
+  fi
 
   root="$(repo_root)"
-  cd "$root" || exit 0
+  # A vanished working directory cannot produce trustworthy project-relative feedback.
+  if ! cd "$root"; then
+    if [[ "$migrated_result_mode" -eq 1 ]]; then
+      duration_ms=$(( (SECONDS - started_seconds) * 1000 ))
+      emit_hook_result "unavailable" "none" 0 0 0 "hook-unavailable" \
+        '[{"code":"project-root-unavailable","message":"The selected project root could not be opened","target":"project"}]' "$duration_ms"
+    fi
+    exit 0
+  fi
   payload_paths="$(payload_supported_file_paths "$root" "$payload")"
+  all_payload_paths="$(payload_file_paths "$payload")"
   allow_cached_fallback=0
+  # Provider-declared source paths are the narrowest trustworthy edit scope.
   if [[ -n "$payload_paths" ]]; then
     mapfile -t file_paths <<< "$payload_paths"
-  elif [[ -n "$(payload_file_paths "$payload")" ]]; then
-    # The payload named files but none are analyzable (docs/config edits, paths
-    # outside this repo): there is nothing to scan for THIS edit. Scanning
-    # git-changed files instead would surface findings unrelated to the edit,
-    # so the git fallback stays reserved for payloads carrying no paths at all
-    # (e.g. Antigravity file tools).
+  # A named non-source path must not fall back to unrelated dirty source files.
+  elif [[ -n "$all_payload_paths" ]]; then
+    if [[ "$migrated_result_mode" -eq 1 ]]; then
+      duration_ms=$(( (SECONDS - started_seconds) * 1000 ))
+      emit_hook_result "advisory" "complete" 0 0 0 "findings-reported" \
+        '[{"code":"analysis-not-applicable","message":"The completed edit did not target a supported Gruff source file","target":"project"}]' "$duration_ms"
+    fi
     exit 0
   else
-    mapfile -t file_paths < <(git_changed_supported_paths "$root")
+    set +e
+    changed_paths="$(git_changed_supported_paths "$root")"
+    git_status=$?
+    set -e
+    # A failed fallback listing cannot safely choose a subset of dirty files.
+    if [[ "$git_status" -ne 0 ]]; then
+      if [[ "$migrated_result_mode" -eq 1 ]]; then
+        duration_ms=$(( (SECONDS - started_seconds) * 1000 ))
+        emit_hook_result "incomplete" "none" 0 0 0 "coverage-incomplete" \
+          '[{"code":"git-scope-failed","message":"Git could not identify source files changed by this edit","target":"project"}]' "$duration_ms"
+      fi
+      exit 0
+    fi
+    # An empty successful listing means this tool changed no supported source file.
+    if [[ -n "$changed_paths" ]]; then
+      mapfile -t file_paths <<< "$changed_paths"
+    fi
     allow_cached_fallback=1
   fi
-  [[ "${#file_paths[@]}" -gt 0 ]] || exit 0
 
-  announce_liveness "$root" "${file_paths[0]}"
+  # No eligible source work is a complete zero-unit invocation, not an analyzer clean claim.
+  if [[ "${#file_paths[@]}" -eq 0 ]]; then
+    if [[ "$migrated_result_mode" -eq 1 ]]; then
+      duration_ms=$(( (SECONDS - started_seconds) * 1000 ))
+      emit_hook_result "pass" "complete" 0 0 0 "completed-clean" '[]' "$duration_ms"
+    fi
+    exit 0
+  fi
 
+  attempted_units="${#file_paths[@]}"
+  completed_units=0
+  best_priority=-1
+  best_outcome="pass"
+  best_reason="completed-clean"
+  findings_json='[]'
+  verified_exchange=0
+  verified_binary=""
   for file_path in "${file_paths[@]}"; do
-    process_file "$payload" "$root" "$file_path" "${#file_paths[@]}" "$allow_cached_fallback"
+    # Migrated launches capture prose away from stdout, then aggregate the typed file result.
+    if [[ "$migrated_result_mode" -eq 1 ]]; then
+      diagnostic_path="$(mktemp)"
+      process_file_result "$payload" "$root" "$file_path" "${#file_paths[@]}" "$allow_cached_fallback" >"$diagnostic_path" 2>&1
+      # Operational detail remains visible without corrupting the one-object result channel.
+      if [[ -s "$diagnostic_path" ]]; then
+        cat "$diagnostic_path" >&2
+      fi
+      rm -f "$diagnostic_path"
+      completed_units=$((completed_units + FILE_RESULT_COMPLETED))
+      findings_json="$(jq -cn --argjson current "$findings_json" --argjson next "$FILE_RESULT_FINDINGS" '($current + $next)[:20]')"
+      # The highest-priority state prevents one clean file from hiding another file's failure.
+      if [[ "$FILE_RESULT_PRIORITY" -gt "$best_priority" ]]; then
+        best_priority="$FILE_RESULT_PRIORITY"
+        best_outcome="$FILE_RESULT_OUTCOME"
+        best_reason="$FILE_RESULT_REASON_CODE"
+      fi
+      # One valid analyzer response is enough to establish health, never to widen coverage.
+      if [[ "$FILE_RESULT_VERIFIED" -eq 1 ]]; then
+        verified_exchange=1
+        verified_binary="$FILE_RESULT_BINARY"
+      fi
+    else
+      reset_file_result
+      process_file "$payload" "$root" "$file_path" "${#file_paths[@]}" "$allow_cached_fallback"
+      # Legacy users receive health only after the same run produced a validated response.
+      if [[ "$FILE_RESULT_VERIFIED" -eq 1 ]]; then
+        verified_exchange=1
+        verified_binary="$FILE_RESULT_BINARY"
+      fi
+    fi
   done
+
+  # Health follows verified analyzer work and never suppresses subsequent findings.
+  if [[ "$verified_exchange" -eq 1 ]]; then
+    announce_verified_health "$root" "$payload" "$verified_binary"
+  fi
+  # Legacy launchers keep their established text response while normal sync migrates registration.
+  if [[ "$migrated_result_mode" -eq 0 ]]; then
+    exit 0
+  fi
+
+  skipped_units=$((attempted_units - completed_units))
+  coverage_status="none"
+  # Completing every declared file is the only path to complete coverage.
+  if [[ "$completed_units" -eq "$attempted_units" ]]; then
+    coverage_status="complete"
+  # Completing some files gives the user partial rather than all-or-nothing coverage.
+  elif [[ "$completed_units" -gt 0 ]]; then
+    coverage_status="partial"
+  fi
+  duration_ms=$(( (SECONDS - started_seconds) * 1000 ))
+  emit_hook_result "$best_outcome" "$coverage_status" "$attempted_units" \
+    "$completed_units" "$skipped_units" "$best_reason" "$findings_json" "$duration_ms"
   exit 0
 }
 

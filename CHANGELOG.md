@@ -4,7 +4,8 @@
 
 - **Hook support claims have an evidence contract** - Dated provider capture, trust, delivered results, and complete coverage are required before future adapters can report effective or passing hooks.
 - **Hook result migration fails visibly** - Legacy output stays intact; malformed, partial, oversized, or block-weakening envelopes are rejected.
-- **Antigravity Gruff limitations are explicit** - Its legacy registration remains compatible, while adapter evidence marks PostToolUse result delivery ineffective until support changes propagate atomically.
+- **Gruff feedback distinguishes failure from clean work** - Claude and Copilot get bounded findings; analysis gaps stay explicit.
+- **Antigravity Gruff is no longer registered** - Its PostToolUse channel cannot return feedback; setup removes stale optional registrations.
 - **Post-turn scan failures block cleanly** - Missing roots, parser errors, and failed scan commands now fail closed on native and Bash 3 paths.
 - **Post-turn scans no longer skip declared changes** - Oversized tracked hunks stream; binary and oversized untracked paths block as incomplete.
 - **BREAKING: new secrets cannot use inline allow markers** - Use split fixtures or leave reviewed fixtures unchanged; self-suppression was unsafe.

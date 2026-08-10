@@ -1,5 +1,7 @@
 /**
- * Hook fact extraction - analyzes deny hooks, post-turn hooks, and hook registration.
+ * Extracts the hook facts shown by audit and dashboard status screens.
+ * Use these readers when a user needs to know whether local hook files,
+ * registrations, and executable policy rules provide the claimed coverage.
  */
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 import {
@@ -318,12 +320,15 @@ function denyHookHasActiveSecretRule(content: string): boolean {
 /** Detect relative/home root normalization for secret path checks. */
 function denyHookHasNormalizedSecretRoots(content: string): boolean {
   const hasRootMatcher = content.includes("((\\./|\\.\\./|~/)*)");
+  const hasBoundaryAwareDirectoryMatcher =
+    content.includes("local secret_directory_re=") &&
+    content.includes("(^|[[:space:]]|=|:|/|");
   const hasSelfTestRoots = [
     "cat ./.env",
     "cat ../.env",
     "cat ~/.ssh/id_rsa",
   ].every((marker) => content.includes(marker));
-  return hasRootMatcher || hasSelfTestRoots;
+  return hasRootMatcher || hasBoundaryAwareDirectoryMatcher || hasSelfTestRoots;
 }
 
 /** Detect the direct literal secret-path families the Bash hook should block. */
@@ -332,12 +337,16 @@ function denyHookHasSecretFamilyMarkers(content: string): boolean {
     content.includes("\\.(pem|key|pfx)") ||
     content.includes("\\.(pem|key|pfx|p12)") ||
     content.includes("\\.\\(pem\\|key\\|pfx\\)");
+  const hasSecretDirectoryFamilies =
+    (content.includes("\\.ssh/") && content.includes("\\.aws/")) ||
+    content.includes("(\\.ssh|\\.aws|");
+  const hasSecretsDirectoryFamily =
+    /secrets\//.test(content) || content.includes("|secrets)");
   return [
     /\\\.env/.test(content),
     /\\\.env\\\.example/.test(content) || /\.env\.example/.test(content),
-    /\\\.ssh\//.test(content) || /\/\\\.ssh\//.test(content),
-    /\\\.aws\//.test(content) || /\/\\\.aws\//.test(content),
-    /secrets\//.test(content),
+    hasSecretDirectoryFamilies,
+    hasSecretsDirectoryFamily,
     /credentials/.test(content) || /\\\.npmrc|\\\.pypirc/.test(content),
     hasKeys,
   ].every(Boolean);

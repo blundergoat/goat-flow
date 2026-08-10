@@ -27,7 +27,7 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
 - Antigravity uses `agy` as the terminal binary; verify a current build is installed with `agy --version` (older builds predate the OAuth-persistence fix).
 - Plugin migration from other agents: `agy plugin import gemini` or `agy plugin import claude` populates Antigravity from existing setups.
-- Antigravity hook wiring uses `.agents/hooks.json` and scripts in `.agents/hooks/`. Goat-flow registers PreToolUse guardrails there and can register the optional `gruff-code-quality` PostToolUse hook for `write_to_file`, `replace_file_content`, and `multi_replace_file_content`.
+- Antigravity hook wiring uses `.agents/hooks.json` for PreToolUse guardrails. Gruff feedback is not registered because Antigravity PostToolUse cannot return command output to the active model.
 - User-level config lives at `~/.config/antigravity/config.toml`; it is not a repo-local surface and is out of scope for per-project setup.
 - Sandbox/approval settings: Antigravity exposes `--sandbox` and `proceed-in-sandbox` permission modes through the binary, not via repo-local config files.
 

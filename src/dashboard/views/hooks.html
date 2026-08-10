@@ -50,8 +50,15 @@
         ></strong>
       </div>
       <div class="gf-hooks-stat">
-        <span class="gf-hooks-stat-label">Installed surfaces</span>
-        <strong x-text="hooksInstalledSurfaceCount()"></strong>
+        <span class="gf-hooks-stat-label">Effective surfaces</span>
+        <strong x-text="hooksEffectiveSurfaceCount()"></strong>
+      </div>
+      <div class="gf-hooks-stat">
+        <span class="gf-hooks-stat-label">Ineffective hooks</span>
+        <strong
+          :class="hooksIneffectiveCount() > 0 ? 'is-warning' : 'is-success'"
+          x-text="hooksIneffectiveCount()"
+        ></strong>
       </div>
     </section>
 
@@ -61,6 +68,19 @@
       aria-label="Hook filters"
     >
       <div class="gf-hooks-filter-group" role="group" aria-label="Hook state">
+        <button
+          type="button"
+          class="gf-hooks-chip"
+          :class="hooksFilter === 'ineffective' && 'is-active'"
+          :aria-pressed="String(hooksFilter === 'ineffective')"
+          @click="hooksFilter = 'ineffective'"
+        >
+          Ineffective
+          <span
+            class="gf-hooks-chip-count"
+            x-text="hookFilterCount('ineffective')"
+          ></span>
+        </button>
         <button
           type="button"
           class="gf-hooks-chip"
@@ -222,12 +242,34 @@
                     <span
                       class="gf-hook-agent"
                       :class="hookAgentStatusClass(state)"
-                      :title="state.reason || state.scriptPath || hookAgentStatusLabel(state)"
+                      :title="state.reason || state.repairSummary || state.scriptPath || hookAgentStatusLabel(state)"
                       :aria-label="agentId + ': ' + hookAgentStatusLabel(state) + (state.reason ? '. ' + state.reason : '')"
                     >
                       <span x-text="agentId"></span>
                       <strong x-text="hookAgentStatusLabel(state)"></strong>
                     </span>
+                  </template>
+                </div>
+
+                <div
+                  x-show="ineffectiveHookAgents(hook).length > 0"
+                  class="gf-hook-unsupported"
+                  aria-label="Ineffective hook repairs"
+                >
+                  <template
+                    x-for="[agentId, state] in ineffectiveHookAgents(hook)"
+                    :key="hook.id + '-repair-' + agentId"
+                  >
+                    <div class="gf-hook-unsupported-item">
+                      <span
+                        class="gf-hook-unsupported-agent"
+                        x-text="agentId + ': ' + state.effectiveStateLabel"
+                      ></span>
+                      <span
+                        class="gf-hook-unsupported-reason"
+                        x-text="state.repairCommand || state.repairSummary"
+                      ></span>
+                    </div>
                   </template>
                 </div>
 
@@ -298,15 +340,15 @@
     <div x-show="hooksState.length > 0" class="gf-hooks-legend">
       <span>
         <span class="gf-hooks-swatch is-installed" aria-hidden="true"></span>
-        installed and enforced
-      </span>
-      <span>
-        <span class="gf-hooks-swatch is-available" aria-hidden="true"></span>
-        available, not installed
+        effective through every evidence link
       </span>
       <span>
         <span class="gf-hooks-swatch is-drift" aria-hidden="true"></span>
-        desired state drift
+        enabled but ineffective or unverified
+      </span>
+      <span>
+        <span class="gf-hooks-swatch is-available" aria-hidden="true"></span>
+        disabled by user choice
       </span>
     </div>
   </main>

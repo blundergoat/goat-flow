@@ -105,4 +105,3 @@ expanded unquoted at three call sites.
 - quote all path expansions in workflow/install-hooks.sh
 - add a regression test using a spaced tmpdir
 ```
-

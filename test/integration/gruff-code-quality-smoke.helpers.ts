@@ -204,6 +204,33 @@ export function runHook(
 }
 
 /**
+ * Run Gruff in the migrated result mode consumed by the provider launcher.
+ * Use when a fixture must inspect the bounded result before model-facing adaptation.
+ *
+ * @param root - non-empty disposable project root used as the hook working directory
+ * @param payload - PostToolUse payload; null or malformed input must produce an explicit result
+ * @param pathPrefix - PATH used to isolate analyzer and Git discovery; empty prevents tool lookup
+ * @param extraEnv - optional fixture overrides; an empty object keeps the default Claude contract
+ * @param provider - provider identity embedded in the result; empty or unknown values are invalid
+ * @returns completed hook process; empty stdout means the migrated hook failed its result contract
+ */
+export function runMigratedHook(
+  root: string,
+  payload: unknown,
+  pathPrefix: string,
+  extraEnv: NodeJS.ProcessEnv = {},
+  provider: "claude" | "codex" | "antigravity" | "copilot" = "claude",
+): ReturnType<typeof spawnSync> {
+  return runHook(root, payload, pathPrefix, {
+    ...extraEnv,
+    GOAT_FLOW_HOOK_PROVIDER: provider,
+    GOAT_FLOW_HOOK_EVENT: "post-tool",
+    GOAT_FLOW_HOOK_PROVIDER_MODE: "fixture",
+    GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
+  });
+}
+
+/**
  * Assert extension-based binary routing through the hook using real payloads.
  *
  * @param root - disposable git root containing mock gruff binaries
@@ -400,15 +427,37 @@ const DEFAULT_CONTRACT_ENVELOPE =
  *
  * @param root - temp project root the shim is installed under
  * @param envelope - gruff.hook.v1 JSON the mock emits from `hook --format json`
+ * @param behavior - optional exit, stderr, and delay controls; omitted values model a clean exchange
  * @returns absolute path to the created node_modules/.bin directory
  */
 export function writeContractGruffBinary(
   root: string,
   envelope: string = DEFAULT_CONTRACT_ENVELOPE,
+  behavior: {
+    exitStatus?: number;
+    standardError?: string;
+    delaySeconds?: number;
+  } = {},
 ): string {
   const binDir = join(root, "node_modules", ".bin");
   mkdirSync(binDir, { recursive: true });
   const bin = join(binDir, "gruff-ts");
+  const analyzerOutputProgram =
+    envelope.length === 0
+      ? ":"
+      : ["cat <<'JSON'", envelope, "JSON"].join("\n");
+  const analyzerErrorProgram =
+    (behavior.standardError ?? "").length === 0
+      ? ":"
+      : [
+          "cat >&2 <<'ERROR'",
+          behavior.standardError ?? "",
+          "ERROR",
+        ].join("\n");
+  const analyzerDelayProgram =
+    (behavior.delaySeconds ?? 0) > 0
+      ? `sleep ${behavior.delaySeconds}`
+      : ":";
   writeFileSync(
     bin,
     `#!/usr/bin/env bash
@@ -420,10 +469,10 @@ JSON
 fi
 if [[ "$1" == "hook" ]]; then
   printf '%s\\n' "$*" >> "$PWD/gruff-hook-args.log"
-  cat <<'JSON'
-${envelope}
-JSON
-  exit 0
+  ${analyzerDelayProgram}
+  ${analyzerErrorProgram}
+  ${analyzerOutputProgram}
+  exit ${behavior.exitStatus ?? 0}
 fi
 exit 2
 `,

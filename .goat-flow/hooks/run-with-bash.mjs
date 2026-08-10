@@ -659,6 +659,17 @@ export async function runHookWithBash(
       );
     }
   }
+  // Migrated hooks receive the decoded identity they must echo in their neutral result.
+  if (launchContract !== null) {
+    hookEnvironment = {
+      ...hookEnvironment,
+      GOAT_FLOW_HOOK_PROVIDER: launchContract.providerIdentifier,
+      GOAT_FLOW_HOOK_EVENT: launchContract.hookEvent,
+      GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+      GOAT_FLOW_HOOK_ADAPTER_VERSION: launchContract.adapterVersion,
+      GOAT_FLOW_HOOK_RESULT_PROTOCOL: launchContract.resultProtocol,
+    };
+  }
   const timeoutCeiling =
     launchContract?.launcherDeadlineMs ?? legacyHookDeadline;
   const launchTimeout = hookLaunchTimeoutMs(timeoutCeiling, hookEnvironment);

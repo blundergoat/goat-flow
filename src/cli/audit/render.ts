@@ -9,6 +9,7 @@ import type {
 } from "./enforcement.js";
 import type {
   AuditConcernKey,
+  AuditHookCoverageReport,
   AuditReport,
   AuditScope,
   ContentReport,
@@ -82,6 +83,47 @@ function renderEnforcementMatrix(matrix: AgentEnforcementCapability[]): string {
     lines.push("");
   }
   return lines.join("\n").trimEnd();
+}
+
+/** Color one effective-hook severity without turning warnings into a success badge. */
+function hookSeverityLabel(
+  severity: "neutral" | "warning" | "danger" | "success",
+): string {
+  // Complete evidence is the only hook state rendered in green.
+  if (severity === "success") return `${GREEN}EFFECTIVE${RESET}`;
+  // Untrusted or undelivered results are danger states users must not rely on.
+  if (severity === "danger") return `${RED}DANGER${RESET}`;
+  // Missing or stale links remain visible as warnings rather than implied coverage.
+  if (severity === "warning") return `${YELLOW}WARNING${RESET}`;
+  return `${DIM}DISABLED${RESET}`;
+}
+
+/** Render the same per-agent effective-state labels and repairs returned in audit JSON. */
+function renderHookCoverage(hookCoverage: AuditHookCoverageReport): string {
+  const lines = [
+    `${BOLD}Effective Hook Coverage:${RESET}  ${statusBadge(hookCoverage.status)}  ${DIM}(${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only)${RESET}`,
+  ];
+  // Each registry hook keeps agent evidence separate so shared files never imply shared support.
+  for (const hook of hookCoverage.hooks) {
+    // Only agents selected by this audit belong in its terminal coverage section.
+    for (const agentId of hookCoverage.selectedAgents) {
+      const agentState = hook.agents[agentId];
+      // A missing registry row is omitted because audit JSON still exposes the complete hook object.
+      if (!agentState) continue;
+      lines.push(
+        `  ${hook.id}/${agentId}: ${hookSeverityLabel(agentState.effectiveState.severity)} ${agentState.effectiveStateLabel}`,
+      );
+      // The first broken link carries one non-mutating next action where a command exists.
+      if (agentState.effectiveState.status !== "effective") {
+        lines.push(`    ${DIM}${agentState.repairSummary}${RESET}`);
+        // Exact local repairs are copyable; provider evidence gaps intentionally have no invented command.
+        if (agentState.repairCommand !== null) {
+          lines.push(`    ${CYAN}-> ${agentState.repairCommand}${RESET}`);
+        }
+      }
+    }
+  }
+  return lines.join("\n");
 }
 
 /** Render one audit scope in the terminal text format. */
@@ -169,6 +211,9 @@ export function renderAuditText(report: AuditReport): string {
   lines.push(renderTextScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
   lines.push(renderTextScope("Agent Setup", report.scopes.agent));
+  lines.push("");
+
+  lines.push(renderHookCoverage(report.hookCoverage));
   lines.push("");
 
   lines.push(`Result: ${statusBadge(report.status)}`);
@@ -306,6 +351,38 @@ function renderMdScope(name: string, scope: AuditScope): string {
   return lines.join("\n");
 }
 
+/** Render effective hook links and repairs in the Markdown summary users paste into reviews. */
+function renderMdHookCoverage(
+  hookCoverage: AuditHookCoverageReport,
+  lines: string[],
+): void {
+  lines.push("");
+  lines.push(
+    `## Effective Hook Coverage: ${mdScopeStatus(hookCoverage.status)} (${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only)`,
+  );
+  lines.push("");
+  // Every selected agent receives its own status so provider gaps never inherit another runner's evidence.
+  for (const hook of hookCoverage.hooks) {
+    // The audit filter decides which agent rows belong in this Markdown result.
+    for (const agentId of hookCoverage.selectedAgents) {
+      const agentState = hook.agents[agentId];
+      // A missing agent row contributes no claim; the JSON hook object remains available for diagnosis.
+      if (!agentState) continue;
+      lines.push(
+        `- **${hook.id}/${agentId}: ${agentState.effectiveState.severity.toUpperCase()}** - ${agentState.effectiveStateLabel}`,
+      );
+      // Non-effective states retain their registry-owned repair wording.
+      if (agentState.effectiveState.status !== "effective") {
+        lines.push(`  - ${agentState.repairSummary}`);
+        // Provider evidence gaps have no local command, while setup drift has an exact sync or verify command.
+        if (agentState.repairCommand !== null) {
+          lines.push(`  - *Next:* \`${agentState.repairCommand}\``);
+        }
+      }
+    }
+  }
+}
+
 /**
  * Render harness concerns in markdown.
  *
@@ -413,6 +490,7 @@ export function renderAuditMarkdown(report: AuditReport): string {
   lines.push(renderMdScope("GOAT Flow Setup", report.scopes.setup));
   lines.push("");
   lines.push(renderMdScope("Agent Setup", report.scopes.agent));
+  renderMdHookCoverage(report.hookCoverage, lines);
   renderMdHarnessConcerns(report, lines);
   if (report.drift) renderMdDrift(report.drift, lines);
   if (report.content) renderMdContent(report.content, lines);

@@ -18,7 +18,17 @@ export interface AgentHookReadState {
   installed: boolean;
   configMissing?: boolean;
   configInvalid?: boolean;
+  registrationIssue?: AgentHookRegistrationIssue;
 }
+
+/** First registry-owned registration link a Hooks screen can ask the user to repair. */
+export type AgentHookRegistrationIssue =
+  | "registration-missing"
+  | "retired-registration"
+  | "event-mismatch"
+  | "matcher-mismatch"
+  | "command-or-response-mismatch"
+  | "timeout-mismatch";
 
 type JsonObject = Record<string, unknown>;
 
@@ -371,37 +381,63 @@ function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
   return false;
 }
 
-/**
- * Checks command and runner timeout so dashboard state matches what users will actually run.
- */
-function entryMatchesSpecRegistration(
+/** Check whether one managed entry carries the exact launcher and provider response contract. */
+function entryMatchesSpecCommand(
   entry: unknown,
   agent: AgentProfile,
   spec: HookSpec,
 ): boolean {
   // Non-object JSON cannot represent a valid managed registration.
   if (!isObject(entry)) return false;
-  // A direct command must also carry the timeout supported by this runner.
+  // A direct command must equal the registry-generated launcher byte for byte.
   if (commandEntryReferencesSpec(entry, spec)) {
     const expectedCommand = shellCommand(agent, spec);
-    const matchesManagedLauncher =
-      agent.id === "copilot"
-        ? entry.bash === expectedCommand && entry.powershell === expectedCommand
-        : entry.command === expectedCommand;
-    // A stale launcher appears disabled until sync restores what the user will actually run.
-    if (!matchesManagedLauncher) return false;
+    return agent.id === "copilot"
+      ? entry.bash === expectedCommand && entry.powershell === expectedCommand
+      : entry.command === expectedCommand;
+  }
+  // Matcher groups can carry the exact managed command one level below the event row.
+  if (Array.isArray(entry.hooks)) {
+    return entry.hooks.some((hook) =>
+      entryMatchesSpecCommand(hook, agent, spec),
+    );
+  }
+  return false;
+}
+
+/** Check the host timeout independently so users can distinguish it from response-command drift. */
+function entryMatchesSpecTimeout(
+  entry: unknown,
+  agent: AgentProfile,
+  spec: HookSpec,
+): boolean {
+  // Non-object JSON cannot carry a valid host timeout.
+  if (!isObject(entry)) return false;
+  // A direct managed command owns the timeout field at the same object level.
+  if (commandEntryReferencesSpec(entry, spec)) {
     // Codex has no timeout field, and hooks without a registry timeout use agent defaults.
     if (agent.id === "codex" || spec.timeoutSec === undefined) return true;
     const timeoutField = agent.id === "copilot" ? "timeoutSec" : "timeout";
     return entry[timeoutField] === spec.timeoutSec;
   }
-  // Matcher groups are valid when one nested command has the complete registration.
+  // Matcher groups carry timeout beside the nested runnable command.
   if (Array.isArray(entry.hooks)) {
     return entry.hooks.some((hook) =>
-      entryMatchesSpecRegistration(hook, agent, spec),
+      entryMatchesSpecTimeout(hook, agent, spec),
     );
   }
   return false;
+}
+
+/** Check command and runner timeout together so installed means the exact user runtime shape. */
+function entryMatchesSpecRegistration(
+  entry: unknown,
+  agent: AgentProfile,
+  spec: HookSpec,
+): boolean {
+  // Both links must match; a stale response mode or timeout keeps the registration non-current.
+  if (!entryMatchesSpecCommand(entry, agent, spec)) return false;
+  return entryMatchesSpecTimeout(entry, agent, spec);
 }
 
 /** Translate generic hook matchers into Antigravity's tool names while leaving other agents unchanged. */
@@ -591,15 +627,140 @@ function hasAllExpectedEntries(
   return hasEventExpectedEntries(config, agent, spec);
 }
 
+/** Search parsed agent config for any command owned by one current or retired managed hook. */
+function configurationReferencesSpec(value: unknown, spec: HookSpec): boolean {
+  // Each array member may hold an event group or direct managed command.
+  if (Array.isArray(value)) {
+    return value.some((nestedValue) =>
+      configurationReferencesSpec(nestedValue, spec),
+    );
+  }
+  // Primitive or null JSON cannot contain a managed command entry.
+  if (!isObject(value)) return false;
+  // A direct command match identifies setup-owned registration bytes.
+  if (commandEntryReferencesSpec(value, spec)) return true;
+  return Object.values(value).some((nestedValue) =>
+    configurationReferencesSpec(nestedValue, spec),
+  );
+}
+
+/** Return entries under the registry-owned event without accepting another event as equivalent. */
+function expectedEventEntries(
+  config: JsonObject,
+  agent: AgentProfile,
+  spec: HookSpec,
+): unknown[] {
+  // Antigravity stores each managed hook in its own top-level definition.
+  if (agent.id === "antigravity") {
+    const definition = config[spec.id];
+    // A missing or disabled definition has no active event rows for the user.
+    if (!isObject(definition) || definition.enabled === false) return [];
+    const entries = definition[hookEventKey(agent, spec)];
+    return Array.isArray(entries) ? entries : [];
+  }
+  const hooks = isObject(config.hooks) ? config.hooks : {};
+  const entries = hooks[hookEventKey(agent, spec)];
+  return Array.isArray(entries) ? entries : [];
+}
+
+/** Check matcher ownership independently from command and timeout bytes. */
+function expectedMatchersArePresent(
+  entries: unknown[],
+  agent: AgentProfile,
+  spec: HookSpec,
+): boolean {
+  // Stop and Copilot event rows do not carry registry matchers.
+  if (spec.event === "Stop" || agent.id === "copilot") return true;
+  // Antigravity translates generic tool names into its one provider matcher.
+  if (agent.id === "antigravity") {
+    return entries.some(
+      (entry) =>
+        isObject(entry) &&
+        entry.matcher === matcherForAgent(agent, spec) &&
+        entryReferencesSpec(entry, spec),
+    );
+  }
+  return matcherParts(spec.matcher).every((expectedMatcher) =>
+    entries.some(
+      (entry) =>
+        isObject(entry) &&
+        entry.matcher === expectedMatcher &&
+        entryReferencesSpec(entry, spec),
+    ),
+  );
+}
+
+/** Detect an old split deny registration so upgrade guidance names retirement, not absence. */
+function hasRetiredDenyRegistration(
+  config: JsonObject,
+  spec: HookSpec,
+): boolean {
+  // Other hooks have no retired split identifiers in this migration.
+  if (spec.id !== "deny-dangerous") return false;
+  const serializedConfig = JSON.stringify(config);
+  return [...LEGACY_DENY_DANGEROUS_HOOK_IDS, ...LEGACY_DENY_DANGEROUS_SCRIPT_NAMES].some(
+    (retiredIdentifier) => serializedConfig.includes(retiredIdentifier),
+  );
+}
+
+/** Name the first exact registration link setup must repair for the selected agent. */
+function registrationIssue(
+  config: JsonObject,
+  agent: AgentProfile,
+  spec: HookSpec,
+): AgentHookRegistrationIssue | undefined {
+  // A complete exact registration has no repair issue.
+  if (hasAllExpectedEntries(config, agent, spec)) return undefined;
+  // Retired split policy entries need migration rather than a generic missing message.
+  if (hasRetiredDenyRegistration(config, spec)) return "retired-registration";
+  // No managed command anywhere means this hook was never registered or was removed.
+  if (!configurationReferencesSpec(config, spec)) {
+    return "registration-missing";
+  }
+  const eventEntries = expectedEventEntries(config, agent, spec);
+  // A command under another lifecycle event cannot protect the intended user action.
+  if (!eventEntries.some((entry) => entryReferencesSpec(entry, spec))) {
+    return "event-mismatch";
+  }
+  // Wrong or incomplete tool matchers leave some user actions outside the hook.
+  if (!expectedMatchersArePresent(eventEntries, agent, spec)) {
+    return "matcher-mismatch";
+  }
+  // A stale generated command can carry the wrong response adapter or launcher contract.
+  if (
+    !eventEntries.some((entry) =>
+      entryMatchesSpecCommand(entry, agent, spec),
+    )
+  ) {
+    return "command-or-response-mismatch";
+  }
+  // A stale host deadline can kill the hook before its own result reaches the user.
+  if (
+    !eventEntries.some((entry) =>
+      entryMatchesSpecTimeout(entry, agent, spec),
+    )
+  ) {
+    return "timeout-mismatch";
+  }
+  return "command-or-response-mismatch";
+}
+
 export function readAgentHookState(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
 ): AgentHookReadState {
   const config = readJsonFile(configPath(projectPath, agent));
+  // A missing config is distinct from an existing file whose registration needs repair.
   if (config.missing) return { installed: false, configMissing: true };
+  // Invalid JSON cannot be inspected for a safe event, matcher, command, or timeout.
   if (config.invalid) return { installed: false, configInvalid: true };
-  return { installed: hasAllExpectedEntries(config.value, agent, spec) };
+  const issue = registrationIssue(config.value, agent, spec);
+  return {
+    installed: issue === undefined,
+    // A complete registration omits the issue so existing consumers keep a compact shape.
+    ...(issue === undefined ? {} : { registrationIssue: issue }),
+  };
 }
 
 export function writeAgentHookState(

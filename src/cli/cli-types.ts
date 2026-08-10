@@ -72,8 +72,8 @@ export const HOOK_SUBCOMMANDS = new Set<string>([
   "verify",
 ]);
 
-/** Bounded runtime scenario groups users may request through `hooks verify`. */
-export type HookScenario = "deny-hook";
+/** Bounded offline scenario groups users may request through `hooks verify`. */
+export type HookScenario = "deny-hook" | "post-turn-hook" | "gruff-hook";
 
 /**
  * The mutually exclusive modes of the `quality` command. `prompt` (the default when no subcommand

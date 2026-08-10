@@ -10,7 +10,7 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 | `hook-provider-adapters.mjs` | Provider response | Required with migrated result hooks | Validates the versioned result envelope and translates it into the active coding agent's documented response shape |
 | `deny-dangerous.sh` | PreToolUse | Required | Single dispatcher that blocks destructive shell commands, direct secret-path access, `git commit` / `git push`, destructive git flags, and GitHub writes via `gh` |
 | `deny-dangerous/*.sh` | Sourced policy store | Required with `deny-dangerous.sh` | Shared destructive-shell, secret-path, repository-write policy modules plus the central `deny-dangerous-self-test.sh` |
-| `gruff-code-quality.sh` | PostToolUse | Optional | Runs the matching `gruff-*` analyzer after file edits and surfaces findings whose reported line intersects changed lines |
+| `gruff-code-quality.sh` | PostToolUse | Optional | Checks each edited source file with its nearest package config and returns attributable line, symbol, file, and project findings through a bounded provider result |
 | `post-turn-safety.sh` | Stop | Default for supported Stop agents | Scans changed text content for built-in safety hazards such as obvious secrets, private keys, credential assignments, and merge conflict markers |
 
 ## Agent Event Name Mapping
@@ -18,14 +18,14 @@ Copyable hook scripts and agent-config templates for the GOAT Flow enforcement l
 | Purpose | Claude Code | Codex CLI | Antigravity | Copilot CLI |
 |---------|-------------|-----------|-------------|-------------|
 | Block before tool runs | PreToolUse | PreToolUse in `.codex/hooks.json` with `deny-dangerous.sh` matched to `Bash` | PreToolUse in `.agents/hooks.json` with `deny-dangerous.sh` matched to `run_command` and secret-bearing file tools | `preToolUse` in `.github/hooks/hooks.json` with `deny-dangerous.sh` |
-| Changed-line gruff quality | PostToolUse matched to `Edit` and `Write` | Unsupported until Codex PostToolUse result delivery is verified | Legacy registration remains for compatibility, but PostToolUse result delivery is ineffective because the host accepts only `{}` | `postToolUse` entry with the shipped `gruff-code-quality.sh` command |
+| Attributable Gruff quality | PostToolUse matched to `Edit`, `Write`, and `Bash` events containing `apply_patch` | Unsupported until Codex PostToolUse result delivery is verified | Unsupported because PostToolUse cannot return feedback to the active model | `postToolUse` entry with the shipped `gruff-code-quality.sh` command |
 | Universal post-turn safety | Stop with `post-turn-safety.sh` | Unsupported; Codex Stop-hook delivery is unverified (registered Stop hooks did not fire under codex exec 0.139.0) | Skipped; Antigravity Stop-hook delivery is unverified (hook trust gates execution; no Stop payload captured firing) | Unsupported; `agentStop` delivery is unverified and Goat Flow has no current registration adapter |
 | Permission deny list | `.claude/settings.json` deny patterns | Filesystem permission profile in `.codex/config.toml`; command denies in the Bash hooks | Script-only guardrails; no provider-native file-read/file-write deny layer is claimed | Script-only guardrails; no provider-native file-read/file-write deny layer is claimed |
 | Config format | JSON | TOML + JSON | JSON | JSON |
 
 ## Setup
 
-1. Copy `run-with-bash.mjs`, `deny-dangerous.sh`, and `post-turn-safety.sh` to `.goat-flow/hooks/`, and copy `deny-dangerous/` to `.goat-flow/hooks/deny-dangerous/`. Also copy `hook-provider-adapters.mjs` when enabling a versioned result hook.
+1. Copy `run-with-bash.mjs`, `deny-dangerous.sh`, and `post-turn-safety.sh` to `.goat-flow/hooks/`, and copy `deny-dangerous/` to `.goat-flow/hooks/deny-dangerous/`. When Gruff is enabled, install `hook-provider-adapters.mjs` and `gruff-code-quality.sh` together.
 2. Copy the matching agent-config template(s) for your runtime:
    - Claude: `agent-config/claude.json` -> `.claude/settings.json`
    - Codex: `agent-config/codex.toml` -> `.codex/config.toml` and `agent-config/codex-hooks.json` -> `.codex/hooks.json`
@@ -37,7 +37,7 @@ Generated hook commands resolve a verified managed project root before starting 
 
 ## Direct and Registered Results
 
-Direct `.sh` use keeps each hook's existing stdout, stderr, exit status, `--check`, and self-test interface. Existing registered hooks keep their one-word legacy launch mode and do not load the adapter. A migrated command adds a namespaced contract containing the provider, response kind, result protocol, lifecycle event, adapter version, and launcher deadline only when its detector and install path migrate together.
+Direct `.sh` use keeps each hook's existing stdout, stderr, exit status, `--check`, and self-test interface. Registered Gruff commands for Claude and Copilot use a namespaced provider-result contract; legacy hooks keep their one-word mode. A migrated command names the provider, response kind, result protocol, lifecycle event, adapter version, and launcher deadline.
 
 The `goat-flow.hook-result.v1` path captures at most 10,000 combined stdout/stderr bytes, accepts one JSON object, caps findings at 20, and requires complete declared coverage before `pass`. Malformed, empty, partial, timed-out, or mismatched results become explicit unavailable outcomes. Provider adapters preserve blocking semantics; a host/event pair that cannot deliver the result remains unsupported instead of receiving weaker advice.
 
@@ -50,7 +50,7 @@ The `goat-flow.hook-result.v1` path captures at most 10,000 combined stdout/stde
 - Claude, Codex, and Antigravity support nested cwd inside a git checkout through the root-resolving wrapper. Outside a git checkout, `deny-dangerous.sh` fails closed unless an agent-specific project root fallback is documented and configured; today that fallback is `$CLAUDE_PROJECT_DIR` for Claude/Antigravity, not Codex. `gruff-code-quality.sh` fails soft.
 - Copilot uses direct project-local paths and therefore requires a repo-root working directory for the configured command. Nested-cwd execution is outside the current Copilot contract unless that runtime adds a portable project-root variable or root-resolving command support.
 - Directly invoked `.sh` hooks must keep executable bits. Missing `bash` is a hard runtime prerequisite for all shipped guardrails.
-- Legacy registrations do not load or install `hook-provider-adapters.mjs`. A migrated detector must add its namespaced mode and adapter file in the same propagation change so partial setup fails visibly instead of changing existing hook behavior.
+- Registered Gruff installs `hook-provider-adapters.mjs` with its namespaced launch mode. Missing or malformed pieces produce visible unavailable feedback.
 - `post-turn-safety.sh` uses an optimized Bash 4+ scanner and a bounded compatibility scanner on stock macOS Bash 3.2. Both enforce the same findings and wall-clock limit. Tracked and staged text streams as added hunks regardless of full file size; binary changed paths and whole untracked text above `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES` report incomplete and block. A valid Stop payload can end one exact repeated command failure loudly, while findings, coverage gaps, budget exhaustion, and malformed payloads keep blocking. The default scan budget is 60 seconds and the registered Stop timeout is 90 seconds, so the hook can print its own diagnostic before the runner intervenes. Run `bash .goat-flow/hooks/post-turn-safety.sh --self-test` after install or upgrade.
 
 ## Post-Turn Safety
@@ -61,7 +61,7 @@ Tracked and staged text is scanned from added hunks, including files above the w
 
 For a valid Claude Stop payload, the first incomplete command failure blocks and records only owner-local hashes. One exact active replay can end loudly without claiming a clean scan. Changed findings, incomplete content coverage, budget exhaustion, and malformed input always block. Run `bash .goat-flow/hooks/post-turn-safety.sh --self-test` to check clean, finding, incomplete, and Bash 3 outcomes; unknown options fail instead of scanning.
 
-goat-flow does not ship a project-validation Stop hook or a plan-reminder Stop hook. Run project-specific build, test, lint, typecheck, format, and milestone accounting through explicit verification gates. The shipped `gruff-code-quality.sh` is a file-edit hook: it runs on supported file-write tools, prefers the edited path from the hook payload, and falls back to git-changed supported files when a runtime omits the path.
+goat-flow does not ship a project-validation Stop hook or a plan-reminder Stop hook. Run project-specific build, test, lint, typecheck, format, and milestone accounting through explicit verification gates. The shipped `gruff-code-quality.sh` prefers payload-declared edit or patch targets, uses Git only when a runtime omits paths, and reports incomplete scope instead of clean work when Git fails.
 
 ## Codex Permissions
 

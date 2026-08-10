@@ -294,6 +294,70 @@ describe("hook launcher script validation", () => {
     });
   });
 
+  // Fixture purpose: prove hooks receive registry-owned identity, not ambient user values.
+  it("injects the decoded provider contract into migrated hook execution", () => {
+    withTempProject((fixtureProjectPath) => {
+      const hookScriptRelativePath = ".goat-flow/hooks/environment-result.sh";
+      const managedHookDirectoryPath =
+        createManagedHookDirectory(fixtureProjectPath);
+      const environmentReceiptPath = join(
+        fixtureProjectPath,
+        "hook-environment-receipt.txt",
+      );
+      const cleanHookResult = JSON.stringify({
+        schema: HOOK_RESULT_SCHEMA,
+        hookId: "fixture-quality",
+        event: "post-tool",
+        outcome: "pass",
+        coverage: {
+          status: "complete",
+          attemptedUnits: 1,
+          completedUnits: 1,
+          skippedUnits: 0,
+        },
+        reasonCode: "completed-clean",
+        findings: [],
+        execution: {
+          hookVersion: "1.15.1",
+          provider: "claude",
+          providerMode: "managed",
+          adapterName: "claude-post-tool",
+          adapterVersion: "1",
+          durationMs: 1,
+        },
+      });
+      writeFileSync(
+        join(managedHookDirectoryPath, "environment-result.sh"),
+        [
+          "#!/usr/bin/env bash",
+          `printf '%s\\n' \"$GOAT_FLOW_HOOK_PROVIDER|$GOAT_FLOW_HOOK_EVENT|$GOAT_FLOW_HOOK_PROVIDER_MODE|$GOAT_FLOW_HOOK_ADAPTER_VERSION|$GOAT_FLOW_HOOK_RESULT_PROTOCOL\" > '${environmentReceiptPath}'`,
+          `printf '%s\\n' '${cleanHookResult}'`,
+          "",
+        ].join("\n"),
+      );
+
+      const launcherResult = runLauncherProcess(
+        fixtureProjectPath,
+        hookScriptRelativePath,
+        `claude:gruff:${HOOK_RESULT_SCHEMA}:post-tool:1:75000`,
+        {
+          ...process.env,
+          GOAT_FLOW_HOOK_PROVIDER: "untrusted-ambient-value",
+        },
+      );
+
+      assert.equal(
+        launcherResult.status,
+        0,
+        launcherDiagnostics(launcherResult),
+      );
+      assert.equal(
+        readFileSync(environmentReceiptPath, "utf8"),
+        `claude|post-tool|managed|1|${HOOK_RESULT_SCHEMA}\n`,
+      );
+    });
+  });
+
   // Fixture purpose: reject old plain output. Side effects: writes and starts one script.
   it("reports migrated legacy output as unavailable", () => {
     withTempProject((fixtureProjectPath) => {

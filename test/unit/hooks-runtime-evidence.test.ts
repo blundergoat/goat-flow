@@ -37,6 +37,7 @@ const CONFIGURED_HOOK_STATE: ManagedDenyHookState = {
   enabled: true,
   installed: true,
   scriptPath: ".goat-flow/hooks/deny-dangerous.sh",
+  configuredCommand: null,
   reasonCode: null,
 };
 
@@ -187,6 +188,23 @@ describe("hooks runtime evidence", () => {
     assert.equal(parsed.projectPath, resolve("."));
     assert.equal(parsed.agent, "codex");
   });
+
+  // Each shared hook has its own explicit offline group so users never run another hook by accident.
+  for (const scenarioGroup of ["post-turn-hook", "gruff-hook"] as const) {
+    it(`parses the ${scenarioGroup} configured-command group`, () => {
+      const parsed = parseCLIArgs([
+        "hooks",
+        "verify",
+        ".",
+        "--agent",
+        "claude",
+        "--scenario",
+        scenarioGroup,
+      ]);
+
+      assert.equal(parsed.hookScenario, scenarioGroup);
+    });
+  }
 
   // An omitted scenario must stop before the CLI chooses a proof group on the user's behalf.
   it("requires an explicit hook verification scenario group", () => {

@@ -252,10 +252,52 @@ interface TaskState {
 }
 
 type HookDrift = "desired-on-actual-off" | "desired-off-actual-on";
+type HookEffectiveStatus =
+  | "disabled"
+  | "provider-undocumented"
+  | "provider-documentation-stale"
+  | "provider-documented-unsupported"
+  | "provider-capture-absent"
+  | "provider-capture-stale"
+  | "provider-capture-untrusted"
+  | "provider-capture-inconclusive"
+  | "provider-live-unsupported"
+  | "not-registered"
+  | "installation-stale"
+  | "runtime-untrusted"
+  | "not-observed"
+  | "result-undelivered"
+  | "scenario-unverified"
+  | "effective";
+type HookEffectiveSeverity = "neutral" | "warning" | "danger" | "success";
+type HookRegistrationIssue =
+  | "registration-missing"
+  | "retired-registration"
+  | "event-mismatch"
+  | "matcher-mismatch"
+  | "command-or-response-mismatch"
+  | "timeout-mismatch";
+type HookInstallationIssue =
+  | "managed-files-missing"
+  | "installed-version-mismatch"
+  | "managed-path-untrusted";
 
-/** Per-agent hook installation and drift state delivered to the browser. */
+/** Per-agent desired-to-effective hook chain delivered to the browser. */
 interface HookAgentState extends Record<"supported", boolean> {
   installed: boolean;
+  isRegistered: boolean;
+  isCurrentVersionInstalled: boolean;
+  isTrusted: boolean;
+  registrationIssue: HookRegistrationIssue | null;
+  installationIssue: HookInstallationIssue | null;
+  effectiveState: {
+    status: HookEffectiveStatus;
+    severity: HookEffectiveSeverity;
+  };
+  effectiveStateLabel: string;
+  evidenceIdentity: string | null;
+  repairCommand: string | null;
+  repairSummary: string;
   scriptPath: string | null;
   configPath: string | null;
   drift?: HookDrift;

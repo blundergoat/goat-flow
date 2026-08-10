@@ -790,7 +790,7 @@ prune_legacy_agent_hook_copies() {
   local script
   for legacy_hooks_dir in .claude/hooks .codex/hooks .agents/hooks .github/hooks; do
     [[ -d "$legacy_hooks_dir" ]] || continue
-    for script in deny-dangerous.sh gruff-code-quality.sh post-turn-safety.sh plan-checkbox-guard.sh post-turn-validate.sh; do
+    for script in run-with-bash.mjs hook-provider-adapters.mjs deny-dangerous.sh gruff-code-quality.sh post-turn-safety.sh plan-checkbox-guard.sh post-turn-validate.sh; do
       if [[ -f "$legacy_hooks_dir/$script" ]]; then
         rm -f "$legacy_hooks_dir/$script"
         REMOVED=$((REMOVED + 1))
@@ -1148,6 +1148,7 @@ const fs = require("node:fs");
 const [dst, src, agent] = process.argv.slice(2);
 const managedScripts = [
   "run-with-bash.mjs",
+  "hook-provider-adapters.mjs",
   "deny-dangerous.sh",
   "gruff-code-quality.sh",
   "post-turn-safety.sh",
@@ -1262,21 +1263,25 @@ function configuredHookEnabled(hookId) {
  * @returns {string} Node response source; never empty because every hook needs an outcome.
  */
 function unavailableHookResponseProgram(hookResponseMode) {
-  // Antigravity expects a deny decision on stdout and treats the host response as handled.
-  if (hookResponseMode === "antigravity") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
-  }
-  // Copilot expects its own permission-decision fields when the policy hook cannot start.
-  if (hookResponseMode === "copilot") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
-  }
+  const responseModeParts = hookResponseMode.split(":");
+  const hasNamespacedMode = responseModeParts.length === 6;
+  const providerIdentifier = hasNamespacedMode ? responseModeParts[0] : hookResponseMode;
+  const responseKind = hasNamespacedMode ? responseModeParts[1] : hookResponseMode;
   // Optional Gruff feedback fails soft so a missing analyzer shell never blocks the user's edit.
-  if (hookResponseMode === "gruff") {
+  if (responseKind === "gruff") {
     return "const reportUnavailable=(reason)=>{process.stderr.write('gruff-code-quality: hook unavailable: '+reason+'; skipped.'+lineBreak);process.exit(0);};";
   }
   // Post-turn safety cannot claim a completed scan when its launcher never started.
-  if (hookResponseMode === "post-turn") {
+  if (responseKind === "post-turn") {
     return "const reportUnavailable=(reason)=>{process.stderr.write('post-turn-safety: hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
+  }
+  // Antigravity expects a deny decision on stdout and treats the host response as handled.
+  if (providerIdentifier === "antigravity") {
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
+  }
+  // Copilot expects its own permission-decision fields when the policy hook cannot start.
+  if (providerIdentifier === "copilot") {
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
   }
   // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
   return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
@@ -1339,7 +1344,9 @@ function hookLaunchBootstrap(hookResponseMode) {
  */
 function hookLaunchMode(hookScriptName) {
   // Gruff is optional feedback, so unavailable execution is shown as a non-blocking skip.
-  if (hookScriptName === "gruff-code-quality.sh") return "gruff";
+  if (hookScriptName === "gruff-code-quality.sh") {
+    return `${agent}:gruff:goat-flow.hook-result.v1:post-tool:1:75000`;
+  }
   // Post-turn safety returns a failed scan rather than an agent permission payload.
   if (hookScriptName === "post-turn-safety.sh") return "post-turn";
   // Antigravity requires its decision JSON shape for command admission.
@@ -1390,7 +1397,7 @@ function gruffHookEntries() {
   const hookScriptName = "gruff-code-quality.sh";
   // Codex receives matcher groups through its native hook schema.
   if (agent === "codex") {
-    return ["Edit", "Write"].map((matcher) => ({
+    return ["Edit", "Write", "Bash"].map((matcher) => ({
       matcher,
       hooks: [
         {
@@ -1413,14 +1420,14 @@ function gruffHookEntries() {
       },
     ];
   }
-  return ["Edit", "Write"].map((matcher) => ({
+  return ["Edit", "Write", "Bash"].map((matcher) => ({
     matcher,
     hooks: [{ type: "command", command: rootResolvingCommand(hookScriptName), timeout: 90 }],
   }));
 }
 
 function appendGruffHookEntries(currentHooks) {
-  if (agent === "codex" || !configuredHookEnabled("gruff-code-quality")) return false;
+  if (agent === "codex" || agent === "antigravity" || !configuredHookEnabled("gruff-code-quality")) return false;
   const event = agent === "copilot" ? "postToolUse" : "PostToolUse";
   const currentEntries = Array.isArray(currentHooks[event]) ? currentHooks[event] : [];
   const nextEntries = [...currentEntries, ...gruffHookEntries()];
@@ -1468,24 +1475,6 @@ function appendPostTurnSafetyEntries(currentHooks) {
   return true;
 }
 
-function gruffAntigravityDefinition() {
-  return {
-    enabled: true,
-    PostToolUse: [
-      {
-        matcher: "write_to_file|replace_file_content|multi_replace_file_content",
-        hooks: [
-          {
-            type: "command",
-            command: rootResolvingCommand("gruff-code-quality.sh"),
-            timeout: 90,
-          },
-        ],
-      },
-    ],
-  };
-}
-
 const current = readJson(dst);
 const template = readJson(src);
 if (!current || !template) {
@@ -1513,16 +1502,7 @@ if (agent === "antigravity") {
       changed = true;
     }
   }
-  if (configuredHookEnabled("gruff-code-quality")) {
-    const gruff = gruffAntigravityDefinition();
-    if (JSON.stringify(current["gruff-code-quality"]) !== JSON.stringify(gruff)) {
-      current["gruff-code-quality"] = gruff;
-      changed = true;
-    }
-  }
-  // Stop hooks are not re-added for Antigravity: the M02b spike could not
-  // verify Stop delivery (hook trust gates execution; no stop_hook_active loop
-  // guard observed). The managedHookIds delete above prunes stale definitions.
+  // Antigravity receives policy hooks only because its post-tool channel cannot return feedback.
 } else if (isObject(template.hooks)) {
   if (!isObject(current.hooks)) {
     current.hooks = {};
@@ -2438,6 +2418,7 @@ fi
 if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-with-bash.mjs" "$HOOKS_DIR/run-with-bash.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-provider-adapters.mjs" "$HOOKS_DIR/hook-provider-adapters.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh" "system-owned" "755"

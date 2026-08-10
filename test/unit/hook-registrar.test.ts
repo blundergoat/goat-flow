@@ -41,7 +41,6 @@ import {
   installClaudeDenyHook,
   installCodexDenyHook,
   readClaudeGruffCommands,
-  readAntigravityGruffCommand,
   runClaudeLauncher,
   assertLauncherAllows,
   runCodexLauncher,
@@ -150,7 +149,20 @@ describe("hook registrar: launchers and installation", () => {
         listHookSpecs().some((hookSpec) => hookSpec.id === spec.id),
         true,
       );
-      assert.equal(getHookSpec("gruff-code-quality")?.matcher, "Edit|Write");
+      const gruffSpec = getHookSpec("gruff-code-quality");
+      assert.equal(gruffSpec?.matcher, "Edit|Write|Bash");
+      assert.equal(
+        gruffSpec?.deliveryContract?.resultProtocol,
+        "goat-flow.hook-result.v1",
+      );
+      assert.equal(
+        gruffSpec?.scriptFiles.includes("hook-provider-adapters.mjs"),
+        true,
+      );
+      assert.match(
+        gruffSpec?.unsupportedAgents?.antigravity ?? "",
+        /cannot deliver Gruff feedback/u,
+      );
       assert.equal(getHookSpec("plan-checkbox-guard"), null);
       assert.equal(isValidHookIdShape("gruff-code-quality"), true);
       assert.equal(isValidHookIdShape("../bad"), false);
@@ -167,7 +179,6 @@ describe("hook registrar: launchers and installation", () => {
       writeAgentHookState(root, PROFILES.claude, denySpec, true);
       writeAgentHookState(root, PROFILES.claude, gruffSpec, true);
       writeAgentHookState(root, PROFILES.antigravity, denySpec, true);
-      writeAgentHookState(root, PROFILES.antigravity, gruffSpec, true);
       writeAgentHookState(root, PROFILES.copilot, denySpec, true);
 
       const claudeSettings = readFileSync(
@@ -183,8 +194,6 @@ describe("hook registrar: launchers and installation", () => {
         "utf-8",
       );
       const claudeGruffCommands = readClaudeGruffCommands(claudeSettings);
-      const antigravityGruffCommand =
-        readAntigravityGruffCommand(antigravityHooks);
 
       // every() on an empty list passes vacuously; require commands first.
       assert.ok(
@@ -206,11 +215,7 @@ describe("hook registrar: launchers and installation", () => {
       assert.doesNotMatch(claudeSettings, /Guard.*git repository root/u);
       assert.match(antigravityHooks, /Policy hook unavailable:/u);
       assert.match(antigravityHooks, /managed root unavailable/u);
-      assert.match(
-        antigravityGruffCommand,
-        /gruff-code-quality: hook unavailable/u,
-      );
-      assert.doesNotMatch(antigravityGruffCommand, /"decision":"deny"/u);
+      assert.doesNotMatch(antigravityHooks, /gruff-code-quality/u);
       assert.doesNotMatch(antigravityHooks, /Guard.*git repository root/u);
       assert.match(antigravityHooks, /"timeout": 30/u);
       assert.match(copilotHooks, /"timeoutSec": 30/u);

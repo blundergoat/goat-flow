@@ -1,5 +1,7 @@
 /**
- * Unit tests for the Hooks dashboard view support-disclosure contract.
+ * Protects the Hooks dashboard's effective-state and support disclosures.
+ * Use these checks when hook labels, repair rows, summary counts, or provider
+ * exclusions change so installed files cannot be rendered as proven coverage.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -33,7 +35,29 @@ describe("dashboard Hooks view", () => {
     assert.match(html, /x-text="agentId \+ ' unsupported'"/);
     assert.match(appSource, /unsupportedHookAgents\(hook: HookState\)/);
     assert.match(appSource, /!state\.supported && Boolean\(state\.reason\)/);
-    assert.match(appSource, /if \(!state\.supported\) return "unsupported"/);
+    assert.match(appSource, /return state\.effectiveStateLabel/);
+  });
+
+  // Enabled but incomplete chains need a dedicated filter, repair row, and non-green legend.
+  it("renders canonical effective-state labels and repairs", () => {
+    const html = readFileSync(HOOKS_VIEW_PATH, "utf-8");
+    const appSource = readFileSync(HOOKS_APP_FRAGMENT_PATH, "utf-8");
+
+    assert.match(html, />Effective surfaces</u);
+    assert.match(html, />Ineffective hooks</u);
+    assert.match(html, /hooksFilter === 'ineffective'/u);
+    assert.match(html, /ineffectiveHookAgents\(hook\)\.length > 0/u);
+    assert.match(html, /state\.repairCommand \|\| state\.repairSummary/u);
+    assert.doesNotMatch(html, /installed and enforced/u);
+    assert.match(appSource, /hookHasIneffectiveCoverage\(hook: HookState\)/u);
+    assert.match(
+      appSource,
+      /state\.effectiveState\.status === "effective"/u,
+    );
+    assert.match(
+      appSource,
+      /state\.effectiveState\.severity === "success"/u,
+    );
   });
 
   it("keeps Codex non-PreToolUse exclusions paired with reasons", () => {

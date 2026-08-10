@@ -5,9 +5,9 @@
  * Keeping these values central makes every user-facing setup path agree.
  */
 import type { AgentId } from "../types.js";
-import type {
+import {
   HOOK_RESULT_SCHEMA,
-  HookEffectiveState,
+  type HookEffectiveState,
 } from "../hook-contracts.js";
 
 type HookEvent = "PreToolUse" | "PostToolUse" | "Stop";
@@ -69,6 +69,12 @@ const FEEDBACK_DELIVERY_CONTRACT: HookDeliveryContract = {
   launcherDeadlineMs: 75_000, // Ceiling: leaves fifteen seconds for the host to render feedback.
 };
 
+const GRUFF_DELIVERY_CONTRACT: HookDeliveryContract = {
+  resultProtocol: HOOK_RESULT_SCHEMA,
+  adapterVersion: "1",
+  launcherDeadlineMs: 75_000, // Ceiling: includes Gruff's 60-second analyzer budget and host rendering.
+};
+
 const HOOKS: HookSpec[] = [
   {
     id: "deny-dangerous",
@@ -109,10 +115,14 @@ const HOOKS: HookSpec[] = [
     id: "gruff-code-quality",
     displayName: "gruff code quality",
     description:
-      "Run gruff-* on each edited file and surface findings on changed lines inline.",
+      "Check each edited source file with its nearest gruff-* config and return attributable line, symbol, file, and project feedback.",
     event: "PostToolUse",
-    matcher: "Edit|Write",
-    scriptFiles: ["run-with-bash.mjs", "gruff-code-quality.sh"],
+    matcher: "Edit|Write|Bash",
+    scriptFiles: [
+      "run-with-bash.mjs",
+      "hook-provider-adapters.mjs",
+      "gruff-code-quality.sh",
+    ],
     primaryScript: "gruff-code-quality.sh",
     togglable: true,
     defaultEnabled: false,
@@ -120,7 +130,7 @@ const HOOKS: HookSpec[] = [
     // Above the script's internal 60s analyzer timeout so the hook's own
     // timeout/config diagnostics print before the runner kills the wrapper.
     timeoutSec: 90,
-    deliveryContract: FEEDBACK_DELIVERY_CONTRACT,
+    deliveryContract: GRUFF_DELIVERY_CONTRACT,
     providerEvidence: {
       claude: {
         identity: "hook-provider-adapter.v1:claude:post-tool",
@@ -142,6 +152,8 @@ const HOOKS: HookSpec[] = [
     unsupportedAgents: {
       codex:
         "Codex goat-flow hooks are PreToolUse-only until a supported post-tool lifecycle path is verified.",
+      antigravity:
+        "Antigravity PostToolUse can run a command but cannot deliver Gruff feedback to the active model.",
     },
   },
   {

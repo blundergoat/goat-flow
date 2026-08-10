@@ -1,9 +1,19 @@
 ---
 category: hooks
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-10
 ---
 
 **Scope:** Hook runtime delivery, Stop-scanner behavior, execution performance, and resolved hook history. Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
+
+## Footgun: Destination-only Git pathspecs disguise renames as full-file additions
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Resolve rename identity before deriving edit ranges from a path-limited diff.
+**Trigger phase:** VERIFY
+
+A Git diff limited to a rename destination can hide the source path and render an unchanged rename as a full-file addition. Edit-time analysis then treats every line as user-authored and may report a clean scan or unrelated debt instead of a not-applicable rename.
+
+Git rename detection needs both sides of the move. Query full `--name-status --find-renames` output first, then diff the matched source and destination together before parsing positive hunks. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `rename_source_for_path`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `classifies rename-only and binary Git changes as not applicable`).
 
 ## Footgun: Changed-range scoping makes a quality hook structurally blind to file-level rules
 
@@ -16,7 +26,7 @@ A per-edit quality hook that scopes findings to changed lines cannot report any 
 
 Measured on 2026-08-05: editing `test/unit/hook-registrar.test.ts` (1,139 lines, threshold 750) produced no hook output at all, while `gruff-ts analyse` on the same file reported `size.file-length` immediately. Twenty files had crossed the gate this way. The nearby trap is fixing only half of it - scoping the whole file when the changed range already covers it repairs the new-file case but leaves the far more common "editing an existing oversized file" case still silent.
 
-The fix trades symbol-aware scoping for structural visibility: request the whole file and select scopes in the hook, keeping `scope=file`/`scope=project` findings unconditionally while confining line and symbol findings to the edited ranges. Symbol widening is lost, which is a real cost, but a rule nobody can ever see is worth less than one that occasionally reports a sibling function. Residual gap: the fix covers only the `gruff.hook.v1` contract path (gruff-ts today). The legacy `analyse` path still delegates ranges to analyzers advertising the native trio, and those cannot express finding scope, so partial edits to oversized files stay silent until those analyzers expose scope-aware results. Evidence anchors: `.goat-flow/hooks/gruff-code-quality.sh` (search: `Ranges are applied by this hook rather than by the analyzer`), `.goat-flow/hooks/gruff-code-quality.sh` (search: `A file-scope finding describes the file the agent is editing right now`).
+The fix trades symbol-aware scoping for structural visibility: request the whole file and select scopes in the hook, keeping `scope=file`/`scope=project` findings unconditionally while confining line and symbol findings to the edited ranges. Symbol widening is lost, which is a real cost, but a rule nobody can ever see is worth less than one that occasionally reports a sibling function. Residual gap: the fix covers only the `gruff.hook.v1` contract path (gruff-ts today). The legacy `analyse` path still delegates ranges to analyzers advertising the native trio, and those cannot express finding scope, so partial edits to oversized files stay silent until those analyzers expose scope-aware results. Evidence anchors: `.goat-flow/hooks/gruff-code-quality.sh` (search: `hook_v1_report`), `.goat-flow/hooks/gruff-code-quality.sh` (search: `A file-scope finding describes the file the agent is editing right now`).
 
 Recurrence on 2026-08-05 exposed the adjacent release gate gap. A fresh gruff-ts 0.4.0 full-repository scan at commit `9f1bb2be` reported 36 findings: 14 `size.file-length` warnings, 4 `security.process-exec` warnings, and 18 documentation advisories. Preflight still reported `PASS   79 checks · 0 warnings` because its Gruff Policy check only rejects disabled rules; it never runs the analyzer. The per-edit hook also cannot be expected to enumerate untouched repository debt. Neither result proves a clean repository, even though both surfaces can be read that way.
 

@@ -39,6 +39,7 @@
     ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
     ".goat-flow/hooks/deny-dangerous.sh",
     ".goat-flow/hooks/gruff-code-quality.sh",
+    ".goat-flow/hooks/hook-provider-adapters.mjs",
     ".goat-flow/hooks/post-turn-safety.sh",
     ".goat-flow/hooks/run-with-bash.mjs",
     ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
@@ -195,6 +196,10 @@
     ".goat-flow/hooks/gruff-code-quality.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/gruff-code-quality.sh"
+    },
+    ".goat-flow/hooks/hook-provider-adapters.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-provider-adapters.mjs"
     },
     ".goat-flow/hooks/post-turn-safety.sh": {
       "ownership": "system-owned",
@@ -442,7 +447,7 @@
         "pre_tool": "PreToolUse",
         "post_turn": null
       },
-      "hooks": ["deny-dangerous.sh", "gruff-code-quality.sh"]
+      "hooks": ["deny-dangerous.sh"]
     },
     "copilot": {
       "name": "Copilot CLI",
