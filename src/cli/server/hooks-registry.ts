@@ -31,6 +31,8 @@ export interface HookDeliveryContract {
 export interface HookProviderRegistryEvidence {
   identity: string;
   effectiveSupportGate: HookEffectiveState["status"];
+  /** Last instant this live proof may stay green; absent means the gate is not time-bounded. */
+  expiresAt?: string;
 }
 
 /**
@@ -52,6 +54,8 @@ export interface HookSpec extends Record<"togglable", boolean> {
   timeoutSec?: number;
   /** Internal result and launcher ceiling; omitted only for removed-hook tombstones. */
   deliveryContract?: HookDeliveryContract;
+  /** Provider override used only where live proof approves a newer result path. */
+  providerDeliveryContracts?: Partial<Record<AgentId, HookDeliveryContract>>;
   /** Deterministic contract identity; absence means the UI has no provider proof to show. */
   providerEvidence?: Partial<Record<AgentId, HookProviderRegistryEvidence>>;
   unsupportedAgents?: Partial<Record<AgentId, string>>;
@@ -75,6 +79,12 @@ const GRUFF_DELIVERY_CONTRACT: HookDeliveryContract = {
   launcherDeadlineMs: 75_000, // Ceiling: includes Gruff's 60-second analyzer budget and host rendering.
 };
 
+const CODEX_POST_TURN_DELIVERY_CONTRACT: HookDeliveryContract = {
+  resultProtocol: HOOK_RESULT_SCHEMA,
+  adapterVersion: "1",
+  launcherDeadlineMs: 75_000, // Ceiling: leaves Codex fifteen seconds to render Stop feedback.
+};
+
 const HOOKS: HookSpec[] = [
   {
     id: "deny-dangerous",
@@ -83,7 +93,11 @@ const HOOKS: HookSpec[] = [
       "Block risky shell operations, direct secret-path access, repository writes, and GitHub write operations through one PreToolUse dispatcher.",
     event: "PreToolUse",
     matcher: "Bash",
-    scriptFiles: ["run-with-bash.mjs", "deny-dangerous.sh"],
+    scriptFiles: [
+      "run-with-bash.mjs",
+      "hook-launch-runtime.mjs",
+      "deny-dangerous.sh",
+    ],
     primaryScript: "deny-dangerous.sh",
     togglable: true,
     defaultEnabled: true,
@@ -121,6 +135,7 @@ const HOOKS: HookSpec[] = [
     scriptFiles: [
       "run-with-bash.mjs",
       "hook-provider-adapters.mjs",
+      "hook-launch-runtime.mjs",
       "gruff-code-quality.sh",
     ],
     primaryScript: "gruff-code-quality.sh",
@@ -138,7 +153,8 @@ const HOOKS: HookSpec[] = [
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:post-tool",
-        effectiveSupportGate: "provider-capture-absent",
+        effectiveSupportGate: "effective",
+        expiresAt: "2026-09-09T00:00:00.000Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:post-tool",
@@ -150,8 +166,6 @@ const HOOKS: HookSpec[] = [
       },
     },
     unsupportedAgents: {
-      codex:
-        "Codex goat-flow hooks are PreToolUse-only until a supported post-tool lifecycle path is verified.",
       antigravity:
         "Antigravity PostToolUse can run a command but cannot deliver Gruff feedback to the active model.",
     },
@@ -163,7 +177,12 @@ const HOOKS: HookSpec[] = [
       "Scan changed content after an agent turn for built-in safety hazards such as obvious secrets, private keys, and merge conflict markers.",
     event: "Stop",
     matcher: "",
-    scriptFiles: ["run-with-bash.mjs", "post-turn-safety.sh"],
+    scriptFiles: [
+      "run-with-bash.mjs",
+      "hook-provider-adapters.mjs",
+      "hook-launch-runtime.mjs",
+      "post-turn-safety.sh",
+    ],
     primaryScript: "post-turn-safety.sh",
     togglable: true,
     defaultEnabled: true,
@@ -173,6 +192,9 @@ const HOOKS: HookSpec[] = [
     // wrapper; a silent mid-scan kill would mean unreported partial coverage.
     timeoutSec: 90,
     deliveryContract: FEEDBACK_DELIVERY_CONTRACT,
+    providerDeliveryContracts: {
+      codex: CODEX_POST_TURN_DELIVERY_CONTRACT,
+    },
     providerEvidence: {
       claude: {
         identity: "hook-provider-adapter.v1:claude:turn-stop",
@@ -180,7 +202,8 @@ const HOOKS: HookSpec[] = [
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:turn-stop",
-        effectiveSupportGate: "provider-capture-absent",
+        effectiveSupportGate: "effective",
+        expiresAt: "2026-09-09T00:00:00.000Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:turn-stop",
@@ -194,8 +217,6 @@ const HOOKS: HookSpec[] = [
     unsupportedAgents: {
       copilot:
         "Copilot agentStop delivery is unverified and has no current Goat Flow registration adapter.",
-      codex:
-        "Codex Stop-hook delivery is unverified: registered .codex/hooks.json Stop hooks did not fire under codex exec 0.139.0.",
       antigravity:
         "Antigravity Stop-hook delivery is unverified: hook trust gates execution and no Stop payload was captured firing.",
     },
@@ -203,6 +224,38 @@ const HOOKS: HookSpec[] = [
 ];
 
 const HOOKS_BY_IDENTIFIER = new Map(HOOKS.map((hook) => [hook.id, hook]));
+
+/**
+ * Expire live provider proof before a hook screen presents it as current.
+ * Use when setup, audit, or the dashboard reads one provider support gate.
+ *
+ * @param providerEvidence - registry proof; an absent expiry means this gate has no live-capture clock
+ * @param supportCheckDate - time shown by the current run; an invalid date cannot keep live proof green
+ * @returns current support gate; never empty, and stale when a dated proof is invalid or expired
+ */
+export function currentHookProviderSupportGate(
+  providerEvidence: HookProviderRegistryEvidence,
+  supportCheckDate: Date = new Date(),
+): HookEffectiveState["status"] {
+  const providerEvidenceExpiry = providerEvidence.expiresAt;
+
+  // Undated non-live gates keep their explicit state instead of inventing a capture deadline.
+  if (!providerEvidenceExpiry) return providerEvidence.effectiveSupportGate;
+
+  const providerEvidenceExpiryMilliseconds = Date.parse(providerEvidenceExpiry);
+  const supportCheckMilliseconds = supportCheckDate.getTime();
+
+  // Invalid or elapsed evidence asks the user for a fresh provider capture.
+  if (
+    Number.isNaN(providerEvidenceExpiryMilliseconds) ||
+    Number.isNaN(supportCheckMilliseconds) ||
+    providerEvidenceExpiryMilliseconds < supportCheckMilliseconds
+  ) {
+    return "provider-capture-stale";
+  }
+
+  return providerEvidence.effectiveSupportGate;
+}
 
 /**
  * List hook definitions without exposing the canonical array to UI sorting.

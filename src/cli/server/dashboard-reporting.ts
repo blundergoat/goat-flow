@@ -1,13 +1,8 @@
 /**
- * Report assembly, enrichment, and audit-cache I/O behind the dashboard's `/api/audit` and quality routes.
- *
- * Projects raw audit results into the DashboardReport wire shape, layers in compact Home-only
- * learning-loop context (cached in-memory by a content signature with a TTL), and reads/writes the
- * persisted on-disk audit cache. Also builds the deterministic content signatures used to invalidate
- * both caches: the signature must stay stable for identical inputs and change when any tracked file
- * changes, or the dashboard serves stale audits. All filesystem reads here swallow missing/unreadable
- * inputs into stable sentinels so a partial project still produces a report. Routes live in
- * dashboard-audit-routes.ts and dashboard-quality-routes.ts; the wire types in types.ts.
+ * Assembles dashboard audit reports and manages their content-aware caches.
+ * Use when Home, audit, or quality routes need current scores and memory context.
+ * Stable sentinels keep partial projects usable, while content signatures prevent
+ * changed project state from serving a stale user-facing report.
  */
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -33,9 +28,7 @@ import {
 import { resolveLocalStatePath } from "./local-paths.js";
 import type { DashboardReport } from "./types.js";
 
-/**
- * Home-card projection of the latest quality report, stripped to display totals.
- */
+/** Home-card projection of the latest quality report, stripped to display totals. */
 interface LatestQualitySummary {
   id: string;
   date: string;
@@ -50,9 +43,7 @@ interface LatestQualitySummary {
   scope: string | null;
 }
 
-/**
- * Compact learning-loop entry shown on the dashboard without loading full files.
- */
+/** Compact learning-loop entry shown without loading the full lesson file. */
 interface RecentLessonSummary {
   title: string;
   created: string | null;
@@ -634,9 +625,7 @@ export function buildDashboardReport(
 
 const AUDIT_CACHE_FILE = "audit-cache.json";
 
-/**
- * Persisted audit cache schema keyed by package version, config version, and content signature.
- */
+/** Persisted audit cache contract. Invariant: package, config, and content keys match its report. */
 interface AuditCacheEnvelope {
   packageVersion: string;
   configVersion: string;

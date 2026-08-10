@@ -11,24 +11,26 @@
      * Use when a user scans the project list and needs the recommended next step to read visually.
      *
      * @param projectRow - saved dashboard project; missing or empty `action` means the UI has no specific next step yet
-     * @returns CSS badge class for the project action, or a muted badge when the action is unknown
+     * @returns CSS badge class for the project action, or a muted badge for an action with no badge of its own
      */
     projectActionBadgeClass(projectRow) {
-      // Ready to audit, so the UI shows a positive next-step badge.
+      // Set up and current; the audit is only the deeper per-agent check.
       if (projectRow.action === 'audit') return 'gf-badge-pass';
 
-      // A newer version exists, so the UI nudges the user with a warning badge.
+      // Installed, but behind the current release.
       if (projectRow.action === 'upgrade') return 'gf-badge-warn';
 
-      // Migration work is outstanding, so the UI raises the attention level.
+      // Pre-1.0 layout with retired skill names; a plain setup run would leave them in place.
       if (projectRow.action === 'migration') return 'gf-badge-high';
 
-      // Setup is incomplete, so the UI points the user at the setup flow.
+      // A half-finished install, or another agent's instructions with no goat-flow beside them.
       if (projectRow.action === 'setup') return 'gf-badge-ap';
 
-      // The audit found repair work, so the UI highlights an actionable fix state.
+      // Not repair work: the manifest probe threw, so the real state is unknown rather than bad.
+      // Shares the setup badge - both mean act on the row before trusting what it says.
       if (projectRow.action === 'fix') return 'gf-badge-ap';
 
+      // Also where 'incomplete' lands - a current project missing pieces, with no badge of its own.
       return 'gf-badge-muted';
     },
     /**

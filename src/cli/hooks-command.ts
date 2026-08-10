@@ -91,9 +91,10 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
   const {
     renderHookRuntimeReportJson,
     renderHookRuntimeReportText,
-    verifyManagedConfiguredHook,
     verifyManagedDenyHook,
   } = await import("./hooks-runtime-evidence.js");
+  const { verifyManagedConfiguredHook } =
+    await import("./hooks-configured-runtime-evidence.js");
   const report =
     options.hookScenario === "deny-hook"
       ? verifyManagedDenyHook({

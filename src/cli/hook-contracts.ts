@@ -369,6 +369,7 @@ export type HookResultOutcome =
 /** Stable user-facing reasons shared by blocking, advisory, and diagnostic hooks. */
 export type HookResultReasonCode =
   | "completed-clean"
+  | "bounded-reentry-ended"
   | "policy-blocked"
   | "findings-reported"
   | "coverage-incomplete"

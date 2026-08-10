@@ -6,12 +6,25 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PROFILES } from "../detect/agents.js";
-import type { AgentId, AgentProfile } from "../types.js";
+import type { AgentProfile } from "../types.js";
+import {
+  LEGACY_DENY_DANGEROUS_HOOK_IDS,
+  LEGACY_DENY_DANGEROUS_SCRIPT_NAMES,
+  agentRegistersHostTimeout,
+  commandEntryReferencesSpec,
+  entryMatchesSpecCommand,
+  entryMatchesSpecRegistration,
+  entryMatchesSpecTimeout,
+  entryReferencesSpec,
+  isAgentHookJsonObject,
+  managedAgentHookCommand,
+  matcherForAgent,
+  type AgentHookJsonObject,
+} from "./agent-hook-command.js";
 import { writeFileAtomic } from "./safe-exec.js";
 import type { HookSpec } from "./hooks-registry.js";
 
-const HOOK_LAUNCH_MODE_PART_COUNT = 6; // Contract: host, response, result, event, adapter, deadline.
+export { buildAgentHookCommand } from "./agent-hook-command.js";
 
 /** Result of reading an agent hook config without mutating it. */
 export interface AgentHookReadState {
@@ -30,89 +43,102 @@ export type AgentHookRegistrationIssue =
   | "command-or-response-mismatch"
   | "timeout-mismatch";
 
-type JsonObject = Record<string, unknown>;
-
-const LEGACY_DENY_DANGEROUS_SCRIPT_NAMES = [
-  "guard-common.sh",
-  "guard-destructive-shell.sh",
-  "guard-secret-paths.sh",
-  "guard-repository-writes.sh",
-  "guardrails-self-test.sh",
-  "deny-dangerous.self-test.sh",
-];
-
-const LEGACY_DENY_DANGEROUS_HOOK_IDS = [
-  "guard-destructive-shell",
-  "guard-secret-paths",
-  "guard-repository-writes",
-];
-
 /**
- * Type guard for a JSON object - the only shape we can safely read keyed properties off. Excludes the two
- * `typeof x === "object"` footguns, `null` and arrays, so callers can treat untrusted `JSON.parse` output
- * as a record without crashing on `null.foo` or silently mis-reading an array as a map. Centralised because
- * the writer parses pre-existing agent config files that may legally contain any JSON value.
+ * Resolve the config file that stores one agent's user-visible hook state.
+ * Use before status or sync reads and writes the selected project.
  *
- * @param value - parsed JSON of unknown shape (e.g. JSON.parse output) to test
- * @returns true - when value is a non-null, non-array object, narrowed to JsonObject
+ * @param projectPath - selected project; empty text cannot identify an owned config root
+ * @param agent - selected agent; a null hook config means this provider cannot host managed hooks
+ * @returns config path for the selected agent; never empty for a hook-capable profile
+ * @throws when the agent has no hook configuration surface
  */
-function isObject(value: unknown): value is JsonObject {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    Array.isArray(value) === false
-  );
-}
-
-/** Resolve the agent hook config file; throws when the profile does not support hook writes. */
 function configPath(projectPath: string, agent: AgentProfile): string {
+  // A provider without a config surface cannot store the hook the user selected.
   if (!agent.hookConfigFile) {
     throw new Error(`${agent.id} has no hook config file`);
   }
   return join(projectPath, agent.hookConfigFile);
 }
 
-/** Read an existing agent hook config; malformed JSON uses an empty-object fallback with `invalid=true`. */
+/**
+ * Read hook config without mutating malformed or missing user files.
+ * Use when status or sync needs a safe object plus repair flags.
+ *
+ * @param path - selected agent config path; empty text behaves like a missing file
+ * @returns parsed config and flags; an empty object means the file is missing, invalid, or not an object
+ * @throws Never; unreadable or malformed user files return an invalid repair state
+ */
 function readJsonFile(path: string): {
-  value: JsonObject;
+  value: AgentHookJsonObject;
   missing: boolean;
   invalid: boolean;
 } {
+  // A missing config tells the Hooks screen that this agent has not registered the hook.
   if (!existsSync(path)) return { value: {}, missing: true, invalid: false };
   try {
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
     return {
-      value: isObject(parsed) ? parsed : {},
+      value: isAgentHookJsonObject(parsed) ? parsed : {},
       missing: false,
-      invalid: !isObject(parsed),
+      invalid: !isAgentHookJsonObject(parsed),
     };
   } catch {
+    // For example, the user may have a half-written JSON file after an interrupted editor save.
     return { value: {}, missing: false, invalid: true };
   }
 }
 
-/** Map goat-flow hook events to the event-key spelling required by each agent config format. */
+/**
+ * Translate one registry event into the selected provider's config key.
+ * Use so setup writes the lifecycle the user's agent actually reads.
+ *
+ * @param agent - selected provider; an empty id cannot pass profile validation
+ * @param spec - managed hook; an empty event cannot produce a runnable registration
+ * @returns provider event key; never empty for a valid registry hook
+ */
 function hookEventKey(agent: AgentProfile, spec: HookSpec): string {
+  // Copilot uses camel-case event names while the other supported configs use registry spelling.
   if (agent.id === "copilot") {
     return spec.event === "PreToolUse" ? "preToolUse" : "postToolUse";
   }
   return spec.event;
 }
 
-/** Ensure the shared hooks container is an object before mutating event arrays inside it. */
-function ensureHooksObject(config: JsonObject): JsonObject {
-  if (!isObject(config.hooks)) config.hooks = {};
-  return config.hooks as JsonObject;
+/**
+ * Return the writable hooks object, replacing an unsafe user value with an empty container.
+ * Use immediately before setup changes provider event arrays.
+ *
+ * @param config - parsed config; empty means setup creates only the managed hooks container
+ * @returns mutable hooks object; never null or an array
+ */
+function ensureHooksObject(config: AgentHookJsonObject): AgentHookJsonObject {
+  // A missing, null, or non-object hooks value cannot safely contain event rows.
+  if (!isAgentHookJsonObject(config.hooks)) config.hooks = {};
+  return config.hooks as AgentHookJsonObject;
 }
 
-/** Return the mutable event-entry array, creating it when an agent config lacks the event key. */
-function eventEntries(config: JsonObject, event: string): unknown[] {
+/**
+ * Return the mutable rows for one provider lifecycle event.
+ * Use when setup adds or removes the user's managed registration.
+ *
+ * @param config - parsed agent config; empty means the event array is created
+ * @param event - provider event key; empty text would create an unusable property
+ * @returns event rows; empty means the user has no registrations for this lifecycle
+ */
+function eventEntries(config: AgentHookJsonObject, event: string): unknown[] {
   const hooks = ensureHooksObject(config);
+  // A missing or malformed event value becomes an empty list ready for managed entries.
   if (!Array.isArray(hooks[event])) hooks[event] = [];
   return hooks[event] as unknown[];
 }
 
-/** Split pipe-delimited matcher strings because Claude and Codex store one matcher per entry. */
+/**
+ * Split a shared matcher into the individual rows Claude and Codex display.
+ * Use while writing or checking tool-triggered hook registrations.
+ *
+ * @param matcher - pipe-delimited registry matcher; empty text yields no event rows
+ * @returns trimmed non-empty matcher parts; empty means no tool-specific registration
+ */
 function matcherParts(matcher: string): string[] {
   return matcher
     .split("|")
@@ -121,353 +147,23 @@ function matcherParts(matcher: string): string[] {
 }
 
 /**
- * Build the hook path written into an agent's managed configuration.
- * Use when setup enables a hook; empty path parts would produce an unusable registration.
+ * Remove only rows that launch the selected managed hook.
+ * Use before disable or replacement so user-authored hooks remain untouched.
  *
- * @param hooksDirectory - project hook folder shown in config; empty means no valid managed location
- * @param hookScriptName - script the agent should run; empty means the registration cannot identify a hook
- * @returns normalized project-relative path; never empty when registry metadata is valid
+ * @param config - parsed agent config; empty means there are no rows to remove
+ * @param event - provider lifecycle key; empty text cannot name a valid managed event
+ * @param spec - managed hook contract; empty script metadata matches no user command
+ * @returns nothing; an empty result removes the event value from the config
  */
-function commandPath(hooksDirectory: string, hookScriptName: string): string {
-  return `${hooksDirectory}/${hookScriptName}`.replace(/\/+/gu, "/");
-}
-
-/**
- * Choose the unavailable-hook response understood by the active agent host.
- * Use when setup writes a launcher so startup failures remain visible without corrupting host protocol.
- *
- * @param hookResponseMode - host protocol for this hook; empty or unknown uses fail-closed policy text
- * @returns Node source for the host response; never empty because every hook needs a failure outcome
- */
-function unavailableHookResponseProgram(hookResponseMode: string): string {
-  const responseModeParts = hookResponseMode.split(":");
-  const hasNamespacedResponseMode =
-    responseModeParts.length === HOOK_LAUNCH_MODE_PART_COUNT;
-  const providerIdentifier = hasNamespacedResponseMode
-    ? responseModeParts[0]
-    : hookResponseMode;
-  const responseKind = hasNamespacedResponseMode
-    ? responseModeParts[1]
-    : hookResponseMode;
-  // Optional Gruff feedback fails soft so a missing analyzer shell never blocks the user's edit.
-  if (responseKind === "gruff") {
-    return "const reportUnavailable=(reason)=>{process.stderr.write('gruff-code-quality: hook unavailable: '+reason+'; skipped.'+lineBreak);process.exit(0);};";
-  }
-  // Post-turn safety cannot claim a completed scan when its launcher never started.
-  if (responseKind === "post-turn") {
-    return "const reportUnavailable=(reason)=>{process.stderr.write('post-turn-safety: hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
-  }
-  // Antigravity expects a deny decision on stdout and treats the host response as handled.
-  if (providerIdentifier === "antigravity") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
-  }
-  // Copilot expects its own permission-decision fields when the policy hook cannot start.
-  if (providerIdentifier === "copilot") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
-  }
-  // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
-  return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
-}
-
-/**
- * Build shell-neutral Node source that finds the user's project before starting its Bash hook.
- * Use in generated agent configs so PowerShell, cmd, and POSIX shells share one launch path.
- *
- * @param hookResponseMode - host response selected for this hook; empty uses fail-closed policy behavior
- * @returns portable `node -e` source; never empty because it becomes the registered hook command
- */
-function hookLaunchBootstrap(hookResponseMode: string): string {
-  const unavailableResponseProgram =
-    unavailableHookResponseProgram(hookResponseMode);
-  return [
-    "const childProcess=require('node:child_process');",
-    "const filesystem=require('node:fs');",
-    "const path=require('node:path');",
-    "const hookScriptPath=process.argv[1];",
-    "const responseMode=process.argv[2];",
-    "const rootEnvironmentName=process.argv[3];",
-    "const registrationPath=process.argv[4];",
-    "const bashLauncherRelativePath=process.argv[5];",
-    "const lineBreak=String.fromCharCode(10);",
-    unavailableResponseProgram,
-    "const isPlainObject=(value)=>value!==null&&typeof value==='object'&&!Array.isArray(value);",
-    "const normalizeOperand=(value)=>path.normalize(value).replaceAll('\\\\','/').replace(/^\\.\\//u,'');",
-    "const commandOperands=(command)=>{const tokens=command.match(/\"(?:\\\\.|[^\"\\\\])*\"|'[^']*'|\\S+/gu)||[];return tokens.map((token)=>{if(token.startsWith('\"')){try{return JSON.parse(token);}catch{return '';}}if(token.startsWith(\"'\"))return token.slice(1,-1);return token;});};",
-    "const commandNamesOperands=(command)=>{const normalized=commandOperands(command).map(normalizeOperand);return normalized.includes(normalizeOperand(hookScriptPath))&&normalized.includes(normalizeOperand(bashLauncherRelativePath));};",
-    "const registrationNamesOperands=(value)=>{if(Array.isArray(value))return value.some(registrationNamesOperands);if(!isPlainObject(value))return false;for(const [key,nested] of Object.entries(value)){if((key==='command'||key==='bash'||key==='powershell')&&typeof nested==='string'&&commandNamesOperands(nested))return true;if((Array.isArray(nested)||isPlainObject(nested))&&registrationNamesOperands(nested))return true;}return false;};",
-    "const realDirectory=(candidate)=>{try{const absolute=path.resolve(candidate);const entry=filesystem.lstatSync(absolute);if(entry.isSymbolicLink()||!entry.isDirectory())return '';const real=filesystem.realpathSync(absolute);return filesystem.lstatSync(real).isDirectory()?real:'';}catch{return '';}};",
-    "const containedRelativePath=(relativePath)=>{if(!relativePath||path.isAbsolute(relativePath))return '';const normalized=path.normalize(relativePath);return normalized==='..'||normalized.startsWith('..'+path.sep)?'':normalized;};",
-    "const managedEntryExists=(root,relativePath)=>{const normalized=containedRelativePath(relativePath);if(!normalized)return false;try{filesystem.lstatSync(path.join(root,normalized));return true;}catch{return false;}};",
-    "const managedRegularFile=(root,relativePath)=>{const normalized=containedRelativePath(relativePath);if(!normalized)return '';const parts=normalized.split(path.sep).filter(Boolean);let current=root;try{for(let index=0;index<parts.length;index+=1){current=path.join(current,parts[index]);const entry=filesystem.lstatSync(current);if(entry.isSymbolicLink())return '';if(index<parts.length-1&&!entry.isDirectory())return '';if(index===parts.length-1&&(!entry.isFile()||entry.nlink!==1))return '';}const real=filesystem.realpathSync(current);const relative=path.relative(root,real);if(relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))return '';return real;}catch{return '';}};",
-    "const inspectCandidate=(candidate)=>{const root=realDirectory(candidate);if(!root)return {state:'none',root:''};const scriptSeen=managedEntryExists(root,hookScriptPath);const registration=managedRegularFile(root,registrationPath);let registered=false;if(registration){try{const parsed=JSON.parse(filesystem.readFileSync(registration,'utf8'));registered=isPlainObject(parsed)&&registrationNamesOperands(parsed);}catch{registered=false;}}const relevant=scriptSeen||registered;if(!relevant)return {state:'none',root};const launcher=managedRegularFile(root,bashLauncherRelativePath);const script=managedRegularFile(root,hookScriptPath);return registered&&launcher&&script?{state:'complete',root}:{state:'corrupt',root};};",
-    "const visited=new Set();",
-    "const inspectOnce=(candidate)=>{const root=realDirectory(candidate);if(!root||visited.has(root))return {state:'none',root};visited.add(root);return inspectCandidate(root);};",
-    "const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});",
-    "let selected={state:'none',root:''};",
-    "if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){selected=inspectOnce(gitRootLookup.stdout.trim());if(selected.state==='corrupt')reportUnavailable('managed root incomplete');}",
-    "let ancestor=realDirectory(process.cwd());",
-    "while(selected.state!=='complete'&&ancestor){const inspected=inspectOnce(ancestor);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete'){selected=inspected;break;}const parent=path.dirname(ancestor);if(parent===ancestor)break;ancestor=parent;}",
-    "if(selected.state!=='complete'&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){const inspected=inspectOnce(process.env[rootEnvironmentName]);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}",
-    "if(selected.state!=='complete')reportUnavailable('managed root unavailable');",
-    "const projectRoot=selected.root;",
-    "const bashLauncherPath=path.join(projectRoot,containedRelativePath(bashLauncherRelativePath));",
-    "const hookResult=childProcess.spawnSync(process.execPath,[bashLauncherPath,hookScriptPath,responseMode],{cwd:projectRoot,stdio:'inherit'});",
-    "/* A startup error or absent status means the user's hook never produced a trustworthy result. */",
-    "if(hookResult.error||!Number.isInteger(hookResult.status))reportUnavailable('managed launcher could not start');",
-    "process.exit(hookResult.status);",
-  ].join("");
-}
-
-/**
- * Select the response protocol the user's agent understands for one hook.
- * Use while writing config; an unknown combination falls back to the safety-policy protocol.
- *
- * @param agentId - selected agent; empty is impossible after setup request validation
- * @param spec - hook being registered; missing metadata is rejected by the registry before this call
- * @returns response mode consumed by the launcher; never empty
- */
-function hookLaunchMode(agentId: AgentId, spec: HookSpec): string {
-  let responseKind = "policy";
-  // Gruff is optional feedback, so unavailable execution is shown as a non-blocking skip.
-  if (spec.id === "gruff-code-quality") responseKind = "gruff";
-  // Post-turn safety must return a failing scan outcome rather than an agent permission payload.
-  if (spec.id === "post-turn-safety") responseKind = "post-turn";
-
-  const deliveryContract = spec.deliveryContract;
-  const usesLegacyResultProtocol =
-    !deliveryContract || deliveryContract.resultProtocol === "legacy";
-  // Legacy hooks keep installed command parity until their detector and installer migrate together.
-  if (usesLegacyResultProtocol) {
-    // Feedback and stop hooks keep their category-specific unavailable messages on every host.
-    if (responseKind !== "policy") return responseKind;
-    // Antigravity requires its decision JSON shape for legacy command admission.
-    if (agentId === "antigravity") return "antigravity";
-    // Copilot requires permission-decision fields for legacy pre-tool output.
-    if (agentId === "copilot") return "copilot";
-    return "policy";
-  }
-
-  const canonicalHookEvent =
-    spec.event === "PreToolUse"
-      ? "pre-tool"
-      : spec.event === "PostToolUse"
-        ? "post-tool"
-        : "turn-stop";
-  return [
-    agentId,
-    responseKind,
-    deliveryContract.resultProtocol,
-    canonicalHookEvent,
-    deliveryContract.adapterVersion,
-    deliveryContract.launcherDeadlineMs,
-  ].join(":");
-}
-
-/**
- * Build the hook command written into the selected agent's configuration.
- * Use during install and sync so every host reaches the same managed Bash resolver.
- *
- * @param agentId - agent receiving the command; empty is impossible after setup validation
- * @param hooksDirectory - project hook folder; empty would produce an invalid managed path
- * @param spec - hook behavior and script; missing metadata is rejected before config generation
- * @returns shell-neutral Node command; never empty because enabled hooks must be runnable
- */
-export function buildAgentHookCommand(
-  agentId: AgentId,
-  hooksDirectory: string,
+function removeHookEntries(
+  config: AgentHookJsonObject,
+  event: string,
   spec: HookSpec,
-): string {
-  const hookScriptPath = commandPath(hooksDirectory, spec.primaryScript);
-  const bashLauncherPath = commandPath(hooksDirectory, "run-with-bash.mjs");
-  const hookResponseMode = hookLaunchMode(agentId, spec);
-  const registrationPath = PROFILES[agentId].hookConfigFile;
-  if (!registrationPath) throw new Error(`${agentId} has no hook config file`);
-  // Codex can use managed ancestors but has no supported final host-root environment fallback.
-  const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
-  return [
-    "node",
-    "-e",
-    JSON.stringify(hookLaunchBootstrap(hookResponseMode)),
-    JSON.stringify(hookScriptPath),
-    JSON.stringify(hookResponseMode),
-    JSON.stringify(rootEnvironmentName),
-    JSON.stringify(registrationPath),
-    JSON.stringify(bashLauncherPath),
-  ].join(" ");
-}
-
-/**
- * Build a managed command after setup has selected an agent profile.
- * A profile without a hook folder is rejected so users never receive a dead config entry.
- *
- * @param agent - selected agent profile; a missing hook folder means this host cannot register hooks
- * @param spec - enabled hook; missing metadata is rejected before this writer runs
- * @returns registered Node command; never empty for supported agents
- * @throws when the selected agent has no managed hook directory
- */
-function shellCommand(agent: AgentProfile, spec: HookSpec): string {
-  // An unsupported profile cannot offer a working hook, so setup fails before writing its config.
-  if (!agent.hooksDir) throw new Error(`${agent.id} has no hooks dir`);
-  return buildAgentHookCommand(agent.id, agent.hooksDir, spec);
-}
-
-/**
- * Decide whether a hook entry in the user's agent config is one goat-flow installed.
- * Use before setup adds, replaces, or removes a registration, so toggling a hook in the dashboard
- * never rewrites a hook the user wrote themselves. The name must appear as a whole path token: a
- * user hook called `custom-post-turn-safety.sh` merely contains a managed name, and claiming it
- * would delete the user's own guard when they switched the managed one off.
- *
- * @param commands - command strings from one config entry, joined by newlines; empty means the entry
- *   runs nothing and can never be a managed registration
- * @param script - managed script filename to look for, such as `post-turn-safety.sh`
- * @returns true when this entry launches the managed script, so setup owns it; false leaves the
- *   entry untouched as the user's own hook
- */
-function commandsReferenceScriptToken(
-  commands: string,
-  script: string,
-): boolean {
-  const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // The name must start at a path or word boundary and end at one, so `custom-<name>` never matches.
-  const scriptTokenPattern = new RegExp(
-    `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
-    "mu",
-  );
-  return scriptTokenPattern.test(commands);
-}
-
-/** Detect a command entry that directly launches one managed hook script. */
-function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
-  // Non-object JSON cannot represent a runnable hook command.
-  if (!isObject(entry)) return false;
-  const commands = [
-    typeof entry.command === "string" ? entry.command : "",
-    typeof entry.bash === "string" ? entry.bash : "",
-    typeof entry.powershell === "string" ? entry.powershell : "",
-  ].join("\n");
-  // Current managed script names identify the registration setup owns.
-  if (
-    spec.scriptFiles.some(
-      (script) =>
-        script !== "run-with-bash.mjs" &&
-        commandsReferenceScriptToken(commands, script),
-    )
-  ) {
-    return true;
-  }
-  // Historical deny script names remain managed so upgrades can remove them.
-  if (
-    spec.id === "deny-dangerous" &&
-    LEGACY_DENY_DANGEROUS_SCRIPT_NAMES.some((script) =>
-      commandsReferenceScriptToken(commands, script),
-    )
-  ) {
-    return true;
-  }
-  return false;
-}
-
-/** Detect any nested hook entry that points at one of the spec's managed scripts. */
-function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
-  // Non-object JSON cannot contain a managed hook command or nested hook list.
-  if (!isObject(entry)) return false;
-  // A direct command match is enough for upgrade removal and replacement.
-  if (commandEntryReferencesSpec(entry, spec)) return true;
-  // Matcher groups nest the runnable command under their hooks array.
-  if (Array.isArray(entry.hooks)) {
-    return entry.hooks.some((hook) => entryReferencesSpec(hook, spec));
-  }
-  return false;
-}
-
-/** Check whether one managed entry carries the exact launcher and provider response contract. */
-function entryMatchesSpecCommand(
-  entry: unknown,
-  agent: AgentProfile,
-  spec: HookSpec,
-): boolean {
-  // Non-object JSON cannot represent a valid managed registration.
-  if (!isObject(entry)) return false;
-  // A direct command must equal the registry-generated launcher byte for byte.
-  if (commandEntryReferencesSpec(entry, spec)) {
-    const expectedCommand = shellCommand(agent, spec);
-    return agent.id === "copilot"
-      ? entry.bash === expectedCommand && entry.powershell === expectedCommand
-      : entry.command === expectedCommand;
-  }
-  // Matcher groups can carry the exact managed command one level below the event row.
-  if (Array.isArray(entry.hooks)) {
-    return entry.hooks.some((hook) =>
-      entryMatchesSpecCommand(hook, agent, spec),
-    );
-  }
-  return false;
-}
-
-/** Check the host timeout independently so users can distinguish it from response-command drift. */
-function entryMatchesSpecTimeout(
-  entry: unknown,
-  agent: AgentProfile,
-  spec: HookSpec,
-): boolean {
-  // Non-object JSON cannot carry a valid host timeout.
-  if (!isObject(entry)) return false;
-  // A direct managed command owns the timeout field at the same object level.
-  if (commandEntryReferencesSpec(entry, spec)) {
-    // Codex has no timeout field, and hooks without a registry timeout use agent defaults.
-    if (agent.id === "codex" || spec.timeoutSec === undefined) return true;
-    const timeoutField = agent.id === "copilot" ? "timeoutSec" : "timeout";
-    return entry[timeoutField] === spec.timeoutSec;
-  }
-  // Matcher groups carry timeout beside the nested runnable command.
-  if (Array.isArray(entry.hooks)) {
-    return entry.hooks.some((hook) =>
-      entryMatchesSpecTimeout(hook, agent, spec),
-    );
-  }
-  return false;
-}
-
-/** Check command and runner timeout together so installed means the exact user runtime shape. */
-function entryMatchesSpecRegistration(
-  entry: unknown,
-  agent: AgentProfile,
-  spec: HookSpec,
-): boolean {
-  // Both links must match; a stale response mode or timeout keeps the registration non-current.
-  if (!entryMatchesSpecCommand(entry, agent, spec)) return false;
-  return entryMatchesSpecTimeout(entry, agent, spec);
-}
-
-/** Translate generic hook matchers into Antigravity's tool names while leaving other agents unchanged. */
-function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
-  if (spec.event === "Stop") return "";
-  if (agent.id !== "antigravity") return spec.matcher;
-  if (spec.id === "gruff-code-quality") {
-    return [
-      "write_to_file",
-      "replace_file_content",
-      "multi_replace_file_content",
-    ].join("|");
-  }
-  if (spec.id === "deny-dangerous") {
-    return [
-      "run_command",
-      "view_file",
-      "write_to_file",
-      "replace_file_content",
-      "multi_replace_file_content",
-    ].join("|");
-  }
-  return spec.matcher;
-}
-
-/** Remove only goat-flow-managed hook entries so unrelated user hook config is preserved. */
-function removeHookEntries(config: JsonObject, event: string, spec: HookSpec) {
+) {
   const entries = eventEntries(config, event);
   const next = entries.filter((entry) => !entryReferencesSpec(entry, spec));
   const hooks = ensureHooksObject(config);
+  // No retained rows means the user should not see an empty provider event group.
   if (next.length === 0) {
     hooks[event] = undefined;
     return;
@@ -475,28 +171,48 @@ function removeHookEntries(config: JsonObject, event: string, spec: HookSpec) {
   hooks[event] = next;
 }
 
-/** Create the Claude/Codex hook entries for each matcher segment in the managed spec. */
-function claudeCodexEntries(agent: AgentProfile, spec: HookSpec): JsonObject[] {
+/**
+ * Build the exact Claude or Codex rows setup shows in agent config.
+ * Use when enabling Stop or tool-triggered coverage for either provider.
+ *
+ * @param agent - selected Claude/Codex profile; a null hook directory makes command creation throw
+ * @param spec - managed hook contract; empty matchers create no tool-triggered rows
+ * @returns provider rows; empty only when a non-Stop hook has no matcher parts
+ */
+function claudeCodexEntries(
+  agent: AgentProfile,
+  spec: HookSpec,
+): AgentHookJsonObject[] {
+  // Stop runs after the user's turn and therefore has no tool matcher row.
   if (spec.event === "Stop") {
-    const command: JsonObject = {
+    const command: AgentHookJsonObject = {
       type: "command",
-      command: shellCommand(agent, spec),
+      command: managedAgentHookCommand(agent, spec),
     };
-    if (agent.id === "claude" && spec.timeoutSec !== undefined) {
+    // An owned host deadline gives the migrated hook time to return model-visible Stop feedback.
+    if (
+      agentRegistersHostTimeout(agent, spec) &&
+      spec.timeoutSec !== undefined
+    ) {
       command.timeout = spec.timeoutSec;
     }
+    // Codex displays this name while the user's hook is running.
     if (agent.id === "codex") command.statusMessage = spec.displayName;
     return [{ hooks: [command] }];
   }
-  return matcherParts(spec.matcher).map((matcher) => {
-    const command: JsonObject = {
+  return matcherParts(matcherForAgent(agent, spec)).map((matcher) => {
+    const command: AgentHookJsonObject = {
       type: "command",
-      command: shellCommand(agent, spec),
+      command: managedAgentHookCommand(agent, spec),
     };
-    // Codex's hook schema carries no timeout field, so only Claude gets the override.
-    if (agent.id === "claude" && spec.timeoutSec !== undefined) {
+    // An owned host deadline stays above the launcher's internal response ceiling.
+    if (
+      agentRegistersHostTimeout(agent, spec) &&
+      spec.timeoutSec !== undefined
+    ) {
       command.timeout = spec.timeoutSec;
     }
+    // Codex displays the same hook name for each matched user edit tool.
     if (agent.id === "codex") command.statusMessage = spec.displayName;
     return {
       matcher,
@@ -505,9 +221,19 @@ function claudeCodexEntries(agent: AgentProfile, spec: HookSpec): JsonObject[] {
   });
 }
 
-/** Create Copilot's single hook entry shape with both bash and PowerShell commands. */
-function copilotEntry(agent: AgentProfile, spec: HookSpec): JsonObject {
-  const crossPlatformCommand = shellCommand(agent, spec);
+/**
+ * Build Copilot's one cross-platform command row.
+ * Use when enabling a managed hook for users on either supported shell.
+ *
+ * @param agent - selected Copilot profile; a null hook directory makes command creation throw
+ * @param spec - managed hook; an absent timeout uses the provider's 30-second default
+ * @returns command row with Bash and PowerShell parity; never empty
+ */
+function copilotEntry(
+  agent: AgentProfile,
+  spec: HookSpec,
+): AgentHookJsonObject {
+  const crossPlatformCommand = managedAgentHookCommand(agent, spec);
   return {
     type: "command",
     bash: crossPlatformCommand,
@@ -516,15 +242,24 @@ function copilotEntry(agent: AgentProfile, spec: HookSpec): JsonObject {
   };
 }
 
+/**
+ * Build Antigravity's top-level definition for one managed hook.
+ * Use when setup enables protection in the provider's project policy file.
+ *
+ * @param agent - selected Antigravity profile; a null hook directory makes command creation throw
+ * @param spec - managed hook; an absent timeout uses the provider's 30-second default
+ * @returns enabled provider definition; never empty for a valid registry hook
+ */
 function antigravityHookDefinition(
   agent: AgentProfile,
   spec: HookSpec,
-): JsonObject {
+): AgentHookJsonObject {
   const command = {
     type: "command",
-    command: shellCommand(agent, spec),
+    command: managedAgentHookCommand(agent, spec),
     timeout: spec.timeoutSec ?? 30,
   };
+  // Stop definitions omit matchers because they run after the user's complete turn.
   if (spec.event === "Stop") {
     return {
       enabled: true,
@@ -546,18 +281,30 @@ function antigravityHookDefinition(
   };
 }
 
+/**
+ * Append the selected provider's exact managed registration shape.
+ * Use after stale managed rows are removed during enable or sync.
+ *
+ * @param config - parsed provider config; empty means setup creates the first managed row
+ * @param agent - selected provider profile; unsupported surfaces cannot reach this writer
+ * @param spec - enabled hook contract; empty script metadata cannot produce a command
+ * @returns nothing; the config object is updated in place for later atomic persistence
+ */
 function appendHookEntries(
-  config: JsonObject,
+  config: AgentHookJsonObject,
   agent: AgentProfile,
   spec: HookSpec,
 ): void {
+  // Antigravity stores each hook as a named top-level definition instead of a shared event array.
   if (agent.id === "antigravity") {
     config[spec.id] = antigravityHookDefinition(agent, spec);
     return;
   }
   const event = hookEventKey(agent, spec);
   const entries = eventEntries(config, event);
+  // Copilot stores one dual-shell row for the user's lifecycle event.
   if (agent.id === "copilot") {
+    // A missing or non-numeric schema version is normalized before Copilot reads the new row.
     if (typeof config.version !== "number") config.version = 1;
     entries.push(copilotEntry(agent, spec));
     return;
@@ -565,69 +312,112 @@ function appendHookEntries(
   entries.push(...claudeCodexEntries(agent, spec));
 }
 
+/**
+ * Check whether Antigravity has the exact active row setup owns.
+ * Use when the Hooks screen decides whether local registration is current.
+ *
+ * @param config - parsed provider config; empty means the hook is unregistered
+ * @param agent - selected Antigravity profile
+ * @param spec - expected managed hook; empty script metadata cannot match a command
+ * @returns true for the exact event, matcher, command, and timeout; false names repairable drift
+ */
 function hasAntigravityExpectedEntries(
-  config: JsonObject,
+  config: AgentHookJsonObject,
   agent: AgentProfile,
   spec: HookSpec,
 ): boolean {
   const definition = config[spec.id];
-  if (!isObject(definition) || definition.enabled === false) return false;
+  // Missing, malformed, or disabled definitions cannot protect the user's action.
+  if (!isAgentHookJsonObject(definition) || definition.enabled === false)
+    return false;
   const entries = definition[hookEventKey(agent, spec)];
+  // A non-array lifecycle value contains no runnable managed rows.
   if (!Array.isArray(entries)) return false;
+  // Stop rows match only the exact managed command because they carry no tool matcher.
   if (spec.event === "Stop") {
     return entries.some(
       (entry) =>
-        isObject(entry) && entryMatchesSpecRegistration(entry, agent, spec),
+        isAgentHookJsonObject(entry) &&
+        entryMatchesSpecRegistration(entry, agent, spec),
     );
   }
   return entries.some(
     (entry) =>
-      isObject(entry) &&
+      isAgentHookJsonObject(entry) &&
       entry.matcher === matcherForAgent(agent, spec) &&
       entryMatchesSpecRegistration(entry, agent, spec),
   );
 }
 
+/**
+ * Check a shared provider event for every exact managed row users need.
+ * Use for Claude, Codex, and Copilot status reporting.
+ *
+ * @param config - parsed provider config; empty means no managed event rows
+ * @param agent - selected provider profile
+ * @param spec - expected hook contract; empty matchers cannot satisfy tool-triggered coverage
+ * @returns true when all provider-specific rows match; false exposes registration drift
+ */
 function hasEventExpectedEntries(
-  config: JsonObject,
+  config: AgentHookJsonObject,
   agent: AgentProfile,
   spec: HookSpec,
 ): boolean {
-  const hooks = isObject(config.hooks) ? config.hooks : {};
+  const hooks = isAgentHookJsonObject(config.hooks) ? config.hooks : {};
   const entries = hooks[hookEventKey(agent, spec)];
+  // A missing or malformed event array means the user's hook is not registered.
   if (!Array.isArray(entries)) return false;
+  // Stop needs one exact command and no matcher expansion.
   if (spec.event === "Stop") {
     return entries.some((entry) =>
       entryMatchesSpecRegistration(entry, agent, spec),
     );
   }
+  // Copilot also stores one direct dual-shell row for each event.
   if (agent.id === "copilot") {
     return entries.some((entry) =>
       entryMatchesSpecRegistration(entry, agent, spec),
     );
   }
-  return matcherParts(spec.matcher).every((matcher) =>
+  return matcherParts(matcherForAgent(agent, spec)).every((matcher) =>
     entries.some(
       (entry) =>
-        isObject(entry) &&
+        isAgentHookJsonObject(entry) &&
         entry.matcher === matcher &&
         entryMatchesSpecRegistration(entry, agent, spec),
     ),
   );
 }
 
+/**
+ * Route exact-registration checks to the selected provider shape.
+ * Use as the final local installed-state decision shown to users.
+ *
+ * @param config - parsed provider config; empty means no registration is current
+ * @param agent - selected provider profile
+ * @param spec - expected hook contract; empty metadata cannot produce a match
+ * @returns true only when every required provider row is exact; false requests repair
+ */
 function hasAllExpectedEntries(
-  config: JsonObject,
+  config: AgentHookJsonObject,
   agent: AgentProfile,
   spec: HookSpec,
 ): boolean {
+  // Antigravity uses a named definition rather than the shared hooks object.
   if (agent.id === "antigravity") {
     return hasAntigravityExpectedEntries(config, agent, spec);
   }
   return hasEventExpectedEntries(config, agent, spec);
 }
 
-/** Search parsed agent config for any command owned by one current or retired managed hook. */
+/**
+ * Search parsed config recursively for one current or retired managed command.
+ * Use to distinguish missing registration from event or command drift.
+ *
+ * @param value - parsed config value; null, empty, or primitive values contain no command
+ * @param spec - managed hook contract; empty script metadata matches nothing
+ * @returns true when setup owns a nested command; false preserves unrelated user config
+ */
 function configurationReferencesSpec(value: unknown, spec: HookSpec): boolean {
   // Each array member may hold an event group or direct managed command.
   if (Array.isArray(value)) {
@@ -636,7 +426,7 @@ function configurationReferencesSpec(value: unknown, spec: HookSpec): boolean {
     );
   }
   // Primitive or null JSON cannot contain a managed command entry.
-  if (!isObject(value)) return false;
+  if (!isAgentHookJsonObject(value)) return false;
   // A direct command match identifies setup-owned registration bytes.
   if (commandEntryReferencesSpec(value, spec)) return true;
   return Object.values(value).some((nestedValue) =>
@@ -644,9 +434,17 @@ function configurationReferencesSpec(value: unknown, spec: HookSpec): boolean {
   );
 }
 
-/** Return entries under the registry-owned event without accepting another event as equivalent. */
+/**
+ * Return rows only from the lifecycle event the registry owns.
+ * Use so a command under the wrong event remains visible as drift.
+ *
+ * @param config - parsed provider config; empty means there are no event rows
+ * @param agent - selected provider profile
+ * @param spec - expected hook contract; an empty event cannot identify rows
+ * @returns event rows; empty means missing, disabled, malformed, or absent state
+ */
 function expectedEventEntries(
-  config: JsonObject,
+  config: AgentHookJsonObject,
   agent: AgentProfile,
   spec: HookSpec,
 ): unknown[] {
@@ -654,16 +452,25 @@ function expectedEventEntries(
   if (agent.id === "antigravity") {
     const definition = config[spec.id];
     // A missing or disabled definition has no active event rows for the user.
-    if (!isObject(definition) || definition.enabled === false) return [];
+    if (!isAgentHookJsonObject(definition) || definition.enabled === false)
+      return [];
     const entries = definition[hookEventKey(agent, spec)];
     return Array.isArray(entries) ? entries : [];
   }
-  const hooks = isObject(config.hooks) ? config.hooks : {};
+  const hooks = isAgentHookJsonObject(config.hooks) ? config.hooks : {};
   const entries = hooks[hookEventKey(agent, spec)];
   return Array.isArray(entries) ? entries : [];
 }
 
-/** Check matcher ownership independently from command and timeout bytes. */
+/**
+ * Check provider matchers separately from command and timeout bytes.
+ * Use so the Hooks screen can name matcher drift as the user's first repair.
+ *
+ * @param entries - expected lifecycle rows; empty cannot cover a tool matcher
+ * @param agent - selected provider profile
+ * @param spec - expected hook; empty matchers are valid only for Stop or Copilot rows
+ * @returns true when all required matchers are present; false means some user actions are uncovered
+ */
 function expectedMatchersArePresent(
   entries: unknown[],
   agent: AgentProfile,
@@ -675,24 +482,31 @@ function expectedMatchersArePresent(
   if (agent.id === "antigravity") {
     return entries.some(
       (entry) =>
-        isObject(entry) &&
+        isAgentHookJsonObject(entry) &&
         entry.matcher === matcherForAgent(agent, spec) &&
         entryReferencesSpec(entry, spec),
     );
   }
-  return matcherParts(spec.matcher).every((expectedMatcher) =>
+  return matcherParts(matcherForAgent(agent, spec)).every((expectedMatcher) =>
     entries.some(
       (entry) =>
-        isObject(entry) &&
+        isAgentHookJsonObject(entry) &&
         entry.matcher === expectedMatcher &&
         entryReferencesSpec(entry, spec),
     ),
   );
 }
 
-/** Detect an old split deny registration so upgrade guidance names retirement, not absence. */
+/**
+ * Detect retired split-deny ids or commands in the user's config.
+ * Use so upgrade guidance says migration instead of missing registration.
+ *
+ * @param config - parsed provider config; empty contains no retired registration
+ * @param spec - current hook; any non-deny hook has no split-deny history
+ * @returns true when exact retired identifiers remain; false means another repair owns the state
+ */
 function hasRetiredDenyRegistration(
-  config: JsonObject,
+  config: AgentHookJsonObject,
   spec: HookSpec,
 ): boolean {
   // Other hooks have no retired split identifiers in this migration.
@@ -704,9 +518,17 @@ function hasRetiredDenyRegistration(
   ].some((retiredIdentifier) => serializedConfig.includes(retiredIdentifier));
 }
 
-/** Name the first exact registration link setup must repair for the selected agent. */
+/**
+ * Name the first exact registration link users need to repair.
+ * Use after parsing succeeds but installed state is not yet known.
+ *
+ * @param config - parsed provider config; empty produces a missing-registration issue
+ * @param agent - selected provider profile
+ * @param spec - expected hook contract; empty metadata cannot form a complete registration
+ * @returns first issue, or undefined when the user's registration is exact and current
+ */
 function registrationIssue(
-  config: JsonObject,
+  config: AgentHookJsonObject,
   agent: AgentProfile,
   spec: HookSpec,
 ): AgentHookRegistrationIssue | undefined {
@@ -742,6 +564,15 @@ function registrationIssue(
   return "command-or-response-mismatch";
 }
 
+/**
+ * Read one agent's managed registration without changing user config.
+ * Use for setup, audit, CLI, and dashboard installed-state reporting.
+ *
+ * @param projectPath - selected project; empty text cannot locate an owned config
+ * @param agent - selected provider; a null config path throws before reading
+ * @param spec - expected hook contract; empty metadata cannot be reported installed
+ * @returns installed state plus one missing, invalid, or repair issue; absent issue means current
+ */
 export function readAgentHookState(
   projectPath: string,
   agent: AgentProfile,
@@ -760,6 +591,17 @@ export function readAgentHookState(
   };
 }
 
+/**
+ * Persist one enabled or disabled managed registration atomically.
+ * Use after a user toggles a hook or sync repairs local config drift.
+ *
+ * @param projectPath - selected project; empty text cannot own a safe config write
+ * @param agent - selected provider; a null config path throws before writing
+ * @param spec - managed hook contract; empty metadata cannot produce a useful command
+ * @param enabled - true installs current rows; false removes only setup-owned rows
+ * @returns nothing; successful completion leaves unrelated user hooks unchanged
+ * @throws when existing config is invalid JSON or the agent lacks a writable surface
+ */
 export function writeAgentHookState(
   projectPath: string,
   agent: AgentProfile,
@@ -768,19 +610,24 @@ export function writeAgentHookState(
 ): void {
   const path = configPath(projectPath, agent);
   const config = readJsonFile(path);
+  // Invalid user JSON cannot be safely merged, so setup asks the user to repair it first.
   if (config.invalid) {
     throw new Error(
       `${agent.id} hook config is not valid JSON: ${agent.hookConfigFile}`,
     );
   }
   const event = hookEventKey(agent, spec);
+  // Antigravity keeps managed hooks as top-level definitions with provider-specific migration ids.
   if (agent.id === "antigravity") {
     Reflect.deleteProperty(config.value, spec.id);
+    // The current deny hook replaces every earlier split Antigravity policy id.
     if (spec.id === "deny-dangerous") {
+      // Each exact retired id is Goat Flow-owned and safe to remove from the user's config.
       for (const legacyId of LEGACY_DENY_DANGEROUS_HOOK_IDS) {
         Reflect.deleteProperty(config.value, legacyId);
       }
     }
+    // Enabling adds the current definition; disabling leaves the owned definition absent.
     if (enabled) appendHookEntries(config.value, agent, spec);
     writeFileAtomic(
       path,
@@ -790,6 +637,7 @@ export function writeAgentHookState(
     return;
   }
   removeHookEntries(config.value, event, spec);
+  // Enabling appends exact current rows after stale managed rows are removed.
   if (enabled) appendHookEntries(config.value, agent, spec);
   writeFileAtomic(
     path,
