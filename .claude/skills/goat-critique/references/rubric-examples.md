@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.0"
+goat-flow-reference-version: "1.15.1"
 ---
 # Critique Rubric Examples (Reference Pack)
 
@@ -103,7 +103,7 @@ When Step 0 detects a same-artifact critique log within 30 days and differential
 
 ## Meta-audit rubric (Phase 5.5)
 
-The meta-agent scores the draft critique against these 10 checks. Award 10 only when a check is fully satisfied, otherwise 0; partial credit is forbidden. `Meta-score` is the sum. Name every failed check under `## Auto-Detected Issues`.
+The meta-agent scores the draft critique against these 10 checks. Award 10 only when a check is fully satisfied, otherwise 0; partial credit is forbidden. `Meta-score` is the sum. Name every failed check under `## Auto-Detected Issues`. When all 10 checks pass, write exactly `No failed meta-audit checks.` A clean attestation is not an issue and must not be expanded into one.
 
 1. **Gate-finding match** - Gate value matches highest surviving severity
 2. **Evidence quality per finding** - every finding has Proof attempt + Proof class + Evidence quality fields

@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
@@ -123,7 +123,7 @@ last_reviewed: 2026-08-07
 **Status:** active | **Created:** 2026-04-27
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** VERIFY
-**Incident count:** 7 | **Latest occurrence:** 2026-08-07
+**Incident count:** 10 | **Latest occurrence:** 2026-08-10
 
 **What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
 
@@ -143,7 +143,11 @@ last_reviewed: 2026-08-07
 
 **Recurrence 2026-08-07 (quality history):** The first impossible-date streak fixture placed `2026-02-30` beside a June report. The existing 30-day cutoff already broke continuity, so the test passed without proving that an impossible date cannot bridge a streak. Moving the surrounding dates within 30 days made the pre-fix test fail on JavaScript's calendar normalization and isolated the new rule. Evidence anchor: `test/unit/quality-diff-delta-tag.test.ts` (search: `an invalid legacy date`).
 
-**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
+**Recurrence 2026-08-09 (goat-plan contract):** The first RED asked the H2-only `readMarkdownSection` helper for an H3 artifact section, so it failed before reaching the write-target contradiction. Reading the complete installed skill produced the intended RED twice. Evidence: `test/contract/skill-hardening-plan-2.test.ts` (search: `writes the user-facing ISSUE artifact`).
+
+**Recurrence 2026-08-10 (hook coverage):** A configured-hook drift fixture installed the optional Gruff script but omitted its registry-declared provider adapter, so the exact template check failed before reaching the intended config assertion. The same verification cycle found two direct audit-renderer fixtures without the required `hookCoverage` field; source typecheck did not inspect those test-only report objects, and the text renderers crashed. Adding the adapter to both fixture mirrors and completing both direct report shapes restored the intended proofs. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `hook-provider-adapters.mjs`), `test/contract/command-phrases.test.ts` (search: `hookCoverage:`), `test/unit/audit-command/helpers.ts` (search: `This minimal fixture selects no agent surfaces`), and `src/cli/server/hooks-registry.ts` (search: `scriptFiles:`).
+
+**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. When an exported report schema or a hook's `scriptFiles` contract grows, update direct report builders and both source/installed fixture mirrors before running consumer assertions. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
 ---
 
@@ -230,9 +234,9 @@ last_reviewed: 2026-08-07
 ## Lesson: Pressure scenarios must isolate the rule under test
 
 **Status:** active | **Created:** 2026-07-12
-**Decision changed:** Validate the provenance of every pressure fact before launching an evaluator; a source-grounded target decision does not make transplanted urgency or simplicity facts valid.
+**Decision changed:** Validate every pressure fact and evaluator restriction against the loaded contract before launch; non-target constraints must not decide the result.
 **Trigger phase:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-08-02
+**Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
 **What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-040 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
 
@@ -244,9 +248,11 @@ last_reviewed: 2026-08-07
 
 **Recurrence 2026-08-02 (same hardening run):** After correcting fact provenance, a hypothesis evaluator prompt explicitly requested “What would disconfirm each.” The evaluator returned good falsifiers, but the prompt had named the target field and therefore measured recitation rather than unaided technique use. The host excluded the run and rewound after the second scenario-method correction. This is the same isolation failure at a different layer: the fixture supplied the decision it claimed to test.
 
-**Prevention:** Before using a pressure or application fixture, compare every option with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend facts from separate incidents or ask the evaluator to recite the target technique. Keep all non-target obligations equal so only the rule under test explains the result.
+**Recurrence 2026-08-09:** A goat-debug GREEN evaluator chose the correct Investigate path, but the prompt's three-call cap and ban on other reads prevented the skill's mandatory learning-loop retrieval. The pass was discarded because that artificial conflict could decide the clarity result independently of the Diagnose-versus-Investigate rule. Evidence anchor: `workflow/skills/goat-debug/SKILL.md` (search: `Footgun check`).
 
-**Current-run record:** `.goat-flow/logs/sessions/2026-08-01-goat-review-tdd.md` preserves the M06 pressure and seeded-corpus receipts for this checkout. It is gitignored session evidence, not a durable repository anchor.
+**Recurrence 2026-08-10:** A live provider canary prohibited reads but named only the old and new values for four edits. The coding agent guessed four incompatible declarations, every patch failed, and the run exercised Stop without exercising PostToolUse. Supplying the exact editable declaration made the bounded canary valid. The durable consumer fixture now writes its complete registration and hook inputs explicitly. Evidence anchor: `test/integration/hook-consumer-canary.test.ts` (search: `writeObservedCodexFeedbackConfig`).
+
+**Prevention:** Before using a pressure or application fixture, compare every option and prompt restriction with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend incidents, block mandatory reads, or ask the evaluator to recite the target technique. Keep non-target obligations equal so only the tested rule explains the result. When a canary prohibits reads, provide the exact editable source declaration or allow one bounded read; never require blind patch construction.
 
 ---
 

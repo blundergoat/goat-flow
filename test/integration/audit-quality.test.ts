@@ -239,6 +239,7 @@ describe("commit-guidance harness check", () => {
   it("accepts the former docs path from real project facts", async () => {
     const root = await mkdtemp(join(tmpdir(), "goat-flow-commit-guidance-"));
     try {
+      await mkdir(join(root, ".git"));
       const guidanceDir = join(root, "docs", "coding-standards");
       await mkdir(guidanceDir, { recursive: true });
       await writeFile(
@@ -256,6 +257,25 @@ describe("commit-guidance harness check", () => {
 
       assert.ok(result, "commit-guidance audit result must exist");
       assert.equal(result.status, "pass");
+      assert.equal(result.failure, undefined);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("skips commit guidance when the target has no .git", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-no-git-guidance-"));
+    try {
+      const report = runAudit(createFS(root), root, {
+        agentFilter: null,
+        harness: true,
+      });
+      const result = report.scopes.harness?.checks.find(
+        (check) => check.id === "commit-guidance",
+      );
+
+      assert.ok(result, "commit-guidance audit result must exist");
+      assert.equal(result.status, "skipped");
       assert.equal(result.failure, undefined);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -314,7 +334,8 @@ describe("commit-guidance harness check", () => {
             }),
           ],
           fs: stubFS({
-            exists: (path) => path === ".github" || path === instructionPath,
+            exists: (path) =>
+              path === ".git" || path === ".github" || path === instructionPath,
             readFile: (path) =>
               path === instructionPath ? instructionContent : null,
           }),
@@ -323,6 +344,69 @@ describe("commit-guidance harness check", () => {
 
       assert.equal(result, null, `Copilot should accept ${guidePath}`);
     }
+  });
+
+  it("skips the Copilot commit bridge when the target has no .git", () => {
+    const agentInstructionCheck = AGENT_CHECKS.find(
+      (check) => check.id === "agent-instruction",
+    );
+    assert.ok(agentInstructionCheck, "agent-instruction check must exist");
+    const instructionPath = ".github/copilot-instructions.md";
+    const instructionContent = "# Copilot Instructions\n";
+    const baseAgent = stubAgentFacts();
+    const result = agentInstructionCheck.run(
+      makeCtx({
+        agentFilter: "copilot",
+        agents: [
+          stubAgentFacts({
+            agent: PROFILES.copilot,
+            instruction: {
+              ...baseAgent.instruction,
+              content: instructionContent,
+            },
+          }),
+        ],
+        fs: stubFS({
+          exists: (path) => path === ".github" || path === instructionPath,
+          readFile: (path) =>
+            path === instructionPath ? instructionContent : null,
+        }),
+      }),
+    );
+
+    assert.equal(result, null);
+  });
+
+  it("requires the Copilot commit bridge inside a Git project", () => {
+    const agentInstructionCheck = AGENT_CHECKS.find(
+      (check) => check.id === "agent-instruction",
+    );
+    assert.ok(agentInstructionCheck, "agent-instruction check must exist");
+    const instructionPath = ".github/copilot-instructions.md";
+    const instructionContent = "# Copilot Instructions\n";
+    const baseAgent = stubAgentFacts();
+    const result = agentInstructionCheck.run(
+      makeCtx({
+        agentFilter: "copilot",
+        agents: [
+          stubAgentFacts({
+            agent: PROFILES.copilot,
+            instruction: {
+              ...baseAgent.instruction,
+              content: instructionContent,
+            },
+          }),
+        ],
+        fs: stubFS({
+          exists: (path) =>
+            path === ".git" || path === ".github" || path === instructionPath,
+          readFile: (path) =>
+            path === instructionPath ? instructionContent : null,
+        }),
+      }),
+    );
+
+    assert.match(result?.message ?? "", /must reference/u);
   });
 });
 

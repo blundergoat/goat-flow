@@ -49,6 +49,45 @@ function completedEperm(): NodeJS.ErrnoException & { status: number } {
   return error;
 }
 
+/**
+ * Return the Codex result a user should receive for one safe or blocked runtime probe.
+ * Use in launcher mocks so policy meaning comes from payload content, never call order.
+ */
+function codexRuntimeProbeResult(
+  hookInput: string,
+  spawnError?: NodeJS.ErrnoException,
+): ReturnType<typeof childProcess.spawnSync> {
+  const isSafeUserCommand = hookInput.includes("echo safe");
+  const blockedPolicyMessage =
+    "BLOCKED: Policy repository: git push is not allowed.";
+  // Safe work continues quietly; a repository write receives the policy block users expect.
+  return {
+    status: isSafeUserCommand ? 0 : 2,
+    signal: null,
+    error: spawnError,
+    output: [null, "", isSafeUserCommand ? "" : blockedPolicyMessage],
+    pid: 0,
+    stdout: "",
+    stderr: isSafeUserCommand ? "" : blockedPolicyMessage,
+  } as ReturnType<typeof childProcess.spawnSync>;
+}
+
+/**
+ * Return a completed direct-script probe with no policy text.
+ * Use when a test needs the later agent to supply the visible audit failure.
+ */
+function completedDirectHookProbe(): ReturnType<typeof childProcess.spawnSync> {
+  return {
+    status: 0,
+    signal: null,
+    error: undefined,
+    output: [null, "", ""],
+    pid: 0,
+    stdout: "",
+    stderr: "",
+  } as ReturnType<typeof childProcess.spawnSync>;
+}
+
 describe("agent deny hook template comparison", () => {
   const denyCheck = AGENT_CHECKS.find(
     (check) => check.id === "agent-guardrails",
@@ -414,22 +453,15 @@ describe("agent deny hook template comparison", () => {
     childProcess.execFileSync = (() => {
       throw completedEperm();
     }) as typeof childProcess.execFileSync;
-    childProcess.spawnSync = (() =>
-      ({
-        status: 2,
-        signal: null,
-        error: spawnEperm(),
-        output: [
-          null,
-          "",
-          "BLOCKED: Policy repository: git push is not allowed.",
-        ],
-        pid: 0,
-        stdout: "",
-        stderr: "BLOCKED: Policy repository: git push is not allowed.",
-      }) as ReturnType<
-        typeof childProcess.spawnSync
-      >) as typeof childProcess.spawnSync;
+    childProcess.spawnSync = ((
+      _command: string,
+      _args: readonly string[],
+      options: { env?: NodeJS.ProcessEnv },
+    ) => {
+      // A missing payload means no user command reached the mock and cannot prove policy.
+      const hookInput = options.env?.GOAT_HOOK_SMOKE_PAYLOAD ?? "";
+      return codexRuntimeProbeResult(hookInput, spawnEperm());
+    }) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();
 
     const ctx = makeCtx({
@@ -480,35 +512,26 @@ describe("agent deny hook template comparison", () => {
   it("continues to later agents after a configured command passes", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    let smokeCalls = 0;
+    let configuredRuntimeProbeCalls = 0;
+    let directRuntimeProbeCalls = 0;
     childProcess.execFileSync = (() =>
       Buffer.from("")) as typeof childProcess.execFileSync;
-    childProcess.spawnSync = (() => {
-      smokeCalls += 1;
-      if (smokeCalls === 1) {
-        return {
-          status: 2,
-          signal: null,
-          error: undefined,
-          output: [
-            null,
-            "",
-            "BLOCKED: Policy repository: git push is not allowed.",
-          ],
-          pid: 0,
-          stdout: "",
-          stderr: "BLOCKED: Policy repository: git push is not allowed.",
-        } as ReturnType<typeof childProcess.spawnSync>;
+    childProcess.spawnSync = ((
+      _command: string,
+      args: readonly string[],
+      options: { env?: NodeJS.ProcessEnv },
+    ) => {
+      // Missing shell text cannot represent configured or direct user execution.
+      const shellProgram = args[1] ?? "";
+      // A direct script replay belongs to the later agent and must remain a separate result.
+      if (shellProgram.includes("| { bash '")) {
+        directRuntimeProbeCalls += 1;
+        return completedDirectHookProbe();
       }
-      return {
-        status: 0,
-        signal: null,
-        error: undefined,
-        output: [null, "", ""],
-        pid: 0,
-        stdout: "",
-        stderr: "",
-      } as ReturnType<typeof childProcess.spawnSync>;
+      configuredRuntimeProbeCalls += 1;
+      // A missing payload means no user command reached the configured launcher.
+      const hookInput = options.env?.GOAT_HOOK_SMOKE_PAYLOAD ?? "";
+      return codexRuntimeProbeResult(hookInput);
     }) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();
 
@@ -561,13 +584,14 @@ describe("agent deny hook template comparison", () => {
       }),
     });
 
-    const result = denyCheck.run(ctx);
-    assert.ok(result, "expected later-agent direct smoke failure");
+    const auditResult = denyCheck.run(ctx);
+    assert.ok(auditResult, "expected later-agent direct runtime failure");
     assert.match(
-      result.message,
-      /registered deny hook runtime smoke failed for claude/,
+      auditResult.message,
+      /registered deny hook runtime check failed for claude/,
     );
-    assert.equal(smokeCalls, 2);
+    assert.equal(configuredRuntimeProbeCalls, 2);
+    assert.equal(directRuntimeProbeCalls, 1);
   });
 
   it("fails when a direct configured command is replayed from nested cwd", () => {

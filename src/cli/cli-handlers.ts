@@ -40,10 +40,7 @@ import {
   emitIndexGenerationInstallResult,
   handleIndexCommand,
 } from "./learning-loop-index/command.js";
-import {
-  ensureGitCommitInstructions,
-  type CommitConventionDetection,
-} from "./prompt/commit-guidance.js";
+import { emitCommitGuidanceInstallResult } from "./prompt/commit-guidance.js";
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
@@ -381,28 +378,6 @@ function collectInstallerFlags(options: ParsedCLI, agent: AgentId): string[] {
   if (options.cleanDeprecated) flags.push("--clean-deprecated");
   flags.push(...deriveInstallFlags(options.projectPath, agent, options));
   return flags;
-}
-
-function commitGuidanceInstallSummary(
-  detection: CommitConventionDetection,
-): string {
-  if (detection.status === "insufficient-history") {
-    return detection.gitAvailable
-      ? `stub generated from ${detection.total} commits`
-      : "stub generated because git history was unavailable";
-  }
-  return `${detection.status} guidance generated from ${detection.total} commits`;
-}
-
-/** Print commit-guide generation status only when install wrote new guidance. */
-function emitCommitGuidanceInstallResult(projectPath: string): void {
-  const result = ensureGitCommitInstructions(projectPath);
-  if (result.status !== "written" || result.detection === null) return;
-  console.log("");
-  console.log("Git commit instructions:");
-  console.log(
-    `  ✓ ${result.path} (${commitGuidanceInstallSummary(result.detection)})`,
-  );
 }
 
 /**

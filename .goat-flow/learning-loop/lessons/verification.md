@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: I edited a dead code path because I assumed one implementation
@@ -76,12 +76,15 @@ last_reviewed: 2026-08-07
 ## Lesson: Harness fixture counts must match the reported unit
 
 **Status:** active | **Created:** 2026-05-25
+**Incident count:** 2 | **Latest occurrence:** 2026-08-10
 
 **What happened:** During the gruff documentation pass on `src/cli/audit/harness/check-verification.ts`, the focused evidence-before-claims test failed because the fixture expected `4 present instruction file` even though Codex and Antigravity both pointed at the same `AGENTS.md`. The harness reported the correct deduplicated count: 3 unique present instruction files.
 
 **Root cause:** The assertion counted agent profiles, while the check reports unique instruction-file paths. Shared instruction files make those units diverge.
 
 **Prevention:** In harness tests, name and assert the reported unit explicitly: profiles, unique files, findings, or checks. When a fixture deliberately maps multiple agents to the same instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
+
+**Recurrence (2026-08-10):** A migrated Gruff result fixture asserted only the first finding code. Replacing that partial check with the complete user-visible code list failed because the analyzer envelope also carries `naming.short`. The expected result now enumerates both findings, so a missing or extra detail row is visible. Evidence anchors: `test/integration/hook-provider-contracts.test.ts` (search: `expectedFindingCodes`) and `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `FINDING_GRUFF_CONTRACT_ENVELOPE`).
 
 ## Lesson: Validators can require explicit inventories and phrases despite README pointers
 
@@ -97,13 +100,15 @@ last_reviewed: 2026-08-07
 
 ## Lesson: Header-only edits leave bodies contradicting the new scope
 
-**Status:** active | **Created:** 2026-05-16 | **Incident count:** 2 | **Latest occurrence:** 2026-08-07
+**Status:** active | **Created:** 2026-05-16 | **Incident count:** 3 | **Latest occurrence:** 2026-08-09
 
 **What happened:** I updated status/dependency headers across several milestone files and reframed M11, but left body sections, deferred items, field names, and one filename contradicting the new scope. Review caught doc-only milestones still requiring code helpers, stale dependencies, an old `confidence` field, and an abandoned filename.
 
 **Root cause:** I treated the header as the scope change. In planning docs, status/dependency/framing changes ripple through Scope Discipline, Tasks, Exit Criteria, Testing Gate, Deferred, filenames, and schema field names.
 
 **Recurrence 2026-08-07:** The first usage-insights plan set passed strict plan validation, but a cold-start reread found semantic contradictions the validator cannot see: M08 required a nonexistent quality `proof_class` field, M06 left a placeholder response mode and an under-scoped live sync command, M11 could race M07 on the same instruction files, and M10 assumed persistent markers were necessary after current Claude documentation added skill-scoped hook cleanup. The corrected milestones now cite the live schema and platform contract, use runnable fixture commands, and encode shared-file dependencies.
+
+**Recurrence 2026-08-09:** The revised analysis-derived roadmap passed strict plan validation with zero exporter warnings, but a cold-start path-and-anchor audit found that M06 named `runConfiguredHookCommandSmoke`, which does not exist in the current deny-runtime source. The plan now uses the live `verifyConfiguredHookRuntime` anchor. The first lesson draft then failed learning-loop validation because it cited the gitignored roadmap as durable evidence; the retained evidence points only to tracked source. Evidence anchor: `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`).
 
 **Prevention:** After adding or changing a milestone, re-read the whole file, grep old-scope keywords, check the filename, compare every named field with its live schema, resolve shared write paths into dependency headers, and require every command to be literal or name the task that creates it. Re-verify time-sensitive platform premises against current primary documentation and the installed version. Run structural plan validation last; it proves shape and arithmetic, not semantic executability. In closeout, list what changed in each touched milestone so reviewers can target the same surfaces. Evidence anchors: `.goat-flow/skill-docs/skill-conventions.md` (search: `Task Tracking`), `src/cli/quality/schema-types.ts` (search: `QUALITY_EVIDENCE_METHODS`), and `workflow/skills/reference/skill-preamble.md` (search: `Report-Only Skill Contract`). External platform evidence: [Claude Code hooks reference](https://code.claude.com/docs/en/hooks) (search: `Hooks in skills and agents`).
 
@@ -245,3 +250,15 @@ last_reviewed: 2026-08-07
 3. Session logs already use unique filenames - extend this pattern to footgun/lesson entries when multi-agent mode is detected
 
 ---
+
+## Lesson: Expected classifier statuses must be captured around `set -e`
+
+**Status:** active | **Created:** 2026-08-10
+**Decision changed:** Capture expected nonzero helper statuses before restoring shell fail-fast mode.
+**Trigger phase:** VERIFY
+
+**What happened:** Gruff range classification correctly returned distinct statuses for deletion-only and unavailable hunks, but the legacy caller assigned the result under `set -e`. The shell exited with status 10 or 11 before the existing fail-soft skip branch ran.
+
+**Root cause:** I added meaningful nonzero returns to a shared helper without auditing every caller for shell error-mode semantics. A command substitution assignment is still a failing command under `set -e`.
+
+**Prevention:** When a shell helper uses nonzero statuses as data, wrap each call in `set +e`, capture `$?` immediately, restore `set -e`, and test the top-level script exit as well as its message. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `range_status=$?`) and `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not print whole-file findings when no changed range is available`).

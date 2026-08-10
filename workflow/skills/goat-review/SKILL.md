@@ -1,7 +1,7 @@
 ---
 name: goat-review
 description: "Use when reviewing a diff, PR, or set of code changes, or auditing a codebase area for quality issues. Triggers: 'review this', 'code review', 'audit X', 'look at these changes'."
-goat-flow-skill-version: "1.15.0"
+goat-flow-skill-version: "1.15.1"
 ---
 # /goat-review
 
@@ -27,7 +27,7 @@ Use for diff/PR review or codebase-area quality audits.
 - Dispatcher depth wins unless material risk forces Full; clarify vague scope.
 - Use explicit input, then combined dirty worktree; otherwise measure diff. Over 20 files/3000 lines, stop before Pass 1; request PR/base/head, commit/range, worktree, or area; never guess commit windows.
 
-**PR/base, clean worktree:** without checkout, resolve explicit → configured → remote HEAD → prompt → `main`; fetch only after network approval. Record URL/baseRefName/source/SHA/failures. Automated-review conclusions stay unread until both local passes finish.
+**PR/base, clean worktree:** without checkout, resolve explicit → configured (`.goat-flow/config.yaml` → `skills.goat-review.local_pr_base`) → remote HEAD → prompt → `main`; fetch only after network approval. Record URL/baseRefName/source/SHA/failures. Automated-review conclusions stay unread until both local passes finish.
 
 **Scope sizing:** `references/examples.md` (search: `Depth Signals`). A material-risk override → Full; else 3+ → full, 2 → offer, 0–1 → quick. Quick keeps Pass 1 → Pass 2. Refused Full: `risk-depth-declined`, Conclusion `partial`, verdict max `PARTIAL`.
 

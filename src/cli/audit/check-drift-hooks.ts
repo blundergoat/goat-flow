@@ -1,14 +1,8 @@
 /**
- * Detects when a project's installed safety hooks no longer match the ones goat-flow ships.
- * Hooks are the layer that actually blocks dangerous commands, so a stale copy, a disabled
- * toggle, or a timeout that drifted is the difference between a user being protected and
- * only believing they are. Every comparison here exists to surface that gap before they
- * rely on it.
- *
- * The comparison runs across three surfaces because any one of them can silently break
- * protection: the hook script itself, the agent configuration that registers it, and the
- * per-agent timeout. A user who explicitly disabled a hook in their own config is respected
- * rather than reported, so their deliberate choice is never mistaken for drift.
+ * Reports when installed safety hooks differ from the Goat Flow version a user selected.
+ * Use during setup or audit before relying on command protection in an agent session.
+ * It compares hook scripts, configured launchers, and supported host timeouts.
+ * Explicitly disabled hooks remain the user's choice instead of appearing as drift.
  */
 import { posix as pathPosix } from "node:path";
 import { load } from "js-yaml";
@@ -439,21 +433,24 @@ export function compareHooks(
 }
 
 /** Installed settings plus the path users can pass to the repair command. */
-interface InstalledHookTimeoutConfig {
+interface InstalledHookConfig {
   hookConfigPath: string;
   hookConfig: Record<string, unknown>;
 }
 
-/** Reads one installed hook config when it can provide trustworthy timeout evidence. */
-function readInstalledHookTimeoutConfig(
+/**
+ * Read one installed agent config for launcher and timeout comparison.
+ * A null result means setup owns the user's missing, unreadable, or malformed config.
+ */
+function readInstalledHookConfig(
   fs: ReadonlyFS,
   agentProfile: AgentProfile,
-): InstalledHookTimeoutConfig | null {
+): InstalledHookConfig | null {
   const hookConfigPath = agentProfile.hook_config_file;
   // Hookless or uninstalled profiles remain the responsibility of setup checks.
   if (!hookConfigPath || !fs.exists(hookConfigPath)) return null;
   const installedHookConfigText = fs.readFile(hookConfigPath);
-  // An unreadable config has no trustworthy timeout evidence for the user.
+  // An unreadable config has no trustworthy launcher or timeout evidence for the user.
   if (installedHookConfigText === null) return null;
   const hookConfig = parseHookConfigJson(installedHookConfigText);
   // Malformed settings are reported by setup validation without duplicate drift noise.
@@ -483,15 +480,66 @@ function staleTimeoutLabels(
   ].join(", ");
 }
 
-/** Compares one present managed command and reports the exact sync action on mismatch. */
+/**
+ * Compare one installed launcher with the command setup would give the user today.
+ * A mismatch adds the exact hook-sync repair to the drift report.
+ */
+function compareManagedHookCommand(
+  installedConfig: InstalledHookConfig,
+  agentIdentifier: AgentId,
+  agentProfile: AgentProfile,
+  hookSpec: HookSpec,
+  findings: DriftFinding[],
+): number {
+  // Unsupported lifecycles must not make this agent's audit fail.
+  if (hookSpec.unsupportedAgents?.[agentIdentifier]) return 0;
+  const hooksDirectory = agentProfile.hooks_dir;
+  // A profile without a hook folder has no managed launcher for the user to sync.
+  if (!hooksDirectory) return 0;
+  const matchingCommands: Record<string, unknown>[] = [];
+  collectManagedHookCommands(
+    installedConfig.hookConfig,
+    hookSpec,
+    matchingCommands,
+  );
+  // A missing registration is setup state, not content drift.
+  if (matchingCommands.length === 0) return 0;
+  const expectedCommand = buildAgentHookCommand(
+    agentIdentifier,
+    hooksDirectory,
+    hookSpec,
+  );
+  // Any alternate launcher text could send the user's command to stale or unsafe code.
+  const staleCommands = matchingCommands.filter((commandEntry) =>
+    agentIdentifier === "copilot"
+      ? commandEntry.bash !== expectedCommand ||
+        commandEntry.powershell !== expectedCommand
+      : commandEntry.command !== expectedCommand,
+  );
+  // Exact launcher identity means this part of the user's registration is current.
+  if (staleCommands.length === 0) return 1;
+  findings.push({
+    kind: "content",
+    path: installedConfig.hookConfigPath,
+    message: `${hookSpec.id}: registered launcher command differs from the managed command; run goat-flow hooks sync`,
+  });
+  return 1;
+}
+
+/**
+ * Compare one supported host timeout with the window setup gives the user today.
+ * A mismatch adds the exact hook-sync repair to the drift report.
+ */
 function compareManagedHookTimeout(
-  installedConfig: InstalledHookTimeoutConfig,
+  installedConfig: InstalledHookConfig,
   agentIdentifier: AgentId,
   hookSpec: HookSpec,
   findings: DriftFinding[],
 ): number {
   // Agent defaults remain valid when the registry defines no timeout.
   if (hookSpec.timeoutSec === undefined) return 0;
+  // Codex exposes no project hook timeout field; the shared launcher remains its bound.
+  if (agentIdentifier === "codex") return 0;
   // Unsupported lifecycles must not make this agent's audit fail.
   if (hookSpec.unsupportedAgents?.[agentIdentifier]) return 0;
   const matchingCommands: Record<string, unknown>[] = [];
@@ -517,19 +565,29 @@ function compareManagedHookTimeout(
   return 1;
 }
 
-/** Compares every timeout-bearing managed command in one installed agent config. */
-function compareAgentHookTimeouts(
+/**
+ * Compare every managed launcher and supported host timeout for one installed agent.
+ * Use per profile so the drift report names only settings that user can repair.
+ */
+function compareAgentHookRegistrations(
   fs: ReadonlyFS,
   findings: DriftFinding[],
   agentIdentifier: AgentId,
   agentProfile: AgentProfile,
 ): number {
-  const installedConfig = readInstalledHookTimeoutConfig(fs, agentProfile);
+  const installedConfig = readInstalledHookConfig(fs, agentProfile);
   // No installed readable config means setup checks own this user's next action.
   if (installedConfig === null) return 0;
   let checked = 0;
-  // Each registry hook can carry an independent runner timeout.
+  // Each registry hook carries one managed command and, where supported, a host timeout.
   for (const hookSpec of listHookSpecs()) {
+    checked += compareManagedHookCommand(
+      installedConfig,
+      agentIdentifier,
+      agentProfile,
+      hookSpec,
+      findings,
+    );
     checked += compareManagedHookTimeout(
       installedConfig,
       agentIdentifier,
@@ -541,16 +599,15 @@ function compareAgentHookTimeouts(
 }
 
 /**
- * Compare installed managed-command timeouts with the registry value setup will write.
+ * Compare installed managed commands and host timeouts with the values setup will write.
  * Missing registrations remain owned by setup checks; present stale values become actionable drift.
  *
- * @param fs - the audited project's filesystem
- * @param findings - shared list this appends stale timeouts to
- * @param agentFilter - single agent the user asked about; null or omitted checks every agent
- *   they have configured
- * @returns how many timeout values were compared; zero means nothing was registered yet
+ * @param fs - audited project files; an empty project yields no registration checks
+ * @param findings - user-visible drift list; empty means no earlier issue has been found
+ * @param agentFilter - selected agent; null or omitted checks every configured agent
+ * @returns command and timeout comparisons; zero means no managed registration exists yet
  */
-export function compareManagedHookTimeouts(
+export function compareManagedHookRegistrations(
   fs: ReadonlyFS,
   findings: DriftFinding[],
   agentFilter: AgentId | null | undefined,
@@ -558,7 +615,7 @@ export function compareManagedHookTimeouts(
   let checked = 0;
   const manifest = loadManifest();
 
-  // Every installed agent config can carry a runner-specific timeout field.
+  // Every installed agent config can carry a user-visible launcher and host timeout.
   for (const [agentIdentifier, agentProfile] of Object.entries(
     manifest.agents,
   )) {
@@ -566,7 +623,7 @@ export function compareManagedHookTimeouts(
     if (!isAgentId(agentIdentifier)) continue;
     // A selected-agent audit reports only the runner the user asked about.
     if (agentFilter && agentIdentifier !== agentFilter) continue;
-    checked += compareAgentHookTimeouts(
+    checked += compareAgentHookRegistrations(
       fs,
       findings,
       agentIdentifier,

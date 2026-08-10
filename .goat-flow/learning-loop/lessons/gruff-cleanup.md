@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
@@ -95,7 +95,7 @@ last_reviewed: 2026-08-07
 
 **Status:** active | **Created:** 2026-05-31
 
-**Incident count:** 5 | **Latest occurrence:** 2026-08-07
+**Incident count:** 6 | **Latest occurrence:** 2026-08-10
 
 **What happened:** During the gruff naming cleanup, the full `npm test` run reached the installer round-trip fixture and failed its temp-repo preflight because local style gates still had issues: ESLint flagged a non-null assertion in `src/cli/cli-parser.ts`, and Prettier found an unformatted modified contract test.
 
@@ -108,6 +108,8 @@ last_reviewed: 2026-08-07
 **Same-day recurrence:** M02 correctly ran cheap gates before broad tests, and Prettier caught the newly edited `plans-time.ts` before the timing suites. Formatting first prevented a later preflight or round-trip failure; the proof sequence stopped, formatted the file, and re-ran the exact check before continuing.
 
 **Recurrence 2026-08-07:** R2's degradation-list behavior and focused tests passed, but the release-wide format gate later rejected the modified verdict test. Formatting that file and rerunning the same gate cleared the failure before full tests or preflight. Evidence anchor: `test/unit/review-validate-verdict.test.ts` (search: `rejects empty or contradictory degradation flag lists`).
+
+**Recurrence 2026-08-10:** The release-wide format gate found `scripts/check-versions.mjs` unformatted after focused hook tests were green. Because formatting ran before the full regression and preflight, the correction stayed isolated to that file and the exact format check then passed. Evidence anchor: `scripts/check-versions.mjs` (search: `const hookRuntimeTemplates`).
 
 **Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`), `src/cli/plans-time.ts` (search: `beforeMilestoneReplacement`).
 
@@ -170,8 +172,8 @@ last_reviewed: 2026-08-07
 **Status:** active | **Created:** 2026-07-13
 **Decision changed:** Generate one named test per matrix value and keep the assertion in that test callback; shared helpers return evidence instead of hiding assertions.
 **Trigger phase:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-08-07
+**Incident count:** 5
+**Latest occurrence:** 2026-08-09
 
 **What happened:** The first M03 cross-agent install matrix wrapped assertions for all four agents inside two test-level loops. Gruff reported `test-quality.loop-in-test`; moving the work into named per-agent helpers then exposed `test-quality.no-assertions` because the visible test callbacks only called those helpers. The behavior suite passed both shapes, but its TAP output and analyzer evidence could not prove each named case owned an assertion.
 
@@ -182,3 +184,7 @@ last_reviewed: 2026-08-07
 **Recurrence 2026-07-13:** M14's evidence-envelope and local-data contract tests initially asserted matrix values inside test-level loops. Gruff again reported `test-quality.loop-in-test`; named cases restored direct, user-visible failure localization and produced `A`, composite `100`, with 0 findings. Evidence anchors: `test/unit/evidence-envelope.test.ts` (search: `FORBIDDEN_RAW_PAYLOAD_KEYS`) and `test/contract/local-data-contract.test.ts` (search: `LOCAL_STATE_README_ENTRIES`).
 
 **Recurrence 2026-08-07:** M04 initially checked nine staged-only prompt phrases inside one bounded-saver test loop. Direct Gruff analysis reported a new `test-quality.loop-in-test` advisory. Registering one named test per phrase kept a direct assertion and made the failed contract visible in TAP; the focused suite passed 45 tests and the rerun removed the new finding. Evidence anchor: `test/unit/quality-report-contract.test.ts` (search: `keeps bounded-saver prompts free of staged-only guidance`).
+
+**Recurrence 2026-08-09:** Three hook-registration tests each looped over the two shipped playbook copies. Gruff reported three `test-quality.loop-in-test` advisories; one named mirror runner moved iteration out of the tests while assertion callbacks retained path-labelled failures. The rerun reported 0 findings. Evidence: `test/unit/playbook-contract.test.ts` (search: `assertRegistrationCommandForEachPlaybook`).
+
+**Recurrence 2026-08-09:** The hook launcher suite checked six invalid settings and two feedback ceilings inside one test-level loop. Gruff reported `test-quality.loop-in-test`; registering named cases outside the test callbacks gave every value a direct assertion and distinct TAP result. The final focused analysis reported 0 advisories. Evidence anchor: `test/unit/hook-launcher.test.ts` (search: `Separate names show exactly which mistyped user setting`).

@@ -1,13 +1,7 @@
 /**
- * Report assembly, enrichment, and audit-cache I/O behind the dashboard's `/api/audit` and quality routes.
- *
- * Projects raw audit results into the DashboardReport wire shape, layers in compact Home-only
- * learning-loop context (cached in-memory by a content signature with a TTL), and reads/writes the
- * persisted on-disk audit cache. Also builds the deterministic content signatures used to invalidate
- * both caches: the signature must stay stable for identical inputs and change when any tracked file
- * changes, or the dashboard serves stale audits. All filesystem reads here swallow missing/unreadable
- * inputs into stable sentinels so a partial project still produces a report. Routes live in
- * dashboard-audit-routes.ts and dashboard-quality-routes.ts; the wire types in types.ts.
+ * Assembles dashboard audit reports and manages their content-aware caches.
+ * Use when Home, audit, or quality routes need current scores and memory context.
+ * Stable sentinels keep partial projects usable; content signatures prevent stale reports.
  */
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -33,9 +27,7 @@ import {
 import { resolveLocalStatePath } from "./local-paths.js";
 import type { DashboardReport } from "./types.js";
 
-/**
- * Home-card projection of the latest quality report, stripped to display totals.
- */
+/** Home-card projection of the latest quality report, stripped to display totals. */
 interface LatestQualitySummary {
   id: string;
   date: string;
@@ -50,9 +42,7 @@ interface LatestQualitySummary {
   scope: string | null;
 }
 
-/**
- * Compact learning-loop entry shown on the dashboard without loading full files.
- */
+/** Compact learning-loop entry shown without loading the full lesson file. */
 interface RecentLessonSummary {
   title: string;
   created: string | null;
@@ -63,7 +53,6 @@ interface RecentLessonSummary {
 /**
  * Decide whether to collect per-span audit timings for one request. Profiling is gated on both an
  * explicit opt-in and a trust signal so an untrusted caller cannot force the extra timing work.
- *
  * @param url - the request URL; profiling requires the `profile=true` query parameter
  * @param devMode - true when the server runs in dev mode; otherwise the `GOAT_FLOW_AUDIT_PROFILE=1`
  *   environment flag must be set to allow profiling on a packaged server
@@ -540,16 +529,13 @@ export function buildAuditCacheSignature(
 }
 
 /**
- * Attach compact Home-only learning-loop context (loop health plus recent lessons) to a dashboard
- * report, served from a per-project in-memory cache keyed by a content signature with a 60s TTL so
- * repeated Home loads avoid re-scanning `.goat-flow`. Returns a new report; the input is not mutated.
+ * Attach cached learning-loop health and recent lessons to the Home report.
+ * Use after audit so repeated Home loads avoid rescanning unchanged project memory.
  *
- * @param report - the base dashboard report to extend; returned unchanged except for the two added fields
- * @param projectPath - absolute project root whose `.goat-flow` learning-loop content is summarised
- * @param fresh - when true, bypass the cache and recompute (used right after a fresh audit so the
- *   first response reflects current content)
- * @returns a copy of the report with `learningLoop` and `recentLessons` populated; `learningLoop` is
- *   null when the loop directories are absent or unreadable
+ * @param report - base report; empty enrichment fields are replaced when memory is readable
+ * @param projectPath - selected project; empty or unreadable paths produce null loop health
+ * @param fresh - true bypasses cache after a new audit; false may reuse current content
+ * @returns copied report; learningLoop is null when project memory is unavailable
  */
 export function enrichDashboardReport(
   report: DashboardReport,
@@ -583,16 +569,14 @@ export function enrichDashboardReport(
 }
 
 /**
- * Assemble the `/api/audit` DashboardReport from one aggregate audit and the per-agent audits,
- * deriving agent cards from per-agent results and overall scopes/status from the aggregate. Always
- * runs learning-loop enrichment with fresh=true so a newly built report reflects current content.
+ * Assemble the audit response shown across dashboard cards and agent details.
+ * Use after all selected agent audits complete so the UI receives one consistent snapshot.
  *
- * @param auditRpt - the aggregate (dashboard-wide) audit supplying scopes, overall status, and target
- * @param perAgentAudits - one entry per managed agent, each id paired with that agent's audit report;
- *   becomes the per-agent `agentScores` cards
- * @param projectPath - absolute project root, used for the learning-loop enrichment pass
- * @param profiler - optional per-request profiler; when present the enrichment pass is timed as a span
- * @returns the fully populated dashboard report ready to serialise to the client
+ * @param auditRpt - aggregate audit; never null after a completed dashboard audit
+ * @param perAgentAudits - selected agent reports; empty means no agent cards are shown
+ * @param projectPath - selected project; empty paths leave learning-loop enrichment unavailable
+ * @param profiler - optional timings; null or absent omits profiling from the user response
+ * @returns complete dashboard report; agentScores is empty when no agents were selected
  */
 export function buildDashboardReport(
   auditRpt: AuditReport,
@@ -620,6 +604,7 @@ export function buildDashboardReport(
       ...(auditRpt.scopes.harness ? { harness: auditRpt.scopes.harness } : {}),
     },
     overall: auditRpt.overall,
+    hookCoverage: auditRpt.hookCoverage,
     learningLoop: null,
     recentLessons: [],
     target: auditRpt.target,
@@ -633,9 +618,7 @@ export function buildDashboardReport(
 
 const AUDIT_CACHE_FILE = "audit-cache.json";
 
-/**
- * Persisted audit cache schema keyed by package version, config version, and content signature.
- */
+/** Persisted audit cache contract. Invariant: package, config, and content keys match its report. */
 interface AuditCacheEnvelope {
   packageVersion: string;
   configVersion: string;
@@ -658,17 +641,29 @@ function readConfigVersion(projectPath: string): string | null {
   }
 }
 
+/** Recognize a non-null JSON object before the dashboard reads cache properties. */
+function isCacheObject(value: unknown): value is Record<string, unknown> {
+  // Null and primitive cache values cannot provide user-visible report fields.
+  return typeof value === "object" && value !== null;
+}
+
 /** Validate persisted cache JSON before trusting it as a dashboard report. */
 function isAuditCacheEnvelope(value: unknown): value is AuditCacheEnvelope {
-  if (typeof value !== "object" || value === null) return false;
-  const envelope = value as Record<string, unknown>;
+  // Null or primitive cache data cannot carry a dashboard report.
+  if (!isCacheObject(value)) return false;
+  const envelope = value;
+  const cachedReport = envelope.report;
+  const hasCompleteCacheIdentity = [
+    envelope.packageVersion,
+    envelope.configVersion,
+    envelope.cachedAt,
+    envelope.signature,
+  ].every((identityField) => typeof identityField === "string");
   return (
-    typeof envelope.packageVersion === "string" &&
-    typeof envelope.configVersion === "string" &&
-    typeof envelope.cachedAt === "string" &&
-    typeof envelope.signature === "string" &&
-    typeof envelope.report === "object" &&
-    envelope.report !== null
+    hasCompleteCacheIdentity &&
+    isCacheObject(cachedReport) &&
+    "hookCoverage" in cachedReport &&
+    isCacheObject(cachedReport.hookCoverage)
   );
 }
 

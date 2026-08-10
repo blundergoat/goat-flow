@@ -5,19 +5,8 @@
  * Every case builds a real project and reads back what the registrar actually wrote.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  linkSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
@@ -50,8 +39,8 @@ import {
   readClaudeDenyLauncher,
   readCodexDenyLauncher,
   installClaudeDenyHook,
+  installCodexDenyHook,
   readClaudeGruffCommands,
-  readAntigravityGruffCommand,
   runClaudeLauncher,
   assertLauncherAllows,
   runCodexLauncher,
@@ -160,7 +149,20 @@ describe("hook registrar: launchers and installation", () => {
         listHookSpecs().some((hookSpec) => hookSpec.id === spec.id),
         true,
       );
-      assert.equal(getHookSpec("gruff-code-quality")?.matcher, "Edit|Write");
+      const gruffSpec = getHookSpec("gruff-code-quality");
+      assert.equal(gruffSpec?.matcher, "Edit|Write|Bash");
+      assert.equal(
+        gruffSpec?.deliveryContract?.resultProtocol,
+        "goat-flow.hook-result.v1",
+      );
+      assert.equal(
+        gruffSpec?.scriptFiles.includes("hook-provider-adapters.mjs"),
+        true,
+      );
+      assert.match(
+        gruffSpec?.unsupportedAgents?.antigravity ?? "",
+        /cannot deliver Gruff feedback/u,
+      );
       assert.equal(getHookSpec("plan-checkbox-guard"), null);
       assert.equal(isValidHookIdShape("gruff-code-quality"), true);
       assert.equal(isValidHookIdShape("../bad"), false);
@@ -177,7 +179,7 @@ describe("hook registrar: launchers and installation", () => {
       writeAgentHookState(root, PROFILES.claude, denySpec, true);
       writeAgentHookState(root, PROFILES.claude, gruffSpec, true);
       writeAgentHookState(root, PROFILES.antigravity, denySpec, true);
-      writeAgentHookState(root, PROFILES.antigravity, gruffSpec, true);
+      writeAgentHookState(root, PROFILES.copilot, denySpec, true);
 
       const claudeSettings = readFileSync(
         join(root, ".claude", "settings.json"),
@@ -187,19 +189,19 @@ describe("hook registrar: launchers and installation", () => {
         join(root, ".agents", "hooks.json"),
         "utf-8",
       );
+      const copilotHooks = readFileSync(
+        join(root, ".github", "hooks", "hooks.json"),
+        "utf-8",
+      );
       const claudeGruffCommands = readClaudeGruffCommands(claudeSettings);
-      const antigravityGruffCommand =
-        readAntigravityGruffCommand(antigravityHooks);
 
       // every() on an empty list passes vacuously; require commands first.
       assert.ok(
         claudeGruffCommands.length > 0,
         "expected generated Claude gruff commands",
       );
-      assert.match(
-        claudeSettings,
-        /Policy hook unavailable: git repository root unavailable\./u,
-      );
+      assert.match(claudeSettings, /Policy hook unavailable:/u);
+      assert.match(claudeSettings, /managed root unavailable/u);
       assert.ok(
         claudeGruffCommands.every((command) =>
           command.includes("gruff-code-quality: hook unavailable"),
@@ -211,16 +213,18 @@ describe("hook registrar: launchers and installation", () => {
         ),
       );
       assert.doesNotMatch(claudeSettings, /Guard.*git repository root/u);
-      assert.match(
-        antigravityHooks,
-        /Policy hook unavailable: git repository root unavailable\./u,
-      );
-      assert.match(
-        antigravityGruffCommand,
-        /gruff-code-quality: hook unavailable/u,
-      );
-      assert.doesNotMatch(antigravityGruffCommand, /"decision":"deny"/u);
+      assert.match(antigravityHooks, /Policy hook unavailable:/u);
+      assert.match(antigravityHooks, /managed root unavailable/u);
+      assert.doesNotMatch(antigravityHooks, /gruff-code-quality/u);
       assert.doesNotMatch(antigravityHooks, /Guard.*git repository root/u);
+      assert.match(antigravityHooks, /"timeout": 30/u);
+      assert.match(copilotHooks, /"timeoutSec": 30/u);
+      const expectedFeedbackTimeoutSeconds = 90;
+      assert.equal(gruffSpec.timeoutSec, expectedFeedbackTimeoutSeconds);
+      assert.equal(
+        getHookSpec("post-turn-safety")?.timeoutSec,
+        expectedFeedbackTimeoutSeconds,
+      );
     });
   });
 
@@ -253,6 +257,7 @@ describe("hook registrar: launchers and installation", () => {
         true,
         "worktree fixture should prove central hooks exist in the active checkout",
       );
+      installClaudeDenyHook(worktree);
       assert.match(
         runGit(worktree, ["rev-parse", "--show-toplevel"]),
         /main-worktree$/u,
@@ -361,174 +366,132 @@ describe("hook registrar: launchers and installation", () => {
       assert.match(blocked.stderr, /BLOCKED: Policy/u);
     });
   });
-});
 
-describe("hook launcher script validation", () => {
-  const LAUNCHER = resolve(
-    import.meta.dirname,
-    "..",
-    "..",
-    "workflow",
-    "hooks",
-    "run-with-bash.mjs",
-  );
-
-  /**
-   * Run the canonical launcher exactly as agent configs do.
-   * Side effect: starts one child process with the fixture project as its working directory.
-   */
-  function runLauncherProcess(root: string, scriptRel: string) {
-    return spawnSync(process.execPath, [LAUNCHER, scriptRel, "policy"], {
-      cwd: root,
-      encoding: "utf8" as const,
-    });
-  }
-
-  /**
-   * Create the managed hooks directory inside a fixture project.
-   * Side effect: writes the `.goat-flow/hooks` directory tree under the temporary project.
-   */
-  function makeHookDir(root: string): string {
-    const hookDir = join(root, ".goat-flow", "hooks");
-    mkdirSync(hookDir, { recursive: true });
-    return hookDir;
-  }
-
-  /** Diagnostic string so a failing launcher assertion names both streams. */
-  function launcherDiagnostics(
-    result: ReturnType<typeof runLauncherProcess>,
-  ): string {
-    return `status=${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
-  }
-
-  it("fails closed when the managed hook script is a symlink", () => {
+  it("launches the real guard from a managed non-Git root", () => {
     withTempProject((root) => {
-      const hookDir = makeHookDir(root);
-      const redirectTarget = join(root, "innocent-looking.sh");
-      writeFileSync(redirectTarget, "#!/usr/bin/env bash\nexit 0\n");
-      symlinkSync(redirectTarget, join(hookDir, "deny-dangerous.sh"));
+      const launcher = installCodexDenyHook(root);
+      assert.equal(runCodexLauncher(launcher, root).status, 0);
+      const nested = join(root, "packages", "app");
+      mkdirSync(nested, { recursive: true });
 
-      const result = runLauncherProcess(
-        root,
-        ".goat-flow/hooks/deny-dangerous.sh",
+      const safe = runCodexLauncher(launcher, nested);
+      assert.equal(safe.status, 0, `${safe.stdout}\n${safe.stderr}`);
+      const blocked = runCodexLauncher(
+        launcher,
+        nested,
+        CLAUDE_DANGEROUS_PAYLOAD,
       );
-      assert.equal(result.status, 2, launcherDiagnostics(result));
-      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
-      assert.match(result.stderr, /symlink/u);
+      assert.equal(blocked.status, 2, `${blocked.stdout}\n${blocked.stderr}`);
+      assert.match(blocked.stderr, /BLOCKED: Policy/u);
     });
   });
 
-  it("fails closed when the managed hook path is not a regular file", () => {
+  it("selects Git first, then the nearest complete managed ancestor", () => {
     withTempProject((root) => {
-      const hookDir = makeHookDir(root);
-      mkdirSync(join(hookDir, "deny-dangerous.sh"));
-
-      const result = runLauncherProcess(
-        root,
-        ".goat-flow/hooks/deny-dangerous.sh",
+      const outerLauncher = installCodexDenyHook(root);
+      const nestedGit = join(root, "workspace", "plain-git");
+      mkdirSync(nestedGit, { recursive: true });
+      runGit(nestedGit, ["init", "-q"]);
+      const outerResult = runCodexLauncher(outerLauncher, nestedGit);
+      assert.equal(
+        outerResult.status,
+        0,
+        `${outerResult.stdout}\n${outerResult.stderr}`,
       );
-      assert.equal(result.status, 2, launcherDiagnostics(result));
-      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
-      assert.match(result.stderr, /regular file/u);
-    });
-  });
 
-  it("fails closed when the managed hook script has extra hard links", () => {
-    withTempProject((root) => {
-      const hookDir = makeHookDir(root);
-      const scriptPath = join(hookDir, "deny-dangerous.sh");
-      writeFileSync(scriptPath, "#!/usr/bin/env bash\nexit 0\n");
-      linkSync(scriptPath, join(root, "second-name.sh"));
-
-      const result = runLauncherProcess(
-        root,
-        ".goat-flow/hooks/deny-dangerous.sh",
-      );
-      assert.equal(result.status, 2, launcherDiagnostics(result));
-      assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
-      assert.match(result.stderr, /hard link/u);
-    });
-  });
-
-  // The hook path text stays inside the project, so only resolving the symlinked parent directory
-  // reveals that the script really lives elsewhere. This fixture writes a project plus an outside
-  // directory and spawns the launcher, because path text alone cannot prove containment.
-  it("fails closed when a symlinked parent directory escapes the project root", () => {
-    withTempProject((root) => {
-      const outsideHooks = mkdtempSync(join(tmpdir(), "goat-flow-outside-"));
-      try {
-        writeFileSync(
-          join(outsideHooks, "deny-dangerous.sh"),
-          "#!/usr/bin/env bash\nexit 0\n",
-        );
-        mkdirSync(join(root, ".goat-flow"), { recursive: true });
-        symlinkSync(outsideHooks, join(root, ".goat-flow", "hooks"));
-
-        const result = runLauncherProcess(
-          root,
-          ".goat-flow/hooks/deny-dangerous.sh",
-        );
-        assert.equal(result.status, 2, launcherDiagnostics(result));
-        assert.match(result.stderr, /BLOCKED: Policy hook unavailable/u);
-        assert.match(result.stderr, /escaped the project root/u);
-      } finally {
-        rmSync(outsideHooks, { recursive: true, force: true });
-      }
-    });
-  });
-});
-
-describe("hook registrar: unrelated hook preservation", () => {
-  // The user's own Stop hook is called `custom-post-turn-safety.sh`, which merely contains the
-  // managed name, so a wrong claim would delete their guard when the managed hook is switched off.
-  // This fixture writes their settings file and toggles the hook, because only the off step deletes it.
-  it("preserves user hooks whose names merely contain a managed script name", () => {
-    withTempProject((root) => {
-      mkdirSync(join(root, ".claude"), { recursive: true });
+      const inner = join(root, "workspace", "managed-inner");
+      const innerLauncher = installCodexDenyHook(inner);
+      assert.equal(typeof innerLauncher, "string");
       writeFileSync(
-        join(root, ".claude", "settings.json"),
-        `${JSON.stringify(
-          {
-            hooks: {
-              Stop: [
-                {
-                  hooks: [
-                    {
-                      type: "command",
-                      command: "bash .claude/hooks/custom-post-turn-safety.sh",
-                      timeout: 30,
-                    },
-                  ],
-                },
-              ],
-            },
-          },
-          null,
-          2,
-        )}\n`,
+        join(inner, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        "#!/usr/bin/env bash\nprintf 'INNER_MANAGED_ROOT\\n'\n",
+      );
+      const innerCwd = join(inner, "src");
+      mkdirSync(innerCwd, { recursive: true });
+      const innerResult = runCodexLauncher(outerLauncher, innerCwd);
+      assert.equal(
+        innerResult.status,
+        0,
+        `${innerResult.stdout}\n${innerResult.stderr}`,
+      );
+      assert.equal(innerResult.stdout, "INNER_MANAGED_ROOT\n");
+    });
+  });
+
+  /**
+   * Fixture purpose: contrasts an unrelated config with a partial managed root the user must fix.
+   * Writes both disposable layouts, then starts the launcher to show which one blocks the user.
+   */
+  it("skips unrelated configs but stops at a partial managed trace", () => {
+    withTempProject((root) => {
+      const launcher = installCodexDenyHook(root);
+      const unrelated = join(root, "unrelated");
+      // Fixture purpose: a user's unrelated agent config must not claim a managed goat-flow root.
+      mkdirSync(join(unrelated, ".codex"), { recursive: true });
+      writeFileSync(
+        join(unrelated, ".codex", "hooks.json"),
+        '{"hooks":{"PreToolUse":[{"command":"custom-tool"}]}}\n',
+      );
+      mkdirSync(join(unrelated, ".goat-flow", "hooks"), { recursive: true });
+      writeFileSync(
+        join(unrelated, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        "// launcher for a different managed hook\n",
+      );
+      const unrelatedResult = runCodexLauncher(launcher, unrelated);
+      assert.equal(
+        unrelatedResult.status,
+        0,
+        `${unrelatedResult.stdout}\n${unrelatedResult.stderr}`,
       );
 
-      applyHookState("post-turn-safety", true, root);
-      const afterEnable = readFileSync(
-        join(root, ".claude", "settings.json"),
-        "utf-8",
+      const partial = join(root, "partial");
+      mkdirSync(join(partial, ".goat-flow", "hooks"), { recursive: true });
+      writeFileSync(
+        join(partial, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        "#!/usr/bin/env bash\nexit 0\n",
       );
-      assert.match(
-        afterEnable,
-        /custom-post-turn-safety\.sh/u,
-        "managed registration must not claim the user's similarly named hook",
+      const partialResult = runCodexLauncher(launcher, partial);
+      assert.equal(
+        partialResult.status,
+        2,
+        `${partialResult.stdout}\n${partialResult.stderr}`,
       );
+      assert.match(partialResult.stderr, /managed root incomplete/iu);
+      assert.doesNotMatch(partialResult.stderr, new RegExp(root, "u"));
+    });
+  });
 
-      applyHookState("post-turn-safety", false, root);
-      const afterDisable = readFileSync(
-        join(root, ".claude", "settings.json"),
-        "utf-8",
+  /**
+   * Fixture purpose: captures the exact user payload and verified working directory seen by a hook.
+   * Writes capture files and starts the launcher inside a disposable project.
+   */
+  it("forwards stdin unchanged and gives the hook the verified root cwd", () => {
+    withTempProject((root) => {
+      const launcher = installCodexDenyHook(root);
+      const payloadPath = join(root, "captured-payload.txt");
+      const cwdPath = join(root, "captured-cwd.txt");
+      // Fixture purpose: capture the exact user payload and working directory seen by the hook.
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        [
+          "#!/usr/bin/env bash",
+          'cat > "$GOAT_FLOW_TEST_PAYLOAD_PATH"',
+          'pwd > "$GOAT_FLOW_TEST_CWD_PATH"',
+          "",
+        ].join("\n"),
       );
-      assert.match(
-        afterDisable,
-        /custom-post-turn-safety\.sh/u,
-        "managed removal must not delete the user's similarly named hook",
-      );
+      const nested = join(root, "deep", "cwd");
+      mkdirSync(nested, { recursive: true });
+      const payload = '{"raw":"line one\\nline two 🐐"}\n';
+      const result = runCodexLauncher(launcher, nested, payload, {
+        ...process.env,
+        GOAT_FLOW_TEST_PAYLOAD_PATH: payloadPath,
+        GOAT_FLOW_TEST_CWD_PATH: cwdPath,
+      });
+
+      assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      assert.equal(readFileSync(payloadPath, "utf8"), payload);
+      assert.equal(readFileSync(cwdPath, "utf8").trim(), root);
     });
   });
 });

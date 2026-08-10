@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-11
 ---
 
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
@@ -81,9 +81,11 @@ last_reviewed: 2026-08-07
 **Status:** active | **Created:** 2026-08-02 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Gate an evidence artifact's shape on whether something claims authority from it, not on its mere presence.
 **Trigger phase:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-08-04
+**Incident count:** 5 | **Latest occurrence:** 2026-08-09
 
-**Symptoms:** A milestone that passed strict validation for weeks starts failing after an unrelated release. The errors name an artifact the milestone does not depend on - here, five `timing receipt ... inconsistent` errors on a `complete` goat-debug-improve milestone whose Actual is `retrospective` and cites no receipt at all. Separately, a seven-cell timing row was silently skipped and a receipt containing `S01` plus `S03` allocated `S03` again because the writer used row count as identity authority. In a later change, the receipt parser correctly diagnosed a summary on an active receipt, but strict checking first exited 0 because the new message did not begin with the classifier's `timing receipt` prefix. After that prefix was corrected, paused and incomplete receipts still exited 0 because general receipt warnings become fatal only for a live clock or claimed Actual. Each failure surfaced late because parser behavior was not verified through every policy-owning consumer state.
+**Symptoms:** A milestone that passed strict validation for weeks starts failing after an unrelated release. The errors name an artifact the milestone does not depend on - here, five `timing receipt ... inconsistent` errors on a completed milestone whose Actual is `retrospective` and cites no receipt at all. Separately, a seven-cell timing row was silently skipped and a receipt containing `S01` plus `S03` allocated `S03` again because the writer used row count as identity authority. In a later change, the receipt parser correctly diagnosed a summary on an active receipt, but strict checking first exited 0 because the new message did not begin with the classifier's `timing receipt` prefix. After that prefix was corrected, paused and incomplete receipts still exited 0 because general receipt warnings become fatal only for a live clock or claimed Actual. Each failure surfaced late because parser behavior was not verified through every policy-owning consumer state.
+
+**Recurrence (2026-08-09):** A hand-finalized receipt closed every segment and changed its state but omitted `Recorded seconds` and `Allocated minutes`. Strict checking rejected the measured Actual because the state label alone cannot prove its totals. Use the canonical finalize transition or include its complete summary shape. Evidence anchors: `src/cli/plans-time-receipt.ts` (search: `finalized timing receipt requires a summary`) and `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).
 
 **Why it happens:** `src/cli/plans-time-receipt.ts` (search: `export function parseTimingReceiptMarkdown`) defines a receipt grammar requiring a `State` column and a `**Receipt state:**` header. Hand-written receipts predating the CLI used a free-text `Work` column instead. `src/cli/plans-check.ts` (search: `function isValidationWarning`) classifies receipt diagnostics with `warning.startsWith("timing receipt")`; message text is therefore part of the routing contract, not presentation alone. That classifier previously promoted every matching warning to a strict error regardless of whether any Actual cited the receipt. On the live workflow path, `readTimingDataColumns` treated a table-shaped wrong-width row as unrelated prose, and `nextSegmentId` derived identity from `segments.length` instead of the highest canonical suffix.
 
@@ -117,6 +119,27 @@ last_reviewed: 2026-08-07
 
 ---
 
+
+---
+
+## Footgun: goat-review report grammar fails only at validate time, after the ledger is already persisted
+
+**Status:** active | **Created:** 2026-08-11 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Draft the Review Integrity block and refutation ledger against the validator's field grammar before redacting them to disk, because a rejected ledger has to be rewritten, re-redacted, and re-persisted under a new random path.
+**Trigger phase:** VERIFY
+
+**Symptoms:** `goat-flow review validate` exits 1 on a finished review whose content is correct. Three rules produced it in one session: a refutation ledger record was rejected for not matching the one-line grammar, the `Verdicts:` counts were rejected as inconsistent with the findings list, and a scope-snapshot value was rejected despite naming every required field.
+
+**Why it happens:** The ledger record grammar in `src/cli/review-validate-common.ts` splits on `|`, so any suspicion or evidence text containing a literal pipe creates extra fields and fails the record. Reviewing shell code is exactly when a reviewer writes `curl|bash` or `curl|tar` into a record, so the collision is most likely on the material the grammar is most needed for. Two adjacent rules compound it. Every ledger line is parsed as a record, so a human-readable title line above the records fails as record 1. The `Verdicts: <c>/<a>/<r>/<u>` line is cross-checked against the visible findings, so counting a suspicion that stayed unresolved without becoming a finding makes the integrity block contradict the report. All three surface only at the final Proof Gate, after the ledger has been written through the redactor.
+
+**Evidence:** Measured 2026-08-11 while reviewing PR #58. First run: `review validate: FAIL (3 violations)` covering `V5/integrity-format` twice and `V8/refutation-ledger` once. Rewriting pipe-bearing prose as `curl-into-bash`, dropping the ledger title line, reconciling `Verdicts: 5/0/13/0` with five findings, and replacing a bare filename anchor with its repository-relative path produced `review validate: PASS`. The bare-filename anchor also failed as `V1/anchor-unresolved` because anchors are resolved against the declared head OID.
+
+**Prevention:**
+1. Write pipeline examples in ledger records as prose (`curl into bash`) or a fenced form the grammar does not split. Reserve `|` for the field separator.
+2. Start the ledger file at the first record. Put provenance in the report's Review Integrity line, which already names the ledger path.
+3. Keep `Verdicts:` consistent with the findings list: confirmed, adjusted, and unresolved together must equal the visible findings. Record a suspicion that was neither confirmed nor turned into a finding in the automated-review provenance line instead.
+4. Use repository-relative paths in every anchor. A bare filename cannot be read from the declared head OID even when it is unambiguous in the working tree.
+5. Run the validator against a draft before persisting durable artifacts, so a grammar failure costs an edit rather than a redact-and-repersist cycle.
 
 ---
 

@@ -1,9 +1,8 @@
 /**
- * Audit checks comparing installed agent deny hooks against the canonical templates
- * with stubbed filesystems: exact configured commands pointing at stale paths,
- * launcher-string bypasses, legacy per-agent mirrors, installed-template drift,
- * a missing shared self-test, the Copilot JSON runtime smoke, and the
- * exact-match pass case.
+ * Covers deny-hook audit results a user sees for current and stale installations.
+ * Use when launcher identity, runtime policy probes, or agent response formats change.
+ * Real non-Git Codex fixtures separate working policy from startup and timeout failures.
+ * Stubbed configurations retain coverage for legacy paths and every supported agent.
  */
 import {
   AGENT_CHECKS,
@@ -18,6 +17,73 @@ import {
   stubAgentFacts,
   stubFS,
 } from "./helpers.js";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { createFS } from "../../../src/cli/facts/fs.js";
+import { checkHookRuntimeSmoke } from "../../../src/cli/audit/check-agent-deny-runtime.js";
+import { applyHookState } from "../../../src/cli/server/hook-registrar.js";
+import { withTempProject } from "../hook-registrar.helpers.js";
+
+/**
+ * Build a real non-Git Codex install and pass it to one runtime-audit assertion.
+ * Use when the configured launcher itself, rather than a direct script substitute, matters.
+ */
+function withRealCodexAudit(
+  runAuditAssertion: (
+    targetProjectPath: string,
+    auditContext: ReturnType<typeof makeCtx>,
+  ) => void,
+): void {
+  withTempProject((targetProjectPath) => {
+    mkdirSync(join(targetProjectPath, ".codex"), { recursive: true });
+    writeFileSync(join(targetProjectPath, ".codex", "config.toml"), "");
+    applyHookState("deny-dangerous", true, targetProjectPath);
+    const auditContext = makeCtx({
+      agentFilter: "codex",
+      projectPath: targetProjectPath,
+      agents: [
+        stubAgentFacts({
+          agent: PROFILES.codex,
+          settings: {
+            exists: true,
+            valid: true,
+            parsed: {},
+            hasDenyPatterns: false,
+          },
+          hooks: {
+            ...stubAgentFacts().hooks,
+            denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+            readDenyCoversSecrets: false,
+          },
+        }),
+      ],
+      fs: createFS(targetProjectPath),
+    });
+    runAuditAssertion(targetProjectPath, auditContext);
+  });
+}
+
+/**
+ * Temporarily lower the shared launcher deadline for one timeout assertion.
+ * The previous user environment is restored even when the assertion throws.
+ */
+function withHookLaunchTimeout(
+  timeoutMilliseconds: string,
+  runTimeoutAssertion: () => void,
+): void {
+  const previousTimeout = process.env.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS;
+  process.env.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS = timeoutMilliseconds;
+  try {
+    runTimeoutAssertion();
+  } finally {
+    // No prior override means the user's environment returns to its original empty state.
+    if (previousTimeout === undefined) {
+      delete process.env.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS;
+    } else {
+      process.env.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS = previousTimeout;
+    }
+  }
+}
 
 describe("agent deny hook template comparison", () => {
   const denyCheck = AGENT_CHECKS.find(
@@ -81,6 +147,58 @@ describe("agent deny hook template comparison", () => {
     };
     return readInstalledGuardrail;
   }
+
+  it("replays literal non-Git launchers and separates policy results from unavailability", () => {
+    withRealCodexAudit((targetProjectPath, auditContext) => {
+      assert.equal(existsSync(join(targetProjectPath, ".git")), false);
+      assert.equal(checkHookRuntimeSmoke(auditContext), null);
+    });
+
+    withRealCodexAudit((targetProjectPath, auditContext) => {
+      writeFileSync(
+        join(targetProjectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        [
+          "#!/usr/bin/env bash",
+          'payload="$(cat)"',
+          "# A safe user command is falsely rejected, which the audit must expose.",
+          'if [[ "$payload" == *"echo safe"* ]]; then',
+          "  printf 'BLOCKED: Policy destructive: safe fixture rejected\\n' >&2",
+          "  exit 2",
+          "fi",
+          "printf 'BLOCKED: Policy repository: fixture deny\\n' >&2",
+          "exit 2",
+          "",
+        ].join("\n"),
+      );
+      const failure = checkHookRuntimeSmoke(auditContext);
+      assert.ok(
+        failure,
+        "safe false denial must fail configured-command audit",
+      );
+      assert.match(failure.message, /allow/u);
+    });
+
+    withRealCodexAudit((targetProjectPath, auditContext) => {
+      unlinkSync(
+        join(targetProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+      );
+      const failure = checkHookRuntimeSmoke(auditContext);
+      assert.ok(failure, "missing launcher must not look like policy denial");
+      assert.match(failure.message, /unavailable|expected/iu);
+    });
+
+    withRealCodexAudit((targetProjectPath, auditContext) => {
+      writeFileSync(
+        join(targetProjectPath, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        "#!/usr/bin/env bash\nsleep 2\nprintf 'BLOCKED: Policy repository: late fixture deny\\n' >&2\nexit 2\n",
+      );
+      withHookLaunchTimeout("1", () => {
+        const failure = checkHookRuntimeSmoke(auditContext);
+        assert.ok(failure, "launcher timeout must not look like policy denial");
+        assert.match(failure.message, /timeout|expected/iu);
+      });
+    });
+  });
 
   it("fails when an exact configured hook command points at a stale path", () => {
     assert.ok(denyCheck, "agent deny check should exist");

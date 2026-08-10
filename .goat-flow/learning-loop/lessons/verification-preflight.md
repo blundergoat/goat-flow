@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -99,11 +99,13 @@ last_reviewed: 2026-08-07
 
 **Recurrences (2026-07-13, 2026-07-18, 2026-07-19, 2026-08-01):** M04/M09 contracts, the skill-quality truncation fixes, M07 setup-truth contracts, M10 scaffold/drift regressions, and the review-validator relationship corpus each reached behavioral GREEN before scoped Prettier rejected touched TypeScript. Evidence anchors: `test/contract/skill-hardening-shared-3.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`), `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`), and `test/unit/review-validate-verdict.test.ts` (search: `structuralValidationCases`).
 
-**Recurrences (2026-08-03, 2026-08-07):** Review/critique, writing-style, and M01 reached focused GREEN before Prettier rejected tests. M02-M05 ran the formatter first; it caught prompt and launch-test formatting before proof. Evidence anchors: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), and `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`).
+**Recurrences (2026-08-03, 2026-08-07, 2026-08-09):** A later skill-contract batch repeated the focused-GREEN-before-Prettier failure; following batches formatted first. Evidence anchors: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`), and `test/integration/post-turn-safety-hook.helpers.ts` (search: `withCommandShim`).
 
-**Prevention:** Format touched TypeScript before focused claims, then keep `prettier --check` in the verification bundle.
+**2026-08-09 hook-contract evidence:** `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`); `test/contract/skill-hardening-skills-2.test.ts` (search: `truthful goat-critique`); `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 10 | **Latest occurrence:** 2026-08-07
+**Prevention:** Format touched TypeScript before focused proof; retain Prettier in final verification.
+
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 14 | **Latest occurrence:** 2026-08-09
 
 ---
 
@@ -115,37 +117,39 @@ last_reviewed: 2026-08-07
 
 **Root cause:** Focused behavior tests and typecheck do not run the full-source lint and format gates that the copied checkout enforces.
 
-**Prevention:** Before rerunning npm run test:slow after prompt or test changes, run npx eslint src/cli src/dashboard and npm run format:check in the source checkout. Reproduce a reported gate directly before changing installer or drift logic. Evidence anchors: src/cli/prompt/compose-quality-common.ts (search: appendScopeSummary), src/cli/audit/check-agent-deny-runtime.ts (search: runConfiguredHookCommandSmoke), test/unit/quality-report-contract.test.ts (search: embeds drift and content failures).
+**Prevention:** Before slow installer tests, run the supported source ESLint and format gates. Reproduce a failure directly before changing installer or drift logic. Evidence anchors: `src/cli/prompt/compose-quality-common.ts` (search: `appendScopeSummary`), `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`), and `test/unit/quality-report-contract.test.ts` (search: `embeds drift and content failures`).
 
 ---
 
 ## Lesson: Final verification gates need supported scopes and captured logs
 
-**Status:** active | **Created:** 2026-05-19
+**Status:** active | **Created:** 2026-05-19 | **Incident count:** 3 | **Latest occurrence:** 2026-08-09
 
-**What happened:** During the M30-M34 closeout, I ran an ad hoc ESLint command that included ignored test files and a `.mjs` helper outside the TypeScript ESLint project, producing a tooling failure unrelated to the code change. The same final-gate bundle ran `npm test` in parallel with other expensive checks; it reported one failing test but the returned output did not include the failing block. A clean rerun with output captured to a temp log passed (`# tests 881`, `# pass 881`, `# fail 0`).
+**What happened:** Several closeouts sent ignored tests or workflow `.mjs` files to TypeScript-only ESLint. One also ran `npm test` beside expensive checks and lost the failing block; a captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
 
 **Root cause:** I mixed repo-supported verification scopes with improvised paths and treated parallel final gates as interchangeable with a clean final evidence run. That made the first failure ambiguous and forced a rerun to recover the actual evidence.
+
+**Recurrence update (2026-08-09):** A runtime-adapter check again sent workflow `.mjs` to TypeScript-only ESLint. Workflow modules instead use `node --check`, Prettier, targeted Gruff, runtime fixtures, and preflight. Evidence anchors: `workflow/hooks/hook-provider-adapters.mjs` (search: `Decodes bounded provider-neutral hook results`) and `scripts/preflight-checks.sh` (search: `lint_targets[@]`).
 
 **Recurrence update (2026-05-19):** The same closeout also added a dashboard markdown performance sanity test whose 500KB fixture was newline-heavy. Focused runs passed, but preflight's concurrent fast-suite runner exceeded the 100ms budget. The fixture still needed to be 500KB, but it needed to measure plain markdown throughput rather than line-break parsing stress.
 
 **Recurrence update (2026-05-26, 2026-06-14):** The same dashboard markdown performance sanity test (test/unit/dashboard-markdown.test.ts, since removed in 1.13.0 with the markdown viewer) passed standalone and in `npm test`, but failed under preflight's `npm run test:coverage` because Node's coverage instrumentation and full-suite concurrency pushed the 500KB render over hard 100ms/250ms budgets (`expected <100ms, got 115ms` and later `159ms`; the full preflight still needed the retry path at 250ms). A later fixed `750ms` ceiling was still machine-sensitive, so the test now compares the 500KB render against a same-process 100KB baseline with a generous floor.
 
-**Recurrence update (2026-05-19):** M01 commit-guidance work added a new helper and tests. Focused `npx tsc --noEmit` and the new test file passed, but the first full preflight failed in the TypeScript gate: `Knip: 2 unused exports/types`. The exported names were internal helper types, not public API. Removing the unnecessary `export` keywords fixed `npx knip`. Evidence anchor: `src/cli/prompt/commit-guidance.ts` (search: `type CommitGuidanceStatus`).
+**Recurrence updates (2026-05-19, 2026-08-08):** Commit-guidance helpers passed focused tests but failed full preflight with `Knip: 2 unused exports/types`; making internal types private fixed it. Later, removing the history detector removed the cited `CommitGuidanceStatus`, so the audit suite failed on a stale learning-loop anchor. Keeping that type as the template-copy result status fixed the reference. Run `goat-flow stats --check` before deleting cited symbols. Evidence anchor: `src/cli/prompt/commit-guidance.ts` (search: `type CommitGuidanceStatus`).
 
 **Recurrence update (2026-07-03):** 1.13.0 milestones each passed their per-file scoped gates, yet the closing `npm run publish:check` failed three ways only a full-tree run surfaces: (1) an integration assertion still matched a CDN string after an asset was vendored locally (`test/integration/dashboard-server.test.ts`, `alpinejs@3` → `/assets/alpine.js`); (2) `appendQualityReportContract` shipped at complexity 21 because scoped eslint had only run the file's own diff, never the whole `src/cli` tree - as in the M01 recurrence above, route branchy `full ? a : b` / `if (full)` lines through small `pushVariant`/`pushFull` helpers so each decision sits in the helper's scope; (3) deleting the `coming-soon` dashboard view left its name in three prose lists (`.goat-flow/code-map.md`, `docs/dashboard.md`, `.goat-flow/architecture.md`) and orphaned 7 backticked learning-loop refs, tripping the round-trip fixture's embedded preflight. Prevention: when a milestone deletes files, moves symbols between modules, or swaps a served asset, run `npm run publish:check` as the FINAL gate - the fast suite and scoped eslint do not exercise full-tree complexity, cold-path doc drift, or learning-loop ref integrity.
 
-**Recurrence update (2026-07-12):** M02 policy-contract verification ran targeted ESLint against `test/contract/command-phrases.test.ts`; the normal command returned only an ignored-file warning, and `--no-ignore` then failed because the test is outside ESLint's configured TypeScript project. The focused Node test and `npm run typecheck` were the supported gates. After those two failed attempts, verification rewound to the repository-supported scopes instead of forcing ad hoc lint coverage. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`).
+**Recurrences (2026-07-12, 2026-08-09):** Two hook-contract batches aimed ESLint at ignored tests; `--no-ignore` then failed outside the parser project. One also omitted Gruff's `analyse` subcommand. Supported Node tests, typecheck, Prettier, and `gruff-ts analyse <file>` produced valid evidence. Anchors: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`); `test/unit/playbook-contract.test.ts` (search: `assertRegistrationCommandForEachPlaybook`).
 
-**Recurrence update (2026-07-12):** M29's testing gate again listed ignored unit/integration test files in a targeted `npx eslint --max-warnings 0` command. ESLint reported three ignored-file warnings and exited 1 even though the changed source had no lint error. The gate was corrected to lint only the three changed `src/cli/audit/` files; TypeScript, Prettier, and focused Node tests remain the supported verification for the ignored test files. Evidence anchor: `eslint.config.mjs` (search: `"test/**"`) - test files are intentionally outside this repo's ESLint scope.
+**Recurrence update (2026-07-12):** A later testing gate listed ignored unit and integration files in `npx eslint --max-warnings 0`. The corrected gate linted only the changed `src/cli/audit/` files; TypeScript, Prettier, and focused Node tests cover ignored tests. Evidence anchor: `eslint.config.mjs` (search: `"test/**"`).
 
-**Recurrence update (2026-07-13):** M20 hit Prettier on three files, ESLint on tests outside its project, and Knip on four internal type exports. Correction used formatting, scoped source lint/tests, and private types. Evidence: `test/unit/context-report.test.ts` (search: `static context report`).
+**Recurrence update (2026-07-13):** A context-report gate hit Prettier on three files, ESLint on out-of-project tests, and Knip on four internal exports. Formatting, scoped source lint/tests, and private types cleared it. Evidence: `test/unit/context-report.test.ts` (search: `static context report`).
 
-**Recurrence update (2026-07-31):** M05/M06 caught four scope mismatches: ESLint complexity, a Node directory target, a probe without `PATH`, and stale smoke expectations after terminal env cleanup. Fixes extracted a helper, targeted `*.test.ts` (91/91), reused `process.env`, and aligned the smoke contract (20/20). Evidence: `src/cli/audit/check-factual-claims.ts` and `test/smoke/dashboard-endpoints.test.ts` (search: `GOAT_CLAUDE_REPORTING_SETTINGS`).
+**Recurrence update (2026-07-31):** Two audit batches caught ESLint complexity, a Node directory target, a probe without `PATH`, and stale terminal-env smoke expectations. Fixes extracted a helper, targeted `*.test.ts` (91/91), reused `process.env`, and aligned the smoke contract (20/20). Evidence: `src/cli/audit/check-factual-claims.ts` and `test/smoke/dashboard-endpoints.test.ts` (search: `GOAT_CLAUDE_REPORTING_SETTINGS`).
 
 **Recurrence update (2026-08-07):** An EXIT-trap cleanup made the executor reject M05's `test:fast` wrapper before npm ran. Retaining the printed `mktemp` log produced `1580` pass / `0` fail. Gate wrappers no longer bundle destructive cleanup.
 
-**Prevention:** Use the repo's supported scopes for final gates (`npx eslint src/cli src/dashboard`, `npm run format:check`, `npx knip --no-progress`). Run full `npm test` alone or capture it to a log before starting parallel expensive checks. When Knip reports configuration hints after a dependency starts being used for real, remove the temporary ignore entry instead of carrying it forward. For performance sanity tests that run in the default fast suite and preflight coverage suite, keep fixtures representative and prefer same-process relative budgets over fixed local-run ceilings. Evidence anchors: `package.json` (search: `test:fast`), `knip.json` (search: `ignoreDependencies`).
+**Prevention:** Use supported final scopes: `npx eslint src/cli src/dashboard`, `npm run format:check`, and `npx knip --no-progress`. Run full tests alone or capture their log before parallel gates. Remove obsolete Knip ignores, and use representative fixtures with same-process relative performance budgets. Evidence anchors: `package.json` (search: `test:fast`) and `knip.json` (search: `ignoreDependencies`).
 
 ---
 
@@ -247,11 +251,15 @@ last_reviewed: 2026-08-07
 
 **What happened:** Multiple verification failures came from citing paths that were not durable repo truth: gitignored task files in ADRs, ignored `.goat-flow` paths hidden by normal `rg`, unresolved optional skill-path examples, and fake external PR paths formatted as repo-local code spans.
 
-**Recurrence update (2026-05-27):** During the M11 learning-loop consolidation, `stats --check` passed after lesson files were merged and renamed, but the targeted audit unit suite failed with `Invalid audit check provenance` because `src/cli/audit/harness/check-context.ts` still cited the deleted `auditor-and-rubric.md` lesson, and `src/cli/audit/harness/check-verification.ts` still cited the deleted `verification-review.md` and `agent-behavior-trust.md` lessons. The markdown cross-reference grep was clean; the stale paths lived in code-owned provenance metadata.
+**2026-05-27:** Lesson renames left deleted paths in code-owned audit provenance even though Markdown greps passed. Evidence: `src/cli/audit/harness/check-context.ts` (search: `boundary-guidance-present`).
 
 **Recurrences (2026-06-10, 2026-07-19):** `stats --check` caught `bucket-size` after Step 0 and M07 recurrence edits crossed `BUCKET_SIZE_WARN_BYTES`; the first run also caught a bare-path `stale-ref`. Both fixes compacted redundant wording, preserved anchors, regenerated indexes, and reran stats. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Step 0 retrieval was advisory`) and `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
 
 **Recurrence update (2026-08-04):** A broad Markdown evidence scan initially admitted a gitignored nested plan README; adversarial review also exposed a permissive log-README rule and omitted tool-cache roots. The gate now admits only enumerated committed local-state READMEs and excludes ignored agent/tool roots. Evidence: `src/cli/audit/check-content-quality.ts` (search: `COMMITTED_LOCAL_STATE_READMES`).
+
+**2026-08-09:** Two same-day learning edits crossed this bucket cap, and the first index refresh also swept unrelated generated rows into a rollback patch. Later, `stats --check` rejected durable drafts that cited ignored planning files. Describe the failure mechanism without local milestone labels; compact before indexing; diff generated files; cite tracked sources. Evidence anchors: `src/cli/learning-loop-index/generate.ts` (search: `generateIndexes`) and `src/cli/facts/shared/learning-loop-common.ts` (search: `Local-state paths (plans/scratchpad/logs)`).
+
+**2026-08-10:** Launcher and evidence refactors left two durable search anchors pointing at removed symbols, so repository schema and content gates failed after focused code checks cleared. Pair semantic renames with an exact old-name search across durable evidence before preflight. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `legacyHookLaunchMode`), `src/cli/hooks-runtime-evidence.ts` (search: `verifyManagedDenyHook`), and `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
 
 **Root cause:** Filesystem/path checks prove that a local path currently resolves, not that the reference is committed, portable, or appropriate for a durable lesson/ADR. Ignored local workspaces and external examples require different citation forms from repo-local files.
 
@@ -277,35 +285,34 @@ last_reviewed: 2026-08-07
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 10 | **Latest occurrence:** 2026-08-04
+**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 13 | **Latest occurrence:** 2026-08-10
 
-**What happened:** Focused behavior, type, and test gates repeatedly passed before preflight exposed ESLint, Knip, or formatting failures. In 2026-08-03, runtime-only worker lookup hid a fixture from Knip; later parser tests passed with three over-complex helpers. On 2026-08-04, anchor/readiness tests passed before lint found complexity 18/17/11 and an impossible fallback. Extracting fence, line-token, and single-anchor evaluators preserved behavior and cleared ESLint.
+**What happened:** Narrower checks repeatedly cleared before later static gates. On 2026-08-10, typecheck rejected dynamic membership against a literal-tuple union and ESLint found proof-reader and registrar complexity 13/11. Earlier recurrences included formatting drift, an undiscovered worker, and impossible fallback logic.
 
 **Root cause:** Typecheck and runtime tests do not exercise lint complexity, unused-code/binary policy, static fixture reachability, or formatting. A child process launched from a string path can be reachable at runtime but invisible to Knip's dependency graph. Running a memory-heavy analyzer beside other gates can also turn a resource limit into a misleading tool failure.
 
-**Fix and prevention:** After TypeScript changes, run ESLint, Knip, and `npm run format:check` directly before preflight. Fix their exact findings. Keep child-process fixture entry points statically discoverable, for example with `fileURLToPath(new URL("../fixtures/worker.ts", import.meta.url))`, rather than hiding the only dependency edge in a path string. Run Knip independently; if it alone reaches the default heap and measured host headroom exists, rerun `node --max-old-space-size=8192 node_modules/knip/bin/knip.js` before classifying the crash. Evidence anchors: `knip.json` (search: `ignoreBinaries`), `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`), `src/cli/install-invocation.ts` (search: `buildInstallerSpawnSpec`), and `src/cli/rendered-markdown.ts` (search: `function maskMarkdownSourceLine`).
+**Fix and prevention:** After TypeScript changes, run ESLint, Knip, and `npm run format:check` before preflight and fix their exact findings. Keep child-process fixtures statically discoverable with `fileURLToPath(new URL("../fixtures/worker.ts", import.meta.url))`. Run Knip independently; if only it reaches the default heap and host headroom was measured, rerun `node --max-old-space-size=8192 node_modules/knip/bin/knip.js` before classifying the crash. Evidence anchors: `knip.json` (search: `ignoreBinaries`), `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`), `src/cli/install-invocation.ts` (search: `buildInstallerSpawnSpec`), and `src/cli/rendered-markdown.ts` (search: `function maskMarkdownSourceLine`).
 
-**Measured recurrences:** M05/M06b: three lint errors and two unused exports; M08: one unused export; M17: one complexity error, three impossible conditions, and five unused exports; M23/M24: internal-only exports; 1.15 quality persistence: four complexity errors and a measured Knip heap limit; 2026-08-03: one hidden worker fixture; 2026-08-04: three complex functions and one impossible fallback.
+**Measured recurrences:** Static gates have found complexity, impossible conditions, internal-only exports, an undiscovered worker, and a measured Knip heap limit. The latest fix widened dynamic scenario ids through `Set<string>` and separated event matching from gate promotion. Evidence anchors: `src/cli/server/hook-runtime-proof.ts` (search: `requiredScenarioIds`) and (search: `hookSupportGateAfterLocalProof`).
+
+**Release recurrence (2026-08-09):** Hook notes gained a dated release heading before its manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 
 ---
 
 ## Lesson: Verification grep patterns must not carry Markdown backticks into Bash
 
 **Status:** active | **Created:** 2026-06-07
-**Decision changed:** Validate every persisted semantic anchor against its source with the literal search shape a future agent will run.
+**Decision changed:** Validate persisted anchors with the literal search shape a future agent will run.
+**Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
-**What happened:** During the M04 review-cleanup verification, a stale-path `rg` sweep embedded a Markdown-formatted fragment inside a double-quoted shell pattern. Bash treated the backticks around `decisions/` as command substitution, printed `/bin/bash: line 1: decisions/: No such file or directory`, and then ran `rg` with a mangled pattern that produced noisy, unusable output.
+**What happened:** Shell commands copied Markdown-formatted anchors into executable arguments. Bash treated backticks as command substitution, mangled searches, and once ran embedded CLI names. Later PreToolUse checks blocked the same shape before execution, including a redaction draft sent through a generated shell command.
 
-**Root cause:** I copied prose-review formatting into an executable shell regex instead of making the verification command a plain shell argument.
+**Root cause:** Display formatting crossed into shell syntax.
 
-**Fix:** Discard the malformed output and rerun the sweep with a single-quoted regex that contains no Markdown quoting.
+**Fix:** Searches use plain single-quoted or fixed-string tokens. Prose containing backticks goes directly to the running redactor over stdin. An architecture anchor that included formatted `EvidenceEnvelope` text now uses its stable section heading.
 
-**Prevention:** Before trusting a verification grep, check the command output for shell diagnostics as well as `rg` matches. When searching for literal Markdown text, use single quotes plus `-e` patterns or `rg -F` fixed-string searches instead of embedding backticks in a double-quoted regex.
+**Evidence:** `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`) blocks the unsafe command shape; `src/cli/redact-command.ts` (search: `readFileSync(0`) accepts direct stdin; `.goat-flow/architecture.md` (search: `## Local Data and Evidence Budget`) supplies the formatting-independent anchor.
 
-**Recurrence update (2026-06-10):** The same failure recurred while proving the M06b lifecycle sentence across docs: a double-quoted `rg` fixed-string pattern containing `` `goat-flow index` `` and `` `goat-flow stats --check` `` triggered command substitution, ran the CLI commands, and produced a mangled regex error instead of useful grep evidence. The corrected proof used `rg -n -F 'Re-run `goat-flow index` ...' ...` with single quotes around the whole fixed-string pattern.
-
-**Recurrence update (2026-08-01):** M06 learning retrieval again placed backticked lesson titles inside a double-quoted `rg` expression. The PreToolUse hook blocked the command before Bash could substitute anything, so no search evidence was produced and no repository write occurred. The corrected retrieval searched plain semantic tokens inside single quotes, then opened the matched source entries directly.
-
-**Recurrence update (2026-08-02):** An effort-estimation milestone cited a prose rendering of an architecture sentence as its `(search: ...)` anchor, but the source wrapped `EvidenceEnvelope` in Markdown backticks. The fixed-string verification could not match the persisted anchor. The plan now anchors on the exact `## Local Data and Evidence Budget` heading, which is both literal and formatting-independent.
+**Prevention:** Keep Markdown formatting out of shell arguments. Use `rg -F` with a plain token for searches, direct stdin for formatted prose, and reject any proof output containing shell diagnostics.
 
 ---

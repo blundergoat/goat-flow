@@ -1,7 +1,9 @@
 # patterns-paths.sh
 #
-# Secret-path policy extracted from paths.sh.
-# Sourced by deny-dangerous.sh; not executable on its own.
+# Protects the user's credential-bearing files from shell reads and uploads.
+# Use through deny-dangerous.sh when a proposed command names paths or file operands.
+# Sample files and near-miss documentation remain available for normal project work.
+# This module is sourced by the dispatcher and is not executable on its own.
 # shellcheck shell=bash disable=SC2034,SC2154,SC2317,SC2319
 
 __goat_git_rest=""
@@ -78,6 +80,8 @@ key_material_path_touch() {
   return 1
 }
 
+# Decide whether text names a protected credential file or directory.
+# Use for direct operands after command-specific parsers reveal their file meaning.
 is_secret_path_touch() {
   local c
   c=$(strip_shell_quotes_for_path_scan "$1")
@@ -92,10 +96,148 @@ is_secret_path_touch() {
   fi
   if [[ "$env_scan" =~ (^|[[:space:]]|=|:|/|[\'\"])\.env[a-zA-Z0-9_.-]*([[:space:]]|$|[\'\"]) ]]; then return 0; fi
   if [[ "$env_scan" =~ (\>|\>\>|\>\|)[[:space:]]*[\'\"]?\.env[a-zA-Z0-9_.-]*([[:space:]]|$|[\'\"]) ]]; then return 0; fi
-  if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"])((\./|\.\./|~/)*)(\.ssh/|\.aws/|\.config/gcloud/|\.gnupg/|\.docker/config\.json|\.kube/config|secrets/) ]]; then return 0; fi
+  local secret_directory_re='(^|[[:space:]]|=|:|/|['\''"])(\.ssh|\.aws|\.config/gcloud|\.gnupg|secrets)(/|[[:space:]]|$|['\''"])'
+  # Exact directory operands matter because users usually copy a whole key store without a slash.
+  if [[ "$c" =~ $secret_directory_re ]]; then return 0; fi
+  local secret_config_file_re='(^|[[:space:]]|=|:|/|['\''"])(\.docker/config\.json|\.kube/config)([[:space:]]|$|['\''"])'
+  # Exact client config files contain credentials even though their parent directories are ordinary.
+  if [[ "$c" =~ $secret_config_file_re ]]; then return 0; fi
   if [[ "$c" =~ application_default_credentials\.json ]]; then return 0; fi
   if key_material_path_touch "$c"; then return 0; fi
   if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"])(credentials|\.npmrc|\.pypirc)([[:space:]]|$|\.|[\'\"]) ]]; then return 0; fi
+  return 1
+}
+
+# Decide whether one curl option value makes curl read a protected local file.
+# Use after option parsing so literal `--data-raw @name` text is not mistaken for a file read.
+curl_file_reference_touches_secret() {
+  local curl_operand_kind="$1"
+  local curl_option_value="$2"
+  local referenced_file=""
+
+  case "$curl_operand_kind" in
+    data)
+      # Data options read a file only when the value begins with curl's at-file marker.
+      [[ "$curl_option_value" == @* ]] || return 1
+      referenced_file="${curl_option_value#@}"
+      ;;
+    data-urlencode)
+      # URL-encoding reads a file after either `@` or a `name@` prefix.
+      [[ "$curl_option_value" == *@* ]] || return 1
+      referenced_file="${curl_option_value#*@}"
+      ;;
+    form)
+      local form_value="$curl_option_value"
+      # A named form field keeps its file marker after the first equals sign.
+      if [[ "$form_value" == *=* ]]; then
+        form_value="${form_value#*=}"
+      fi
+      # Curl form values use either at-file or less-than-file syntax.
+      [[ "$form_value" == @* || "$form_value" == \<* ]] || return 1
+      referenced_file="${form_value:1}"
+      referenced_file="${referenced_file%%;*}"
+      ;;
+    direct)
+      referenced_file="$curl_option_value"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  # An empty reference gives curl no protected filename to read.
+  [[ -n "$referenced_file" ]] || return 1
+  is_secret_path_touch "$referenced_file"
+}
+
+# Inspect curl options that read local files before sending or configuring a request.
+# Use so users cannot upload a credential through option grammar that hides the path boundary.
+curl_file_operands_touch_secret() {
+  local developer_command
+  developer_command=$(normalize_command_candidate "$1")
+  local -a curl_words=()
+  split_shell_words_into curl_words "$developer_command"
+
+  # A valid curl command needs a command word before option parsing can begin.
+  [[ "${#curl_words[@]}" -gt 0 ]] || return 1
+  # Other network clients keep their own policy and are not parsed as curl.
+  [[ "${curl_words[0]##*/}" == "curl" ]] || return 1
+
+  local curl_word_index=1
+  local curl_word=""
+  local curl_option_value=""
+  # Walk every option because one request can combine safe data with a protected file operand.
+  while [[ "$curl_word_index" -lt "${#curl_words[@]}" ]]; do
+    curl_word="${curl_words[$curl_word_index]}"
+    curl_option_value=""
+    case "$curl_word" in
+      -d|--data|--data-ascii|--data-binary)
+        curl_word_index=$((curl_word_index + 1))
+        curl_option_value="${curl_words[$curl_word_index]:-}"
+        # A protected at-file value would expose local credentials to the request target.
+        if curl_file_reference_touches_secret data "$curl_option_value"; then return 0; fi
+        ;;
+      -d?*)
+        curl_option_value="${curl_word#-d}"
+        # Attached short data options use the same at-file meaning.
+        if curl_file_reference_touches_secret data "$curl_option_value"; then return 0; fi
+        ;;
+      --data=*|--data-ascii=*|--data-binary=*)
+        curl_option_value="${curl_word#*=}"
+        # Attached long data options use the same at-file meaning.
+        if curl_file_reference_touches_secret data "$curl_option_value"; then return 0; fi
+        ;;
+      --data-urlencode)
+        curl_word_index=$((curl_word_index + 1))
+        curl_option_value="${curl_words[$curl_word_index]:-}"
+        # URL-encoded at-file values also make curl read a local file.
+        if curl_file_reference_touches_secret data-urlencode "$curl_option_value"; then return 0; fi
+        ;;
+      --data-urlencode=*)
+        curl_option_value="${curl_word#*=}"
+        # Attached URL-encoding values preserve the same file-reference grammar.
+        if curl_file_reference_touches_secret data-urlencode "$curl_option_value"; then return 0; fi
+        ;;
+      -F|--form)
+        curl_word_index=$((curl_word_index + 1))
+        curl_option_value="${curl_words[$curl_word_index]:-}"
+        # Form fields may name a protected upload after either equals or the marker itself.
+        if curl_file_reference_touches_secret form "$curl_option_value"; then return 0; fi
+        ;;
+      -F?*)
+        curl_option_value="${curl_word#-F}"
+        # Attached short form fields preserve the same file-reference grammar.
+        if curl_file_reference_touches_secret form "$curl_option_value"; then return 0; fi
+        ;;
+      --form=*)
+        curl_option_value="${curl_word#*=}"
+        # Attached long form fields preserve the same file-reference grammar.
+        if curl_file_reference_touches_secret form "$curl_option_value"; then return 0; fi
+        ;;
+      -T|--upload-file|-K|--config)
+        curl_word_index=$((curl_word_index + 1))
+        curl_option_value="${curl_words[$curl_word_index]:-}"
+        # Upload and config options always interpret their operand as a local file.
+        if curl_file_reference_touches_secret direct "$curl_option_value"; then return 0; fi
+        ;;
+      -T?*|-K?*)
+        curl_option_value="${curl_word:2}"
+        # Attached short upload and config options preserve the direct-file meaning.
+        if curl_file_reference_touches_secret direct "$curl_option_value"; then return 0; fi
+        ;;
+      --upload-file=*|--config=*)
+        curl_option_value="${curl_word#*=}"
+        # Attached long upload and config options preserve the direct-file meaning.
+        if curl_file_reference_touches_secret direct "$curl_option_value"; then return 0; fi
+        ;;
+      --data-raw|--form-string)
+        # These options keep at-sign text literal, so skip their value without treating it as a file.
+        curl_word_index=$((curl_word_index + 1))
+        ;;
+    esac
+    curl_word_index=$((curl_word_index + 1))
+  done
+
   return 1
 }
 
@@ -220,6 +362,8 @@ search_file_operands_touch_secret() {
   return 1
 }
 
+# Apply secret-path policy to one user-visible command segment.
+# This gate blocks protected reads and uploads while preserving searches for quoted examples.
 check_secret_segment() {
   local cmd="$1"
   cmd="$CMD_TRIMMED"
@@ -232,7 +376,10 @@ check_secret_segment() {
   fi
 
   local touches_secret=0
-  if is_search_command_verb "$CMD_VERB"; then
+  # Curl needs option-aware file parsing before the generic path scanner runs.
+  if [[ "$CMD_VERB" == "curl" ]] && curl_file_operands_touch_secret "$cmd"; then
+    touches_secret=1
+  elif is_search_command_verb "$CMD_VERB"; then
     if search_file_operands_touch_secret "$cmd"; then
       touches_secret=1
     fi

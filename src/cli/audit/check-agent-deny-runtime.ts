@@ -1,18 +1,16 @@
 /**
- * Runtime-execution half of the agent deny-mechanism audit (concern 4): spawn-failure
- * classification shared with the static checks, plus the runtime smoke that replays a
- * blocked payload through the registered hook path - both the project-configured
- * launcher strings (from each agent's hook config) and the direct registered hook
- * script. Static presence/syntax/pattern/template checks live in
- * check-agent-deny-mechanism.ts, which composes these into the BuildCheck.
+ * Runs the runtime half of the deny-hook audit after a user selects a project.
+ * It replays safe and blocked commands through configured launchers, then uses the
+ * registered script when no launcher is present.
+ * The result tells the user whether policy ran or failed before protection started.
+ * Static configuration checks remain in check-agent-deny-mechanism.ts.
  */
 import * as childProcess from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import type { AuditContext, AuditFailure } from "./types.js";
 
-/** A bash-spawn failure surfaced as an audit result: the user-facing message and
- * the remediation hint, kept separate from a hook's own non-zero exit. */
+/** User-facing spawn failure and repair, separate from a hook's policy exit. */
 interface SpawnFailure {
   message: string;
   howToFix: string;
@@ -44,9 +42,7 @@ function errorMessage(error: unknown): string {
 }
 
 /**
- * Translate a spawn-level errno (EPERM/ENOENT/ETIMEDOUT) into a {@link SpawnFailure}
- * with actionable remediation, distinguishing "bash could not run" from "the hook
- * ran and reported a failure".
+ * Turn a spawn errno into a user-facing failure, separate from a hook policy result.
  *
  * @param error - The error thrown/returned by the spawn attempt.
  * @param action - Short description of what was being spawned, for the message.
@@ -83,8 +79,7 @@ export function spawnFailureFor(
 }
 
 /**
- * Decide whether a `spawnSync` result represents a child that actually ran (it
- * carries a numeric exit status) versus one that failed to launch.
+ * Detect whether the user's hook started and returned a numeric status.
  *
  * @param result - A `spawnSync`-shaped result with an optional `status`.
  * @returns `true` when `status` is a number (the child started and exited).
@@ -94,8 +89,7 @@ function completedWithStatus(result: { status?: unknown }): boolean {
 }
 
 /**
- * Decide whether a thrown `execFileSync` error nonetheless reports a clean exit
- * (`status === 0`), which `execFileSync` can do when it throws on stderr output.
+ * Detect a clean child exit even when `execFileSync` also reports an error.
  *
  * @param error - The error thrown by `execFileSync`.
  * @returns `true` when the underlying command exited 0 despite the throw.
@@ -118,8 +112,7 @@ function spawnFailureFromResult(
 }
 
 /**
- * POSIX single-quote a value so an arbitrary filesystem path can be embedded in a
- * `bash -c` string without word-splitting or expansion.
+ * Quote a hook path so Bash reads it as one literal user-selected location.
  *
  * @param value - The raw string (typically an absolute hook path) to quote.
  * @returns The value wrapped in single quotes with embedded quotes escaped.
@@ -129,30 +122,29 @@ function shellSingleQuote(value: string): string {
 }
 
 /**
- * Build the child environment for a runtime smoke run, carrying the test payload
- * to the hook via `GOAT_HOOK_SMOKE_PAYLOAD` instead of argv (avoids quoting JSON).
+ * Carry one user-shaped runtime probe to the hook without changing its JSON bytes.
+ * Use while audit replays the same standard-input flow an agent runtime uses.
  *
- * @param input - The JSON payload string the hook should read from the env var.
- * @returns A copy of `process.env` with the smoke payload added.
+ * @param hookInput - agent event JSON; empty means the hook receives no user command
+ * @returns child environment containing the probe; never empty because process values are preserved
  */
-function runtimeSmokeEnv(input: string): NodeJS.ProcessEnv {
-  return { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: input };
+function runtimeProbeEnvironment(hookInput: string): NodeJS.ProcessEnv {
+  return { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: hookInput };
 }
 
 /**
- * Wrap a hook command so the smoke payload is piped to its stdin, matching how the
- * agent runtimes feed tool-call JSON to a PreToolUse hook.
+ * Pipe one user-shaped probe into the configured hook command.
+ * Use during audit so the launcher receives input exactly as it does in an agent session.
  *
- * @param command - The hook invocation to run with the payload on stdin.
- * @returns A `bash -c`-ready command string that pipes the payload in.
+ * @param configuredHookCommand - launcher from agent config; empty cannot produce a valid audit run
+ * @returns shell pipeline for replay; never empty because the payload command is always included
  */
-function pipeSmokePayloadTo(command: string): string {
-  return `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${command}; }`;
+function pipeRuntimeProbeTo(configuredHookCommand: string): string {
+  return `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${configuredHookCommand}; }`;
 }
 
 /**
- * Audit evidence paths are user-visible in text/markdown/JSON output. Force
- * forward slashes so Windows and POSIX agree on the rendered shape.
+ * Render one evidence path consistently for users on Windows and POSIX.
  *
  * @param relPath - Repo-relative path that may carry Windows separators.
  * @returns The same path with every backslash rendered as a forward slash.
@@ -161,84 +153,166 @@ export function evidencePath(relPath: string): string {
   return relPath.replace(/\\/g, "/");
 }
 
-/** Build the per-agent hook payload and expected denial shape for runtime smoke tests. */
-function runtimeSmokePayload(agentId: string): {
-  input: string;
+/**
+ * Expected user outcome for one replay, including the agent's status and response stream.
+ * Use it to distinguish a policy decision from a launcher that never reached policy.
+ */
+interface RuntimeProbeExpectation {
+  expectedOutcome: "allow" | "block";
+  hookInput: string;
   expectedStatus: number;
   expectedStream: "stdout" | "stderr";
   expectedPattern: RegExp;
-} {
+}
+
+/**
+ * Build the blocked-command expectation for one agent protocol.
+ * Use when audit proves an unsafe user command reaches policy and is denied.
+ */
+function blockedRuntimeProbe(agentId: string): RuntimeProbeExpectation {
+  // Copilot users receive a JSON permission denial on standard output.
   if (agentId === "copilot") {
     return {
-      input:
+      expectedOutcome: "block",
+      hookInput:
         '{"toolName":"bash","toolArgs":{"command":"git push origin main"}}',
       expectedStatus: 0,
       expectedStream: "stdout",
-      expectedPattern: /"permissionDecision"\s*:\s*"deny"/,
+      expectedPattern:
+        /"permissionDecisionReason"\s*:\s*"Policy (?:destructive|secret|repository):/,
     };
   }
+  // Antigravity users receive its allow-or-deny decision object on standard output.
   if (agentId === "antigravity") {
     return {
-      input:
+      expectedOutcome: "block",
+      hookInput:
         '{"hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"git push origin main"}}}',
       expectedStatus: 0,
       expectedStream: "stdout",
-      expectedPattern: /"decision"\s*:\s*"deny"/,
+      expectedPattern:
+        /"reason"\s*:\s*"Policy (?:destructive|secret|repository):/,
     };
   }
   return {
-    input:
+    expectedOutcome: "block",
+    hookInput:
       '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}',
     expectedStatus: 2,
     expectedStream: "stderr",
-    expectedPattern: /BLOCKED:/,
+    expectedPattern: /BLOCKED: Policy (?:destructive|secret|repository):/,
   };
 }
 
-function runtimeSmokePayloadForScript(
+/**
+ * Build the safe-command expectation for one agent protocol.
+ * Use when audit proves ordinary user work is still allowed by the configured launcher.
+ */
+function allowedRuntimeProbe(agentId: string): RuntimeProbeExpectation {
+  // Copilot represents a safe command by returning no hook response.
+  if (agentId === "copilot") {
+    return {
+      expectedOutcome: "allow",
+      hookInput: '{"toolName":"bash","toolArgs":{"command":"echo safe"}}',
+      expectedStatus: 0,
+      expectedStream: "stdout",
+      expectedPattern: /^$/u,
+    };
+  }
+  // Antigravity explicitly tells the user that the safe command may continue.
+  if (agentId === "antigravity") {
+    return {
+      expectedOutcome: "allow",
+      hookInput:
+        '{"hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"echo safe"}}}',
+      expectedStatus: 0,
+      expectedStream: "stdout",
+      expectedPattern: /"decision"\s*:\s*"allow"/u,
+    };
+  }
+  return {
+    expectedOutcome: "allow",
+    hookInput: '{"tool_name":"Bash","tool_input":{"command":"echo safe"}}',
+    expectedStatus: 0,
+    expectedStream: "stdout",
+    expectedPattern: /^$/u,
+  };
+}
+
+/**
+ * Match one managed guard with the user action it is meant to block.
+ * Use when audit replays an exact configured script rather than only the shared deny guard.
+ */
+function blockedRuntimeProbeForScript(
   agentId: string,
   scriptFile: string,
-): ReturnType<typeof runtimeSmokePayload> {
-  const command =
+): RuntimeProbeExpectation {
+  // Each guard is probed with the user action its policy is expected to stop.
+  const blockedCommand =
     scriptFile === "deny-dangerous.sh" ||
     scriptFile === "guard-repository-writes.sh"
       ? "git push origin main"
       : scriptFile === "guard-secret-paths.sh"
         ? "cat .env"
         : "rm -rf /";
-  const base = runtimeSmokePayload(agentId);
+  const baseProbe = blockedRuntimeProbe(agentId);
+  // Copilot receives the selected blocked command in its tool-argument shape.
   if (agentId === "copilot") {
     return {
-      ...base,
-      input: JSON.stringify({
+      ...baseProbe,
+      hookInput: JSON.stringify({
         toolName: "bash",
-        toolArgs: { command },
+        toolArgs: { command: blockedCommand },
       }),
     };
   }
+  // Antigravity receives the same blocked action in its command-line field.
   if (agentId === "antigravity") {
     return {
-      ...base,
-      input: JSON.stringify({
+      ...baseProbe,
+      hookInput: JSON.stringify({
         hookEventName: "PreToolUse",
-        toolCall: { name: "run_command", args: { CommandLine: command } },
+        toolCall: {
+          name: "run_command",
+          args: { CommandLine: blockedCommand },
+        },
       }),
     };
   }
   return {
-    ...base,
-    input: JSON.stringify({
+    ...baseProbe,
+    hookInput: JSON.stringify({
       tool_name: "Bash",
-      tool_input: { command },
+      tool_input: { command: blockedCommand },
     }),
   };
 }
 
+/**
+ * Return allow and block probes for one configured launcher.
+ * Use both so a launcher that rejects every user command cannot pass audit.
+ */
+function configuredRuntimeProbes(
+  agentId: string,
+  scriptFile: string,
+): RuntimeProbeExpectation[] {
+  return [
+    allowedRuntimeProbe(agentId),
+    blockedRuntimeProbeForScript(agentId, scriptFile),
+  ];
+}
+
+/**
+ * Resolve the managed deny script a selected agent should run.
+ * A null result means the user has no installed hook path for direct runtime proof.
+ */
 function registeredDenyRelPath(
   agentFacts: AuditContext["agents"][number],
 ): string | null {
+  // An explicit registration is the path the user's agent will actually invoke.
   if (agentFacts.hooks.denyRegisteredPath)
     return agentFacts.hooks.denyRegisteredPath;
+  // No hook directory means setup, rather than runtime audit, owns the next action.
   if (!agentFacts.agent.hooksDir) return null;
   return join(agentFacts.agent.hooksDir, "deny-dangerous.sh");
 }
@@ -254,7 +328,7 @@ function normalizedRegisteredDenyRelPath(
   );
 }
 
-const CONFIGURED_SMOKE_SCRIPTS = ["deny-dangerous.sh"] as const;
+const CONFIGURED_RUNTIME_SCRIPTS = ["deny-dangerous.sh"] as const;
 
 /** Hook command extracted from agent config for runtime-shaped smoke validation. */
 interface ConfiguredHookCommand {
@@ -316,20 +390,26 @@ function commandReferencesScriptToken(
   return scriptTokenPattern.test(command);
 }
 
+/**
+ * Add one managed launcher found in an agent config to the runtime audit queue.
+ * Empty or unrelated user commands are ignored so audit reports only Goat Flow hooks.
+ */
 function pushConfiguredCommand(
   commands: ConfiguredHookCommand[],
   command: unknown,
   configPath: string,
 ): void {
+  // Empty or non-text values cannot be launchers the user's agent will run.
   if (typeof command !== "string" || command.length === 0) return;
-  const scriptFile = CONFIGURED_SMOKE_SCRIPTS.find((script) =>
+  const managedScriptFile = CONFIGURED_RUNTIME_SCRIPTS.find((script) =>
     commandReferencesScriptToken(command, script),
   );
-  if (!scriptFile) return;
+  // Unrelated user hooks stay outside the managed runtime audit.
+  if (!managedScriptFile) return;
   commands.push({
     command,
-    scriptFile,
-    scriptPath: extractConfiguredScriptPath(command, scriptFile),
+    scriptFile: managedScriptFile,
+    scriptPath: extractConfiguredScriptPath(command, managedScriptFile),
     configPath,
   });
 }
@@ -399,29 +479,38 @@ function configuredHookCommandPathFailure(
   return null;
 }
 
-/** Return cwd labels used to replay configured hook launchers. */
-function configuredHookSmokeCwds(
+/**
+ * Return the project locations from which a user's configured launcher must work.
+ * Root and managed descendants prove the launcher does not depend on Git cwd state.
+ */
+function configuredHookProbeLocations(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
 ): Array<{
   label: string;
   cwd: string;
 }> {
-  const cwds = [{ label: "project root", cwd: ctx.projectPath }];
-  if (agentFacts.agent.id === "copilot") return cwds;
-  const nested = join(ctx.projectPath, ".goat-flow");
-  if (existsSync(nested)) {
-    cwds.push({ label: ".goat-flow", cwd: nested });
+  const probeLocations = [{ label: "project root", cwd: ctx.projectPath }];
+  // Copilot supplies its workspace root, so one root replay matches its user flow.
+  if (agentFacts.agent.id === "copilot") return probeLocations;
+  const managedStateDirectory = join(ctx.projectPath, ".goat-flow");
+  // An installed managed folder adds the descendant launch path users can enter from.
+  if (existsSync(managedStateDirectory)) {
+    probeLocations.push({ label: ".goat-flow", cwd: managedStateDirectory });
   }
-  return cwds;
+  return probeLocations;
 }
 
-function configuredHookSmokeFailureFromResult(
+/**
+ * Convert one configured-launcher replay into the audit result a user sees.
+ * A null result means the expected allow or block response reached policy.
+ */
+function configuredHookProbeFailureFromResult(
   result: childProcess.SpawnSyncReturns<string>,
   agentFacts: AuditContext["agents"][number],
   configured: ConfiguredHookCommand,
-  smoke: ReturnType<typeof runtimeSmokePayloadForScript>,
-  smokeCwd: { label: string; cwd: string },
+  runtimeProbe: RuntimeProbeExpectation,
+  probeLocation: { label: string; cwd: string },
 ): {
   ok: boolean;
   message: string;
@@ -432,6 +521,7 @@ function configuredHookSmokeFailureFromResult(
     result,
     `${agentFacts.agent.id} configured hook command for ${configured.scriptFile}`,
   );
+  // A launcher that cannot start leaves the user without policy protection.
   if (spawnFailure !== null) {
     return {
       ok: false,
@@ -440,32 +530,43 @@ function configuredHookSmokeFailureFromResult(
       howToFix: spawnFailure.howToFix,
     };
   }
+  // A missing shell command means setup failed before the managed hook could run.
   const status = result.status ?? (result.error ? -1 : 0);
   if (status === 126 || status === 127) {
     return {
       ok: false,
-      message: `${agentFacts.agent.id} configured hook command exited before ${configured.scriptFile} could start from ${smokeCwd.label} (exit ${status}): ${configured.scriptPath}`,
+      message: `${agentFacts.agent.id} configured hook command exited before ${configured.scriptFile} could start from ${probeLocation.label} (exit ${status}): ${configured.scriptPath}`,
       evidence: configured.configPath,
     };
   }
-  const stream =
-    smoke.expectedStream === "stdout" ? result.stdout : result.stderr;
-  if (status === smoke.expectedStatus && smoke.expectedPattern.test(stream)) {
+  // Each agent exposes its user-facing hook decision on a different stream.
+  const responseText =
+    runtimeProbe.expectedStream === "stdout" ? result.stdout : result.stderr;
+  // The expected policy outcome means this configured launcher is working for the user.
+  if (
+    status === runtimeProbe.expectedStatus &&
+    runtimeProbe.expectedPattern.test(responseText)
+  ) {
     return null;
   }
   return {
     ok: false,
-    message: `${agentFacts.agent.id} configured hook command did not return the expected deny response for ${configured.scriptFile} from ${smokeCwd.label}: ${configured.scriptPath}`,
+    message: `${agentFacts.agent.id} configured hook command did not return the expected ${runtimeProbe.expectedOutcome} response for ${configured.scriptFile} from ${probeLocation.label}: ${configured.scriptPath}`,
     evidence: configured.configPath,
   };
 }
 
-function runConfiguredHookCommandSmoke(
+/**
+ * Replay safe and blocked user commands through one exact configured launcher.
+ * Use during trusted runtime audit so launcher, root selection, and policy are proved together.
+ */
+function verifyConfiguredHookRuntime(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
   configured: ConfiguredHookCommand,
 ): { ok: boolean; message: string; evidence: string; howToFix?: string } {
   const pathFailure = configuredHookCommandPathFailure(agentFacts, configured);
+  // A launcher that names the wrong script cannot protect the project the user selected.
   if (pathFailure !== null) {
     return {
       ok: false,
@@ -473,141 +574,175 @@ function runConfiguredHookCommandSmoke(
       evidence: configured.configPath,
     };
   }
-  const smoke = runtimeSmokePayloadForScript(
+  const runtimeProbes = configuredRuntimeProbes(
     agentFacts.agent.id,
     configured.scriptFile,
   );
-  // Invoke via `bash -c`, not `-lc`: the agent runtimes run the configured
-  // launcher directly without a login shell, so `-lc` would source user rc files
-  // and make audit results environment-dependent. `-c` is more faithful to
-  // runtime and drops that rc-sourcing surface. This smoke still executes the
-  // project-configured launcher string by design (to validate the real
-  // root-resolution/cd glue), so the runtime evidence level should only be run
-  // against trusted target projects.
-  for (const smokeCwd of configuredHookSmokeCwds(ctx, agentFacts)) {
-    const result = childProcess.spawnSync(
-      "bash",
-      ["-c", pipeSmokePayloadTo(configured.command)],
-      {
-        cwd: smokeCwd.cwd,
-        encoding: "utf8",
-        env: runtimeSmokeEnv(smoke.input),
-        input: "",
-        timeout: 5000,
-      },
-    );
-    const failure = configuredHookSmokeFailureFromResult(
-      result,
-      agentFacts,
-      configured,
-      smoke,
-      smokeCwd,
-    );
-    if (failure !== null) return failure;
+  // Replay every location from which the user can launch the selected agent.
+  for (const probeLocation of configuredHookProbeLocations(ctx, agentFacts)) {
+    // A safe command followed by a blocked one proves policy is selective, not broadly broken.
+    for (const runtimeProbe of runtimeProbes) {
+      const probeResult = childProcess.spawnSync(
+        "bash",
+        ["-c", pipeRuntimeProbeTo(configured.command)],
+        {
+          cwd: probeLocation.cwd,
+          encoding: "utf8",
+          env: runtimeProbeEnvironment(runtimeProbe.hookInput),
+          input: "",
+          timeout: 5000,
+        },
+      );
+      const runtimeFailure = configuredHookProbeFailureFromResult(
+        probeResult,
+        agentFacts,
+        configured,
+        runtimeProbe,
+        probeLocation,
+      );
+      // The first failed user outcome is the actionable audit result.
+      if (runtimeFailure !== null) return runtimeFailure;
+    }
   }
   return { ok: true, message: "", evidence: configured.configPath };
 }
 
-function runDirectHookRuntimeSmoke(
+/**
+ * Replay one blocked user command through the installed script itself.
+ * Use only when no configured launcher is available to provide stronger end-to-end proof.
+ */
+function verifyDirectHookRuntime(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
   denyRelPath: string,
 ): { ok: boolean; message?: string; howToFix?: string } {
-  const smoke = runtimeSmokePayload(agentFacts.agent.id);
-  const command = pipeSmokePayloadTo(
+  const blockedProbe = blockedRuntimeProbe(agentFacts.agent.id);
+  const directHookCommand = pipeRuntimeProbeTo(
     `bash ${shellSingleQuote(join(ctx.projectPath, denyRelPath))}`,
   );
-  const result = childProcess.spawnSync("bash", ["-c", command], {
-    cwd: ctx.projectPath,
-    encoding: "utf8",
-    env: runtimeSmokeEnv(smoke.input),
-    input: "",
-    timeout: 5000,
-  });
-  const spawnFailure = spawnFailureFromResult(
-    result,
-    `registered deny hook runtime smoke for ${agentFacts.agent.id}`,
+  const probeResult = childProcess.spawnSync(
+    "bash",
+    ["-c", directHookCommand],
+    {
+      cwd: ctx.projectPath,
+      encoding: "utf8",
+      env: runtimeProbeEnvironment(blockedProbe.hookInput),
+      input: "",
+      timeout: 5000,
+    },
   );
+  const spawnFailure = spawnFailureFromResult(
+    probeResult,
+    `registered deny hook runtime check for ${agentFacts.agent.id}`,
+  );
+  // A script that cannot start leaves the user without direct policy proof.
   if (spawnFailure !== null) {
     return { ok: false, ...spawnFailure };
   }
 
-  const status = result.status ?? (result.error ? -1 : 0);
-  const stream =
-    smoke.expectedStream === "stdout" ? result.stdout : result.stderr;
+  // Agent protocols expose their block decision on different output streams.
+  const status = probeResult.status ?? (probeResult.error ? -1 : 0);
+  const responseText =
+    blockedProbe.expectedStream === "stdout"
+      ? probeResult.stdout
+      : probeResult.stderr;
   return {
-    ok: status === smoke.expectedStatus && smoke.expectedPattern.test(stream),
+    ok:
+      status === blockedProbe.expectedStatus &&
+      blockedProbe.expectedPattern.test(responseText),
   };
 }
 
+/**
+ * Verify every configured guard for one agent and return its first user-facing failure.
+ * Undefined means no launcher exists, while null means every configured launcher passed.
+ */
 function configuredHookRuntimeFailure(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
 ): AuditFailure | null | undefined {
-  const configuredCommands = configuredGuardCommands(ctx, agentFacts);
-  if (configuredCommands.length === 0) return undefined;
-  for (const configured of configuredCommands) {
-    const result = runConfiguredHookCommandSmoke(ctx, agentFacts, configured);
-    if (result.ok) continue;
+  const configuredLaunchers = configuredGuardCommands(ctx, agentFacts);
+  // No launcher means the user needs the direct-script fallback checked next.
+  if (configuredLaunchers.length === 0) return undefined;
+  // Each configured guard must preserve the same safe-and-blocked user outcomes.
+  for (const configuredLauncher of configuredLaunchers) {
+    const runtimeResult = verifyConfiguredHookRuntime(
+      ctx,
+      agentFacts,
+      configuredLauncher,
+    );
+    // A working launcher lets audit continue to the user's next configured guard.
+    if (runtimeResult.ok) continue;
     return {
       check: "Agent deny mechanism",
-      message: result.message,
-      evidence: evidencePath(result.evidence),
+      message: runtimeResult.message,
+      evidence: evidencePath(runtimeResult.evidence),
       howToFix:
-        result.howToFix ??
+        // Without a spawn-specific repair, show the standard launcher check to the user.
+        runtimeResult.howToFix ??
         "Run the configured hook command with a runtime-shaped payload and confirm it reaches the managed hook script without exit 126/127.",
     };
   }
   return null;
 }
 
+/**
+ * Verify the installed deny script when no configured launcher is available.
+ * Use this fallback so users still receive runtime evidence for older installations.
+ */
 function directHookRuntimeFailure(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
 ): AuditFailure | null {
   const denyRelPath = registeredDenyRelPath(agentFacts);
+  // No installed path leaves setup, not runtime audit, as the user's repair route.
   if (denyRelPath === null) return null;
-  const content = ctx.fs.readFile(denyRelPath);
-  if (content === null) return null;
+  const installedHookContent = ctx.fs.readFile(denyRelPath);
+  // A missing script is already reported by the static setup checks.
+  if (installedHookContent === null) return null;
 
-  const directSmoke = runDirectHookRuntimeSmoke(ctx, agentFacts, denyRelPath);
-  if (directSmoke.ok) return null;
+  const directRuntimeResult = verifyDirectHookRuntime(
+    ctx,
+    agentFacts,
+    denyRelPath,
+  );
+  // The expected policy block means the installed script works for this user.
+  if (directRuntimeResult.ok) return null;
 
   return {
     check: "Agent deny mechanism",
     message:
-      directSmoke.message ??
-      `registered deny hook runtime smoke failed for ${agentFacts.agent.id}`,
+      // Without a spawn diagnostic, name the direct policy check that failed for the user.
+      directRuntimeResult.message ??
+      `registered deny hook runtime check failed for ${agentFacts.agent.id}`,
     evidence: evidencePath(denyRelPath),
     howToFix:
-      directSmoke.howToFix ??
+      // Without a spawn-specific repair, show the standard direct-hook check to the user.
+      directRuntimeResult.howToFix ??
       "Run the registered deny hook with a runtime-shaped Bash payload and confirm it denies `git push origin main`.",
   };
 }
 
 /**
- * Run a runtime-shaped blocked payload because configured commands and direct
- * hooks fail differently.
+ * Verify safe and blocked user commands through each selected agent's real hook path.
+ * Use during trusted CLI audit to separate working policy from launcher unavailability.
  *
- * @param ctx - Audit context carrying agent facts, project path, and the audit FS.
- * @returns The first runtime-smoke failure across agents, or `null` when all pass.
+ * @param ctx - selected project and agents; an empty agent list means there is nothing to show
+ * @returns first runtime failure; `null` means every selected user-facing hook check passed
  */
 export function checkHookRuntimeSmoke(ctx: AuditContext): AuditFailure | null {
+  // Each selected agent gets an independent result so one pass cannot hide a later failure.
   for (const agentFacts of ctx.agents) {
     const configuredFailure = configuredHookRuntimeFailure(ctx, agentFacts);
-    // `undefined` means the agent has no configured guard commands, so fall
-    // through to the direct registered-hook smoke. A non-null value is a real
-    // failure to report now. `null` means the configured commands ran and
-    // passed (authoritative for this agent) - continue to the next agent
-    // instead of returning, which previously short-circuited the whole loop on
-    // the first agent whose configured smoke passed, skipping its direct smoke
-    // and every later agent.
+    // A configured launcher is authoritative: show its failure or continue after its pass.
     if (configuredFailure !== undefined) {
+      // A real failure gives the user an immediate, specific repair action.
       if (configuredFailure !== null) return configuredFailure;
       continue;
     }
 
     const directFailure = directHookRuntimeFailure(ctx, agentFacts);
+    // Without a configured launcher, a direct-script failure is the user's runtime result.
     if (directFailure !== null) return directFailure;
   }
   return null;

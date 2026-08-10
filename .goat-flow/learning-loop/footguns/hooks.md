@@ -1,14 +1,24 @@
 ---
 category: hooks
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-11
 ---
 
 **Scope:** Hook runtime delivery, Stop-scanner behavior, execution performance, and resolved hook history. Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
 
+## Footgun: Destination-only Git pathspecs disguise renames as full-file additions
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Resolve rename identity before deriving edit ranges from a path-limited diff.
+**Trigger phase:** VERIFY
+
+A Git diff limited to a rename destination can hide the source path and render an unchanged rename as a full-file addition. Edit-time analysis then treats every line as user-authored and may report a clean scan or unrelated debt instead of a not-applicable rename.
+
+Git rename detection needs both sides of the move. Query full `--name-status --find-renames` output first, then diff the matched source and destination together before parsing positive hunks. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `rename_source_for_path`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `classifies rename-only Git changes as not applicable`).
+
 ## Footgun: Changed-range scoping makes a quality hook structurally blind to file-level rules
 
 **Status:** active | **Created:** 2026-08-05 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 2 | **Latest occurrence:** 2026-08-05
+**Incident count:** 5 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Keep edit-time attribution and release-time repository enforcement as separate layers: the hook reports findings attributable to touched files/ranges, while preflight owns a full-repository accepted-debt ratchet.
 **Trigger phase:** VERIFY
 
@@ -16,9 +26,15 @@ A per-edit quality hook that scopes findings to changed lines cannot report any 
 
 Measured on 2026-08-05: editing `test/unit/hook-registrar.test.ts` (1,139 lines, threshold 750) produced no hook output at all, while `gruff-ts analyse` on the same file reported `size.file-length` immediately. Twenty files had crossed the gate this way. The nearby trap is fixing only half of it - scoping the whole file when the changed range already covers it repairs the new-file case but leaves the far more common "editing an existing oversized file" case still silent.
 
-The fix trades symbol-aware scoping for structural visibility: request the whole file and select scopes in the hook, keeping `scope=file`/`scope=project` findings unconditionally while confining line and symbol findings to the edited ranges. Symbol widening is lost, which is a real cost, but a rule nobody can ever see is worth less than one that occasionally reports a sibling function. Residual gap: the fix covers only the `gruff.hook.v1` contract path (gruff-ts today). The legacy `analyse` path still delegates ranges to analyzers advertising the native trio, and those cannot express finding scope, so partial edits to oversized files stay silent there until the M02 combined-mode work. Evidence anchors: `.goat-flow/hooks/gruff-code-quality.sh` (search: `Ranges are applied by this hook rather than by the analyzer`), `.goat-flow/hooks/gruff-code-quality.sh` (search: `A file-scope finding describes the file the agent is editing right now`).
+The fix trades symbol-aware scoping for structural visibility: request the whole file and select scopes in the hook, keeping `scope=file`/`scope=project` findings unconditionally while confining line and symbol findings to the edited ranges. Symbol widening is lost, which is a real cost, but a rule nobody can ever see is worth less than one that occasionally reports a sibling function. Residual gap: the fix covers only the `gruff.hook.v1` contract path (gruff-ts today). The legacy `analyse` path still delegates ranges to analyzers advertising the native trio, and those cannot express finding scope, so partial edits to oversized files stay silent until those analyzers expose scope-aware results. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `hook_v1_report`), `workflow/hooks/gruff-code-quality.sh` (search: `A file-scope finding describes the file the agent is editing right now`).
 
 Recurrence on 2026-08-05 exposed the adjacent release gate gap. A fresh gruff-ts 0.4.0 full-repository scan at commit `9f1bb2be` reported 36 findings: 14 `size.file-length` warnings, 4 `security.process-exec` warnings, and 18 documentation advisories. Preflight still reported `PASS   79 checks · 0 warnings` because its Gruff Policy check only rejects disabled rules; it never runs the analyzer. The per-edit hook also cannot be expected to enumerate untouched repository debt. Neither result proves a clean repository, even though both surfaces can be read that way.
+
+Recurrence on 2026-08-08 showed that the ratchet's downward path is part of completing a fix. Replacing history-derived commit guidance shortened `src/cli/cli-handlers.ts` from 759 to 747 lines, below the 750-line threshold. Full preflight then failed on stale accepted identity `4348d703d920ab92` until only that baseline entry was removed; rule thresholds and enabled state stayed unchanged. A change that eliminates a warning must reconcile the accepted-debt manifest in the same proof pass. Evidence anchors: `scripts/gruff-warning-ratchet-checks.mjs` (search: `The finding is gone`) enforces stale-entry removal; `src/cli/prompt/commit-guidance.ts` (search: `emitCommitGuidanceInstallResult`) now owns that guidance reporting, moved out of `src/cli/cli-handlers.ts` when the same threshold was crossed again on 2026-08-10.
+
+Recurrence on 2026-08-09: a changed-range scan showed only three advisories, while full preflight found three task-local file-length warnings. Moving matrix checks into existing helper/suite files and compacting the runtime audit cleared them without accepting debt. Evidence: `test/unit/hook-registrar.helpers.ts` (search: `verifyAgentHookRegistrationMatrix`) and `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`).
+
+Recurrence on 2026-08-10: source and packed consumer canaries passed after launcher-owned failures gained provider feedback, but a whole-file Gruff scan measured the edited adapter and launcher at 827 and 836 lines, above the 750-line limit. Moving lifecycle capture and timeout selection into the launch runtime restored the adapter to 742 lines and the launcher to 746; changed-range feedback alone would not enforce that file-level limit. Evidence anchors: `workflow/hooks/hook-launch-runtime.mjs` (search: `captureHookProcessUntilDeadline`) and `test/integration/packaged-hook-install.test.ts` (search: `npm archive must contain the candidate launch runtime bytes`).
 
 Prevention has two layers. Keep PostToolUse fast and attributable, but expose incomplete coverage explicitly when the analyzer is missing, times out, emits invalid JSON, or reports zero analyzed files. In preflight, run the repo-local analyzer once in JSON mode and compare findings by `stableIdentity` against reviewed accepted debt; fail on analyzer errors, new warnings, worsened size metadata, stale baseline state, or degraded scan coverage while reporting unchanged accepted findings. Do not use the composite grade or raw finding count as the ratchet, and do not clear the gate by disabling rules or raising thresholds. Evidence anchors: `scripts/preflight-checks.sh` (search: `No gruff-ts rules disabled (satisfy or tune)`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: "Prefer `stableIdentity` for finding diffs"), `.gruff-ts.yaml` (search: `size.file-length`).
 
@@ -45,15 +61,53 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 ## Footgun: Registered Stop hooks can be dead config behind agent trust gates
 
 **Status:** active | **Created:** 2026-06-13 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 2 | **Latest occurrence:** 2026-08-10
+**Decision changed:** Treat project-layer trust, hook-handler trust, and live model delivery as separate gates before enabling a registration.
+**Trigger phase:** VERIFY
 
 **Trap:** Writing a Stop entry into `.codex/hooks.json` or `.agents/hooks.json` does not mean the agent will ever execute it. On 2026-06-13, a capture fixture with Stop hooks registered for all three agents showed: Claude fired and delivered the full payload; Codex (codex-cli 0.139.0, `features` reports `hooks stable true`, docs document the `Stop` event) never executed the hook across four `codex exec` runs even with `--dangerously-bypass-hook-trust`, project trust, and a project config layer; Antigravity (agy 1.0.6) logged `Loaded hooks.json ... 1 total handlers` and `JSON hook "jsonhook__stop-capture_Stop_0_0": executing command` but the command never ran because execution waits on `~/.gemini/trusted_hooks.json` review (`toolPermission=request-review`) and print mode exits first.
 
+Current primary documentation changed again by 2026-08-09: Codex and Antigravity now document `PostToolUse` and `Stop`, while Copilot documents `postToolUse` and `agentStop`. That makes the earlier live capture stale evidence, not proof that current delivery now works. The documented state and the captured state must change independently.
+
+Recurrence on 2026-08-10: Codex CLI 0.147.0 repeated the trust distinction. Ignoring user configuration also removed the project trust record, so the project hook layer stayed inactive even when handler review was bypassed. A session-only whole-table project trust override activated the project layer; PostToolUse and Stop then delivered in both exec and interactive modes. The provider-owned timeout remained silent, so Goat Flow must finish first and return its own unavailable response. Evidence anchors: `src/cli/hook-contracts.ts` (search: `assessHookProviderEvidence`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), and `test/integration/hook-consumer-canary.test.ts` (search: `writeObservedCodexFeedbackConfig`).
+
 **Evidence:**
-- The 2026-06-13 capture-fixture runs recorded in the M02b plan-checkbox-guard milestone (local gitignored plan file; the per-agent delivery results are restated in full in the Trap paragraph above).
+- `src/cli/server/hooks-registry.ts` (search: `hook-provider-adapter.v1:codex:turn-stop`) identifies the current time-bounded Codex Stop evidence gate; the recurrence above retains the historical failed capture.
+- `src/cli/hook-contracts.ts` (search: `assessHookProviderEvidence`) keeps official documentation, dated live capture, trust, and result delivery as separate states.
+- Current provider contracts: [Codex hooks](https://developers.openai.com/codex/hooks), [Antigravity hooks](https://www.antigravity.google/docs/hooks), and [GitHub Copilot hooks](https://docs.github.com/en/copilot/reference/hooks-reference).
 - ADR-039 (search: `Remove Plan Checkbox Guard`) removes the plan checkbox guard from current shipped hooks and keeps only a tombstone cleanup path.
 - `post-turn-safety` was held to the same standard on 2026-06-14: `antigravity` was added to its `unsupportedAgents` (codex was already gated), so goat-flow does not ship a default-on Stop hook to an agent whose delivery is unverified. A default-on *secret scanner* whose Stop event may never fire is false assurance - arguably worse than shipping nothing, because the dashboard still reports it "installed."
 
-**Prevention:** Treat hook registration facts as config evidence only. Before claiming an agent runs a Stop hook, capture a live payload (or hook-side log write) from that agent; for Codex assume an interactive `/hooks` review is required per project, and for Antigravity assume `trusted_hooks.json` approval is required. Gate default registration on verified delivery, not documented support - and keep the gate consistent across every Stop hook for that agent. Gating one Stop hook for one agent is a lock-step edit: `workflow/manifest.json` `hook_events.post_turn` -> `null` (which flips `supportsPostTurnHook` in `src/cli/agents/registry.ts` (search: `supportsPostTurnHook`) so `check-verification.ts` *skips* the agent instead of penalising it), `hooks-registry.ts` `unsupportedAgents`, the generated `.agents/hooks.json` (regenerate via `goat-flow hooks sync`, never hand-edit the escaped launcher JSON), plus the README hook table / CHANGELOG / `docs/dashboard.md` and the `hook-registrar` tests.
+**Prevention:** Treat hook registration facts as config evidence only. Before claiming an agent runs a Stop hook, capture a live payload or hook-side log write from that exact provider version, mode, config source, and trust state. Expire the record after 30 days or any relevant provider, hook, adapter, mode, source, or trust change. Gate default registration on verified delivery, not documented support, and keep the gate consistent across every Stop hook for that agent. Gating one Stop hook for one agent is a lock-step edit: `workflow/manifest.json` `hook_events.post_turn` -> `null` (which flips `supportsPostTurnHook` in `src/cli/agents/registry.ts` (search: `supportsPostTurnHook`) so `check-verification.ts` *skips* the agent instead of penalising it), `hooks-registry.ts` `unsupportedAgents`, the generated `.agents/hooks.json` (regenerate via `goat-flow hooks sync`, never hand-edit the escaped launcher JSON), plus the README hook table / CHANGELOG / `docs/dashboard.md` and the `hook-registrar` tests.
+
+## Footgun: Launcher-owned failures can bypass provider feedback adapters
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Exercise launcher-owned timeout and invalid-output branches through source and packed consumers before registering model-visible feedback.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-10
+
+A migrated child result used the provider adapter, but timeout and adapter-failure branches returned through the legacy unavailable reporter. The terminal showed human stderr while Codex received empty stdout, so a stopped analyzer looked silent to the active model.
+
+Route every migrated launcher-owned failure through the neutral unavailable envelope and provider adapter. Keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), and `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
+
+## Footgun: Rejecting invalid hook configuration instead of clamping it wedges every tool call
+
+**Status:** active | **Created:** 2026-08-11 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** When a blocking hook validates user configuration, decide what an out-of-range or empty value does before shipping the validator; rejection is a session-wide outage, not a local error.
+**Trigger phase:** ACT
+
+**Symptoms:** Every Bash tool call is denied with `Policy hook unavailable: hook timeout configuration is invalid`, and the turn cannot stop either, because the Stop hook fails the same way. The message names neither the variable that caused it nor the value that would be accepted, so the user cannot recover without reading the launcher source.
+
+**Why it happens:** `workflow/hooks/hook-launch-runtime.mjs` (search: `resolveHookLaunchTimeoutMs`) returns `null` for any `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` that is not a plain decimal at or below the mode ceiling, and `workflow/hooks/run-with-bash.mjs` (search: `hook timeout configuration is invalid`) turns `null` into a fail-closed unavailable result. Three ordinary values reach that branch. An exported-but-empty variable arrives as `""` rather than `undefined`, so it fails the digit test instead of falling back to the ceiling. A value above the ceiling is rejected rather than clamped. The ceilings differ per mode, so one value can be accepted for the feedback hooks and rejected for the policy hook in the same session, which reads as an intermittent fault rather than a configuration error.
+
+**Evidence:** Measured on branch `dev` at `9adf06be` by running the launcher directly. `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` unset and `=1000` both exit 0; `=30000` (above the 25s policy ceiling), `=abc`, `=0`, and the empty string all exit 2 with the same message. The post-turn hook fails the same way at exit 2, so one variable blocks both command execution and turn completion.
+
+**Prevention:**
+1. Treat unset and empty as the same input. A shell exports an empty string for `export VAR=`, and a validator that only checks `undefined` will reject it.
+2. Clamp a value that exceeds a ceiling rather than rejecting it, or reject it with a message naming the variable, the supplied value, and the accepted maximum.
+3. Decide the failure mode per hook class. Fail-closed is right for a policy hook and defensible for a Stop hook, but a configuration error that blocks both leaves no path back to a working session.
+4. Pair each validator branch with a launcher-level test that asserts the resulting exit status, not just the resolver's return value; the harm lives in the caller's translation of `null`, not in the resolver.
 
 ## Footgun: Blocking Stop scanners can wedge on gitignored local state
 
@@ -64,7 +118,7 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 **Why it happens:** A blocking Stop hook runs at turn-end, not at commit time. If it scans gitignored files, it treats local runtime state as work the agent must fix before it can yield. That is too broad for a default hook: ignored paths commonly include real local `.env` files, `_temp/`, coverage output, caches, and test sandboxes. The safety boundary for `post-turn-safety` is committable content: tracked diffs, staged diffs, and untracked non-ignored files.
 
 **Evidence:**
-- 2026-06-14 live loop: `post-turn-safety` scanned ignored `_temp/stryker-tmp/sandbox-*` copies of `.goat-flow/scratchpad/.../.env.example` and blocked placeholder assignments such as `NOTION_TOKEN="ntn_your_notion_token_here"`, causing Claude Stop to re-fire repeatedly.
+- 2026-06-14 live loop: `post-turn-safety` scanned ignored mutation-test sandbox copies of an environment example and blocked placeholder assignments such as `NOTION_TOKEN="ntn_your_notion_token_here"`, causing Claude Stop to re-fire repeatedly.
 - Current hook scope: `workflow/hooks/post-turn-safety.sh` (search: `scan_tracked_changes`) and (search: `scan_untracked_changes`) scan tracked/staged/non-ignored changes only; there is no ignored-file scan.
 - Regression coverage: `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `allows ignored env files that are not staged`) and (search: `blocks ignored env files once they are force-staged`) lock the boundary: local ignored files are skipped, force-staged ignored files still block.
 
@@ -124,13 +178,13 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 ## Footgun: Gitignored local artifacts make repository scans diverge between local and CI
 
 **Status:** active | **Created:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 2 | **Latest occurrence:** 2026-08-07
+**Incident count:** 1 | **Latest occurrence:** 2026-08-07
 
-**Trap:** A full-repository analyzer can silently depend on gitignored local state. The gruff warning-ratchet floor was first recorded as 448 analysed files because the scan counted `.goat-flow/hooks/run-with-bash.mjs`, the gitignored installed mirror of the tracked `workflow/hooks/run-with-bash.mjs`. Later, local `dist/cli/cli.js` satisfied the package binary check while a fresh CI checkout ran the ratchet before building `dist/` and reported `design.package-bin-missing`. In both cases local verification was green only because the developer tree contained files CI did not.
+**Trap:** A full-repository analyzer can silently depend on gitignored local state. Local `dist/cli/cli.js` satisfied the package binary check while a fresh CI checkout ran the warning ratchet before building `dist/` and reported `design.package-bin-missing`. Local verification was green only because the developer tree contained generated files absent from the clean checkout.
 
-**Evidence:** Measured on 2026-08-07 while adding the ratchet: local scan `paths.analysedFiles: 448` with a `security.process-exec` identity for the gitignored mirror; the identical tree minus gitignored state analysed 447 files with no mirror identity. Measured again from a clean `git archive`: the ratchet emitted stable identity `75483f7900f8f4f6` before the build, then passed after `npm run build` with 449 analysed files. Anchors: `.gruff-ts.yaml` (search: `installed hook mirrors are gitignored local copies`), `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`), `.github/workflows/ci.yml` (search: `Build package binary`).
+**Evidence:** Measured from a clean `git archive` on 2026-08-07: the ratchet emitted stable identity `75483f7900f8f4f6` before the build, then passed after `npm run build` with 449 analysed files. Anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`) and `.github/workflows/ci.yml` (search: `Build package binary`).
 
-**Prevention:** A shared scan contract may only cover files every environment can reproduce. Before recording a coverage floor or accepted-debt manifest, ignore duplicated gitignored artifacts in the analyzer's path config and verify every manifest entry's file with `git ls-files --error-unmatch`. When a rule validates a declared generated artifact, build that artifact before the scan in every environment. Reproduce the gate from a clean tracked-tree fixture instead of trusting a developer tree that already contains build output.
+**Prevention:** A shared scan contract may cover only files every environment can reproduce. Build declared generated artifacts before the scan in every environment, verify accepted-debt paths against tracked or deliberately generated inputs, and reproduce the gate from a clean tracked-tree fixture instead of trusting an existing developer build.
 
 ## Footgun: Nested template literals can blind the gruff-ts block scanner to everything after them
 
@@ -138,15 +192,32 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 
 **Trap:** A template literal nested inside another template's `${...}` interpolation (for example `` `${JSON.stringify({ reason: `text ${value}` })}` ``) breaks gruff-ts 0.4.0 function-block detection: the scanner treats the inner backtick as closing the outer template, misreads the following braces, and attributes the rest of the file to the enclosing function. Findings inside the blinded region simply never appear, so the file reads cleaner than it is - the launcher's argv `spawnSync` calls produced no `security.process-exec` finding at all until the nesting was removed, and the phantom mega-function only surfaced when added lines pushed it over `size.function-length`.
 
-**Evidence:** Measured on 2026-08-07: with nested templates in `reportUnavailable`, the analyzer reported `size.function-length` of 226 lines attributed to `reportUnavailable` (a ~40-line function) and zero process-exec findings for the file; after replacing the nested template with plain concatenation, the phantom finding disappeared and the file's real `spawnSync` warning appeared for the first time. Anchors: `workflow/hooks/run-with-bash.mjs` (search: `a template literal`), `scripts/gruff-warning-baseline.json` (search: `surfaced when the M03 nested-template refactor`).
+**Evidence:** Measured on 2026-08-07: with nested templates in `reportUnavailable`, the analyzer reported `size.function-length` of 226 lines attributed to `reportUnavailable` (a ~40-line function) and zero process-exec findings for the file; after replacing the nested template with plain concatenation, the phantom finding disappeared and the file's real `spawnSync` warning appeared for the first time. Anchors: `workflow/hooks/run-with-bash.mjs` (search: `a template literal`), `scripts/gruff-warning-baseline.json` (search: `Hook launcher spawns validated Bash`).
 
 **Prevention:** Treat a suspiciously clean gruff result on a file with nested template literals as unparsed, not clean. Prefer plain concatenation or an extracted variable over templates nested inside interpolations in analyzed source, and when a size/complexity finding names a function far smaller than the reported span, suspect scanner blinding before refactoring the named function.
+
+---
+
+## Footgun: A `-diff` gitattribute blinds content scanners that enumerate changed paths
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A post-turn or pre-commit content scanner reports a changed path as unscannable and refuses to claim coverage, even though the file is plain text. Marking it `text` alone does not clear the report.
+
+**Evidence:**
+- `.goat-flow/hooks/post-turn-safety.sh` (search: `binary changed path not scanned`) builds its inventory from `git diff --numstat` and treats every `-\t-\t<path>` record as a coverage gap.
+- `.gitattributes` (search: `package-lock.json`) previously carried `binary`. `git diff --numstat` emitted `-\t-\tpackage-lock.json` while `file` reported JSON text data with zero NUL bytes.
+- Switching to `text -diff` did **not** fix it: `-diff` alone still suppresses numstat counts. Only removing `-diff` restored `2\t2\tpackage-lock.json`.
+
+**Why it happens:** `binary` is shorthand for `-text -diff`, and it is `-diff` - not `-text` - that makes numstat report a path as uncountable. A scanner reading numstat therefore cannot distinguish a real binary from a text file whose diff is merely suppressed.
+
+**Prevention:** To keep a generated file out of review noise without blinding scanners, use `text linguist-generated=true`, which collapses the diff in GitHub review while leaving numstat counts intact. Reserve `-diff` for genuinely unreadable content. After changing a lockfile attribute, confirm with `git diff --numstat -- <path>` that real counts appear.
 
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
 
-- **git diff --stat unreliable for scope detection** (resolved 2026-04-03) - auto-detect uses staged, then unstaged, then full diff (M17).
+- **git diff --stat unreliable for scope detection** (resolved 2026-04-03) - auto-detect uses staged, then unstaged, then full diff.
 - **Advisory hooks create unfixable quality warning after setup** (resolved 2026-04-14) - hooks ship enforce-mode (`GOAT_LINT_ENFORCE` defaults to 1).
 - **Codex hooks registered in config.toml instead of hooks.json** (resolved 2026-04-15) - moved to `.codex/hooks.json`; TOML hook sections were silently ignored.
 - **Codex hook migrations drift across files, templates, installer, docs** (resolved 2026-04-15) - restored Codex guardrail registration; aligned all four surfaces.
@@ -155,7 +226,7 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 
 **Status:** resolved | **Created:** 2026-06-07 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
 
-**Resolution:** Current migration code removes managed legacy gruff registrations before pruning per-agent scripts and rebuilds only supported/enabled central entries. The focused regression `test/integration/setup-install-migrations.test.ts` (search: `prunes legacy Codex gruff hook registrations because Codex gruff is unsupported`) verifies unsupported Codex registrations are pruned while the deny hook remains registered. `test/unit/hook-registrar-surfaces.test.ts` (search: `enables gruff-code-quality for a detected Antigravity surface`) verifies a supported, detected surface receives the enabled central gruff registration.
+**Resolution:** Current migration removes managed legacy Gruff registrations before pruning per-agent scripts and rebuilds only provider-supported, enabled central entries. `test/integration/setup-install-codex-config-migration.test.ts` (search: `migrates legacy Codex Gruff registration to the approved provider contract`) verifies that an old Codex command becomes the approved central contract while a custom user event remains. `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) verifies that an enabled desired state does not restore a registration whose feedback cannot reach the model.
 
 **Original symptoms:** The installer could successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure appeared only after upgrade because fresh installs used the new template shape and disabled optional hooks did not expose the stale entry.
 
@@ -166,7 +237,7 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 - `workflow/install-goat-flow.sh` (search: `appendGruffHookEntries`) re-adds central gruff registrations from the enabled hook toggle rather than preserving stale per-agent paths.
 - `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`) reads the existing config toggle so enabled optional hooks survive upgrades while disabled hooks stay absent.
 
-**Prevention:** Any future optional hook must enter the managed-hook removal list before legacy files are pruned. Regenerate current registrations from registry/config state, and add upgrade fixtures whenever an optional hook's install path changes.
+**Prevention:** Add every future optional hook to the managed removal list before legacy files are pruned. Rebuild registrations from current registry and config state, preserve desired toggles for unsupported providers, and add upgrade fixtures whenever install paths or delivery support changes.
 
 ## Footgun: Fail-soft analyzer skips can silently uncover a configured language
 

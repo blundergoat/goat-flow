@@ -1,15 +1,8 @@
 /**
- * Registrar that reconciles `.goat-flow/config.yaml` hook truth to detected
- * hook-capable agent surfaces in the selected project.
+ * Reconciles hook settings with agents detected in the user's selected project.
  */
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  unlinkSync,
-} from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { getAgentProfiles } from "../agents/registry.js";
 import {
   readHookEnabled,
@@ -17,11 +10,15 @@ import {
   removeTopLevelConfigBlock,
   setHookEnabled,
 } from "../config/writer.js";
-import { getTemplatePath } from "../paths.js";
-import { AUDIT_VERSION } from "../constants.js";
-import { projectIsAheadOfCli } from "../version-compare.js";
+import {
+  classifyHookEffectiveState,
+  type HookEffectiveState,
+  type HookEffectiveStateFacts,
+} from "../hook-contracts.js";
+import { hookScenarioForHookId } from "../hook-verification-contracts.js";
 import type { AgentId, AgentProfile } from "../types.js";
 import {
+  currentHookProviderSupportGate,
   getHookSpec,
   isValidHookIdShape,
   listHookSpecs,
@@ -30,29 +27,22 @@ import {
 import {
   readAgentHookState,
   writeAgentHookState,
+  type AgentHookReadState,
+  type AgentHookRegistrationIssue,
 } from "./agent-hook-writer.js";
+import {
+  HookManagedInstallationError as HookRegistrarError,
+  copyHookScripts,
+  hookConfigExists,
+  managedFileIsTrusted,
+  managedHookInstallationFacts,
+  removeHookScripts,
+  shouldReconcileAgent,
+  type ManagedHookInstallationFacts,
+} from "./hook-managed-installation.js";
+import { hookSupportGateAfterLocalProof } from "./hook-runtime-proof.js";
 import { writeFileAtomic } from "./safe-exec.js";
 
-const DENY_DANGEROUS_POLICY_FILES = [
-  "patterns-shell.sh",
-  "patterns-paths.sh",
-  "patterns-writes.sh",
-  "deny-dangerous-self-test.sh",
-];
-const LEGACY_AGENT_HOOK_DIRS = [
-  ".claude/hooks",
-  ".codex/hooks",
-  ".agents/hooks",
-  ".github/hooks",
-];
-const LEGACY_DENY_DANGEROUS_SCRIPT_NAMES = [
-  "guard-common.sh",
-  "guard-destructive-shell.sh",
-  "guard-secret-paths.sh",
-  "guard-repository-writes.sh",
-  "guardrails-self-test.sh",
-  "deny-dangerous.self-test.sh",
-];
 const REMOVED_HOOK_TOMBSTONES: HookSpec[] = [
   {
     id: "plan-checkbox-guard",
@@ -70,10 +60,25 @@ const REMOVED_HOOK_TOMBSTONES: HookSpec[] = [
 ];
 
 type HookDrift = "desired-on-actual-off" | "desired-off-actual-on";
+/** Names the installed-file repair shown when registration exists but local coverage is stale. */
+type HookInstallationIssue =
+  | "managed-files-missing"
+  | "installed-version-mismatch"
+  | "managed-path-untrusted";
 
-/** Per-agent hook installation/config state for one registry hook. */
-interface HookAgentState extends Record<"supported", boolean> {
+/** Per-agent hook state shown by setup, audit, CLI, and dashboard views. */
+export interface HookAgentState extends Record<"supported", boolean> {
   installed: boolean;
+  isRegistered: boolean;
+  isCurrentVersionInstalled: boolean;
+  isTrusted: boolean;
+  registrationIssue: AgentHookRegistrationIssue | null;
+  installationIssue: HookInstallationIssue | null;
+  effectiveState: HookEffectiveState;
+  effectiveStateLabel: string;
+  evidenceIdentity: string | null;
+  repairCommand: string | null;
+  repairSummary: string;
   scriptPath: string | null;
   configPath: string | null;
   drift?: HookDrift;
@@ -90,18 +95,53 @@ export interface HookState extends Record<"togglable" | "enabled", boolean> {
   agents: Record<AgentId, HookAgentState>;
 }
 
-/** HTTP-safe hook registrar failure with the status code routes should return. */
-class HookRegistrarError extends Error {
-  constructor(
-    message: string,
-    readonly statusCode: number,
-  ) {
-    super(message);
-    this.name = "HookRegistrarError";
-  }
-}
-
 export { HookRegistrarError };
+
+type HookEffectiveStatus = HookEffectiveState["status"];
+
+const HOOK_EFFECTIVE_STATE_LABELS: Record<HookEffectiveStatus, string> = {
+  disabled: "disabled",
+  "provider-undocumented": "provider undocumented",
+  "provider-documentation-stale": "provider documentation stale",
+  "provider-documented-unsupported": "provider documented unsupported",
+  "provider-capture-absent": "provider capture absent",
+  "provider-capture-stale": "provider capture stale",
+  "provider-capture-untrusted": "provider capture untrusted",
+  "provider-capture-inconclusive": "provider capture inconclusive",
+  "provider-live-unsupported": "provider live unsupported",
+  "not-registered": "not registered",
+  "installation-stale": "installation stale",
+  "runtime-untrusted": "runtime untrusted",
+  "not-observed": "not observed running",
+  "result-undelivered": "result undelivered",
+  "scenario-unverified": "scenario unverified",
+  effective: "effective",
+};
+
+/** Registry gate overrides applied to the optimistic effective-state chain shown in hook UIs. */
+const HOOK_GATE_FACT_OVERRIDES: Record<
+  HookEffectiveStatus,
+  Partial<HookEffectiveStateFacts>
+> = {
+  disabled: { isDesired: false },
+  "provider-undocumented": { providerDocumentation: "absent" },
+  "provider-documentation-stale": { providerDocumentation: "stale" },
+  "provider-documented-unsupported": {
+    providerDocumentation: "fresh-unsupported",
+  },
+  "provider-capture-absent": { providerCapture: "absent" },
+  "provider-capture-stale": { providerCapture: "stale" },
+  "provider-capture-untrusted": { providerCapture: "untrusted" },
+  "provider-capture-inconclusive": { providerCapture: "inconclusive" },
+  "provider-live-unsupported": { providerCapture: "fresh-unsupported" },
+  "not-registered": { isRegistered: false },
+  "installation-stale": { isCurrentVersionInstalled: false },
+  "runtime-untrusted": { isTrusted: false },
+  "not-observed": { hasObservedRun: false },
+  "result-undelivered": { hasDeliveredResult: false },
+  "scenario-unverified": { isScenarioVerified: false },
+  effective: {},
+};
 
 /** Validate and resolve a hook id into the registry spec; bad ids throw 400 and unknown ids throw 404. Throws on invalid input. */
 function resolveSpec(hookId: string): HookSpec {
@@ -122,6 +162,7 @@ function isSupportedAgent(agent: AgentProfile): boolean {
   );
 }
 
+/** Return the registry reason shown when this hook cannot protect the selected agent. */
 function unsupportedReasonForSpec(
   spec: HookSpec,
   agent: AgentProfile,
@@ -129,344 +170,280 @@ function unsupportedReasonForSpec(
   return spec.unsupportedAgents?.[agent.id] ?? null;
 }
 
-/** Block hook script writes that would escape the selected project root; throws a 400 registrar error. */
-function assertWithinProject(projectPath: string, targetPath: string): void {
-  const root = resolve(projectPath);
-  const target = resolve(targetPath);
-  const fromRoot = relative(root, target);
-  if (
-    fromRoot === "" ||
-    (fromRoot !== ".." &&
-      !fromRoot.startsWith(`..${String.fromCharCode(47)}`) &&
-      !fromRoot.startsWith(`..${String.fromCharCode(92)}`) &&
-      !isAbsolute(fromRoot))
-  ) {
-    return;
-  }
-  throw new HookRegistrarError("Refusing to write outside project path", 400);
-}
-
-function scriptTarget(
-  projectPath: string,
-  agent: AgentProfile,
-  script: string,
-) {
-  if (!agent.hooksDir) throw new Error(`${agent.id} has no hooks dir`);
-  const target = join(projectPath, agent.hooksDir, script);
-  assertWithinProject(projectPath, target);
-  return target;
-}
-
-function scriptExists(
-  projectPath: string,
-  agent: AgentProfile,
-  spec: HookSpec,
-): boolean {
-  const agentScriptsExist = spec.scriptFiles.every((script) =>
-    existsSync(scriptTarget(projectPath, agent, script)),
-  );
-  if (!agentScriptsExist) return false;
-  if (spec.id !== "deny-dangerous") return true;
-  return DENY_DANGEROUS_POLICY_FILES.every((file) =>
-    existsSync(
-      join(projectPath, ".goat-flow", "hooks", "deny-dangerous", file),
-    ),
-  );
-}
-
-type AgentProfilePathKey =
-  | "instructionFile"
-  | "skillsDir"
-  | "settingsFile"
-  | "hookConfigFile"
-  | "hooksDir";
-
-function profilePathIsUnique(
-  profiles: AgentProfile[],
-  key: AgentProfilePathKey,
-  path: string | null,
-): boolean {
-  if (!path) return false;
-  return profiles.filter((profile) => profile[key] === path).length === 1;
-}
-
-function agentInstalledSurfaceExists(
-  projectPath: string,
-  agent: AgentProfile,
-  profiles: AgentProfile[],
-): boolean {
-  const uniqueOptionalMarkers = [
-    profilePathIsUnique(profiles, "instructionFile", agent.instructionFile)
-      ? agent.instructionFile
-      : null,
-    profilePathIsUnique(profiles, "skillsDir", agent.skillsDir)
-      ? agent.skillsDir
-      : null,
-  ];
-  const markers = [
-    agent.settingsFile,
-    agent.hookConfigFile,
-    profilePathIsUnique(profiles, "hooksDir", agent.hooksDir)
-      ? agent.hooksDir
-      : null,
-    ...uniqueOptionalMarkers,
-  ].filter((marker): marker is string => typeof marker === "string");
-  return markers.some((marker) => existsSync(join(projectPath, marker)));
-}
-
-function hookScriptResidueExists(
-  projectPath: string,
-  agent: AgentProfile,
-  spec: HookSpec,
-  profiles: AgentProfile[],
-): boolean {
-  const scriptFiles =
-    spec.id === "deny-dangerous"
-      ? [...spec.scriptFiles, ...LEGACY_DENY_DANGEROUS_SCRIPT_NAMES]
-      : spec.scriptFiles;
-  if (
-    agent.hooksDir &&
-    profilePathIsUnique(profiles, "hooksDir", agent.hooksDir) &&
-    scriptFiles.some((script) =>
-      existsSync(scriptTarget(projectPath, agent, script)),
-    )
-  ) {
-    return true;
-  }
-  return LEGACY_AGENT_HOOK_DIRS.some((hooksDir) =>
-    scriptFiles.some((script) =>
-      existsSync(join(projectPath, hooksDir, script)),
-    ),
-  );
-}
-
-function shouldReconcileAgent(
-  projectPath: string,
-  agent: AgentProfile,
-  spec: HookSpec,
-  profiles: AgentProfile[],
-): boolean {
-  return (
-    agentInstalledSurfaceExists(projectPath, agent, profiles) ||
-    hookScriptResidueExists(projectPath, agent, spec, profiles)
-  );
-}
-
-/** Check for an existing hook config before writing disabled state for optional hooks. */
-function hookConfigExists(projectPath: string, agent: AgentProfile): boolean {
-  return (
-    agent.hookConfigFile !== null &&
-    existsSync(join(projectPath, agent.hookConfigFile))
-  );
-}
-
-function ensureGoatFlowGitignoreEntry(
-  projectPath: string,
-  entry: string,
-): void {
-  const gitignorePath = join(projectPath, ".goat-flow", ".gitignore");
-  assertWithinProject(projectPath, gitignorePath);
-  mkdirSync(join(projectPath, ".goat-flow"), { recursive: true });
-
-  const original = existsSync(gitignorePath)
-    ? readFileSync(gitignorePath, "utf-8")
-    : "";
-  const hasFinalNewline = original.length === 0 || original.endsWith("\n");
-  const lines = original.split(/\r?\n/u).filter((line, index, all) => {
-    return index < all.length - 1 || line.length > 0;
-  });
-  if (lines.includes(entry)) return;
-
-  const next = `${lines.join("\n")}${lines.length > 0 ? "\n" : ""}${entry}\n`;
-  writeFileAtomic(
-    gitignorePath,
-    hasFinalNewline ? next : next.trimEnd(),
-    projectPath,
-  );
-}
-
+/**
+ * Remove one retired Goat Flow ignore rule while preserving user entries.
+ * Use when an upgrade prunes a removed hook's final state file.
+ * @param projectPath - selected project; empty text cannot locate an owned ignore file
+ * @param gitignoreEntry - exact managed rule; empty text matches no useful entry
+ * @returns nothing; missing files or rules leave the user's policy unchanged
+ */
 function removeGoatFlowGitignoreEntry(
   projectPath: string,
-  entry: string,
+  gitignoreEntry: string,
 ): void {
-  const gitignorePath = join(projectPath, ".goat-flow", ".gitignore");
-  assertWithinProject(projectPath, gitignorePath);
-  if (!existsSync(gitignorePath)) return;
-  const original = readFileSync(gitignorePath, "utf-8");
-  const hasFinalNewline = original.endsWith("\n");
-  const lines = original.split(/\r?\n/u);
-  if (hasFinalNewline) lines.pop();
-  const nextLines = lines.filter((line) => line !== entry);
-  if (nextLines.length === lines.length) return;
-  const next = `${nextLines.join("\n")}${hasFinalNewline ? "\n" : ""}`;
-  writeFileAtomic(gitignorePath, next, projectPath);
-}
+  const goatFlowGitignorePath = join(projectPath, ".goat-flow", ".gitignore");
+  // No local ignore file means the retired state rule is already absent for the user.
+  if (!existsSync(goatFlowGitignorePath)) return;
 
-/**
- * Keep the shared `.goat-flow/hooks/deny-dangerous/` policy store tracked by Git.
- *
- * Adds both `!hooks/` and `!hooks/**` negations to `.goat-flow/.gitignore` so the
- * deny-dangerous policy modules survive a fresh clone; without them a gitignored
- * `.goat-flow/` drops the store and the guard fails closed on checkout. Idempotent -
- * each entry is appended only when absent (writes `.goat-flow/.gitignore`).
- *
- * @param projectPath - target project root whose `.goat-flow/.gitignore` is updated
- */
-function ensureHookGitignoreEntries(projectPath: string): void {
-  ensureGoatFlowGitignoreEntry(projectPath, "!hooks/");
-  ensureGoatFlowGitignoreEntry(projectPath, "!hooks/**");
-}
-
-function removeLegacyAgentScriptIfPresent(
-  projectPath: string,
-  hooksDir: string,
-  script: string,
-): void {
-  const target = join(projectPath, hooksDir, script);
-  assertWithinProject(projectPath, target);
-  try {
-    unlinkSync(target);
-  } catch {
-    /* target already gone - stale script pruning is idempotent */
-  }
-}
-
-function removeLegacyAgentHookScripts(
-  projectPath: string,
-  spec: HookSpec,
-): void {
-  for (const hooksDir of LEGACY_AGENT_HOOK_DIRS) {
-    for (const script of spec.scriptFiles) {
-      removeLegacyAgentScriptIfPresent(projectPath, hooksDir, script);
-    }
-    if (spec.id === "deny-dangerous") {
-      for (const script of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
-        removeLegacyAgentScriptIfPresent(projectPath, hooksDir, script);
-      }
-    }
-  }
-}
-
-/**
- * Read a managed hook script from the workflow template tree.
- * Use when enabling a hook so the selected project receives the same script the dashboard describes.
- *
- * @param script - managed script path under `workflow/hooks`; empty cannot resolve to an installable hook
- * @returns script contents written into the user's project
- */
-function hookScriptContent(script: string): string {
-  return readFileSync(getTemplatePath(`workflow/hooks/${script}`), "utf-8");
-}
-
-/**
- * Report whether an installed hook script is stamped newer than this CLI's bundled copy.
- * Guards the guardrail layer: `hooks sync` rewrites installed files from the running CLI's bundle, so an
- * older CLI run against a newer install would silently replace current deny/safety hooks with its own
- * stale copies.
- *
- * This never throws. A target that is missing, unreadable, or carries no version stamp is
- * reported as "not newer", so a first install or a repair still goes ahead for the user.
- *
- * @param target - absolute path of the installed hook script about to be overwritten
- * @returns true when the installed script is ahead of this CLI and must be left alone; false
- *   also covers "cannot tell", so the caller proceeds with the sync
- */
-function installedHookIsNewer(target: string): boolean {
-  // Nothing installed there yet, so this is a first install with no user work to protect.
-  if (!existsSync(target)) return false;
-
-  let installed: string;
-  try {
-    installed = readFileSync(target, "utf-8");
-  } catch {
-    // e.g. the user pointed the CLI at a project checkout they do not own, so the hook is
-    // present but cannot be opened. Treat it as unknown rather than blocking their sync.
-    return false;
-  }
-
-  const stamped = installed.match(
-    /goat-flow-hook-version:\s*([0-9]+\.[0-9]+\.[0-9]+)/,
+  const originalGitignore = readFileSync(goatFlowGitignorePath, "utf-8");
+  const hadFinalNewline = originalGitignore.endsWith("\n");
+  const gitignoreLines = originalGitignore.split(/\r?\n/u);
+  // A final split item is not a rule, so exclude it from the retained content.
+  if (hadFinalNewline) gitignoreLines.pop();
+  // Keep every rule except the exact retired Goat Flow entry.
+  const retainedGitignoreLines = gitignoreLines.filter(
+    (gitignoreLine) => gitignoreLine !== gitignoreEntry,
   );
+  // The rule was already absent, so setup must not rewrite the user's file.
+  if (retainedGitignoreLines.length === gitignoreLines.length) return;
 
-  // A hand-written or pre-stamp hook carries no version, so we cannot claim it is newer.
-  if (!stamped?.[1]) return false;
-
-  return projectIsAheadOfCli(stamped[1], AUDIT_VERSION);
+  const updatedGitignore = `${retainedGitignoreLines.join("\n")}${hadFinalNewline ? "\n" : ""}`;
+  writeFileAtomic(goatFlowGitignorePath, updatedGitignore, projectPath);
 }
 
-function copyHookScripts(
+/** Start with a complete chain, then lower the one registry-owned evidence gate. */
+function providerGateFacts(
+  isDesiredByUser: boolean,
+  effectiveSupportGate: HookEffectiveStatus,
+): HookEffectiveStateFacts {
+  const fullyEffectiveFacts: HookEffectiveStateFacts = {
+    isDesired: isDesiredByUser,
+    providerDocumentation: "fresh-supported",
+    providerCapture: "fresh-supported",
+    isRegistered: true,
+    isCurrentVersionInstalled: true,
+    isTrusted: true,
+    hasObservedRun: true,
+    hasDeliveredResult: true,
+    isScenarioVerified: true,
+  };
+  return {
+    ...fullyEffectiveFacts,
+    ...HOOK_GATE_FACT_OVERRIDES[effectiveSupportGate],
+  };
+}
+
+/** States repaired by regenerating the user's managed config and files. */
+const HOOK_SYNC_REPAIR_STATES = new Set<HookEffectiveStatus>([
+  "not-registered",
+  "installation-stale",
+]);
+/** States repaired by running the user's bounded offline scenarios. */
+const HOOK_VERIFY_REPAIR_STATES = new Set<HookEffectiveStatus>([
+  "not-observed",
+  "result-undelivered",
+  "scenario-unverified",
+]);
+
+/**
+ * Explain the next operator-controlled action for the first unmet effective-state link.
+ * Provider exclusions stay command-free because project sync cannot repair host delivery.
+ */
+function effectiveStateRepair(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
-): void {
-  if (!agent.hooksDir) return;
-  mkdirSync(join(projectPath, agent.hooksDir), { recursive: true });
-  for (const script of spec.scriptFiles) {
-    const target = scriptTarget(projectPath, agent, script);
-    if (installedHookIsNewer(target)) {
-      throw new HookRegistrarError(
-        `Refusing to overwrite ${script}: the installed hook is newer than this CLI (${AUDIT_VERSION}). Re-run with a matching goat-flow release instead of downgrading the guardrail.`,
-        409,
-      );
-    }
-    writeFileAtomic(target, hookScriptContent(script), projectPath);
-    chmodSync(target, 0o755);
+  effectiveState: HookEffectiveState,
+  doesProviderExclusionOwnState = false,
+): { command: string | null; summary: string } {
+  const quotedProjectPath = JSON.stringify(resolve(projectPath));
+  // A provider-limited hook needs new delivery evidence, not a local command the user can rerun.
+  if (doesProviderExclusionOwnState && effectiveState.status !== "disabled") {
+    return {
+      command: null,
+      summary:
+        "Provider result delivery must be proven before Goat Flow can register this hook.",
+    };
   }
-  ensureHookGitignoreEntries(projectPath);
-  if (spec.id === "deny-dangerous") {
-    const targetDir = join(
-      projectPath,
-      ".goat-flow",
-      "hooks",
-      "deny-dangerous",
-    );
-    mkdirSync(targetDir, { recursive: true });
-    for (const file of DENY_DANGEROUS_POLICY_FILES) {
-      const source = getTemplatePath(`workflow/hooks/deny-dangerous/${file}`);
-      const target = join(targetDir, file);
-      assertWithinProject(projectPath, target);
-      writeFileAtomic(target, readFileSync(source, "utf-8"), projectPath);
-      chmodSync(target, 0o755);
-    }
-    for (const script of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
-      removeScriptIfPresent(projectPath, agent, script);
-    }
+  // A disabled hook is an intentional user choice, so no repair command is offered.
+  if (effectiveState.status === "disabled") {
+    return {
+      command: null,
+      summary:
+        "The hook is intentionally disabled; enable it when this coverage is wanted.",
+    };
   }
-  removeLegacyAgentHookScripts(projectPath, spec);
+  // Provider evidence gaps require new proof rather than a local project mutation.
+  if (effectiveState.status.startsWith("provider-")) {
+    return {
+      command: null,
+      summary:
+        "Provider evidence must be refreshed before local setup can claim this hook is effective.",
+    };
+  }
+  // Missing or stale managed files can be restored through the canonical sync path.
+  if (HOOK_SYNC_REPAIR_STATES.has(effectiveState.status)) {
+    return {
+      command: `goat-flow hooks sync ${quotedProjectPath}`,
+      summary:
+        "Re-sync the selected project to restore the registry-owned command and current hook files.",
+    };
+  }
+  // Untrusted paths need human inspection before Goat Flow can safely rewrite them.
+  if (effectiveState.status === "runtime-untrusted") {
+    return {
+      command: null,
+      summary:
+        "Inspect the managed config and hook paths, remove symlinks or hard links, then re-sync.",
+    };
+  }
+  // Missing runtime proof has one bounded offline verification command for the user.
+  if (HOOK_VERIFY_REPAIR_STATES.has(effectiveState.status)) {
+    return {
+      command: `goat-flow hooks verify ${quotedProjectPath} --agent ${agent.id} --scenario ${hookScenarioForHookId(spec.id)}`,
+      summary:
+        "Run the explicit configured-command scenarios; normal audit does not execute project hooks.",
+    };
+  }
+  return {
+    command: null,
+    summary: "Every required hook link has current evidence.",
+  };
 }
 
-function removeScriptIfPresent(
-  projectPath: string,
-  agent: AgentProfile,
-  script: string,
-): void {
-  const target = scriptTarget(projectPath, agent, script);
-  try {
-    unlinkSync(target);
-  } catch {
-    /* target already gone - script removal is idempotent, missing file is fine */
-  }
-}
-
-function removeHookScripts(
+/** Combine registry and local facts while preserving the user's causal provider gap. */
+function effectiveAgentState(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
-): void {
-  removeScriptIfPresent(projectPath, agent, spec.primaryScript);
-  if (spec.id === "deny-dangerous") {
-    for (const script of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
-      removeScriptIfPresent(projectPath, agent, script);
-    }
-  }
-  removeLegacyAgentHookScripts(projectPath, spec);
+  isDesiredByUser: boolean,
+  isRegistered: boolean,
+  isCurrentVersionInstalled: boolean,
+  isTrusted: boolean,
+  doesProviderExclusionOwnState = false,
+): Pick<
+  HookAgentState,
+  | "effectiveState"
+  | "effectiveStateLabel"
+  | "evidenceIdentity"
+  | "repairCommand"
+  | "repairSummary"
+> {
+  const providerEvidence = spec.providerEvidence?.[agent.id];
+  // Missing evidence keeps the user at an unverified provider state.
+  const registrySupportGate = providerEvidence
+    ? currentHookProviderSupportGate(providerEvidence)
+    : "provider-undocumented";
+  const effectiveSupportGate = hookSupportGateAfterLocalProof(
+    projectPath,
+    agent.id,
+    spec.id,
+    registrySupportGate,
+  );
+  const effectiveStateFacts = providerGateFacts(
+    isDesiredByUser,
+    effectiveSupportGate,
+  );
+  effectiveStateFacts.isRegistered = doesProviderExclusionOwnState
+    ? true
+    : isRegistered;
+  effectiveStateFacts.isCurrentVersionInstalled = doesProviderExclusionOwnState
+    ? true
+    : isCurrentVersionInstalled;
+  effectiveStateFacts.isTrusted = doesProviderExclusionOwnState
+    ? true
+    : isTrusted;
+  const effectiveState = classifyHookEffectiveState(effectiveStateFacts);
+  const repair = effectiveStateRepair(
+    projectPath,
+    agent,
+    spec,
+    effectiveState,
+    doesProviderExclusionOwnState,
+  );
+  return {
+    effectiveState,
+    effectiveStateLabel: HOOK_EFFECTIVE_STATE_LABELS[effectiveState.status],
+    evidenceIdentity: providerEvidence?.identity ?? null,
+    repairCommand: repair.command,
+    repairSummary: repair.summary,
+  };
 }
 
-/** Build the state payload for an agent that cannot host the requested hook. */
-function unsupportedAgentHookState(reason: string): HookAgentState {
+/** Name the installed-file link that keeps an exact registration from being current and trusted. */
+function installedHookIssue(
+  isRegistered: boolean,
+  installationFacts: ManagedHookInstallationFacts,
+  isTrusted: boolean,
+): HookInstallationIssue | null {
+  // Registration diagnostics own the first repair while no exact command exists.
+  if (!isRegistered) return null;
+  // Missing script or policy files make the installed command incomplete.
+  if (!installationFacts.hasAllRequiredFiles) {
+    return "managed-files-missing";
+  }
+  // Changed bytes mean setup no longer knows which hook version the user will run.
+  if (!installationFacts.hasCurrentRequiredFiles) {
+    return "installed-version-mismatch";
+  }
+  // Symlinks, hard links, or redirected config paths cannot establish local trust.
+  if (!isTrusted) return "managed-path-untrusted";
+  return null;
+}
+
+/** Translate a machine registration issue into concise setup guidance for the user. */
+function registrationIssueReason(
+  registrationIssue: AgentHookRegistrationIssue,
+): string {
+  const issueReasons: Record<AgentHookRegistrationIssue, string> = {
+    "registration-missing": "The managed hook command is not registered.",
+    "retired-registration":
+      "A retired hook registration must be migrated to the current dispatcher.",
+    "event-mismatch":
+      "The managed command is registered under the wrong lifecycle event.",
+    "matcher-mismatch":
+      "The registered tool matcher does not cover the registry contract.",
+    "command-or-response-mismatch":
+      "The registered launcher or provider response contract is stale.",
+    "timeout-mismatch":
+      "The registered host timeout does not match the hook deadline contract.",
+  };
+  return issueReasons[registrationIssue];
+}
+
+/** Translate installed byte and trust drift into the first repair detail shown in setup. */
+function installationIssueReason(
+  installationIssue: HookInstallationIssue,
+): string {
+  const issueReasons: Record<HookInstallationIssue, string> = {
+    "managed-files-missing":
+      "One or more managed hook or policy files are missing.",
+    "installed-version-mismatch":
+      "Installed hook bytes differ from the bundled registry version.",
+    "managed-path-untrusted":
+      "A managed hook or config path is symlinked, hard-linked, or non-regular.",
+  };
+  return issueReasons[installationIssue];
+}
+
+/** Build an unsupported-agent row that preserves the user's causal delivery gap. */
+function unsupportedAgentHookState(
+  projectPath: string,
+  agent: AgentProfile,
+  spec: HookSpec,
+  isDesiredByUser: boolean,
+  reason: string,
+  doesProviderExclusionOwnState = false,
+): HookAgentState {
+  const effectivePresentation = effectiveAgentState(
+    projectPath,
+    agent,
+    spec,
+    isDesiredByUser,
+    false,
+    false,
+    false,
+    doesProviderExclusionOwnState,
+  );
   return {
     supported: false,
     installed: false,
+    isRegistered: false,
+    isCurrentVersionInstalled: false,
+    isTrusted: false,
+    registrationIssue: null,
+    installationIssue: null,
+    ...effectivePresentation,
     scriptPath: null,
     configPath: null,
     reason,
@@ -482,28 +459,116 @@ function hookDrift(
   return undefined;
 }
 
+/**
+ * Resolve local trust, installed-file drift, script path, and the first repair reason.
+ * Use once per supported agent so every Hooks UI presents the same local diagnosis.
+ * @param projectPath - selected project; empty text cannot identify trusted managed files
+ * @param agent - selected provider; null config or hook paths remain untrusted or absent
+ * @param spec - managed hook contract; empty script metadata cannot produce a path
+ * @param registrationState - parsed config state; empty issue flags mean registration is healthy
+ * @param isRegistered - false keeps installed-file issues behind registration repair
+ * @param installationFacts - managed file facts; false values identify missing, stale, or unsafe files
+ * @returns complete local details; null fields mean no path or repair issue is available
+ */
+function supportedHookLocalDetails(
+  projectPath: string,
+  agent: AgentProfile,
+  spec: HookSpec,
+  registrationState: AgentHookReadState,
+  isRegistered: boolean,
+  installationFacts: ManagedHookInstallationFacts,
+) {
+  const hookConfigPath =
+    agent.hookConfigFile === null
+      ? null
+      : join(projectPath, agent.hookConfigFile);
+  const isTrusted =
+    installationFacts.hasTrustedRequiredFiles &&
+    hookConfigPath !== null &&
+    managedFileIsTrusted(projectPath, hookConfigPath);
+  const installationIssue = installedHookIssue(
+    isRegistered,
+    installationFacts,
+    isTrusted,
+  );
+  let repairReason: string | null = null;
+  // Managed file and trust problems are the last local link and the first repair shown.
+  if (installationIssue !== null) {
+    repairReason = installationIssueReason(installationIssue);
+    // Registration mismatches are more specific than generic config flags.
+  } else if (registrationState.registrationIssue !== undefined) {
+    repairReason = registrationIssueReason(registrationState.registrationIssue);
+    // Invalid JSON prevents the user from relying on any configured row.
+  } else if (registrationState.configInvalid) {
+    repairReason = "Hook config file is invalid JSON.";
+    // A missing config tells the user to create or sync the provider registration.
+  } else if (registrationState.configMissing) {
+    repairReason = "Hook config file is missing.";
+  }
+  const scriptPath =
+    agent.hooksDir === null
+      ? null
+      : `${agent.hooksDir}/${spec.primaryScript}`.replace(/\/+/gu, "/");
+  return { isTrusted, installationIssue, scriptPath, repairReason };
+}
+
+/**
+ * Build one supported provider row for CLI, audit, and dashboard hook views.
+ * Use when the manifest exposes registration surfaces for the selected agent.
+ */
 function supportedAgentHookState(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
-  desired: boolean,
+  isDesiredByUser: boolean,
 ): HookAgentState {
-  const read = readAgentHookState(projectPath, agent, spec);
-  const installed = read.installed && scriptExists(projectPath, agent, spec);
-  const drift = hookDrift(desired, installed);
-  return {
+  const registrationState = readAgentHookState(projectPath, agent, spec);
+  const installationFacts = managedHookInstallationFacts(
+    projectPath,
+    agent,
+    spec,
+  );
+  const isRegistered = registrationState.installed;
+  const installed = isRegistered && installationFacts.hasAllRequiredFiles;
+  const isCurrentVersionInstalled =
+    installed && installationFacts.hasCurrentRequiredFiles;
+  const localDetails = supportedHookLocalDetails(
+    projectPath,
+    agent,
+    spec,
+    registrationState,
+    isRegistered,
+    installationFacts,
+  );
+  const drift = hookDrift(isDesiredByUser, installed);
+  const effectivePresentation = effectiveAgentState(
+    projectPath,
+    agent,
+    spec,
+    isDesiredByUser,
+    isRegistered,
+    isCurrentVersionInstalled,
+    localDetails.isTrusted,
+  );
+  const hookState: HookAgentState = {
     supported: true,
     installed,
-    scriptPath: agent.hooksDir
-      ? `${agent.hooksDir}/${spec.primaryScript}`.replace(/\/+/gu, "/")
-      : null,
+    isRegistered,
+    isCurrentVersionInstalled,
+    isTrusted: localDetails.isTrusted,
+    registrationIssue: registrationState.registrationIssue ?? null,
+    installationIssue: localDetails.installationIssue,
+    ...effectivePresentation,
+    scriptPath: localDetails.scriptPath,
     configPath: agent.hookConfigFile,
-    ...(drift ? { drift } : {}),
-    ...(read.configMissing ? { reason: "Hook config file is missing." } : {}),
-    ...(read.configInvalid
-      ? { reason: "Hook config file is invalid JSON." }
-      : {}),
   };
+  // Drift is omitted when the user's desired and installed states already agree.
+  if (drift !== undefined) hookState.drift = drift;
+  // A null reason keeps healthy rows concise while preserving exact local repair context.
+  if (localDetails.repairReason !== null) {
+    hookState.reason = localDetails.repairReason;
+  }
+  return hookState;
 }
 
 function agentHookState(
@@ -513,9 +578,24 @@ function agentHookState(
   desired: boolean,
 ): HookAgentState {
   const unsupportedReason = unsupportedReasonForSpec(spec, agent);
-  if (unsupportedReason) return unsupportedAgentHookState(unsupportedReason);
+  // A provider exclusion stays visible even when shared script files exist on disk.
+  if (unsupportedReason) {
+    return unsupportedAgentHookState(
+      projectPath,
+      agent,
+      spec,
+      desired,
+      unsupportedReason,
+      true,
+    );
+  }
+  // A profile without registration surfaces cannot make this hook effective for the user.
   if (!isSupportedAgent(agent)) {
     return unsupportedAgentHookState(
+      projectPath,
+      agent,
+      spec,
+      desired,
       "Agent manifest has no hook directory or hook config file.",
     );
   }
@@ -570,7 +650,6 @@ function reconcileHook(
 /**
  * Disable and remove one hook that used to exist in older installs.
  * Use during hook reconciliation so users do not keep stale controls for removed hooks.
- *
  * @param projectPath - project being cleaned; empty means no project hook files can be found
  * @param spec - removed hook descriptor; empty script lists mean only config state is cleared
  * @returns nothing; stale files and agent registrations are removed when present
@@ -593,7 +672,6 @@ function pruneRemovedHookTombstone(projectPath: string, spec: HookSpec): void {
 /**
  * Remove all tombstoned hook artifacts from a project.
  * Use during reconciliation after a user upgrades from an older hook set.
- *
  * @param projectPath - project being cleaned; empty means there are no hook files or config blocks to edit
  * @returns nothing; removed hooks disappear from config, gitignore, and agent hook folders
  */

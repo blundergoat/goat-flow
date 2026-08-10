@@ -5,7 +5,7 @@
  */
 
 type ProjectSortKey = "name" | "state" | "action" | "details";
-type HookFilter = "all" | "enabled" | "disabled" | "drift";
+type HookFilter = "all" | "enabled" | "disabled" | "ineffective" | "drift";
 type HookSection = "safety" | "workflow" | "git" | "quality";
 type HookTone = "danger" | "workflow" | "warning" | "neutral";
 

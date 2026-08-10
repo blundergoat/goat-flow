@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-10
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -68,19 +68,21 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Agent capability metadata goes stale when upstream docs add hooks
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Re-check each provider, event, and result channel instead of carrying agent-level support forward.
+**Trigger phase:** READ
+**Incident count:** 3 | **Latest occurrence:** 2026-08-10
 
-**Symptoms:** Dashboard and docs can report an agent as "not supported" for hooks while the runtime has a project-local hook config or a viable fallback path. The 2026-05-26 Antigravity correction found stale "not wired" claims in `workflow/setup/agents/antigravity.md` (search: `.agents/hooks.json`), `workflow/hooks/README.md` (search: `secret-bearing file tools`), and `workflow/manifest.json` (search: `"antigravity"`) after official Antigravity docs documented `.agents/hooks.json` and PreToolUse hooks. The 2026-05-28 gruff correction then removed a stale `gruff-code-quality` exclusion after the hook gained Antigravity file-tool matchers and a git-changed-file fallback.
+**Symptoms:** Hook support can drift independently by event and response channel. Antigravity's 2026-05-26 correction proved PreToolUse config, and its 2026-05-28 Gruff correction proved PostToolUse input through file matchers and a changed-file fallback. On 2026-08-10, those input paths were still cited as full Gruff support after provider evidence showed their output could not reach the active model.
 
-**Why it happens:** Agent capability tables freeze a past product observation. Manifest fields, setup docs, dashboard state, audit logic, and changelog prose then reinforce each other, so structural checks can pass while the primary upstream docs have moved on.
+**Why it happens:** Capability tables freeze one observation and reuse it across events. Setup docs, dashboard state, audit logic, tests, and learning entries then reinforce a user-visible claim that structural checks cannot validate.
 
 **Evidence:**
-- `workflow/manifest.json` (search: `"hook_config_file": ".agents/hooks.json"`) now records the corrected Antigravity hook config.
-- `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`) maps `gruff-code-quality` to Antigravity file-edit tool names.
-- `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`) prefers payload paths, and `workflow/hooks/gruff-code-quality.sh` (search: `git_changed_supported_paths`) falls back to git-changed supported files when a PostToolUse payload omits the edited path.
-- `workflow/hooks/agent-config/antigravity-hooks.json` (search: `run_command|view_file`) is the new Antigravity config template.
-- `.agents/hooks.json` (search: `deny-dangerous`) is the installed mirror that proves this controlling workspace no longer treats Antigravity as hookless.
+- `workflow/manifest.json` (search: `"hook_config_file": ".agents/hooks.json"`) records the project hook surface without claiming every event can return a result.
+- `src/cli/server/agent-hook-command.ts` (search: `spec.id === "gruff-code-quality"`) proves Antigravity input routing only.
+- `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`) records the current delivery limit.
+- `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) proves the desired toggle does not create unusable registration.
 
-**Prevention:** Before marking an agent capability "unsupported" or "capability-limited", check current primary product docs and the local binary version, then test whether an agent-specific matcher or repository-state fallback can preserve the contract. Use hook-specific unsupported reasons only after the fallback path is disproven. After correcting capability metadata, grep docs, changelog, footguns, manifest, audit, dashboard, templates, and installed mirrors for the old unsupported wording.
+**Prevention:** Check current primary docs and the local binary, then prove the exact event, payload, command, response, continuation, and model visibility separately. Treat config, matchers, and fallbacks as feasibility evidence. After a correction, grep every product, prose, template, and test consumer for the superseded claim.
 
 ## Footgun: Hook additions and renames cross runtime, dashboard, and audit surfaces
 
@@ -98,8 +100,8 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** When a behavior fix changes evidence cited by an active footgun, update or resolve that entry in the same change.
 **Trigger phase:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-08-07
+**Incident count:** 4
+**Latest occurrence:** 2026-08-10
 
 **Symptoms:** A footgun is tagged `**Status:** active` and reads as a current trap. The Prevention rules are still good, but the Symptoms paragraph describes an obsolete code shape. Its search anchor either resolves to behavior that now contradicts the prose or resolves to nothing. Future agents following it either make the wrong current-state decision, chase a removed implementation, or distrust the entire footgun bucket because one entry is verifiably wrong.
 
@@ -110,6 +112,8 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 **Recurrence 2026-08-04:** The first evaluator missed chained needles and root dotfiles; naive carry-over then crossed sentence boundaries. The final grammar follows chains only from an explicit same-sentence target, recognizes dotfiles, and ignores fences. Contracts: `test/unit/check-content-quality.test.ts` (search: `validates every chained search needle`), (search: `does not guess a target for an unqualified search anchor`), and (search: `validates root dotfile search anchors`).
 
 **Recurrence 2026-08-07:** `.goat-flow/learning-loop/footguns/auditor.md` (search: `## Footgun: The deny-mechanism runtime smoke executes the target checkout's own hook command`) and the lesson that cited it were corrected at 07:09 to describe a dashboard audit using `"full"`. Commit `19046c08` changed `src/cli/server/dashboard-audit-routes.ts` (search: `agentFilter === null ? "present-only" : "static"`) at 17:06 without refreshing either entry. The route-level contract in `test/integration/dashboard-audit-api.test.ts` (search: `does not execute selected-project hook launcher in /api/audit`) proves the old present-tense claim is now false.
+
+**Recurrence 2026-08-10:** The Antigravity capability footgun and a resolved optional-hook migration entry still cited local Gruff wiring as current support after the registry and installer stopped registering it. The corrected entries now distinguish runnable input handling from model-visible result delivery. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`) and `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`).
 
 **Prevention:**
 1. When you fix a bug that has a footgun entry, in the same PR EITHER (a) rewrite the Symptoms paragraph to describe the principle the fix demonstrates and update the search anchors to point at the current shape, OR (b) move the entry to the file's "Resolved Entries" section with a one-line summary of what was learned. Do not leave an `active` footgun whose Symptoms anchors don't resolve.
@@ -140,8 +144,8 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 **Status:** active | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Stage a rename before registering its destination; search all tracked files, not only Markdown, for old paths.
 **Trigger phase:** VERIFY
-**Incident count:** 5
-**Latest occurrence:** 2026-07-27
+**Incident count:** 6
+**Latest occurrence:** 2026-08-09
 
 **Symptoms:** A renamed or moved file breaks links in multiple documents. Dense pointer maps mean one stale path can mislead setup, glossary, or architecture readers at multiple entry points.
 
@@ -152,9 +156,7 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 - `workflow/setup/01-system-overview.md` → `NEXT:` links and numbered-step references hard-link the setup flow across multiple files; renaming one step file breaks the flow.
 - `.goat-flow/architecture.md` → component/location tables point readers at concrete paths across `src/`, `workflow/`, and `.goat-flow/`; stale paths here become wrong architecture guidance, not cosmetic drift.
 
-**Recurrence update (2026-07-27):**
-- M01 registered the new path before M02 created it, so audit failed with `commit-guidance: evidence_path does not exist`. Enforcer: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`); pointer: `src/cli/audit/harness/check-verification.ts` (search: `const commitGuidance`). The update waited for the rename.
-- M02's docs inventory missed two paths in `scripts/profile-dashboard-audit.mjs`; a tracked sweep found its synthetic Copilot builder (search: `Synthetic. Commit rules`) before closeout.
+**Recurrences:** On 2026-07-27, M01 registered a destination before M02 created it, so audit failed `evidence_path does not exist`; M02 also missed two synthetic config references. On 2026-08-09, correcting M02's timeout premise left removed-phrase anchors in two roadmaps and two analysis reports; `rg --hidden --no-ignore` caught them. The roadmap files are gitignored, so their same-session before/after sweep is not a durable anchor. Enforcers: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`), `scripts/profile-dashboard-audit.mjs` (search: `Synthetic. Commit rules`), and `src/cli/facts/shared/search-anchors.ts` (search: `Validate one parsed citation`).
 
 ~~**Evidence (historical - resolved):** the M13 Phase 3 setup-step renumber left three stale pointers - `.goat-flow/glossary.md` and an evidence-lifecycle ADR entry at removed `workflow/setup/09-customise-to-project.md`, and `.goat-flow/learning-loop/decisions/ADR-011-sbao-mob-core-features.md` at removed `05-install-skills.md`~~ (resolved: now `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`; the ADR carrying the second pointer later left the active set).
 
@@ -179,20 +181,15 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Version bump checks do not cover synthetic project config strings
 
 **Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 3 | **Latest occurrence:** 2026-08-03
+**Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
-**Symptoms:** The bump and version checks pass while helpers, examples, fixtures, or mirrors still name the previous release.
+**Symptoms:** Curated version and mirror checks pass while fixtures, examples, or newly shipped runtimes retain the previous release.
 
-**Why it happens:** Both tools cover curated paths, not arbitrary embedded strings or newly added release surfaces.
+**Why it happens:** The writer and checker can share the same incomplete list, so agreement does not prove coverage.
 
-**Evidence:** v1.3.2 checks passed with old values in `scripts/profile-dashboard-audit.mjs` (search: `writeSyntheticProject`) and `test/integration/dashboard-server.helpers.ts` (search: `makeDashboardCacheProject`). v1.6.1 checks missed stale frontmatter under `workflow/skills/playbooks/`. v1.15.0 checks missed 1.14.0 plan examples in `README.md`, `docs/cli.md`, and `src/cli/cli.ts` (search: `plans export .goat-flow/plans/1.15.0`), plus two regex-escaped assertions now split across `test/contract/skill-hardening-review-1.test.ts` (search: `goat-flow-reference-version: "1\.15\.0"`) and `test/contract/skill-hardening-skills-1.test.ts` (search: `goat-flow-reference-version: "1\.15\.0"`).
+**Evidence:** Earlier releases missed synthetic dashboard projects, playbook frontmatter, plan examples, and regex-escaped assertions. The 1.15.1 release initially omitted shared Node hook runtimes; final proof then found two 1.15.0 contract assertions and no frozen v1.15.1 manifest snapshot. Evidence anchors: `scripts/bump-version.sh` (search: `manifest_hook_runtime_paths`), `scripts/check-versions.mjs` (search: `hookRuntimeTemplates`), `test/contract/skill-hardening-review-1.test.ts` (search: `registers evidenced goat-review reasoning traps across every root`), and `test/unit/manifest.test.ts` (search: `provides a readable snapshot for every changelog release`).
 
-**Structural anchors:**
-- `scripts/bump-version.sh` (search: `# ── Source files (version string replacement)`) lists the curated surfaces the bump workflow edits.
-- `scripts/check-versions.mjs` (search: `goat-flow-reference-version`) verifies skill and reference frontmatter, not arbitrary embedded config stubs.
-- `workflow/skills/playbooks/README.md` (search: `goat-flow-reference-version`) is a standalone playbook tree that must be included alongside `workflow/skills/reference/`.
-
-**Prevention:** After each bump, search the same repository-wide path set for both literal old versions (`rg -n -F '1.14.0' ...`) and regex-escaped forms (`rg -n -F '1\.14\.0' ...`), then classify historical and compatibility evidence.
+**Prevention:** Derive fanout from manifest ownership. After every bump, search tracked release surfaces for literal and regex-escaped old versions, capture the release snapshot, run packed-byte canaries, and run the full suite.
 
 ---
 

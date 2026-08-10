@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-08-04
+last_reviewed: 2026-08-09
 ---
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
@@ -246,7 +246,9 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Recurrence update 2026-05-30:** After completing the deny-dangerous hook consolidation, the user asked "whats next". The agent responded with `git add` / `git commit` sequences and a PR follow-up path, even though the user had not asked to commit, stage, push, or open a PR. No commit was executed, but the answer still steered the user into a write workflow as the default next action. The current rule is stronger and unambiguous: `AGENTS.md` (search: `Coding agents never run`) reserves commits and pushes for the user.
 
-**Prevention:** Make closing gates part of the deliverable, not an optional afterword. After completing milestone tasks, run the named testing gate and strict plan validation before lifecycle promotion. Report what was done and stop; do not make commits, pushes, PRs, staging commands, or follow-on Git write workflows the default next action. Coding agents never run `git commit` or `git push`, even when asked; hand those operations back to the user. If asked "what's next" after verified work, default to non-mutating options: review the diff, inspect a file, or wait for the requested handoff. Providing a suggested commit message is allowed only when asked for one.
+**Recurrence update 2026-08-09:** M00 automated proof passed, but its final compatibility row combined `[automated, HUMAN-PENDING: ...]` metadata and remained unchecked. Strict plan validation correctly rejected the row as executor-owned because human ownership requires a leading `[human]` marker. The correction closed the automated row and added a separate open `[human]` native-runtime row before presenting the gate.
+
+**Prevention:** Make closing gates part of the deliverable, not an optional afterword. Separate executor and human proof into distinct rows: close automated evidence before promotion and mark each remaining human-owned row with leading `[human]`. After completing milestone tasks, run the named testing gate and strict plan validation before lifecycle promotion. Report what was done and stop; do not make commits, pushes, PRs, staging commands, or follow-on Git write workflows the default next action. Coding agents never run `git commit` or `git push`, even when asked; hand those operations back to the user. If asked "what's next" after verified work, default to non-mutating options: review the diff, inspect a file, or wait for the requested handoff. Providing a suggested commit message is allowed only when asked for one.
 
 ---
 

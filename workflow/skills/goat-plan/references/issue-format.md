@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.0"
+goat-flow-reference-version: "1.15.1"
 ---
 # ISSUE.md Format
 
@@ -103,7 +103,7 @@ Show delivery phases, not duplicated milestone tasks. Tasks remain open at autho
 - [ ] <Next delivery phase with one outcome and no executor-only detail.> = <agent-time range>
 ```
 
-How ranges must reconcile with Delivery. Label prerequisites separately and exclude them from the delivery subtotal.
+Every ISSUE delivery band is derived from milestone forecasts; reconcile How with Delivery. ISSUE bands summarize estimates and never input a milestone estimate. Exclude prerequisites from the subtotal.
 
 ## Out of scope
 

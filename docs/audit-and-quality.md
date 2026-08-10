@@ -32,33 +32,14 @@ For the full deterministic inventory, including every check id and what it valid
 
 Binary pass/fail. This is the structural setup gate - it validates that required files/directories exist, config parses, skills are installed at the expected paths, and hooks are registered. It does not execute configured toolchain commands (lint, test, build). Step 06 uses `audit` as the minimum gate; preflight runs `audit` plus additional checks including ESLint, Prettier, version consistency, instruction file line counts (warn at `line_target`, fail at `line_limit`), Router Table path parity across agents, encyclopedia-content guards, and downstream-content guards.
 
-Checks are grouped by **scope**:
+Build checks use two scopes:
 
-**setup scope** (GOAT Flow Setup) - 16 checks on goat-flow-owned surfaces:
-- `lessons` - `.goat-flow/learning-loop/lessons/` directory and README exist
-- `footguns` - `.goat-flow/learning-loop/footguns/` directory and README exist
-- `architecture` - `.goat-flow/architecture.md` exists
-- `code-map` - `.goat-flow/code-map.md` exists
-- `glossary` - `.goat-flow/glossary.md` exists
-- `patterns` - `.goat-flow/learning-loop/patterns/README.md` exists
-- `decisions` - `.goat-flow/learning-loop/decisions/` directory exists
-- `session-logs` - `.goat-flow/logs/sessions/` directory exists
-- `tasks` - `.goat-flow/plans/` directory, `.gitignore`, and README exist (local-session state by design)
-- `scratchpad` - `.goat-flow/scratchpad/` directory, `.gitignore`, and README exist (local WIP by design)
-- `goat-flow-gitignore` - `.goat-flow/.gitignore` exists with the required ignore entries
-- `instruction-file-skill-docs-pointer` - the full skill-docs/playbook pack exists, and every present instruction file has both the READ-step availability-check rule and Router Table pointer to `.goat-flow/skill-docs/playbooks/`; missing `.goat-flow/skill-docs/` or `.goat-flow/skill-docs/playbooks/` files fail here instead of falling through to `other-files`
-- `other-files` - Other required manifest surfaces not already covered by named setup checks exist (for example local log README paths)
-- `config-parses` - `.goat-flow/config.yaml` parses and validates supported configuration fields; legacy `agents:` entries are ignored
-- `config-version` - Config version matches current release
-- `hook-version` - Installed hook dispatchers in `.goat-flow/hooks/` carry the current `goat-flow-hook-version` stamp; a missing or behind stamp means a partial upgrade
+| Scope | Registered checks | What it validates |
+|---|---:|---|
+| GOAT Flow Setup | 16 | Shared directories, generated project docs, config, local-state anchors, and hook versions |
+| Agent Setup | 4 | Instruction file, canonical skills, settings, and the selected agent's deny mechanism |
 
-**agent scope** (Agent Setup) - 4 registered checks. In aggregate mode, only `agent-instruction` can actively fail without `--agent <id>`:
-- `agent-instruction` - selected agent instruction file exists; aggregate mode also detects orphaned agent artifacts whose instruction file is missing
-- `agent-skills` - selected agent has canonical skills installed with correct versions and no deprecated skill directories
-- `agent-settings` - selected agent settings/config file parses as valid JSON or TOML
-- `agent-guardrails` - selected agent has a deny mechanism, shell-hook syntax is valid, deny patterns exist, installed deny hook files match the workflow templates, and the smoke deny self-test passes when the script exists
-
-**Agent scope:** `audit` checks every supported manifest-backed agent from `workflow/manifest.json` unless `--agent <id>` is supplied. Run `npx @blundergoat/goat-flow@latest manifest` to inspect the current support matrix; use `--agent <id>` to scope checks to one supported runtime.
+Aggregate audit always runs the 16 setup checks and reports all four agent check IDs. Without `--agent <id>`, only `agent-instruction` actively fails; the other three need a selected runtime for meaningful evidence. The [deterministic check inventory](audit-checks.md) owns every stable ID and its exact semantics.
 
 ### Enforcement matrix
 
@@ -76,23 +57,24 @@ When `--check-drift` or `--check-content` is enabled, drift and content findings
 
 ### Harness mode (`--harness`)
 
-Adds 18 checks across the five harness concerns on top of the default build checks. These check AI harness completeness -- whether the project has the structures that make agents effective. Harness checks are deterministic but classified by type (see `HarnessCheckType` in `src/cli/audit/types.ts`): **integrity** (drift from install state - affects concern status), **advisory** (best practice - affects status unless the check id is listed in `harness.acknowledge` in `config.yaml`), and **metric** (workflow maturity signal - affects concern score, never affects pass/fail status). JSON results also include `displayStatus`, `impact`, optional `evidenceKind`, optional `assurance`, and split provenance path bases (`framework_evidence_paths` vs `target_evidence_paths`) so score-only, structural-smoke, platform-limited, and framework-rationale evidence can be rendered honestly.
+Adds 18 checks across the five harness concerns on top of the default build checks. Harness checks are deterministic but classified as **integrity** (installation drift), **advisory** (acknowledgeable practice), or **metric** (score-only maturity signal). JSON includes the status, impact, assurance, and framework-versus-target provenance needed to distinguish hard failures from limited or score-only evidence.
 
-Harness checks are grouped by **concern** -- the five things that matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
+Harness checks are grouped by **concern** - the five surfaces the model in [harness-engineering.md](harness-engineering.md) defines, where that doc also gives the sources behind each one.
 
-**harness scope** (AI Harness Completeness) - 18 checks across 5 concerns:
-- **Context** (5) - instruction file within line limit, execution loop present, doc paths resolve, required instruction sections present, workspace boundary guidance present
-- **Constraints** (5) - deny blocks direct literal secret paths, deny blocks dangerous commands, deny blocks pipe-to-shell, deny hook registered in agent settings, permission rules use forms the agent matches
-- **Verification** (4) - hooks in sync, commit guidance, evidence-before-claims coverage, post-turn hook integrity. The post-turn metric applies only to agents whose manifest declares a post-turn event; agents without that runtime capability are skipped, not scored as missing evidence.
-- **Recovery** (2) - milestone tracking, session logs
-- **Feedback Loop** (2) - feedback loop directories exist, decisions tracked
+| Concern | Checks | Structural question |
+|---|---:|---|
+| Context | 5 | Do instructions, required sections, and referenced paths exist within the configured limits? |
+| Constraints | 5 | Do installed deny layers cover the registered dangerous and secret-path patterns? |
+| Verification | 4 | Are hook registration, commit guidance, evidence rules, and applicable post-turn signals wired? |
+| Recovery | 2 | Do milestone and session-log storage surfaces exist? |
+| Feedback Loop | 2 | Do learning-loop and decision surfaces exist? |
 
 Sample harness output:
 
 ```
 GOAT Flow Setup:          PASS
   Skills:                 7/7 installed
-  Config:                 valid, version 1.15.0
+  Config:                 valid, version 1.15.1
   InstructionFile:        118 lines
 
 Agent Setup:              PASS
@@ -119,7 +101,7 @@ For single-agent projects the check is opt-in via the flag. For multi-agent proj
 
 ## `goat-flow quality`
 
-Generates a structured quality-assessment prompt for a coding agent to evaluate goat-flow quality and usefulness on the current project. This is fundamentally different from `audit` - it produces a prompt, not findings.
+Generates a structured quality-assessment prompt for a coding agent to evaluate goat-flow quality and usefulness on the current project.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality . --agent antigravity
@@ -143,7 +125,9 @@ CLI `quality` command request fresh audit context before composing the prompt.
 
 ### Quality report lifecycle
 
-`npx @blundergoat/goat-flow@latest quality` composes the prompt and instructs the agent to write its final JSON report directly to `.goat-flow/logs/quality/<YYYY-MM-DD>-<HHMM>-<agent>-<rand5>.json` - a gitignored path. No separate capture step is needed; the agent owns the write, and `history` / `diff` operate on whatever the agent saved.
+The CLI prompt keeps the completed JSON report in memory and passes it to the exact-version `quality save` command. That bounded saver redacts accepted strings, validates the report, chooses a collision-safe filename, and writes only the final JSON under the selected project's gitignored `.goat-flow/logs/quality/` directory.
+
+Dashboard-launched enforced Claude sessions use a separate staging contract because their reporting profile cannot run the shell saver. The session writes one staged draft; the dashboard claims, validates, redacts, persists, and removes it. Both paths feed the same `history` and `diff` commands.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality . --agent antigravity             # Default: Agent Installation mode
@@ -169,11 +153,11 @@ The `--mode` flag selects a focused quality assessment. Each mode generates a di
 
 `history` and `diff` compare within the same mode by default. Cross-mode comparison is not supported since the scoring rubrics differ.
 
-- `quality` composes a structured prompt that ends with an instruction to save the JSON report under `.goat-flow/logs/quality/`. Positional finding ids are computed at load time by `history` / `diff`.
+- `quality` composes a structured prompt with a bounded persistence contract. Positional finding IDs are computed at load time by `history` / `diff`.
 - `quality history` lists saved reports and same-agent setup/system score deltas.
 - `quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from saved same-agent report ids.
 
-This keeps audit and quality separated in both terminology and storage: audit remains deterministic CLI output, while quality reports are agent-emitted assessments saved to a gitignored log directory for local trend analysis.
+The two commands stay separated in storage as well as terminology: audit output goes to stdout or `--output`, while quality reports land in a gitignored log directory for local trend analysis.
 
 ### When to use quality
 
@@ -201,7 +185,7 @@ npx @blundergoat/goat-flow@latest quality . --agent X  →  "What does an agent 
 Typical workflow after setup:
 1. Run `audit` - fix any build failures
 2. Run `audit --harness` - fix any failing harness completeness checks
-3. Run `quality` - paste the prompt into an agent session, get a subjective review; the agent writes its JSON report to `.goat-flow/logs/quality/` itself
+3. Run `quality` - send the prompt to an agent; the prompt's bounded saver or dashboard staging contract persists the accepted JSON report
 4. Run `quality history` / `quality diff` - compare trend lines and finding lifecycles across same-agent runs
 5. Feed durable findings back into the harness (footguns, lessons, decisions) - the feedback loop
 

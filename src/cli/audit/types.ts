@@ -12,6 +12,7 @@ import type {
   ReadonlyFS,
 } from "../types.js";
 import type { LoadedConfig } from "../config/types.js";
+import type { HookState } from "../server/hook-registrar.js";
 import type { AgentEnforcementCapability } from "./enforcement.js";
 import type { CheckEvidence } from "./provenance-types.js";
 
@@ -89,6 +90,22 @@ export type AuditConcernKey =
 /** Stable `harness` JSON field retained for existing CLI and dashboard consumers. */
 type AuditHarnessJsonField = Record<"harness", boolean>;
 
+/** Read-only hook coverage chain shared by audit JSON, CLI text, and dashboard state. */
+export interface AuditHookCoverageReport {
+  status: "pass" | "fail";
+  selectedAgents: AgentId[];
+  summary: {
+    selectedSurfaces: number;
+    requiredSurfaces: number;
+    requiredIneffective: number;
+    effective: number;
+    warning: number;
+    danger: number;
+    disabled: number;
+  };
+  hooks: HookState[];
+}
+
 /** Top-level audit JSON schema returned by CLI and dashboard audit routes. */
 export interface AuditReport extends AuditHarnessJsonField {
   command: "audit";
@@ -102,6 +119,8 @@ export interface AuditReport extends AuditHarnessJsonField {
   concerns: Record<AuditConcernKey, AuditConcern> | null;
   /** Advisory per-agent enforcement capability matrix. Does not affect status. */
   enforcement: AgentEnforcementCapability[];
+  /** Effective hook chain; its own status stays non-green while required links are missing. */
+  hookCoverage: AuditHookCoverageReport;
   /** Drift section, populated when --check-drift is set. */
   drift: DriftReport | null;
   /** Content-lint section, populated when --check-content is set. */

@@ -1,6 +1,6 @@
 # AI Harness Audit
 
-`npx @blundergoat/goat-flow@latest audit . --harness` adds 18 structural installation checks to the standard build audit. Each check answers an installation question - is the file present, is the registration in sync, is the deny pattern installed. Deterministic, no LLM involvement. Harness results contribute to the overall audit status. Not all checks can reach "installed" on every platform (e.g., Codex has no settings-based Read deny coverage; its deny layer is script-only), but install as much as possible.
+`npx @blundergoat/goat-flow@latest audit . --harness` adds 18 deterministic harness checks to the standard build audit. They inspect required files, registrations, deny patterns, and other local evidence without an LLM. Harness failures contribute to the overall audit status. Platform limits remain explicit: a runtime can pass with limited assurance where broader enforcement is unavailable.
 
 | Mode | Command | Question |
 |------|---------|----------|
@@ -22,7 +22,9 @@ The Agent Enforcement Matrix is an advisory comparison of evidence observed by t
 | `provider-documented` | Cited provider documentation supports the named capability. | This checkout configured or exercised that capability. |
 | `not-observed` | The audit has no stronger evidence source for the row. | Absence or presence beyond what the audit inspected. |
 
-`hard`, `limited`, and `soft` are positive local strength labels; `missing` means the inspected local surface is absent or failed; `unknown` means the audit cannot infer the broader capability. A `hard` row is rejected unless local static or runtime evidence exists. Static test fixtures prove this contract shape only, never runtime agent behavior. For a deeper managed-script probe, use `goat-flow hooks verify . --agent <id> --scenario deny-hook`; that command still does not exercise external-agent hook delivery.
+`hard`, `limited`, and `soft` are positive local strength labels; `missing` means the inspected local surface is absent or failed; `unknown` means the audit cannot infer the broader capability. A `hard` row is rejected unless local static or runtime evidence exists. Static test fixtures prove this contract shape only, never runtime agent behavior. For deeper configured-command proof, use `goat-flow hooks verify . --agent <id> --scenario <deny-hook|post-turn-hook|gruff-hook>`. It runs fixed offline inputs through that agent's exact registered command, but does not exercise external-agent hook delivery or model visibility.
+
+Every audit also returns a `hookCoverage` section and renders Effective Hook Coverage in terminal and Markdown output. It reports the first unmet link for each selected agent: provider evidence, exact registration, current installed bytes, trusted paths, observed execution, delivered result, or configured scenario. The section has its own `pass` or `fail` status; consumers must not use the top-level audit status alone to claim effective hooks. Repair commands are read-only guidance until the user runs them.
 
 ## Check types
 
@@ -66,7 +68,7 @@ Only `advisory`-typed checks can be acknowledged. Integrity checks have no opt-o
 
 Every registered build and harness check now carries machine-readable `provenance` in `npx @blundergoat/goat-flow@latest audit . --format json`. The record includes `source_type`, `normative_level`, `verified_on`, and supporting `evidence_paths` / `source_urls`. The legacy `evidence_paths` list is also split into `framework_evidence_paths` and `target_evidence_paths` when serialized, so framework rationale files do not look like missing files in the audited target project. Check results also expose `displayStatus`, `impact`, and optional `evidenceKind` / `assurance` fields so dashboard consumers can distinguish hard failures, score-only warnings, skipped checks, metrics, structural smoke evidence, and passing checks with platform-limited assurance.
 
-1.2.0 keeps provenance JSON-only on purpose. Terminal and markdown renderers stay focused on status + remediation; if you need the justification trail for a check, inspect the per-check `provenance` object in JSON output.
+Provenance remains JSON-only. Terminal and Markdown output stays focused on status and remediation; inspect each check's `provenance` object for its justification trail.
 
 ### The 18 checks by type
 
@@ -92,14 +94,13 @@ The agent can only work with what it sees. Stale router paths, missing execution
 
 **Not checked here (belongs in quality):** whether instructions are specific to this project, whether footgun evidence is current, whether documentation content is accurate.
 
-
 ---
 
 ## 2. Constraints
 
 **Question:** Do the deterministic safety rules cover the known-dangerous patterns?
 
-Constraints are the cheapest, most reliable layer of the harness. They cost zero tokens, produce zero false positives when well-designed, and prevent entire failure categories without any LLM involvement.
+Constraints run before model judgment and can prevent covered failure classes without consuming model context. Their value still depends on precise patterns and honest platform limits.
 
 **Constraints checks (5):**
 
@@ -111,26 +112,22 @@ Constraints are the cheapest, most reliable layer of the harness. They cost zero
 
 **Not checked here:** Ask First boundary counts, linter registration cross-reference, static-analysis tool detection. Those were earlier designs that were dropped as either low signal or out-of-scope for a structural audit.
 
-
-
 ---
 
 ## 3. Verification
 
 **Question:** Is the agent's verification wiring structurally in place?
 
-Verification loops are consistently reported as the single highest-impact harness pattern. The audit checks that the wiring is present; it does not grade whether the verification is sufficient.
+Verification turns an agent's completion claim into inspectable evidence. The audit checks that the wiring is present; it does not grade whether the chosen verification is sufficient.
 
 **Verification checks (4):**
 
 - `hooks-registered` - hook registrations and hook files are in sync (no registered-but-missing, no exists-but-unregistered) for each agent
-- `commit-guidance` - commit guidance is present at preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md`. Old GitHub commit-guidance locations are reported as misplaced with a prompt to move the content.
-- `evidence-before-claims` - metric. Present agent instruction files carry the Hallucination red-flags clauses and the pointer to `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`). Missing coverage lowers the concern score but does not fail the harness scope in v1.7.0.
+- `commit-guidance` - for targets containing `.git`, commit guidance is present at preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md`. Targets without `.git` skip this check as not applicable. Old GitHub commit-guidance locations are reported as misplaced with a prompt to move the content.
+- `evidence-before-claims` - metric. Present agent instruction files carry the Hallucination red-flags clauses and the pointer to `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`). Missing coverage lowers the concern score without failing the harness scope, as every `metric` check does.
 - `post-turn-hook-integrity` - metric. For agents whose manifest declares a post-turn event, reports whether the registered post-turn hook is the universal safety guard or a custom hook with literal validation commands, and whether validation hooks exit 0 unconditionally or mask failures. Missing or masked hooks lower the concern score without failing the harness scope. Agents without a post-turn event are skipped as not applicable. Safety-only hooks carry a guardrail-specific caveat; the Verification concern separately states that the audit itself did not execute project validation.
 
 **Not checked here:** project test-command configuration, lint command presence, Ask First quality, verification effectiveness. The shipped `post-turn-safety` hook is universal changed-content safety scanning, not project validation. goat-flow no longer ships a project-validation Stop hook; audit still does not judge whether project-specific commands are sufficient.
-
-
 
 ---
 
@@ -146,8 +143,6 @@ Agents that run for minutes or hours need durable state. Without recovery mechan
 - `session-logs` - `.goat-flow/logs/sessions/` exists as a readable directory. The JSON details expose the top-level Markdown file count for orientation, but that count does not affect status or score.
 
 **Not checked here:** whether entry counts are sufficient, recency, content quality of task or session files, current objective, completed work, last verification, next action, or end-to-end resumability. A fresh install passes with the Recovery evidence limit.
-
-
 
 ---
 

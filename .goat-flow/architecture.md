@@ -12,15 +12,15 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Setup installer | `workflow/install-goat-flow.sh` | Manifest-driven installation with ownership checks, safe parent-path validation, and adjacent per-file atomic staging |
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 7 goat-flow skill templates (6 functional + 1 dispatcher) |
-| Hook scripts | `workflow/hooks/` | Copyable `deny-dangerous.sh` dispatcher, shared `deny-dangerous/` policy templates, opt-in `gruff-code-quality.sh`, default `post-turn-safety.sh`, and per-agent config templates |
+| Hook scripts | `workflow/hooks/` | Managed launcher/runtime and provider adapters, copyable `deny-dangerous.sh` policies, opt-in `gruff-code-quality.sh`, default `post-turn-safety.sh`, and per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
 | CLI diagnostics | `src/cli/diagnostics/` | Redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
 | Managed setup | `src/cli/managed-setup-command.ts`, `src/cli/managed-setup-preview.ts`, `src/cli/managed-setup-state.ts` | Hash-only dry-run classification, install admission, and local recovery state for manifest-managed template files |
 | Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML, views, and ~20 client TypeScript modules) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
-| Hook registration and proof | `src/cli/hooks-command.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | CLI/dashboard hook toggles plus explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
-| Plan export and effort check | `src/cli/plans-export.ts`, `src/cli/plans-effort.ts`, `src/cli/plans-check.ts` | Redacted milestone export, shared estimate/Actual grammar, and user-invoked `plans check`; `--strict` gates derivable current-plan accounting while the rough mix stays advisory, and neither mode joins audit because plans are optional local state |
+| Hook registration, contracts, and proof | `src/cli/hooks-command.ts`, `src/cli/hook-contracts.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | Provider-neutral evidence/result contracts, CLI/dashboard hook toggles, and explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
+| Plan export and effort check | `src/cli/plans-export.ts`, `src/cli/plans-effort.ts`, `src/cli/plans-check.ts` | Redacted milestone export, shared estimate/Actual/work-unit grammar, and user-invoked `plans check`; supplied basis arithmetic and forecast ranges are checked in both modes, `--strict` adds the split, coverage, and Actual gates, while receipt calibration and the rough mix stay advisory, and neither mode joins audit because plans are optional local state |
 | Maintenance scripts | `scripts/maintenance/` | Repo hygiene: git cleanup, secret scanning, Zone.Identifier removal |
 
 ## Data Flow
@@ -54,6 +54,7 @@ src/cli/
   constants.ts        # Shared constants
   paths.ts            # Path resolution utilities
   redact-command.ts   # Pre-write scrubber for readable session, handoff, review, quality, security, and export text
+  hook-contracts.ts   # Provider evidence, effective-state, and bounded result contracts
   hooks-runtime-evidence.ts # Explicit managed deny-hook classifier proof and metadata-only local events
   config/             # Configuration (reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
@@ -150,7 +151,7 @@ Timing receipts are milestone-local plan state. The embedded receipt, not the lo
 | `project.save` | existing | `dashboard-session-trace` | server | Project/favourite/add/remove counts | No project-list body | Project-list continuity |
 | `project.remove` | existing | `dashboard-session-trace` | server | Removed-project count | No removed path list | Project-list continuity |
 | `project.switch` | existing | `dashboard-session-trace` | server | Readiness state and project identity metadata | No config or file body | Selected-target diagnosis |
-| `hook.verify` | new in 1.14.0 | `hooks-runtime-evidence` | cli | Scenario id, agent, expected/observed state, verdict, evidence level, duration, and reason code | No command operand, stdout, stderr, or external-agent delivery claim | Checkout-local deny-hook proof and diagnosis |
+| `hook.verify` | new in 1.14.0 | `hooks-runtime-evidence` | cli | Hook id, scenario group/id, agent, framework version, expected/observed state, verdict, evidence level, duration, and reason code | No command operand, stdout, stderr, or external-agent delivery claim | Checkout-local effective-hook status and diagnosis |
 | `plan.time` | new in 1.15.0 | `plans-time` | cli | Action, category, receipt state, segment count, and finalized raw-second total | No milestone body, work descriptions, prompts, commands, or source content | Timing-transition diagnosis; never Actual validation |
 
 M01 timing adds `plan.time`; route/checkpoint/promotion event families and all other runtime event families remain **deferred**. Every future producer must add its exact event kind, producer, actor, bounded payload, redaction rule, consumer, and focused validation before extending `EvidenceEventKind`.
@@ -160,6 +161,18 @@ M01 timing adds `plan.time`; route/checkpoint/promotion event families and all o
 - Summary dashboard/CLI routes reuse cached or already-extracted facts and may record only cheap outcome metadata. A deep route may run a probe only through an explicit user command, with bounded execution/output and a metadata-only envelope.
 - User-level tool or MCP configuration is a user-provided local capability, not proof that its output is correct. Project-level configuration crosses a repository-controlled trust boundary and needs explicit review of origin, command, permissions, and endpoint before use.
 - External tool/MCP output is producer evidence. Durable promotion must retain producer provenance and independent verification; neither output nor forwarded instructions authorize code, GitHub, or other external writes.
+
+### Hook Provider and Result Contracts
+
+`src/cli/hook-contracts.ts` is the provider-neutral contract boundary. Provider records keep official documentation separate from an exact live capture. A capture names provider version and mode, hook and adapter versions, configuration source, trust state, event and canonical tool, observed payload fields, response channels, timeout and continuation behavior, result delivery, and model visibility. Raw payload values are not part of this committed contract.
+
+Documentation and capture records expire after 30 days. They become stale earlier when the provider version or mode, configuration source or trust, lifecycle event, hook or adapter version, registration shape, or relevant official contract changes. Documentation can establish `provider-documented`; only a fresh trusted capture with delivered results can establish `live-supported`.
+
+Every user-facing surface follows one effective-state chain: `desired` -> `provider-documented` -> `live-supported` -> `registered` -> `installed-current` -> `trusted` -> `observed-running` -> `result-delivered` -> `scenario-verified`. Disabled is neutral; absent, stale, unsupported, unregistered, outdated, unobserved, or unverified states are warnings; untrusted or observed-but-undelivered states are danger; only the complete chain is success.
+
+Hook results use `pass`, `block`, `advisory`, `incomplete`, or `unavailable`. A pass requires complete declared coverage, and findings are capped at 20 before the provider adapter runs. Adapters preserve blocks and never promote incomplete or unavailable work to pass. One exact repeated infrastructure failure may return a provider continuation only with `bounded-reentry-ended`; its neutral envelope remains incomplete so the user regains control without a false clean scan.
+
+For the current security model, a user-selected checkout is trusted executable content. Project hooks protect against accidental and prompt-influenced agent actions; they are not a sandbox against a malicious branch, dependency, helper, or analyzer. Bringing hostile checkout content into scope requires a new decision that supersedes ADR-032, moves executable policy to a reviewed versioned installation, and gives project-local analyzers explicit provenance.
 
 ## Deliberate Trade-offs
 

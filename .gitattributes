@@ -28,10 +28,11 @@
 .gitignore text eol=lf
 .editorconfig text eol=lf
 
-# Lock files - don't diff (noisy)
-pnpm-lock.yaml binary
-package-lock.json binary
-Cargo.lock text -diff
+# Lock files - collapsed in review, but kept scannable. `-diff` would suppress the
+# numstat line counts that content scanners rely on to see the change at all.
+pnpm-lock.yaml text linguist-generated=true
+package-lock.json text linguist-generated=true
+Cargo.lock text linguist-generated=true
 
 # Binary assets
 *.png binary

@@ -6,13 +6,13 @@ TypeScript spans the **Node.js CLI and server** under `src/cli/` and the **brows
 
 - CLI/server: ESM with `"type": "module"`, target ES2023, and `"module": "NodeNext"`
 - CLI/server imports use `.js` extensions: `import { foo } from './bar.js'`
-- CLI dynamic imports provide lazy loading (see `cli.ts` -- keeps `--help` fast)
+- CLI dynamic imports provide lazy loading (see `cli.ts` - keeps `--help` fast)
 - CLI/server Node built-ins use the `node:` prefix: `import { parseArgs } from 'node:util'`
 - Dashboard files are classic browser scripts compiled by `tsconfig.dashboard.json`; cross-file symbols are resolved through their shared script scope
 
 ## Type System
 
-- Shared types in `src/cli/types.ts`; audit/check types in `src/cli/audit/types.ts`; CLI command types in `src/cli/cli-types.ts`
+- Types are distributed by domain: CLI command types in `src/cli/cli-types.ts`, audit/check types in `src/cli/audit/types.ts`, and config, manifest, quality, and server types alongside their owning module. Reserve `src/cli/types.ts` for genuinely cross-cutting contracts rather than letting it become a catch-all
 - Strict mode: no implicit any, strict null checks, strict property initialization
 - Avoid explicit `any`. Use `unknown` and narrow with type guards. A load-bearing dynamic-interop exception requires an inline ESLint suppression with a same-line `-- rationale` comment. Minimize `as` casts.
 - Union types for constrained strings: `AgentId = 'claude' | 'codex' | 'antigravity' | 'copilot'`
@@ -23,7 +23,7 @@ TypeScript spans the **Node.js CLI and server** under `src/cli/` and the **brows
 - Framework: `node:test` (describe/it) + `node:assert/strict`
 - Run: `npm test` for the fast preflight suite; use `npm run test:slow` for the nested preflight/dashboard integration suite and `npm run test:full` before release-sensitive changes.
 - Tests in `test/` mirroring `src/cli/` structure
-- Integration tests isolate the filesystem with a real temp dir (`fs.mkdtemp` under `os.tmpdir()`) -- never touch the real project tree
+- Integration tests isolate the filesystem with a real temp dir (`fs.mkdtemp` under `os.tmpdir()`) - never touch the real project tree
 - Process/global-state helpers in `test/helpers/`: `setEnv` and `withStubbedDate` (`global-fixtures.ts`), `assertExists` (`assert-exists.ts`)
 
 ## Build Check Pattern

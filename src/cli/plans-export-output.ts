@@ -23,6 +23,7 @@ import { scrubDurableText } from "./evidence/redaction.js";
 import {
   renderActualLine,
   renderEffortLine,
+  renderForecastBasisLine,
   renderForecastRangeLine,
   type PlanExportEffort,
 } from "./plans-effort.js";
@@ -55,9 +56,18 @@ function redactExportEffort(effort: PlanExportEffort): PlanExportEffort {
       }
     : undefined;
 
+  // Forecast provenance may contain pasted issue text, so exports scrub it like rationale text.
+  const redactedForecastBasis = effort.forecastBasis
+    ? {
+        ...effort.forecastBasis,
+        source: scrubDurableText(effort.forecastBasis.source),
+      }
+    : undefined;
+
   return {
     ...effort,
     ...(redactedActual && { actual: redactedActual }),
+    ...(redactedForecastBasis && { forecastBasis: redactedForecastBasis }),
     ...(redactedForecastRange && { forecastRange: redactedForecastRange }),
   };
 }
@@ -129,6 +139,10 @@ function renderEffortMetadata(record: PlanExportRecord): string[] {
   const lines: string[] = [];
   if (record.effort) {
     lines.push(renderEffortLine(record.effort));
+  }
+  // A supplied basis appears before its derived range so readers see inputs before output.
+  if (record.effort?.forecastBasis) {
+    lines.push(renderForecastBasisLine(record.effort.forecastBasis));
   }
   if (record.effort?.forecastRange) {
     lines.push(renderForecastRangeLine(record.effort.forecastRange));

@@ -109,8 +109,11 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 │   ├── local-paths.ts           = containment guards for browser-supplied paths
 │   ├── types.ts                 = shared terminal-session wire types
 │   ├── hooks-registry.ts        = manifest-backed hook specs and compatibility metadata
-│   ├── hook-registrar.ts        = applies hook enabled/disabled state to installed agent surfaces
-│   └── agent-hook-writer.ts     = writes per-agent hook config entries and launcher commands
+│   ├── agent-hook-command.ts    = builds provider-specific commands and matches managed registrations
+│   ├── agent-hook-writer.ts     = reads and writes per-agent hook config entries
+│   ├── hook-managed-installation.ts = syncs managed files and verifies trust and release bytes
+│   ├── hook-runtime-proof.ts    = promotes hook status from current local verification evidence
+│   └── hook-registrar.ts        = coordinates registry state, files, configs, and support gates
 │
 └── stats/                       = learning-loop health report and renderer
 ```

@@ -2,16 +2,16 @@
 
 **An AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot.**
 
-GOAT Flow helps teams find and fix weak AI-agent setup: it audits agent instructions, installs guardrails and deny hooks, provides structured `/goat-*` workflows, preserves a learning loop, and runs supported coding agents from one local dashboard.
+GOAT Flow audits agent setup, installs guardrails and deny hooks, provides structured `/goat-*` workflows, and preserves lessons between sessions. Its manifest-backed registry keeps the same harness available across all four supported coding agents.
 
-One command opens a local menu for auditing, deterministic setup, guided agent prompts, and the dashboard. The manifest-backed support matrix currently covers Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot/Copilot CLI.
-
-[![npm version](https://img.shields.io/npm/v/@blundergoat/goat-flow.svg)](https://www.npmjs.com/package/@blundergoat/goat-flow) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE) 
+[![npm version](https://img.shields.io/npm/v/@blundergoat/goat-flow.svg)](https://www.npmjs.com/package/@blundergoat/goat-flow) [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 ```bash
 npx @blundergoat/goat-flow@latest
 ```
-output:
+
+Output:
+
 ```text
 What do you want to do?
   1. Start dashboard
@@ -21,78 +21,53 @@ What do you want to do?
   5. Show project status
 ```
 
-**Install locally (optional)**
+Install locally when you want a project-pinned version:
 
 ```bash
-npm install --save-dev @blundergoat/goat-flow    # npm
+npm install --save-dev @blundergoat/goat-flow
 ```
 
-then run this for the dashboard:
+Then launch the dashboard through npm:
 
 ```bash
 npm exec --package=@blundergoat/goat-flow -- goat-flow dashboard .
 ```
 
-For the dashboard's embedded terminal, you'll need `node-pty` to compile. See [Troubleshooting](#troubleshooting) if the terminal doesn't appear.
+The embedded terminal needs the optional `node-pty` package to compile. See [Troubleshooting](#troubleshooting) if the terminal does not appear.
 
-## Dashboard views
-
-![Dashboard](docs/assets/dashboard-preview.png)
-
-The desktop dashboard uses a persistent side menu for primary navigation. The
-header keeps the current project switcher, runner switcher, and utility actions
-available while you move between views.
-
-### Home
-
-Live audit results for every supported agent. Per-agent cards show pass/fail across two scopes (GOAT Flow Setup, Agent Setup) with actionable fix hints. An AI Harness section scores each agent across five concerns - Context, Constraints, Verification, Recovery, and Feedback Loop - so you can see exactly where your setup is strong and where it's weak. "What to do next" action cards surface the highest-priority gaps. Re-audit after changes without leaving the page.
-
-### Plans
-
-Plan milestone view for the selected project. Surfaces `.goat-flow/plans/` plan
-directories, milestone status, and checkbox progress, and lets you set the
-active plan.
-
-### Setup
-
-Guided setup flow. Detects your project stack and existing configuration, lets you pick a target agent, then generates a setup prompt you can preview and launch directly in a terminal session. The agent configures your project: instruction file, skills, hooks, and learning loop.
-
-### Prompts
-
-A library of 24 visible preset prompts across six categories: critique, debug, plan, QA, review, and security, plus 2 internal quality prompts used by dashboard workflows. Two-pane layout with search, category filters, and favorites. Select a prompt and launch it in a new terminal, send it to an active session, or copy it to clipboard. Keyboard-navigable: `/` to search, arrows to browse, Enter to launch.
-
-Prompts include structured workflows like pre-walk-through notes with targeted testing plans, multi-lens critiques, full threat assessments, dependency scans, coverage audits, and milestone planning.
-
-### Workspace
-
-Split layout for terminal work. A sessions rail lists all running terminal sessions (up to 10) with runner, age, and idle indicators, plus collapsed-rail tooltips and an active-session status pip. Single-click switching between sessions. The right pane is a full xterm.js terminal with WebSocket-based PTY - run Claude, Codex, Antigravity, or Copilot directly in the browser. Drag and drop images onto the terminal pane to attach them to the next prompt.
-
-### Projects
-
-Multi-project browser. Register multiple projects, view their audit status at a glance, and "Audit All" in one click. Titles and favorites follow a stable identity where possible: git remote hash first, then a local `.goat-flow/project-id` marker for non-git goat-flow projects, then path fallback. Select a project to switch context across the entire dashboard.
-
-### Quality
-
-Generate agent quality-assessment prompts. Select a target agent, generate the
-prompt, and preview the full output with embedded audit results. Passive page
-loads use cached audit enrichment when available so the view opens quickly;
-Regenerate requests a fresh audit before composing the prompt.
-
-## What's under the hood
-
-The dashboard is the interface. Underneath, GOAT Flow installs a harness that makes agents more reliable:
+## What GOAT Flow adds
 
 | Component | What it prevents |
 |---|---|
-| **Execution Loop** (READ → SCOPE → ACT → VERIFY) | Guessing at unread code, shipping without checks |
-| **Skills** (six `/goat-*` commands + dispatcher) | Free-form prompting that drifts mid-task |
-| **Enforcement Hooks** (guardrails) | `rm -rf`, all git push, secret file access |
-| **Learning Loop** (footguns, lessons, decisions) | Same mistake recurring next session |
-| **Autonomy Tiers** (Always / Ask First / Never) | Agent overreach, missed approvals |
+| **Execution loop** (READ → SCOPE → ACT → VERIFY) | Guessing at unread code or shipping without checks |
+| **Seven skills** (six `/goat-*` workflows plus dispatcher) | Free-form prompting that drifts mid-task |
+| **Enforcement hooks** | Destructive commands, repository publication, and direct secret-path access |
+| **Learning loop** | The same mistake recurring in later sessions |
+| **Autonomy tiers** | Agent overreach and missed approval boundaries |
 
-Skills have phases and human gates. Hooks intercept tool calls before they execute. The learning loop gets read at session start so mistakes compound into context, not repetition. Re-run `goat-flow index` after adding, editing, renaming, or resolving entries; `goat-flow stats --check` fails while the index is stale, and the dashboard Home learning-loop card can regenerate indexes for the selected project.
+Skills provide explicit phases and human gates. Hooks reject covered tool calls before they execute. The learning loop turns verified failures into durable lessons, footguns, and decisions.
 
-## Why not just CLAUDE.md / Cursor rules?
+## Dashboard
+
+![Dashboard](docs/assets/dashboard-preview.png)
+
+The local dashboard keeps project and runner selection available while you move between operational views:
+
+| View | Use it for |
+|---|---|
+| **Home** | Compare setup and harness results across supported agents, then follow the highest-priority repair |
+| **Setup** | Detect the project, install deterministic files, and generate project-specific setup prompts |
+| **Prompts** | Search 24 visible presets across critique, debug, plan, QA, review, and security |
+| **Workspace** | Run up to 10 PTY-backed terminal sessions and attach images to prompts |
+| **Plans** | Inspect local milestones, checkbox progress, and the active-plan pointer |
+| **Projects** | Register projects, compare audit status, and switch the dashboard target |
+| **Skills** | Audit installed skills or evaluate draft Markdown without installing it |
+| **Quality** | Generate source-aware assessment prompts and compare saved reports |
+| **Hooks** | Inspect and toggle shipped guardrail, quality, and safety hooks |
+
+Settings and About provide local preferences and orientation. See the [Dashboard reference](docs/dashboard.md) for view details, security boundaries, and API endpoints.
+
+## Why an instruction file is not enough
 
 Instruction files tell the agent what to do. They don't enforce it.
 
@@ -104,7 +79,7 @@ Instruction files tell the agent what to do. They don't enforce it.
 | Capture lessons across sessions | no | yes |
 | Audit whether setup is actually correct | no | yes |
 
-Use an instruction file for rules the agent should *remember*. Use GOAT Flow for rules the agent cannot *skip*.
+Use an instruction file for rules the agent should remember. Use GOAT Flow when a rule also needs structural enforcement, verification, or recovery.
 
 ## Getting started
 
@@ -127,13 +102,9 @@ npx @blundergoat/goat-flow@latest install . --agent claude
 npx @blundergoat/goat-flow@latest install . --agent claude --dry-run
 ```
 
-The manifest labels each installed file as system-owned, user-owned, generated, deprecated, or external. `--dry-run` previews source-backed managed templates and selected-agent skills without invoking the installer; normal CLI installs block local managed edits, deletions, and unknown baselines until you inspect them. System files then refresh from canonical sources while user-owned and external files stay untouched by default. Use `--force` only when you explicitly accept managed content conflicts and may also replace user-owned settings, config, policies, or other seeded guidance; it cannot bypass symlinked, non-regular, or unreadable target paths. For outdated or v0.9 projects, the installer automatically updates the config version and cleans deprecated skill directories.
+`--dry-run` shows managed-template drift without writing. A normal install refreshes system-owned files, preserves user-owned and external files, and blocks ambiguous local edits or unsafe paths. `--force` accepts managed conflicts and may replace seeded user-owned guidance, but it never bypasses path-safety failures. Replacements are atomic per file; the [CLI reference](docs/cli.md#atomic-installer-writes) explains failure and rollback behaviour.
 
-Installer replacements are atomic per file: goat-flow completes copied or transformed bytes beside the destination, then renames the finished payload into place. A failed copy, interruption, or rename preserves the previous file and does not fall back to a partial copy. This is a per-file guarantee, not an all-or-nothing transaction across the entire installation; if a later file fails, earlier completed replacements remain applied and the error names what to inspect.
-
-The installer keeps `.goat-flow/config.yaml` free of agent allowlists by default. Dashboard Home and aggregate `goat-flow audit .` read the supported agent registry from `workflow/manifest.json`, so they always show or check the current manifest-backed setup status. Use `--agent <id>` when you intentionally want one agent.
-
-The install includes `.goat-flow/skill-docs/` for shared meta references and `.goat-flow/skill-docs/playbooks/` for tool/capability playbooks. Generated or repaired instruction files route agents to `.goat-flow/skill-docs/playbooks/` before declaring a requested tool unavailable.
+Dashboard Home and aggregate `goat-flow audit .` read supported agents from `workflow/manifest.json`. Use `--agent <id>` when you intentionally want one runtime. Installs also include shared meta references and on-demand tool playbooks under `.goat-flow/skill-docs/`.
 
 ### 3. Generate the setup prompt
 
@@ -151,7 +122,7 @@ npx @blundergoat/goat-flow@latest setup . --agent claude --apply
 
 ### 4. Re-audit
 
-Back on the Home view, click **Re-audit**. All checks should pass. The AI Harness cards now show scores across the five concerns.
+Back on the Home view, click **Re-audit**. Each failure names the missing or stale surface and provides a repair hint. Harness cards show structural coverage across the five concerns.
 
 ### 5. Use a prompt
 
@@ -159,7 +130,7 @@ Open the **Prompts** view, pick a workflow (code review, bug diagnosis, UI debug
 
 ## Multi-agent support
 
-GOAT Flow's current manifest-backed registry supports **Claude Code, Codex, Google Antigravity, and Copilot CLI**. All agents share the same execution loop, autonomy tiers, skills, and learning loop. The dashboard's runner switcher in the header lets you toggle between agents and see per-agent audit results side by side.
+GOAT Flow's manifest-backed registry supports **Claude Code, Codex, Google Antigravity, and Copilot CLI**. Their installed templates share the execution loop, autonomy tiers, skills, and learning loop. The dashboard runner switcher shows their audit results side by side.
 
 Run `npx @blundergoat/goat-flow@latest manifest` to inspect the live agent matrix from `workflow/manifest.json`.
 
@@ -192,7 +163,7 @@ See [docs/cli.md](docs/cli.md) for the full reference.
 
 ## The five harness concerns
 
-Every major source in harness engineering (Hashimoto, Fowler/Böckeler, Anthropic, HumanLayer) converges on the same concerns. The dashboard's AI Harness section scores each agent across all five:
+GOAT Flow groups its harness checks into five concerns:
 
 | Concern | Question |
 |---------|----------|
@@ -202,7 +173,7 @@ Every major source in harness engineering (Hashimoto, Fowler/Böckeler, Anthropi
 | **Recovery** | Can the agent resume after crash or interruption? |
 | **Feedback Loop** | Is the harness getting smarter from failures over time? |
 
-See [docs/audit-and-quality.md](docs/audit-and-quality.md) for the full framework and sources.
+See [Harness engineering](docs/harness-engineering.md) for the model and [Audit & Quality](docs/audit-and-quality.md) for the evaluation workflow.
 
 ## Troubleshooting
 
@@ -226,9 +197,15 @@ Regenerate from the dashboard Setup page, which shows detected stack info alongs
 | Document | What it covers |
 |---|---|
 | [CLI Reference](docs/cli.md) | All commands, flags, and output formats |
-| [Dashboard](docs/dashboard.md) | Views, terminal, API endpoints |
-| [Skills Reference](docs/skills.md) | All 7 skills: modes, phases, gates, outputs |
-| [Audit & Quality](docs/audit-and-quality.md) | The two evaluation commands, 5 harness concerns, and when to use each |
+| [Dashboard](docs/dashboard.md) | Views, local access boundary, terminal, and API endpoints |
+| [Audit & Quality](docs/audit-and-quality.md) | Deterministic audit versus agent-driven quality assessment |
+| [Deterministic Audit Checks](docs/audit-checks.md) | Stable check IDs, scopes, and command matrix |
+| [Harness Engineering](docs/harness-engineering.md) | The five-concern model and its sources |
+| [Harness Audit](docs/harness-audit.md) | Harness scoring, evidence limits, and check semantics |
+| [Skills](docs/skills.md) | All seven skills, their modes, gates, and outputs |
+| [Skill Authoring](docs/skill-authoring.md) | Candidacy, RED evidence, scaffolding, and draft validation |
+| [Guardrails](docs/guardrails.md) | Runtime command-safety surfaces and limitations |
+| [Coding Standards](docs/coding-standards/conventions.md) | Repository architecture, commands, and implementation conventions |
 
 ## Author
 

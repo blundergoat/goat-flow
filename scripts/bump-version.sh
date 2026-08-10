@@ -18,7 +18,7 @@
 #   - workflow/skills/reference/ (shared skill reference docs)
 #   - workflow/skills/playbooks/ (standalone skill playbooks)
 #   - workflow/skills/*/references/ (per-skill reference packs)
-#   - Hook templates and installed hook mirrors
+#   - Shell/Node hook templates and installed hook mirrors
 #   - test/fixtures/skill-with-references/SKILL.md
 #   - docs/audit-and-quality.md sample output
 #   - Installed skill mirrors and per-skill reference packs (.claude/skills/, .agents/skills/, .github/skills/ via manifest)
@@ -134,9 +134,9 @@ if [[ -d test/fixtures ]]; then
   done < <(find test/fixtures -path '*/references/*.md' -print0)
 fi
 
-# Hook templates
-for hook_sh in workflow/hooks/*.sh; do
-  update_file "$hook_sh"
+# Hook templates use one stamp across shell detectors, the launcher, and adapter runtimes.
+for hook_runtime in workflow/hooks/*.sh workflow/hooks/*.mjs; do
+  update_file "$hook_runtime"
 done
 
 # Docs
@@ -202,19 +202,21 @@ for (const h of hooks) console.log(h);
 NODE
 }
 
-manifest_hook_script_paths() {
+# List every top-level managed hook runtime a user receives, including Node support modules.
+manifest_hook_runtime_paths() {
   node - "$MANIFEST_PATH" <<'NODE'
 const fs = require("node:fs");
 const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
-const paths = [];
-for (const agent of Object.values(manifest.agents || {})) {
-  if (typeof agent.hooks_dir !== "string" || !Array.isArray(agent.hooks)) continue;
-  const hooksDir = agent.hooks_dir.replace(/\/$/, "");
-  for (const hook of agent.hooks) {
-    if (typeof hook === "string" && hook.endsWith(".sh")) paths.push(`${hooksDir}/${hook}`);
-  }
+const managedHookRuntimePaths = [];
+// Each manifest-owned top-level runtime has one canonical workflow/hooks source.
+for (const [installedPath, ownershipRecord] of Object.entries(manifest.file_ownership || {})) {
+  // Nested policy modules are synced by setup; this release mirror pass owns top-level runtimes.
+  if (!/^\.goat-flow\/hooks\/[^/]+$/u.test(installedPath)) continue;
+  // A missing or non-hook source cannot identify bytes safe to copy into the user's mirror.
+  if (typeof ownershipRecord?.source !== "string" || !ownershipRecord.source.startsWith("workflow/hooks/")) continue;
+  managedHookRuntimePaths.push(installedPath);
 }
-for (const path of [...new Set(paths)]) console.log(path);
+for (const installedPath of [...new Set(managedHookRuntimePaths)]) console.log(installedPath);
 NODE
 }
 
@@ -241,7 +243,7 @@ while IFS= read -r hook_dst; do
     cp "$hook_src" "$hook_dst"
     echo "  ✓ ${hook_dst}"
   fi
-done < <(manifest_hook_script_paths)
+done < <(manifest_hook_runtime_paths)
 
 # Sync shared reference docs
 if [[ -d ".goat-flow/skill-docs" ]]; then

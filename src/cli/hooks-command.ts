@@ -9,23 +9,23 @@
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
+import type { HookState } from "./server/hook-registrar.js";
 
-/** Render hook state as a compact terminal table. */
-function renderHooksText(hooks: Array<Record<string, unknown>>): string {
+/** Render desired and effective hook state as a compact terminal table. */
+function renderHooksText(hooks: HookState[]): string {
   const lines = ["Hook state", ""];
+  // Each hook keeps agent evidence separate because shared files do not prove shared provider support.
   for (const hook of hooks) {
-    const agents =
-      hook.agents && typeof hook.agents === "object"
-        ? (hook.agents as Record<string, Record<string, unknown>>)
-        : {};
-    const agentBits = Object.entries(agents).map(([agentId, state]) => {
-      if (state.supported === false) return `${agentId}: not-supported`;
-      const installed = state.installed === true ? "installed" : "missing";
-      const drift = typeof state.drift === "string" ? ` (${state.drift})` : "";
-      return `${agentId}: ${installed}${drift}`;
+    const agentBits = Object.entries(hook.agents).map(([agentId, state]) => {
+      const repair = state.repairCommand
+        ? `; next: ${state.repairCommand}`
+        : state.effectiveState.status === "effective"
+          ? ""
+          : `; ${state.repairSummary}`;
+      return `${agentId}: ${state.effectiveStateLabel} [${state.effectiveState.severity}]${repair}`;
     });
     lines.push(
-      `${String(hook.id)}  ${hook.enabled === true ? "enabled" : "disabled"}  ${agentBits.join(", ")}`,
+      `${hook.id}  ${hook.enabled ? "enabled" : "disabled"}  ${agentBits.join(", ")}`,
     );
   }
   return lines.join("\n");
@@ -41,15 +41,16 @@ function requireHookId(options: ParsedCLI): string {
   throw new CLIError(`hooks ${options.hookSubcommand} requires <hook-id>.`, 2);
 }
 
+/** Render all hook rows in the user's selected text or JSON format. */
 function renderHooksResult(
   options: ParsedCLI,
-  result: { hooks: unknown[] },
+  result: { hooks: HookState[] },
 ): void {
   writeOutput(
     options,
     options.format === "json"
       ? JSON.stringify(result, null, 2)
-      : renderHooksText(result.hooks as Array<Record<string, unknown>>),
+      : renderHooksText(result.hooks),
   );
 }
 
@@ -58,12 +59,12 @@ function renderHooksResult(
  * Emits JSON wrapping the hook under a `hook` key when `--format json`, otherwise the one-row text
  * table, so toggle output stays shape-compatible with `hooks list` for scripts that parse either.
  */
-function renderHookToggleResult(options: ParsedCLI, hook: unknown): void {
+function renderHookToggleResult(options: ParsedCLI, hook: HookState): void {
   writeOutput(
     options,
     options.format === "json"
       ? JSON.stringify({ hook }, null, 2)
-      : renderHooksText([hook] as Array<Record<string, unknown>>),
+      : renderHooksText([hook]),
   );
 }
 
@@ -80,21 +81,34 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
   if (options.agent === null) {
     throw new CLIError("hooks verify requires --agent <id>.", 2);
   }
-  // Direct callers must select the only bounded scenario group shipped in this release.
-  if (options.hookScenario !== "deny-hook") {
-    throw new CLIError('hooks verify requires --scenario "deny-hook".', 2);
+  // Direct callers must select one bounded offline scenario group before target hook code runs.
+  if (options.hookScenario === null) {
+    throw new CLIError(
+      'hooks verify requires --scenario "deny-hook", "post-turn-hook", or "gruff-hook".',
+      2,
+    );
   }
   const {
     renderHookRuntimeReportJson,
     renderHookRuntimeReportText,
     verifyManagedDenyHook,
   } = await import("./hooks-runtime-evidence.js");
-  const report = verifyManagedDenyHook({
-    projectPath: options.projectPath,
-    agent: options.agent,
-    scenarioGroup: options.hookScenario,
-    isTargetUntrusted: options.isTargetUntrusted,
-  });
+  const { verifyManagedConfiguredHook } =
+    await import("./hooks-configured-runtime-evidence.js");
+  const report =
+    options.hookScenario === "deny-hook"
+      ? verifyManagedDenyHook({
+          projectPath: options.projectPath,
+          agent: options.agent,
+          scenarioGroup: options.hookScenario,
+          isTargetUntrusted: options.isTargetUntrusted,
+        })
+      : verifyManagedConfiguredHook({
+          projectPath: options.projectPath,
+          agent: options.agent,
+          scenarioGroup: options.hookScenario,
+          isTargetUntrusted: options.isTargetUntrusted,
+        });
   writeOutput(
     options,
     options.format === "json"

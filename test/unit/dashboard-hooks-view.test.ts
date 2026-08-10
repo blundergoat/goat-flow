@@ -1,5 +1,7 @@
 /**
- * Unit tests for the Hooks dashboard view support-disclosure contract.
+ * Protects the Hooks dashboard's effective-state and support disclosures.
+ * Use these checks when hook labels, repair rows, summary counts, or provider
+ * exclusions change so installed files cannot be rendered as proven coverage.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -33,21 +35,51 @@ describe("dashboard Hooks view", () => {
     assert.match(html, /x-text="agentId \+ ' unsupported'"/);
     assert.match(appSource, /unsupportedHookAgents\(hook: HookState\)/);
     assert.match(appSource, /!state\.supported && Boolean\(state\.reason\)/);
-    assert.match(appSource, /if \(!state\.supported\) return "unsupported"/);
+    assert.match(appSource, /return state\.effectiveStateLabel/);
   });
 
-  it("keeps Codex non-PreToolUse exclusions paired with reasons", () => {
-    const codexUnsupportedHookEntries = listHookSpecs().filter(
-      (hook) => hook.unsupportedAgents?.codex,
+  // Enabled but incomplete chains need a dedicated filter, repair row, and non-green legend.
+  it("renders canonical effective-state labels and repairs", () => {
+    const html = readFileSync(HOOKS_VIEW_PATH, "utf-8");
+    const appSource = readFileSync(HOOKS_APP_FRAGMENT_PATH, "utf-8");
+
+    assert.match(html, />Effective surfaces</u);
+    assert.match(html, />Ineffective hooks</u);
+    assert.match(html, /hooksFilter === 'ineffective'/u);
+    assert.match(html, /ineffectiveHookAgents\(hook\)\.length > 0/u);
+    assert.match(html, /state\.repairCommand \|\| state\.repairSummary/u);
+    assert.doesNotMatch(html, /installed and enforced/u);
+    assert.match(appSource, /hookHasIneffectiveCoverage\(hook: HookState\)/u);
+    assert.match(appSource, /state\.effectiveState\.status === "effective"/u);
+    assert.match(appSource, /state\.effectiveState\.severity === "success"/u);
+  });
+
+  it("keeps current provider exclusions paired with reasons", () => {
+    const providerExclusions = listHookSpecs().flatMap((hook) =>
+      Object.entries(hook.unsupportedAgents ?? {}).map(
+        ([providerId, reason]) => ({
+          hookId: hook.id,
+          event: hook.event,
+          providerId,
+          reason,
+        }),
+      ),
     );
 
-    assert.ok(
-      codexUnsupportedHookEntries.length > 0,
-      "Codex should have explicit unsupported hook entries",
+    assert.deepEqual(
+      providerExclusions
+        .map(({ hookId, providerId }) => `${hookId}/${providerId}`)
+        .sort(),
+      [
+        "gruff-code-quality/antigravity",
+        "post-turn-safety/antigravity",
+        "post-turn-safety/copilot",
+      ],
     );
-    for (const hook of codexUnsupportedHookEntries) {
-      assert.notEqual(hook.event, "PreToolUse");
-      assert.match(hook.unsupportedAgents?.codex ?? "", /^Codex /);
+    // Every excluded provider gives the Hooks screen a practical reason beside its non-green state.
+    for (const providerExclusion of providerExclusions) {
+      assert.notEqual(providerExclusion.event, "PreToolUse");
+      assert.match(providerExclusion.reason, /^(Antigravity|Copilot) /u);
     }
   });
 });

@@ -419,13 +419,19 @@ function parseEnvelopeLine(line: string): EvidenceEnvelope | null {
 /**
  * Read the newest local event envelopes, preserving chronological order.
  *
+ * Pass `eventKind` whenever a caller needs the newest events *of one kind*: the window is applied
+ * after the filter, so unrelated activity can never push the caller's own events out of the tail.
+ * Reading a global window and filtering afterwards silently discards still-valid records.
+ *
  * @param projectRoot - Project root whose gitignored event logs should be tailed.
  * @param limit - Requested maximum number of newest envelopes; capped for bounded reads.
+ * @param eventKind - Optional exact `event_kind`; omit to tail every kind together.
  * @returns Valid envelopes from the newest tail window.
  */
 export function tailEvidenceEvents(
   projectRoot: string,
   limit = 20,
+  eventKind?: string,
 ): EvidenceEnvelope[] {
   const boundedLimit = Math.max(1, Math.min(limit, MAX_TAIL_LIMIT));
   const entries = eventLogFiles(projectRoot).flatMap((path) =>
@@ -436,5 +442,9 @@ export function tailEvidenceEvents(
         return envelope ? [envelope] : [];
       }),
   );
-  return entries.slice(-boundedLimit);
+  const selected =
+    eventKind === undefined
+      ? entries
+      : entries.filter((envelope) => envelope.event_kind === eventKind);
+  return selected.slice(-boundedLimit);
 }

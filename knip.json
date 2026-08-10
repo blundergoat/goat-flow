@@ -21,13 +21,12 @@
     "src/dashboard/dashboard-terminal-connect.ts",
     "src/dashboard/dashboard-terminal-paste.ts",
     "src/dashboard/dashboard-terminal-runtime.ts",
-    "src/dashboard/dashboard-terminal.ts",
-    "src/dashboard/globals.d.ts"
+    "src/dashboard/dashboard-terminal.ts"
   ],
   "ignoreIssues": {
     "test/**": ["exports", "types"]
   },
-  "ignoreBinaries": ["diff", "where", "which"],
+  "ignoreBinaries": ["diff", "where"],
   "ignoreDependencies": [
     "@stryker-mutator/core",
     "@tailwindcss/browser",

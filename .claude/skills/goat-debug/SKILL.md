@@ -1,7 +1,7 @@
 ---
 name: goat-debug
 description: "Use when diagnosing a bug, unexpected behaviour, system failure, or unfamiliar code that needs structured investigation."
-goat-flow-skill-version: "1.15.0"
+goat-flow-skill-version: "1.15.1"
 ---
 # /goat-debug
 
@@ -29,7 +29,7 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 ## Boundary Commands
 
 - **NEVER:** Turn diagnosis into review, test planning, milestone planning, or an ungated fix.
-- **ALWAYS:** Trace the live path, test competing hypothesis categories, and state the reproduction and evidence limits.
+- **ALWAYS in Diagnose mode:** Trace the live path, test competing hypothesis categories, and state the reproduction and evidence limits.
 - **DEFER TO:** `/goat-review` for quality, `/goat-qa` for test plans, `/goat-plan` for milestones, and the dispatcher for feature briefs.
 
 ## Step 0 - Choose Depth
@@ -154,8 +154,8 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 
 ## Constraints
 
-- MUST write hypotheses AFTER initial read of the primary file
-- MUST include at least 2 hypothesis categories
+- Diagnose mode MUST write hypotheses AFTER initial read of the primary file
+- Diagnose mode MUST include at least 2 hypothesis categories
 - MUST NOT propose fixes until human reviews diagnosis (D2 to D3 gate)
 - MUST declare scope before deep reading (investigate mode)
 - MUST tag diagnose evidence as OBSERVED, INFERRED, UNVERIFIED, or HUMAN-PENDING
@@ -163,7 +163,7 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 - MUST check recurrence against footguns + lessons
 - Universal constraints from skill-preamble.md apply.
 - MUST verify fix doesn't violate architecture constraints
-- MUST run D1.5 reduction before D2 or evidence a minimal, not-applicable, or unsafe disposition
+- Diagnose mode MUST run D1.5 reduction before D2 or evidence a minimal, not-applicable, or unsafe disposition
 - MUST NOT run `git bisect` in reporting-only or no-write mode, or without explicit approval, a clean worktree, validated refs and predicate, and a reset plan
 - MUST include Debug Integrity section in every diagnose-mode report
 

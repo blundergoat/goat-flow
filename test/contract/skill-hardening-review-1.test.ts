@@ -425,7 +425,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         const reference = readProjectFile(referencePath);
         assert.match(
           reference,
-          /goat-flow-reference-version: "1\.15\.0"/u,
+          /goat-flow-reference-version: "1\.15\.1"/u,
           referencePath,
         );
         for (const trapName of [

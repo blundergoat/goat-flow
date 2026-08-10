@@ -1,6 +1,6 @@
 ---
 category: skills
-last_reviewed: 2026-08-04
+last_reviewed: 2026-08-10
 ---
 
 ## Footgun: Skill parity edits can miss `.github/skills/` and fail repo-level drift checks
@@ -132,6 +132,27 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 
 ---
 
+## Footgun: Playbook content edits collide with the ADR-023 word cap and exact-phrase contract assertions
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** An approved content addition to a shipped playbook passes typecheck, content lint, and the playbook contract test, then fails preflight twice. First on the ADR-023 progressive-pack word cap. Then, after the compression pass that makes room, on skill-hardening assertions pinning exact sentences the compression reworded.
+
+**Why it happens:** Playbooks under `.goat-flow/skill-docs/playbooks/` are trimmed to sit just below the 3000-word cap, so headroom is often single digits and any addition forces compression across sections unrelated to the change. Those same sections carry regex assertions matching literal phrasing, including capitalisation. Word-count pressure and phrase-exactness pressure point in opposite directions, and neither is visible while editing the Markdown.
+
+**Evidence:** 2026-08-10, `writing-style.md`. Eight approved additions took the body from 2998 to 3672 words; `test/contract/skill-hardening-contracts.test.ts` (search: `ADR-023 word budget tiers`) reported `3672 words meets or exceeds progressive cap 3000`. Compressing back to 2997 broke eight assertions in `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps writing-style edits truth-preserving and source-aware`), among them `claim strength and specificity to the evidence`, `Reference-list labels remain valid`, `Illustrative before`, and a capitalisation-only change from `status,` to `Status,` at the head of a Verification Gate item.
+
+**Prevention:** Before editing a playbook, measure its body word count and grep the contract tests for its filename to list the pinned phrases:
+
+```bash
+node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8").replace(/^---\n[\s\S]*?\n---\n?/,"");console.log(t.split(/\s+/).filter(Boolean).length)' .goat-flow/skill-docs/playbooks/<name>.md
+grep -n "<name>" test/contract/skill-hardening-*.test.ts
+```
+
+Restore pinned phrases verbatim after any compression, take the compensating words from prose no assertion covers, and run both skill-hardening contract tests before preflight. Mirror the result to `workflow/skills/playbooks/` in the same turn; preflight diffs the pair.
+
+---
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
@@ -182,7 +203,7 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 **Original symptoms:** `npm test` failed in `test/integration/audit-drift.test.ts` even when the code change did not touch skills, because the tracked installed copies under `.claude/skills/` and `.agents/skills/` had Unicode em dashes while `workflow/skills/` templates had ASCII hyphens.
 
 **Original evidence:**
-- `workflow/skills/goat-plan/SKILL.md` vs `.claude/skills/goat-plan/SKILL.md` (search: `Use when work needs milestone tracking`) - hyphen vs em dash
+- `workflow/skills/goat-plan/SKILL.md` vs `.claude/skills/goat-plan/SKILL.md` (search: `## When to Use`) - hyphen vs em dash in the historical text at that section
 - `workflow/skills/goat-plan/SKILL.md` vs `.claude/skills/goat-plan/SKILL.md` (search: `Milestone files exist for`) - hyphen vs em dash
 
 **Resolution:** Installed copies are now byte-identical with the workflow templates (verified by `diff` returning empty output). The drift check at `test/integration/audit-drift.test.ts` now passes on these files.

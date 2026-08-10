@@ -476,6 +476,7 @@ export function parseMilestoneMarkdown(
     warnings,
     readMilestoneField(content, "Actual", warnings),
     readMilestoneField(content, "Forecast range", warnings),
+    readMilestoneField(content, "Forecast basis", warnings),
   );
   addMissingFieldWarning(warnings, status, "status");
   addMissingFieldWarning(warnings, scopeMarkdown, "scope");

@@ -144,8 +144,8 @@ export const TIMING_OBLIGATION_CHECKS = [
   /`retrospective:/u,
   /`unavailable:/u,
   /`incomplete:/u,
-  /must equal the `Effort estimate` headline/u,
-  /uncalibrated/u,
+  /round likely\/headline/u,
+  /cold-start prior/u,
 ];
 
 /**

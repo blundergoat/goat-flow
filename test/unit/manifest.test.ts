@@ -6,8 +6,10 @@
  * both exercises the real disk path and asserts that `workflow/manifest.json`
  * is consistent with code at test time.
  */
-import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, it } from "node:test";
 import {
   composeManifest,
   validateManifest,
@@ -32,6 +34,7 @@ import { AUDIT_VERSION, getSkillNames } from "../../src/cli/constants.js";
 import { SETUP_CHECKS } from "../../src/cli/audit/check-goat-flow.js";
 import { AGENT_CHECKS } from "../../src/cli/audit/check-agent-setup.js";
 import { HARNESS_CHECKS } from "../../src/cli/audit/harness/index.js";
+import { getTemplatePath } from "../../src/cli/paths.js";
 
 /** Build a fixture ManifestJson whose static facts match the provided observed. */
 function fixtureJson(
@@ -512,6 +515,48 @@ describe("checkManifest (real repo)", () => {
     const report = checkManifest();
     assert.equal(report.status, "pass");
     assert.equal(report.findings.length, 0);
+  });
+});
+
+describe("manifest snapshot coverage (real repo)", () => {
+  it("provides a readable snapshot for every changelog release from v1.1.0", () => {
+    const changelog = readFileSync(getTemplatePath("CHANGELOG.md"), "utf8");
+    const releaseVersions = Array.from(
+      changelog.matchAll(/^## v(\d+\.\d+\.\d+)\b/gmu),
+      (match) => match[1] ?? "",
+    ).filter((version) => {
+      const [major = 0, minor = 0] = version.split(".").map(Number);
+      return major > 1 || (major === 1 && minor >= 1);
+    });
+    const snapshotDirectory = getTemplatePath(
+      join("workflow", "manifest-snapshots"),
+    );
+    const snapshotFiles = new Set(readdirSync(snapshotDirectory));
+    const missingSnapshots = releaseVersions
+      .map((version) => `v${version}.json`)
+      .filter((filename) => !snapshotFiles.has(filename));
+
+    assert.deepEqual(
+      missingSnapshots,
+      [],
+      `missing manifest snapshots: ${missingSnapshots.join(", ")}`,
+    );
+
+    for (const version of releaseVersions) {
+      const snapshot: {
+        version?: unknown;
+        snapshot_facts?: unknown;
+      } = JSON.parse(
+        readFileSync(join(snapshotDirectory, `v${version}.json`), "utf8"),
+      );
+      assert.equal(snapshot.version, version);
+      assert.ok(
+        typeof snapshot.snapshot_facts === "object" &&
+          snapshot.snapshot_facts !== null &&
+          !Array.isArray(snapshot.snapshot_facts),
+        `v${version} must contain snapshot_facts`,
+      );
+    }
   });
 });
 

@@ -287,13 +287,23 @@ export function parseHookScenarioArg(
   if (subcommand !== "verify") return null;
   // Verification must not choose a proof group the user did not explicitly request.
   if (value === undefined) {
-    throw new CLIError('hooks verify requires --scenario "deny-hook".', 2);
+    throw new CLIError(
+      'hooks verify requires --scenario "deny-hook", "post-turn-hook", or "gruff-hook".',
+      2,
+    );
   }
   // Unknown groups must fail before the CLI can imply an unimplemented proof ran.
-  if (value !== "deny-hook") {
-    throw new CLIError('--scenario must be "deny-hook".', 2);
+  if (
+    value !== "deny-hook" &&
+    value !== "post-turn-hook" &&
+    value !== "gruff-hook"
+  ) {
+    throw new CLIError(
+      '--scenario must be "deny-hook", "post-turn-hook", or "gruff-hook".',
+      2,
+    );
   }
-  return "deny-hook";
+  return value;
 }
 
 /**

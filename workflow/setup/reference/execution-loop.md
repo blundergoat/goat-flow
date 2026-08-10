@@ -36,8 +36,9 @@ d) Hard Rules
    - Ambiguous requirements: present interpretations; do not pick silently.
 
 e) Commit Messages
-   - Summarise the project's commit conventions: subject format, any branch/issue prefix rule, and the weak-verb ban.
-   - Point to the preferred full reference at `docs/coding-standards/git-commit-message.md`; the detector seeds that doc from git history when neither accepted path exists (Step 02). Preserve and reference an existing `docs/coding-standards/git-commit.md` rather than creating a duplicate.
+   - Include this section only when the target contains `.git`; non-Git targets do not need commit guidance.
+   - Summarise the shipped standard and point to `docs/coding-standards/git-commit-message.md`.
+   - Preserve an existing preferred guide. Rename a former-only `docs/coding-standards/git-commit.md` after confirming the destination is absent; when neither guide exists, copy `workflow/setup/reference/git-commit-message.md`; when both exist, preserve both and reference the preferred path.
 
 f) Key Resources
    - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`.

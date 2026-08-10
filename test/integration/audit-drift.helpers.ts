@@ -231,8 +231,8 @@ export function setupFixture(): string {
 }
 
 /**
- * Write deny-dangerous hook fixtures - workflow source hooks plus the installed central hooks
- * under .goat-flow/hooks - so drift checks that compare hook manifests find parity.
+ * Write managed hook fixtures - workflow source hooks plus the installed central hooks
+ * under .goat-flow/hooks - so drift checks that compare launch and adapter files find parity.
  * Writes files and creates directories on the filesystem under root.
  *
  * @param root - the temp fixture root the hook source and installed copies are written beneath
@@ -258,6 +258,14 @@ export function writeHookFixtures(root: string): void {
   );
   writeFileSync(
     join(root, "workflow", "hooks", "run-with-bash.mjs"),
+    HOOK_LAUNCHER_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "hooks", "hook-provider-adapters.mjs"),
+    HOOK_LAUNCHER_STUB,
+  );
+  writeFileSync(
+    join(root, "workflow", "hooks", "hook-launch-runtime.mjs"),
     HOOK_LAUNCHER_STUB,
   );
   // Canonical policy modules represent the hook package future users receive.
@@ -301,6 +309,14 @@ export function writeHookFixtures(root: string): void {
   );
   writeFileSync(
     join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
+    HOOK_LAUNCHER_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "hooks", "hook-provider-adapters.mjs"),
+    HOOK_LAUNCHER_STUB,
+  );
+  writeFileSync(
+    join(root, ".goat-flow", "hooks", "hook-launch-runtime.mjs"),
     HOOK_LAUNCHER_STUB,
   );
   writeFileSync(

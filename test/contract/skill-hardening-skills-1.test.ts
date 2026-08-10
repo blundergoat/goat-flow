@@ -196,6 +196,51 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
   });
 
+  /*
+   * A user asking for a code tour can use Investigate without inventing a bug.
+   * This contract keeps diagnosis-only work out of that user path.
+   */
+  it("scopes goat-debug diagnosis requirements away from Investigate mode", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const boundaryCommands = readMarkdownSection(
+        skillPath,
+        "Boundary Commands",
+      );
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+
+      assert.match(
+        boundaryCommands,
+        /\*\*ALWAYS in Diagnose mode:\*\* Trace the live path, test competing hypothesis categories, and state the reproduction and evidence limits\./u,
+        skillPath,
+      );
+      assert.match(
+        constraints,
+        /Diagnose mode MUST write hypotheses AFTER initial read of the primary file/u,
+        skillPath,
+      );
+      assert.match(
+        constraints,
+        /Diagnose mode MUST include at least 2 hypothesis categories/u,
+        skillPath,
+      );
+      assert.match(
+        constraints,
+        /Diagnose mode MUST run D1\.5 reduction before D2 or evidence a minimal, not-applicable, or unsafe disposition/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        boundaryCommands,
+        /\*\*ALWAYS:\*\* Trace the live path, test competing hypothesis categories/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        constraints,
+        /^- MUST (?:write hypotheses|include at least 2 hypothesis categories|run D1\.5 reduction)/mu,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-debug ADJUSTED disposition countable in its root output", () => {
     assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -249,7 +294,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         // Asserting the wrong one here is what let this file drift out of version parity.
         assert.match(
           referenceGuidance,
-          /goat-flow-reference-version: "1\.15\.0"/u,
+          /goat-flow-reference-version: "1\.15\.1"/u,
           referencePath,
         );
       },

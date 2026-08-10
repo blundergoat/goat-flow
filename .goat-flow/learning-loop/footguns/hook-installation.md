@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-09
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-shell.md](deny-shell.md) (command grammar), [deny-secrets.md](deny-secrets.md) (secret-path reads), and [deny-writes.md](deny-writes.md) (external writes).
@@ -18,11 +18,13 @@ last_reviewed: 2026-08-06
 **Evidence:**
 - Pre-fix runtime probes against `<clean-temp-dir>`: `node --import tsx src/cli/cli.ts hooks disable deny-dangerous <clean-temp-dir>` created `.agents/hooks.json`, `.claude/settings.json`, `.codex/hooks.json`, `.github/hooks/hooks.json`, and `.goat-flow/config.yaml`; the `hooks enable deny-dangerous` form created hook scripts under `.agents/hooks/`, `.claude/hooks/`, `.codex/hooks/`, and `.github/hooks/`.
 - Guard anchors: `src/cli/server/hook-registrar.ts` (search: `shouldReconcileAgent`) gates writes on detected installed surfaces or existing hook residue; `test/unit/hook-registrar-surfaces.test.ts` (search: `does not scaffold uninstalled agent surfaces`) locks the clean-target regression.
+- 2026-08-09 recurrence: copying Copilot's baseline template over its installed config removed the explicitly enabled Gruff hook. Audit expected the project toggle and reported drift until the writer restored it. Anchor: `src/cli/audit/check-drift-hooks.ts` (search: `applyExplicitHookToggles`).
 
 **Prevention:**
 1. Treat hook support and agent installation as different facts. Support comes from the manifest; installation from target-project surfaces.
 2. Don't count shared markers such as `AGENTS.md` or `.agents/skills/` as a per-agent hook opt-in when multiple profiles share them.
 3. On disable, remove existing hook residue, but don't create a missing hook config file just to remove an entry from it.
+4. Regenerate installed configs through the hook writer so project toggles survive; raw template copies are only defaults.
 
 ## Footgun: Hook command strings can fail before guard code starts
 
@@ -34,10 +36,10 @@ last_reviewed: 2026-08-06
 
 **Evidence:**
 - Preflight/audit parse configured command strings from `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`, require an exact guard script path, then run that guard with safe deny payloads. Anchors: `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredGuardCommands`).
-- 2026-06-01 release-review recurrence (now fixed): an earlier `runConfiguredHookCommandSmoke` parsed the configured command but launched `bash` against `configured.scriptPath`, so a broken `$root` resolver, stale wrapper, syntax error, or executable-bit failure could pass audit while the configured agent command failed before guard startup. `src/cli/audit/check-agent-deny-runtime.ts` (search: `runConfiguredHookCommandSmoke`) now executes the configured launcher string (`configured.command`) directly, and the drift tests below lock that it must not fall back to the bare script path.
-- `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `exact configured hook command points at a stale path`) locks the stale-path case; `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`) locks the unsafe hidden-script-path case. Runtime contract anchors: `workflow/hooks/README.md` (search: `Failure Modes / Runtime Contracts`) and `src/cli/server/agent-hook-writer.ts` (search: `Policy hook unavailable: git repository root unavailable`).
-- 2026-06-04 PR #47 review recurrence: the generated launcher added a `$CLAUDE_PROJECT_DIR` fallback for the script path but still ran `bash "$root/..."` from the old cwd, so the dispatcher recomputed policy root from the wrong directory and failed closed outside a repo. The current Node launcher preserves the corrected root as its child cwd. Anchors: `src/cli/server/agent-hook-writer.ts` (search: `hookLaunchBootstrap`), `workflow/hooks/deny-dangerous.sh` (search: `resolve_goat_flow_root_from_git`), `workflow/hooks/agent-config/claude.json` (search: `CLAUDE_PROJECT_DIR`), and `.claude/settings.json` (search: `CLAUDE_PROJECT_DIR`).
-- 2026-06-09 recurrence for Codex: bare `.goat-flow/hooks/deny-dangerous.sh` commands exited 127 from a nested cwd, while a root-resolving wrapper reached the central policy. The current cross-platform implementation replaces that shell wrapper with a Node bootstrap and managed Bash launcher. Current anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `run-with-bash.mjs`), `src/cli/server/agent-hook-writer.ts` (search: `rootEnvironmentName`), and `test/unit/hook-registrar.test.ts` (search: `generated Codex launchers resolve the active root`).
+- 2026-06-01 release-review recurrence (now fixed): an earlier `verifyConfiguredHookRuntime` parsed the configured command but launched `bash` against `configured.scriptPath`, so a broken `$root` resolver, stale wrapper, syntax error, or executable-bit failure could pass audit while the configured agent command failed before guard startup. `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`) now executes the configured launcher string (`configured.command`) directly, and the drift tests below lock that it must not fall back to the bare script path.
+- `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `exact configured hook command points at a stale path`) locks the stale-path case; `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`) locks the unsafe hidden-script-path case. Runtime contract anchors: `workflow/hooks/README.md` (search: `Failure Modes / Runtime Contracts`) and `src/cli/server/agent-hook-command.ts` (search: `managed root unavailable`).
+- 2026-06-04 PR #47 review recurrence: the generated launcher added a `$CLAUDE_PROJECT_DIR` fallback for the script path but still ran `bash "$root/..."` from the old cwd, so the dispatcher recomputed policy root from the wrong directory and failed closed outside a repo. The current Node launcher preserves the corrected root as its child cwd. Anchors: `src/cli/server/agent-hook-command.ts` (search: `hookLaunchBootstrap`), `workflow/hooks/deny-dangerous.sh` (search: `resolve_goat_flow_root_from_git`), `workflow/hooks/agent-config/claude.json` (search: `CLAUDE_PROJECT_DIR`), and `.claude/settings.json` (search: `CLAUDE_PROJECT_DIR`).
+- 2026-06-09 recurrence for Codex: bare `.goat-flow/hooks/deny-dangerous.sh` commands exited 127 from a nested cwd, while a root-resolving wrapper reached the central policy. The current cross-platform implementation replaces that shell wrapper with a Node bootstrap and managed Bash launcher. Current anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `run-with-bash.mjs`), `src/cli/server/agent-hook-command.ts` (search: `rootEnvironmentName`), and `test/unit/hook-registrar.test.ts` (search: `generated Codex launchers resolve the active root`).
 - 2026-08-06 launcher migration recurrence: adding `run-with-bash.mjs` to every hook spec made naive per-spec registration matching treat the shared support file as proof that any managed hook was installed. Focused drift tests then removed or cross-matched unrelated deny, gruff, and post-turn entries. Current guards explicitly exclude the shared launcher from identity checks in `src/cli/server/agent-hook-writer.ts` and `src/cli/audit/check-drift-hooks.ts` (search: `script !== "run-with-bash.mjs"`).
 
 **Prevention:**
@@ -57,7 +59,7 @@ last_reviewed: 2026-08-06
 **Why it happens:** Pre-1.9 `.goat-flow/.gitignore` templates use a leading `*`; any CLI/dashboard path that writes required committed files under `.goat-flow/` must append matching unignore entries. The original hook sync path wrote `.goat-flow/hooks/deny-dangerous/` without adding `!hooks/` and `!hooks/**`.
 
 **Evidence:**
-- Current repair: `src/cli/server/hook-registrar.ts` (search: `ensureHookGitignoreEntries`) appends both negations whenever hook sync writes the shared policy store.
+- Current repair: `src/cli/server/hook-managed-installation.ts` (search: `ensureHookGitignoreEntries`) appends both negations whenever hook sync writes the shared policy store.
 - Regression: `test/unit/hook-registrar-surfaces.test.ts` (search: `unignores hooks when enabling deny-dangerous on a stale goat-flow gitignore`) starts from a pre-1.9 gitignore and asserts both negations are added.
 - Broader trap: `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Filesystem-backed validation can miss untracked or ignored replacement files`) records how filesystem checks can pass with ignored `.goat-flow/*` files.
 
@@ -90,19 +92,25 @@ last_reviewed: 2026-08-06
 ## Footgun: Hook launchers fail closed when the shell cwd is outside any git repo, wedging every Bash
 
 **Status:** active | **Created:** 2026-06-04 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 2 | **Latest occurrence:** 2026-08-09
 
-**Symptoms:** A Claude/Antigravity session that `cd`'d outside the repo (usually `/tmp` for scratch) has EVERY later Bash blocked by `BLOCKED: Policy hook unavailable: git repository root unavailable.` (older installs: `Guard cannot start: ...`). The block fires before the command, so even `cd /path/to/repo && ...` is rejected - the session can't escape `/tmp` via Bash (Read/Edit/Write still work).
+**Symptoms:** Before 1.15.1, a Claude/Antigravity session that `cd`'d outside the repo (usually `/tmp` for scratch) had every later Bash blocked by `BLOCKED: Policy hook unavailable: git repository root unavailable.` The block fired before the command, so even `cd /path/to/repo && ...` was rejected. Current launchers recover from a complete managed ancestor without Git; a cwd outside every complete candidate still fails closed.
 
-**Why it happens:** The launcher runs `git rev-parse` in the agent's persistent cwd and fails closed outside any repo. Claude Code keeps one cwd across Bash calls, so one `cd /tmp` gates every later command (the `cd` back included) on a `git rev-parse` that cannot succeed from `/tmp`; `--git-common-dir` also fails there (`fatal: not a git repository`, exit 128). Script-path lookup alone is insufficient: `deny-dangerous.sh` re-resolves `.goat-flow/hooks/deny-dangerous` via `git rev-parse` from cwd, failing closed unless the launcher `cd`s into root.
+**Why it happens:** The old launcher made `git rev-parse` its only root source. Claude Code keeps one cwd across Bash calls, so one `cd /tmp` gated every later command on a Git lookup that could not succeed there. Script-path lookup alone was insufficient because policy also needed a verified project cwd. The replacement prefers Git for worktree correctness, then accepts only a complete managed ancestor; it deliberately rejects partial, redirected, or multiply-linked installations.
 
 **Evidence:**
 - 2026-06-04 live incident: a session in `~/projects/gruff-workspace/gruff-rs` cd'd to `/tmp`, after which every Bash returned `Guard cannot start: git repository root unavailable.`; `cd <repo> && pwd` was blocked too. Both launcher generations fail from `/tmp`: `git rev-parse --show-toplevel` and `--git-common-dir` each exit 128 with empty output → fail-closed branch.
-- End-to-end probe (real guard, from `/tmp`): WITH `$CLAUDE_PROJECT_DIR` + the resolved child cwd → benign allowed (exit 0), `rm -rf /` blocked (exit 2); WITHOUT the env var → fail-closed (exit 2); script-path lookup alone (without the corrected cwd) still failed closed. Anchors: `src/cli/server/agent-hook-writer.ts` (search: `CLAUDE_PROJECT_DIR`), and the generated launchers in `workflow/hooks/agent-config/claude.json`, `workflow/hooks/agent-config/antigravity-hooks.json`, and `workflow/install-goat-flow.sh` (search: `CLAUDE_PROJECT_DIR`).
+- End-to-end probe (real guard, from `/tmp`): WITH `$CLAUDE_PROJECT_DIR` + the resolved child cwd → benign allowed (exit 0), `rm -rf /` blocked (exit 2); WITHOUT the env var → fail-closed (exit 2); script-path lookup alone (without the corrected cwd) still failed closed. Anchors: `src/cli/server/agent-hook-command.ts` (search: `CLAUDE_PROJECT_DIR`), and the generated launchers in `workflow/hooks/agent-config/claude.json`, `workflow/hooks/agent-config/antigravity-hooks.json`, and `workflow/install-goat-flow.sh` (search: `CLAUDE_PROJECT_DIR`).
+- 2026-08-09 recurrence: the first managed-ancestor classifier treated the shared `run-with-bash.mjs` as a relevant requested-hook trace. A nested root with only another managed hook would therefore appear corrupt and suppress a valid outer candidate. Relevance now requires the requested script or an exact registration operand; the shared launcher is validated only after that threshold is met. Anchors: `src/cli/server/agent-hook-command.ts` (search: `const relevant=scriptSeen||registered`) and `test/unit/hook-registrar.test.ts` (search: `skips unrelated configs but stops at a partial managed trace`).
+- 2026-08-10 packaged-bin reproduction: archived 1.15.1 bytes installed into a bare non-Git project, upgraded exact tagged 1.15.0 launcher bytes through `hooks sync`, allowed safe input, and denied destructive input. Anchor: `test/integration/packaged-hook-install.test.ts` (search: `runs fresh install and 1.15.0 sync through the archived CLI bin`).
 
 **Prevention:**
-1. A launcher MUST locate `run-with-bash.mjs` from a cwd-independent anchor: after git resolution, consult the supported project-root environment fallback, then fail closed when neither exists. Run the launcher with the resolved root as child cwd because the guard re-resolves policy from cwd.
-2. Keep git resolution FIRST so worktree/submodule checkouts resolve to the active checkout; the env fallback only rescues the cwd-outside-repo case. Non-Codex registrations consult `$CLAUDE_PROJECT_DIR` when the host supplies it; Codex intentionally remains fail-closed without a git root.
-3. Recovery: the user types `!cd <repo>` to reset the persisted cwd. Keep scratch work in `.goat-flow/scratchpad/`, not `/tmp` (see `.goat-flow/learning-loop/lessons/agent-behavior.md`, search: `wedged its own shell`).
+1. Keep Git resolution first so worktree and submodule checkouts can win, but continue upward when that Git root has no requested-hook trace. Select only a complete managed root, then run the launcher with that verified root as child cwd.
+2. Treat the requested script or an exact registration operand as relevance. The shared launcher alone may belong to another enabled hook and cannot classify the candidate as partial.
+3. After the ancestor walk, consult the supported project-root environment fallback. Codex can use a complete managed ancestor without Git but still fails closed when its cwd has no candidate and its host supplies no root environment.
+4. Keep policy-root and diff-root claims separate: deny policy works in a complete non-Git installation, while post-turn scanning blocks without a trustworthy Git comparison baseline.
+5. Keep each launcher deadline below its supported host limit and stop the full child process tree on timeout so the user's agent can render the bounded failure.
+6. Recovery: the user types `!cd <repo>` to reset the persisted cwd. Keep scratch work in `.goat-flow/scratchpad/`, not `/tmp` (see `.goat-flow/learning-loop/lessons/agent-behavior.md`, search: `wedged its own shell`).
 
 ## Footgun: Copilot hook config can exist while runtime policy hooks are disabled
 
@@ -112,7 +120,7 @@ last_reviewed: 2026-08-06
 
 **Evidence:**
 - `workflow/hooks/agent-config/copilot-hooks.json` and `.github/hooks/hooks.json` (search: `"preToolUse"`).
-- `src/cli/audit/check-agent-deny-runtime.ts` (search: `runtimeSmokePayload`) validates script-shaped stdin only.
+- `src/cli/audit/check-agent-deny-runtime.ts` (search: `blockedRuntimeProbe`) validates script-shaped stdin only.
 
 **Prevention:** In release QA, label Copilot coverage as script/config evidence unless live capture writes a payload or emits `hook.start`. `POLICY_HOOKS: false` means runtime enforcement is unavailable/limited.
 

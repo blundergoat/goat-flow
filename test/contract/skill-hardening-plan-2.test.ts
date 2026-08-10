@@ -81,6 +81,16 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         assert.match(issueGuidance, /= <agent-time range>/u, issuePath);
         assert.match(
           issueGuidance,
+          /delivery band.*derived from.*milestone forecast/isu,
+          `${issuePath}: ISSUE delivery bands are not derived from milestones`,
+        );
+        assert.match(
+          issueGuidance,
+          /never.*input.*milestone estimate/isu,
+          `${issuePath}: ISSUE bands can still anchor milestone estimates`,
+        );
+        assert.match(
+          issueGuidance,
           /800 words and 60 nonblank lines/u,
           issuePath,
         );
@@ -91,6 +101,27 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         );
       },
     );
+  });
+
+  /*
+   * A user starting a Standard plan needs an ISSUE.md beside the milestone files.
+   * The format reference guides that artifact and must stay unchanged.
+   */
+  it("writes the user-facing ISSUE artifact without treating its format reference as output", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const planGuidance = readProjectFile(skillPath);
+
+      assert.match(
+        planGuidance,
+        /\*\*ISSUE\.md:\*\* Standard\+ writes `ISSUE\.md` using `references\/issue-format\.md`/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        planGuidance,
+        /Standard\+ writes `references\/issue-format\.md`/u,
+        skillPath,
+      );
+    });
   });
 
   it("keeps public goat-plan consumers aligned with proportional planning", () => {

@@ -1,6 +1,21 @@
 ---
 category: coordination
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-10
+---
+
+## Lesson: Git status cannot prove milestone work disappeared after HEAD moves
+
+**Status:** active | **Created:** 2026-08-09
+**Decision changed:** Compare the recorded baseline tree, current HEAD, and file hashes before attempting recovery when a changed path disappears from `git status`.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-09
+
+**What happened:** During M03 verification, goat-debug paths disappeared from `git status`, so I paused writes on the assumption that a test process had restored them. The files still had the expected hashes and differed from the recorded M03 baseline tree; current HEAD had advanced to a user-created commit that already contained those changes.
+
+**Root cause:** I read `git status` as a comparison with the milestone's recorded baseline. It compares the index and working tree with current HEAD, so a commit made during the milestone can make preserved work disappear from status without removing it.
+
+**Prevention:** Before restoring or recreating apparently missing work, compare `git diff <recorded-tree>`, `git diff HEAD`, `git log -1`, and hashes for the affected mirrors. Treat an unexpected HEAD change as shared-workspace evidence to reconcile, not proof of data loss. Evidence anchor: `workflow/skills/goat-debug/SKILL.md` (search: `ALWAYS in Diagnose mode`).
+
 ---
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
@@ -77,14 +92,18 @@ last_reviewed: 2026-08-07
 **Status:** active | **Created:** 2026-05-01
 **Decision changed:** Run the plan arithmetic gate immediately after writing estimates, then independently derive every ISSUE-level roll-up from the validated milestone headlines.
 **Trigger phase:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-08-07
+**Incident count:** 5
+**Latest occurrence:** 2026-08-10
 
 **What happened:** Programme headline stated ~33 weekends (council's estimate). Phase breakdowns summed to ~26. The gap was unexplained - some combination of CF items, overhead, and double-counted shared infrastructure. The headline lost legitimacy when the math didn't add up.
 
 **Recurrence 2026-08-04:** The quality-findings milestone declared 70 minutes as 45 product / 20 proof / 5 other, but its proof tasks summed to 28 minutes. `plans check` rejected the artifact with the category-overrun diagnostic; the estimate was corrected to 78 minutes before implementation continued. Evidence anchor: `src/cli/plans-check.ts` (search: `task estimates`).
 
 **Recurrence 2026-08-07:** Strict plan validation confirmed every milestone's internal arithmetic, but I manually transcribed the M06-M12 sum as 13.25 hours. The validated headlines totalled 815 minutes, or about 13.6 hours. A separate cross-artifact arithmetic pass caught the mismatch before delivery.
+
+**Recurrence 2026-08-09:** Expanding M03 for a runtime-hook repair added 20 product minutes and 20 proof minutes, but I initially left its headline split at 140 product / 110 proof. Strict validation reported counted totals of 160 / 130; the live estimate was corrected while the original 260-minute baseline stayed explicit in Forecast calibration. Evidence anchor: `src/cli/plans-check.ts` (search: `counted work`).
+
+**Recurrence 2026-08-10:** A release plan used 15 work units and a 12.42-minute high rate, then manually recorded the high bound as 186 minutes. The deterministic ceiling was 187, so strict validation blocked closeout until the displayed range matched the formula. Evidence anchor: `src/cli/plans-effort.ts` (search: `forecast basis derives`).
 
 **Prevention:** Programme documents should show effort accounting explicitly and derive each roll-up from the milestone headlines after strict validation. If two totals intentionally differ, name the accounting difference; do not transcribe a mental sum into the summary.
 
@@ -109,16 +128,20 @@ last_reviewed: 2026-08-07
 ## Lesson: Final human gates belong in Proof, not implementation Tasks
 
 **Status:** active | **Created:** 2026-08-01
-**Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked and place the sole open human approval under Proof.
+**Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked, separate agent handoff work from human execution, and prefix each open human-owned Proof item with `[HUMAN]`.
 **Trigger phase:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-08-10
 
-**What happened:** M06 had finished its implementation and automated proof, but I added the final human approval checkbox under Tasks while changing the status to `human-verification-pending`. Strict plan validation rejected the snapshot as having an open implementation task.
+**What happened:** A release milestone had finished implementation and automated proof, but I added the final human approval checkbox under Tasks while changing the status to `human-verification-pending`. Strict plan validation rejected the snapshot as having an open implementation task.
 
-**Root cause:** I treated `[human]` as a global ownership marker. The plan checker counts every unchecked item parsed from Tasks as implementation work; it exempts human-owned items only when evaluating the proof collection.
+**Recurrence 2026-08-10:** A later release proof put `[manual, HUMAN-PENDING]` at the end of one open item that mixed agent handoff preparation with human execution. The checker treated it as executor-owned because human ownership requires the leading `[HUMAN]` marker. Splitting the checked handoff from the zero-agent-minute human gate preserved the original forecast and left the required human work open.
 
-**Fix:** Move the unchanged human gate to Proof and rerun strict plan validation.
+**Root cause:** I treated human ownership as readable prose instead of positional machine metadata. The checker treats every open Task as executor work and recognizes human ownership only at the start of a Proof item's text.
 
-**Prevention:** Before a pending transition, confirm Tasks has no unchecked boxes and Proof has no open executor-owned boxes. Evidence anchor: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`).
+**Fix:** Keep the gate under Proof, prefix it with `[HUMAN]`, and rerun strict plan validation.
+
+**Prevention:** Before a pending transition, confirm Tasks has no unchecked boxes, agent handoff preparation has its own checked Proof item, and every open human-owned Proof item starts with `[HUMAN]`. Evidence anchor: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`).
 
 ---
 
@@ -127,10 +150,14 @@ last_reviewed: 2026-08-07
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** VERIFY
-**Incident count:** 1
-**Latest occurrence:** 2026-08-02
+**Incident count:** 4
+**Latest occurrence:** 2026-08-10
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
+
+**Recurrence 2026-08-10:** A hook-coverage milestone left its product receipt open overnight across approval pauses. Because the stop time could no longer distinguish agent work from human waiting, the span had to be discarded; its Actual is incomplete and cannot calibrate future forecasts.
+
+**Recurrence 2026-08-10:** During release-plan closeout, I passed a display identifier to `plans time stop` instead of the required milestone-file path. The CLI rejected the command and left the receipt open until the invocation used the exact `M*.md` path. Evidence anchor: `src/cli/plans-time.ts` (search: `requires an M*.md milestone file`).
 
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
 
@@ -141,6 +168,7 @@ last_reviewed: 2026-08-07
 4. Report wall-clock and aggregate subagent time separately. Parallel agent effort must never be added and presented as elapsed time.
 5. If timing was not started prospectively, label Actual as a low-confidence retrospective estimate. Never call it measured or derive it from the plan.
 6. Calibrate future estimates only after at least three comparable measured milestones. Use the median `actual / estimate` ratio plus a low/likely/high range; one fast milestone is evidence, not a universal multiplier.
+7. Pass the exact milestone-file path to timing commands; a display identifier is not a file locator.
 
 **Evidence anchors:** `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI proof records`) defines the handoff requirement; `src/cli/plans-effort.ts` (search: `renderActualLine`) renders the recorded value but cannot create timing evidence.
 
@@ -151,21 +179,30 @@ last_reviewed: 2026-08-07
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Derive an estimate by counting task, proof, and admin units, then converting once. Never write an hours figure first and decompose backwards from it.
 **Trigger phase:** SCOPE
-**Incident count:** 1
-**Latest occurrence:** 2026-08-02
+**Incident count:** 3
+**Latest occurrence:** 2026-08-10
 
 **What happened:** Two plans authored days apart under the same goat-plan guidance produced opposite calibration. goat-debug-improve budgeted 715 minutes; its two receipt-backed milestones measured 273s and 1043s - ratios of 0.05x and 0.13x. Its three earlier milestones show the same shape (180/190/120 minutes estimated against 15/10/4 reported). effort-estimation-timing, estimated by the same author, measured 1.54x, 1.13x, and 0.79x - every milestone inside its declared forecast range.
 
-**Root cause:** The two plans derived their numbers differently. goat-debug-improve's brief opens with a duration - "9.5-15 hours coding-agent time" - and the per-milestone splits were apportioned out of that total, so wall-clock intuition set the scale and the categories only divided it. effort-estimation-timing carried a `Forecast basis` naming countable units (contract and RED fixtures 7, timing command and safe writer 6, proof cycles 6, administration 2) which summed upward into the headline. Counting produces agent-time; converting from hours reproduces human intuition wearing agent-time units.
+**Root cause:** The plans derived their numbers differently. goat-debug-improve's brief opens with a duration - "9.5-15 hours coding-agent time" - and the per-milestone splits were apportioned out of that total, so wall-clock intuition set the scale and the categories only divided it. effort-estimation-timing carried a `Forecast basis` naming countable units (contract and RED fixtures 7, timing command and safe writer 6, proof cycles 6, administration 2) which summed upward into the headline. Counting produces agent-time; converting from hours reproduces human intuition wearing agent-time units.
+
+**Recurrence 2026-08-09:** Three consecutive hook-safety milestones were estimated at 150, 165, and 145 minutes; prospective receipts measured 28, 29, and 102 minutes, or 0.19x, 0.18x, and 0.70x. The user flagged the persistent overestimate. A retrospective comparison added six receipt-backed downstream milestones. Across all nine samples, duration-first estimates totalled 1,200 minutes against 276.25 measured minutes: 4.34 times actual in aggregate, with a 5.70-times median overestimate.
+
+**Recurrence 2026-08-10:** A release-identity closeout forecast 103 minutes from 15 units and measured 1,912 recorded-unpaused seconds, rendered as 32 minutes. The 0.31x result fell below the 41-minute low bound because prerequisite work had already absorbed much of the implementation risk; counting every remaining checkbox as fresh work overstated the residual scope.
+
+**Method comparison:** The nine milestones contained 99 positive agent-owned Task, Proof, Mid-proof, and admin units. Applying a cold `0.5-2.5-10 min/unit` prior produced a 247.5-minute likely total, 10.4% below the measured total, and all nine outcomes landed inside their derived low/high bands. Leave-one-out local rates covered seven of nine outcomes with 36.5% median absolute percentage error. This is a retrospective backtest, not proof that the next forecast will land; its value is showing that countable inputs materially outperform a duration chosen first.
 
 **Prevention:**
-1. Write the unit count before any minute figure: files touched, commands run, proof cycles, integration cycles. The headline is the sum, never the input.
+1. Count positive agent-owned Task, Proof, Mid-proof, and admin entries before writing any minute figure. Exclude `[HUMAN]` and zero-minute items. The headline is the result, never the input.
 2. Treat any estimate expressed first as hours as unvalidated. Decomposing a duration into product/proof/other does not convert it into agent-time.
-3. A `Forecast basis` line that names its countable groups is the artifact that makes an estimate auditable later; a bare total is not.
+3. Record `<units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <evidence>` in `Forecast basis:`. Derive low by flooring (minimum one), likely by rounding, and high by ceiling.
 4. Do not carry an inflated plan's estimates into calibration. Untagged retrospective Actuals are excluded for exactly this reason.
-5. Suspect the method, not the milestone, when a whole plan misses one direction by an order of magnitude.
+5. Below three matching completed, measured bases, use the conservative cold-start prior. At three or more, use the observed low, median, and high minutes per unit reported by `plans check`.
+6. Recount and reforecast before implementation whenever scope changes or the CLI prints `reforecast required`; preserve the original estimate for calibration.
+7. Derive an ISSUE delivery band by summing milestone forecasts. Never feed a plan-wide duration down into milestone estimates.
+8. At activation after prerequisite handoff, classify each unit as fresh, inherited complete, or reconciliation-only. Forecast the residual agent work and preserve the cold estimate separately instead of charging completed prerequisite risk twice.
 
-**Evidence anchors:** `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) computes ratios from raw receipt seconds; `workflow/skills/goat-plan/SKILL.md` (search: `Effort estimate (agent-time)`) already requires counted units and forbids wall-clock intuition - this lesson is measured evidence that the rule is load-bearing rather than stylistic.
+**Evidence anchors:** `src/cli/plans-effort.ts` (search: `export function countAgentWorkUnits`) owns the unit definition and deterministic range math; `src/cli/plans-check-summary.ts` (search: `function renderRequiredReforecasts`) turns three matching receipt-backed bases into a visible next action; `workflow/skills/goat-plan/SKILL.md` (search: `Effort estimate (agent-time)`) makes that action block implementation. The raw cross-project receipts remain local plan state; the aggregate comparison above is the durable derived record.
 
 ---
 
@@ -174,12 +211,14 @@ last_reviewed: 2026-08-07
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Switch the receipt category at the work boundary, not at the milestone boundary; a stale category is a silent data error, not a rounding detail.
 **Trigger phase:** VERIFY
-**Incident count:** 2
-**Latest occurrence:** 2026-08-04
+**Incident count:** 3
+**Latest occurrence:** 2026-08-09
 
 **What happened:** Effort-estimation-timing M02 opened a `product` span and left it open across implementation, a full test-suite run, lint, format, and unused-export checks. The finalized receipt reported 1112 product / 99 proof seconds. The total (1354s) was correct and system-stamped, but the split was badly wrong - most of that "product" time was proof. Nothing flagged it: the receipt was open, finalized cleanly, reconciled against the Actual, and passed strict validation, because the CLI can only stamp the category it was given.
 
 **Recurrence 2026-08-04:** The quality-findings milestone left its first `product` span open through focused content tests, both 327-case hook corpora, the interleaved benchmark, and skill contract runs. The category switched only for final repository verification. The receipt total remains prospective, but its product/proof split is knowingly inaccurate and must be disclosed rather than used for calibration.
+
+**Recurrence 2026-08-09:** M03 left its first `product` span open across goat-debug RED confirmation, delegated pressure runs, and the deployment test matrix, then into goat-critique RED. The mistake was caught after 1,604 seconds when the user challenged forecast quality; the receipt switched to `proof` immediately. Total elapsed time remains prospective, but the first segment's category is knowingly mixed and cannot calibrate product-versus-proof rates.
 
 **Root cause:** Starting a receipt feels like the whole discipline, so category maintenance gets treated as optional bookkeeping. A single long span is also the path of least resistance - `stop` then `start` is two commands, while doing nothing is zero. The resulting split carries the full authority of a `measured` Actual while being no better than a guess.
 
@@ -197,15 +236,17 @@ last_reviewed: 2026-08-07
 ## Lesson: Milestone task sections contain estimated work, not evidence notes
 
 **Status:** active | **Created:** 2026-08-07
-**Decision changed:** Put audit notes in Context and command output in Actual evidence; reserve Tasks for estimated implementation checkboxes.
+**Decision changed:** Reserve Tasks for estimated implementation checkboxes and keep each `(est: ...)` entry at the end of its item.
 **Trigger phase:** VERIFY
-**Incident count:** 1
-**Latest occurrence:** 2026-08-07
+**Incident count:** 2
+**Latest occurrence:** 2026-08-08
 
 **What happened:** M05 recorded a completed test-audit result as another checkbox under `## Tasks`. Strict plan validation counted it as implementation work, then reported one missing `(est: ...)` entry and a 15/20-minute product mismatch.
 
-**Root cause:** The task section was treated as a convenient narrative checklist. Its checkboxes are machine-readable work records that feed estimate coverage and category totals.
+**Recurrence update (2026-08-08):** M01 completion notes were appended after all four task estimates. The terminal estimate parser then treated every task as unestimated and reported zero counted product minutes against the declared 60-minute split. Moving each completion note before its estimate restored strict validation.
 
-**Prevention:** Keep `## Tasks` to estimated work items. Put discoveries in `## Context` and literal gate output in `## Actual evidence` so proof does not alter effort accounting.
+**Root cause:** The task section was treated as a convenient narrative checklist without preserving its terminal estimate grammar. Its checkboxes and final `(est: ...)` entries are machine-readable work records that feed estimate coverage and category totals.
 
-**Evidence anchor:** `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task-section checkbox into an estimate-bearing record; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.
+**Prevention:** Keep `## Tasks` to estimated work items. Put discoveries in `## Context` and literal gate output in `## Actual evidence`; if a task needs a completion note, place it before the terminal estimate and rerun strict plan validation.
+
+**Evidence anchor:** `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task-section checkbox into an estimate-bearing record; `src/cli/plans-effort.ts` (search: `const TASK_ESTIMATE_PATTERN`) requires the estimate at the item's end; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.

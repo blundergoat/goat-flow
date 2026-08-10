@@ -1,6 +1,6 @@
 # AI Harness Quality Assessment
 
-`npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness` generates a structured prompt for a coding agent to evaluate the harness. Where the audit runs deterministic pass/fail checks (see [harness-audit.md](harness-audit.md)), the quality assessment asks an LLM to try the system on real code and judge whether the content is actually useful for this project.
+`npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness` generates a structured prompt for a coding agent to evaluate the harness. Where the audit runs deterministic pass/fail checks (see [harness-audit.md](harness-audit.md)), the quality assessment asks an agent to inspect project evidence and judge whether the harness is useful in this codebase.
 
 | Mode | Command | Question |
 |------|---------|----------|
@@ -8,7 +8,7 @@
 | Harness | `npx @blundergoat/goat-flow@latest audit . --harness` | Is the harness structurally complete? |
 | **Quality** | **`npx @blundergoat/goat-flow@latest quality . --agent X --mode harness`** | **Does this make sense to a fresh agent?** |
 
-Quality is not automated checks. It generates a prompt that asks an agent to assess whether the harness is actually usable, not just structurally present. The evaluation covers:
+The generated prompt asks an agent to judge whether the harness is usable, not just structurally present. The evaluation covers:
 
 1. **Ground yourself** - run the project's validation commands (`audit --harness`, `stats --check`), save the output
 2. **Concern-by-concern analysis** - for each of the 5 harness concerns (Context, Constraints, Verification, Recovery, Feedback Loop), assess what works, what fails or is weak, and provide file or semantic-anchor evidence
@@ -21,7 +21,7 @@ Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality mar
 
 ## Persisting quality reports
 
-`npx @blundergoat/goat-flow@latest quality . --agent X --mode harness` composes a prompt that instructs the agent to save its final JSON report directly to `.goat-flow/logs/quality/` - a gitignored path. No separate capture step: the agent owns the write, and `history` / `diff` read whatever the agent saved.
+The CLI prompt keeps the completed JSON in memory and sends it to the exact-version `quality save` command. The saver redacts accepted strings, validates the report, chooses the filename, and persists the final JSON under the selected project's gitignored `.goat-flow/logs/quality/` directory. Dashboard-launched enforced Claude sessions use the dashboard staging contract described in the [CLI reference](cli.md#goat-flow-quality-path---agent-id---mode-mode).
 
 ```bash
 npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness
@@ -29,7 +29,7 @@ npx @blundergoat/goat-flow@latest quality history --agent claude
 npx @blundergoat/goat-flow@latest quality diff --agent claude
 ```
 
-Saved reports live locally under `.goat-flow/logs/quality/` as validated `.json` files (with any companion `.md` prose the agent chooses). `history` and `diff` only operate on saved reports.
+Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. `history` and `diff` only operate on reports that completed the persistence contract.
 
 ---
 
@@ -69,7 +69,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 ### 4. Recovery
 
-**Audit checks:** tasks directory exists, session logs directory exists.
+**Audit checks:** plans directory exists, session logs directory exists.
 
 **Quality evaluates:**
 - Are recovery instructions clear about optional task files versus session logs?
@@ -82,7 +82,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 **Quality evaluates:**
 - Are footgun and lesson entries from real incidents, or synthetic?
-- Are entries recent? A project with no entries in the last 90 days has a feedback loop problem.
+- Do recent incidents appear in the learning loop, or are recurring failures missing from the record?
 - Are active/resolved statuses accurate? An "active" footgun describing fixed behavior is stale.
 - Do semantic-anchor references in entries still resolve in the current code?
 
@@ -90,13 +90,4 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 ## When to use quality
 
-- After setup is complete and audit passes - "is this actually good?"
-- After significant changes - "did we break anything the auditor can't see?"
-- Periodically - "has the harness drifted?"
-- When onboarding - "does this make sense to a fresh agent?"
-
-## When NOT to use quality
-
-- As a setup gate (use `audit`)
-- As a CI check (use `audit`)
-- As a replacement for `audit --harness` (quality is subjective; audit is deterministic)
+[Audit & Quality](audit-and-quality.md#when-to-use-quality) owns the routing rules for both commands. The harness-specific case: reach for `--mode harness` when `audit --harness` passes and you still suspect the concerns are wired but not useful.

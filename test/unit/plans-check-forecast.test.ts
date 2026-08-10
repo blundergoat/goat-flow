@@ -1,8 +1,8 @@
 /**
- * How the checker reports the future: forecast bands around the headline, calibration from
- * measured history, and the usage errors that keep the command read-only.
- * Runs the real CLI against written milestone fixtures, so failures read as an author would
- * see them in a terminal rather than as internals.
+ * How the checker reports the future: countable inputs, forecast bands,
+ * minutes-per-unit history, and read-only usage errors. It runs the real CLI
+ * against written milestones, so failures match what plan authors see in the
+ * terminal before implementation begins.
  */
 import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
@@ -19,6 +19,7 @@ import {
   writeCheckPlan,
   estimatedMilestoneBody,
   eligibleSampleBody,
+  eligibleWorkUnitSampleBody,
 } from "./plans-check.helpers.js";
 
 describe("plans check: forecasts, calibration, and CLI usage", () => {
@@ -42,6 +43,70 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
     try {
       const result = runPlansCheck(planPath, "--strict");
       assert.equal(result.status, 0, result.stdout + result.stderr);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: a reviewable basis must agree with three positive agent work units.
+   * Process/filesystem side effects: writes a temporary plan, runs the CLI, then removes it.
+   */
+  it("strict mode accepts a forecast basis that matches the plan and its derived range", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-basis-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~8 min agent-time (3 product / 3 proof / 2 other)",
+        ["- [ ] Build the thing (est: 3 min product)"],
+        {
+          forecastBasisLine:
+            "Forecast basis: 3 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
+          forecastRangeLine:
+            "Forecast range: 1-30 agent-time minutes on one recorded-unpaused milestone timeline; likely 8; uncalibrated",
+          planAdminOverhead: "2 min other",
+          testingGateLines: ["- [ ] Run typecheck (est: 3 min proof)"],
+        },
+      ),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: a stale four-unit basis must expose the plan's current three-unit scope.
+   * Process/filesystem side effects: writes a temporary plan, runs the CLI, then removes it.
+   */
+  it("strict mode rejects a forecast basis that no longer matches plan work units", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-basis-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~8 min agent-time (3 product / 3 proof / 2 other)",
+        ["- [ ] Build the thing (est: 3 min product)"],
+        {
+          forecastBasisLine:
+            "Forecast basis: 4 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: stale cold-start prior",
+          forecastRangeLine:
+            "Forecast range: 1-30 agent-time minutes on one recorded-unpaused milestone timeline; likely 8; stale before implementation",
+          planAdminOverhead: "2 min other",
+          testingGateLines: ["- [ ] Run typecheck (est: 3 min proof)"],
+        },
+      ),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /forecast basis declares 4 agent work units but the plan contains 3/u,
+      );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -217,6 +282,48 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
       assert.match(
         result.stdout,
         /calibration sample: M01-fast\.md 0\.50x \(300s measured \/ 10 min estimated\)/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Writes four temporary milestones, runs the CLI feedback loop, then removes every fixture.
+  it("reports minutes-per-unit evidence and requires a stale unfinished forecast to be revised", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-units-"));
+    const futureMilestone = estimatedMilestoneBody(
+      "Effort estimate: ~10 min agent-time (4 product / 2 proof / 4 other)",
+      [
+        "- [ ] Build the first part (est: 2 min product)",
+        "- [ ] Build the second part (est: 2 min product)",
+      ],
+      {
+        title: "M04: Future milestone",
+        forecastBasisLine:
+          "Forecast basis: 4 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
+        forecastRangeLine:
+          "Forecast range: 2-40 agent-time minutes on one recorded-unpaused milestone timeline; likely 10; uncalibrated",
+        planAdminOverhead: "4 min other",
+        testingGateLines: ["- [ ] Prove the result (est: 2 min proof)"],
+      },
+    );
+    const planPath = writeCheckPlan(temporaryRoot, {
+      "M01-fast.md": eligibleWorkUnitSampleBody(300),
+      "M02-even.md": eligibleWorkUnitSampleBody(600, "M02"),
+      "M03-slow.md": eligibleWorkUnitSampleBody(1200, "M03"),
+      "M04-future.md": futureMilestone,
+    });
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /work-unit calibration: 3 eligible measured samples - median 3\.33 min\/unit, observed 1\.67-6\.67 min\/unit/u,
+      );
+      assert.match(
+        result.stdout,
+        /reforecast required: M04-future\.md - 4 agent work units imply 6-27 agent-time minutes; likely 13 from local evidence/u,
       );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });

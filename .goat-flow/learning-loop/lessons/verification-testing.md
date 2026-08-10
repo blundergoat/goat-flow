@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -23,14 +23,19 @@ last_reviewed: 2026-08-07
 ## Lesson: Timeout completion needs a deadline independent of child close
 
 **Status:** active | **Created:** 2026-07-12
+**Decision changed:** Treat a timeout response as incomplete proof until the host-facing call also returns within its wall-clock bound.
+**Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-09
 
 **What happened:** The seven-skill pressure matrix reproduced a preflight runner that exceeded its hard timeout window after process-group escalation. A detached test helper escaped the group, inherited stdout/stderr, and held those pipes open, so Node delayed the child's `close` event after the direct process exited.
 
-**Root cause:** The timeout path bounded process termination but used `close` as its only result-delivery event. An escaped descriptor holder could therefore hide a known timeout result.
+**Recurrence 2026-08-09:** M03 preflight first reported `bounds gruff hooks with a timeout-specific response` as transient because its automatic full-suite retry passed. Running that named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound. A deterministic fixture then wrote a marker after starting the background child and reproduced the same wait, ruling out an early Bash kill. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `hook exceeded its deadline and was killed`) and `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
 
-**Fix:** After SIGKILL, use a one-shot result deadline that preserves the observed direct-child status, destroys only local capture streams, emits a cleanup-limit diagnostic, and ignores late events. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`) and `test/integration/preflight-progress.test.ts` (search: `returns after escalation when an escaped descendant retains the capture pipe`).
+**Root cause:** Both timeout paths treated direct-child termination as completion. A descendant retaining inherited output handles could keep the host-facing call open; the hook launcher also killed Bash without bounding the process tree it had started.
 
-**Prevention:** Test timeout runners with a descendant that escapes the signalled group while retaining an output descriptor. Assert both status and a wall-clock bound; process-kill proof alone does not prove the caller returns.
+**Fix:** The preflight runner uses a one-shot cleanup deadline and closes its local capture streams. The hook launcher now starts a detached POSIX process group, uses Windows tree termination on native Windows, stops that tree at the configured deadline, and delivers one timeout result without waiting for a late close event. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`) and `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
+
+**Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert the marker, response mode, timeout message, and wall-clock bound; a kill signal or timeout message alone does not prove the user regains control.
 
 ---
 
@@ -148,6 +153,10 @@ last_reviewed: 2026-08-07
 
 **Recurrence 2026-08-03:** The first GREEN wording for oversized review scope and critique context merging pushed `goat-review` and `goat-critique` from 2495/2494 words to 2592/2531. The focused skill-contract run rejected both before broader verification; budget-neutral rewrites finished at 2498/2495. Evidence anchors: `workflow/skills/goat-review/SKILL.md` (search: `never guess commit windows`), `workflow/skills/goat-critique/SKILL.md` (search: `never replace baseline context`), `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`). TDD receipts: `.goat-flow/logs/sessions/2026-08-03-goat-review-tdd.md` and `.goat-flow/logs/sessions/2026-08-03-goat-critique-tdd.md`.
 
+**Recurrence 2026-08-09:** A new milestone roadmap first failed strict validation because six mid-implementation proof items had no parseable estimates. After that arithmetic was corrected, `plans check --strict` passed while 24 `Read first` anchors still named stale paths or paraphrases absent from their files. A separate exact path and `rg -F` anchor audit exposed the cold-start failures. Treat each validator as proof only of its named contract: run strict plan validation for structure and estimates, then independently verify every referenced path and semantic anchor. Evidence anchors: `src/cli/plans-check.ts` (search: `mid-proof item(s) missing an (est: ...) entry`) and `test/unit/plans-check-lifecycle.test.ts` (search: `strict mode rejects unestimated testing and mid-proof work`).
+
+**Recurrence 2026-08-09:** M03 correctly qualified goat-debug's boundary command as `ALWAYS in Diagnose mode`, but the first full `npm test` run exposed a shared contract that still required the exact unqualified `ALWAYS` label. The focused goat-debug contract passed because it covered the new wording; the shared contract now accepts only the canonical label or that explicit Diagnose qualifier. Evidence anchors: `workflow/skills/goat-debug/SKILL.md` (search: `ALWAYS in Diagnose mode`) and `test/contract/skill-hardening-shared-1.test.ts` (search: `keeps canonical skill boundaries explicit and route-focused`).
+
 **Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN.
 ---
 
@@ -165,11 +174,13 @@ last_reviewed: 2026-08-07
 ## Lesson: Temp cleanup must satisfy destructive-command hooks
 
 **Status:** active | **Created:** 2026-05-08
-**Incident count:** 2 | **Latest occurrence:** 2026-08-03
+**Incident count:** 3 | **Latest occurrence:** 2026-08-10
 
 **What happened:** While smoke-testing `scripts/install-browser-tools.sh` wrapper-guard behavior, a temp-directory cleanup command used `rm -rf "$tmpdir"`. The PreToolUse hook blocked the command with `BLOCKED: rm -r without safe scoping. Specify an explicit target path.` The smoke test had to be rerun with non-recursive cleanup: `rm -f "$tmpdir/browser-use"; rmdir "$tmpdir"`.
 
 **Recurrence 2026-08-03:** A packaged-release smoke again placed variable-scoped `rm -rf` in the same shell program as the validation. The hook rejected the complete command before `mktemp` ran, so no validation state was created. The rerun omitted destructive cleanup and retained its printed `/tmp/goat-flow-release-check.*` directory as disposable local evidence.
+
+**Recurrence 2026-08-10:** Cleanup of two known redaction directories still used recursive removal, so the safety hook rejected it despite literal paths. Listing each file, deleting the exact files in bounded groups, and removing the empty directories completed cleanup without weakening the guard.
 
 **Root cause:** Treated a `mktemp` path as self-evidently safe, but the hook cannot prove variable-scoped recursive deletion is bounded.
 
@@ -201,6 +212,8 @@ last_reviewed: 2026-08-07
 **Recurrence 2026-08-02:** The PR #57 scanner-parity fix first lost the raw assignment key because a placeholder helper overwrote Bash's global `BASH_REMATCH`, then broader forced-fallback fixtures exposed Docker space-form and multi-assignment drift, dotted config-reference drift, npm secondary-assignment drift, and quoted-password mismatches. The complete native-versus-fallback finding-set comparison caught these after the initial named examples agreed. Capture regex matches before calling helpers, and compare normalized findings across the full existing block-and-allow corpus rather than treating a few equal exit codes as parity. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `scan_literal_credential_assignment`), and `test/integration/post-turn-safety-hook.helpers.ts` (search: `hookFindingSignatures`).
 
 **Recurrence 2026-08-02:** PR #57 review found `plans time` rejecting `stop --discard-open` under the clock reversal whose own error names discard as the remedy. The suite had a discard case and a reversal case; neither crossed. Rule: when an error names a recovery path, test that path under the condition raising it. Evidence: `src/cli/plans-time.ts` (search: `if (transition.discardOpen) return;`), `test/unit/plans-time.test.ts` (search: `lets discard-open recover a span the clock reversed under`).
+
+**Recurrence 2026-08-09:** M00's named failure cases went green before a complete command/read-boundary inventory found unchecked compatibility `tr` normalization and the selected-file open. Inventory every external command, redirection, and direct content read before treating named reproductions as completeness proof. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `fallback_lower`), `workflow/hooks/post-turn-safety.sh` (search: `fallback_open_scan_file`), and `test/integration/post-turn-safety-hook-scanning.test.ts` (search: `blocks when selected content disappears after byte counting`).
 
 ---
 
@@ -255,9 +268,31 @@ last_reviewed: 2026-08-07
 ## Lesson: A documentation pass can push a file past a size gate it was written to enforce
 
 **Status:** active | **Created:** 2026-08-07
+**Incident count:** 3 | **Latest occurrence:** 2026-08-10
 
 **What happened:** Applying the mandatory comment standard to `scripts/check-gruff-warning-ratchet.mjs` grew it from 626 to 783 lines, past the 750-line `size.file-length` threshold. The warning-debt ratchet then reported its own checker as new debt on the very run that was meant to prove the release clean.
 
 **Root cause:** I treated comment work as free of quality-gate consequences. Doc comments on every function, context lines on every branch, and null/empty meaning on every tag add real lines, so a file already near a size threshold crosses it.
 
+**Recurrence 2026-08-10:** Expanding current hook-capability evidence pushed `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` to 40,372 bytes against the 40,000-byte bucket limit. Compressing the new entry below the existing ceiling preserved its decisions and semantic anchors without creating another retrieval bucket. Evidence anchors: `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`) and `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Agent capability metadata goes stale when upstream docs add hooks`).
+
+**Recurrence 2026-08-10 (playbook prose):** Adding a reader-selection section and an anti-template rule to `.goat-flow/skill-docs/playbooks/code-comments.md` took it from 2,856 to 3,180 words against the 3,000-word ADR-023 progressive cap. Trimming duplicate representation - a fractal summary restating the worked example, and a PHP class-file rule stated in four places - restored it to 2,983 with no rule lost. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within`).
+
 **Prevention:** Before commenting a file that sits within about 20% of its size threshold, check the current count and plan the split first. Splitting by responsibility is the fix, never accepting the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
+
+---
+
+## Lesson: A failed multi-file patch can preserve earlier edits
+
+**Status:** active | **Created:** 2026-08-09
+**Decision changed:** Inspect every target after a failed multi-file patch; never assume the operation was atomic.
+**Trigger phase:** ACT
+**Incident count:** 2 | **Latest occurrence:** 2026-08-09
+
+**What happened:** During peer-plan synthesis, one patch updated the roadmap issue and provider-contract milestone, then failed when a later post-turn hunk used a near-match instead of the file's exact wording. The failure named only the unmatched hunk, which made the operation look rejected as a whole; a target-by-target read showed the earlier file edits had persisted.
+
+**Recurrence:** While preparing the M00 rollback patch in disposable copies, a malformed Markdown-list hunk failed after earlier file hunks in the same request. A target-by-target diff found no retained edits this time. The patch surface has now shown both partial and atomic-looking failures, so inspection remains the recovery contract.
+
+**Root cause:** I treated a multi-file patch as a transaction and reasoned from the final failing hunk instead of checking the state of every target. The retry therefore risked applying already-landed edits twice or building new hunks against stale bytes.
+
+**Prevention:** Prefer one file or independently recoverable hunk group per patch when source is changing concurrently. After any patch failure, inspect timestamps and exact semantic anchors across every target before retrying, then generate the retry from current bytes. The affected artifacts were gitignored milestone files, so they are deliberately not cited as durable learning-loop anchors; the evidence was the failed patch result followed by the same-session target-by-target read.

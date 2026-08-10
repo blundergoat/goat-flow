@@ -1,6 +1,6 @@
 /**
  * How a written milestone becomes an export record: which fields parse, which absences
- * warn, and how effort lines, timing receipts, and forecast ranges survive the round trip.
+ * warn, and how effort, forecast-basis, range, and receipt fields survive the round trip.
  * Runs the real CLI and parser against written fixtures, so failures read as the author's
  * terminal output rather than as internals.
  * Lifecycle cases also prove those visible fields govern whether milestone timing can start.
@@ -554,19 +554,27 @@ describe("plans export: milestone parsing", () => {
     }
   });
 
-  it("parses an optional forecast range in headline units", () => {
+  it("parses an optional forecast basis and range in headline units", () => {
     const record = parseMilestoneMarkdown(
       [
         "# M02: Range-carrying milestone",
         "",
         "**Status:** in-progress",
         "**Effort estimate:** ~25 min agent-time (17 product / 6 proof / 2 other)",
+        "**Forecast basis:** 10 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
         "**Forecast range:** 10-60 agent-time minutes on one recorded-unpaused milestone timeline; likely 25; low confidence because no same-shape measured sample exists",
         "",
       ].join("\n"),
       "M02-range.md",
     );
 
+    assert.deepEqual(record.effort?.forecastBasis, {
+      agentWorkUnits: 10,
+      lowMinutesPerUnit: 0.5,
+      likelyMinutesPerUnit: 2.5,
+      highMinutesPerUnit: 10,
+      source: "cold-start prior",
+    });
     assert.deepEqual(record.effort?.forecastRange, {
       lowMinutes: 10,
       likelyMinutes: 25,
@@ -574,7 +582,6 @@ describe("plans export: milestone parsing", () => {
       rationale: "low confidence because no same-shape measured sample exists",
     });
   });
-
   // Absence is the legacy and in-flight default, so it must stay silent rather than warn.
   it("keeps milestones without a forecast range free of range fields and warnings", () => {
     const record = parseMilestoneMarkdown(
@@ -600,13 +607,15 @@ describe("plans export: milestone parsing", () => {
    * Both previews use one fixture because format choice must not change the user's forecast.
    * Filesystem side effects: writes one temporary plan and reads CLI previews.
    */
-  it("preserves optional forecast ranges in JSON and Markdown exports", () => {
+  it("preserves optional forecast bases and ranges in JSON and Markdown exports", () => {
+    const plannedAgentWorkUnits = 10;
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));
     const planPath = join(temporaryRoot, "1.15.0");
     const body = completeMilestoneBody().replace(
       "## Scope Discipline",
       [
         "**Effort estimate:** ~25 min agent-time (17 product / 6 proof / 2 other)",
+        "**Forecast basis:** 10 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
         "**Forecast range:** 10-60 agent-time minutes on one recorded-unpaused milestone timeline; likely 25; low confidence because no same-shape measured sample exists",
         "",
         "## Scope Discipline",
@@ -620,15 +629,12 @@ describe("plans export: milestone parsing", () => {
 
       assert.equal(jsonResult.status, 0, jsonResult.stderr);
       assert.equal(markdownResult.status, 0, markdownResult.stderr);
-      const records = JSON.parse(jsonResult.stdout) as Array<{
-        effort: {
-          forecastRange?: {
-            lowMinutes: number;
-            likelyMinutes: number;
-            highMinutes: number;
-          };
-        };
-      }>;
+      const records = JSON.parse(jsonResult.stdout) as ReturnType<
+        typeof parseMilestoneMarkdown
+      >[];
+      const forecastBasis = records[0]?.effort.forecastBasis;
+      assert.equal(forecastBasis?.agentWorkUnits, plannedAgentWorkUnits);
+      assert.equal(forecastBasis?.source, "cold-start prior");
       assert.deepEqual(records[0]?.effort.forecastRange, {
         lowMinutes: 10,
         likelyMinutes: 25,
@@ -636,8 +642,11 @@ describe("plans export: milestone parsing", () => {
         rationale:
           "low confidence because no same-shape measured sample exists",
       });
+      assert.match(
+        markdownResult.stdout,
+        /\*\*Forecast basis:\*\* 10 agent work units/u,
+      );
       assert.match(markdownResult.stdout, /\*\*Forecast range:\*\* 10-60/u);
-      assert.match(markdownResult.stdout, /likely 25/u);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -647,7 +656,7 @@ describe("plans export: milestone parsing", () => {
    * Fixture purpose: a user pastes a token into forecast reasoning, then previews both export formats.
    * Process/filesystem side effects: spawns the CLI and writes only one temporary milestone.
    */
-  it("redacts forecast rationale from JSON and Markdown previews", () => {
+  it("redacts forecast-basis source text from JSON and Markdown previews", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));
     const planPath = join(temporaryRoot, "1.15.0");
     const fakeToken = ["ghp", "r".repeat(36)].join("_");
@@ -655,7 +664,8 @@ describe("plans export: milestone parsing", () => {
       "## Scope Discipline",
       [
         "**Effort estimate:** ~25 min agent-time (17 product / 6 proof / 2 other)",
-        `**Forecast range:** 10-60 agent-time minutes on one recorded-unpaused milestone timeline; likely 25; ${fakeToken}`,
+        `**Forecast basis:** 10 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: ${fakeToken}`,
+        "**Forecast range:** 10-60 agent-time minutes on one recorded-unpaused milestone timeline; likely 25; uncalibrated",
         "",
         "## Scope Discipline",
       ].join("\n"),

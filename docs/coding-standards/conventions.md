@@ -82,7 +82,7 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 - Types are distributed by domain: CLI command types in `cli-types.ts`; audit types in `audit/types.ts`; and config, manifest, quality, and server types in `config/types.ts`, `manifest/types.ts`, `quality/*types.ts`, and `server/*types.ts`. Keep only genuinely cross-cutting types in `src/cli/types.ts`.
 - AUDIT_VERSION lives in `src/cli/constants.ts`, derived from `package.json` at runtime (single source of truth)
 - Skill frontmatter must embed AUDIT_VERSION - CI enforces this in the "Skill template versions" step
-- `ReadonlyFS` interface for filesystem access -- auditor never writes to disk
+- `ReadonlyFS` interface for filesystem access - the auditor never writes to disk
 - Minimal runtime dependencies (js-yaml, ws), with optional node-pty support. Dev-only: typescript, tsx, @types/node
 
 ## DO
@@ -98,10 +98,9 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 ## DON'T
 
 - Don't add unnecessary runtime dependencies (keep the dependency footprint minimal)
-- Don't use `console.log` outside `cli.ts` and `audit/render.ts` (preflight warns)
 - Don't turn `src/cli/types.ts` into a catch-all; colocate domain types with their owning module and reserve the shared file for cross-cutting contracts
 - Don't hardcode version strings (derive from package.json via constants.ts)
-- Don't use hypothetical examples in docs -- real incidents only
+- Don't use hypothetical examples in docs - real incidents only, except explicitly labelled placeholder scenarios in shipped skill references
 - Don't reference removed ADR patterns (see `scripts/preflight-checks.sh` for the enforced list)
 - Don't create `_modified`, `_new`, `_backup`, `_v2` file variants - modify files in-place
 
@@ -109,11 +108,6 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 
 Never edit or commit: `dist/`, `node_modules/`, `.claude/projects/`, `.claude/worktrees/`, `.claude/settings.local.json`
 
-## Dangerous Operations (Ask First)
+## Ask First boundaries
 
-These files are high-risk because other files reference them or users depend on them:
-- `workflow/setup/` -- numbered setup steps (01-system-overview.md through 06-final-verification.md) plus reference docs, referenced by 10+ docs
-- `workflow/setup/` -- prompt changes affect what users generate
-- `workflow/skills/` -- template changes affect user skill creation
-- `src/cli/constants.ts` -- AUDIT_VERSION must match package.json
-- Any file rename (breaks cross-references; CLAUDE.md DoD requires grep-after-rename)
+The active repository instruction file owns the complete Ask First list. Read it before changing workflow or manifest files, architecture, skill references or playbooks, server runtime, agent configuration, CI/hooks, three or more docs, or any add/remove/rename. This document does not grant those changes.

@@ -226,9 +226,19 @@ export function assertDashboardReport(value: unknown): Record<string, unknown> {
     Array.isArray(report.agentScores),
     "Dashboard report agentScores should be an array",
   );
+  const hookCoverage = expectRecord(
+    report.hookCoverage,
+    "Dashboard report hookCoverage",
+  );
+  assert.match(String(hookCoverage.status), /^(pass|fail)$/);
+  assert.ok(
+    Array.isArray(hookCoverage.hooks),
+    "Dashboard report hookCoverage.hooks should be an array",
+  );
   const scopes = expectRecord(report.scopes, "Dashboard report scopes");
   assertAuditScope(scopes.setup, "Dashboard report scopes.setup");
   assertAuditScope(scopes.agent, "Dashboard report scopes.agent");
+  // Harness data is optional when the user requests setup-only dashboard facts.
   if (scopes.harness !== undefined) {
     assertAuditScope(scopes.harness, "Dashboard report scopes.harness");
   }
@@ -242,6 +252,7 @@ export function assertDashboardReport(value: unknown): Record<string, unknown> {
     Object.prototype.hasOwnProperty.call(report, "learningLoop"),
     "Dashboard report should include learningLoop",
   );
+  // A missing learning-loop folder is a valid null state for a newly selected project.
   if (report.learningLoop !== null) {
     const learningLoop = expectRecord(
       report.learningLoop,

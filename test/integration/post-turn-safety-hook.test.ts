@@ -12,13 +12,21 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  FORCE_BASH3_ENV_KEY,
   TEST_AWS_ACCESS_KEY,
   TEST_GITHUB_TOKEN,
   TEST_NPM_TOKEN,
   TEST_SLACK_TOKEN,
   TEST_API_TOKEN,
+  TEST_UNDERSCORE_API_TOKEN,
+  TEST_OPENAI_PROJECT_TOKEN,
+  TEST_ANTHROPIC_API_TOKEN,
   withTempRepo,
+  withUnbornTempRepo,
   writeFile,
+  runGit,
+  runHook,
+  runHookCommand,
   commitAll,
   assertHookAllows,
   assertHookBlocks,
@@ -32,6 +40,11 @@ import {
   TEST_DOCUMENTED_AWS_PLACEHOLDER,
   TEST_DOCUMENTED_SLACK_PLACEHOLDER,
 } from "./post-turn-safety-hook.helpers.js";
+
+const POST_TURN_SCANNER_VARIANTS = [
+  { displayName: "native scanner", forceBash3Fallback: "0" },
+  { displayName: "Bash 3 compatibility scanner", forceBash3Fallback: "1" },
+] as const;
 
 describe("post-turn-safety hook: secret and marker detection", () => {
   describe("must-block fixtures", () => {
@@ -110,12 +123,13 @@ describe("post-turn-safety hook: secret and marker detection", () => {
       },
     ];
 
+    // Each case creates a temporary Git repo, writes the secret fixture, and runs the hook.
     for (const fixture of fixtures) {
       it(`blocks ${fixture.name}`, () => {
-        withTempRepo((root) => {
-          writeFile(root, fixture.path, fixture.content);
+        withTempRepo((projectRoot) => {
+          writeFile(projectRoot, fixture.path, fixture.content);
 
-          assertHookBlocks(root, fixture.pattern);
+          assertHookBlocks(projectRoot, fixture.pattern);
         });
       });
     }
@@ -163,22 +177,155 @@ describe("post-turn-safety hook: secret and marker detection", () => {
         path: "docs.md",
         content: "Section\n=======\n",
       },
-      {
-        name: "inline allow comment",
-        path: ".env",
-        content: `API_KEY=${TEST_API_TOKEN} # goat-flow-allow-secret\n`,
-      },
     ];
 
+    // Each case creates a temporary Git repo, writes the safe fixture, and runs the hook.
     for (const fixture of fixtures) {
       it(`allows ${fixture.name}`, () => {
-        withTempRepo((root) => {
-          writeFile(root, fixture.path, fixture.content);
+        withTempRepo((projectRoot) => {
+          writeFile(projectRoot, fixture.path, fixture.content);
 
-          assertHookAllows(root);
+          assertHookAllows(projectRoot);
         });
       });
     }
+  });
+
+  it("blocks a new finding that carries its own suppression marker", () => {
+    withTempRepo((root) => {
+      writeFile(
+        root,
+        ".env",
+        `API_KEY=${TEST_API_TOKEN} # goat-flow-allow-secret\n`,
+      );
+
+      const result = assertHookBlocks(root, /API token/u);
+      assert.equal(result.stderr.includes(TEST_API_TOKEN), false);
+    });
+  });
+
+  it("leaves an unchanged reviewed suppression outside changed scope", () => {
+    withTempRepo((root) => {
+      writeFile(
+        root,
+        "reviewed.env",
+        `API_KEY=${TEST_API_TOKEN} # goat-flow-allow-secret\n`,
+      );
+      commitAll(root, "record reviewed suppression");
+      writeFile(root, "notes.txt", "safe user-facing change\n");
+
+      assertHookAllows(root);
+    });
+  });
+
+  // Fixture purpose: covers segmented provider tokens that must never appear in hook feedback.
+  const providerTokenFixtures = [
+    {
+      displayName: "underscore token",
+      path: "underscore.txt",
+      value: TEST_UNDERSCORE_API_TOKEN,
+    },
+    {
+      displayName: "OpenAI project token",
+      path: "openai-project.txt",
+      value: TEST_OPENAI_PROJECT_TOKEN,
+    },
+    {
+      displayName: "Anthropic token",
+      path: "anthropic.txt",
+      value: TEST_ANTHROPIC_API_TOKEN,
+    },
+  ];
+  // Each current provider shape must give users the same safe diagnostic on both scanners.
+  for (const providerTokenFixture of providerTokenFixtures) {
+    // Separate names show whether native or compatibility scanning failed for the user.
+    for (const scannerVariant of POST_TURN_SCANNER_VARIANTS) {
+      // This case creates a temporary Git repo, writes a token, and runs the shell hook.
+      it(`blocks the ${providerTokenFixture.displayName} with the ${scannerVariant.displayName} without printing its body`, () => {
+        withTempRepo((projectRoot) => {
+          writeFile(
+            projectRoot,
+            providerTokenFixture.path,
+            `provider token ${providerTokenFixture.value}\n`,
+          );
+          const hookResult = runHook(projectRoot, {
+            [FORCE_BASH3_ENV_KEY]: scannerVariant.forceBash3Fallback,
+          });
+
+          assert.equal(hookResult.status, 2, hookResult.stderr);
+          assert.match(hookResult.stderr, /API token/u);
+          assert.equal(
+            hookResult.stderr.includes(providerTokenFixture.value),
+            false,
+          );
+        });
+      });
+    }
+  }
+
+  // Each named case creates a temporary Git repo and sends malformed provider input.
+  for (const scannerVariant of POST_TURN_SCANNER_VARIANTS) {
+    it(`fails closed on malformed Stop input with the ${scannerVariant.displayName}`, () => {
+      withTempRepo((projectRoot) => {
+        const hookResult = runHook(
+          projectRoot,
+          { [FORCE_BASH3_ENV_KEY]: scannerVariant.forceBash3Fallback },
+          "{invalid-json",
+        );
+
+        assert.equal(hookResult.status, 2, hookResult.stderr);
+        assert.match(hookResult.stderr, /invalid Stop payload/iu);
+      });
+    });
+  }
+
+  it("runs self-test explicitly and rejects unknown options", () => {
+    withTempRepo((root) => {
+      const selfTestResult = runHookCommand(root, ["--self-test"]);
+      assert.equal(selfTestResult.status, 0, selfTestResult.stderr);
+      assert.match(selfTestResult.stdout, /post-turn-safety self-test: ok/u);
+
+      const unknownOptionResult = runHookCommand(root, ["--unknown"]);
+      assert.equal(unknownOptionResult.status, 2, unknownOptionResult.stderr);
+      assert.match(unknownOptionResult.stderr, /Usage:/u);
+    });
+  });
+
+  it("detects new hazards added to files that were already dirty", () => {
+    withTempRepo((root) => {
+      writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+      const firstPass = runHook(root, { [FORCE_BASH3_ENV_KEY]: "0" });
+      assert.equal(firstPass.status, 0, firstPass.stderr);
+      writeFile(
+        root,
+        "settings.env",
+        `API_KEY=your_api_key_here\nAWS_ACCESS_KEY_ID=${TEST_AWS_ACCESS_KEY}\n`,
+      );
+
+      assertHookBlocks(root, /AWS access key/u);
+    });
+  });
+
+  it("blocks staged-only secrets when the worktree copy is restored", () => {
+    withTempRepo((root) => {
+      writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
+      commitAll(root, "add placeholder settings");
+      writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
+      runGit(root, ["add", "settings.env"]);
+      runGit(root, ["restore", "--worktree", "--source=HEAD", "settings.env"]);
+
+      assertHookBlocks(root, /API token/u);
+    });
+  });
+
+  it("blocks staged-only secrets before the first commit", () => {
+    withUnbornTempRepo((root) => {
+      writeFile(root, "config.env", `API_KEY=${TEST_API_TOKEN}\n`);
+      runGit(root, ["add", "config.env"]);
+      writeFile(root, "config.env", "API_KEY=your_api_key_here\n");
+
+      assertHookBlocks(root, /API token/u);
+    });
   });
 
   it("blocks high-confidence secrets in untracked text files", () => {

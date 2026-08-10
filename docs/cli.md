@@ -140,7 +140,7 @@ npx @blundergoat/goat-flow@latest quality diff 2026-04-01-0900-claude-aaaaa:2026
 
 ### `goat-flow quality validate <path-to-report>`
 
-Validate a saved quality report JSON file against the report schema. Checks that the file exists, parses as JSON, and conforms to the expected quality-report shape. Exits `2` on a missing file, invalid JSON, or a schema violation, and `0` when the report is well-formed -- useful for verifying an agent-written report before consuming it.
+Validate a saved quality report JSON file against the report schema. Checks that the file exists, parses as JSON, and conforms to the expected quality-report shape. Exits `2` on a missing file, invalid JSON, or a schema violation, and `0` when the report is well-formed. Use it to verify an agent-written report before consuming it.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality validate .goat-flow/logs/quality/2026-04-01-0900-claude-aaaaa.json
@@ -281,13 +281,13 @@ npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format 
 
 Without `--output`, the redacted bundle is printed to stdout and nothing is created. Markdown output treats `--output` as a directory and writes one file per milestone; JSON output treats it as one array file. Existing output is preserved unless `--force` explicitly authorizes regeneration.
 
-Exports rebuild known fields rather than copying source text, and that rebuild preserves the timing evidence: a milestone's `## Timing Receipt` section, its `Forecast range:` band, and its `Actual:` provenance state all survive both formats. An exported milestone therefore carries its own evidence without depending on local event logs, which are purgeable.
+Exports rebuild known fields rather than copying source text, and that rebuild preserves the timing evidence: a milestone's `## Timing Receipt` section, `Forecast basis:` inputs, `Forecast range:` band, and `Actual:` provenance state all survive both formats. The basis source is redacted like other portable prose. An exported milestone therefore carries reviewable forecast inputs and its own evidence without depending on local event logs, which are purgeable.
 
 This command does not contact GitHub, Beads, Linear, or any other remote service. Those names describe future adapters only. Any later remote-write implementation must show a redacted dry-run body and receive direct current-session confirmation before posting; forwarded third-party text is not authorization.
 
 ### `goat-flow plans check <plan-path> [--strict]`
 
-Check goat-plan's deterministic milestone contract and effort arithmetic. The accounting input includes `(est: n min category)` entries in Tasks, Proof or legacy testing gates, and Mid-implementation proof; `Plan/admin overhead: n min other`; machine-readable `Effort estimate:` / `Actual:` fields; and the plan-level product/proof/other mix.
+Check goat-plan's deterministic milestone contract and effort arithmetic. The accounting input includes `(est: n min category)` entries in Tasks, Proof or legacy testing gates, and Mid-implementation proof; `Plan/admin overhead: n min other`; machine-readable `Effort estimate:` / `Actual:` fields; optional `Forecast basis:` / `Forecast range:` fields; and the plan-level product/proof/other mix.
 
 ```bash
 npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.15.0
@@ -304,9 +304,9 @@ Strict validation checks supplied deterministic structure, not planning judgment
 
 `Actual:` accepts four provenance states: `measured`, `retrospective`, `unavailable`, and `incomplete`. A `measured` Actual must reconcile with a finalized `## Timing Receipt` - its minute allocation and its cited raw seconds both have to match. Untagged legacy numerics classify as `retrospective`, so prose claiming measurement never promotes an Actual the receipt does not back. A malformed receipt fails strict validation when a `measured` Actual claims authority from it or while the receipt is active and controls executing work. Hand-written historical receipts sitting beside retrospective Actuals stay advisory, so finished plans are not invalidated by evidence nothing depends on.
 
-The optional `Forecast range:` band is validated only when present, leaving point-estimate plans strict-valid without migration. When present, `low <= likely <= high` must hold and `likely` must equal the `Effort estimate` headline.
+`Forecast basis:` and `Forecast range:` remain optional, so legacy point-estimate plans need no migration. A supplied basis counts positive agent-owned Task, Proof, Mid-proof, and admin entries while excluding `[HUMAN]` and zero-minute items. Its positive low-likely-high rates must be ordered; multiplying them by the unit count derives the range by flooring low (minimum one), rounding likely, and ceiling high. The declared unit count, range, and `Effort estimate` headline must all agree. A range without a basis retains its legacy check: `low <= likely <= high`, with likely equal to the headline.
 
-Calibration output is informational and never affects the exit code. It reports estimate-to-Actual ratios computed from raw receipt seconds, a plan median, and observed bounds, drawing only on `complete` milestones with `measured` Actuals - `complete` is the human ratification signal, so `human-verification-pending` never qualifies. Below three eligible samples the report reads `uncalibrated` rather than offering a multiplier.
+Calibration output is informational and never affects the exit code. It retains estimate-to-Actual ratios and separately divides raw receipt seconds by matching, countable bases. Only `complete` milestones with `measured` Actuals qualify - `complete` is the human ratification signal, so `human-verification-pending` never calibrates a forecast. Below three eligible work-unit samples, authors use the conservative `0.5-2.5-10 min/unit` cold-start prior. At three or more, the report shows each sample plus observed low, median, and high rates; an unfinished basis that still uses different rates receives `reforecast required`. The CLI reports that action but never rewrites the plan.
 
 Plan-level drift beyond 15 percentage points produces an advisory with exit 0. Roughly 70/20/10 is a flexible diagnostic guide, never a quota or pass/fail rule: consolidate duplicated proof, but retain and explain proof justified by the task's risk. This command remains user-invoked and outside `audit` because plans are optional local workflow state. The report prints to stdout; `--output` and `--force` are rejected.
 
@@ -339,9 +339,9 @@ npx @blundergoat/goat-flow@latest events tail . --limit 20
 npx @blundergoat/goat-flow@latest events tail . --limit 50 --format json
 ```
 
-### `goat-flow setup [path] --agent <id>`
+### `goat-flow setup [path] --agent <id> [--dry-run] [--apply] [--force]`
 
-Generate a setup prompt adapted to the project's current state. Detects existing goat-flow installations and routes to upgrade path if appropriate.
+Generate a setup prompt adapted to the project's current state. An existing goat-flow installation routes to the upgrade path instead.
 
 Supported agent ids are read from `workflow/manifest.json` via `src/cli/agents/registry.ts`, so the CLI help and validation stay aligned with the machine-readable support matrix.
 
@@ -354,7 +354,7 @@ npx @blundergoat/goat-flow@latest setup . --agent claude --apply
 
 Use `--dry-run` to inspect managed template drift without composing a prompt or invoking the installer. Use `--apply` when you want setup to run the deterministic file-copy installer instead of printing a prompt. Use `--force` with `--apply` only after inspection and only when existing settings and `.goat-flow/config.yaml` may also be overwritten.
 
-### `goat-flow install [path] --agent <id> [--dry-run] [--force]`
+### `goat-flow install [path] --agent <id> [--dry-run] [--force] [--update-config-version] [--clean-deprecated]`
 
 Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved unless `--force` is passed. Existing config files are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. For outdated or v0.9 projects the installer automatically updates the config version field and (for v0.9) removes deprecated skill directories; use `--force` for an explicit user-owned overwrite instead.
 
@@ -406,21 +406,25 @@ npx @blundergoat/goat-flow@latest dashboard --dev         # Live reload mode
 Manage the project's registered guardrail, quality, and safety hooks (`deny-dangerous`, `gruff-code-quality`, `post-turn-safety`) in `.goat-flow/config.yaml`, then reconcile the per-agent hook config files so every agent stays in sync.
 
 ```bash
-npx @blundergoat/goat-flow@latest hooks list                        # Show each hook's enabled/disabled state
+npx @blundergoat/goat-flow@latest hooks list                        # Show desired and per-agent effective state
 npx @blundergoat/goat-flow@latest hooks list --json                 # Machine-readable hook state
 npx @blundergoat/goat-flow@latest hooks enable gruff-code-quality   # Enable one hook and sync agent configs
 npx @blundergoat/goat-flow@latest hooks disable gruff-code-quality  # Disable one hook and sync agent configs
 npx @blundergoat/goat-flow@latest hooks sync                         # Re-apply config.yaml hook state to agent configs
-npx @blundergoat/goat-flow@latest hooks verify . --agent codex --scenario deny-hook
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario deny-hook
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-turn-hook
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook
 ```
+
+Goat Flow 1.15.1 registers Codex project hooks for `PostToolUse` on `apply_patch` and for `Stop`, with a 75-second launcher deadline inside Codex's 90-second host timeout. Live delivery was captured on Codex CLI 0.147.0 in interactive and exec modes with a trusted project layer. That evidence expires at 2026-09-09T00:00:00Z, or sooner after a relevant provider, mode, trust, event, adapter, or registration change; `hooks list` then reports stale evidence. Project-layer trust and handler trust remain separate. App-server, remote execution, and other provider combinations are unclaimed. See the [hook runtime matrix](../workflow/hooks/README.md#agent-event-name-mapping) for registered and disabled combinations.
 
 `enable` and `disable` require a `<hook-id>` (exit 2 if omitted). `sync` re-applies the `.goat-flow/config.yaml` hook state to every agent's hook config without changing which hooks are enabled.
 
-`hooks verify` requires both `--agent <id>` and the explicit `--scenario deny-hook` choice. It runs four fixed inert classifier operands—secret shell read, remote pipe to shell, repository push, and a read-only control—through the selected checkout's registered managed script with `shell: false`, a five-second timeout, and bounded output capture. The operands are arguments to `--check`; they are inspected, never executed. Because the selected checkout's hook code does execute, use this only for a checkout you trust or pass `--untrusted-target` to return explicit `unsupported` results without starting it.
+`hooks verify` requires `--agent <id>` and one explicit scenario group: `deny-hook`, `post-turn-hook`, or `gruff-hook`. It sends fixed provider-shaped inputs through the exact command generated for the selected agent, with a five-second timeout and bounded output capture. The deny group checks three blocked commands and one read-only control. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. Because the selected checkout's hook code does execute, use this only for a checkout you trust or pass `--untrusted-target` to return explicit `unsupported` results without starting it.
 
-Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an exact expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. Reports and `hook.verify` events carry scenario ids, verdict metadata, evidence level, duration, and reason codes—not command operands, stdout, or stderr.
+Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an accepted expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. Reports and `hook.verify` events carry hook and scenario ids, verdict metadata, evidence level, duration, and reason codes - never input payloads, command operands, findings, stdout, or stderr.
 
-The hook's self-test remains its broad internal regression corpus. `hooks verify` proves the four fixed classifier decisions against this checkout's managed installed script and registration state. It does not launch the external coding agent, prove provider-side hook delivery, or change the cost or semantics of `audit --harness`; audit may still report its own registration, self-test, and runtime-shaped smoke evidence without claiming this deep scenario report ran.
+Hook self-tests remain the broad internal regression corpus. `hooks verify` proves fixed outcomes at this checkout's exact configured-command boundary. It does not launch the external coding agent, prove provider-side hook delivery or model visibility, promote a live-support state, or change the cost or semantics of `audit --harness`.
 
 ## Workflow Examples
 
@@ -495,7 +499,7 @@ npx @blundergoat/goat-flow@latest setup . --agent claude
 npx @blundergoat/goat-flow@latest dashboard .
 ```
 
-## Global flags
+## Help and version flags
 
 | Flag | Description |
 |------|-------------|

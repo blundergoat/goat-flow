@@ -1,8 +1,6 @@
-# guardrails
+# Guardrails
 
-`guardrails` are goat-flow's runtime command-safety hooks. The shipped safety
-surface is one `deny-dangerous.sh` dispatcher per agent, backed by shared policy
-modules in `.goat-flow/hooks/deny-dangerous/`.
+Guardrails are goat-flow's runtime command-safety hooks. Each agent invokes the central `deny-dangerous.sh` dispatcher, backed by shared policy modules in `.goat-flow/hooks/deny-dangerous/`.
 
 ## Surfaces
 
@@ -30,7 +28,6 @@ modules in `.goat-flow/hooks/deny-dangerous/`.
 
 ## Limitations
 
-The hooks are literal command guards, not a shell parser or general ignore
-system. They do not reliably catch aliases, variable indirection, encoded
-commands, or arbitrary interpreter code. File-read deny layers still live in
-the agent-specific settings where the runtime supports them.
+The dispatcher is a defense-in-depth check for proposed command text. It applies the existing Git and GitHub write rules to commands wrapped in supported `xargs`, `find -exec`, `watch`, shell-c, and common GNU Parallel forms. It also blocks exact credential directories, protected curl file operands, and downloaded bytes passed to executable or unknown pipeline consumers. Known read-only download filters, local data passed to an explicit script file, and literal `vendor` or `target` cleanup remain available.
+
+The hook does not interpret arbitrary shell state or replace runtime permissions. Variable-computed executable names, shell aliases the policy cannot resolve, arbitrary interpreter bodies, and unsupported wrapper grammar may remain outside classification. Keep provider deny lists, filesystem permissions, process sandboxing, and operating-system credentials as the hard boundary. Inspect and run an unclear command manually.

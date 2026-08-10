@@ -1,13 +1,13 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
 
 **Status:** active | **Created:** 2026-06-13
 **Trigger phase:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-08-06
+**Incident count:** 7 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Recursive ripgrep searches over gitignored plan or log trees must use `--no-ignore` or `-uuu` and a known-positive control before a zero-match result is accepted.
 
 **What happened:** During the M02b review, `grep -rl "plan-checkbox-guard" .goat-flow --include="*.md"` returned nothing even though `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` and ADR-038 matched when grepped directly. `type grep` showed the Claude Code session shell defines `grep` as a function that execs the claude binary as `ugrep -G --ignore-files --hidden -I ...`, and `--ignore-files` applies `.gitignore`-style ignore files during recursion - so sweeps that descend into ignored trees (`.goat-flow/plans/`, `.goat-flow/logs/`) silently return clean.
@@ -20,7 +20,11 @@ last_reviewed: 2026-08-06
 
 **Recurrence 2026-08-06:** During a 12-directory roadmap shift, `rg --hidden` reported zero old-version matches under `.goat-flow/plans/`, and the in-progress audit treated that as a clean result. Reading a renamed milestone directly exposed multiple `1.16.0` references; rerunning with `rg --no-ignore --hidden` found 14 matches for that version and the remaining roadmap references. Evidence anchors: `.goat-flow/plans/.gitignore` (search: `*`), `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`).
 
-**Root cause:** I treated recursive `grep` output as filesystem truth. In this environment it is gitignore-filtered, which can false-clean a verification sweep exactly where stale or historical content lives.
+**Recurrence 2026-08-09:** While reconciling the 1.15.1 roadmap, `rg` over `.goat-flow/plans/1.15.1` returned no matches for premises already read in the milestones. Rerunning the same proof with `rg --hidden --no-ignore` found the expected host-timeout and oversized-file references. The corrected verification command now carries both flags so a clean result cannot depend on repository ignore rules. Evidence anchor: `workflow/setup/reference/goat-flow-gitignore` (search: `plans/`).
+
+**Recurrence 2026-08-10:** The same wrapper masked a *missing binary* rather than filtered results. Two `playbook-contract` cases failed with `rg: command not found`, and `command -v rg` in the session shell answered `rg`, so I first called the failure a sanitized-PATH harness artifact. `type rg` showed `rg is a function`, and `bash -c 'command -v rg'` found nothing: ripgrep is not installed here at all. The real defect was in the shipped playbook, whose documented registration check hard-required ripgrep and exited 127 for any consumer without it. Evidence anchor: `workflow/skills/playbooks/hook-policy-testing.md` (search: `Ripgrep is not installed on every consumer machine`).
+
+**Root cause:** I treated recursive `grep` output as filesystem truth. In this environment it is gitignore-filtered, which can false-clean a verification sweep exactly where stale or historical content lives. The same wrapper layer also makes `command -v` report availability for tools that are only shell functions.
 
 **Prevention:** For verification sweeps that must include gitignored content, use `rg --no-ignore` / `rg -uuu`, `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with an ignore-bypassing search. When the question is "is this consistent in what ships" rather than "does this string exist on disk", prefer `git grep` - it searches tracked files by construction, so local logs, plans, and scratch artifacts cannot mask a real residue or manufacture a false one. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
 
@@ -109,14 +113,20 @@ last_reviewed: 2026-08-06
 ## Lesson: Test suite must exercise the published invocation path
 
 **Status:** active | **Created:** 2026-04-24
+**Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-10
+**Decision changed:** Run the packed public command and capture its complete output instead of inferring entry-point behavior or presentation from source and package metadata.
 
 **What happened:** Commit 918ca3e wrapped the bare `main().catch(...)` call in an `import.meta.url` guard to prevent side effects on import. The guard used `resolve(process.argv[1]) === fileURLToPath(import.meta.url)`, which silently fails when the CLI is invoked through a symlink (the standard npm/npx path). All 359 tests passed because every test imports CLI functions directly or shells out via `node dist/cli/cli.js` - no test invoked the binary through a symlink, which is how every real consumer runs it.
 
 **Root cause:** The test suite verified internal function behavior but never exercised the actual entry-point guard through the `.bin/` symlink path that `npx` uses. The refactor commit was titled "update goat-critique documentation," making it easy to overlook a CLI entry-point change during review.
 
+**Recurrence 2026-08-10:** A new packed-bin release fixture inferred that `--version` would print the package value `1.15.1`. The real archived `.bin/goat-flow` command printed `goat-flow v1.15.1`, so the first run failed before fresh-install and migration checks began. The assertion now preserves the complete public string. Evidence anchor: `test/integration/packaged-hook-install.test.ts` (search: `runs fresh install and 1.15.0 sync through the archived CLI bin`).
+
 **Prevention:**
 1. `test/integration/main-guard.test.ts` now tests the CLI via a temp-dir symlink - the exact path that broke. This test would have caught the regression.
 2. When modifying the entry-point guard or anything that controls whether `main()` runs, verify via symlink invocation, not just direct `node dist/cli/cli.js`.
+3. Treat package metadata and CLI presentation as separate contracts: run the archived `--version` command and assert its complete user-facing output before testing later package flows.
 
 ---
 
@@ -247,3 +257,15 @@ last_reviewed: 2026-08-06
 1. Before a costly reproduction run, diff your call site against the real caller argument by argument (here: `src/cli/server/dashboard-quality-routes.ts`, search: `composeQuality`). Every argument the real caller populates and yours stubs is a fidelity gap to declare or close.
 2. Assert route-fidelity in the run's own output check: a report with `audit_status: "unavailable"` or `prior_report_id: null` when history exists means the prompt was degraded, and any diff computed from it is not resolution evidence.
 3. Scope the conclusion to the layer actually exercised. A stubbed input invalidates conclusions that read it and leaves untouched those that do not - state which is which rather than reporting one verdict for the whole run.
+
+---
+
+## Lesson: Missing-helper self-tests must close stdin
+
+**Status:** active | **Created:** 2026-05-27
+
+**What happened:** `deny-dangerous-self-test.sh --self-test=full` hung on an interactive terminal while copying a thin hook into a temp directory without `deny-dangerous.sh`. The copied hook hit the missing-helper branch before `--check` parsing, then read from the inherited terminal instead of receiving closed stdin.
+
+**Root cause:** The missing-dependency test proved fail-closed behavior only when stdin was already closed. Interactive terminals changed the control flow enough to hide the PASS/FAIL line behind a blocked read.
+
+**Prevention:** Any self-test that intentionally runs a degraded hook or helper must redirect stdin from `/dev/null`, and smoke mode should include the missing-helper branch so startup failures are caught quickly. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `run_common_dependency_checks`).

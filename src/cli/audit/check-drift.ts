@@ -23,7 +23,7 @@ import {
 } from "./artifact-templates.js";
 import {
   compareHooks,
-  compareManagedHookTimeouts,
+  compareManagedHookRegistrations,
   compareRegistryHookScripts,
   findDeprecatedHookFiles,
 } from "./check-drift-hooks.js";
@@ -332,7 +332,7 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
     checkedHookArtifacts,
     agentFilter,
   );
-  checked += compareManagedHookTimeouts(fs, findings, agentFilter);
+  checked += compareManagedHookRegistrations(fs, findings, agentFilter);
   checked += compareRegistryHookScripts(
     fs,
     templateRoot,

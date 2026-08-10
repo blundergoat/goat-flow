@@ -412,7 +412,7 @@ collapsed_desc_for() {
         "TypeScript") printf 'build · lint · knip · prettier' ;;
         "Deny Policy") printf 'self-test + runtime smokes' ;;
         "ADR Enforcement") printf 'no removed patterns' ;;
-        "Gruff Policy") printf 'no enabled:false in .gruff-ts.yaml' ;;
+        "Gruff Policy") printf 'no disabled rules · warning-debt ratchet' ;;
         "Agent Config Parity") printf 'claude · codex · antigravity · copilot' ;;
         "Skill and Reference Versions") printf 'templates + installed match version' ;;
         "Version Consistency") printf 'package.json · config.yaml' ;;

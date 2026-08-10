@@ -790,7 +790,7 @@ prune_legacy_agent_hook_copies() {
   local script
   for legacy_hooks_dir in .claude/hooks .codex/hooks .agents/hooks .github/hooks; do
     [[ -d "$legacy_hooks_dir" ]] || continue
-    for script in deny-dangerous.sh gruff-code-quality.sh post-turn-safety.sh plan-checkbox-guard.sh post-turn-validate.sh; do
+    for script in run-with-bash.mjs hook-provider-adapters.mjs hook-launch-runtime.mjs deny-dangerous.sh gruff-code-quality.sh post-turn-safety.sh plan-checkbox-guard.sh post-turn-validate.sh; do
       if [[ -f "$legacy_hooks_dir/$script" ]]; then
         rm -f "$legacy_hooks_dir/$script"
         REMOVED=$((REMOVED + 1))
@@ -1148,6 +1148,8 @@ const fs = require("node:fs");
 const [dst, src, agent] = process.argv.slice(2);
 const managedScripts = [
   "run-with-bash.mjs",
+  "hook-provider-adapters.mjs",
+  "hook-launch-runtime.mjs",
   "deny-dangerous.sh",
   "gruff-code-quality.sh",
   "post-turn-safety.sh",
@@ -1262,24 +1264,28 @@ function configuredHookEnabled(hookId) {
  * @returns {string} Node response source; never empty because every hook needs an outcome.
  */
 function unavailableHookResponseProgram(hookResponseMode) {
-  // Antigravity expects deny JSON on stdout and treats that response as handled.
-  if (hookResponseMode === "antigravity") {
-    return "const reportUnavailable=()=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: git repository root unavailable.'})+lineBreak);process.exit(0);};";
-  }
-  // Copilot expects permission-decision fields when the policy hook cannot start.
-  if (hookResponseMode === "copilot") {
-    return "const reportUnavailable=()=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: git repository root unavailable.'})+lineBreak);process.exit(0);};";
-  }
-  // Optional Gruff feedback fails soft so a missing shell never blocks the user's edit.
-  if (hookResponseMode === "gruff") {
-    return "const reportUnavailable=()=>{process.stderr.write('gruff-code-quality: hook unavailable: git repository root or hook launcher unavailable; skipped.'+lineBreak);process.exit(0);};";
+  const responseModeParts = hookResponseMode.split(":");
+  const hasNamespacedMode = responseModeParts.length === 6;
+  const providerIdentifier = hasNamespacedMode ? responseModeParts[0] : hookResponseMode;
+  const responseKind = hasNamespacedMode ? responseModeParts[1] : hookResponseMode;
+  // Optional Gruff feedback fails soft so a missing analyzer shell never blocks the user's edit.
+  if (responseKind === "gruff") {
+    return "const reportUnavailable=(reason)=>{process.stderr.write('gruff-code-quality: hook unavailable: '+reason+'; skipped.'+lineBreak);process.exit(0);};";
   }
   // Post-turn safety cannot claim a completed scan when its launcher never started.
-  if (hookResponseMode === "post-turn") {
-    return "const reportUnavailable=()=>{process.stderr.write('post-turn-safety: hook unavailable: git repository root or hook launcher unavailable.'+lineBreak);process.exit(2);};";
+  if (responseKind === "post-turn") {
+    return "const reportUnavailable=(reason)=>{process.stderr.write('post-turn-safety: hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
+  }
+  // Antigravity expects a deny decision on stdout and treats the host response as handled.
+  if (providerIdentifier === "antigravity") {
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
+  }
+  // Copilot expects its own permission-decision fields when the policy hook cannot start.
+  if (providerIdentifier === "copilot") {
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
   }
   // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
-  return "const reportUnavailable=()=>{process.stderr.write('BLOCKED: Policy hook unavailable: git repository root unavailable.'+lineBreak);process.exit(2);};";
+  return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
 }
 
 /**
@@ -1298,18 +1304,34 @@ function hookLaunchBootstrap(hookResponseMode) {
     "const hookScriptPath=process.argv[1];",
     "const responseMode=process.argv[2];",
     "const rootEnvironmentName=process.argv[3];",
+    "const registrationPath=process.argv[4];",
+    "const bashLauncherRelativePath=process.argv[5];",
     "const lineBreak=String.fromCharCode(10);",
     unavailableResponseProgram,
+    "const isPlainObject=(value)=>value!==null&&typeof value==='object'&&!Array.isArray(value);",
+    "const normalizeOperand=(value)=>path.normalize(value).replaceAll('\\\\','/').replace(/^\\.\\//u,'');",
+    "const commandOperands=(command)=>{const tokens=command.match(/\"(?:\\\\.|[^\"\\\\])*\"|'[^']*'|\\S+/gu)||[];return tokens.map((token)=>{if(token.startsWith('\"')){try{return JSON.parse(token);}catch{return '';}}if(token.startsWith(\"'\"))return token.slice(1,-1);return token;});};",
+    "const commandNamesOperands=(command)=>{const normalized=commandOperands(command).map(normalizeOperand);return normalized.includes(normalizeOperand(hookScriptPath))&&normalized.includes(normalizeOperand(bashLauncherRelativePath));};",
+    "const registrationNamesOperands=(value)=>{if(Array.isArray(value))return value.some(registrationNamesOperands);if(!isPlainObject(value))return false;for(const [key,nested] of Object.entries(value)){if((key==='command'||key==='bash'||key==='powershell')&&typeof nested==='string'&&commandNamesOperands(nested))return true;if((Array.isArray(nested)||isPlainObject(nested))&&registrationNamesOperands(nested))return true;}return false;};",
+    "const realDirectory=(candidate)=>{try{const absolute=path.resolve(candidate);const entry=filesystem.lstatSync(absolute);if(entry.isSymbolicLink()||!entry.isDirectory())return '';const real=filesystem.realpathSync(absolute);return filesystem.lstatSync(real).isDirectory()?real:'';}catch{return '';}};",
+    "const containedRelativePath=(relativePath)=>{if(!relativePath||path.isAbsolute(relativePath))return '';const normalized=path.normalize(relativePath);return normalized==='..'||normalized.startsWith('..'+path.sep)?'':normalized;};",
+    "const managedEntryExists=(root,relativePath)=>{const normalized=containedRelativePath(relativePath);if(!normalized)return false;try{filesystem.lstatSync(path.join(root,normalized));return true;}catch{return false;}};",
+    "const managedRegularFile=(root,relativePath)=>{const normalized=containedRelativePath(relativePath);if(!normalized)return '';const parts=normalized.split(path.sep).filter(Boolean);let current=root;try{for(let index=0;index<parts.length;index+=1){current=path.join(current,parts[index]);const entry=filesystem.lstatSync(current);if(entry.isSymbolicLink())return '';if(index<parts.length-1&&!entry.isDirectory())return '';if(index===parts.length-1&&(!entry.isFile()||entry.nlink!==1))return '';}const real=filesystem.realpathSync(current);const relative=path.relative(root,real);if(relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))return '';return real;}catch{return '';}};",
+    "const inspectCandidate=(candidate)=>{const root=realDirectory(candidate);if(!root)return {state:'none',root:''};const scriptSeen=managedEntryExists(root,hookScriptPath);const registration=managedRegularFile(root,registrationPath);let registered=false;if(registration){try{const parsed=JSON.parse(filesystem.readFileSync(registration,'utf8'));registered=isPlainObject(parsed)&&registrationNamesOperands(parsed);}catch{registered=false;}}const relevant=scriptSeen||registered;if(!relevant)return {state:'none',root};const launcher=managedRegularFile(root,bashLauncherRelativePath);const script=managedRegularFile(root,hookScriptPath);return registered&&launcher&&script?{state:'complete',root}:{state:'corrupt',root};};",
+    "const visited=new Set();",
+    "const inspectOnce=(candidate)=>{const root=realDirectory(candidate);if(!root||visited.has(root))return {state:'none',root};visited.add(root);return inspectCandidate(root);};",
     "const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});",
-    "let projectRoot=gitRootLookup.status===0?gitRootLookup.stdout.trim():'';",
-    "let bashLauncherPath=projectRoot?path.join(projectRoot,'.goat-flow','hooks','run-with-bash.mjs'):'';",
-    "/* A user may leave the repo, so supported hosts can recover the project originally selected. */",
-    "if((!bashLauncherPath||!filesystem.existsSync(bashLauncherPath))&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){projectRoot=process.env[rootEnvironmentName];bashLauncherPath=path.join(projectRoot,'.goat-flow','hooks','run-with-bash.mjs');}",
-    "/* Missing managed launch code means the host must not report an unchecked hook as successful. */",
-    "if(!bashLauncherPath||!filesystem.existsSync(bashLauncherPath))reportUnavailable();",
+    "let selected={state:'none',root:''};",
+    "if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){selected=inspectOnce(gitRootLookup.stdout.trim());if(selected.state==='corrupt')reportUnavailable('managed root incomplete');}",
+    "let ancestor=realDirectory(process.cwd());",
+    "while(selected.state!=='complete'&&ancestor){const inspected=inspectOnce(ancestor);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete'){selected=inspected;break;}const parent=path.dirname(ancestor);if(parent===ancestor)break;ancestor=parent;}",
+    "if(selected.state!=='complete'&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){const inspected=inspectOnce(process.env[rootEnvironmentName]);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}",
+    "if(selected.state!=='complete')reportUnavailable('managed root unavailable');",
+    "const projectRoot=selected.root;",
+    "const bashLauncherPath=path.join(projectRoot,containedRelativePath(bashLauncherRelativePath));",
     "const hookResult=childProcess.spawnSync(process.execPath,[bashLauncherPath,hookScriptPath,responseMode],{cwd:projectRoot,stdio:'inherit'});",
     "/* A startup error or absent status means the user's hook never produced a trustworthy result. */",
-    "if(hookResult.error||!Number.isInteger(hookResult.status))reportUnavailable();",
+    "if(hookResult.error||!Number.isInteger(hookResult.status))reportUnavailable('managed launcher could not start');",
     "process.exit(hookResult.status);",
   ].join("");
 }
@@ -1323,9 +1345,17 @@ function hookLaunchBootstrap(hookResponseMode) {
  */
 function hookLaunchMode(hookScriptName) {
   // Gruff is optional feedback, so unavailable execution is shown as a non-blocking skip.
-  if (hookScriptName === "gruff-code-quality.sh") return "gruff";
+  if (hookScriptName === "gruff-code-quality.sh") {
+    return `${agent}:gruff:goat-flow.hook-result.v1:post-tool:1:75000`;
+  }
   // Post-turn safety returns a failed scan rather than an agent permission payload.
-  if (hookScriptName === "post-turn-safety.sh") return "post-turn";
+  if (hookScriptName === "post-turn-safety.sh") {
+    // Codex receives the neutral Stop result proven through its trusted project layer.
+    if (agent === "codex") {
+      return "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
+    }
+    return "post-turn";
+  }
   // Antigravity requires its decision JSON shape for command admission.
   if (agent === "antigravity") return "antigravity";
   // Copilot requires permission-decision fields in its pre-tool response.
@@ -1342,9 +1372,16 @@ function hookLaunchMode(hookScriptName) {
  * @returns {string} Shell-neutral Node command; never empty for an enabled hook.
  */
 function rootResolvingCommand(hookScriptName) {
-  // Codex has no supported project-root environment, so it stays fail-closed outside Git.
+  // Codex can use managed ancestors but has no supported final host-root environment fallback.
   const rootEnvironmentName = agent === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
   const hookResponseMode = hookLaunchMode(hookScriptName);
+  const registrationPath = {
+    claude: ".claude/settings.json",
+    codex: ".codex/hooks.json",
+    antigravity: ".agents/hooks.json",
+    copilot: ".github/hooks/hooks.json",
+  }[agent];
+  const bashLauncherPath = ".goat-flow/hooks/run-with-bash.mjs";
   return [
     "node",
     "-e",
@@ -1352,6 +1389,8 @@ function rootResolvingCommand(hookScriptName) {
     JSON.stringify(`.goat-flow/hooks/${hookScriptName}`),
     JSON.stringify(hookResponseMode),
     JSON.stringify(rootEnvironmentName),
+    JSON.stringify(registrationPath),
+    JSON.stringify(bashLauncherPath),
   ].join(" ");
 }
 
@@ -1363,14 +1402,15 @@ function rootResolvingCommand(hookScriptName) {
  */
 function gruffHookEntries() {
   const hookScriptName = "gruff-code-quality.sh";
-  // Codex receives matcher groups through its native hook schema.
+  // Codex receives the exact edit tool and host deadline observed by the live provider canary.
   if (agent === "codex") {
-    return ["Edit", "Write"].map((matcher) => ({
+    return ["^apply_patch$"].map((matcher) => ({
       matcher,
       hooks: [
         {
           type: "command",
           command: rootResolvingCommand(hookScriptName),
+          timeout: 90,
           statusMessage: "gruff code quality",
         },
       ],
@@ -1388,14 +1428,16 @@ function gruffHookEntries() {
       },
     ];
   }
-  return ["Edit", "Write"].map((matcher) => ({
+  return ["Edit", "Write", "Bash"].map((matcher) => ({
     matcher,
     hooks: [{ type: "command", command: rootResolvingCommand(hookScriptName), timeout: 90 }],
   }));
 }
 
+/** Add enabled Gruff feedback only where the selected provider can deliver it to the user. */
 function appendGruffHookEntries(currentHooks) {
-  if (agent === "codex" || !configuredHookEnabled("gruff-code-quality")) return false;
+  // Antigravity remains disabled because its PostToolUse result cannot reach the active model.
+  if (agent === "antigravity" || !configuredHookEnabled("gruff-code-quality")) return false;
   const event = agent === "copilot" ? "postToolUse" : "PostToolUse";
   const currentEntries = Array.isArray(currentHooks[event]) ? currentHooks[event] : [];
   const nextEntries = [...currentEntries, ...gruffHookEntries()];
@@ -1404,10 +1446,10 @@ function appendGruffHookEntries(currentHooks) {
   return true;
 }
 
-// Builds the Stop registration users receive when setup enables safety scanning.
+/** Build the Stop registration users receive when setup enables safety scanning. */
 function postTurnSafetyHookEntries() {
   const hookScriptName = "post-turn-safety.sh";
-  // Codex keeps no active Stop registration until delivery is verified.
+  // Codex uses the approved status label and 90-second host deadline around the 75-second launcher.
   if (agent === "codex") {
     return [
       {
@@ -1415,6 +1457,7 @@ function postTurnSafetyHookEntries() {
           {
             type: "command",
             command: rootResolvingCommand(hookScriptName),
+            timeout: 90,
             statusMessage: "Post-turn safety guard",
           },
         ],
@@ -1434,31 +1477,15 @@ function postTurnSafetyHookEntries() {
   ];
 }
 
+/** Add the default Stop guard only where the selected provider has an approved registration. */
 function appendPostTurnSafetyEntries(currentHooks) {
-  if (agent === "copilot" || agent === "codex" || !configuredHookEnabled("post-turn-safety")) return false;
+  // Copilot and Antigravity remain disabled because their Stop delivery lacks approved proof.
+  if (agent === "copilot" || agent === "antigravity" || !configuredHookEnabled("post-turn-safety")) return false;
   const currentEntries = Array.isArray(currentHooks.Stop) ? currentHooks.Stop : [];
   const nextEntries = [...currentEntries, ...postTurnSafetyHookEntries()];
   if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return false;
   currentHooks.Stop = nextEntries;
   return true;
-}
-
-function gruffAntigravityDefinition() {
-  return {
-    enabled: true,
-    PostToolUse: [
-      {
-        matcher: "write_to_file|replace_file_content|multi_replace_file_content",
-        hooks: [
-          {
-            type: "command",
-            command: rootResolvingCommand("gruff-code-quality.sh"),
-            timeout: 90,
-          },
-        ],
-      },
-    ],
-  };
 }
 
 const current = readJson(dst);
@@ -1488,16 +1515,7 @@ if (agent === "antigravity") {
       changed = true;
     }
   }
-  if (configuredHookEnabled("gruff-code-quality")) {
-    const gruff = gruffAntigravityDefinition();
-    if (JSON.stringify(current["gruff-code-quality"]) !== JSON.stringify(gruff)) {
-      current["gruff-code-quality"] = gruff;
-      changed = true;
-    }
-  }
-  // Stop hooks are not re-added for Antigravity: the M02b spike could not
-  // verify Stop delivery (hook trust gates execution; no stop_hook_active loop
-  // guard observed). The managedHookIds delete above prunes stale definitions.
+  // Antigravity receives policy hooks only because its post-tool channel cannot return feedback.
 } else if (isObject(template.hooks)) {
   if (!isObject(current.hooks)) {
     current.hooks = {};
@@ -2413,6 +2431,8 @@ fi
 if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-with-bash.mjs" "$HOOKS_DIR/run-with-bash.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-provider-adapters.mjs" "$HOOKS_DIR/hook-provider-adapters.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-launch-runtime.mjs" "$HOOKS_DIR/hook-launch-runtime.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh" "system-owned" "755"

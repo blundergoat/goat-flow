@@ -19,7 +19,10 @@ import { spawnSync } from "node:child_process";
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
 import { getSkillNames, getStaleSkillNames } from "../../src/cli/constants.js";
 import { readAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
-import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import {
+  getHookSpec,
+  listHookSpecs,
+} from "../../src/cli/server/hooks-registry.js";
 import type { AgentProfile } from "../../src/cli/types.js";
 import {
   PROJECT_ROOT,
@@ -141,6 +144,17 @@ function assertInstalledAgentSurface(
     `${agentProfile.id} hook config must use the managed Bash resolver`,
   );
 
+  // Codex users receive only the provider lifecycles proven by the approved live matrix.
+  if (agentProfile.id === "codex") {
+    assert.match(installedHookConfig, /"PreToolUse"/u);
+    assert.match(installedHookConfig, /"Stop"/u);
+    assert.match(installedHookConfig, /"timeout": 90/u);
+    assert.match(
+      installedHookConfig,
+      /codex:post-turn:goat-flow\.hook-result\.v1:turn-stop:1:75000/u,
+    );
+  }
+
   const denyDangerousHook = getHookSpec("deny-dangerous");
   assert.ok(
     denyDangerousHook,
@@ -186,6 +200,8 @@ function assertInstalledAgentSurface(
  */
 function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
   const targetProjectPath = makeTempProject();
+  // The user selected an ordinary folder, so install must not create Git state for them.
+  assert.equal(existsSync(join(targetProjectPath, ".git")), false);
   const installResult = runInstaller(
     targetProjectPath,
     "--agent",
@@ -198,6 +214,8 @@ function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
     installResult.stderr || installResult.stdout,
   );
   assert.match(installResult.stdout, new RegExp(`agent: ${agentProfile.id}`));
+  // Installation leaves the user's non-Git project type unchanged.
+  assert.equal(existsSync(join(targetProjectPath, ".git")), false);
   assertInstalledAgentSurface(targetProjectPath, agentProfile);
 
   const doctorReport = runSkillDoctor(targetProjectPath, agentProfile.id);
@@ -321,6 +339,74 @@ function verifyAgentRepairAndCleanup(agentProfile: AgentProfile): string {
   return userOwnedPath;
 }
 
+/**
+ * Prove the standalone installer and TypeScript writer show one hook state to a user.
+ * Use per agent after launcher or migration behavior changes.
+ *
+ * @param agentProfile - agent selected at install time; missing support keeps that hook absent
+ * @returns installed target path; never empty after fixture creation
+ */
+function verifyStandaloneInstallerHookSemantics(
+  agentProfile: AgentProfile,
+): string {
+  const targetProjectPath = makeTempProject();
+  mkdirSync(join(targetProjectPath, ".goat-flow"), { recursive: true });
+  // This fixture represents a user who enabled every shared hook before reinstalling.
+  writeFileSync(
+    join(targetProjectPath, ".goat-flow", "config.yaml"),
+    [
+      "hooks:",
+      "  deny-dangerous:",
+      "    enabled: true",
+      "  gruff-code-quality:",
+      "    enabled: true",
+      "  post-turn-safety:",
+      "    enabled: true",
+      "",
+    ].join("\n"),
+  );
+
+  const installResult = runInstaller(
+    targetProjectPath,
+    "--agent",
+    agentProfile.id,
+  );
+  assert.equal(
+    installResult.status,
+    0,
+    installResult.stderr || installResult.stdout,
+  );
+  // Hook installation must not turn the user's ordinary folder into a Git repository.
+  assert.equal(existsSync(join(targetProjectPath, ".git")), false);
+
+  // Every shipped hook must match the enabled state this agent can actually support.
+  for (const hookSpec of listHookSpecs()) {
+    const installedHookState = readAgentHookState(
+      targetProjectPath,
+      agentProfile,
+      hookSpec,
+    );
+    // No unsupported reason means this agent can install the hook for the user.
+    const shouldInstallHook = !hookSpec.unsupportedAgents?.[agentProfile.id];
+    assert.equal(
+      installedHookState.installed,
+      shouldInstallHook,
+      `${agentProfile.id} ${hookSpec.id} diverged between installer and writer`,
+    );
+  }
+  // An enabled Codex Gruff hook uses the canonical tool observed by the active provider.
+  if (agentProfile.id === "codex") {
+    const codexHookConfig = readFileSync(
+      join(targetProjectPath, agentProfile.hookConfigFile ?? ""),
+      "utf-8",
+    );
+    assert.match(codexHookConfig, /"PostToolUse"/u);
+    assert.match(codexHookConfig, /"matcher": "\^apply_patch\$"/u);
+    assert.match(codexHookConfig, /"timeout": 90/u);
+  }
+  return targetProjectPath;
+}
+
 describe("cross-agent install smoke matrix", () => {
   const supportedAgentProfiles = getAgentProfiles();
   assert.deepEqual(
@@ -345,6 +431,16 @@ describe("cross-agent install smoke matrix", () => {
       assert.equal(
         readFileSync(preservedUserFilePath, "utf-8"),
         "keep this user content\n",
+      );
+    });
+
+    it(`${agentProfile.id} standalone install matches writer hook state`, () => {
+      const installedTargetPath =
+        verifyStandaloneInstallerHookSemantics(agentProfile);
+      assert.ok(agentProfile.hookConfigFile);
+      assert.equal(
+        existsSync(join(installedTargetPath, agentProfile.hookConfigFile)),
+        true,
       );
     });
   }

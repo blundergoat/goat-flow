@@ -1,7 +1,9 @@
 # patterns-shell.sh
 #
-# Destructive shell-command policy extracted from shell.sh.
-# Sourced by deny-dangerous.sh; not executable on its own.
+# Protects the user's files and machine from destructive shell commands.
+# Use through deny-dangerous.sh before an agent-proposed command can execute.
+# Safe inspection, local data handling, and scoped build cleanup remain available.
+# This module is sourced by the dispatcher and is not executable on its own.
 # shellcheck shell=bash disable=SC2034,SC2154,SC2317,SC2319
 
 # Is this an rm command that deletes recursively (-r/-R/--recursive)?
@@ -20,11 +22,9 @@ rm_has_recursive() {
   [[ "$c" =~ (^|[[:space:]])--recursive([[:space:]]|$) ]] || [[ "$c" =~ (^|[[:space:]])-[^-[:space:]]*[rR][^[:space:]]*([[:space:]]|$) ]]
 }
 
-# Is every deletion target a safe, project-local cleanup path?
-# This is what lets an agent honour a user request like "clear out
-# node_modules and do a fresh install" (rm -rf node_modules -> allowed)
-# while a wrong-directory `rm -rf /etc` or `rm -rf ~/` is blocked before
-# it ever executes.
+# Decide whether every recursive deletion target is explicit and project-scoped.
+# Use for user-requested cleanup: `vendor` is allowed, while `cache/$TARGET` blocks.
+# Absolute, home-relative, traversing, or unresolved targets remain manual decisions.
 rm_is_safely_scoped() {
   local c="$1"
   local targets_str
@@ -49,12 +49,9 @@ rm_is_safely_scoped() {
     target="${target%/}"
     # Target reduced to nothing (e.g. `rm -rf ./`) -> unsafe.
     [[ -z "$target" ]] && return 1
-    # A target that begins with an unresolved shell expansion - $VAR, ${VAR},
-    # $'...', $(...), or a `backtick` command - can point anywhere once the
-    # shell expands it (e.g. rm -rf $HOME/.cache, rm -rf $'/etc'). The hook
-    # can't prove it stays in the project, and the "*/*" slash-scoped allow
-    # below would otherwise wave it through. Demand an explicit literal path.
-    [[ "$target" == '$'* || "$target" == '`'* ]] && return 1
+    # Any unresolved expansion can move a reviewed cleanup outside the project.
+    # For example, `cache/$TARGET` may become `cache/../../home` at execution time.
+    [[ "$target" == *'$'* || "$target" == *'`'* ]] && return 1
     # Dot traversal makes the path shown in review differ from what rm deletes.
     case "/$target/" in
       */../*|*/./*) return 1 ;;
@@ -70,7 +67,7 @@ rm_is_safely_scoped() {
     [[ "$target" =~ ^[A-Za-z]:[/\\] ]] && return 1
     # Well-known disposable build/cache dirs are always fine to remove.
     case "$target" in
-      node_modules|dist|out|build|coverage|__pycache__|.cache|.next|.nuxt|.turbo) continue ;;
+      node_modules|vendor|target|dist|out|build|coverage|__pycache__|.cache|.next|.nuxt|.turbo) continue ;;
     esac
     # A slash means the path stays scoped inside the project (src/old-module) -> fine.
     [[ "$target" == */* ]] && continue
@@ -80,59 +77,11 @@ rm_is_safely_scoped() {
   return 0
 }
 
-strip_xargs_payload_command() {
-  local c="$1"
-  local -a xargs_words=()
-  split_shell_words_into xargs_words "$c"
-  [[ "${#xargs_words[@]}" -eq 0 ]] && return 1
-
-  local command_word="${xargs_words[0]##*/}"
-  [[ "$command_word" == "xargs" ]] || return 1
-
-  local i=1
-  local word=""
-  while [[ "$i" -lt "${#xargs_words[@]}" ]]; do
-    word="${xargs_words[$i]}"
-    case "$word" in
-      --)
-        i=$((i + 1))
-        break
-        ;;
-      -0|--null|-r|--no-run-if-empty|-t|--verbose|-p|--interactive)
-        i=$((i + 1))
-        continue
-        ;;
-      # Flags that consume a following operand - skip the flag AND its value.
-      # -a/--arg-file read the input list from a FILE; without them the filename
-      # is misread as the command, letting `xargs -a list rm -rf` slip through.
-      -a|--arg-file|-I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter)
-        i=$((i + 2))
-        continue
-        ;;
-      -a?*|--arg-file=*|-I?*|-i?*|-L?*|-l?*|-n?*|-P?*|-s?*|-E?*|-e?*|-d?*|--replace=*|--max-lines=*|--max-args=*|--max-procs=*|--max-chars=*|--eof=*|--delimiter=*)
-        i=$((i + 1))
-        continue
-        ;;
-      -*)
-        i=$((i + 1))
-        continue
-        ;;
-    esac
-    break
-  done
-
-  [[ "$i" -lt "${#xargs_words[@]}" ]] || return 1
-
-  local rest=""
-  while [[ "$i" -lt "${#xargs_words[@]}" ]]; do
-    rest+="${xargs_words[$i]} "
-    i=$((i + 1))
-  done
-  printf '%s' "${rest% }"
-}
-
+# Inspect destructive actions embedded in find so users get the same policy as a direct command.
+# Use when find's `-exec` or `-execdir` would otherwise hide the downstream action.
 find_has_destructive_action() {
   local c
+  local depth="${2:-0}"
   c=$(normalize_command_candidate "$1")
   c="${c#"${c%%[![:space:]]*}"}"
   [[ "$(first_word_base "$c")" == "find" ]] || return 1
@@ -142,14 +91,18 @@ find_has_destructive_action() {
   local i=1
   local word=""
   local exec_cmd=""
+  # Walk find arguments until every executable action has been inspected.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     word="${words[$i]}"
+    # Direct find deletion is already an existing destructive policy category.
     if [[ "$word" == "-delete" ]]; then
       return 0
     fi
+    # An exec action may hide a command that would be blocked when run directly.
     if [[ "$word" == "-exec" || "$word" == "-execdir" ]]; then
       i=$((i + 1))
       exec_cmd=""
+      # Collect one executable action up to find's semicolon or plus terminator.
       while [[ "$i" -lt "${#words[@]}" ]]; do
         word="${words[$i]}"
         [[ "$word" == ";" || "$word" == "+" ]] && break
@@ -157,6 +110,11 @@ find_has_destructive_action() {
         i=$((i + 1))
       done
       exec_cmd="${exec_cmd% }"
+      # A non-empty exec payload receives every policy module before find can run it.
+      if [[ -n "$exec_cmd" ]]; then
+        check_command_segments "$exec_cmd" $((depth + 1)) || return $?
+      fi
+      # Recursive deletion remains a destructive find action even with a scoped target.
       if rm_has_recursive "$exec_cmd"; then
         return 0
       fi
@@ -167,6 +125,19 @@ find_has_destructive_action() {
   return 1
 }
 
+# Decide whether a bare command word names a POSIX-family shell binary.
+# Shared so pipeline classification and the script-file exemption cover the same shells; a shell
+# recognized by only one of them would either bypass the guard or lose a legitimate exemption.
+is_shell_name() {
+  case "$1" in
+    bash|sh|dash|zsh|ksh|ksh93|mksh|ash|yash) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Decide whether a command word starts a shell that would execute piped bytes as its program.
+# Every POSIX-family shell reads stdin the same way, so classifying only bash and sh would let
+# `printf payload | dash` run the payload while `printf payload | bash` stayed blocked.
 is_shell_command() {
   local c
   c=$(normalize_command_candidate "$1")
@@ -174,7 +145,82 @@ is_shell_command() {
   local word="${c%%[[:space:]]*}"
   local base="${word##*/}"
 
-  [[ "$base" == "bash" || "$base" == "sh" ]]
+  # BusyBox is a multi-call binary, so only its shell applets read stdin as a program.
+  if [[ "$base" == "busybox" ]]; then
+    local busybox_rest="${c#"$word"}"
+    busybox_rest="${busybox_rest#"${busybox_rest%%[![:space:]]*}"}"
+    local busybox_applet="${busybox_rest%%[[:space:]]*}"
+    [[ "$busybox_applet" == "sh" || "$busybox_applet" == "ash" ]]
+    return $?
+  fi
+
+  is_shell_name "$base"
+}
+
+# Decide whether Bash or sh reads its program from an explicit local script file.
+# Use to let a user pipe local data into a checked-in script while bare shell stdin stays blocked.
+is_script_file_shell_command() {
+  local developer_command="$1"
+  local -a shell_words=()
+  split_shell_words_into shell_words "$developer_command"
+
+  # A shell plus one script operand is the smallest safe file-backed shape.
+  [[ "${#shell_words[@]}" -gt 1 ]] || return 1
+  local shell_name="${shell_words[0]##*/}"
+  # The exemption must cover exactly the shells the pipeline check classifies; a shell blocked
+  # there but unrecognized here would lose its legitimate explicit-script-file exemption.
+  is_shell_name "$shell_name" || return 1
+
+  local shell_word_index=1
+  local shell_word=""
+  # Skip non-executing shell options until the first script-file operand.
+  while [[ "$shell_word_index" -lt "${#shell_words[@]}" ]]; do
+    shell_word="${shell_words[$shell_word_index]}"
+    # A short option bundle containing `c` runs inline code, not a script file.
+    if [[ "$shell_word" =~ ^-[^-]*c ]]; then
+      return 1
+    fi
+    case "$shell_word" in
+      --)
+        shell_word_index=$((shell_word_index + 1))
+        break
+        ;;
+      -s|-s?*)
+        return 1
+        ;;
+      --init-file|--rcfile)
+        # A startup file is read before the script operand, so `--rcfile /dev/stdin -i script.sh`
+        # would execute the piped bytes as the interactive rcfile while the operand looked safe.
+        # A checked-in startup file stays allowed; only stdin-backed sources are rejected.
+        shell_word_index=$((shell_word_index + 1))
+        script_file_word_is_safe "${shell_words[$shell_word_index]:-}" || return 1
+        shell_word_index=$((shell_word_index + 1))
+        continue
+        ;;
+      --init-file=*|--rcfile=*)
+        script_file_word_is_safe "${shell_word#*=}" || return 1
+        shell_word_index=$((shell_word_index + 1))
+        continue
+        ;;
+      -O|-o)
+        shell_word_index=$((shell_word_index + 2))
+        continue
+        ;;
+      -O?*|-o?*|--noprofile|--norc|--posix|--restricted|--verbose|--version)
+        shell_word_index=$((shell_word_index + 1))
+        continue
+        ;;
+      -*)
+        shell_word_index=$((shell_word_index + 1))
+        continue
+        ;;
+    esac
+    break
+  done
+
+  # Missing script means the shell would execute the piped bytes as its program.
+  [[ "$shell_word_index" -lt "${#shell_words[@]}" ]] || return 1
+  script_file_word_is_safe "${shell_words[$shell_word_index]}"
 }
 
 is_interpreter_command() {
@@ -190,18 +236,9 @@ is_interpreter_command() {
   esac
 }
 
-# Is this pipeline stage a benign local data producer? Curated allowlist of
-# read-only text/JSON tools, so `tail -1 log | python3 -c ...` is recognised
-# as local-data-into-fixed-code instead of being blocked like a downloader
-# pipe. Deliberately kept as an allowlist rather than "anything that is not a
-# known downloader": the downloader latch in check_pipeline_shell_consumers
-# only names known fetchers (curl/wget/fetch/http), so dropping this check
-# would fail OPEN for every network tool it doesn't name (ssh, nc, aria2c,
-# browser-use, ...). Unknown and command-capable producers (sed/awk shell
-# escapes, ssh, nc, aria2c, direct browser-use, ...) fail closed and the
-# interpreter-pipe block stands. Each stage is still policy-checked as its own
-# segment by check_destructive_segment; this list only decides "local data vs
-# possibly-remote content" for the interpreter-pipe exemption.
+# Decide whether a pipeline stage is a known read-only local data producer.
+# Use to allow fixed scripts to consume local text; unknown or network tools stay blocked.
+# For example, `tail app.log | python -c ...` is local, while `ssh host cat file` is not.
 is_local_data_pipe_source() {
   local c
   c=$(normalize_command_candidate "$1")
@@ -220,6 +257,12 @@ is_downloader_pipe_source() {
     curl|wget|fetch|http) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# Decide whether a stage only presents or transforms downloaded data for the user.
+# Unknown consumers fail closed because they may execute bytes received from the network.
+is_inert_download_pipe_consumer() {
+  is_local_data_pipe_source "$1"
 }
 
 is_inline_interpreter_command() {
@@ -471,27 +514,46 @@ check_command_chain_policy() {
   fi
 }
 
+# Inspect every pipeline stage so downloaded code cannot reach an executable consumer.
+# Local data may still feed visible inline code or an explicit checked-in script file.
 check_pipeline_shell_consumers() {
   local pipe_scan="${CMD_UNQUOTED//||/__GOAT_OR__}"
   local -a pipeline_parts
   local pipe_index
   local previous_part
+  local current_part
   local saw_downloader_pipe_source=0
   local all_upstream_pipe_sources_local=1
   IFS='|' read -ra pipeline_parts <<< "$pipe_scan"
+  # Each downstream stage inherits whether any earlier stage downloaded its input.
   for ((pipe_index = 1; pipe_index < ${#pipeline_parts[@]}; pipe_index++)); do
     previous_part="${pipeline_parts[$((pipe_index - 1))]}"
+    current_part="${pipeline_parts[$pipe_index]}"
+    # Once a downloader appears, later filters cannot erase the remote origin.
     if is_downloader_pipe_source "$previous_part"; then
       saw_downloader_pipe_source=1
     fi
+    # Only known local producers qualify for the local-data script exemption.
     if ! is_local_data_pipe_source "$previous_part"; then
       all_upstream_pipe_sources_local=0
     fi
-    if is_shell_command "${pipeline_parts[$pipe_index]}"; then
+
+    # A user may inspect downloads with inert tools; unknown consumers may execute them.
+    if [[ "$saw_downloader_pipe_source" -eq 1 ]] && ! is_inert_download_pipe_consumer "$current_part"; then
+      block "Downloaded content reaches an executable or unknown pipeline consumer. Save and inspect it before running it." || return $?
+    fi
+
+    # Local data stays data when Bash reads its program from an explicit script file.
+    if is_shell_command "$current_part"; then
+      if [[ "${depth:-0}" -eq 0 && "$saw_downloader_pipe_source" -eq 0 && "$all_upstream_pipe_sources_local" -eq 1 ]] && is_script_file_shell_command "$current_part"; then
+        continue
+      fi
       block "Pipe to shell. Download or inspect first, then run; to feed a local script, redirect from a file (cmd < file) instead of piping." || return $?
     fi
-    if is_interpreter_command "${pipeline_parts[$pipe_index]}"; then
-      if [[ "${depth:-0}" -eq 0 && "$saw_downloader_pipe_source" -eq 0 && "$all_upstream_pipe_sources_local" -eq 1 ]] && interpreter_treats_stdin_as_data "${pipeline_parts[$pipe_index]}"; then
+
+    # Known language runtimes may consume local data only when their program is explicit.
+    if is_interpreter_command "$current_part"; then
+      if [[ "${depth:-0}" -eq 0 && "$saw_downloader_pipe_source" -eq 0 && "$all_upstream_pipe_sources_local" -eq 1 ]] && interpreter_treats_stdin_as_data "$current_part"; then
         continue
       fi
       block "Pipe to interpreter. Download or inspect first, then run; to feed local data to inline interpreter code, redirect from a file (cmd < file) instead of piping." || return $?
@@ -499,10 +561,12 @@ check_pipeline_shell_consumers() {
   done
 }
 
+# Check the command xargs will invoke so input options cannot hide recursive deletion.
 check_xargs_destructive_payload() {
   local candidate="$1"
   local normalized xargs_payload
   normalized="$(normalize_command_candidate "$candidate")"
+  # Only a real recursive-delete payload belongs to this destructive rule.
   if xargs_payload="$(strip_xargs_payload_command "$normalized")" && rm_has_recursive "$xargs_payload"; then
     block "xargs feeding rm -r hides recursive deletion targets. Review the input list and run manually." || return $?
   fi
@@ -518,6 +582,8 @@ check_pipeline_xargs_destructive_payloads() {
   done
 }
 
+# Apply destructive-shell policy to one user-visible command segment.
+# This is the final shell gate before secret and repository policy inspect the same segment.
 check_destructive_segment() {
   local cmd="$1"
   cmd="$CMD_TRIMMED"
@@ -541,7 +607,7 @@ check_destructive_segment() {
 
   check_pipeline_xargs_destructive_payloads || return $?
 
-  if find_has_destructive_action "$CMD_NORMALIZED"; then
+  if find_has_destructive_action "$CMD_NORMALIZED" "$depth"; then
     block "find deletion action (-delete / -exec rm -r) can remove many files. Review matches and run manually." || return $?
   fi
 
@@ -564,15 +630,6 @@ check_destructive_segment() {
         block "dd writing to a device path can overwrite disks. Write to an ordinary file or run manually." || return $?
         ;;
     esac
-  fi
-
-  local pipe_to_shell_re='(curl|wget)[^|]*\|[[:space:]]*(ba)?sh'
-  if [[ "$cmd" =~ $pipe_to_shell_re ]]; then
-    block "Pipe-to-shell (curl|bash). Download first, inspect, then run." || return $?
-  fi
-  local pipe_to_interpreter_re='(curl|wget)[^|]*\|[[:space:]]*(python|python3|node|perl|ruby)'
-  if [[ "$cmd" =~ $pipe_to_interpreter_re ]]; then
-    block "Pipe-to-interpreter. Download first, inspect, then run." || return $?
   fi
 
   local lockfile_write_re='(>|>>|tee|sed[[:space:]]+-i)[[:space:]]+.*(package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock)'

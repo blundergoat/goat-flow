@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * Command-line entry point for goat-flow.
- * Handles argv parsing, command dispatch, exit codes, and output for audit,
- * quality, setup, diagnostics, dashboard, events, redaction, review validation, and information workflows.
+ * Starts the goat-flow command line and routes the user's requested workflow.
+ * Use this entry point for help, parsing, dispatch, and process exit status.
+ * Product behavior belongs in the command modules this file invokes.
  */
 
 import { realpathSync } from "node:fs";
@@ -23,7 +23,7 @@ export type { ParsedCLI } from "./cli-types.js";
 /** Current package version used in --version output. */
 const PACKAGE_VERSION = getPackageVersion();
 
-/** Print usage instructions and available commands to stdout */
+/** Show terminal users the available commands, flags, and examples. */
 function printHelp(): void {
   console.log(`
 goat-flow - GOAT Flow CLI Auditor
@@ -58,7 +58,7 @@ Commands:
   hooks enable      Enable one registered hook and sync agent configs
   hooks disable     Disable one registered hook and sync agent configs
   hooks sync        Re-apply config.yaml hook truth to agent configs
-  hooks verify      Run bounded managed deny-hook classifier proof for one agent
+  hooks verify      Run bounded configured-command proof for one agent
 Arguments:
   project-path    Target project directory (default: .)
   report-file     Saved goat-review Markdown for review validate (omit to read stdin)
@@ -72,13 +72,13 @@ Flags:
   --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
   --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
   --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
-  --untrusted-target Audit/hooks verify: skip executing target deny-hook code; use for a checkout you don't trust
+  --untrusted-target Audit/hooks verify: skip executing target managed-hook code; use for a checkout you don't trust
   --no-audit-details Audit JSON: omit structured harness detail payloads
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
   --json            Emit machine-readable JSON (alias for --format json)
   --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
   --red-log <file>  Skill new: failing RED receipt required before a skill write
-  --scenario <name> Hooks verify: required bounded scenario group (deny-hook)
+  --scenario <name> Hooks verify: deny-hook, post-turn-hook, or gruff-hook
   --strict          Plans check: require fully derived current-format estimates and completed Actuals
   --category <kind> Plans time start: product, proof, or other
   --finalize        Plans time stop: close the open span and finalize a measured receipt
@@ -118,6 +118,8 @@ Examples:
   goat-flow hooks enable gruff-code-quality
   goat-flow hooks sync                 Re-apply hook toggles from config.yaml
   goat-flow hooks verify . --agent codex --scenario deny-hook
+  goat-flow hooks verify . --agent claude --scenario post-turn-hook
+  goat-flow hooks verify . --agent claude --scenario gruff-hook
   goat-flow stats                      Learning-loop health report
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
   goat-flow diagnostics context . --agent codex

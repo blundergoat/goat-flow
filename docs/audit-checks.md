@@ -46,7 +46,7 @@ Build mode is the structural install gate. It validates files, directories, conf
 
 | Check id | Display name | What it validates |
 |----------|--------------|-------------------|
-| `agent-instruction` | Agent instruction file | The selected agent's instruction file exists; for Copilot, `.github/copilot-instructions.md` must also reference preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md` under a `## Commit Messages` section. Without `--agent`, this also detects orphaned agent artifacts and incomplete Copilot installs |
+| `agent-instruction` | Agent instruction file | The selected agent's instruction file exists; for Copilot in a target containing `.git`, `.github/copilot-instructions.md` must also reference preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md` under a `## Commit Messages` section. Non-Git targets skip that bridge requirement. Without `--agent`, this also detects orphaned agent artifacts and incomplete Copilot installs |
 | `agent-skills` | Agent skills | The selected agent has every canonical skill file, each installed skill declares the current `goat-flow-skill-version`, and no deprecated skill directories remain |
 | `agent-settings` | Agent settings | The selected agent's settings file parses as valid JSON or TOML |
 | `agent-guardrails` | Agent deny mechanism | The selected agent has a deny mechanism, any installed shell hooks pass `bash -n`, deny patterns exist, installed `deny-dangerous.sh` plus `.goat-flow/hooks/deny-dangerous/` match the workflow templates, `deny-dangerous-self-test.sh --self-test=smoke` passes when the hook scripts exist, and a runtime-shaped blocked Bash payload is denied through the registered hook path |
@@ -68,18 +68,18 @@ Aggregate-mode nuance:
 
 | Concern | Check id | Type | What it validates |
 |---------|----------|------|-------------------|
-| Context | `instruction-line-count` | `advisory` | Each configured instruction file stays within `lineLimits.limit` from `.goat-flow/config.yaml` |
+| Context | `instruction-line-count` | `advisory` | Each configured instruction file stays within `line-limits.limit` from `.goat-flow/config.yaml` |
 | Context | `execution-loop-present` | `advisory` | Structural smoke check for the Execution Loop heading plus READ / SCOPE / ACT / VERIFY vocabulary |
 | Context | `doc-paths-resolve` | `integrity` | Router-table paths, `.goat-flow/architecture.md` backtick paths, and curated audit/glossary docs backtick paths resolve to real files |
 | Context | `instruction-sections-present` | `advisory` | Structural smoke check for required hot-path headings: Truth Order, Execution Loop, Definition of Done, and Router Table |
 | Context | `boundary-guidance-present` | `advisory` | Structural smoke check for workspace boundary guidance (controlling workspace vs target workspace separation) |
 | Constraints | `deny-covers-secrets` | `integrity` | Direct literal secret-path reads are blocked by the deny layer; agents with file-read deny need both settings/Codex permission coverage and Bash-hook direct-path coverage. Codex permission coverage is limited to exact paths and trailing `/**` subtrees accepted by the current CLI. Script-only agents can pass with `assurance: "limited"` because file-read deny is unavailable; a 100 constraints score means known deny-pattern coverage, not broad file read/write enforcement. |
 | Constraints | `deny-blocks-dangerous` | `integrity` | Deny patterns block broad recursive deletion, all git push (ADR-025), and `chmod` |
-| Constraints | `deny-blocks-pipe-to-shell` | `advisory` | Deny patterns block `curl | bash` and `wget | sh` pipe-to-shell execution |
+| Constraints | `deny-blocks-pipe-to-shell` | `advisory` | Deny patterns block `curl \| bash` and `wget \| sh` pipe-to-shell execution |
 | Constraints | `deny-hook-registered` | `integrity` | A deny hook that exists on disk is registered in the correct pre-tool hook slot |
 | Constraints | `settings-rules-matched` | `integrity` | JSON permission rules (deny/allow/ask) use forms the agent matches; `MultiEdit` (removed tool) and `Write`/`NotebookEdit`/`Glob` path rules warn at launch and enforce nothing - re-running goat-flow setup/install repairs them |
 | Verification | `hooks-registered` | `integrity` | Post-turn hook registrations and on-disk hook files stay in sync |
-| Verification | `commit-guidance` | `advisory` | Commit guidance exists at preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md`; old GitHub commit-guidance locations are flagged as misplaced |
+| Verification | `commit-guidance` | `advisory` | For targets containing `.git`, commit guidance exists at preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md`; targets without `.git` skip the check, and old GitHub commit-guidance locations are flagged as misplaced |
 | Verification | `evidence-before-claims` | `metric` | Present instruction files carry the Hallucination red-flags clauses and Rationalisations-to-reject pointer |
 | Verification | `post-turn-hook-integrity` | `metric` | For agents with a manifest-backed post-turn event, reports whether the registered post-turn hook is the universal safety guard or a custom hook with literal validation commands and whether it swallows failures; absence or masking is no hook evidence, not proof. Agents with `supportsPostTurnHook=false` are skipped as not applicable instead of penalized. |
 | Recovery | `milestone-tracking` | `integrity` | `.goat-flow/plans/` exists; task count, checkbox completion, milestone status, and roadmap progress are optional local workflow state |

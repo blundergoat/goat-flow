@@ -2,8 +2,8 @@
  * Shared fixtures for the gruff-code-quality hook integration suites: disposable git
  * roots, mock gruff binaries (legacy analyse, native changed-region, gruff.hook.v1
  * contract, config-error shapes), the hook spawner, and invocation-log readers.
- * Imported by gruff-code-quality-smoke.test.ts and gruff-code-quality-contract.test.ts;
- * each test file registers `after(cleanupHookTestDirs)` for temp-dir cleanup.
+ * Imported by the smoke, contract, and provider-contract suites; each consumer
+ * registers `after(cleanupHookTestDirs)` so temporary user projects are removed.
  */
 import {
   chmodSync,
@@ -204,6 +204,89 @@ export function runHook(
 }
 
 /**
+ * Run Gruff in the migrated result mode consumed by the provider launcher.
+ * Use when a fixture must inspect the bounded result before model-facing adaptation.
+ *
+ * @param root - non-empty disposable project root used as the hook working directory
+ * @param payload - PostToolUse payload; null or malformed input must produce an explicit result
+ * @param pathPrefix - PATH used to isolate analyzer and Git discovery; empty prevents tool lookup
+ * @param extraEnv - optional fixture overrides; an empty object keeps the default Claude contract
+ * @param provider - provider identity embedded in the result; empty or unknown values are invalid
+ * @returns completed hook process; empty stdout means the migrated hook failed its result contract
+ */
+export function runMigratedHook(
+  root: string,
+  payload: unknown,
+  pathPrefix: string,
+  extraEnv: NodeJS.ProcessEnv = {},
+  provider: "claude" | "codex" | "antigravity" | "copilot" = "claude",
+): ReturnType<typeof spawnSync> {
+  return runHook(root, payload, pathPrefix, {
+    ...extraEnv,
+    GOAT_FLOW_HOOK_PROVIDER: provider,
+    GOAT_FLOW_HOOK_EVENT: "post-tool",
+    GOAT_FLOW_HOOK_PROVIDER_MODE: "fixture",
+    GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
+  });
+}
+
+/**
+ * Creates one edited project for a migrated Gruff result scenario.
+ * Use when users need the same source edit while analyzer output or failure changes.
+ *
+ * @param analyzerEnvelope - analyzer JSON; empty text models no analyzer response
+ * @param analyzerBehavior - process controls; an empty object models successful analysis
+ * @returns disposable project root; never empty after fixture creation
+ */
+export function makeEditedGruffContractProject(
+  analyzerEnvelope: string,
+  analyzerBehavior: {
+    exitStatus?: number;
+    standardError?: string;
+    delaySeconds?: number;
+  } = {},
+): string {
+  const projectRoot = makeRoot();
+  writeContractGruffBinary(projectRoot, analyzerEnvelope, analyzerBehavior);
+  writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
+  mkdirSync(join(projectRoot, "src"), { recursive: true });
+  writeFileSync(join(projectRoot, "src", "sample.ts"), "a\nb\nc\nd\n");
+  return projectRoot;
+}
+
+/**
+ * Reads the neutral result a migrated hook sends toward provider feedback.
+ * Use after execution; empty or malformed output fails instead of hiding missing UI feedback.
+ *
+ * @param hookResult - completed hook process; empty stdout means no result reached the adapter
+ * @returns decoded result fields; never null for a conforming migrated hook
+ */
+export function readMigratedGruffResult(
+  hookResult: ReturnType<typeof runMigratedHook>,
+): Record<string, unknown> {
+  assert.equal(hookResult.status, 0, hookResult.stderr);
+  return JSON.parse(hookResult.stdout) as Record<string, unknown>;
+}
+
+/**
+ * Builds the edit payload users produce when changing the shared Gruff fixture.
+ * Use when a scenario needs an attributable file and optional stable session identity.
+ *
+ * @param sessionIdentifier - non-empty session ID; omitted uses the stable fixture session
+ * @returns PostToolUse edit payload; file path and changed range are never empty
+ */
+export function sampleGruffEditPayload(sessionIdentifier = "fixture-session") {
+  return {
+    session_id: sessionIdentifier,
+    tool_name: "Edit",
+    tool_input: {
+      file_path: "src/sample.ts",
+      changed_ranges: [{ startLine: 3, endLine: 3 }],
+    },
+  };
+}
+
+/**
  * Assert extension-based binary routing through the hook using real payloads.
  *
  * @param root - disposable git root containing mock gruff binaries
@@ -392,6 +475,14 @@ exit 1
 const DEFAULT_CONTRACT_ENVELOPE =
   '{"contractVersion":"gruff.hook.v1","findings":[{"ruleId":"size.file-length","pillar":"size","severity":"warning","scope":"file","file":"src/sample.ts","line":1,"message":"file too long","remediation":"split it"},{"ruleId":"naming.short","pillar":"naming","severity":"advisory","scope":"line","file":"src/sample.ts","line":3,"message":"too short"}],"suppressed":{"count":2},"ignored":{"paths":[]},"config":{"schemaOk":true,"error":null}}';
 
+/** Clean analyzer response used when the user's edit has no findings. */
+export const CLEAN_GRUFF_CONTRACT_ENVELOPE =
+  '{"contractVersion":"gruff.hook.v1","findings":[],"suppressed":{"count":0},"ignored":{"paths":[]},"config":{"schemaOk":true,"error":null}}';
+
+/** Finding response used when provider feedback must show one changed-file warning. */
+export const FINDING_GRUFF_CONTRACT_ENVELOPE =
+  '{"contractVersion":"gruff.hook.v1","findings":[{"ruleId":"size.file-length","pillar":"size","severity":"warning","scope":"file","file":"src/sample.ts","line":1,"message":"file too long","remediation":"split it"},{"ruleId":"naming.short","pillar":"naming","severity":"advisory","scope":"line","file":"src/sample.ts","line":3,"message":"too short"}],"suppressed":{"count":0},"ignored":{"paths":[]},"config":{"schemaOk":true,"error":null}}';
+
 /**
  * Install a contract-aware mock that advertises gruff.hook.v1 from
  * `hook --capabilities` and emits a gruff.hook.v1 envelope from `hook --format
@@ -400,15 +491,29 @@ const DEFAULT_CONTRACT_ENVELOPE =
  *
  * @param root - temp project root the shim is installed under
  * @param envelope - gruff.hook.v1 JSON the mock emits from `hook --format json`
+ * @param behavior - optional exit, stderr, and delay controls; omitted values model a clean exchange
  * @returns absolute path to the created node_modules/.bin directory
  */
 export function writeContractGruffBinary(
   root: string,
   envelope: string = DEFAULT_CONTRACT_ENVELOPE,
+  behavior: {
+    exitStatus?: number;
+    standardError?: string;
+    delaySeconds?: number;
+  } = {},
 ): string {
   const binDir = join(root, "node_modules", ".bin");
   mkdirSync(binDir, { recursive: true });
   const bin = join(binDir, "gruff-ts");
+  const analyzerOutputProgram =
+    envelope.length === 0 ? ":" : ["cat <<'JSON'", envelope, "JSON"].join("\n");
+  const analyzerErrorProgram =
+    (behavior.standardError ?? "").length === 0
+      ? ":"
+      : ["cat >&2 <<'ERROR'", behavior.standardError ?? "", "ERROR"].join("\n");
+  const analyzerDelayProgram =
+    (behavior.delaySeconds ?? 0) > 0 ? `sleep ${behavior.delaySeconds}` : ":";
   writeFileSync(
     bin,
     `#!/usr/bin/env bash
@@ -420,10 +525,10 @@ JSON
 fi
 if [[ "$1" == "hook" ]]; then
   printf '%s\\n' "$*" >> "$PWD/gruff-hook-args.log"
-  cat <<'JSON'
-${envelope}
-JSON
-  exit 0
+  ${analyzerDelayProgram}
+  ${analyzerErrorProgram}
+  ${analyzerOutputProgram}
+  exit ${behavior.exitStatus ?? 0}
 fi
 exit 2
 `,

@@ -388,6 +388,20 @@ function dashboardHookSetupActionsFragment(
         hook.agents[agent.id] ?? {
           supported: false,
           installed: false,
+          isRegistered: false,
+          isCurrentVersionInstalled: false,
+          isTrusted: false,
+          registrationIssue: null,
+          installationIssue: null,
+          effectiveState: {
+            status: "provider-undocumented",
+            severity: "warning",
+          },
+          effectiveStateLabel: "state unavailable",
+          evidenceIdentity: null,
+          repairCommand: null,
+          repairSummary:
+            "Refresh hook state before relying on this agent surface.",
           scriptPath: null,
           configPath: null,
           reason: "Agent state unavailable.",
@@ -438,16 +452,48 @@ function dashboardHookSetupActionsFragment(
     },
 
     /**
-     * Count agent surfaces where a hook is installed.
-     * Use for Hooks overview counts and row summaries.
+     * Count agent surfaces whose complete effective-state chain is proven.
+     * Use for Hooks overview counts so installed files never imply user coverage.
      *
-     * @param hook - hook row to count; empty agent map returns zero installed surfaces
-     * @returns installed surface count shown in the Hooks view
+     * @param hook - hook row to count; empty agent map returns zero effective surfaces
+     * @returns effective surface count shown in the Hooks view
      */
-    hookInstalledSurfaceCount(hook: HookState): number {
+    hookEffectiveSurfaceCount(hook: HookState): number {
       return this.hookAgents(hook).filter(
-        ([, state]: [RunnerId, HookAgentState]) => state.installed,
+        ([, state]: [RunnerId, HookAgentState]) =>
+          state.effectiveState.status === "effective",
       ).length;
+    },
+
+    /**
+     * Detect an enabled hook with any warning or danger surface.
+     * Use for the Ineffective filter so missing evidence stays visible.
+     *
+     * @param hook - hook row to inspect; disabled hooks are not requested coverage
+     * @returns true when an enabled hook has at least one non-green agent surface
+     */
+    hookHasIneffectiveCoverage(hook: HookState): boolean {
+      // Disabled hooks are neutral user choices rather than broken requested coverage.
+      if (!hook.enabled) return false;
+      return this.hookAgents(hook).some(
+        ([, state]: [RunnerId, HookAgentState]) =>
+          state.effectiveState.severity === "warning" ||
+          state.effectiveState.severity === "danger",
+      );
+    },
+
+    /**
+     * List supported agent surfaces whose requested hook chain is not effective.
+     * Use under each row to show the exact broken link and operator-controlled repair.
+     *
+     * @param hook - hook row to inspect; empty agent state returns no repair rows
+     * @returns ineffective supported rows; unsupported reasons use their separate disclosure
+     */
+    ineffectiveHookAgents(hook: HookState): Array<[RunnerId, HookAgentState]> {
+      return this.hookAgents(hook).filter(
+        ([, state]: [RunnerId, HookAgentState]) =>
+          state.supported && state.effectiveState.status !== "effective",
+      );
     },
 
     /**
@@ -487,17 +533,29 @@ function dashboardHookSetupActionsFragment(
     },
 
     /**
-     * Count installed hook surfaces across all hooks and agents.
-     * Use for the Hooks overview so users see total installed coverage.
+     * Count effective hook surfaces across all hooks and agents.
+     * Use for the Hooks overview so users see proven coverage rather than file presence.
      *
-     * @returns installed surface count; zero means no hook is installed on any visible agent
+     * @returns effective surface count; zero means no visible agent has the full evidence chain
      */
-    hooksInstalledSurfaceCount(): number {
+    hooksEffectiveSurfaceCount(): number {
       return this.hooksState.reduce(
         (total: number, hook: HookState) =>
-          total + Number(this.hookInstalledSurfaceCount(hook)),
+          total + Number(this.hookEffectiveSurfaceCount(hook)),
         0,
       );
+    },
+
+    /**
+     * Count enabled hooks with at least one non-green agent surface.
+     * Use for the Hooks summary and Ineffective filter badge.
+     *
+     * @returns ineffective hook count; zero means every requested visible chain is effective
+     */
+    hooksIneffectiveCount(): number {
+      return this.hooksState.filter((hook: HookState) =>
+        this.hookHasIneffectiveCoverage(hook),
+      ).length;
     },
 
     /**
@@ -513,6 +571,10 @@ function dashboardHookSetupActionsFragment(
       if (filter === "enabled") return hook.enabled;
       // Disabled filter shows hooks the user has turned off.
       if (filter === "disabled") return !hook.enabled;
+      // Ineffective filter shows requested hooks with a broken evidence or runtime link.
+      if (filter === "ineffective") {
+        return this.hookHasIneffectiveCoverage(hook);
+      }
       // Drift filter shows hooks whose installed state needs repair.
       if (filter === "drift") return this.hookHasDrift(hook);
       return true;
@@ -576,34 +638,32 @@ function dashboardHookSetupActionsFragment(
 
     /**
      * Format one agent hook state for the hook table.
-     * Use so users see installed, missing, drifted, or unsupported states in plain language.
+     * Use so users see the registry-owned effective link instead of raw file presence.
      *
-     * @param state - hook state for one agent; unsupported states ignore drift/install details
-     * @returns status label; `not installed` means the hook is supported but absent
+     * @param state - hook state for one agent; empty labels fall back to the machine status
+     * @returns exact state label shared with CLI audit and hook-list JSON
      */
     hookAgentStatusLabel(state: HookAgentState): string {
-      // Unsupported agents need a neutral label because the user cannot install this hook there.
-      if (!state.supported) return "unsupported";
-      // Desired-on drift means protection is expected but missing.
-      if (state.drift === "desired-on-actual-off") return "drift: missing";
-      // Desired-off drift means a hook remains installed after the user disabled it.
-      if (state.drift === "desired-off-actual-on") return "drift: installed";
-      return state.installed ? "installed" : "not installed";
+      return state.effectiveStateLabel || state.effectiveState.status;
     },
 
     /**
-     * Choose the CSS status class for one agent hook state.
-     * Use so hook rows visually separate supported, installed, missing, and drift states.
+     * Choose the CSS status class for one effective hook state.
+     * Use so only complete evidence renders green while warnings and danger stay visible.
      *
-     * @param state - hook state for one agent; unsupported states render muted
+     * @param state - hook state for one agent; disabled states render muted
      * @returns CSS class for the hook status pill
      */
     hookAgentStatusClass(state: HookAgentState): string {
-      // Unsupported agents are muted because the user cannot act on them here.
-      if (!state.supported) return "gf-hook-status-muted";
-      // Drift needs warning styling so the resync action is visible.
-      if (state.drift) return "gf-hook-status-warn";
-      return state.installed ? "gf-hook-status-ok" : "gf-hook-status-muted";
+      // Complete provider, install, trust, delivery, and scenario evidence is green.
+      if (state.effectiveState.severity === "success") {
+        return "gf-hook-status-ok";
+      }
+      // Disabled coverage is a neutral user choice.
+      if (state.effectiveState.severity === "neutral") {
+        return "gf-hook-status-muted";
+      }
+      return "gf-hook-status-warn";
     },
 
     /**

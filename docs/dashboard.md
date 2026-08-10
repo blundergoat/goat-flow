@@ -8,21 +8,11 @@ The dashboard is a local privileged control plane. Each server process prints a 
 
 Read-only browsing and audit routes may still inspect arbitrary local paths selected in the UI after token authorization. Side-effectful routes are guarded by the same token boundary, and terminal creation still validates that the requested project path is an existing directory.
 
-Successful dashboard operations append redacted evidence-envelope records to
-`.goat-flow/logs/events/*.jsonl`. The trace records metadata such as terminal
-creation, prompt launch/send, audit runs, setup/quality prompt generation, and
-project list changes without storing full prompt text, terminal scrollback, or
-uploaded file contents. Inspect it with `goat-flow events tail . --limit 20`.
+Successful dashboard operations append redacted evidence-envelope records to `.goat-flow/logs/events/*.jsonl`. The trace records terminal creation, prompt launch/send, audit runs, setup or quality prompt generation, and project-list changes without storing full prompt text, terminal scrollback, or uploaded file contents. Inspect it with `goat-flow events tail . --limit 20`.
 
 ## Views
 
-The dashboard uses a persistent desktop side rail for primary navigation. The
-rail collapses to icon-only with hover tooltips, exposes an active-plan tooltip
-when collapsed, and keeps Projects, Prompts, and New Prompt grouped together.
-The header stays focused on the current project switcher, runner switcher, and
-utility actions. The rail exposes backed destinations only: Home, Prompts,
-Workspace, Hooks, Plans, Skill Evaluator, Projects, Quality, and Setup -- each
-maps to a real view.
+The dashboard uses a persistent desktop side rail for primary navigation. It collapses to icons with tooltips, exposes the active plan while collapsed, and groups Projects, Prompts, and New Prompt. The main destinations are Home, Prompts, Workspace, Hooks, Plans, Skills, Projects, Quality, and Setup; Settings and About remain available as utility views. Every destination maps to a real view.
 
 ### Home
 
@@ -53,7 +43,7 @@ Per-artifact quality view for installed skills and shared references. Shows dete
 
 ### Hooks
 
-Manage shipped guardrails and quality hooks for the selected project. Lists each registered hook (`deny-dangerous`, `gruff-code-quality`, `post-turn-safety`) with its current enabled/disabled state and the agents it is wired into (Claude, Codex, Antigravity, Copilot). Toggles update `.goat-flow/config.yaml` and reconcile per-agent hook config files. Codex currently receives only the `PreToolUse` `deny-dangerous` hook; `gruff-code-quality` and `post-turn-safety` are shown as unsupported for Codex until supported post-tool or post-turn lifecycle contracts are verified. `post-turn-safety` is shown as unsupported for Antigravity until its Stop-hook delivery is verified (hook trust gates execution; no Stop payload captured firing). Copilot has no project-local post-turn event, so `post-turn-safety` is shown as unsupported for that runner rather than installed. Mirrors the `goat-flow hooks <list|enable|disable|sync>` CLI.
+Manage shipped guardrails and quality hooks for the selected project. Each agent row separates the desired toggle from its effective state across provider evidence, exact registration, current installed bytes, trusted paths, observed execution, delivered results, and configured scenarios. Only `effective` is green. Warning and danger rows name the first broken link and show a copyable repair command when Goat Flow owns one; provider evidence gaps stay explicit without an invented command. Toggles update `.goat-flow/config.yaml` and reconcile per-agent hook config files. The view uses the same registry labels as `goat-flow hooks list`, `audit`, and the `/api/hooks` response.
 
 ### Projects
 
@@ -61,7 +51,7 @@ Multi-project browser. Lists registered projects with their latest audit status.
 
 ### Prompts
 
-Dedicated prompt library. Two-pane layout: left pane is the list with search, category filters, favorites strip, and grouped-by-category rendering; right pane is the full prompt preview with search-match highlighting. Primary actions are `Copy`, `Launch in new terminal`, and `Send to active terminal` -- the last one is project-scoped and only appears when one or more active sessions exist for the current project (a picker is shown when multiple). Keyboard: `/` focuses search, `↑` / `↓` navigate, `Enter` launches the selected prompt, `Esc` clears the search or selection.
+Dedicated prompt library. Two-pane layout: left pane is the list with search, category filters, favorites strip, and grouped-by-category rendering; right pane is the full prompt preview with search-match highlighting. Primary actions are `Copy`, `Launch in new terminal`, and `Send to active terminal`. The last one is project-scoped and only appears when the current project has at least one active session; multiple sessions show a picker. Keyboard: `/` focuses search, `↑` / `↓` navigate, `Enter` launches the selected prompt, `Esc` clears the search or selection.
 
 Good default presets to start with:
 
@@ -92,7 +82,12 @@ Getting-started page for new users. Explains what goat-flow is, the audit/qualit
 - 480-minute idle timeout (8 hours) with auto-kill
 - Maximum 10 concurrent sessions
 - Session state: running / ended / error
-- Prompt presets with `mayWriteFiles: false`, unclassified preset launches, and investigator sessions request reporting access. Codex uses a native read-mostly profile with narrowly writable ignored paths; Quality launches grant log writes only in the mode-selected report owner (controlling workspace for process/skills; selected target for agent-setup/harness). Claude uses an isolated per-session permission overlay: read-only commands remain available, tracked edits and write-capable shell commands are denied, and quality reports persist dashboard-side per ADR-044. The session writes one draft into that owner's gitignored `.goat-flow/logs/quality/staging/` directory. Before reading it, the server acquires an exclusive per-draft filesystem claim shared across dashboard processes. The owner strictly accepts the report shape, scrubs accepted strings, revalidates and persists through the `quality save` core, deletes the draft, and writes a receipt the session confirms from. Competing owners skip live claims; stale claims produce rejection receipts instead of replaying a possibly persisted report. Shutdown removes only claims owned by that process and never sweeps another process's drafts. Finalized reports under `.goat-flow/logs/quality/` are deny-listed against agent edits. Unsupported Claude controls fail closed instead of reopening workspace access. Explicit write-enabled builder presets and ordinary direct sessions use workspace access; other runners still rely on their available prompt and hook guardrails.
+- Presets with `mayWriteFiles: false`, unclassified launches, and investigator sessions request reporting access; explicit builders and ordinary sessions use workspace access.
+- Codex reporting sessions use a native read-mostly profile with narrowly writable ignored paths. Quality writes belong to the controlling workspace for process/skills mode and the selected target for agent-setup/harness mode.
+- Claude reporting sessions use an isolated permission overlay: reads remain available, tracked edits and write-capable shell commands are denied, and finalized quality reports are deny-listed against agent edits.
+- Claude quality persistence uses one draft under the report owner's gitignored `.goat-flow/logs/quality/staging/` directory. The server claims the draft, validates and scrubs it through the `quality save` core, persists the report, deletes the draft, and writes a receipt.
+- Competing dashboard processes skip live draft claims. Stale claims produce rejection receipts, and shutdown removes only claims owned by that process.
+- Unsupported Claude controls fail closed instead of reopening workspace access. Other runners rely on their available prompt and hook guardrails.
 
 ## API Endpoints
 
@@ -101,7 +96,7 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/health` | GET | Health check |
-| `/api/audit` | GET | Run audit, return JSON results including per-agent advisory enforcement matrices |
+| `/api/audit` | GET | Run audit and return JSON results, including effective `hookCoverage` and per-agent advisory enforcement matrices |
 | `/api/setup` | GET | Generate setup prompt |
 | `/api/setup/detect` | GET | Detect project stack and agents |
 | `/api/quality` | GET | Generate quality-assessment prompt, including `auditCacheStatus` (`hit`, `miss`, or `bypass`) for dashboard cache visibility |
@@ -118,9 +113,9 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/projects/list` | GET | List registered projects from saved dashboard state, including identity-keyed project records |
 | `/api/projects/list` | POST | Save the dashboard's registered project list and migrate it to identity-keyed records |
 | `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) plus dashboard project identity |
-| `/api/hooks` | GET | Registered hook state for the selected project (each hook's enabled/disabled state and wired agents) |
+| `/api/hooks` | GET | Desired and effective hook state for the selected project, including per-agent severity, first broken link, and repair guidance |
 | `/api/hooks/:hookId/toggle` | POST | Enable or disable one hook; updates `.goat-flow/config.yaml` and reconciles per-agent hook config files |
-| `/api/terminal/create` | POST | Start a terminal session; accepts `accessMode: "workspace" | "reporting"`, applies supported runner-specific reporting enforcement, and defaults omitted values to `workspace` |
+| `/api/terminal/create` | POST | Start a terminal session; accepts `accessMode: "workspace" \| "reporting"`, applies supported runner-specific reporting enforcement, and defaults omitted values to `workspace` |
 | `/api/terminal/list` | GET | List active terminal sessions |
 | `/api/terminal/sessions` | GET | Session metadata |
 | `/api/terminal/:id` | DELETE | End a terminal session |

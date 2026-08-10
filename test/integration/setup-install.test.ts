@@ -1,8 +1,8 @@
 /**
  * setup --apply installer behaviour: scaffolds config.yaml without an agents allowlist and manages
  * that allowlist on existing configs (removing single/multi-agent lists or a null value, leaving an
- * absent one absent), does not duplicate an existing node_modules gitignore entry, and seeds GitHub
- * commit instructions from target git history. Upgrade migration and prune cases live in
+ * absent one absent), does not duplicate an existing node_modules gitignore entry, and installs
+ * deterministic Git commit instructions only for Git projects. Upgrade migration and prune cases live in
  * setup-install-migrations.test.ts.
  */
 import { describe, it } from "node:test";
@@ -17,15 +17,54 @@ import {
 import { join } from "node:path";
 
 import {
-  addCommit,
-  git,
-  gitAvailable,
   makeTempProject,
   POST_TURN_SAFETY_TIMEOUT_SECONDS,
+  PROJECT_ROOT,
   readClaudePostTurnSafetyTimeout,
   runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
+
+/**
+ * Groups the permission choices a Claude user sees after setup migration.
+ * Empty arrays mean that group has no saved rules.
+ */
+interface ClaudePermissionGroups {
+  deny: string[];
+  allow: string[];
+  ask: string[];
+}
+
+/**
+ * Reads the permission groups users receive after setup migrates their settings.
+ * @param projectRoot - non-empty fixture root containing `.claude/settings.json`
+ * @returns all three groups; a missing group appears as an empty user rule list
+ */
+function readClaudePermissionGroups(
+  projectRoot: string,
+): ClaudePermissionGroups {
+  const settings = JSON.parse(
+    readFileSync(join(projectRoot, ".claude", "settings.json"), "utf-8"),
+  ) as { permissions?: Record<string, string[]> };
+  // A missing group means the user has not saved rules in that UI category.
+  return {
+    deny: settings.permissions?.deny ?? [],
+    allow: settings.permissions?.allow ?? [],
+    ask: settings.permissions?.ask ?? [],
+  };
+}
+
+/**
+ * Finds stale rules that would show misleading permission choices after upgrade.
+ * @param groups - migrated groups; empty arrays mean the user saved no rules there
+ * @returns stale rule labels, or an empty list when the UI contract is current
+ */
+function stalePermissionRules(groups: ClaudePermissionGroups): string[] {
+  const stalePrefixes = ["MultiEdit(", "Write(", "NotebookEdit(", "Glob("];
+  return [groups.deny, groups.allow, groups.ask]
+    .flat()
+    .filter((rule) => stalePrefixes.some((prefix) => rule.startsWith(prefix)));
+}
 
 describe("setup --apply installer", () => {
   // A fresh Claude user needs enough runner time to see the hook's own incomplete-scan warning.
@@ -73,9 +112,15 @@ describe("setup --apply installer", () => {
     assert.match(codexHooks, /PreToolUse/u);
     assert.match(codexHooks, /deny-dangerous\.sh/u);
     assert.doesNotMatch(codexHooks, /PostToolUse/u);
-    assert.doesNotMatch(codexHooks, /Stop/u);
+    // Fresh Codex users receive the live-proven Stop feedback path without enabling Gruff.
+    assert.match(codexHooks, /"Stop"/u);
     assert.doesNotMatch(codexHooks, /gruff-code-quality\.sh/u);
-    assert.doesNotMatch(codexHooks, /post-turn-safety\.sh/u);
+    assert.match(codexHooks, /post-turn-safety\.sh/u);
+    assert.match(codexHooks, /"timeout": 90/u);
+    assert.match(
+      codexHooks,
+      /codex:post-turn:goat-flow\.hook-result\.v1:turn-stop:1:75000/u,
+    );
     assert.equal(
       existsSync(
         join(
@@ -294,48 +339,174 @@ describe("setup --apply installer", () => {
     assert.equal(readFileSync(cursorIgnorePath, "utf-8"), editorRules);
   });
 
-  it("CLI install preserves commit guidance at the former canonical path", () => {
+  it("CLI install renames commit guidance from the former canonical path", () => {
     const root = makeTempProject();
     const guidanceDir = join(root, "docs", "coding-standards");
     const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
     const legacyGuidance = "# Team Commit Rules\n\nKeep this project rule.\n";
+    mkdirSync(join(root, ".git"));
     mkdirSync(guidanceDir, { recursive: true });
     writeFileSync(legacyGuidancePath, legacyGuidance);
 
     const result = runCliInstaller(root, "--agent", "copilot");
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.equal(readFileSync(legacyGuidancePath, "utf-8"), legacyGuidance);
-    assert.equal(existsSync(join(guidanceDir, "git-commit-message.md")), false);
+    assert.equal(existsSync(legacyGuidancePath), false);
+    assert.equal(readFileSync(preferredGuidancePath, "utf-8"), legacyGuidance);
+    assert.match(
+      result.stdout,
+      /renamed from docs\/coding-standards\/git-commit\.md/,
+    );
+  });
+
+  it("CLI install copies the reviewed template for a Git project", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".git"));
+
+    const result = runCliInstaller(root, "--agent", "copilot");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const guidance = readFileSync(
+      join(root, "docs", "coding-standards", "git-commit-message.md"),
+      "utf-8",
+    );
+    const template = readFileSync(
+      join(
+        PROJECT_ROOT,
+        "workflow",
+        "setup",
+        "reference",
+        "git-commit-message.md",
+      ),
+      "utf-8",
+    );
+    assert.equal(guidance, template);
+    assert.match(result.stdout, /copied from goat-flow template/);
+  });
+
+  it("CLI install does not create commit guidance without .git", () => {
+    const root = makeTempProject();
+
+    const result = runCliInstaller(root, "--agent", "copilot");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(
+      existsSync(
+        join(root, "docs", "coding-standards", "git-commit-message.md"),
+      ),
+      false,
+    );
     assert.doesNotMatch(result.stdout, /Git commit instructions:/);
   });
 
-  it(
-    "CLI install seeds missing commit-message guidance from target git history",
-    { skip: !gitAvailable },
-    () => {
-      const root = makeTempProject();
-      git(root, ["init"]);
-      git(root, ["config", "user.name", "GOAT Test"]);
-      git(root, ["config", "user.email", "goat@example.test"]);
-      for (let i = 0; i < 10; i += 1) {
-        addCommit(root, `feat(setup): add fixture ${i}`);
-      }
+  it("CLI install preserves both commit guides when the preferred path exists", () => {
+    const root = makeTempProject();
+    const guidanceDir = join(root, "docs", "coding-standards");
+    const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
+    const legacyGuidance = "# Legacy Team Rules\n";
+    const preferredGuidance = "# Preferred Team Rules\n";
+    mkdirSync(join(root, ".git"));
+    mkdirSync(guidanceDir, { recursive: true });
+    writeFileSync(legacyGuidancePath, legacyGuidance);
+    writeFileSync(preferredGuidancePath, preferredGuidance);
 
-      const result = runCliInstaller(root, "--agent", "copilot");
-      assert.equal(result.status, 0, result.stderr || result.stdout);
+    const result = runCliInstaller(root, "--agent", "copilot");
 
-      const guidance = readFileSync(
-        join(root, "docs", "coding-standards", "git-commit-message.md"),
-        "utf-8",
-      );
-      assert.match(guidance, /generated from recent git history/);
-      assert.match(guidance, /Use conventional commits/);
-      assert.match(result.stdout, /Git commit instructions:/);
-      assert.equal(
-        existsSync(join(root, "docs", "coding-standards", "git-commit.md")),
-        false,
-      );
-    },
-  );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.equal(readFileSync(legacyGuidancePath, "utf-8"), legacyGuidance);
+    assert.equal(
+      readFileSync(preferredGuidancePath, "utf-8"),
+      preferredGuidance,
+    );
+    assert.doesNotMatch(result.stdout, /Git commit instructions:/);
+  });
+});
+
+describe("setup --apply permission upgrade migrations", () => {
+  // Covers removed-tool, unmatched-rule, and broad env-deny migrations together.
+  // Fixture purpose: writes stale Claude rules for pruning, rewriting, and env-deny expansion.
+  it("prunes removed-tool (MultiEdit) denies and rewrites unmatched Write/NotebookEdit/Glob denies on upgrade", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    // Example: a user upgrades after MultiEdit was removed and old rules now show as invalid.
+    // Setup rewrites usable paths, expands env protection, and preserves custom WebFetch rules.
+    writeFileSync(
+      join(root, ".claude", "settings.json"),
+      JSON.stringify(
+        {
+          permissions: {
+            allow: ["Read(**/.env.example)", "Write(docs/**)"],
+            ask: ["Glob(**/dist/**)"],
+            deny: [
+              "MultiEdit(**/secrets/**)",
+              "MultiEdit(**/*.key)",
+              "Edit(**/*.key)",
+              "Write(**/*.key)",
+              "Write(**/custom-cert.pem)",
+              "NotebookEdit(**/notebooks/**)",
+              "Glob(**/generated/**)",
+              "Read(**/.env*)",
+              "Edit(**/.env*)",
+              "WebFetch(**/internal/**)",
+            ],
+          },
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+
+    const result = runInstaller(root, "--agent", "claude");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /stale or superseded permission rules/);
+
+    const { deny, allow, ask } = readClaudePermissionGroups(root);
+    assert.deepEqual(
+      stalePermissionRules({ deny, allow, ask }),
+      [],
+      "retired and unmatched permission forms should be gone",
+    );
+    // Write(**/*.key) deduped into the existing Edit rule, not duplicated.
+    assert.deepEqual(
+      deny.filter((rule) => rule === "Edit(**/*.key)"),
+      ["Edit(**/*.key)"],
+      "managed Edit deny preserved exactly once",
+    );
+    // Unmatched forms without a covering rule keep their intent via rewrite.
+    assert.ok(deny.includes("Edit(**/custom-cert.pem)"), "Write rewritten");
+    assert.ok(deny.includes("Edit(**/notebooks/**)"), "NotebookEdit rewritten");
+    assert.ok(deny.includes("Read(**/generated/**)"), "Glob rewritten");
+    // Broad env denies expanded so .env.example matches no deny rule.
+    assert.ok(!deny.includes("Read(**/.env*)"), "broad env read deny expanded");
+    assert.ok(deny.includes("Read(**/.env)"), "exact env deny added");
+    assert.ok(deny.includes("Read(**/.envrc)"), "envrc deny added");
+    assert.ok(
+      deny.includes("Read(**/.env.*.local)"),
+      "local-variant deny added",
+    );
+    assert.ok(!deny.includes("Edit(**/.env*)"), "broad env edit deny expanded");
+    assert.ok(deny.includes("Edit(**/.env)"), "exact env edit deny added");
+    assert.ok(
+      deny.includes("Edit(**/.env.*.local)"),
+      "local-variant edit deny added",
+    );
+    // Allow/ask arrays repaired without env expansion.
+    assert.ok(allow.includes("Edit(docs/**)"), "allow Write rewritten to Edit");
+    assert.ok(
+      allow.includes("Read(**/.env.example)"),
+      "sample env allow preserved",
+    );
+    assert.ok(ask.includes("Read(**/dist/**)"), "ask Glob rewritten to Read");
+    // No collateral damage to valid user-added unmanaged tool denies.
+    assert.ok(
+      deny.includes("WebFetch(**/internal/**)"),
+      "user-added WebFetch deny preserved",
+    );
+
+    // Idempotent: a second upgrade reports no further permission migration.
+    const second = runInstaller(root, "--agent", "claude");
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    assert.doesNotMatch(second.stdout, /stale or superseded permission rules/);
+  });
 });
