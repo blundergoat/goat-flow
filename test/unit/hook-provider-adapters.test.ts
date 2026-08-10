@@ -292,6 +292,22 @@ describe("hook provider adapters", () => {
     assert.match(copilotOutput.stdout ?? "", /"decision":"block"/u);
   });
 
+  // One exact repeated infrastructure failure may end the user's provider loop without becoming a clean scan.
+  it("ends a bounded Stop re-entry while retaining its incomplete result", () => {
+    const boundedReentryResult: HookResultEnvelope = {
+      ...providerHookResult("codex", "turn-stop", "incomplete"),
+      reasonCode: "bounded-reentry-ended",
+    };
+    const providerOutput = adaptHookResultForProvider(
+      decodeFixtureResult(boundedReentryResult),
+      "codex",
+      "turn-stop",
+    );
+
+    assert.equal(providerOutput.state, "adapted");
+    assert.equal(providerOutput.stdout, "");
+  });
+
   // A fixture cannot claim one host while being delivered through another user's config.
   it("rejects provider and lifecycle mismatches", () => {
     const claudeResult = decodeFixtureResult(

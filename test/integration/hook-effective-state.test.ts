@@ -32,9 +32,13 @@ import {
   type HookState,
 } from "../../src/cli/server/hook-registrar.js";
 import {
-  verifyManagedConfiguredHook,
-  verifyManagedDenyHook,
-} from "../../src/cli/hooks-runtime-evidence.js";
+  currentHookProviderSupportGate,
+  getHookSpec,
+  type HookDeliveryContract,
+  type HookProviderRegistryEvidence,
+} from "../../src/cli/server/hooks-registry.js";
+import { verifyManagedDenyHook } from "../../src/cli/hooks-runtime-evidence.js";
+import { verifyManagedConfiguredHook } from "../../src/cli/hooks-configured-runtime-evidence.js";
 
 const disposableProjects: string[] = [];
 
@@ -57,7 +61,10 @@ after(() => {
   }
 });
 
-/** Create the smallest Claude project that the registrar may safely reconcile. */
+/**
+ * Create the smallest Claude project that the registrar may safely reconcile.
+ * Side effects: creates and writes one disposable project removed by suite cleanup.
+ */
 function createClaudeProject(): string {
   const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-hook-state-"));
   disposableProjects.push(projectPath);
@@ -84,7 +91,10 @@ function claudeHookState(projectPath: string, hookId: string): HookAgentState {
   return requiredHook(readAllHookStates(projectPath), hookId).agents.claude;
 }
 
-/** Initialize an empty Git worktree so Stop-hook fixtures have a real changed-file boundary. */
+/**
+ * Initialize an empty Git worktree so Stop fixtures have a real change boundary.
+ * Side effects: spawns `git init`, which writes metadata inside the disposable project.
+ */
 function initializeDisposableGitProject(projectPath: string): void {
   const gitInitialization = spawnSync("git", ["init", "--quiet"], {
     cwd: projectPath,
@@ -128,6 +138,59 @@ function writeClaudeHookSettings(
 }
 
 describe("effective hook state", () => {
+  /** Invariant: deterministic fixture evidence stays below live support in user-facing state. */
+  it("keeps deterministic delivery evidence below live support", () => {
+    const denySpec = getHookSpec("deny-dangerous");
+    const gruffSpec = getHookSpec("gruff-code-quality");
+    assert.ok(denySpec);
+    assert.ok(gruffSpec);
+    const denyDeliveryContract: HookDeliveryContract | undefined =
+      denySpec.deliveryContract;
+    const claudeProviderEvidence: HookProviderRegistryEvidence | undefined =
+      denySpec.providerEvidence?.claude;
+    const antigravityProviderEvidence:
+      HookProviderRegistryEvidence | undefined =
+      gruffSpec.providerEvidence?.antigravity;
+    assert.deepEqual(denyDeliveryContract, {
+      resultProtocol: "legacy",
+      adapterVersion: "1",
+      launcherDeadlineMs: 25_000,
+    });
+    // Missing Claude evidence fails instead of presenting a fixture as live support.
+    assert.equal(
+      claudeProviderEvidence?.effectiveSupportGate,
+      "scenario-unverified",
+    );
+    // Missing Antigravity evidence likewise fails the undelivered-result contract.
+    assert.equal(
+      antigravityProviderEvidence?.effectiveSupportGate,
+      "result-undelivered",
+    );
+  });
+
+  /** Expired Codex proof returns hook screens to an explicit stale-evidence state. */
+  it("expires approved Codex live support after its capture window", () => {
+    const gruffSpec = getHookSpec("gruff-code-quality");
+    assert.ok(gruffSpec);
+    const codexProviderEvidence = gruffSpec.providerEvidence?.codex;
+    assert.ok(codexProviderEvidence);
+
+    assert.equal(
+      currentHookProviderSupportGate(
+        codexProviderEvidence,
+        new Date("2026-09-09T00:00:00.000Z"),
+      ),
+      "effective",
+    );
+    assert.equal(
+      currentHookProviderSupportGate(
+        codexProviderEvidence,
+        new Date("2026-09-09T00:00:00.001Z"),
+      ),
+      "provider-capture-stale",
+    );
+  });
+
   // A desired hook with no exact registration is not protected merely because the registry lists it.
   it("keeps enabled but unregistered hooks non-green", () => {
     const projectPath = createClaudeProject();
@@ -335,16 +398,19 @@ describe("effective hook state", () => {
       readAllHookStates(projectPath),
       "post-turn-safety",
     );
-    const codexState = postTurnHook.agents.codex;
+    const antigravityState = postTurnHook.agents.antigravity;
 
-    assert.equal(codexState.supported, false);
-    assert.equal(codexState.installed, false);
-    assert.deepEqual(codexState.effectiveState, {
+    assert.equal(antigravityState.supported, false);
+    assert.equal(antigravityState.installed, false);
+    assert.deepEqual(antigravityState.effectiveState, {
       status: "provider-capture-absent",
       severity: "warning",
     });
-    assert.match(codexState.reason ?? "", /Stop-hook delivery is unverified/u);
-    assert.equal(codexState.repairCommand, null);
+    assert.match(
+      antigravityState.reason ?? "",
+      /Stop-hook delivery is unverified/u,
+    );
+    assert.equal(antigravityState.repairCommand, null);
   });
 
   // The explicit policy proof now reaches the same generated command the selected agent invokes.
@@ -360,7 +426,7 @@ describe("effective hook state", () => {
     });
 
     assert.equal(report.status, "pass");
-    assert.equal(report.summary.pass, 4);
+    assert.equal(report.summary.pass, report.scenarios.length);
     assert.deepEqual(
       report.scenarios.map((scenario) => scenario.observed),
       ["blocked", "blocked", "blocked", "allowed"],

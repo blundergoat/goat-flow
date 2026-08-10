@@ -54,18 +54,32 @@ describe("dashboard Hooks view", () => {
     assert.match(appSource, /state\.effectiveState\.severity === "success"/u);
   });
 
-  it("keeps Codex non-PreToolUse exclusions paired with reasons", () => {
-    const codexUnsupportedHookEntries = listHookSpecs().filter(
-      (hook) => hook.unsupportedAgents?.codex,
+  it("keeps current provider exclusions paired with reasons", () => {
+    const providerExclusions = listHookSpecs().flatMap((hook) =>
+      Object.entries(hook.unsupportedAgents ?? {}).map(
+        ([providerId, reason]) => ({
+          hookId: hook.id,
+          event: hook.event,
+          providerId,
+          reason,
+        }),
+      ),
     );
 
-    assert.ok(
-      codexUnsupportedHookEntries.length > 0,
-      "Codex should have explicit unsupported hook entries",
+    assert.deepEqual(
+      providerExclusions
+        .map(({ hookId, providerId }) => `${hookId}/${providerId}`)
+        .sort(),
+      [
+        "gruff-code-quality/antigravity",
+        "post-turn-safety/antigravity",
+        "post-turn-safety/copilot",
+      ],
     );
-    for (const hook of codexUnsupportedHookEntries) {
-      assert.notEqual(hook.event, "PreToolUse");
-      assert.match(hook.unsupportedAgents?.codex ?? "", /^Codex /);
+    // Every excluded provider gives the Hooks screen a practical reason beside its non-green state.
+    for (const providerExclusion of providerExclusions) {
+      assert.notEqual(providerExclusion.event, "PreToolUse");
+      assert.match(providerExclusion.reason, /^(Antigravity|Copilot) /u);
     }
   });
 });

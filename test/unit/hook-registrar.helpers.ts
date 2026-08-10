@@ -143,9 +143,15 @@ function assertManagedHookRegistration(
     return;
   }
   assert.equal(commandEntry.command, expectedCommand);
-  // Codex has no host timeout field, so the shared launcher is the user's deadline.
+  // Codex uses the proven 90-second host deadline only for approved feedback and Stop lifecycles.
   if (agentProfile.id === "codex") {
-    assert.equal(commandEntry.timeout, undefined);
+    const codexOwnsHostTimeout =
+      hookSpec.id === "gruff-code-quality" ||
+      hookSpec.id === "post-turn-safety";
+    assert.equal(
+      commandEntry.timeout,
+      codexOwnsHostTimeout ? hookSpec.timeoutSec : undefined,
+    );
     return;
   }
   assert.equal(commandEntry.timeout, hookSpec.timeoutSec);

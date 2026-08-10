@@ -25,6 +25,47 @@ import {
   runInstaller,
 } from "./setup-install.helpers.js";
 
+/**
+ * Groups the permission choices a Claude user sees after setup migration.
+ * Empty arrays mean that group has no saved rules.
+ */
+interface ClaudePermissionGroups {
+  deny: string[];
+  allow: string[];
+  ask: string[];
+}
+
+/**
+ * Reads the permission groups users receive after setup migrates their settings.
+ * @param projectRoot - non-empty fixture root containing `.claude/settings.json`
+ * @returns all three groups; a missing group appears as an empty user rule list
+ */
+function readClaudePermissionGroups(
+  projectRoot: string,
+): ClaudePermissionGroups {
+  const settings = JSON.parse(
+    readFileSync(join(projectRoot, ".claude", "settings.json"), "utf-8"),
+  ) as { permissions?: Record<string, string[]> };
+  // A missing group means the user has not saved rules in that UI category.
+  return {
+    deny: settings.permissions?.deny ?? [],
+    allow: settings.permissions?.allow ?? [],
+    ask: settings.permissions?.ask ?? [],
+  };
+}
+
+/**
+ * Finds stale rules that would show misleading permission choices after upgrade.
+ * @param groups - migrated groups; empty arrays mean the user saved no rules there
+ * @returns stale rule labels, or an empty list when the UI contract is current
+ */
+function stalePermissionRules(groups: ClaudePermissionGroups): string[] {
+  const stalePrefixes = ["MultiEdit(", "Write(", "NotebookEdit(", "Glob("];
+  return [groups.deny, groups.allow, groups.ask]
+    .flat()
+    .filter((rule) => stalePrefixes.some((prefix) => rule.startsWith(prefix)));
+}
+
 describe("setup --apply installer", () => {
   // A fresh Claude user needs enough runner time to see the hook's own incomplete-scan warning.
   it("registers Claude post-turn safety with the registry timeout", () => {
@@ -71,9 +112,15 @@ describe("setup --apply installer", () => {
     assert.match(codexHooks, /PreToolUse/u);
     assert.match(codexHooks, /deny-dangerous\.sh/u);
     assert.doesNotMatch(codexHooks, /PostToolUse/u);
-    assert.doesNotMatch(codexHooks, /Stop/u);
+    // Fresh Codex users receive the live-proven Stop feedback path without enabling Gruff.
+    assert.match(codexHooks, /"Stop"/u);
     assert.doesNotMatch(codexHooks, /gruff-code-quality\.sh/u);
-    assert.doesNotMatch(codexHooks, /post-turn-safety\.sh/u);
+    assert.match(codexHooks, /post-turn-safety\.sh/u);
+    assert.match(codexHooks, /"timeout": 90/u);
+    assert.match(
+      codexHooks,
+      /codex:post-turn:goat-flow\.hook-result\.v1:turn-stop:1:75000/u,
+    );
     assert.equal(
       existsSync(
         join(
@@ -373,5 +420,93 @@ describe("setup --apply installer", () => {
       preferredGuidance,
     );
     assert.doesNotMatch(result.stdout, /Git commit instructions:/);
+  });
+});
+
+describe("setup --apply permission upgrade migrations", () => {
+  // Covers removed-tool, unmatched-rule, and broad env-deny migrations together.
+  // Fixture purpose: writes stale Claude rules for pruning, rewriting, and env-deny expansion.
+  it("prunes removed-tool (MultiEdit) denies and rewrites unmatched Write/NotebookEdit/Glob denies on upgrade", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    // Example: a user upgrades after MultiEdit was removed and old rules now show as invalid.
+    // Setup rewrites usable paths, expands env protection, and preserves custom WebFetch rules.
+    writeFileSync(
+      join(root, ".claude", "settings.json"),
+      JSON.stringify(
+        {
+          permissions: {
+            allow: ["Read(**/.env.example)", "Write(docs/**)"],
+            ask: ["Glob(**/dist/**)"],
+            deny: [
+              "MultiEdit(**/secrets/**)",
+              "MultiEdit(**/*.key)",
+              "Edit(**/*.key)",
+              "Write(**/*.key)",
+              "Write(**/custom-cert.pem)",
+              "NotebookEdit(**/notebooks/**)",
+              "Glob(**/generated/**)",
+              "Read(**/.env*)",
+              "Edit(**/.env*)",
+              "WebFetch(**/internal/**)",
+            ],
+          },
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+
+    const result = runInstaller(root, "--agent", "claude");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /stale or superseded permission rules/);
+
+    const { deny, allow, ask } = readClaudePermissionGroups(root);
+    assert.deepEqual(
+      stalePermissionRules({ deny, allow, ask }),
+      [],
+      "retired and unmatched permission forms should be gone",
+    );
+    // Write(**/*.key) deduped into the existing Edit rule, not duplicated.
+    assert.deepEqual(
+      deny.filter((rule) => rule === "Edit(**/*.key)"),
+      ["Edit(**/*.key)"],
+      "managed Edit deny preserved exactly once",
+    );
+    // Unmatched forms without a covering rule keep their intent via rewrite.
+    assert.ok(deny.includes("Edit(**/custom-cert.pem)"), "Write rewritten");
+    assert.ok(deny.includes("Edit(**/notebooks/**)"), "NotebookEdit rewritten");
+    assert.ok(deny.includes("Read(**/generated/**)"), "Glob rewritten");
+    // Broad env denies expanded so .env.example matches no deny rule.
+    assert.ok(!deny.includes("Read(**/.env*)"), "broad env read deny expanded");
+    assert.ok(deny.includes("Read(**/.env)"), "exact env deny added");
+    assert.ok(deny.includes("Read(**/.envrc)"), "envrc deny added");
+    assert.ok(
+      deny.includes("Read(**/.env.*.local)"),
+      "local-variant deny added",
+    );
+    assert.ok(!deny.includes("Edit(**/.env*)"), "broad env edit deny expanded");
+    assert.ok(deny.includes("Edit(**/.env)"), "exact env edit deny added");
+    assert.ok(
+      deny.includes("Edit(**/.env.*.local)"),
+      "local-variant edit deny added",
+    );
+    // Allow/ask arrays repaired without env expansion.
+    assert.ok(allow.includes("Edit(docs/**)"), "allow Write rewritten to Edit");
+    assert.ok(
+      allow.includes("Read(**/.env.example)"),
+      "sample env allow preserved",
+    );
+    assert.ok(ask.includes("Read(**/dist/**)"), "ask Glob rewritten to Read");
+    // No collateral damage to valid user-added unmanaged tool denies.
+    assert.ok(
+      deny.includes("WebFetch(**/internal/**)"),
+      "user-added WebFetch deny preserved",
+    );
+
+    // Idempotent: a second upgrade reports no further permission migration.
+    const second = runInstaller(root, "--agent", "claude");
+    assert.equal(second.status, 0, second.stderr || second.stdout);
+    assert.doesNotMatch(second.stdout, /stale or superseded permission rules/);
   });
 });

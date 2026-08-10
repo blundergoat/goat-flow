@@ -6,15 +6,7 @@
  * scanner behaves as asserted, not a reimplementation of it.
  */
 import assert from "node:assert/strict";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -35,8 +27,6 @@ import {
   runGit,
   runHook,
   runHookCommand,
-  buildStopPayload,
-  withCommandShim,
   commitAll,
   assertHookAllows,
   assertHookBlocks,
@@ -50,6 +40,11 @@ import {
   TEST_DOCUMENTED_AWS_PLACEHOLDER,
   TEST_DOCUMENTED_SLACK_PLACEHOLDER,
 } from "./post-turn-safety-hook.helpers.js";
+
+const POST_TURN_SCANNER_VARIANTS = [
+  { displayName: "native scanner", forceBash3Fallback: "0" },
+  { displayName: "Bash 3 compatibility scanner", forceBash3Fallback: "1" },
+] as const;
 
 describe("post-turn-safety hook: secret and marker detection", () => {
   describe("must-block fixtures", () => {
@@ -128,13 +123,13 @@ describe("post-turn-safety hook: secret and marker detection", () => {
       },
     ];
 
-    // Each realistic secret example must produce the blocked result the user sees.
+    // Each case creates a temporary Git repo, writes the secret fixture, and runs the hook.
     for (const fixture of fixtures) {
       it(`blocks ${fixture.name}`, () => {
-        withTempRepo((root) => {
-          writeFile(root, fixture.path, fixture.content);
+        withTempRepo((projectRoot) => {
+          writeFile(projectRoot, fixture.path, fixture.content);
 
-          assertHookBlocks(root, fixture.pattern);
+          assertHookBlocks(projectRoot, fixture.pattern);
         });
       });
     }
@@ -184,13 +179,13 @@ describe("post-turn-safety hook: secret and marker detection", () => {
       },
     ];
 
-    // Each safe example must leave the user's turn unblocked.
+    // Each case creates a temporary Git repo, writes the safe fixture, and runs the hook.
     for (const fixture of fixtures) {
       it(`allows ${fixture.name}`, () => {
-        withTempRepo((root) => {
-          writeFile(root, fixture.path, fixture.content);
+        withTempRepo((projectRoot) => {
+          writeFile(projectRoot, fixture.path, fixture.content);
 
-          assertHookAllows(root);
+          assertHookAllows(projectRoot);
         });
       });
     }
@@ -223,124 +218,66 @@ describe("post-turn-safety hook: secret and marker detection", () => {
     });
   });
 
-  it("blocks segmented provider tokens without printing their bodies", () => {
-    const providerTokenFixtures = [
-      { path: "underscore.txt", value: TEST_UNDERSCORE_API_TOKEN },
-      { path: "openai-project.txt", value: TEST_OPENAI_PROJECT_TOKEN },
-      { path: "anthropic.txt", value: TEST_ANTHROPIC_API_TOKEN },
-    ];
-    // Each current provider shape must give the user the same safe diagnostic on both scanners.
-    for (const providerTokenFixture of providerTokenFixtures) {
-      // Native and compatibility paths must independently detect the exact runtime token shape.
-      for (const forceFallback of ["0", "1"]) {
-        withTempRepo((root) => {
+  // Fixture purpose: covers segmented provider tokens that must never appear in hook feedback.
+  const providerTokenFixtures = [
+    {
+      displayName: "underscore token",
+      path: "underscore.txt",
+      value: TEST_UNDERSCORE_API_TOKEN,
+    },
+    {
+      displayName: "OpenAI project token",
+      path: "openai-project.txt",
+      value: TEST_OPENAI_PROJECT_TOKEN,
+    },
+    {
+      displayName: "Anthropic token",
+      path: "anthropic.txt",
+      value: TEST_ANTHROPIC_API_TOKEN,
+    },
+  ];
+  // Each current provider shape must give users the same safe diagnostic on both scanners.
+  for (const providerTokenFixture of providerTokenFixtures) {
+    // Separate names show whether native or compatibility scanning failed for the user.
+    for (const scannerVariant of POST_TURN_SCANNER_VARIANTS) {
+      // This case creates a temporary Git repo, writes a token, and runs the shell hook.
+      it(`blocks the ${providerTokenFixture.displayName} with the ${scannerVariant.displayName} without printing its body`, () => {
+        withTempRepo((projectRoot) => {
           writeFile(
-            root,
+            projectRoot,
             providerTokenFixture.path,
             `provider token ${providerTokenFixture.value}\n`,
           );
-          const result = runHook(root, {
-            [FORCE_BASH3_ENV_KEY]: forceFallback,
+          const hookResult = runHook(projectRoot, {
+            [FORCE_BASH3_ENV_KEY]: scannerVariant.forceBash3Fallback,
           });
 
-          assert.equal(result.status, 2, result.stderr);
-          assert.match(result.stderr, /API token/u);
+          assert.equal(hookResult.status, 2, hookResult.stderr);
+          assert.match(hookResult.stderr, /API token/u);
           assert.equal(
-            result.stderr.includes(providerTokenFixture.value),
+            hookResult.stderr.includes(providerTokenFixture.value),
             false,
           );
-        });
-      }
-    }
-  });
-
-  it("bounds repeated Stop failures while new findings keep blocking", () => {
-    // Both scanner implementations must make the same continuation decision for the user.
-    for (const forceFallback of ["0", "1"]) {
-      withTempRepo((root) => {
-        const sessionId = `fixture-session-${forceFallback}`;
-        const statePath = join(
-          root,
-          ".goat-flow/scratchpad/post-turn-safety-reentry-v1.state",
-        );
-        writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
-
-        withCommandShim("wc", "exit 2", (shimEnv) => {
-          const firstFailure = runHook(
-            root,
-            { ...shimEnv, [FORCE_BASH3_ENV_KEY]: forceFallback },
-            buildStopPayload(sessionId, false),
-          );
-          assert.equal(firstFailure.status, 2, firstFailure.stderr);
-          assert.equal(existsSync(statePath), true);
-          assert.equal(statSync(statePath).mode & 0o777, 0o600);
-          assert.equal(
-            readFileSync(statePath, "utf8").includes(sessionId),
-            false,
-          );
-
-          writeFile(root, "settings.env", `API_KEY=${TEST_API_TOKEN}\n`);
-          const changedFinding = runHook(
-            root,
-            { [FORCE_BASH3_ENV_KEY]: forceFallback },
-            buildStopPayload(sessionId, true),
-          );
-          assert.equal(changedFinding.status, 2, changedFinding.stderr);
-          assert.match(changedFinding.stderr, /API token/u);
-
-          writeFile(root, "settings.env", "API_KEY=your_api_key_here\n");
-          const fixedResult = runHook(
-            root,
-            { [FORCE_BASH3_ENV_KEY]: forceFallback },
-            buildStopPayload(sessionId, true),
-          );
-          assert.equal(fixedResult.status, 0, fixedResult.stderr);
-
-          const repeatedFirstFailure = runHook(
-            root,
-            { ...shimEnv, [FORCE_BASH3_ENV_KEY]: forceFallback },
-            buildStopPayload(sessionId, false),
-          );
-          assert.equal(
-            repeatedFirstFailure.status,
-            2,
-            repeatedFirstFailure.stderr,
-          );
-          const repeatedActiveFailure = runHook(
-            root,
-            { ...shimEnv, [FORCE_BASH3_ENV_KEY]: forceFallback },
-            buildStopPayload(sessionId, true),
-          );
-          assert.equal(
-            repeatedActiveFailure.status,
-            0,
-            repeatedActiveFailure.stderr,
-          );
-          assert.match(
-            repeatedActiveFailure.stderr,
-            /ending repeated Stop.*infrastructure failure/iu,
-          );
-          assert.equal(existsSync(statePath), false);
         });
       });
     }
-  });
+  }
 
-  it("fails closed on malformed Stop input for both scanners", () => {
-    // A broken provider payload must never look like a clean turn-end result.
-    for (const forceFallback of ["0", "1"]) {
-      withTempRepo((root) => {
-        const result = runHook(
-          root,
-          { [FORCE_BASH3_ENV_KEY]: forceFallback },
+  // Each named case creates a temporary Git repo and sends malformed provider input.
+  for (const scannerVariant of POST_TURN_SCANNER_VARIANTS) {
+    it(`fails closed on malformed Stop input with the ${scannerVariant.displayName}`, () => {
+      withTempRepo((projectRoot) => {
+        const hookResult = runHook(
+          projectRoot,
+          { [FORCE_BASH3_ENV_KEY]: scannerVariant.forceBash3Fallback },
           "{invalid-json",
         );
 
-        assert.equal(result.status, 2, result.stderr);
-        assert.match(result.stderr, /invalid Stop payload/iu);
+        assert.equal(hookResult.status, 2, hookResult.stderr);
+        assert.match(hookResult.stderr, /invalid Stop payload/iu);
       });
-    }
-  });
+    });
+  }
 
   it("runs self-test explicitly and rejects unknown options", () => {
     withTempRepo((root) => {

@@ -294,7 +294,10 @@ describe("hook launcher script validation", () => {
     });
   });
 
-  // Fixture purpose: prove hooks receive registry-owned identity, not ambient user values.
+  /**
+   * Prove hooks receive registry-owned identity because ambient user values are untrusted.
+   * Side effects: writes and starts one hook, which writes a disposable environment receipt.
+   */
   it("injects the decoded provider contract into migrated hook execution", () => {
     withTempProject((fixtureProjectPath) => {
       const hookScriptRelativePath = ".goat-flow/hooks/environment-result.sh";
@@ -380,9 +383,17 @@ describe("hook launcher script validation", () => {
         0,
         launcherDiagnostics(launcherResult),
       );
-      assert.equal(launcherResult.stdout, "");
-      assert.match(launcherResult.stderr, /not one JSON object/iu);
-      assert.match(launcherResult.stderr, /hook unavailable/iu);
+      const providerResponse = JSON.parse(launcherResult.stdout) as {
+        hookSpecificOutput?: { additionalContext?: string };
+      };
+      const modelVisibleContext =
+        providerResponse.hookSpecificOutput?.additionalContext ?? "";
+      // Empty context would hide the malformed legacy result from the active coding agent.
+      assert.notEqual(modelVisibleContext, "");
+      assert.match(modelVisibleContext, /gruff-code-quality: UNAVAILABLE/iu);
+      assert.match(modelVisibleContext, /adapter-delivery-failed/iu);
+      assert.match(modelVisibleContext, /not one JSON object/iu);
+      assert.equal(launcherResult.stderr, "");
     });
   });
 
@@ -411,8 +422,17 @@ describe("hook launcher script validation", () => {
         0,
         launcherDiagnostics(launcherResult),
       );
-      assert.equal(launcherResult.stdout, "");
-      assert.match(launcherResult.stderr, /exceeded the 10000-byte limit/iu);
+      const providerResponse = JSON.parse(launcherResult.stdout) as {
+        hookSpecificOutput?: { additionalContext?: string };
+      };
+      const modelVisibleContext =
+        providerResponse.hookSpecificOutput?.additionalContext ?? "";
+      // Empty context would make an output flood look clean after the launcher stops it.
+      assert.notEqual(modelVisibleContext, "");
+      assert.match(modelVisibleContext, /gruff-code-quality: UNAVAILABLE/iu);
+      assert.match(modelVisibleContext, /adapter-delivery-failed/iu);
+      assert.match(modelVisibleContext, /exceeded the 10000-byte limit/iu);
+      assert.equal(launcherResult.stderr, "");
     });
   });
 

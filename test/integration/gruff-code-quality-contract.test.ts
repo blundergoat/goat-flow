@@ -17,73 +17,21 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { adaptHookResultForProvider } from "../../workflow/hooks/hook-provider-adapters.mjs";
 import {
+  CLEAN_GRUFF_CONTRACT_ENVELOPE,
   cleanupHookTestDirs,
   git,
   initGit,
+  makeEditedGruffContractProject,
   makeRoot,
+  readMigratedGruffResult,
   runHook,
   runMigratedHook,
+  sampleGruffEditPayload,
   writeContractGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
 
 after(cleanupHookTestDirs);
-
-const CLEAN_CONTRACT_ENVELOPE =
-  '{"contractVersion":"gruff.hook.v1","findings":[],"suppressed":{"count":0},"ignored":{"paths":[]},"config":{"schemaOk":true,"error":null}}';
-const FINDING_CONTRACT_ENVELOPE =
-  '{"contractVersion":"gruff.hook.v1","findings":[{"ruleId":"size.file-length","pillar":"size","severity":"warning","scope":"file","file":"src/sample.ts","line":1,"message":"file too long","remediation":"split it"},{"ruleId":"naming.short","pillar":"naming","severity":"advisory","scope":"line","file":"src/sample.ts","line":3,"message":"too short"}],"suppressed":{"count":0},"ignored":{"paths":[]},"config":{"schemaOk":true,"error":null}}';
-
-/**
- * Create one TypeScript file and root analyzer config for a migrated hook fixture.
- * Use before varying analyzer output so each result starts from the same user edit.
- *
- * @param analyzerEnvelope - analyzer JSON; empty text models an analyzer that returned no response
- * @param analyzerBehavior - optional process failure controls; an empty object models exit-zero work
- * @returns disposable project root containing one analyzable source file
- */
-function makeContractProject(
-  analyzerEnvelope: string,
-  analyzerBehavior: {
-    exitStatus?: number;
-    standardError?: string;
-    delaySeconds?: number;
-  } = {},
-): string {
-  const projectRoot = makeRoot();
-  writeContractGruffBinary(projectRoot, analyzerEnvelope, analyzerBehavior);
-  writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
-  mkdirSync(join(projectRoot, "src"), { recursive: true });
-  writeFileSync(join(projectRoot, "src", "sample.ts"), "a\nb\nc\nd\n");
-  return projectRoot;
-}
-
-/**
- * Decode the neutral result a migrated hook passes to its provider adapter.
- * Use after asserting process success; empty or malformed stdout fails at the JSON boundary.
- *
- * @param hookResult - completed hook process; empty stdout means no result reached the adapter
- * @returns decoded result fields; never null for a conforming migrated hook
- */
-function migratedResult(
-  hookResult: ReturnType<typeof runMigratedHook>,
-): Record<string, unknown> {
-  assert.equal(hookResult.status, 0, hookResult.stderr);
-  return JSON.parse(hookResult.stdout) as Record<string, unknown>;
-}
-
-/** Build the edit payload users produce when changing the shared fixture file. */
-function sampleEditPayload(sessionIdentifier = "fixture-session") {
-  return {
-    session_id: sessionIdentifier,
-    tool_name: "Edit",
-    tool_input: {
-      file_path: "src/sample.ts",
-      changed_ranges: [{ startLine: 3, endLine: 3 }],
-    },
-  };
-}
 
 describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   // Fixture purpose: writes a hook-envelope mock to cover finding and suppression rendering.
@@ -328,204 +276,6 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     );
   });
 
-  // Each analyzer state must tell the user whether Gruff completed, failed, or timed out.
-  it("emits distinct bounded results for clean, finding, invalid, failed, and timed-out analyzers", () => {
-    const resultFixtures = [
-      {
-        label: "clean",
-        envelope: CLEAN_CONTRACT_ENVELOPE,
-        behavior: {},
-        environment: {},
-        outcome: "pass",
-        reasonCode: "completed-clean",
-        findingCode: undefined,
-      },
-      {
-        label: "finding",
-        envelope: FINDING_CONTRACT_ENVELOPE,
-        behavior: {},
-        environment: {},
-        outcome: "advisory",
-        reasonCode: "findings-reported",
-        findingCode: "size.file-length",
-      },
-      {
-        label: "invalid response",
-        envelope: "not-json",
-        behavior: {},
-        environment: {},
-        outcome: "incomplete",
-        reasonCode: "output-invalid",
-        findingCode: "analyzer-response-invalid",
-      },
-      {
-        label: "failed without output",
-        envelope: "",
-        behavior: { exitStatus: 7, standardError: "dependency crashed" },
-        environment: {},
-        outcome: "unavailable",
-        reasonCode: "hook-unavailable",
-        findingCode: "analyzer-failed",
-      },
-      {
-        label: "timeout",
-        envelope: CLEAN_CONTRACT_ENVELOPE,
-        behavior: { delaySeconds: 2 },
-        environment: { GRUFF_CODE_QUALITY_TIMEOUT_SECONDS: "1" },
-        outcome: "incomplete",
-        reasonCode: "execution-timeout",
-        findingCode: "analyzer-timeout",
-      },
-    ] as const;
-
-    // One case per state makes a clean edit visibly different from unavailable analysis.
-    for (const fixture of resultFixtures) {
-      const projectRoot = makeContractProject(
-        fixture.envelope,
-        fixture.behavior,
-      );
-      const result = migratedResult(
-        runMigratedHook(
-          projectRoot,
-          sampleEditPayload(),
-          "/usr/bin:/bin",
-          fixture.environment,
-        ),
-      );
-
-      assert.equal(result.outcome, fixture.outcome, fixture.label);
-      assert.equal(result.reasonCode, fixture.reasonCode, fixture.label);
-      const findings = result.findings as Array<{ code: string }>;
-      // Clean analysis has no detail; every failure or finding names its exact state.
-      if (fixture.findingCode === undefined) {
-        assert.deepEqual(findings, [], fixture.label);
-      } else {
-        assert.equal(findings[0]?.code, fixture.findingCode, fixture.label);
-      }
-    }
-  });
-
-  const prerequisiteFixtures = [
-    {
-      label: "missing config",
-      /** Installs the analyzer while leaving the user's project config absent. */
-      prepareProject(projectRoot: string) {
-        writeContractGruffBinary(projectRoot, CLEAN_CONTRACT_ENVELOPE);
-      },
-      findingCode: "analyzer-config-missing",
-    },
-    {
-      label: "ambiguous config",
-      /** Side effects: writes both accepted config names so the user must choose one. */
-      prepareProject(projectRoot: string) {
-        writeContractGruffBinary(projectRoot, CLEAN_CONTRACT_ENVELOPE);
-        writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
-        writeFileSync(join(projectRoot, ".gruff-ts.yml"), "rules: {}\n");
-      },
-      findingCode: "analyzer-config-ambiguous",
-    },
-    {
-      label: "missing binary",
-      /** Side effects: writes project config without installing the matching analyzer. */
-      prepareProject(projectRoot: string) {
-        writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
-      },
-      findingCode: "analyzer-binary-missing",
-    },
-    {
-      label: "unsupported capability",
-      /** Side effects: writes an older analyzer and config without JSON hook output. */
-      prepareProject(projectRoot: string) {
-        const binaryDirectoryPath = join(projectRoot, "bin");
-        mkdirSync(binaryDirectoryPath, { recursive: true });
-        writeFileSync(
-          join(binaryDirectoryPath, "gruff-ts"),
-          '#!/usr/bin/env bash\n# A user may still have a pre-JSON analyzer on PATH after enabling Gruff.\nif [[ "$1" == "analyse" && "$2" == "--help" ]]; then printf "Usage: gruff analyse FILE\\n"; fi\nexit 0\n',
-        );
-        chmodSync(join(binaryDirectoryPath, "gruff-ts"), 0o755);
-        writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
-      },
-      findingCode: "analyzer-capability-unsupported",
-    },
-  ] as const;
-
-  // Each named test shows the exact prerequisite a user must repair.
-  for (const fixture of prerequisiteFixtures) {
-    // Fixture purpose: omits one setup requirement while keeping the edited file identical.
-    // Side effects: creates a disposable project and writes its selected setup files.
-    it(`reports ${fixture.label} as unavailable`, () => {
-      const projectRoot = makeRoot();
-      mkdirSync(join(projectRoot, "src"), { recursive: true });
-      writeFileSync(join(projectRoot, "src", "sample.ts"), "a\nb\nc\n");
-      fixture.prepareProject(projectRoot);
-      const result = migratedResult(
-        runMigratedHook(projectRoot, sampleEditPayload(), "/usr/bin:/bin"),
-      );
-
-      assert.equal(result.outcome, "unavailable", fixture.label);
-      assert.equal(result.reasonCode, "hook-unavailable", fixture.label);
-      assert.equal(
-        (result.findings as Array<{ code: string }>)[0]?.code,
-        fixture.findingCode,
-        fixture.label,
-      );
-    });
-  }
-
-  const expectedProviderFields = [
-    { provider: "claude", pattern: /"hookSpecificOutput"/u },
-    { provider: "codex", pattern: /"additionalContext"/u },
-    { provider: "copilot", pattern: /^\{"additionalContext"/u },
-  ] as const;
-
-  // Each provider case names the host translation a user would receive after an edit.
-  for (const fixture of expectedProviderFields) {
-    // Fixture purpose: adapts one neutral finding; Invariant: the host response preserves it.
-    it(`adapts one Gruff finding for ${fixture.provider}`, () => {
-      const projectRoot = makeContractProject(FINDING_CONTRACT_ENVELOPE);
-      const result = migratedResult(
-        runMigratedHook(
-          projectRoot,
-          sampleEditPayload(),
-          "/usr/bin:/bin",
-          {},
-          fixture.provider,
-        ),
-      );
-      const providerResult = adaptHookResultForProvider(
-        result,
-        fixture.provider,
-        "post-tool",
-      );
-
-      assert.equal(providerResult.state, "adapted", fixture.provider);
-      assert.match(providerResult.stdout ?? "", fixture.pattern);
-    });
-  }
-
-  // Fixture purpose: proves runnable Antigravity input never becomes a model-feedback claim.
-  it("keeps Antigravity Gruff feedback unsupported", () => {
-    const antigravityProjectRoot = makeContractProject(
-      FINDING_CONTRACT_ENVELOPE,
-    );
-    const antigravityResult = migratedResult(
-      runMigratedHook(
-        antigravityProjectRoot,
-        sampleEditPayload(),
-        "/usr/bin:/bin",
-        {},
-        "antigravity",
-      ),
-    );
-    assert.deepEqual(
-      adaptHookResultForProvider(antigravityResult, "antigravity", "post-tool"),
-      {
-        state: "unsupported",
-        reason: "Antigravity PostToolUse cannot deliver hook feedback",
-      },
-    );
-  });
-
   // Users can reach patch handling through a native tool or a shell-wrapped apply_patch call.
   it("selects only files named by direct and command-content apply_patch payloads", () => {
     const patchText = [
@@ -546,10 +296,12 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
     // Both user paths must analyze the patch target without falling back to unrelated dirty files.
     for (const payload of payloads) {
-      const projectRoot = makeContractProject(CLEAN_CONTRACT_ENVELOPE);
+      const projectRoot = makeEditedGruffContractProject(
+        CLEAN_GRUFF_CONTRACT_ENVELOPE,
+      );
       mkdirSync(join(projectRoot, "other"), { recursive: true });
       writeFileSync(join(projectRoot, "other", "dirty.ts"), "dirty\n");
-      const result = migratedResult(
+      const result = readMigratedGruffResult(
         runMigratedHook(projectRoot, payload, "/usr/bin:/bin"),
       );
 
@@ -565,12 +317,12 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   it("runs a package-local analyzer from its nearest monorepo config root", () => {
     const projectRoot = makeRoot();
     const packageRoot = join(projectRoot, "app");
-    writeContractGruffBinary(packageRoot, CLEAN_CONTRACT_ENVELOPE);
+    writeContractGruffBinary(packageRoot, CLEAN_GRUFF_CONTRACT_ENVELOPE);
     writeFileSync(join(packageRoot, ".gruff-ts.yaml"), "rules: {}\n");
     mkdirSync(join(packageRoot, "src"), { recursive: true });
     writeFileSync(join(packageRoot, "src", "sample.ts"), "a\nb\nc\n");
 
-    const result = migratedResult(
+    const result = readMigratedGruffResult(
       runMigratedHook(
         projectRoot,
         {
@@ -593,7 +345,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
   // Fixture purpose: proves helper bypass; Side effects: writes Git history, attributes, helpers, and an edit.
   it("derives Git ranges without invoking external diff or textconv helpers", () => {
-    const projectRoot = makeContractProject(CLEAN_CONTRACT_ENVELOPE);
+    const projectRoot = makeEditedGruffContractProject(
+      CLEAN_GRUFF_CONTRACT_ENVELOPE,
+    );
     initGit(projectRoot);
     const helperMarkerPath = join(projectRoot, "external-helper-ran");
     const helperScriptPath = join(projectRoot, "external-helper.sh");
@@ -623,7 +377,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     ]);
     writeFileSync(join(projectRoot, "src", "sample.ts"), "a\nb\nchanged\nd\n");
 
-    const result = migratedResult(
+    const result = readMigratedGruffResult(
       runMigratedHook(
         projectRoot,
         {
@@ -640,7 +394,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
   // A failed Git query means edit attribution is incomplete, never a clean analyzer result.
   it("reports Git diff failure and deletion-only scope explicitly", () => {
-    const failedGitProjectRoot = makeContractProject(CLEAN_CONTRACT_ENVELOPE);
+    const failedGitProjectRoot = makeEditedGruffContractProject(
+      CLEAN_GRUFF_CONTRACT_ENVELOPE,
+    );
     initGit(failedGitProjectRoot);
     git(failedGitProjectRoot, ["add", ".gruff-ts.yaml", "src/sample.ts"]);
     const failingGitBin = join(failedGitProjectRoot, "failing-git-bin");
@@ -654,7 +410,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       join(failedGitProjectRoot, "src", "sample.ts"),
       "a\nb\nchanged\nd\n",
     );
-    const failedGitResult = migratedResult(
+    const failedGitResult = readMigratedGruffResult(
       runMigratedHook(
         failedGitProjectRoot,
         { tool_name: "Edit", tool_input: { file_path: "src/sample.ts" } },
@@ -668,7 +424,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       "git-scope-failed",
     );
 
-    const deletionProjectRoot = makeContractProject(CLEAN_CONTRACT_ENVELOPE);
+    const deletionProjectRoot = makeEditedGruffContractProject(
+      CLEAN_GRUFF_CONTRACT_ENVELOPE,
+    );
     initGit(deletionProjectRoot);
     git(deletionProjectRoot, ["add", ".gruff-ts.yaml", "src/sample.ts"]);
     git(deletionProjectRoot, [
@@ -682,7 +440,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       "--quiet",
     ]);
     rmSync(join(deletionProjectRoot, "src", "sample.ts"));
-    const deletionResult = migratedResult(
+    const deletionResult = readMigratedGruffResult(
       runMigratedHook(
         deletionProjectRoot,
         {
@@ -704,7 +462,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
   // Rename-only and binary edits have no trustworthy positive source hunk to attribute.
   it("classifies rename-only and binary Git changes as not applicable", () => {
-    const renameProjectRoot = makeContractProject(CLEAN_CONTRACT_ENVELOPE);
+    const renameProjectRoot = makeEditedGruffContractProject(
+      CLEAN_GRUFF_CONTRACT_ENVELOPE,
+    );
     initGit(renameProjectRoot);
     git(renameProjectRoot, ["add", ".gruff-ts.yaml", "src/sample.ts"]);
     git(renameProjectRoot, [
@@ -718,7 +478,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       "--quiet",
     ]);
     git(renameProjectRoot, ["mv", "src/sample.ts", "src/renamed.ts"]);
-    const renameResult = migratedResult(
+    const renameResult = readMigratedGruffResult(
       runMigratedHook(
         renameProjectRoot,
         { tool_name: "Edit", tool_input: { file_path: "src/renamed.ts" } },
@@ -731,7 +491,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       "analysis-not-applicable",
     );
 
-    const binaryProjectRoot = makeContractProject(CLEAN_CONTRACT_ENVELOPE);
+    const binaryProjectRoot = makeEditedGruffContractProject(
+      CLEAN_GRUFF_CONTRACT_ENVELOPE,
+    );
     initGit(binaryProjectRoot);
     git(binaryProjectRoot, ["add", ".gruff-ts.yaml", "src/sample.ts"]);
     git(binaryProjectRoot, [
@@ -748,7 +510,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       join(binaryProjectRoot, "src", "sample.ts"),
       Buffer.from([0, 1, 2, 3]),
     );
-    const binaryResult = migratedResult(
+    const binaryResult = readMigratedGruffResult(
       runMigratedHook(
         binaryProjectRoot,
         { tool_name: "Edit", tool_input: { file_path: "src/sample.ts" } },
@@ -764,30 +526,32 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
   // Health is session-scoped and written only after one schema-valid analyzer exchange.
   it("deduplicates verified health while re-announcing malformed and reused session state", () => {
-    const failedProjectRoot = makeContractProject("", {
+    const failedProjectRoot = makeEditedGruffContractProject("", {
       exitStatus: 7,
       standardError: "dependency crashed",
     });
     const failedResult = runMigratedHook(
       failedProjectRoot,
-      sampleEditPayload("failed-session"),
+      sampleGruffEditPayload("failed-session"),
       "/usr/bin:/bin",
     );
-    assert.equal(migratedResult(failedResult).outcome, "unavailable");
+    assert.equal(readMigratedGruffResult(failedResult).outcome, "unavailable");
     assert.doesNotMatch(failedResult.stderr, /verified analyzer exchange/u);
     assert.equal(
       existsSync(join(failedProjectRoot, ".goat-flow", "logs", "events")),
       false,
     );
 
-    const projectRoot = makeContractProject(CLEAN_CONTRACT_ENVELOPE);
+    const projectRoot = makeEditedGruffContractProject(
+      CLEAN_GRUFF_CONTRACT_ENVELOPE,
+    );
     const firstResult = runMigratedHook(
       projectRoot,
-      sampleEditPayload("same-session"),
+      sampleGruffEditPayload("same-session"),
       "/usr/bin:/bin",
       { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-09" },
     );
-    migratedResult(firstResult);
+    readMigratedGruffResult(firstResult);
     assert.match(firstResult.stderr, /verified analyzer exchange/u);
     const markerDirectoryPath = join(
       projectRoot,
@@ -802,11 +566,11 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
     const repeatedResult = runMigratedHook(
       projectRoot,
-      sampleEditPayload("same-session"),
+      sampleGruffEditPayload("same-session"),
       "/usr/bin:/bin",
       { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-09" },
     );
-    migratedResult(repeatedResult);
+    readMigratedGruffResult(repeatedResult);
     assert.doesNotMatch(repeatedResult.stderr, /verified analyzer exchange/u);
 
     writeFileSync(
@@ -815,20 +579,20 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     );
     const malformedResult = runMigratedHook(
       projectRoot,
-      sampleEditPayload("same-session"),
+      sampleGruffEditPayload("same-session"),
       "/usr/bin:/bin",
       { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-09" },
     );
-    migratedResult(malformedResult);
+    readMigratedGruffResult(malformedResult);
     assert.match(malformedResult.stderr, /verified analyzer exchange/u);
 
     const reusedSessionResult = runMigratedHook(
       projectRoot,
-      sampleEditPayload("same-session"),
+      sampleGruffEditPayload("same-session"),
       "/usr/bin:/bin",
       { GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-10" },
     );
-    migratedResult(reusedSessionResult);
+    readMigratedGruffResult(reusedSessionResult);
     assert.match(reusedSessionResult.stderr, /verified analyzer exchange/u);
   });
 });

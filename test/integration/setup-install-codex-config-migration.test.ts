@@ -87,6 +87,23 @@ describe("codex config migration", () => {
         /git repository root unavailable/u,
       );
       assert.match(installedHookConfig, /managed root unavailable/u);
+      assert.match(installedHookConfig, /"Stop"/u);
+      assert.match(installedHookConfig, /"timeout": 90/u);
+      assert.match(
+        installedHookConfig,
+        /codex:post-turn:goat-flow\.hook-result\.v1:turn-stop:1:75000/u,
+      );
+      assert.equal(
+        existsSync(
+          join(
+            targetProjectPath,
+            ".goat-flow",
+            "hooks",
+            "hook-launch-runtime.mjs",
+          ),
+        ),
+        true,
+      );
       assert.notEqual(installedBashRunner, V1_15_0_BASH_RUNNER);
       assert.equal(
         installedBashRunner,
@@ -496,6 +513,100 @@ describe("codex config migration", () => {
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
     assert.equal(config.match(/^hooks = true$/gm)?.length, 1);
     assert.doesNotMatch(config, /^\s*codex_hooks\s=/m);
+  });
+});
+
+describe("codex hook and permission upgrade migrations", () => {
+  // Fixture purpose: writes an old Codex Gruff registration so upgrades replace Goat Flow fields and preserve user entries.
+  it("migrates legacy Codex Gruff registration to the approved provider contract", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(root, ".codex", "hooks", "gruff-code-quality.sh"),
+      "#!/usr/bin/env bash\nexit 0\n",
+    );
+    writeFileSync(
+      join(root, ".codex", "hooks.json"),
+      JSON.stringify(
+        {
+          hooks: {
+            CustomEvent: [{ command: "node custom-user-hook.mjs" }],
+            PostToolUse: [
+              {
+                matcher: "Edit",
+                hooks: [
+                  {
+                    type: "command",
+                    command: ".codex/hooks/gruff-code-quality.sh",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        'version: "1.9.0"',
+        "hooks:",
+        "  deny-dangerous:",
+        "    enabled: true",
+        "  gruff-code-quality:",
+        "    enabled: true",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    assert.equal(
+      existsSync(join(root, ".codex", "hooks", "gruff-code-quality.sh")),
+      false,
+    );
+    const hooksJson = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
+    assert.doesNotMatch(hooksJson, /\.codex\/hooks\/gruff-code-quality\.sh/);
+    assert.match(hooksJson, /\.goat-flow\/hooks\/gruff-code-quality\.sh/);
+    assert.match(hooksJson, /"PostToolUse"/u);
+    assert.match(hooksJson, /"matcher": "\^apply_patch\$"/u);
+    assert.match(hooksJson, /"timeout": 90/u);
+    assert.match(
+      hooksJson,
+      /codex:gruff:goat-flow\.hook-result\.v1:post-tool:1:75000/u,
+    );
+    assert.match(hooksJson, /custom-user-hook\.mjs/u);
+    assert.match(hooksJson, /\.goat-flow\/hooks\/deny-dangerous\.sh/);
+    assert.doesNotMatch(hooksJson, /"matcher": "MultiEdit"/);
+  });
+
+  // Fixture purpose: writes single-quoted Codex denies to cover quote-normalizing migration.
+  it("preserves single-quoted Codex filesystem deny entries during permission migration", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".codex"), { recursive: true });
+    writeFileSync(
+      join(root, ".codex", "config.toml"),
+      [
+        "default_permissions = 'goat-flow'",
+        "",
+        "[permissions.goat-flow.filesystem]",
+        "'private/**' = 'deny'",
+        "'**/.env*' = 'deny'",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+
+    const config = readFileSync(join(root, ".codex", "config.toml"), "utf-8");
+    assert.match(config, /"private\/\*\*" = "deny"/);
+    assert.match(config, /"\*\*\/\.env" = "deny"/);
+    assert.doesNotMatch(config, /"\*\*\/\.env\*" = "deny"/);
   });
 });
 

@@ -16,11 +16,7 @@ import {
   readAgentHookState,
   writeAgentHookState,
 } from "../../src/cli/server/agent-hook-writer.js";
-import {
-  getHookSpec,
-  type HookDeliveryContract,
-  type HookProviderRegistryEvidence,
-} from "../../src/cli/server/hooks-registry.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import {
   HOOK_IDENTIFIER,
@@ -148,37 +144,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   }
 
-  /** Invariant: fixture evidence stays below live support in user-facing state. */
-  it("keeps deterministic delivery evidence below live support", () => {
-    const denySpec = getHookSpec(HOOK_IDENTIFIER);
-    const gruffSpec = getHookSpec("gruff-code-quality");
-    assert.ok(denySpec);
-    assert.ok(gruffSpec);
-    const denyDeliveryContract: HookDeliveryContract | undefined =
-      denySpec.deliveryContract;
-    const claudeProviderEvidence: HookProviderRegistryEvidence | undefined =
-      denySpec.providerEvidence?.claude;
-    const antigravityProviderEvidence:
-      HookProviderRegistryEvidence | undefined =
-      gruffSpec.providerEvidence?.antigravity;
-    assert.deepEqual(denyDeliveryContract, {
-      resultProtocol: "legacy",
-      adapterVersion: "1",
-      launcherDeadlineMs: 25_000,
-    });
-    // Missing Claude evidence fails instead of presenting a fixture as live support.
-    assert.equal(
-      claudeProviderEvidence?.effectiveSupportGate,
-      "scenario-unverified",
-    );
-    // Missing Antigravity evidence likewise fails the undelivered-result contract.
-    assert.equal(
-      antigravityProviderEvidence?.effectiveSupportGate,
-      "result-undelivered",
-    );
-  });
-
-  it("keeps generated Codex hooks PreToolUse-only", () => {
+  it("generates only the approved Codex lifecycle hooks", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".codex"), { recursive: true });
       writeFileSync(join(root, ".codex", "config.toml"), "");
@@ -189,16 +155,28 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
 
       assert.equal(denyState.agents.codex.supported, true);
       assert.equal(denyState.agents.codex.installed, true);
-      assert.equal(gruffState.agents.codex.supported, false);
-      assert.match(gruffState.agents.codex.reason ?? "", /PreToolUse-only/iu);
-      assert.equal(safetyState.agents.codex.supported, false);
-      assert.match(safetyState.agents.codex.reason ?? "", /unverified/iu);
-      assertCodexPreToolUseOnly(root);
+      assert.equal(gruffState.agents.codex.supported, true);
+      assert.equal(gruffState.agents.codex.installed, true);
+      assert.equal(safetyState.agents.codex.supported, true);
+      assert.equal(safetyState.agents.codex.installed, true);
+      const codexHookConfig = readFileSync(
+        join(root, ".codex", "hooks.json"),
+        "utf-8",
+      );
+      assert.match(codexHookConfig, /"PreToolUse"/u);
+      assert.match(codexHookConfig, /"PostToolUse"/u);
+      assert.match(codexHookConfig, /"Stop"/u);
+      assert.match(codexHookConfig, /"matcher": "\^apply_patch\$"/u);
+      assert.match(codexHookConfig, /"timeout": 90/u);
+      assert.match(
+        codexHookConfig,
+        /codex:post-turn:goat-flow\.hook-result\.v1:turn-stop:1:75000/u,
+      );
     });
   });
 
-  // Covers a project with stale managed Codex entries: writes them, because an upgrade must prune them.
-  it("prunes stale managed Codex post-tool and stop hook entries", () => {
+  // Covers a project with stale managed Codex entries: writes them because upgrade must replace only Goat Flow-owned fields.
+  it("migrates stale managed Codex post-tool and Stop entries", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".codex"), { recursive: true });
       mkdirSync(join(root, ".goat-flow"), { recursive: true });
@@ -274,8 +252,10 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         join(root, ".codex", "hooks.json"),
         "utf-8",
       );
-      assert.doesNotMatch(hooksJson, /gruff-code-quality\.sh/u);
-      assert.doesNotMatch(hooksJson, /post-turn-safety\.sh/u);
+      assert.match(hooksJson, /gruff-code-quality\.sh/u);
+      assert.match(hooksJson, /post-turn-safety\.sh/u);
+      assert.match(hooksJson, /"matcher": "\^apply_patch\$"/u);
+      assert.match(hooksJson, /"timeout": 90/u);
       assert.match(hooksJson, /deny-dangerous\.sh/u);
       assert.match(hooksJson, /custom-user-post-tool\.sh/u);
       assert.match(hooksJson, /custom-user-stop\.sh/u);
@@ -350,8 +330,8 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       );
       assert.equal(safetyState.enabled, true);
       assert.equal(safetyState.agents.claude.installed, true);
-      assert.equal(safetyState.agents.codex.supported, false);
-      assert.match(safetyState.agents.codex.reason ?? "", /unverified/iu);
+      assert.equal(safetyState.agents.codex.supported, true);
+      assert.equal(safetyState.agents.codex.installed, true);
       assert.equal(safetyState.agents.antigravity.supported, false);
       assert.match(safetyState.agents.antigravity.reason ?? "", /unverified/iu);
       assert.equal(safetyState.agents.copilot.supported, false);
@@ -382,7 +362,10 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         readStopHookCommands(claudeSettings).join("\n"),
         /post-turn-safety\.sh/u,
       );
-      assertCodexPreToolUseOnly(root);
+      assert.match(
+        readStopHookCommands(codexHooks).join("\n"),
+        /post-turn-safety\.sh/u,
+      );
       assert.equal(readAntigravitySafetyCommand(antigravityHooks), "");
       assert.doesNotMatch(claudeSettings, /post-turn-validate\.sh/u);
       assert.doesNotMatch(codexHooks, /post-turn-validate\.sh/u);
@@ -539,7 +522,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       assert.doesNotMatch(config, /plan-checkbox-guard|plan-guard/u);
       assert.doesNotMatch(gitignore, /plan-guard-state/u);
       assertMissing(root, [".goat-flow/hooks/plan-checkbox-guard.sh"]);
-      assert.doesNotMatch(codexHooks, /post-turn-safety\.sh/u);
+      assert.match(codexHooks, /post-turn-safety\.sh/u);
       assert.equal(readAntigravitySafetyCommand(antigravityHooks), "");
     });
   });

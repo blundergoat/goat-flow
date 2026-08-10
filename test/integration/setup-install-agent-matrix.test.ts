@@ -144,6 +144,17 @@ function assertInstalledAgentSurface(
     `${agentProfile.id} hook config must use the managed Bash resolver`,
   );
 
+  // Codex users receive only the provider lifecycles proven by the approved live matrix.
+  if (agentProfile.id === "codex") {
+    assert.match(installedHookConfig, /"PreToolUse"/u);
+    assert.match(installedHookConfig, /"Stop"/u);
+    assert.match(installedHookConfig, /"timeout": 90/u);
+    assert.match(
+      installedHookConfig,
+      /codex:post-turn:goat-flow\.hook-result\.v1:turn-stop:1:75000/u,
+    );
+  }
+
   const denyDangerousHook = getHookSpec("deny-dangerous");
   assert.ok(
     denyDangerousHook,
@@ -382,6 +393,16 @@ function verifyStandaloneInstallerHookSemantics(
       shouldInstallHook,
       `${agentProfile.id} ${hookSpec.id} diverged between installer and writer`,
     );
+  }
+  // An enabled Codex Gruff hook uses the canonical tool observed by the active provider.
+  if (agentProfile.id === "codex") {
+    const codexHookConfig = readFileSync(
+      join(targetProjectPath, agentProfile.hookConfigFile ?? ""),
+      "utf-8",
+    );
+    assert.match(codexHookConfig, /"PostToolUse"/u);
+    assert.match(codexHookConfig, /"matcher": "\^apply_patch\$"/u);
+    assert.match(codexHookConfig, /"timeout": 90/u);
   }
   return targetProjectPath;
 }

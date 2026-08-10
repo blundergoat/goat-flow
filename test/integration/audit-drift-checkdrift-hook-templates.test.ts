@@ -292,16 +292,16 @@ describe("checkDrift: hook templates", () => {
         `${HOOK_STUB}\n# stale unsupported copy\n`,
       );
 
-      const codexReport = checkDrift({
+      const antigravityReport = checkDrift({
         fs: createFS(root),
         projectPath: root,
         templateRoot: root,
-        agentFilter: "codex",
+        agentFilter: "antigravity",
       });
       assert.equal(
-        codexReport.status,
+        antigravityReport.status,
         "pass",
-        `Codex drift included an unsupported hook: ${JSON.stringify(codexReport.findings)}`,
+        `Antigravity drift included an unsupported hook: ${JSON.stringify(antigravityReport.findings)}`,
       );
 
       const aggregateReport = checkDrift({
