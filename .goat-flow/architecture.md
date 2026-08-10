@@ -151,7 +151,7 @@ Timing receipts are milestone-local plan state. The embedded receipt, not the lo
 | `project.save` | existing | `dashboard-session-trace` | server | Project/favourite/add/remove counts | No project-list body | Project-list continuity |
 | `project.remove` | existing | `dashboard-session-trace` | server | Removed-project count | No removed path list | Project-list continuity |
 | `project.switch` | existing | `dashboard-session-trace` | server | Readiness state and project identity metadata | No config or file body | Selected-target diagnosis |
-| `hook.verify` | new in 1.14.0 | `hooks-runtime-evidence` | cli | Scenario id, agent, expected/observed state, verdict, evidence level, duration, and reason code | No command operand, stdout, stderr, or external-agent delivery claim | Checkout-local deny-hook proof and diagnosis |
+| `hook.verify` | new in 1.14.0 | `hooks-runtime-evidence` | cli | Hook id, scenario group/id, agent, framework version, expected/observed state, verdict, evidence level, duration, and reason code | No command operand, stdout, stderr, or external-agent delivery claim | Checkout-local effective-hook status and diagnosis |
 | `plan.time` | new in 1.15.0 | `plans-time` | cli | Action, category, receipt state, segment count, and finalized raw-second total | No milestone body, work descriptions, prompts, commands, or source content | Timing-transition diagnosis; never Actual validation |
 
 M01 timing adds `plan.time`; route/checkpoint/promotion event families and all other runtime event families remain **deferred**. Every future producer must add its exact event kind, producer, actor, bounded payload, redaction rule, consumer, and focused validation before extending `EvidenceEventKind`.

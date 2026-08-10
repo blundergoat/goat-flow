@@ -22,6 +22,8 @@
 - **Post-turn hooks have an installed self-test** - `--self-test` checks clean, finding, incomplete, and Bash 3 outcomes; unknown options fail.
 - **Managed hooks run safely outside Git** - Launchers find a verified Goat Flow root, reject redirected files, and stop timed-out process trees.
 - **Hook setup converges on one launcher** - Installs, sync, audits, and 1.15.0 upgrades repair stale commands without `git init`.
+- **Fresh Codex install is pinned** - Run `npx @blundergoat/goat-flow@1.15.1 install . --agent codex`; Git is optional.
+- **1.15.0 hook repair is explicit** - Run `npx @blundergoat/goat-flow@1.15.1 hooks sync .` elsewhere, then restart Codex.
 - **goat-debug keeps onboarding investigative** - Investigate mode no longer inherits bug hypotheses, reproduction, or minimisation.
 - **Clean critiques stay truthful** - A 100/100 meta-audit keeps its results section and states that no checks failed.
 - **Plans keep issue templates read-only** - Standard+ creates `ISSUE.md` beside milestones instead of overwriting shared guidance.

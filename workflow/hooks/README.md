@@ -38,7 +38,9 @@ The capture becomes stale sooner when the provider version or mode, project-laye
    - Copilot: `agent-config/copilot-hooks.json` -> `.github/hooks/hooks.json`
 3. `gruff-code-quality.sh` is opt-in through `.goat-flow/config.yaml`, the dashboard Hooks page, or `goat-flow hooks enable gruff-code-quality`.
 
-Generated hook commands resolve a verified managed project root before starting `run-with-bash.mjs`, so nested working directories and linked worktrees use the scripts beside the files being edited. Claude, Antigravity, and Copilot can use `CLAUDE_PROJECT_DIR` as a final configured-root fallback; Codex has no supported host-root variable and fails closed when no managed root is available. Missing policy or post-turn hooks fail closed. Missing Gruff remains a visible non-blocking skip.
+For a fresh Codex project, run `npx @blundergoat/goat-flow@1.15.1 install . --agent codex`. To repair a 1.15.0 project, run `npx @blundergoat/goat-flow@1.15.1 hooks sync .` from a normal terminal or unaffected shell, then start a fresh Codex session. Before publication, the checkout-local equivalent is `node --import tsx src/cli/cli.ts hooks sync <project-path>`.
+
+Root-resolving commands prefer Git so linked worktrees and submodules select the correct checkout, then walk upward for a complete project-local Goat Flow installation. A candidate needs relevant registration plus a contained regular, non-symlinked, single-link launcher and requested script. Claude and Antigravity can also use `CLAUDE_PROJECT_DIR`; Codex has no host-root fallback, but a complete managed ancestor works without Git. A partial candidate or no usable root fails closed. Missing Gruff remains a visible non-blocking skip.
 
 ## Direct and Registered Results
 
@@ -53,7 +55,8 @@ The `goat-flow.hook-result.v1` path captures at most 10,000 combined stdout/stde
 - Known read-only download filters, local data passed to an explicit script file, literal `vendor` or `target` cleanup, and approved issue or pull-request comments remain allowed. Run an unclear command manually after inspection.
 - Audit and preflight run the exact configured command strings from `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`; this catches stale paths, missing executable bits, and command-shape failures before an agent session sees them.
 - Use `goat-flow hooks verify . --agent <id> --scenario <deny-hook|post-turn-hook|gruff-hook>` to replay fixed offline inputs through one agent's exact configured command. A passing report proves only that local boundary; it does not prove the external provider fired the hook or showed the result to the model.
-- Claude, Codex, and Antigravity support nested cwd inside a git checkout through the root-resolving wrapper. Outside a git checkout, `deny-dangerous.sh` fails closed unless an agent-specific project root fallback is documented and configured; today that fallback is `$CLAUDE_PROJECT_DIR` for Claude/Antigravity, not Codex. `gruff-code-quality.sh` fails soft.
+- Claude, Codex, and Antigravity support nested cwd inside a complete managed project with or without Git. Git remains first for worktree correctness; Claude and Antigravity may fall back to `$CLAUDE_PROJECT_DIR`, while Codex must find a complete managed ancestor. `gruff-code-quality.sh` fails soft.
+- Policy evaluation works from a complete non-Git installation. Post-turn scanning still reports incomplete and blocks when it cannot establish a trustworthy Git comparison baseline.
 - Copilot uses direct project-local paths and therefore requires a repo-root working directory for the configured command. Nested-cwd execution is outside the current Copilot contract unless that runtime adds a portable project-root variable or root-resolving command support.
 - Directly invoked `.sh` hooks must keep executable bits. Missing `bash` is a hard runtime prerequisite for all shipped guardrails.
 - Every namespaced result command installs `hook-provider-adapters.mjs` and `hook-launch-runtime.mjs`. Missing or malformed pieces produce visible unavailable feedback.

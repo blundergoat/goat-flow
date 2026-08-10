@@ -53,6 +53,7 @@ function isSlowTest(path) {
     path === "test/integration/cli-manifest-drift.test.ts" ||
     path === "test/integration/main-guard.test.ts" ||
     path === "test/integration/audit-quality.test.ts" ||
+    path === "test/integration/packaged-hook-install.test.ts" ||
     /^test\/integration\/dashboard[^/]*\.test\.ts$/u.test(path) ||
     path === "test/integration/quality-constraint-isolation.test.ts" ||
     path === "test/unit/audit-harness/check-evidence-before-claims.test.ts" ||

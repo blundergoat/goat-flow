@@ -8,10 +8,12 @@ import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -23,6 +25,19 @@ const CODEX_GRUFF_LAUNCHER_DEADLINE_MS = 75_000;
 const CODEX_GRUFF_HOST_TIMEOUT_SECONDS = 90;
 const CODEX_GRUFF_LAUNCH_CONTRACT = `codex:gruff:goat-flow.hook-result.v1:post-tool:1:${CODEX_GRUFF_LAUNCHER_DEADLINE_MS}`;
 const disposablePackagePaths: string[] = [];
+
+interface PackedCliInstallation {
+  packedPackageRoot: string;
+  packedCliExecutablePath: string;
+}
+
+interface CodexHookConfiguration {
+  hooks?: {
+    PreToolUse?: Array<{
+      hooks?: Array<{ command?: string }>;
+    }>;
+  };
+}
 
 after(() => {
   // Each tarball and extracted consumer is local proof state removed after its checks finish.
@@ -100,6 +115,155 @@ function extractPackedCandidate(): string {
     extractionResult.stderr || extractionResult.stdout,
   );
   return join(extractedDirectoryPath, "package");
+}
+
+/**
+ * Expose the archived package's declared CLI at a disposable npm-style bin path.
+ * Use before release to run package code while borrowing only installed dependencies offline.
+ *
+ * @returns Packed package and executable paths; neither is empty after archive validation.
+ */
+function installPackedCliExecutable(): PackedCliInstallation {
+  const packedPackageRoot = extractPackedCandidate();
+  const packedPackageManifest = JSON.parse(
+    readFileSync(join(packedPackageRoot, "package.json"), "utf8"),
+  ) as { bin?: Record<string, string> };
+  // Missing bin metadata means npm users have no goat-flow command to run.
+  const packedCliRelativePath = packedPackageManifest.bin?.["goat-flow"] ?? "";
+  assert.notEqual(packedCliRelativePath, "");
+  const packedCliTargetPath = join(packedPackageRoot, packedCliRelativePath);
+  assert.equal(existsSync(packedCliTargetPath), true);
+
+  const packedCliWorkspacePath = makeDisposablePackageWorkspace("packed-cli");
+  const packedCliBinDirectoryPath = join(
+    packedCliWorkspacePath,
+    "node_modules",
+    ".bin",
+  );
+  mkdirSync(packedCliBinDirectoryPath, { recursive: true });
+  const packedCliExecutablePath = join(packedCliBinDirectoryPath, "goat-flow");
+  symlinkSync(packedCliTargetPath, packedCliExecutablePath, "file");
+  symlinkSync(
+    join(PROJECT_ROOT, "node_modules"),
+    join(packedPackageRoot, "node_modules"),
+    "junction",
+  );
+  return { packedPackageRoot, packedCliExecutablePath };
+}
+
+/**
+ * Run the disposable npm-style command exactly where a package user would run it.
+ * Use for version, fresh-install, and hook-sync checks against archived CLI bytes.
+ *
+ * @param packedCliExecutablePath - non-empty `.bin/goat-flow` path; empty cannot start the package
+ * @param cliArguments - user-entered CLI arguments; empty means the package should show its default flow
+ * @param workingDirectoryPath - existing user cwd; empty would make root resolution meaningless
+ * @returns Captured process result; empty output is valid only when the selected command is silent.
+ */
+function runPackedCli(
+  packedCliExecutablePath: string,
+  cliArguments: string[],
+  workingDirectoryPath: string,
+) {
+  return spawnSync(
+    process.execPath,
+    [packedCliExecutablePath, ...cliArguments],
+    {
+      cwd: workingDirectoryPath,
+      encoding: "utf8",
+      timeout: 120_000,
+    },
+  );
+}
+
+/**
+ * Read an exact prior-release file for a real upgrade fixture.
+ * Use when migration behavior must not be approximated from current source.
+ *
+ * @param relativePath - non-empty tagged file path; empty cannot identify prior release bytes
+ * @returns Tagged bytes, or `null` when a shallow checkout cannot provide the release fixture.
+ */
+function readTaggedReleaseFile(relativePath: string): string | null {
+  const taggedFileResult = spawnSync(
+    "git",
+    ["show", `v1.15.0:${relativePath}`],
+    {
+      cwd: PROJECT_ROOT,
+      encoding: "utf8",
+    },
+  );
+  // A shallow checkout cannot claim the exact 1.15.0 migration scenario ran.
+  return taggedFileResult.status === 0 ? taggedFileResult.stdout : null;
+}
+
+const V1_15_0_CODEX_HOOKS = readTaggedReleaseFile(
+  "workflow/hooks/agent-config/codex-hooks.json",
+);
+const V1_15_0_BASH_RUNNER = readTaggedReleaseFile(
+  "workflow/hooks/run-with-bash.mjs",
+);
+// Missing tagged bytes skips only the unavailable release fixture, never a synthetic substitute.
+const V1_15_0_PACKAGE_MIGRATION_UNAVAILABLE =
+  V1_15_0_CODEX_HOOKS === null || V1_15_0_BASH_RUNNER === null;
+
+/**
+ * Read the exact deny command a Codex user receives after install or sync.
+ * Use before replaying safe and dangerous shell requests through configured policy.
+ *
+ * @param targetProjectPath - non-empty installed project root; empty has no Codex configuration
+ * @returns Configured command; never empty after a successful managed installation.
+ */
+function readInstalledCodexDenyCommand(targetProjectPath: string): string {
+  const installedHookConfiguration = JSON.parse(
+    readFileSync(join(targetProjectPath, ".codex", "hooks.json"), "utf8"),
+  ) as CodexHookConfiguration;
+  // Empty registration means the package left the user's shell without the managed deny guard.
+  const installedDenyCommand =
+    installedHookConfiguration.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command ??
+    "";
+  assert.notEqual(installedDenyCommand, "");
+  return installedDenyCommand;
+}
+
+/**
+ * Replay the user's installed policy command and prove safe work passes while danger blocks.
+ * Use after fresh install or migration so direct-script success cannot hide stale registration.
+ *
+ * @param targetProjectPath - non-empty installed project root; empty cannot resolve managed hooks
+ * @returns Nothing; failed policy outcomes throw assertions with captured user-facing output.
+ */
+function assertInstalledCodexPolicy(targetProjectPath: string): void {
+  const installedDenyCommand = readInstalledCodexDenyCommand(targetProjectPath);
+  const safePolicyResult = spawnSync("bash", ["-lc", installedDenyCommand], {
+    cwd: targetProjectPath,
+    encoding: "utf8",
+    input: JSON.stringify({
+      tool_name: "Bash",
+      tool_input: { command: "echo safe" },
+    }),
+    timeout: 30_000,
+  });
+  assert.equal(
+    safePolicyResult.status,
+    0,
+    safePolicyResult.stderr || safePolicyResult.stdout,
+  );
+
+  const dangerousPolicyResult = spawnSync(
+    "bash",
+    ["-lc", installedDenyCommand],
+    {
+      cwd: targetProjectPath,
+      encoding: "utf8",
+      input: JSON.stringify({
+        tool_name: "Bash",
+        tool_input: { command: "rm -rf /" },
+      }),
+      timeout: 30_000,
+    },
+  );
+  assert.equal(dangerousPolicyResult.status, 2);
+  assert.match(dangerousPolicyResult.stderr, /BLOCKED:/u);
 }
 
 /**
@@ -264,4 +428,93 @@ describe("packaged hook installation canary", () => {
       "packed registration must leave Codex time to render feedback",
     );
   });
+
+  // A user installs into a bare folder, then repairs a tagged 1.15.0 project from another shell.
+  it(
+    "runs fresh install and 1.15.0 sync through the archived CLI bin",
+    { skip: V1_15_0_PACKAGE_MIGRATION_UNAVAILABLE },
+    () => {
+      // The skip above handles shallow clones; these assertions narrow the exact tagged bytes.
+      assert.ok(V1_15_0_CODEX_HOOKS);
+      assert.ok(V1_15_0_BASH_RUNNER);
+      const { packedPackageRoot, packedCliExecutablePath } =
+        installPackedCliExecutable();
+      const packedVersionResult = runPackedCli(
+        packedCliExecutablePath,
+        ["--version"],
+        packedPackageRoot,
+      );
+      assert.equal(
+        packedVersionResult.status,
+        0,
+        packedVersionResult.stderr || packedVersionResult.stdout,
+      );
+      assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.15.1");
+
+      const freshProjectPath = makeDisposablePackageWorkspace("fresh-non-git");
+      const freshInstallResult = runPackedCli(
+        packedCliExecutablePath,
+        ["install", freshProjectPath, "--agent", "codex"],
+        freshProjectPath,
+      );
+      assert.equal(
+        freshInstallResult.status,
+        0,
+        freshInstallResult.stderr || freshInstallResult.stdout,
+      );
+      assert.equal(existsSync(join(freshProjectPath, ".git")), false);
+      assert.equal(
+        readFileSync(
+          join(freshProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+          "utf8",
+        ),
+        readFileSync(
+          join(packedPackageRoot, "workflow", "hooks", "run-with-bash.mjs"),
+          "utf8",
+        ),
+      );
+      assertInstalledCodexPolicy(freshProjectPath);
+
+      const upgradedProjectPath =
+        makeDisposablePackageWorkspace("upgrade-1-15-0");
+      mkdirSync(join(upgradedProjectPath, ".codex"), { recursive: true });
+      mkdirSync(join(upgradedProjectPath, ".goat-flow", "hooks"), {
+        recursive: true,
+      });
+      writeFileSync(
+        join(upgradedProjectPath, ".codex", "hooks.json"),
+        V1_15_0_CODEX_HOOKS,
+      );
+      writeFileSync(
+        join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        V1_15_0_BASH_RUNNER,
+      );
+      const migrationResult = runPackedCli(
+        packedCliExecutablePath,
+        ["hooks", "sync", upgradedProjectPath],
+        upgradedProjectPath,
+      );
+      assert.equal(
+        migrationResult.status,
+        0,
+        migrationResult.stderr || migrationResult.stdout,
+      );
+      assert.equal(existsSync(join(upgradedProjectPath, ".git")), false);
+      assert.notEqual(
+        readFileSync(join(upgradedProjectPath, ".codex", "hooks.json"), "utf8"),
+        V1_15_0_CODEX_HOOKS,
+      );
+      assert.equal(
+        readFileSync(
+          join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+          "utf8",
+        ),
+        readFileSync(
+          join(packedPackageRoot, "workflow", "hooks", "run-with-bash.mjs"),
+          "utf8",
+        ),
+      );
+      assertInstalledCodexPolicy(upgradedProjectPath);
+    },
+  );
 });
