@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-- **Hook support claims have an evidence contract** - Dated provider capture, trust, delivered results, and complete coverage are required before future adapters can report effective or passing hooks.
+## v1.15.1 - 2026-08-10
+
+- **Hook support claims expire automatically** - Dated provider proof becomes stale before setup, audit, or dashboard can keep it effective.
+- **Codex project hooks have live delivery proof** - Interactive and exec PostToolUse and Stop runs carry dated trust and response evidence.
+- **Codex feedback and Stop hooks now install** - Setup uses `apply_patch`, a 90-second host limit, bounded results, and preserves custom hooks.
+- **Hook launcher failures reach the active model** - Timeouts, malformed output, and flooded output return bounded unavailable context.
+- **Packed hook canaries exercise release bytes** - Source and npm archives prove launcher timeouts return Codex feedback before its host limit.
 - **Hook result migration fails visibly** - Legacy output stays intact; malformed, partial, oversized, or block-weakening envelopes are rejected.
 - **Gruff feedback distinguishes failure from clean work** - Claude and Copilot get bounded findings; analysis gaps stay explicit.
 - **Hook coverage names causal gaps** - Audit, hook listing, and dashboard separate local drift from provider delivery and omit impossible repairs.
@@ -20,9 +26,9 @@
 - **Clean critiques stay truthful** - A 100/100 meta-audit keeps its results section and states that no checks failed.
 - **Plans keep issue templates read-only** - Standard+ creates `ISSUE.md` beside milestones instead of overwriting shared guidance.
 - **Hook registration checks fit consumer projects** - Verification scans present configs, shows file names, and fails when none exist.
-- **Plan forecasts expose countable inputs** - Work-unit bases round-trip through exports, strict checks catch stale scope math, and measured receipts prompt the next reforecast.
+- **Plan forecasts expose inputs** - Exports retain work units, strict checks reject stale scope math, and measured receipts trigger reforecasting.
 - **Published README links stay usable** - npm packages now include the guardrails and coding-standards pages linked from the project index.
-- **Deny hooks close composed-command gaps** - Supported `xargs`, `find -exec`, `watch`, shell-c, and GNU Parallel forms no longer hide existing Git or GitHub write rules. Exact credential directories, curl file operands, and downloaded code passed to executable consumers are blocked without breaking scoped cleanup or evidence inspection.
+- **Deny hooks inspect wrapped commands** - Git/GitHub writes, credential paths, curl files, and executable downloads block through known wrappers.
 
 ## v1.15.0 - 2026-08-07
 
