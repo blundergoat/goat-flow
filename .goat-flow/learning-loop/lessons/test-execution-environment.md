@@ -7,7 +7,7 @@ last_reviewed: 2026-08-10
 
 **Status:** active | **Created:** 2026-06-13
 **Trigger phase:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-08-09
+**Incident count:** 7 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Recursive ripgrep searches over gitignored plan or log trees must use `--no-ignore` or `-uuu` and a known-positive control before a zero-match result is accepted.
 
 **What happened:** During the M02b review, `grep -rl "plan-checkbox-guard" .goat-flow --include="*.md"` returned nothing even though `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` and ADR-038 matched when grepped directly. `type grep` showed the Claude Code session shell defines `grep` as a function that execs the claude binary as `ugrep -G --ignore-files --hidden -I ...`, and `--ignore-files` applies `.gitignore`-style ignore files during recursion - so sweeps that descend into ignored trees (`.goat-flow/plans/`, `.goat-flow/logs/`) silently return clean.
@@ -22,7 +22,9 @@ last_reviewed: 2026-08-10
 
 **Recurrence 2026-08-09:** While reconciling the 1.15.1 roadmap, `rg` over `.goat-flow/plans/1.15.1` returned no matches for premises already read in the milestones. Rerunning the same proof with `rg --hidden --no-ignore` found the expected host-timeout and oversized-file references. The corrected verification command now carries both flags so a clean result cannot depend on repository ignore rules. Evidence anchor: `workflow/setup/reference/goat-flow-gitignore` (search: `plans/`).
 
-**Root cause:** I treated recursive `grep` output as filesystem truth. In this environment it is gitignore-filtered, which can false-clean a verification sweep exactly where stale or historical content lives.
+**Recurrence 2026-08-10:** The same wrapper masked a *missing binary* rather than filtered results. Two `playbook-contract` cases failed with `rg: command not found`, and `command -v rg` in the session shell answered `rg`, so I first called the failure a sanitized-PATH harness artifact. `type rg` showed `rg is a function`, and `bash -c 'command -v rg'` found nothing: ripgrep is not installed here at all. The real defect was in the shipped playbook, whose documented registration check hard-required ripgrep and exited 127 for any consumer without it. Evidence anchor: `workflow/skills/playbooks/hook-policy-testing.md` (search: `Ripgrep is not installed on every consumer machine`).
+
+**Root cause:** I treated recursive `grep` output as filesystem truth. In this environment it is gitignore-filtered, which can false-clean a verification sweep exactly where stale or historical content lives. The same wrapper layer also makes `command -v` report availability for tools that are only shell functions.
 
 **Prevention:** For verification sweeps that must include gitignored content, use `rg --no-ignore` / `rg -uuu`, `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with an ignore-bypassing search. When the question is "is this consistent in what ships" rather than "does this string exist on disk", prefer `git grep` - it searches tracked files by construction, so local logs, plans, and scratch artifacts cannot mask a real residue or manufacture a false one. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
 

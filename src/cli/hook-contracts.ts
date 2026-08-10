@@ -12,7 +12,7 @@ export const HOOK_RESULT_SCHEMA = "goat-flow.hook-result.v1";
 export const HOOK_RESULT_FINDING_LIMIT = 20; // Cap: matches both shipped hook limits across agent UIs.
 export const HOOK_RESULT_OUTPUT_LIMIT_BYTES = 10_000; // Cap: fits Copilot's smallest documented feedback channel.
 /** Cap: the 30-day revalidation window ADR-052 documents for documentation and capture records. */
-export const HOOK_EVIDENCE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const HOOK_EVIDENCE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Provider-neutral lifecycle points shown consistently across hook screens. */
 export type HookLifecycleEvent = "pre-tool" | "post-tool" | "turn-stop";
@@ -115,10 +115,7 @@ function hookEvidenceHasExpired(
   if (observedMilliseconds > currentMilliseconds) return true;
 
   // The documented window caps the author's expiry so no record outlives revalidation.
-  if (
-    currentMilliseconds - observedMilliseconds >
-    HOOK_EVIDENCE_MAX_AGE_MS
-  ) {
+  if (currentMilliseconds - observedMilliseconds > HOOK_EVIDENCE_MAX_AGE_MS) {
     return true;
   }
 

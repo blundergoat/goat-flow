@@ -1,6 +1,6 @@
 ---
 category: review-feedback
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: Multi-agent critique finds findings single reviewers miss - but synthesis is the expensive part
@@ -172,3 +172,23 @@ All three were wrong. Locally: `npm run typecheck` exits 0, `npm test` passes 83
 3. Consensus severity is not a substitute for the consumption-model check. Verify the premise, then rate.
 
 ---
+
+## Lesson: A bot finding that contradicts a passing test is a design question, not a bug
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+
+**What happened:** While triaging 41 automated review comments on PR #58, two Codex findings were mechanically correct about the code yet wrong to act on. Codex reported that the managed hook launcher walks past a nested Git root and adopts an enclosing project's install. The code confirmed it. Applying the suggested reorder (explicit host root before the ancestor walk, walk bounded at the Git root) turned 2 test failures into 22, because `test/unit/hook-registrar.test.ts` (search: `selects Git first, then the nearest complete managed ancestor`) creates a plain `git init` directory inside a managed root and asserts the launcher still resolves the outer install. The reported hazard and the asserted behaviour are the same behaviour. Separately, blanket-rejecting `--rcfile` in the shell exemption to close a real `bash --rcfile /dev/stdin -i script.sh` bypass also broke `printf payload | bash --rcfile scripts/bashrc scripts/import-data.sh`, a legitimate checked-in startup file the self-test already covered.
+
+**What this means:** Verifying the mechanism is only half the triage. A finding can describe real code accurately and still be a proposal to change intended behaviour. The deciding evidence is whether a test, ADR, or self-test case already asserts the current behaviour on purpose - if one does, the finding is a design question for the owner, not a defect to fix in a review-response pass. When a guard's parser skips an option to reach a safe operand, the fix is to validate that option's operand with the checker already in the file (`script_file_word_is_safe`), not to reject the option and lose its valid uses.
+
+**Prevention:** Before acting on any review finding, grep the test suite and self-test for the behaviour it wants changed. Run the full suite after each guard edit rather than at the end - the 22-failure spike localised both mistakes immediately. Prefer narrowing a fix to the unsafe input (`/dev`, `/proc`, `-`) over removing a whole capability; the codebase usually already owns that predicate. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `is_shell_name`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `stdin rcfile before bash script`).
+
+## Lesson: A review bot's own "addressed" marker is not evidence the fix landed
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+
+**What happened:** On PR #58, CodeRabbit appended `✅ Addressed in commits d40df9d to 5924750` to its finding that `docs/coding-standards/git-commit-message.md` contradicted the repository's 72-character subject rule. The file still read `No hard character limit` at review time, while `CLAUDE.md`, `AGENTS.md`, and `.github/copilot-instructions.md` all stated `≤72 chars`. Two other bot findings were the inverse: stale rather than unfixed. Codex reported that the release artifacts still identified as 1.15.0 and that the evidence contract had no production consumer, but `package.json`, `workflow/manifest.json`, and `CHANGELOG.md` were already at 1.15.1 and three server modules already imported the contract. Both classes are produced by bots reviewing an older commit than the branch head.
+
+**What this means:** Resolution markers and finding bodies both describe the commit the bot last read, not the working tree. Every finding needs re-verification against current `HEAD` before it is accepted or dismissed, in both directions - a marker claiming a fix landed, and a finding claiming a defect exists.
+
+**Prevention:** Triage automated review comments against the current checkout, never against the comment text. Check the file content for "addressed" claims and re-read the cited symbol for open ones. Evidence anchors: `docs/coding-standards/git-commit-message.md` (search: `never longer`), `CLAUDE.md` (search: `Conventional `).

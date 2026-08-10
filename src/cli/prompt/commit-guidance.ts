@@ -24,7 +24,7 @@ type CommitGuidanceStatus =
   "copied" | "renamed" | "skipped-existing" | "skipped-no-git";
 
 /** Outcome from applying the Git-only commit-guidance setup contract. */
-export interface CommitGuidanceWriteResult {
+interface CommitGuidanceWriteResult {
   status: CommitGuidanceStatus;
   path: string;
 }
@@ -49,7 +49,7 @@ function renameLegacyGuide(legacyPath: string, outputPath: string): void {
  * @param targetRoot - Project root to inspect and, when applicable, update.
  * @returns The applied or skipped result and its project-relative path.
  */
-export function ensureGitCommitInstructions(
+function ensureGitCommitInstructions(
   targetRoot: string,
 ): CommitGuidanceWriteResult {
   const root = resolve(targetRoot);
