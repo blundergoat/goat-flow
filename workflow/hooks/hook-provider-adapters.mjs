@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.15.0
+// goat-flow-hook-version: 1.15.1
 /**
  * Decodes bounded provider-neutral hook results and renders one host response.
  * Use at the managed launcher boundary after a migrated hook finishes, so users
@@ -10,7 +10,6 @@ export const HOOK_RESULT_SCHEMA = "goat-flow.hook-result.v1";
 export const HOOK_RESULT_FINDING_LIMIT = 20; // Cap: matches both shipped hook finding limits.
 export const HOOK_RESULT_OUTPUT_LIMIT_BYTES = 10_000; // Cap: fits Copilot's smallest feedback channel.
 export const HOOK_RESULT_ADAPTER_VERSION = "1";
-
 const HOOK_EVENTS = new Set(["pre-tool", "post-tool", "turn-stop"]);
 const HOOK_OUTCOMES = new Set([
   "pass",
@@ -21,6 +20,7 @@ const HOOK_OUTCOMES = new Set([
 ]);
 const HOOK_REASON_CODES = new Set([
   "completed-clean",
+  "bounded-reentry-ended",
   "policy-blocked",
   "findings-reported",
   "coverage-incomplete",
@@ -587,6 +587,13 @@ function adaptPostToolResult(
  * @returns {ReturnType<typeof jsonProviderOutput> | {state: "unsupported", reason: string}} stop response or explicit unsupported state
  */
 function adaptStopResult(hookResult, providerIdentifier, userFacingMessage) {
+  // One exact repeated infrastructure failure may end loudly without relabelling incomplete coverage as a pass.
+  if (
+    hookResult.outcome === "incomplete" &&
+    hookResult.reasonCode === "bounded-reentry-ended"
+  ) {
+    return adaptCleanResult(providerIdentifier, "turn-stop");
+  }
   // An advisory at turn end has no shared non-blocking delivery contract across supported hosts.
   if (hookResult.outcome === "advisory") {
     return {

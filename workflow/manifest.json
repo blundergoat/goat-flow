@@ -1,6 +1,6 @@
 {
   "description": "Expected goat-flow project structure. Source of truth for setup, audit, and upgrade paths. Not a JSON Schema - this is a manifest of what should exist on disk.",
-  "version": "1.15.0",
+  "version": "1.15.1",
 
   "required_files": [
     ".goat-flow/.gitignore",
@@ -40,6 +40,7 @@
     ".goat-flow/hooks/deny-dangerous.sh",
     ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/hook-provider-adapters.mjs",
+    ".goat-flow/hooks/hook-launch-runtime.mjs",
     ".goat-flow/hooks/post-turn-safety.sh",
     ".goat-flow/hooks/run-with-bash.mjs",
     ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
@@ -201,6 +202,10 @@
       "ownership": "system-owned",
       "source": "workflow/hooks/hook-provider-adapters.mjs"
     },
+    ".goat-flow/hooks/hook-launch-runtime.mjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-launch-runtime.mjs"
+    },
     ".goat-flow/hooks/post-turn-safety.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/post-turn-safety.sh"
@@ -282,7 +287,7 @@
     ".goat-flow/skill-docs/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
     ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, hook-policy-testing.md for deny-hook policy, mirror, and registration verification, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline, skill-playbook-authoring-sync.md for built-in playbook shape, mirroring, discovery, registration, and verification, and writing-style.md for human-read prose style discipline. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
     ".goat-flow/skill-docs/skill-quality-testing/": "Committed skill-authoring methodology pack. README.md indexes the pack; tdd-iteration.md, adversarial-framing.md, and deployment.md cover skill TDD, pressure-testing, and deployment discipline.",
-    ".goat-flow/hooks/": "Committed central hook runtime. Holds the cross-platform run-with-bash.mjs launcher, deny-dangerous.sh, gruff-code-quality.sh, post-turn-safety.sh, and hook-specific policy modules under subdirectories.",
+    ".goat-flow/hooks/": "Committed central hook runtime. Holds the cross-platform launcher, its bounded launch runtime and provider adapters, deny-dangerous.sh, gruff-code-quality.sh, post-turn-safety.sh, and hook-specific policy modules under subdirectories.",
     ".goat-flow/hooks/deny-dangerous/": "Committed shared hook policy store sourced by each agent's deny-dangerous.sh dispatcher. Holds the destructive-shell, secret-path, repository-write policy modules and the central deny-dangerous self-test.",
     ".goat-flow/plans/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
@@ -416,9 +421,13 @@
       "local_pattern": ".github/instructions/*.md",
       "hook_events": {
         "pre_tool": "PreToolUse",
-        "post_turn": null
+        "post_turn": "Stop"
       },
-      "hooks": ["deny-dangerous.sh"]
+      "hooks": [
+        "deny-dangerous.sh",
+        "gruff-code-quality.sh",
+        "post-turn-safety.sh"
+      ]
     },
     "antigravity": {
       "name": "Antigravity",

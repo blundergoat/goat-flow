@@ -5,7 +5,7 @@
 # - Filesystem allow/deny policy uses Codex permission profiles, not Claude's
 #   settings.json permissions.allow/permissions.deny syntax
 # - Hook registrations live in .codex/hooks.json for goat-flow installs
-# - The shipped codex-hooks.json template registers Bash-matched guardrail hooks
+# - The shipped codex-hooks.json template registers Bash admission and Stop safety hooks
 # - Command deny policy still lives in those PreToolUse hooks because
 #   Codex permission profiles describe filesystem/network access, not shell
 #   command pattern denies like git push or sudo

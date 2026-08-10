@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.0"
+goat-flow-reference-version: "1.15.1"
 ---
 # Goat-review Reasoning Traps
 

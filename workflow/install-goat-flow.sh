@@ -790,7 +790,7 @@ prune_legacy_agent_hook_copies() {
   local script
   for legacy_hooks_dir in .claude/hooks .codex/hooks .agents/hooks .github/hooks; do
     [[ -d "$legacy_hooks_dir" ]] || continue
-    for script in run-with-bash.mjs hook-provider-adapters.mjs deny-dangerous.sh gruff-code-quality.sh post-turn-safety.sh plan-checkbox-guard.sh post-turn-validate.sh; do
+    for script in run-with-bash.mjs hook-provider-adapters.mjs hook-launch-runtime.mjs deny-dangerous.sh gruff-code-quality.sh post-turn-safety.sh plan-checkbox-guard.sh post-turn-validate.sh; do
       if [[ -f "$legacy_hooks_dir/$script" ]]; then
         rm -f "$legacy_hooks_dir/$script"
         REMOVED=$((REMOVED + 1))
@@ -1149,6 +1149,7 @@ const [dst, src, agent] = process.argv.slice(2);
 const managedScripts = [
   "run-with-bash.mjs",
   "hook-provider-adapters.mjs",
+  "hook-launch-runtime.mjs",
   "deny-dangerous.sh",
   "gruff-code-quality.sh",
   "post-turn-safety.sh",
@@ -1348,7 +1349,13 @@ function hookLaunchMode(hookScriptName) {
     return `${agent}:gruff:goat-flow.hook-result.v1:post-tool:1:75000`;
   }
   // Post-turn safety returns a failed scan rather than an agent permission payload.
-  if (hookScriptName === "post-turn-safety.sh") return "post-turn";
+  if (hookScriptName === "post-turn-safety.sh") {
+    // Codex receives the neutral Stop result proven through its trusted project layer.
+    if (agent === "codex") {
+      return "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
+    }
+    return "post-turn";
+  }
   // Antigravity requires its decision JSON shape for command admission.
   if (agent === "antigravity") return "antigravity";
   // Copilot requires permission-decision fields in its pre-tool response.
@@ -1395,14 +1402,15 @@ function rootResolvingCommand(hookScriptName) {
  */
 function gruffHookEntries() {
   const hookScriptName = "gruff-code-quality.sh";
-  // Codex receives matcher groups through its native hook schema.
+  // Codex receives the exact edit tool and host deadline observed by the live provider canary.
   if (agent === "codex") {
-    return ["Edit", "Write", "Bash"].map((matcher) => ({
+    return ["^apply_patch$"].map((matcher) => ({
       matcher,
       hooks: [
         {
           type: "command",
           command: rootResolvingCommand(hookScriptName),
+          timeout: 90,
           statusMessage: "gruff code quality",
         },
       ],
@@ -1426,8 +1434,10 @@ function gruffHookEntries() {
   }));
 }
 
+/** Add enabled Gruff feedback only where the selected provider can deliver it to the user. */
 function appendGruffHookEntries(currentHooks) {
-  if (agent === "codex" || agent === "antigravity" || !configuredHookEnabled("gruff-code-quality")) return false;
+  // Antigravity remains disabled because its PostToolUse result cannot reach the active model.
+  if (agent === "antigravity" || !configuredHookEnabled("gruff-code-quality")) return false;
   const event = agent === "copilot" ? "postToolUse" : "PostToolUse";
   const currentEntries = Array.isArray(currentHooks[event]) ? currentHooks[event] : [];
   const nextEntries = [...currentEntries, ...gruffHookEntries()];
@@ -1436,10 +1446,10 @@ function appendGruffHookEntries(currentHooks) {
   return true;
 }
 
-// Builds the Stop registration users receive when setup enables safety scanning.
+/** Build the Stop registration users receive when setup enables safety scanning. */
 function postTurnSafetyHookEntries() {
   const hookScriptName = "post-turn-safety.sh";
-  // Codex keeps no active Stop registration until delivery is verified.
+  // Codex uses the approved status label and 90-second host deadline around the 75-second launcher.
   if (agent === "codex") {
     return [
       {
@@ -1447,6 +1457,7 @@ function postTurnSafetyHookEntries() {
           {
             type: "command",
             command: rootResolvingCommand(hookScriptName),
+            timeout: 90,
             statusMessage: "Post-turn safety guard",
           },
         ],
@@ -1466,8 +1477,10 @@ function postTurnSafetyHookEntries() {
   ];
 }
 
+/** Add the default Stop guard only where the selected provider has an approved registration. */
 function appendPostTurnSafetyEntries(currentHooks) {
-  if (agent === "copilot" || agent === "codex" || !configuredHookEnabled("post-turn-safety")) return false;
+  // Copilot and Antigravity remain disabled because their Stop delivery lacks approved proof.
+  if (agent === "copilot" || agent === "antigravity" || !configuredHookEnabled("post-turn-safety")) return false;
   const currentEntries = Array.isArray(currentHooks.Stop) ? currentHooks.Stop : [];
   const nextEntries = [...currentEntries, ...postTurnSafetyHookEntries()];
   if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return false;
@@ -2419,6 +2432,7 @@ if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-with-bash.mjs" "$HOOKS_DIR/run-with-bash.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-provider-adapters.mjs" "$HOOKS_DIR/hook-provider-adapters.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-launch-runtime.mjs" "$HOOKS_DIR/hook-launch-runtime.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh" "system-owned" "755"
