@@ -6,7 +6,7 @@
 import type { HookScenario } from "./cli-types.js";
 
 /** Evidence level stored for one bounded verification family. */
-export type HookVerificationEvidenceLevel =
+type HookVerificationEvidenceLevel =
   "managed-hook-classifier" | "configured-hook-command";
 
 /** One hook's complete scenario set and the evidence level users must produce. */

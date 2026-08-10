@@ -70,7 +70,7 @@ function recordedScenarioVerdict(
  * @param hookId - registry hook identifier; empty or unknown text has no scenario contract
  * @returns true only when every required latest verdict is pass; false for absent or partial proof
  */
-export function hasCurrentHookRuntimeProof(
+function hasCurrentHookRuntimeProof(
   projectPath: string,
   agentId: AgentId,
   hookId: string,
