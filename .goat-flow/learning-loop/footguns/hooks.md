@@ -18,7 +18,7 @@ Git rename detection needs both sides of the move. Query full `--name-status --f
 ## Footgun: Changed-range scoping makes a quality hook structurally blind to file-level rules
 
 **Status:** active | **Created:** 2026-08-05 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 4 | **Latest occurrence:** 2026-08-09
+**Incident count:** 5 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Keep edit-time attribution and release-time repository enforcement as separate layers: the hook reports findings attributable to touched files/ranges, while preflight owns a full-repository accepted-debt ratchet.
 **Trigger phase:** VERIFY
 
@@ -26,13 +26,15 @@ A per-edit quality hook that scopes findings to changed lines cannot report any 
 
 Measured on 2026-08-05: editing `test/unit/hook-registrar.test.ts` (1,139 lines, threshold 750) produced no hook output at all, while `gruff-ts analyse` on the same file reported `size.file-length` immediately. Twenty files had crossed the gate this way. The nearby trap is fixing only half of it - scoping the whole file when the changed range already covers it repairs the new-file case but leaves the far more common "editing an existing oversized file" case still silent.
 
-The fix trades symbol-aware scoping for structural visibility: request the whole file and select scopes in the hook, keeping `scope=file`/`scope=project` findings unconditionally while confining line and symbol findings to the edited ranges. Symbol widening is lost, which is a real cost, but a rule nobody can ever see is worth less than one that occasionally reports a sibling function. Residual gap: the fix covers only the `gruff.hook.v1` contract path (gruff-ts today). The legacy `analyse` path still delegates ranges to analyzers advertising the native trio, and those cannot express finding scope, so partial edits to oversized files stay silent until those analyzers expose scope-aware results. Evidence anchors: `.goat-flow/hooks/gruff-code-quality.sh` (search: `hook_v1_report`), `.goat-flow/hooks/gruff-code-quality.sh` (search: `A file-scope finding describes the file the agent is editing right now`).
+The fix trades symbol-aware scoping for structural visibility: request the whole file and select scopes in the hook, keeping `scope=file`/`scope=project` findings unconditionally while confining line and symbol findings to the edited ranges. Symbol widening is lost, which is a real cost, but a rule nobody can ever see is worth less than one that occasionally reports a sibling function. Residual gap: the fix covers only the `gruff.hook.v1` contract path (gruff-ts today). The legacy `analyse` path still delegates ranges to analyzers advertising the native trio, and those cannot express finding scope, so partial edits to oversized files stay silent until those analyzers expose scope-aware results. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `hook_v1_report`), `workflow/hooks/gruff-code-quality.sh` (search: `A file-scope finding describes the file the agent is editing right now`).
 
 Recurrence on 2026-08-05 exposed the adjacent release gate gap. A fresh gruff-ts 0.4.0 full-repository scan at commit `9f1bb2be` reported 36 findings: 14 `size.file-length` warnings, 4 `security.process-exec` warnings, and 18 documentation advisories. Preflight still reported `PASS   79 checks · 0 warnings` because its Gruff Policy check only rejects disabled rules; it never runs the analyzer. The per-edit hook also cannot be expected to enumerate untouched repository debt. Neither result proves a clean repository, even though both surfaces can be read that way.
 
 Recurrence on 2026-08-08 showed that the ratchet's downward path is part of completing a fix. Replacing history-derived commit guidance shortened `src/cli/cli-handlers.ts` from 759 to 747 lines, below the 750-line threshold. Full preflight then failed on stale accepted identity `4348d703d920ab92` until only that baseline entry was removed; rule thresholds and enabled state stayed unchanged. A change that eliminates a warning must reconcile the accepted-debt manifest in the same proof pass. Evidence anchors: `scripts/gruff-warning-ratchet-checks.mjs` (search: `The finding is gone`) enforces stale-entry removal; `src/cli/cli-handlers.ts` (search: `ensureGitCommitInstructions`) contains the shortened command handler.
 
 Recurrence on 2026-08-09: a changed-range scan showed only three advisories, while full preflight found three task-local file-length warnings. Moving matrix checks into existing helper/suite files and compacting the runtime audit cleared them without accepting debt. Evidence: `test/unit/hook-registrar.helpers.ts` (search: `verifyAgentHookRegistrationMatrix`) and `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`).
+
+Recurrence on 2026-08-10: source and packed consumer canaries passed after launcher-owned failures gained provider feedback, but a whole-file Gruff scan measured the edited adapter and launcher at 827 and 836 lines, above the 750-line limit. Moving lifecycle capture and timeout selection into the launch runtime restored the adapter to 742 lines and the launcher to 746; changed-range feedback alone would not enforce that file-level limit. Evidence anchors: `workflow/hooks/hook-launch-runtime.mjs` (search: `captureHookProcessUntilDeadline`) and `test/integration/packaged-hook-install.test.ts` (search: `npm archive must contain the candidate launch runtime bytes`).
 
 Prevention has two layers. Keep PostToolUse fast and attributable, but expose incomplete coverage explicitly when the analyzer is missing, times out, emits invalid JSON, or reports zero analyzed files. In preflight, run the repo-local analyzer once in JSON mode and compare findings by `stableIdentity` against reviewed accepted debt; fail on analyzer errors, new warnings, worsened size metadata, stale baseline state, or degraded scan coverage while reporting unchanged accepted findings. Do not use the composite grade or raw finding count as the ratchet, and do not clear the gate by disabling rules or raising thresholds. Evidence anchors: `scripts/preflight-checks.sh` (search: `No gruff-ts rules disabled (satisfy or tune)`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: "Prefer `stableIdentity` for finding diffs"), `.gruff-ts.yaml` (search: `size.file-length`).
 
@@ -59,19 +61,35 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 ## Footgun: Registered Stop hooks can be dead config behind agent trust gates
 
 **Status:** active | **Created:** 2026-06-13 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 2 | **Latest occurrence:** 2026-08-10
+**Decision changed:** Treat project-layer trust, hook-handler trust, and live model delivery as separate gates before enabling a registration.
+**Trigger phase:** VERIFY
 
 **Trap:** Writing a Stop entry into `.codex/hooks.json` or `.agents/hooks.json` does not mean the agent will ever execute it. On 2026-06-13, a capture fixture with Stop hooks registered for all three agents showed: Claude fired and delivered the full payload; Codex (codex-cli 0.139.0, `features` reports `hooks stable true`, docs document the `Stop` event) never executed the hook across four `codex exec` runs even with `--dangerously-bypass-hook-trust`, project trust, and a project config layer; Antigravity (agy 1.0.6) logged `Loaded hooks.json ... 1 total handlers` and `JSON hook "jsonhook__stop-capture_Stop_0_0": executing command` but the command never ran because execution waits on `~/.gemini/trusted_hooks.json` review (`toolPermission=request-review`) and print mode exits first.
 
 Current primary documentation changed again by 2026-08-09: Codex and Antigravity now document `PostToolUse` and `Stop`, while Copilot documents `postToolUse` and `agentStop`. That makes the earlier live capture stale evidence, not proof that current delivery now works. The documented state and the captured state must change independently.
 
+Recurrence on 2026-08-10: Codex CLI 0.147.0 repeated the trust distinction. Ignoring user configuration also removed the project trust record, so the project hook layer stayed inactive even when handler review was bypassed. A session-only whole-table project trust override activated the project layer; PostToolUse and Stop then delivered in both exec and interactive modes. The provider-owned timeout remained silent, so Goat Flow must finish first and return its own unavailable response. Evidence anchors: `src/cli/hook-contracts.ts` (search: `assessHookProviderEvidence`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), and `test/integration/hook-consumer-canary.test.ts` (search: `writeObservedCodexFeedbackConfig`).
+
 **Evidence:**
-- `src/cli/server/hooks-registry.ts` (search: `codex exec 0.139.0`) preserves the exact provider version and failed-delivery conclusion that currently gates registration.
+- `src/cli/server/hooks-registry.ts` (search: `hook-provider-adapter.v1:codex:turn-stop`) identifies the current time-bounded Codex Stop evidence gate; the recurrence above retains the historical failed capture.
 - `src/cli/hook-contracts.ts` (search: `assessHookProviderEvidence`) keeps official documentation, dated live capture, trust, and result delivery as separate states.
 - Current provider contracts: [Codex hooks](https://developers.openai.com/codex/hooks), [Antigravity hooks](https://www.antigravity.google/docs/hooks), and [GitHub Copilot hooks](https://docs.github.com/en/copilot/reference/hooks-reference).
 - ADR-039 (search: `Remove Plan Checkbox Guard`) removes the plan checkbox guard from current shipped hooks and keeps only a tombstone cleanup path.
 - `post-turn-safety` was held to the same standard on 2026-06-14: `antigravity` was added to its `unsupportedAgents` (codex was already gated), so goat-flow does not ship a default-on Stop hook to an agent whose delivery is unverified. A default-on *secret scanner* whose Stop event may never fire is false assurance - arguably worse than shipping nothing, because the dashboard still reports it "installed."
 
 **Prevention:** Treat hook registration facts as config evidence only. Before claiming an agent runs a Stop hook, capture a live payload or hook-side log write from that exact provider version, mode, config source, and trust state. Expire the record after 30 days or any relevant provider, hook, adapter, mode, source, or trust change. Gate default registration on verified delivery, not documented support, and keep the gate consistent across every Stop hook for that agent. Gating one Stop hook for one agent is a lock-step edit: `workflow/manifest.json` `hook_events.post_turn` -> `null` (which flips `supportsPostTurnHook` in `src/cli/agents/registry.ts` (search: `supportsPostTurnHook`) so `check-verification.ts` *skips* the agent instead of penalising it), `hooks-registry.ts` `unsupportedAgents`, the generated `.agents/hooks.json` (regenerate via `goat-flow hooks sync`, never hand-edit the escaped launcher JSON), plus the README hook table / CHANGELOG / `docs/dashboard.md` and the `hook-registrar` tests.
+
+## Footgun: Launcher-owned failures can bypass provider feedback adapters
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Exercise launcher-owned timeout and invalid-output branches through source and packed consumers before registering model-visible feedback.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-10
+
+A migrated child result used the provider adapter, but timeout and adapter-failure branches returned through the legacy unavailable reporter. The terminal showed human stderr while Codex received empty stdout, so a stopped analyzer looked silent to the active model.
+
+Route every migrated launcher-owned failure through the neutral unavailable envelope and provider adapter. Keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), and `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
 
 ## Footgun: Blocking Stop scanners can wedge on gitignored local state
 
@@ -160,6 +178,23 @@ Current primary documentation changed again by 2026-08-09: Codex and Antigravity
 
 **Prevention:** Treat a suspiciously clean gruff result on a file with nested template literals as unparsed, not clean. Prefer plain concatenation or an extracted variable over templates nested inside interpolations in analyzed source, and when a size/complexity finding names a function far smaller than the reported span, suspect scanner blinding before refactoring the named function.
 
+---
+
+## Footgun: A `-diff` gitattribute blinds content scanners that enumerate changed paths
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A post-turn or pre-commit content scanner reports a changed path as unscannable and refuses to claim coverage, even though the file is plain text. Marking it `text` alone does not clear the report.
+
+**Evidence:**
+- `.goat-flow/hooks/post-turn-safety.sh` (search: `binary changed path not scanned`) builds its inventory from `git diff --numstat` and treats every `-\t-\t<path>` record as a coverage gap.
+- `.gitattributes` (search: `package-lock.json`) previously carried `binary`. `git diff --numstat` emitted `-\t-\tpackage-lock.json` while `file` reported JSON text data with zero NUL bytes.
+- Switching to `text -diff` did **not** fix it: `-diff` alone still suppresses numstat counts. Only removing `-diff` restored `2\t2\tpackage-lock.json`.
+
+**Why it happens:** `binary` is shorthand for `-text -diff`, and it is `-diff` - not `-text` - that makes numstat report a path as uncountable. A scanner reading numstat therefore cannot distinguish a real binary from a text file whose diff is merely suppressed.
+
+**Prevention:** To keep a generated file out of review noise without blinding scanners, use `text linguist-generated=true`, which collapses the diff in GitHub review while leaving numstat counts intact. Reserve `-diff` for genuinely unreadable content. After changing a lockfile attribute, confirm with `git diff --numstat -- <path>` that real counts appear.
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
@@ -173,7 +208,7 @@ Current primary documentation changed again by 2026-08-09: Codex and Antigravity
 
 **Status:** resolved | **Created:** 2026-06-07 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
 
-**Resolution:** Current migration removes managed legacy Gruff registrations before pruning per-agent scripts and rebuilds only provider-supported, enabled central entries. `test/integration/setup-install-migrations.test.ts` (search: `prunes legacy Codex gruff hook registrations because Codex gruff is unsupported`) verifies unsupported Codex registration is removed while the deny hook remains. `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) verifies an enabled desired state does not restore a registration whose feedback cannot reach the model.
+**Resolution:** Current migration removes managed legacy Gruff registrations before pruning per-agent scripts and rebuilds only provider-supported, enabled central entries. `test/integration/setup-install-migrations.test.ts` (search: `migrates legacy Codex Gruff registration to the approved provider contract`) verifies that an old Codex command becomes the approved central contract while a custom user event remains. `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) verifies that an enabled desired state does not restore a registration whose feedback cannot reach the model.
 
 **Original symptoms:** The installer could successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure appeared only after upgrade because fresh installs used the new template shape and disabled optional hooks did not expose the stale entry.
 

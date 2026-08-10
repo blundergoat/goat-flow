@@ -268,13 +268,15 @@ last_reviewed: 2026-08-10
 ## Lesson: A documentation pass can push a file past a size gate it was written to enforce
 
 **Status:** active | **Created:** 2026-08-07
-**Incident count:** 2 | **Latest occurrence:** 2026-08-10
+**Incident count:** 3 | **Latest occurrence:** 2026-08-10
 
 **What happened:** Applying the mandatory comment standard to `scripts/check-gruff-warning-ratchet.mjs` grew it from 626 to 783 lines, past the 750-line `size.file-length` threshold. The warning-debt ratchet then reported its own checker as new debt on the very run that was meant to prove the release clean.
 
 **Root cause:** I treated comment work as free of quality-gate consequences. Doc comments on every function, context lines on every branch, and null/empty meaning on every tag add real lines, so a file already near a size threshold crosses it.
 
 **Recurrence 2026-08-10:** Expanding current hook-capability evidence pushed `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` to 40,372 bytes against the 40,000-byte bucket limit. Compressing the new entry below the existing ceiling preserved its decisions and semantic anchors without creating another retrieval bucket. Evidence anchors: `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`) and `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Agent capability metadata goes stale when upstream docs add hooks`).
+
+**Recurrence 2026-08-10 (playbook prose):** Adding a reader-selection section and an anti-template rule to `.goat-flow/skill-docs/playbooks/code-comments.md` took it from 2,856 to 3,180 words against the 3,000-word ADR-023 progressive cap. Trimming duplicate representation - a fractal summary restating the worked example, and a PHP class-file rule stated in four places - restored it to 2,983 with no rule lost. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within`).
 
 **Prevention:** Before commenting a file that sits within about 20% of its size threshold, check the current count and plan the split first. Splitting by responsibility is the fix, never accepting the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
 

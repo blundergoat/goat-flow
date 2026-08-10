@@ -236,7 +236,7 @@ last_reviewed: 2026-08-10
 **Status:** active | **Created:** 2026-07-12
 **Decision changed:** Validate every pressure fact and evaluator restriction against the loaded contract before launch; non-target constraints must not decide the result.
 **Trigger phase:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-08-09
+**Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
 **What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-040 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
 
@@ -248,11 +248,11 @@ last_reviewed: 2026-08-10
 
 **Recurrence 2026-08-02 (same hardening run):** After correcting fact provenance, a hypothesis evaluator prompt explicitly requested “What would disconfirm each.” The evaluator returned good falsifiers, but the prompt had named the target field and therefore measured recitation rather than unaided technique use. The host excluded the run and rewound after the second scenario-method correction. This is the same isolation failure at a different layer: the fixture supplied the decision it claimed to test.
 
-**Recurrence 2026-08-09:** A goat-debug GREEN evaluator chose the correct Investigate path, but the prompt's three-call cap and ban on other reads prevented the skill's mandatory learning-loop retrieval. The pass was discarded because that artificial conflict could decide the clarity result independently of the Diagnose-versus-Investigate rule. Evidence anchor: `workflow/skills/goat-debug/SKILL.md` (search: `Footgun check`). The redacted current-run context is `.goat-flow/logs/sessions/2026-08-09-goat-debug-tdd.md`; it is local evidence, not a durable source anchor.
+**Recurrence 2026-08-09:** A goat-debug GREEN evaluator chose the correct Investigate path, but the prompt's three-call cap and ban on other reads prevented the skill's mandatory learning-loop retrieval. The pass was discarded because that artificial conflict could decide the clarity result independently of the Diagnose-versus-Investigate rule. Evidence anchor: `workflow/skills/goat-debug/SKILL.md` (search: `Footgun check`).
 
-**Prevention:** Before using a pressure or application fixture, compare every option and prompt restriction with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend incidents, block mandatory reads, or ask the evaluator to recite the target technique. Keep non-target obligations equal so only the tested rule explains the result.
+**Recurrence 2026-08-10:** A live provider canary prohibited reads but named only the old and new values for four edits. The coding agent guessed four incompatible declarations, every patch failed, and the run exercised Stop without exercising PostToolUse. Supplying the exact editable declaration made the bounded canary valid. The durable consumer fixture now writes its complete registration and hook inputs explicitly. Evidence anchor: `test/integration/hook-consumer-canary.test.ts` (search: `writeObservedCodexFeedbackConfig`).
 
-**Current-run record:** `.goat-flow/logs/sessions/2026-08-01-goat-review-tdd.md` preserves the M06 pressure and seeded-corpus receipts for this checkout. It is gitignored session evidence, not a durable repository anchor.
+**Prevention:** Before using a pressure or application fixture, compare every option and prompt restriction with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend incidents, block mandatory reads, or ask the evaluator to recite the target technique. Keep non-target obligations equal so only the tested rule explains the result. When a canary prohibits reads, provide the exact editable source declaration or allow one bounded read; never require blind patch construction.
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 category: naming
-last_reviewed: 2026-08-04
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: Boundary payload names are not placeholder debt
@@ -64,3 +64,20 @@ last_reviewed: 2026-08-04
 **Recurrence 2026-08-02:** A gruff `test-quality.loop-in-test` cleanup renamed fixture tables (`LOCAL_STATE_README_PAIRS`→`LOCAL_STATE_README_ENTRIES`) and split looped assertions into per-case `it()` names. Typecheck, the touched focused tests, and gruff were all green, but `npm test` failed one unrelated test: `diagnostics bundle` exited 1 because the harness `feedback_loop` concern dropped to 50. `stats --check` named the real cause - two learning-loop entries carried `(search: ...)` anchors pointing at the old constant and the old test name. The rename sweep is not finished when the code is green; the loop indexes code by those exact strings.
 
 **Prevention:** After any rename or test-name change, run `node --import tsx src/cli/cli.ts stats --check` alongside the focused tests. A green typecheck plus green touched tests cannot see a stale learning-loop anchor, and the failure surfaces far away - as an audit concern score inside an unrelated diagnostics test. Evidence anchors: `.goat-flow/learning-loop/footguns/quality.md` (search: `does not let unscoped npx resolve the deprecated package in`), `.goat-flow/learning-loop/lessons/gruff-cleanup.md` (search: `LOCAL_STATE_README_ENTRIES`).
+
+---
+
+## Lesson: Mechanical extractions need generated-name and owner audits
+
+**Status:** active | **Created:** 2026-08-10
+**Decision changed:** Use identifier boundaries and classify every extracted symbol as shared, moved, or owner-local.
+**Trigger phase:** ACT
+**Incident count:** 2 | **Latest occurrence:** 2026-08-10
+
+**What happened:** While extracting hook command helpers, a specific replacement created `AgentHookJsonObject`, then a broader `JsonObject` replacement matched the suffix and produced a doubled name. Typecheck rejected the generated guard call before tests ran.
+
+**Root cause:** The replacement target remained inside the replacement output, and the chained transformation did not use identifier boundaries.
+
+**Recurrence (2026-08-10):** A runtime-evidence extraction moved a range containing the deny-only hook identifier. The shared destination intentionally omitted that private constant, but the original owner was not restored, so typecheck found every missing reference. The fix kept the identifier private to deny verification while shared report contracts moved once. Evidence anchors: `src/cli/hooks-runtime-evidence.ts` (search: `MANAGED_HOOK_IDENTIFIER`) and `src/cli/hooks-configured-runtime-evidence.ts` (search: `Shared report contracts`).
+
+**Prevention:** Prefer one token-aware replacement per identifier, use word boundaries when text rewriting is unavoidable, and grep generated names for repeated prefixes. Before deleting an extracted range, classify every declaration as shared, moved, or owner-local and verify each destination. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `isAgentHookJsonObject`) and `src/cli/server/agent-hook-writer.ts` (search: `type AgentHookJsonObject`).

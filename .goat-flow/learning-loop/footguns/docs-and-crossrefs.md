@@ -181,20 +181,20 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Version bump checks do not cover synthetic project config strings
 
 **Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 3 | **Latest occurrence:** 2026-08-03
+**Incident count:** 4 | **Latest occurrence:** 2026-08-10
 
-**Symptoms:** The bump and version checks pass while helpers, examples, fixtures, or mirrors still name the previous release.
+**Symptoms:** Version and mirror checks pass while helpers, examples, fixtures, or newly added release runtimes still name or contain the previous release.
 
-**Why it happens:** Both tools cover curated paths, not arbitrary embedded strings or newly added release surfaces.
+**Why it happens:** Release helpers cover curated surfaces. A new file type, manifest-owned runtime, or embedded string stays invisible until both the writer and checker derive the same complete set.
 
-**Evidence:** v1.3.2 checks passed with old values in `scripts/profile-dashboard-audit.mjs` (search: `writeSyntheticProject`) and `test/integration/dashboard-server.helpers.ts` (search: `makeDashboardCacheProject`). v1.6.1 checks missed stale frontmatter under `workflow/skills/playbooks/`. v1.15.0 checks missed 1.14.0 plan examples in `README.md`, `docs/cli.md`, and `src/cli/cli.ts` (search: `plans export .goat-flow/plans/1.15.0`), plus two regex-escaped assertions now split across `test/contract/skill-hardening-review-1.test.ts` (search: `goat-flow-reference-version: "1\.15\.0"`) and `test/contract/skill-hardening-skills-1.test.ts` (search: `goat-flow-reference-version: "1\.15\.0"`).
+**Evidence:** v1.3.2 missed synthetic dashboard projects; v1.6.1 missed playbook frontmatter; v1.15.0 missed plan examples and regex-escaped assertions. The 1.15.1 helper stamped only shell hooks and derived mirror fanout from per-agent registrations, omitting shared Node runtime modules. Its checker had the same `.sh`-only blind spot, so version and mirror output could look current while a shipped launcher imported stale runtime bytes.
 
 **Structural anchors:**
-- `scripts/bump-version.sh` (search: `# ── Source files (version string replacement)`) lists the curated surfaces the bump workflow edits.
-- `scripts/check-versions.mjs` (search: `goat-flow-reference-version`) verifies skill and reference frontmatter, not arbitrary embedded config stubs.
-- `workflow/skills/playbooks/README.md` (search: `goat-flow-reference-version`) is a standalone playbook tree that must be included alongside `workflow/skills/reference/`.
+- `scripts/bump-version.sh` (search: `manifest_hook_runtime_paths`) derives every top-level managed hook mirror from manifest ownership.
+- `scripts/check-versions.mjs` (search: `hookRuntimeTemplates`) checks both `.sh` and `.mjs` runtime stamps.
+- `workflow/manifest.json` (search: `.goat-flow/hooks/hook-launch-runtime.mjs`) owns the installed runtime and canonical source.
 
-**Prevention:** After each bump, search the same repository-wide path set for both literal old versions (`rg -n -F '1.14.0' ...`) and regex-escaped forms (`rg -n -F '1\.14\.0' ...`), then classify historical and compatibility evidence.
+**Prevention:** Derive managed runtime fanout from manifest ownership, not agent registration lists. After each bump, check every shipped runtime extension and search literal plus regex-escaped old versions across the tracked release surface; keep packed-byte canaries for imported runtime modules.
 
 ---
 
