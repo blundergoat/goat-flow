@@ -181,20 +181,15 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Version bump checks do not cover synthetic project config strings
 
 **Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 4 | **Latest occurrence:** 2026-08-10
+**Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
-**Symptoms:** Version and mirror checks pass while helpers, examples, fixtures, or newly added release runtimes still name or contain the previous release.
+**Symptoms:** Curated version and mirror checks pass while fixtures, examples, or newly shipped runtimes retain the previous release.
 
-**Why it happens:** Release helpers cover curated surfaces. A new file type, manifest-owned runtime, or embedded string stays invisible until both the writer and checker derive the same complete set.
+**Why it happens:** The writer and checker can share the same incomplete list, so agreement does not prove coverage.
 
-**Evidence:** v1.3.2 missed synthetic dashboard projects; v1.6.1 missed playbook frontmatter; v1.15.0 missed plan examples and regex-escaped assertions. The 1.15.1 helper stamped only shell hooks and derived mirror fanout from per-agent registrations, omitting shared Node runtime modules. Its checker had the same `.sh`-only blind spot, so version and mirror output could look current while a shipped launcher imported stale runtime bytes.
+**Evidence:** Earlier releases missed synthetic dashboard projects, playbook frontmatter, plan examples, and regex-escaped assertions. The 1.15.1 release initially omitted shared Node hook runtimes; final proof then found two 1.15.0 contract assertions and no frozen v1.15.1 manifest snapshot. Evidence anchors: `scripts/bump-version.sh` (search: `manifest_hook_runtime_paths`), `scripts/check-versions.mjs` (search: `hookRuntimeTemplates`), `test/contract/skill-hardening-review-1.test.ts` (search: `registers evidenced goat-review reasoning traps across every root`), and `test/unit/manifest.test.ts` (search: `provides a readable snapshot for every changelog release`).
 
-**Structural anchors:**
-- `scripts/bump-version.sh` (search: `manifest_hook_runtime_paths`) derives every top-level managed hook mirror from manifest ownership.
-- `scripts/check-versions.mjs` (search: `hookRuntimeTemplates`) checks both `.sh` and `.mjs` runtime stamps.
-- `workflow/manifest.json` (search: `.goat-flow/hooks/hook-launch-runtime.mjs`) owns the installed runtime and canonical source.
-
-**Prevention:** Derive managed runtime fanout from manifest ownership, not agent registration lists. After each bump, check every shipped runtime extension and search literal plus regex-escaped old versions across the tracked release surface; keep packed-byte canaries for imported runtime modules.
+**Prevention:** Derive fanout from manifest ownership. After every bump, search tracked release surfaces for literal and regex-escaped old versions, capture the release snapshot, run packed-byte canaries, and run the full suite.
 
 ---
 

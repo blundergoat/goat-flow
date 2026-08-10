@@ -300,21 +300,17 @@ last_reviewed: 2026-08-09
 ## Lesson: Verification grep patterns must not carry Markdown backticks into Bash
 
 **Status:** active | **Created:** 2026-06-07
-**Decision changed:** Validate every persisted semantic anchor against its source with the literal search shape a future agent will run.
-**Incident count:** 4 | **Latest occurrence:** 2026-08-09
+**Decision changed:** Validate persisted anchors with the literal search shape a future agent will run.
+**Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
-**What happened:** During the M04 review-cleanup verification, a stale-path `rg` sweep embedded a Markdown-formatted fragment inside a double-quoted shell pattern. Bash treated the backticks around `decisions/` as command substitution, printed `/bin/bash: line 1: decisions/: No such file or directory`, and then ran `rg` with a mangled pattern that produced noisy, unusable output.
+**What happened:** Shell commands copied Markdown-formatted anchors into executable arguments. Bash treated backticks as command substitution, mangled searches, and once ran embedded CLI names. Later PreToolUse checks blocked the same shape before execution, including a redaction draft sent through a generated shell command.
 
-**Root cause:** I copied prose-review formatting into an executable shell regex instead of making the verification command a plain shell argument.
+**Root cause:** Display formatting crossed into shell syntax.
 
-**Fix:** Discard the malformed output and rerun the sweep with a single-quoted regex that contains no Markdown quoting.
+**Fix:** Searches use plain single-quoted or fixed-string tokens. Prose containing backticks goes directly to the running redactor over stdin. An architecture anchor that included formatted `EvidenceEnvelope` text now uses its stable section heading.
 
-**Prevention:** Before trusting a verification grep, check the command output for shell diagnostics as well as `rg` matches. When searching for literal Markdown text, use single quotes plus `-e` patterns or `rg -F` fixed-string searches instead of embedding backticks in a double-quoted regex.
+**Evidence:** `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`) blocks the unsafe command shape; `src/cli/redact-command.ts` (search: `readFileSync(0`) accepts direct stdin; `.goat-flow/architecture.md` (search: `## Local Data and Evidence Budget`) supplies the formatting-independent anchor.
 
-**Recurrence update (2026-06-10):** The same failure recurred while proving the M06b lifecycle sentence across docs: a double-quoted `rg` fixed-string pattern containing `` `goat-flow index` `` and `` `goat-flow stats --check` `` triggered command substitution, ran the CLI commands, and produced a mangled regex error instead of useful grep evidence. The corrected proof used `rg -n -F 'Re-run `goat-flow index` ...' ...` with single quotes around the whole fixed-string pattern.
-
-**Recurrences (2026-08-01, 2026-08-09):** PreToolUse blocked double-quoted `rg` patterns containing Markdown backticks before Bash ran them; no writes occurred. Both reruns used plain single-quoted semantic tokens.
-
-**Recurrence update (2026-08-02):** An effort-estimation milestone cited a prose rendering of an architecture sentence as its `(search: ...)` anchor, but the source wrapped `EvidenceEnvelope` in Markdown backticks. The fixed-string verification could not match the persisted anchor. The plan now anchors on the exact `## Local Data and Evidence Budget` heading, which is both literal and formatting-independent.
+**Prevention:** Keep Markdown formatting out of shell arguments. Use `rg -F` with a plain token for searches, direct stdin for formatted prose, and reject any proof output containing shell diagnostics.
 
 ---

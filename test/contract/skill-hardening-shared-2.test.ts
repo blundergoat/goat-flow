@@ -220,7 +220,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     assert.match(failSoftAnalyzer, resolvedStamp, "fail-soft analyzer skip");
     assert.match(
       optionalMigration,
-      /setup-install-migrations\.test\.ts[^\n]+prunes legacy Codex gruff hook registrations because Codex gruff is unsupported/u,
+      /setup-install-codex-config-migration\.test\.ts[^\n]+migrates legacy Codex Gruff registration to the approved provider contract/u,
     );
     assert.match(
       optionalMigration,
