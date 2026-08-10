@@ -5,19 +5,27 @@ The test suite uses Node's built-in test runner (`node:test` + `node:assert`). N
 ## Running tests
 
 ```bash
-npm test                          # Run all tests
-npx tsc --noEmit                  # Type-check without emitting
+npm test                          # Fast suite; excludes slow, dashboard, and perf tests
+npm run test:slow                 # Builds first, then the slow suite at concurrency 1
+npm run test:full                 # Fast then slow; run this before a release
+npm run typecheck                 # Type-check src/cli and src/dashboard
 npx eslint src/cli src/dashboard  # Lint
 bash scripts/preflight-checks.sh  # Full preflight gate (includes all of the above)
 ```
+
+`npm test` is not the whole suite. `scripts/run-tests.mjs` routes integration,
+dashboard, audit-drift, and a few known-heavy unit files to `test:slow` so local
+iteration stays quick. A change that touches the dashboard server, the installer,
+or drift detection is only covered once `test:slow` has run.
 
 ## Test structure
 
 Tests live in `test/` with subdirectories:
 
-- `unit/` - config reader, classify-state, CLI parsing, skill constants, rubric registry
-- `integration/` - audit (build + quality), audit on well-configured projects, quality prompt with audit data
-- `contract/` - cross-surface consistency (skill count, version alignment, no-scan phrasing, JSON shape)
+- `unit/` - config reader, CLI parsing, manifest, hooks, plans, learning loop, and the `audit-command/`, `audit-harness/`, `skill-quality/`, and `dashboard-terminal-launch/` groups
+- `integration/` - audit build and quality runs, installer round-trips, drift detection, deny-policy enforcement, and the dashboard HTTP/WebSocket API
+- `contract/` - cross-surface consistency: skill hardening per skill, command phrasing, ADR-023 word budgets, coding-standard drift, and the local-data contract
+- `smoke/` - dashboard and terminal export surfaces plus the session concurrency cap
 - `fixtures/` - test data for isolated check evaluation
 
 ## What the tests guard

@@ -34,7 +34,7 @@ export const HOOK_VERIFICATION_CONTRACTS = {
     hookId: "gruff-code-quality",
     scenarioGroup: "gruff-hook",
     requiredScenarioIds: [
-      "unsupported-tool-input",
+      "missing-tool-identity",
       "non-source-edit",
       "source-dependency-result",
     ],

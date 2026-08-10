@@ -59,7 +59,7 @@ When `--check-drift` or `--check-content` is enabled, drift and content findings
 
 Adds 18 checks across the five harness concerns on top of the default build checks. Harness checks are deterministic but classified as **integrity** (installation drift), **advisory** (acknowledgeable practice), or **metric** (score-only maturity signal). JSON includes the status, impact, assurance, and framework-versus-target provenance needed to distinguish hard failures from limited or score-only evidence.
 
-Harness checks are grouped by **concern** -- the five things that matter for agent effectiveness. See [harness-engineering.md](harness-engineering.md) for what each concern means and the sources behind the model.
+Harness checks are grouped by **concern** - the five surfaces the model in [harness-engineering.md](harness-engineering.md) defines, where that doc also gives the sources behind each one.
 
 | Concern | Checks | Structural question |
 |---|---:|---|
@@ -101,7 +101,7 @@ For single-agent projects the check is opt-in via the flag. For multi-agent proj
 
 ## `goat-flow quality`
 
-Generates a structured quality-assessment prompt for a coding agent to evaluate goat-flow quality and usefulness on the current project. Unlike `audit`, it produces a prompt rather than deterministic findings.
+Generates a structured quality-assessment prompt for a coding agent to evaluate goat-flow quality and usefulness on the current project.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality . --agent antigravity
@@ -157,7 +157,7 @@ The `--mode` flag selects a focused quality assessment. Each mode generates a di
 - `quality history` lists saved reports and same-agent setup/system score deltas.
 - `quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from saved same-agent report ids.
 
-This keeps audit and quality separated in both terminology and storage: audit remains deterministic CLI output, while quality reports are agent-emitted assessments saved to a gitignored log directory for local trend analysis.
+The two commands stay separated in storage as well as terminology: audit output goes to stdout or `--output`, while quality reports land in a gitignored log directory for local trend analysis.
 
 ### When to use quality
 

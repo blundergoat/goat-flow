@@ -4,8 +4,8 @@
 
 ## v1.15.1 - 2026-08-10
 
-- **Hook support claims expire automatically** - Dated provider proof becomes stale before setup, audit, or dashboard can keep it effective.
-- **Codex project hooks have live delivery proof** - Interactive and exec PostToolUse and Stop runs carry dated trust and response evidence.
+- **Hook support claims expire automatically** - Dated provider evidence expires, so setup, audit, and dashboard report support as unverified.
+- **Codex project hooks have live delivery proof** - Interactive and exec runs of PostToolUse and Stop hooks carry dated trust and response evidence.
 - **Codex feedback and Stop hooks now install** - Setup uses `apply_patch`, a 90-second host limit, bounded results, and preserves custom hooks.
 - **Hook launcher failures reach the active model** - Timeouts, malformed output, and flooded output return bounded unavailable context.
 - **Packed hook canaries exercise release bytes** - Source and npm archives prove launcher timeouts return Codex feedback before its host limit.
@@ -180,7 +180,7 @@ Patch release for hook-surface honesty and `post-turn-safety` precision after th
 
 ## v1.12.0 - 2026-06-13
 
-Verification-score, universal post-turn safety, Codex Workspace preflight reliability, jq compatibility, and skill-handoff polish release.
+Verification scoring, universal post-turn safety, Codex Workspace preflight reliability, jq compatibility, and worked examples in the skill handoffs.
 
 - **Default post-turn hook is universal safety, not project validation** - `post-turn-safety` now installs by default for Claude Stop events and scans tracked diffs, staged diffs, and untracked non-ignored files for obvious secrets, private keys, credential assignments, and merge conflict markers without requiring project toolchain setup. Gitignored local state is skipped unless it is force-staged. Codex and Antigravity are excluded because their Stop-hook delivery is unverified (Codex registered Stop hooks did not fire under codex exec 0.139.0; Antigravity hook trust gates execution and no Stop payload was captured firing).
 - **Plan checkbox guard added as workflow hygiene** - `plan-checkbox-guard` installs beside `post-turn-safety` and blocks only when repo changes move while the active plan still has open checkboxes and the plan file stayed unchanged; it writes ignored local state under `.goat-flow/logs/plan-guard-state.json`, appears as workflow/planning support in the hooks page, and does not count as safety or validation evidence. It registers for Claude only: the Stop-payload spike verified Claude's `session_id`/`transcript_path`/`cwd`/`stop_hook_active` fields, while Codex Stop delivery never fired headlessly (codex exec 0.139.0) and Antigravity's payload could not be captured behind its hook-trust gate, so both are skipped with an explicit reason until verified.
@@ -296,16 +296,16 @@ Upgrade cleanup patch for stale skill reference files.
 
 ## v1.7.0 - 2026-05-20
 
-GOAT Flow 1.7.0 makes releases easier to check and the dashboard easier to use.
+Machine-readable audit output, manifest-driven agent setup, a Plans dashboard view, and wider deny-hook coverage.
 
 - **Clearer audits** - `audit --format sarif` adds CI-friendly output, and audit reports now say what is proven, limited, or agent-specific.
 - **Agent settings from the manifest** - Agent setup now comes from `workflow/manifest.json`; aggregate audit covers Claude, Codex, Gemini, and Copilot by default.
 - **Dashboard Plans** - New Plans view reads `.goat-flow/plans/`, previews milestones, tracks progress, and sets the active plan.
-- **More reliable workspace** - Terminal sessions better handle waiting/running/detached states, keep the selected project separate from the goat-flow workspace, improve Codex startup, support image drops, and detect input prompts from Claude and terminal titles.
-- **Safer dashboard basics** - Path checks, command execution, Markdown rendering, uploads, assets, project identity, navigation, and Quality page loading were tightened.
+- **Workspace terminal handling** - Terminal sessions track waiting/running/detached states, keep the selected project separate from the goat-flow workspace, harden Codex startup, accept image drops, and detect input prompts from Claude and terminal titles.
+- **Dashboard input and rendering hardening** - Tightened path checks, command execution, Markdown rendering, uploads, assets, project identity, navigation, and Quality page loading.
 - **Shorter prompt context** - Quality and setup prompts now get selected lessons, footguns, patterns, and decisions instead of whole files, with stale items filtered out.
 - **Stronger guardrails** - Deny hooks block GitHub writes through `gh`, tighten `.env.example` and heredoc checks, and expand self-tests across agent mirrors.
-- **Skill and release cleanup** - `goat-critique`, `goat-qa`, and `goat-review` now ask for clearer evidence; package/config/manifest/docs/templates/fixtures were synced to 1.7.0.
+- **Skill and release cleanup** - `goat-critique`, `goat-qa`, and `goat-review` now state what evidence they require; package, config, manifest, docs, templates, and fixtures move to 1.7.0.
 
 ## v1.6.4 - 2026-05-12
 
@@ -366,7 +366,7 @@ Skill authoring, quality assessment, and playbook/reference cleanup.
 - **Semantic assessments** - Runner prompts now require anti-bias guidance, scored semantic dimensions, scope checks, final gate decisions, and a fenced JSON verdict.
 - **Reference/playbook split** - Shared meta references stay in `.goat-flow/skill-docs/`; standalone tool and authoring playbooks live in `.goat-flow/skill-docs/playbooks/`.
 - **Prime patterns** - Browser-use recovery, active-testing authorization, proof tables, trigger-only descriptions, API skill guardrails, and frontend guidance were folded into existing surfaces.
-- **Release cleanup** - Version surfaces, docs, fixtures, stale path guidance, snapshot facts, and scratchpad link handling were aligned for the 1.6.0 release.
+- **Release cleanup** - Version surfaces, docs, fixtures, stale path guidance, snapshot facts, and scratchpad link handling now agree for the 1.6.0 release.
 
 ## v1.5.1 - 2026-05-08
 
@@ -410,7 +410,7 @@ Dashboard install-readiness scoring, setup prompt truthfulness, and `/api/setup`
 
 ## v1.4.2 - 2026-05-04
 
-Dashboard agent-targeting fix, audit scope consistency for setup prompts, harness-card prompt scope, and harness fix prompt improvements.
+Dashboard agent-targeting fix, audit scope consistency for setup prompts, harness-card prompt scope, and a harness fix prompt rework.
 
 - **Dashboard agent targeting** - Home "Fix First" card, harness fix prompts, and action commands now resolve the target agent from audit data (`failingHarnessAgent()`) instead of always using `activeRunner`. Prevents misleading `--agent claude` commands when a different agent (e.g. codex at 93%) has the actual failing harness check. Quality pill label now shows which agent the score belongs to. (`src/dashboard/views/home.html`)
 - **Audit scope consistency** - The `/api/setup` route now runs audit with `harness: true` and requests `harness-card` prompt scope, matching the harness-scored grades shown on Setup target cards. Previously the route used `harness: false` while the display used harness scores, producing contradictory pass/fail signals on the same page. (`src/cli/server/dashboard-routes.ts`)
@@ -430,7 +430,7 @@ Instruction file quality guards, execution loop skill integration, deny-dangerou
 - **Deterministic parity guard** - New `scripts/check-instruction-parity.mjs` validates canonical section order and required phrases across all four instruction files and their setup templates, catching structural drift between what setup generates and what the live files contain.
 - **Execution loop skill integration** - goat-* skills now declare mode/depth at Step 0, replacing READ. SCOPE gates on write phases (e.g. `/goat-plan` Phase 2, `/goat-debug` D3) require explicit approval before file writes. Added to all four instruction files and setup agent templates.
 - **Deny-dangerous search command blocking** - New `strip_shell_quotes_for_path_scan()` catches secret paths split or quoted with shell tricks (`cat '.'env`). Search command operand analysis blocks attempts to read secrets via search tool arguments or pattern files (`grep foo .env`, `grep -f .env`). Self-test suite expanded with search and quoting scenarios across all 6 hook copies.
-- **Harness audit expansion** - Verification concern now scans for recent (≤14-day) validation artifacts in `.goat-flow/logs/`. Recovery concern tracks unchecked milestone items, next-action clarity, testing-gate status, and archive state. Constraints concern refactored with clearer fact-gathering. Audit test coverage expanded.
+- **Harness audit expansion** - Verification concern now scans for recent (≤14-day) validation artifacts in `.goat-flow/logs/`. Recovery concern tracks unchecked milestone items, next-action clarity, testing-gate status, and archive state. Constraints concern gathers its facts through a single explicit pass, and audit test coverage grows to match.
 - **Skill-reference discoverability** - Generated and maintained instruction files now append the READ rule that agents must check `.goat-flow/skill-docs/` before declaring a tool or capability unavailable, and their Router Tables point at the tool playbooks directory.
 - **Skill Reference Index** - Installs `.goat-flow/skill-docs/README.md` from `workflow/skills/reference/README.md`, with a ToolSearch/harness-only anti-pattern callout, available-reference table, authoring guidance for new references, and browser-use incident provenance.
 - **Audit enforcement** - Added the default setup check [`instruction-file-skill-docs-pointer`](docs/audit-checks.md#setup-scope-14). When `.goat-flow/skill-docs/` exists, audit fails if the README index is missing or any present instruction file lacks a literal `.goat-flow/skill-docs/` pointer; projects without the directory get a skipped check.
@@ -485,7 +485,7 @@ Release-readiness hardening for decision records, dashboard audit performance, h
 
 ## v1.3.0 - 2026-04-27
 
-Plan completion protocol, browser-use shared reference, hook/push enforcement, dashboard prompt/quality upgrades, instruction artifact routing, harness-score honesty, performance/reference-version improvements, harness docs, and README rewrite.
+Plan completion protocol, browser-use shared reference, hook/push enforcement, dashboard prompt/quality upgrades, instruction artifact routing, harness-score honesty, request-scoped caching, reference-version auditability, harness docs, and README rewrite.
 
 - **Browser-use shared reference** - Browser-use guidance consolidated from per-skill copies into `.goat-flow/skill-docs/browser-use.md`. `/goat-debug` now detects UI bugs at Step 0, uses browser-use for D1 hypothesis testing and D4 post-fix verification, and offers installation guidance when unavailable. Manifest, install, drift, preflight, and quality checks treat browser-use as shared doctrine.
 - **Hook and push enforcement** - ADR-025 blocks all agent-initiated `git push` across README, Help, harness, hook, and settings surfaces. Deny hooks gained no-space redirect detection (`echo foo>.env`), escaped regex dots to prevent false positives, `npm token delete/revoke` blocking, command-parsing fixes, and aggregate audit-scope support. New hook version comparison audit and hook drift detection in `check-drift.ts`; `bump-version.sh` syncs hook templates to all installed mirrors.
@@ -591,8 +591,8 @@ Skill renames, Copilot CLI support, audit subsystem expansion (drift/content/man
 ## v1.1.0 - 2026-04-17
 
 Scanner/rubric system removed. Replaced by deterministic audit with 16 build checks (12 project setup + 4 per-agent) and 16 advisory harness checks across 5 concerns. Deterministic install script. Dashboard overhaul with dynamic recommended actions. 528 files changed.
-- 
-- **Critique Fixes** - Dual-critique synthesis resolved 10 findings. Fixed architecture.md build check count (17→16). Removed stop-lint.sh from core (project-specific concern, will revisit in a later version). Resolved 3 stale footgun entries (advisory hooks, swallows failures, dispatcher verb gap). Removed dead goat-review "code-review instruction file" reference. Reworded goat-test "multi-model" to actionable "cross-agent verification". Added analyse/evaluate/critique verbs to dispatcher disambiguation table. Improved critique prompt with 7 refinements: no-mutation warning, audit PASS caveat, severity definitions, scoped tool guidance, footgun currency checks, numeric claim verification, skill testing clarification.
+
+- **Critique Fixes** - Dual-critique synthesis resolved 10 findings. Fixed architecture.md build check count (17→16). Removed stop-lint.sh from core (project-specific concern, will revisit in a later version). Resolved 3 stale footgun entries (advisory hooks, swallows failures, dispatcher verb gap). Removed dead goat-review "code-review instruction file" reference. Reworded goat-test "multi-model" to actionable "cross-agent verification". Added analyse/evaluate/critique verbs to dispatcher disambiguation table. Added 7 refinements to the critique prompt: no-mutation warning, audit PASS caveat, severity definitions, scoped tool guidance, footgun currency checks, numeric claim verification, skill testing clarification.
 - **Audit System** - Replaced scanner/rubric engine (79 checks + 12 anti-patterns, point-based scoring) with audit system. 12 project-wide setup checks (config, directories, required files) are agent-agnostic. 4 per-agent checks (instruction file, skills, settings, deny-dangerous hook) run independently per agent. Advisory harness scoring (`--harness`) grades 5 concerns with 16 checks total: context, constraints, verification, recovery, feedback loop. Audit became the sole evaluation engine.
 - **Install Script** - `workflow/install-goat-flow.sh` handles all mechanical file copying: 7 skill templates, hooks, settings, templates, reference files, config scaffold. Deterministic, agent-aware (`--agent claude|codex|gemini`), idempotent. A separate migration script existed during v1.1.0 and was later removed as unused.
 - **Setup Prompts** - Stripped stack/toolchain info, signal-driven tasks, stale artifact cleanup, multi-agent consistency directives. Setup prompt now: run install script → follow numbered setup steps → verify with audit. Upgrade prompt (v0.9/v1.0) structured as numbered steps with scripts first.
@@ -606,7 +606,6 @@ Scanner/rubric system removed. Replaced by deterministic audit with 16 build che
 - **Hooks** - `deny-dangerous.sh` supports stdin and argv input, `--self-test` flag, blocks `rm -rf`, force push, `--no-verify`, `chmod 777`, pipe-to-interpreter patterns. Post-turn lint hook removed from core - project-specific concern (see `workflow/hooks/README.md`).
 - **Templates** - 5 project templates (feature-brief, mob-elaboration, compliance-checklist, flow-diagram-guide, requirements-template) remain in `workflow/templates/` as reference material. Removed from core install (no longer copied to `.goat-flow/templates/`).
 - **Tests** - 51 tests across unit, integration, and contract suites. Config filtering, scope coverage, quality concern coverage, cross-agent consistency.
-
 
 ## v1.0.0 - 2026-04-05
 

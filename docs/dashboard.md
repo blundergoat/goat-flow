@@ -12,7 +12,7 @@ Successful dashboard operations append redacted evidence-envelope records to `.g
 
 ## Views
 
-The dashboard uses a persistent desktop side rail for primary navigation. It collapses to icons with tooltips, exposes the active plan while collapsed, and groups Projects, Prompts, and New Prompt. The main destinations are Home, Prompts, Workspace, Hooks, Plans, Skill Evaluator, Projects, Quality, and Setup; Settings and About remain available as utility views. Every destination maps to a real view.
+The dashboard uses a persistent desktop side rail for primary navigation. It collapses to icons with tooltips, exposes the active plan while collapsed, and groups Projects, Prompts, and New Prompt. The main destinations are Home, Prompts, Workspace, Hooks, Plans, Skills, Projects, Quality, and Setup; Settings and About remain available as utility views. Every destination maps to a real view.
 
 ### Home
 
@@ -51,7 +51,7 @@ Multi-project browser. Lists registered projects with their latest audit status.
 
 ### Prompts
 
-Dedicated prompt library. Two-pane layout: left pane is the list with search, category filters, favorites strip, and grouped-by-category rendering; right pane is the full prompt preview with search-match highlighting. Primary actions are `Copy`, `Launch in new terminal`, and `Send to active terminal` -- the last one is project-scoped and only appears when one or more active sessions exist for the current project (a picker is shown when multiple). Keyboard: `/` focuses search, `↑` / `↓` navigate, `Enter` launches the selected prompt, `Esc` clears the search or selection.
+Dedicated prompt library. Two-pane layout: left pane is the list with search, category filters, favorites strip, and grouped-by-category rendering; right pane is the full prompt preview with search-match highlighting. Primary actions are `Copy`, `Launch in new terminal`, and `Send to active terminal`. The last one is project-scoped and only appears when the current project has at least one active session; multiple sessions show a picker. Keyboard: `/` focuses search, `↑` / `↓` navigate, `Enter` launches the selected prompt, `Esc` clears the search or selection.
 
 Good default presets to start with:
 
@@ -115,7 +115,7 @@ All `/api/*` requests require the dashboard token described in [Local Access Bou
 | `/api/projects/status` | GET | Project state classification (`bare`/`partial`/`v0.9`/`outdated`/`current`/`error`) plus dashboard project identity |
 | `/api/hooks` | GET | Desired and effective hook state for the selected project, including per-agent severity, first broken link, and repair guidance |
 | `/api/hooks/:hookId/toggle` | POST | Enable or disable one hook; updates `.goat-flow/config.yaml` and reconciles per-agent hook config files |
-| `/api/terminal/create` | POST | Start a terminal session; accepts `accessMode: "workspace" | "reporting"`, applies supported runner-specific reporting enforcement, and defaults omitted values to `workspace` |
+| `/api/terminal/create` | POST | Start a terminal session; accepts `accessMode: "workspace" \| "reporting"`, applies supported runner-specific reporting enforcement, and defaults omitted values to `workspace` |
 | `/api/terminal/list` | GET | List active terminal sessions |
 | `/api/terminal/sessions` | GET | Session metadata |
 | `/api/terminal/:id` | DELETE | End a terminal session |

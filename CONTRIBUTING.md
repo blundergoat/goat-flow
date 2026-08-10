@@ -1,6 +1,6 @@
 # Contributing to GOAT Flow
 
-Thanks for your interest in contributing. This guide covers environment setup, project layout, and PR workflow.
+Thanks for your interest in contributing.
 
 ## Dev Environment Setup
 
@@ -80,7 +80,7 @@ Stack detection lives in `src/cli/detect/project-stack.ts`. Add a new detection 
 
 ## PR Conventions
 
-- Conventional commit format: `type(scope): description` - e.g., `refactor(ci): enhance CI workflow`, `feat(dashboard): improve UX`
+- Conventional commit format: `type(scope): subject` - e.g., `fix(installer): quote path expansions in the hook installer`, `feat(audit): add SARIF output format`. Name the observable change; *enhance*, *improve*, and *update* are too weak to survive `git log`
 - Multi-line body when spanning multiple areas (blank line after summary)
 - Before opening: `npm run typecheck`, `npm test`, and `shellcheck` on any changed `.sh` files must all pass
 - See `docs/coding-standards/git-commit-message.md` for full conventions

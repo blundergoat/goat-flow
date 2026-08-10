@@ -94,7 +94,6 @@ The agent can only work with what it sees. Stale router paths, missing execution
 
 **Not checked here (belongs in quality):** whether instructions are specific to this project, whether footgun evidence is current, whether documentation content is accurate.
 
-
 ---
 
 ## 2. Constraints
@@ -113,8 +112,6 @@ Constraints run before model judgment and can prevent covered failure classes wi
 
 **Not checked here:** Ask First boundary counts, linter registration cross-reference, static-analysis tool detection. Those were earlier designs that were dropped as either low signal or out-of-scope for a structural audit.
 
-
-
 ---
 
 ## 3. Verification
@@ -127,12 +124,10 @@ Verification turns an agent's completion claim into inspectable evidence. The au
 
 - `hooks-registered` - hook registrations and hook files are in sync (no registered-but-missing, no exists-but-unregistered) for each agent
 - `commit-guidance` - for targets containing `.git`, commit guidance is present at preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md`. Targets without `.git` skip this check as not applicable. Old GitHub commit-guidance locations are reported as misplaced with a prompt to move the content.
-- `evidence-before-claims` - metric. Present agent instruction files carry the Hallucination red-flags clauses and the pointer to `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`). Missing coverage lowers the concern score but does not fail the harness scope in v1.7.0.
+- `evidence-before-claims` - metric. Present agent instruction files carry the Hallucination red-flags clauses and the pointer to `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`). Missing coverage lowers the concern score without failing the harness scope, as every `metric` check does.
 - `post-turn-hook-integrity` - metric. For agents whose manifest declares a post-turn event, reports whether the registered post-turn hook is the universal safety guard or a custom hook with literal validation commands, and whether validation hooks exit 0 unconditionally or mask failures. Missing or masked hooks lower the concern score without failing the harness scope. Agents without a post-turn event are skipped as not applicable. Safety-only hooks carry a guardrail-specific caveat; the Verification concern separately states that the audit itself did not execute project validation.
 
 **Not checked here:** project test-command configuration, lint command presence, Ask First quality, verification effectiveness. The shipped `post-turn-safety` hook is universal changed-content safety scanning, not project validation. goat-flow no longer ships a project-validation Stop hook; audit still does not judge whether project-specific commands are sufficient.
-
-
 
 ---
 
@@ -148,8 +143,6 @@ Agents that run for minutes or hours need durable state. Without recovery mechan
 - `session-logs` - `.goat-flow/logs/sessions/` exists as a readable directory. The JSON details expose the top-level Markdown file count for orientation, but that count does not affect status or score.
 
 **Not checked here:** whether entry counts are sufficient, recency, content quality of task or session files, current objective, completed work, last verification, next action, or end-to-end resumability. A fresh install passes with the Recovery evidence limit.
-
-
 
 ---
 

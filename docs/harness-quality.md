@@ -8,7 +8,7 @@
 | Harness | `npx @blundergoat/goat-flow@latest audit . --harness` | Is the harness structurally complete? |
 | **Quality** | **`npx @blundergoat/goat-flow@latest quality . --agent X --mode harness`** | **Does this make sense to a fresh agent?** |
 
-Quality is not automated checks. It generates a prompt that asks an agent to assess whether the harness is actually usable, not just structurally present. The evaluation covers:
+The generated prompt asks an agent to judge whether the harness is usable, not just structurally present. The evaluation covers:
 
 1. **Ground yourself** - run the project's validation commands (`audit --harness`, `stats --check`), save the output
 2. **Concern-by-concern analysis** - for each of the 5 harness concerns (Context, Constraints, Verification, Recovery, Feedback Loop), assess what works, what fails or is weak, and provide file or semantic-anchor evidence
@@ -90,13 +90,4 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 ## When to use quality
 
-- After setup is complete and audit passes - "is this actually good?"
-- After significant changes - "did we break anything the auditor can't see?"
-- Periodically - "has the harness drifted?"
-- When onboarding - "does this make sense to a fresh agent?"
-
-## When NOT to use quality
-
-- As a setup gate (use `audit`)
-- As a CI check (use `audit`)
-- As a replacement for `audit --harness` (quality is subjective; audit is deterministic)
+[Audit & Quality](audit-and-quality.md#when-to-use-quality) owns the routing rules for both commands. The harness-specific case: reach for `--mode harness` when `audit --harness` passes and you still suspect the concerns are wired but not useful.

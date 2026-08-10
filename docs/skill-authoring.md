@@ -1,6 +1,6 @@
 # Skill Authoring
 
-goat-flow has two authoring surfaces:
+goat-flow has three authoring surfaces:
 
 | Surface | Use for | Writes files? |
 |---|---|---|

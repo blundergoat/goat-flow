@@ -160,13 +160,13 @@ Route every migrated launcher-owned failure through the neutral unavailable enve
 ## Footgun: Gitignored local artifacts make repository scans diverge between local and CI
 
 **Status:** active | **Created:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 2 | **Latest occurrence:** 2026-08-07
+**Incident count:** 1 | **Latest occurrence:** 2026-08-07
 
-**Trap:** A full-repository analyzer can silently depend on gitignored local state. The gruff warning-ratchet floor was first recorded as 448 analysed files because the scan counted `.goat-flow/hooks/run-with-bash.mjs`, the gitignored installed mirror of the tracked `workflow/hooks/run-with-bash.mjs`. Later, local `dist/cli/cli.js` satisfied the package binary check while a fresh CI checkout ran the ratchet before building `dist/` and reported `design.package-bin-missing`. In both cases local verification was green only because the developer tree contained files CI did not.
+**Trap:** A full-repository analyzer can silently depend on gitignored local state. Local `dist/cli/cli.js` satisfied the package binary check while a fresh CI checkout ran the warning ratchet before building `dist/` and reported `design.package-bin-missing`. Local verification was green only because the developer tree contained generated files absent from the clean checkout.
 
-**Evidence:** Measured on 2026-08-07 while adding the ratchet: local scan `paths.analysedFiles: 448` with a `security.process-exec` identity for the gitignored mirror; the identical tree minus gitignored state analysed 447 files with no mirror identity. Measured again from a clean `git archive`: the ratchet emitted stable identity `75483f7900f8f4f6` before the build, then passed after `npm run build` with 449 analysed files. Anchors: `.gruff-ts.yaml` (search: `installed hook mirrors are gitignored local copies`), `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`), `.github/workflows/ci.yml` (search: `Build package binary`).
+**Evidence:** Measured from a clean `git archive` on 2026-08-07: the ratchet emitted stable identity `75483f7900f8f4f6` before the build, then passed after `npm run build` with 449 analysed files. Anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`) and `.github/workflows/ci.yml` (search: `Build package binary`).
 
-**Prevention:** A shared scan contract may only cover files every environment can reproduce. Before recording a coverage floor or accepted-debt manifest, ignore duplicated gitignored artifacts in the analyzer's path config and verify every manifest entry's file with `git ls-files --error-unmatch`. When a rule validates a declared generated artifact, build that artifact before the scan in every environment. Reproduce the gate from a clean tracked-tree fixture instead of trusting a developer tree that already contains build output.
+**Prevention:** A shared scan contract may cover only files every environment can reproduce. Build declared generated artifacts before the scan in every environment, verify accepted-debt paths against tracked or deliberately generated inputs, and reproduce the gate from a clean tracked-tree fixture instead of trusting an existing developer build.
 
 ## Footgun: Nested template literals can blind the gruff-ts block scanner to everything after them
 

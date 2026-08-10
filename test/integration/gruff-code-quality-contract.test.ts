@@ -7,6 +7,7 @@
  */
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -30,6 +31,14 @@ import {
   sampleGruffEditPayload,
   writeContractGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
+
+const PROJECT_ROOT = join(import.meta.dirname, "..", "..");
+const HOOK_RUNNER = join(
+  PROJECT_ROOT,
+  "workflow",
+  "hooks",
+  "run-with-bash.mjs",
+);
 
 after(cleanupHookTestDirs);
 
@@ -302,6 +311,68 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       },
     },
   ];
+
+  const benignPostToolEventFixtures = [
+    {
+      displayName: "Claude Bash command",
+      provider: "claude",
+      payload: {
+        tool_name: "Bash",
+        tool_input: { command: "pwd" },
+      },
+    },
+    {
+      displayName: "Copilot view call",
+      provider: "copilot",
+      payload: {
+        toolName: "view",
+        toolArgs: '{"path":"README.md"}',
+      },
+    },
+  ] as const;
+
+  for (const benignPostToolEvent of benignPostToolEventFixtures) {
+    // Fixture purpose: runs the launcher path that previously sent false incomplete feedback.
+    // Side effects: starts Node and Bash child processes without editing project files.
+    it(`silently ignores a valid non-edit ${benignPostToolEvent.displayName}`, () => {
+      const responseMode = `${benignPostToolEvent.provider}:gruff:goat-flow.hook-result.v1:post-tool:1:75000`;
+      const result = spawnSync(
+        process.execPath,
+        [HOOK_RUNNER, "workflow/hooks/gruff-code-quality.sh", responseMode],
+        {
+          cwd: PROJECT_ROOT,
+          input: JSON.stringify(benignPostToolEvent.payload),
+          encoding: "utf8",
+        },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.stdout, "");
+      assert.equal(result.stderr, "");
+    });
+  }
+
+  // Fixture purpose: keeps missing tool identity visible while valid named non-edits no-op.
+  // Side effects: starts Node and Bash child processes without editing project files.
+  it("reports a malformed migrated payload as incomplete", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        HOOK_RUNNER,
+        "workflow/hooks/gruff-code-quality.sh",
+        "claude:gruff:goat-flow.hook-result.v1:post-tool:1:75000",
+      ],
+      {
+        cwd: PROJECT_ROOT,
+        input: '{"tool_input":{"command":"pwd"}}',
+        encoding: "utf8",
+      },
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /gruff-code-quality: INCOMPLETE/u);
+    assert.match(result.stdout, /unsupported-tool-payload/u);
+  });
 
   // Separate cases show which user tool path failed to select the edited file.
   for (const userPatchFixture of userPatchPayloadFixtures) {

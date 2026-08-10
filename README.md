@@ -61,7 +61,7 @@ The local dashboard keeps project and runner selection available while you move 
 | **Workspace** | Run up to 10 PTY-backed terminal sessions and attach images to prompts |
 | **Plans** | Inspect local milestones, checkbox progress, and the active-plan pointer |
 | **Projects** | Register projects, compare audit status, and switch the dashboard target |
-| **Skill Evaluator** | Audit installed skills or evaluate draft Markdown without installing it |
+| **Skills** | Audit installed skills or evaluate draft Markdown without installing it |
 | **Quality** | Generate source-aware assessment prompts and compare saved reports |
 | **Hooks** | Inspect and toggle shipped guardrail, quality, and safety hooks |
 

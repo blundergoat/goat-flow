@@ -6,12 +6,11 @@ GOAT Flow is a documentation framework for AI coding agent workflows. It consist
 
 Security concerns here are primarily about:
 - Workflow recommendations that could lead to unsafe agent behaviour
-- Shell scripts that run locally on your machine
-- The auditor CLI, which runs locally -- no data leaves your machine
+- Shell scripts that run locally on your machine, including the deny hooks
 
 ## Reporting a Vulnerability
 
-If you discover a security issue, please report it responsibly:
+If you discover a security issue, report it privately through one of these channels:
 
 - **Email:** hello@blundergoat.com
 - **GitHub Security Advisories:** Use the "Report a vulnerability" button on the [Security tab](../../security/advisories/new)

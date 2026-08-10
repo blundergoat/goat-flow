@@ -34,12 +34,11 @@ paths:
     # data, not code to refactor. Keep this as a path ignore, not a threshold
     # change.
     - ".goat-flow/logs/**"
-    # 2026-08-07: installed hook mirrors are gitignored local copies of the
-    # tracked workflow/hooks/ sources, so they do not exist in a fresh CI
-    # checkout. Scanning them locally would make the warning-ratchet manifest
-    # and analysed-file floor diverge between local preflight and the CI
-    # ratchet job. The tracked canonical hooks stay fully analyzed. Keep this
-    # as a path ignore, not a threshold change.
+    # 2026-08-10: installed hook mirrors are tracked release evidence for the
+    # canonical workflow/hooks/ sources. Scanning both byte-identical copies
+    # would double-count one implementation in the warning ratchet and coverage
+    # floor. Analyze the canonical hooks here and verify mirror parity through
+    # the drift audit. Keep this as a path ignore, not a threshold change.
     - ".goat-flow/hooks/**"
 
 allowlists:

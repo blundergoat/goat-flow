@@ -82,7 +82,7 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 - Types are distributed by domain: CLI command types in `cli-types.ts`; audit types in `audit/types.ts`; and config, manifest, quality, and server types in `config/types.ts`, `manifest/types.ts`, `quality/*types.ts`, and `server/*types.ts`. Keep only genuinely cross-cutting types in `src/cli/types.ts`.
 - AUDIT_VERSION lives in `src/cli/constants.ts`, derived from `package.json` at runtime (single source of truth)
 - Skill frontmatter must embed AUDIT_VERSION - CI enforces this in the "Skill template versions" step
-- `ReadonlyFS` interface for filesystem access -- auditor never writes to disk
+- `ReadonlyFS` interface for filesystem access - the auditor never writes to disk
 - Minimal runtime dependencies (js-yaml, ws), with optional node-pty support. Dev-only: typescript, tsx, @types/node
 
 ## DO
@@ -100,7 +100,7 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 - Don't add unnecessary runtime dependencies (keep the dependency footprint minimal)
 - Don't turn `src/cli/types.ts` into a catch-all; colocate domain types with their owning module and reserve the shared file for cross-cutting contracts
 - Don't hardcode version strings (derive from package.json via constants.ts)
-- Don't use hypothetical examples in docs -- real incidents only
+- Don't use hypothetical examples in docs - real incidents only, except explicitly labelled placeholder scenarios in shipped skill references
 - Don't reference removed ADR patterns (see `scripts/preflight-checks.sh` for the enforced list)
 - Don't create `_modified`, `_new`, `_backup`, `_v2` file variants - modify files in-place
 

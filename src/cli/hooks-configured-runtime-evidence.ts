@@ -269,9 +269,9 @@ const POST_TURN_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
 const GRUFF_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
   {
     id: HOOK_VERIFICATION_CONTRACTS["gruff-hook"].requiredScenarioIds[0],
-    label: "Unsupported tool input remains incomplete",
+    label: "Missing tool identity remains incomplete",
     expected: "incomplete",
-    payload: JSON.stringify({ tool_name: "Read", tool_input: {} }),
+    payload: JSON.stringify({ tool_input: {} }),
     acceptedObservations: ["incomplete"],
   },
   {

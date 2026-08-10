@@ -2204,12 +2204,20 @@ main() {
   tool_name="$(json_tool_name "$payload" || true)"
   # Restricted hosts may need the small direct-field fallback to identify the completed tool.
   [[ -n "$tool_name" ]] || tool_name="$(fallback_tool_name "$payload" || true)"
-  # Unregistered tool events remain silent for legacy users and explicit for migrated adapters.
-  if ! supported_payload_tool "$tool_name" "$payload"; then
+  # A missing tool identity is malformed because the hook cannot classify the event safely.
+  if [[ -z "$tool_name" ]]; then
     if [[ "$migrated_result_mode" -eq 1 ]]; then
       duration_ms=$(( (SECONDS - started_seconds) * 1000 ))
       emit_hook_result "incomplete" "none" 0 0 0 "input-invalid" \
         '[{"code":"unsupported-tool-payload","message":"The completed tool did not identify a supported source edit","target":"project"}]' "$duration_ms"
+    fi
+    exit 0
+  fi
+  # Broad provider matchers also send valid non-edit events; complete their zero-unit scope silently.
+  if ! supported_payload_tool "$tool_name" "$payload"; then
+    if [[ "$migrated_result_mode" -eq 1 ]]; then
+      duration_ms=$(( (SECONDS - started_seconds) * 1000 ))
+      emit_hook_result "pass" "complete" 0 0 0 "completed-clean" '[]' "$duration_ms"
     fi
     exit 0
   fi
