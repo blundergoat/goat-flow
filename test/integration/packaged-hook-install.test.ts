@@ -83,6 +83,9 @@ function extractPackedCandidate(): string {
       "pack",
       "--json",
       "--ignore-scripts",
+      // `npm publish --dry-run` exports npm_config_dry_run=true to prepublishOnly,
+      // and a nested pack inherits it: npm still reports a filename it never wrote.
+      "--dry-run=false",
       "--pack-destination",
       archiveDirectoryPath,
     ],

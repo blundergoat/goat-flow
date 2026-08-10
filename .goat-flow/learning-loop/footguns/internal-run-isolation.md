@@ -1,6 +1,6 @@
 ---
 category: internal-run-isolation
-last_reviewed: 2026-05-27
+last_reviewed: 2026-08-11
 ---
 
 ## Footgun: Internal / intermediate runs against a user target must strip side-effect-bearing config
@@ -24,3 +24,20 @@ last_reviewed: 2026-05-27
 2. Internal runs should pipe results back via in-memory return values or scratch tmpdirs, never the user's configured output paths. If a writer is truly needed for an intermediate run, it should be a temp file in `os.tmpdir()` that the caller deletes.
 3. Contract test pattern: for every meta-command (optimize / preview / dry-run / batch-compare), assert that running it does NOT touch the user's `outputPath` file. Fixture: set `outputPath: "/tmp/should-not-be-written-N.jsonl"`, run the meta-command, assert the file does not exist after the run completes.
 4. When adding a new side-effect-bearing config field (a new output sink, a new external integration), add it to the internal-run sanitization field list in the same PR. If you don't, the next meta-command that runs will silently pollute it.
+
+## Footgun: Nested npm commands inherit the parent publish lifecycle's config
+
+**Status:** active | **Created:** 2026-08-11 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** When a test or script spawns npm from inside a lifecycle script, pin the flags whose side effects it depends on rather than trusting npm's defaults.
+**Trigger phase:** VERIFY
+
+**Symptoms:** `npm run test:full` passes on its own, and the same suite fails under `npm publish --dry-run`. The failing test spawns `npm pack`, receives a normal `--json` payload naming a tarball, then cannot read that tarball from disk. The surfaced error names `tar`, not npm.
+
+**Why it happens:** npm exports resolved config into the lifecycle environment, so `npm publish --dry-run` sets `npm_config_dry_run=true` for `prepublishOnly` and for every npm command that script starts. Environment config outranks a nested command's defaults, so `npm pack` runs as a dry run: it prints the filename it would have written and writes nothing to `--pack-destination`. Only the file write disappears, so the failure surfaces one step later in whatever reads the archive.
+
+**Evidence (measured 2026-08-11):** a probe package whose `prepublishOnly` printed its own environment reported `npm_config_dry_run="true"` under `npm publish --dry-run`. In this repo, `npm pack --json --ignore-scripts --pack-destination <dir>` wrote one tarball normally and zero tarballs under `npm_config_dry_run=true`, printing the same filename both times. `test/integration/packaged-hook-install.test.ts` (search: `extractPackedCandidate`) then failed with `# fail 2` and `tar (child): ... Cannot open: No such file or directory`, which blocked the 1.15.1 run of `scripts/npm-publish.sh`.
+
+**Prevention:**
+1. A nested npm command that depends on a side effect must pin the flag that controls it. `extractPackedCandidate` passes `--dry-run=false`, and command-line flags outrank inherited `npm_config_*`.
+2. Reproduce the lifecycle context when a test spawns npm. `npm_config_dry_run=true node --import tsx --test <file>` separates the two cases; a bare run passes either way.
+3. Keep release-gate output intact. `scripts/npm-publish.sh` (search: `Full dry-run output kept at`) piped the dry run through `tail -8`, which cut the `# fail` count and every `not ok` line and left `npm error code 1` as the only visible symptom.

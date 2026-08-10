@@ -49,6 +49,7 @@ PACKAGE_NAME="@blundergoat/goat-flow"
 REGISTRY_URL="https://registry.npmjs.org/"
 AUTH_SOURCE=""
 TEMP_NPMRC=""
+DRY_RUN_LOG=""
 
 cleanup() {
   if [[ -n "$TEMP_NPMRC" && -f "$TEMP_NPMRC" ]]; then
@@ -185,7 +186,19 @@ echo ""
 
 # Dry run
 echo "--- Dry run ---"
-npm publish --dry-run --access public --registry="$REGISTRY_URL" 2>&1 | tail -8
+DRY_RUN_LOG=$(mktemp)
+if npm publish --dry-run --access public --registry="$REGISTRY_URL" >"$DRY_RUN_LOG" 2>&1; then
+  tail -8 "$DRY_RUN_LOG"
+  rm -f -- "$DRY_RUN_LOG"
+  DRY_RUN_LOG=""
+else
+  dry_run_status=$?
+  # The failing lines sit far above the tail, so summarise instead of truncating.
+  echo "Error: publish dry run failed (exit ${dry_run_status})." >&2
+  grep -E '^not ok |^# fail |^npm error' "$DRY_RUN_LOG" | head -20 >&2 || true
+  echo "Full dry-run output kept at: ${DRY_RUN_LOG}" >&2
+  exit 1
+fi
 echo ""
 
 read -rp "Publish v${VERSION} to npm? (y/N) " confirm
