@@ -40,4 +40,4 @@ last_reviewed: 2026-08-11
 **Prevention:**
 1. A nested npm command that depends on a side effect must pin the flag that controls it. `extractPackedCandidate` passes `--dry-run=false`, and command-line flags outrank inherited `npm_config_*`.
 2. Reproduce the lifecycle context when a test spawns npm. `npm_config_dry_run=true node --import tsx --test <file>` separates the two cases; a bare run passes either way.
-3. Keep release-gate output intact. `scripts/npm-publish.sh` (search: `Full dry-run output kept at`) piped the dry run through `tail -8`, which cut the `# fail` count and every `not ok` line and left `npm error code 1` as the only visible symptom.
+3. Keep release-gate output visible. The 1.15.1 script piped `npm publish --dry-run` - and with it the whole test run - through `tail -8`, which cut the `# fail` count and every `not ok` line and left `npm error code 1` as the only visible symptom. The gate now runs directly as `npm run publish:check` with live output, and both publish calls pass `--ignore-scripts` behind a pack-shasum identity guard, so the lifecycle never wraps the suites at all: `scripts/npm-publish.sh` (search: `pack_shasum`).

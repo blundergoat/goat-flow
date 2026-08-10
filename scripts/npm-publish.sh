@@ -8,13 +8,19 @@
 #   bash scripts/npm-publish.sh
 #
 # Behavior:
-#   1) reads package.json version
-#   2) runs build and tests
-#   3) prints a dry-run publish summary
-#   4) asks for manual confirmation before `npm publish`
+#   1) reads package.json version and verifies npm publish auth
+#   2) runs `npm run publish:check` once - the single expensive gate
+#      (versions, instruction parity, build, package links, fast + slow tests)
+#   3) prints an --ignore-scripts dry-run summary and records the tarball
+#      shasum
+#   4) asks for manual confirmation, re-probes the shasum so the approved
+#      bytes are provably what ships, then publishes with --ignore-scripts
+#      (prepublishOnly already ran as step 2; rerunning it would repeat
+#      ~11 minutes of identical checks against an unchanged tree)
 #
 # Exit:
-#   0 if published or explicitly aborted, non-zero on failed build/test/publish.
+#   0 if published or explicitly aborted; non-zero on failed checks, package
+#   contents changed after confirmation, or failed publish.
 #
 # Requirements:
 #   - node, npm
@@ -49,7 +55,6 @@ PACKAGE_NAME="@blundergoat/goat-flow"
 REGISTRY_URL="https://registry.npmjs.org/"
 AUTH_SOURCE=""
 TEMP_NPMRC=""
-DRY_RUN_LOG=""
 
 cleanup() {
   if [[ -n "$TEMP_NPMRC" && -f "$TEMP_NPMRC" ]]; then
@@ -123,6 +128,18 @@ trim_output() {
   tr -d '\r' | awk '{$1=$1; print}'
 }
 
+# Shasum of the tarball npm would publish from the current tree.
+# Probed before and after the confirmation prompt: npm tarballs are
+# content-derived (internal mtimes are fixed), so equal shasums prove the
+# publish ships exactly the bytes the dry run displayed. The JSON travels as
+# an argument, not a pipe, so a failed npm probe aborts under `set -e`
+# instead of feeding the parser an empty stream.
+pack_shasum() {
+  local pack_json
+  pack_json=$(npm pack --dry-run --json --ignore-scripts 2>/dev/null)
+  node -e "const raw = process.argv[1]; const records = raw ? JSON.parse(raw) : []; const shasum = records[0]?.shasum ?? ''; if (!shasum) { console.error('npm pack reported no shasum'); process.exit(1); } console.log(shasum);" "$pack_json"
+}
+
 verify_publish_auth() {
   local npm_user
   local tfa_mode
@@ -178,28 +195,21 @@ VERSION=$(node -p "require('./package.json').version")
 echo "Publishing ${PACKAGE_NAME}@${VERSION}"
 verify_publish_auth
 
-# Preflight
-echo "--- Preflight ---"
-npm run build
-npm test
+# The single expensive gate. Runs directly (not under `npm publish`) so test
+# output streams live and no npm_config_* lifecycle environment reaches the
+# suites; the publish calls below pass --ignore-scripts so prepublishOnly
+# cannot rerun the same checks against the unchanged tree.
+echo "--- Publish check ---"
+npm run publish:check
 echo ""
 
-# Dry run
+# Tarball preview only; the gate above already validated this exact tree.
 echo "--- Dry run ---"
-DRY_RUN_LOG=$(mktemp)
-if npm publish --dry-run --access public --registry="$REGISTRY_URL" >"$DRY_RUN_LOG" 2>&1; then
-  tail -8 "$DRY_RUN_LOG"
-  rm -f -- "$DRY_RUN_LOG"
-  DRY_RUN_LOG=""
-else
-  dry_run_status=$?
-  # The failing lines sit far above the tail, so summarise instead of truncating.
-  echo "Error: publish dry run failed (exit ${dry_run_status})." >&2
-  grep -E '^not ok |^# fail |^npm error' "$DRY_RUN_LOG" | head -20 >&2 || true
-  echo "Full dry-run output kept at: ${DRY_RUN_LOG}" >&2
-  exit 1
-fi
+npm publish --dry-run --ignore-scripts --access public --registry="$REGISTRY_URL"
 echo ""
+
+approved_shasum=$(pack_shasum)
+echo "Tarball shasum locked for confirmation: ${approved_shasum}"
 
 read -rp "Publish v${VERSION} to npm? (y/N) " confirm
 if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
@@ -207,6 +217,15 @@ if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
   exit 0
 fi
 
-npm publish --access public --registry="$REGISTRY_URL"
+# Approval covered the dry-run bytes; publishing different bytes needs a new
+# gate run, not a warning.
+current_shasum=$(pack_shasum)
+if [[ "$current_shasum" != "$approved_shasum" ]]; then
+  printf 'Error: package contents changed since the dry run (shasum %s -> %s). Re-run the script.\n' \
+    "$approved_shasum" "$current_shasum" >&2
+  exit 1
+fi
+
+npm publish --ignore-scripts --access public --registry="$REGISTRY_URL"
 echo ""
 echo "Published: https://www.npmjs.com/package/${PACKAGE_NAME}/v/${VERSION}"
