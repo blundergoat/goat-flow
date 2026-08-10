@@ -276,33 +276,45 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     );
   });
 
-  // Users can reach patch handling through a native tool or a shell-wrapped apply_patch call.
-  it("selects only files named by direct and command-content apply_patch payloads", () => {
-    const patchText = [
-      "*** Begin Patch",
-      "*** Update File: src/sample.ts",
-      "@@ -2,1 +2,1 @@",
-      "-b",
-      "+changed",
-      "*** End Patch",
-    ].join("\n");
-    const payloads = [
-      { tool_name: "apply_patch", tool_input: { patch: patchText } },
-      {
-        tool_name: "Bash",
-        tool_input: { command: `apply_patch <<'PATCH'\n${patchText}\nPATCH` },
+  const userPatchText = [
+    "*** Begin Patch",
+    "*** Update File: src/sample.ts",
+    "@@ -2,1 +2,1 @@",
+    "-b",
+    "+changed",
+    "*** End Patch",
+  ].join("\n");
+  const userPatchPayloadFixtures = [
+    {
+      displayName: "direct apply_patch payload",
+      payload: {
+        tool_name: "apply_patch",
+        tool_input: { patch: userPatchText },
       },
-    ];
+    },
+    {
+      displayName: "shell-wrapped apply_patch payload",
+      payload: {
+        tool_name: "Bash",
+        tool_input: {
+          command: `apply_patch <<'PATCH'\n${userPatchText}\nPATCH`,
+        },
+      },
+    },
+  ];
 
-    // Both user paths must analyze the patch target without falling back to unrelated dirty files.
-    for (const payload of payloads) {
+  // Separate cases show which user tool path failed to select the edited file.
+  for (const userPatchFixture of userPatchPayloadFixtures) {
+    // Fixture purpose: proves only the patch-named file reaches the user's analyzer.
+    // Side effects: creates a project, writes both files, and runs the real hook.
+    it(`selects only files named by a ${userPatchFixture.displayName}`, () => {
       const projectRoot = makeEditedGruffContractProject(
         CLEAN_GRUFF_CONTRACT_ENVELOPE,
       );
       mkdirSync(join(projectRoot, "other"), { recursive: true });
       writeFileSync(join(projectRoot, "other", "dirty.ts"), "dirty\n");
       const result = readMigratedGruffResult(
-        runMigratedHook(projectRoot, payload, "/usr/bin:/bin"),
+        runMigratedHook(projectRoot, userPatchFixture.payload, "/usr/bin:/bin"),
       );
 
       assert.equal(result.outcome, "pass");
@@ -310,10 +322,10 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
         readFileSync(join(projectRoot, "gruff-hook-args.log"), "utf8"),
         "hook --format json src/sample.ts\n",
       );
-    }
-  });
+    });
+  }
 
-  // The nearest package config is the explicit analyzer target a monorepo edit belongs to.
+  // Fixture covers monorepo routing; writes package files and runs the analyzer process.
   it("runs a package-local analyzer from its nearest monorepo config root", () => {
     const projectRoot = makeRoot();
     const packageRoot = join(projectRoot, "app");
@@ -392,8 +404,8 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     assert.equal(existsSync(helperMarkerPath), false);
   });
 
-  // A failed Git query means edit attribution is incomplete, never a clean analyzer result.
-  it("reports Git diff failure and deletion-only scope explicitly", () => {
+  // Fixture covers failed Git scope; writes a shim and edit, then runs both processes.
+  it("reports Git diff failure as incomplete", () => {
     const failedGitProjectRoot = makeEditedGruffContractProject(
       CLEAN_GRUFF_CONTRACT_ENVELOPE,
     );
@@ -423,7 +435,10 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       (failedGitResult.findings as Array<{ code: string }>)[0]?.code,
       "git-scope-failed",
     );
+  });
 
+  it("reports deletion-only scope as not applicable", () => {
+    // Filesystem side effect: commits then deletes the user's file before hook execution.
     const deletionProjectRoot = makeEditedGruffContractProject(
       CLEAN_GRUFF_CONTRACT_ENVELOPE,
     );
@@ -460,8 +475,9 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     );
   });
 
-  // Rename-only and binary edits have no trustworthy positive source hunk to attribute.
-  it("classifies rename-only and binary Git changes as not applicable", () => {
+  // Fixture purpose: proves a rename without source changes is inapplicable for users.
+  // Side effects: creates a project, commits and renames a file, then runs the hook.
+  it("classifies rename-only Git changes as not applicable", () => {
     const renameProjectRoot = makeEditedGruffContractProject(
       CLEAN_GRUFF_CONTRACT_ENVELOPE,
     );
@@ -490,7 +506,10 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       (renameResult.findings as Array<{ code: string }>)[0]?.code,
       "analysis-not-applicable",
     );
+  });
 
+  // Fixture covers binary scope; writes binary user content and runs Git and hook processes.
+  it("classifies binary Git changes as not applicable", () => {
     const binaryProjectRoot = makeEditedGruffContractProject(
       CLEAN_GRUFF_CONTRACT_ENVELOPE,
     );
@@ -524,7 +543,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     );
   });
 
-  // Health is session-scoped and written only after one schema-valid analyzer exchange.
+  // Writes session health markers so repeated user edits receive one useful process notice.
   it("deduplicates verified health while re-announcing malformed and reused session state", () => {
     const failedProjectRoot = makeEditedGruffContractProject("", {
       exitStatus: 7,

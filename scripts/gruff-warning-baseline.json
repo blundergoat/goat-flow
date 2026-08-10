@@ -41,18 +41,6 @@
       ]
     },
     {
-      "stableIdentity": "4ec96770e888823a",
-      "ruleId": "size.file-length",
-      "file": "test/integration/setup-install-migrations.test.ts",
-      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
-      "occurrences": [
-        {
-          "lines": 910,
-          "threshold": 750
-        }
-      ]
-    },
-    {
       "stableIdentity": "56c1a648b8246713",
       "ruleId": "size.file-length",
       "file": "test/unit/check-content-quality.test.ts",
@@ -225,18 +213,6 @@
       "occurrences": [
         {
           "lines": 819,
-          "threshold": 750
-        }
-      ]
-    },
-    {
-      "stableIdentity": "ecbbf586390a47ee",
-      "ruleId": "size.file-length",
-      "file": "src/cli/server/dashboard-reporting.ts",
-      "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
-      "occurrences": [
-        {
-          "lines": 755,
           "threshold": 750
         }
       ]

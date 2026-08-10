@@ -95,7 +95,7 @@ last_reviewed: 2026-08-09
 
 **Status:** active | **Created:** 2026-05-31
 
-**Incident count:** 5 | **Latest occurrence:** 2026-08-07
+**Incident count:** 6 | **Latest occurrence:** 2026-08-10
 
 **What happened:** During the gruff naming cleanup, the full `npm test` run reached the installer round-trip fixture and failed its temp-repo preflight because local style gates still had issues: ESLint flagged a non-null assertion in `src/cli/cli-parser.ts`, and Prettier found an unformatted modified contract test.
 
@@ -108,6 +108,8 @@ last_reviewed: 2026-08-09
 **Same-day recurrence:** M02 correctly ran cheap gates before broad tests, and Prettier caught the newly edited `plans-time.ts` before the timing suites. Formatting first prevented a later preflight or round-trip failure; the proof sequence stopped, formatted the file, and re-ran the exact check before continuing.
 
 **Recurrence 2026-08-07:** R2's degradation-list behavior and focused tests passed, but the release-wide format gate later rejected the modified verdict test. Formatting that file and rerunning the same gate cleared the failure before full tests or preflight. Evidence anchor: `test/unit/review-validate-verdict.test.ts` (search: `rejects empty or contradictory degradation flag lists`).
+
+**Recurrence 2026-08-10:** The release-wide format gate found `scripts/check-versions.mjs` unformatted after focused hook tests were green. Because formatting ran before the full regression and preflight, the correction stayed isolated to that file and the exact format check then passed. Evidence anchor: `scripts/check-versions.mjs` (search: `const hookRuntimeTemplates`).
 
 **Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`), `src/cli/plans-time.ts` (search: `beforeMilestoneReplacement`).
 

@@ -37,7 +37,7 @@ function walkMarkdown(dir, out = []) {
     // Nested reference packs stay part of the same user-visible release identity.
     if (stat.isDirectory()) {
       walkMarkdown(path, out);
-    // Markdown files carry the frontmatter version users receive in installed mirrors.
+      // Markdown files carry the frontmatter version users receive in installed mirrors.
     } else if (path.endsWith(".md")) {
       out.push(path);
     }
@@ -54,7 +54,8 @@ const referenceTemplates = [
 ];
 const hookRuntimeTemplates = readdirSync("workflow/hooks")
   .filter(
-    (runtimeName) => runtimeName.endsWith(".sh") || runtimeName.endsWith(".mjs"),
+    (runtimeName) =>
+      runtimeName.endsWith(".sh") || runtimeName.endsWith(".mjs"),
   )
   .map((runtimeName) => join("workflow/hooks", runtimeName));
 
@@ -111,4 +112,6 @@ if (!allVersionsMatch) {
   );
   process.exit(1);
 }
-console.log(`All skill, reference, hook, and manifest versions match ${version}`);
+console.log(
+  `All skill, reference, hook, and manifest versions match ${version}`,
+);

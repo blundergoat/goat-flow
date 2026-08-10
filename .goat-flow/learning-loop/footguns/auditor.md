@@ -150,7 +150,7 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 - `src/cli/version-compare.ts` (search: `projectIsAheadOfCli`) - direction test now shared by the audit and the hook writer.
 - `src/cli/audit/check-goat-flow.ts` (search: `is newer than this CLI`) - config and hook checks branch before prescribing remediation.
 - `src/cli/audit/check-agent-common.ts` (search: `targetUsesNewerGoatFlow`) - one validated target-version gate now suppresses older-template skill, guardrail, drift, and content checks.
-- `src/cli/server/hook-registrar.ts` (search: `Refusing to overwrite`) - `copyHookScripts` throws rather than downgrading a newer-stamped hook.
+- `src/cli/server/hook-managed-installation.ts` (search: `Refusing to overwrite`) - `copyHookScripts` throws rather than downgrading a newer-stamped hook.
 - `test/unit/version-compare.test.ts` (search: `flags the CLI as the stale side when the project is newer`) - locks the direction contract, including that `1.10.0` sorts above `1.9.0`.
 - `test/integration/audit-quality.test.ts` (search: `reports version skew without older-template agent or drift findings`) - simulates a newer installed config, skills, and hooks against the current CLI and pins the user-visible audit result.
 - `test/unit/hook-registrar.test.ts` (search: `refuses to overwrite a hook stamped newer than the running CLI`) - proves the write boundary preserves the newer hook byte-for-byte.

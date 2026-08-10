@@ -70,7 +70,7 @@ const GRUFF_RESULT_FIXTURES = [
     environment: {},
     outcome: "pass",
     reasonCode: "completed-clean",
-    findingCode: undefined,
+    expectedFindingCodes: [],
   },
   {
     label: "reported finding",
@@ -79,7 +79,7 @@ const GRUFF_RESULT_FIXTURES = [
     environment: {},
     outcome: "advisory",
     reasonCode: "findings-reported",
-    findingCode: "size.file-length",
+    expectedFindingCodes: ["size.file-length", "naming.short"],
   },
   {
     label: "invalid response",
@@ -88,7 +88,7 @@ const GRUFF_RESULT_FIXTURES = [
     environment: {},
     outcome: "incomplete",
     reasonCode: "output-invalid",
-    findingCode: "analyzer-response-invalid",
+    expectedFindingCodes: ["analyzer-response-invalid"],
   },
   {
     label: "failed analyzer",
@@ -97,7 +97,7 @@ const GRUFF_RESULT_FIXTURES = [
     environment: {},
     outcome: "unavailable",
     reasonCode: "hook-unavailable",
-    findingCode: "analyzer-failed",
+    expectedFindingCodes: ["analyzer-failed"],
   },
   {
     label: "timed-out analyzer",
@@ -106,7 +106,7 @@ const GRUFF_RESULT_FIXTURES = [
     environment: { GRUFF_CODE_QUALITY_TIMEOUT_SECONDS: "1" },
     outcome: "incomplete",
     reasonCode: "execution-timeout",
-    findingCode: "analyzer-timeout",
+    expectedFindingCodes: ["analyzer-timeout"],
   },
 ] as const;
 
@@ -285,7 +285,7 @@ describe("hook provider contracts", () => {
   describe("configured Gruff result delivery", () => {
     // Named cases show users whether analysis passed, found debt, failed, or timed out.
     for (const resultFixture of GRUFF_RESULT_FIXTURES) {
-      // This case creates an edited project, installs a mock analyzer, and runs the hook.
+      // Fixture purpose: runs one analyzer state; Invariant: bounded result fields stay deterministic.
       it(`reports ${resultFixture.label} with a bounded result`, () => {
         const projectRoot = makeEditedGruffContractProject(
           resultFixture.envelope,
@@ -310,26 +310,24 @@ describe("hook provider contracts", () => {
           resultFixture.reasonCode,
           resultFixture.label,
         );
-        const userVisibleFindings = hookResult.findings as Array<{
-          code: string;
-        }>;
-        // Clean analysis has no detail; every failure or finding names its exact state.
-        if (resultFixture.findingCode === undefined) {
-          assert.deepEqual(userVisibleFindings, [], resultFixture.label);
-        } else {
-          assert.equal(
-            userVisibleFindings[0]?.code,
-            resultFixture.findingCode,
-            resultFixture.label,
-          );
-        }
+        const userVisibleFindingCodes = (
+          hookResult.findings as Array<{
+            code: string;
+          }>
+        ).map((finding) => finding.code);
+        // An empty expected list means clean analysis leaves the user's UI free of detail rows.
+        assert.deepEqual(
+          userVisibleFindingCodes,
+          resultFixture.expectedFindingCodes,
+          resultFixture.label,
+        );
       });
     }
 
     const prerequisiteFixtures = [
       {
         label: "missing config",
-        /** Installs only the analyzer so users see which config they still need. */
+        /** Side effects: installs only the analyzer so users see which config they still need. */
         prepareProject(projectRoot: string) {
           writeContractGruffBinary(projectRoot, CLEAN_GRUFF_CONTRACT_ENVELOPE);
         },
@@ -337,7 +335,7 @@ describe("hook provider contracts", () => {
       },
       {
         label: "ambiguous config",
-        /** Writes both config names so users are asked to choose one source of truth. */
+        /** Side effects: writes both config names so users must choose one source of truth. */
         prepareProject(projectRoot: string) {
           writeContractGruffBinary(projectRoot, CLEAN_GRUFF_CONTRACT_ENVELOPE);
           writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
@@ -347,7 +345,7 @@ describe("hook provider contracts", () => {
       },
       {
         label: "missing binary",
-        /** Writes only config so users see that the matching analyzer is absent. */
+        /** Side effects: writes only config so users see the matching analyzer is absent. */
         prepareProject(projectRoot: string) {
           writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
         },
@@ -355,7 +353,7 @@ describe("hook provider contracts", () => {
       },
       {
         label: "unsupported capability",
-        /** Installs an older analyzer so users see why JSON hook feedback is unavailable. */
+        /** Writes an older analyzer and config so users see why JSON feedback is unavailable. */
         prepareProject(projectRoot: string) {
           const analyzerDirectoryPath = join(projectRoot, "bin");
           mkdirSync(analyzerDirectoryPath, { recursive: true });
@@ -413,7 +411,7 @@ describe("hook provider contracts", () => {
 
     // Each provider case names the host translation users receive after an edit.
     for (const providerFixture of expectedProviderFields) {
-      // This case creates an edited project, runs Gruff, and adapts one visible finding.
+      // Fixture purpose: creates an edit and runs Gruff; Invariant: provider output keeps the finding.
       it(`adapts one Gruff finding for ${providerFixture.provider}`, () => {
         const projectRoot = makeEditedGruffContractProject(
           FINDING_GRUFF_CONTRACT_ENVELOPE,

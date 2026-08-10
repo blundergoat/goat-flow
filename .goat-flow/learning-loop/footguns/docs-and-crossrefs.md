@@ -78,7 +78,7 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 
 **Evidence:**
 - `workflow/manifest.json` (search: `"hook_config_file": ".agents/hooks.json"`) records the project hook surface without claiming every event can return a result.
-- `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`) proves Antigravity input routing only.
+- `src/cli/server/agent-hook-command.ts` (search: `spec.id === "gruff-code-quality"`) proves Antigravity input routing only.
 - `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`) records the current delivery limit.
 - `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) proves the desired toggle does not create unusable registration.
 

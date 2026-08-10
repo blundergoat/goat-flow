@@ -13,7 +13,7 @@ last_reviewed: 2026-08-10
 
 A Git diff limited to a rename destination can hide the source path and render an unchanged rename as a full-file addition. Edit-time analysis then treats every line as user-authored and may report a clean scan or unrelated debt instead of a not-applicable rename.
 
-Git rename detection needs both sides of the move. Query full `--name-status --find-renames` output first, then diff the matched source and destination together before parsing positive hunks. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `rename_source_for_path`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `classifies rename-only and binary Git changes as not applicable`).
+Git rename detection needs both sides of the move. Query full `--name-status --find-renames` output first, then diff the matched source and destination together before parsing positive hunks. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `rename_source_for_path`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `classifies rename-only Git changes as not applicable`).
 
 ## Footgun: Changed-range scoping makes a quality hook structurally blind to file-level rules
 
@@ -208,7 +208,7 @@ Route every migrated launcher-owned failure through the neutral unavailable enve
 
 **Status:** resolved | **Created:** 2026-06-07 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
 
-**Resolution:** Current migration removes managed legacy Gruff registrations before pruning per-agent scripts and rebuilds only provider-supported, enabled central entries. `test/integration/setup-install-migrations.test.ts` (search: `migrates legacy Codex Gruff registration to the approved provider contract`) verifies that an old Codex command becomes the approved central contract while a custom user event remains. `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) verifies that an enabled desired state does not restore a registration whose feedback cannot reach the model.
+**Resolution:** Current migration removes managed legacy Gruff registrations before pruning per-agent scripts and rebuilds only provider-supported, enabled central entries. `test/integration/setup-install-codex-config-migration.test.ts` (search: `migrates legacy Codex Gruff registration to the approved provider contract`) verifies that an old Codex command becomes the approved central contract while a custom user event remains. `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) verifies that an enabled desired state does not restore a registration whose feedback cannot reach the model.
 
 **Original symptoms:** The installer could successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure appeared only after upgrade because fresh installs used the new template shape and disabled optional hooks did not expose the stale entry.
 

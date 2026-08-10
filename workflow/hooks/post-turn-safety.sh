@@ -171,6 +171,7 @@ emit_post_turn_hook_result() {
     result_detail="The changed-content safety scan did not complete"
   fi
 
+  # shellcheck disable=SC2016 # Literal JavaScript prevents shell expansion of user feedback.
   POST_TURN_RESULT_RECORDS_PATH="$post_turn_result_records_path" \
     POST_TURN_RESULT_OUTCOME="$result_outcome" \
     POST_TURN_RESULT_REASON_CODE="$result_reason_code" \

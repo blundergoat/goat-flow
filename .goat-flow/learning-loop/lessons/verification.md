@@ -76,12 +76,15 @@ last_reviewed: 2026-08-10
 ## Lesson: Harness fixture counts must match the reported unit
 
 **Status:** active | **Created:** 2026-05-25
+**Incident count:** 2 | **Latest occurrence:** 2026-08-10
 
 **What happened:** During the gruff documentation pass on `src/cli/audit/harness/check-verification.ts`, the focused evidence-before-claims test failed because the fixture expected `4 present instruction file` even though Codex and Antigravity both pointed at the same `AGENTS.md`. The harness reported the correct deduplicated count: 3 unique present instruction files.
 
 **Root cause:** The assertion counted agent profiles, while the check reports unique instruction-file paths. Shared instruction files make those units diverge.
 
 **Prevention:** In harness tests, name and assert the reported unit explicitly: profiles, unique files, findings, or checks. When a fixture deliberately maps multiple agents to the same instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
+
+**Recurrence (2026-08-10):** A migrated Gruff result fixture asserted only the first finding code. Replacing that partial check with the complete user-visible code list failed because the analyzer envelope also carries `naming.short`. The expected result now enumerates both findings, so a missing or extra detail row is visible. Evidence anchors: `test/integration/hook-provider-contracts.test.ts` (search: `expectedFindingCodes`) and `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `FINDING_GRUFF_CONTRACT_ENVELOPE`).
 
 ## Lesson: Validators can require explicit inventories and phrases despite README pointers
 
