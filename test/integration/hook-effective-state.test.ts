@@ -25,6 +25,7 @@ import {
   renderAuditText,
 } from "../../src/cli/audit/render.js";
 import { createFS } from "../../src/cli/facts/fs.js";
+import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.js";
 import {
   readAllHookStates,
   syncHookStates,
@@ -428,8 +429,16 @@ describe("effective hook state", () => {
     assert.equal(report.status, "pass");
     assert.equal(report.summary.pass, report.scenarios.length);
     assert.deepEqual(
+      report.scenarios.map((scenario) => scenario.id),
+      HOOK_VERIFICATION_CONTRACTS["deny-hook"].requiredScenarioIds,
+    );
+    assert.deepEqual(
       report.scenarios.map((scenario) => scenario.observed),
       ["blocked", "blocked", "blocked", "allowed"],
+    );
+    assert.deepEqual(
+      claudeHookState(projectPath, "deny-dangerous").effectiveState,
+      { status: "effective", severity: "success" },
     );
   });
 
@@ -459,8 +468,16 @@ describe("effective hook state", () => {
 
     assert.equal(report.status, "pass");
     assert.deepEqual(
+      report.scenarios.map((scenario) => scenario.id),
+      HOOK_VERIFICATION_CONTRACTS["post-turn-hook"].requiredScenarioIds,
+    );
+    assert.deepEqual(
       report.scenarios.map((scenario) => scenario.observed),
       ["finding", "incomplete"],
+    );
+    assert.deepEqual(
+      claudeHookState(projectPath, "post-turn-safety").effectiveState,
+      { status: "effective", severity: "success" },
     );
   });
 
@@ -480,8 +497,16 @@ describe("effective hook state", () => {
 
     assert.equal(report.status, "pass");
     assert.deepEqual(
+      report.scenarios.map((scenario) => scenario.id),
+      HOOK_VERIFICATION_CONTRACTS["gruff-hook"].requiredScenarioIds,
+    );
+    assert.deepEqual(
       report.scenarios.map((scenario) => scenario.observed),
       ["incomplete", "finding", "unavailable"],
+    );
+    assert.deepEqual(
+      claudeHookState(projectPath, "gruff-code-quality").effectiveState,
+      { status: "effective", severity: "success" },
     );
   });
 });

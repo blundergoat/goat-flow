@@ -20,6 +20,17 @@ import {
   setupInstallRoundTripFixture,
 } from "./audit-drift.helpers.ts";
 
+/** Required offline proofs that let the fixture's audit show real effective coverage. */
+const REQUIRED_EFFECTIVE_HOOK_PROOFS = [
+  { agentId: "claude", scenario: "deny-hook" },
+  { agentId: "codex", scenario: "deny-hook" },
+  { agentId: "antigravity", scenario: "deny-hook" },
+  { agentId: "copilot", scenario: "deny-hook" },
+  { agentId: "claude", scenario: "gruff-hook" },
+  { agentId: "copilot", scenario: "gruff-hook" },
+  { agentId: "claude", scenario: "post-turn-hook" },
+] as const;
+
 describe("checkDrift: installer round-trip fixture", () => {
   let root: string;
   before(() => {
@@ -60,6 +71,7 @@ describe("checkDrift: installer round-trip fixture", () => {
         `prettier should format temp round-trip files:\n${format.output}`,
       );
 
+      // A user can install several agents before asking one audit to assess shared coverage.
       for (const agentId of agentIds) {
         const install = runCommand(
           root,
@@ -74,7 +86,9 @@ describe("checkDrift: installer round-trip fixture", () => {
         );
       }
 
+      // Every selected agent should receive the same fixture-backed reference skill.
       for (const skillRoot of skillRoots) {
+        // Each required file must exist before the user sees that skill as installed.
         for (const relativeFile of INSTALL_FIXTURE_FILES) {
           assert.ok(
             existsSync(
@@ -83,6 +97,30 @@ describe("checkDrift: installer round-trip fixture", () => {
             `expected ${skillRoot}/${INSTALL_FIXTURE_SKILL}/${relativeFile} to exist after install`,
           );
         }
+      }
+
+      // Explicit offline scenarios provide the runtime evidence a normal audit never executes.
+      for (const requiredHookProof of REQUIRED_EFFECTIVE_HOOK_PROOFS) {
+        const hookProof = runCommand(
+          root,
+          "node",
+          [
+            "dist/cli/cli.js",
+            "hooks",
+            "verify",
+            ".",
+            "--agent",
+            requiredHookProof.agentId,
+            "--scenario",
+            requiredHookProof.scenario,
+          ],
+          60000,
+        );
+        assert.equal(
+          hookProof.status,
+          0,
+          `${requiredHookProof.agentId}/${requiredHookProof.scenario} proof should pass:\n${hookProof.output}`,
+        );
       }
 
       const preflight = runCommand(

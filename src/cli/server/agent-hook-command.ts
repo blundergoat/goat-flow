@@ -9,6 +9,14 @@ import type { AgentId, AgentProfile } from "../types.js";
 import type { HookSpec } from "./hooks-registry.js";
 
 const HOOK_LAUNCH_MODE_PART_COUNT = 6; // Contract: host, response, result, event, adapter, deadline.
+type HookResponseKind = "policy" | "gruff" | "post-turn";
+
+/** Provider-neutral event names embedded in versioned launcher identities. */
+const CANONICAL_HOOK_EVENTS: Record<HookSpec["event"], string> = {
+  PreToolUse: "pre-tool",
+  PostToolUse: "post-tool",
+  Stop: "turn-stop",
+};
 
 /** Keyed JSON object safe for reading agent hook configuration fields. */
 export type AgentHookJsonObject = Record<string, unknown>;
@@ -146,6 +154,42 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
 }
 
 /**
+ * Choose the user-facing failure category for one managed hook.
+ * Use before provider protocol selection so optional feedback stays non-blocking.
+ *
+ * @param spec - hook being registered; an unknown id uses fail-closed policy behavior
+ * @returns policy, Gruff, or post-turn category; never empty
+ */
+function hookResponseKind(spec: HookSpec): HookResponseKind {
+  // Gruff is optional feedback, so unavailable execution is shown as a non-blocking skip.
+  if (spec.id === "gruff-code-quality") return "gruff";
+  // Post-turn safety must return a failing scan outcome instead of a permission payload.
+  if (spec.id === "post-turn-safety") return "post-turn";
+  return "policy";
+}
+
+/**
+ * Select the response mode used by hooks that predate the versioned result envelope.
+ * Use so existing users retain the exact host protocol their agent understands.
+ *
+ * @param agentId - selected provider; empty ids cannot pass setup validation
+ * @param responseKind - user-facing hook category; never empty
+ * @returns legacy response mode; never empty
+ */
+function legacyHookLaunchMode(
+  agentId: AgentId,
+  responseKind: HookResponseKind,
+): string {
+  // Feedback and Stop hooks keep their category-specific unavailable message on every host.
+  if (responseKind !== "policy") return responseKind;
+  // Antigravity requires its decision JSON shape for legacy command admission.
+  if (agentId === "antigravity") return "antigravity";
+  // Copilot requires permission-decision fields for legacy pre-tool output.
+  if (agentId === "copilot") return "copilot";
+  return "policy";
+}
+
+/**
  * Select the response protocol the user's agent understands for one hook.
  * Use while writing config; an unknown combination falls back to the safety-policy protocol.
  *
@@ -154,38 +198,19 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
  * @returns response mode consumed by the launcher; never empty
  */
 function hookLaunchMode(agentId: AgentId, spec: HookSpec): string {
-  let responseKind = "policy";
-  // Gruff is optional feedback, so unavailable execution is shown as a non-blocking skip.
-  if (spec.id === "gruff-code-quality") responseKind = "gruff";
-  // Post-turn safety must return a failing scan outcome rather than an agent permission payload.
-  if (spec.id === "post-turn-safety") responseKind = "post-turn";
-
+  const responseKind = hookResponseKind(spec);
   const deliveryContract =
     spec.providerDeliveryContracts?.[agentId] ?? spec.deliveryContract;
-  const usesLegacyResultProtocol =
-    !deliveryContract || deliveryContract.resultProtocol === "legacy";
   // Legacy hooks keep installed command parity until their detector and installer migrate together.
-  if (usesLegacyResultProtocol) {
-    // Feedback and stop hooks keep their category-specific unavailable messages on every host.
-    if (responseKind !== "policy") return responseKind;
-    // Antigravity requires its decision JSON shape for legacy command admission.
-    if (agentId === "antigravity") return "antigravity";
-    // Copilot requires permission-decision fields for legacy pre-tool output.
-    if (agentId === "copilot") return "copilot";
-    return "policy";
+  if (!deliveryContract || deliveryContract.resultProtocol === "legacy") {
+    return legacyHookLaunchMode(agentId, responseKind);
   }
 
-  const canonicalHookEvent =
-    spec.event === "PreToolUse"
-      ? "pre-tool"
-      : spec.event === "PostToolUse"
-        ? "post-tool"
-        : "turn-stop";
   return [
     agentId,
     responseKind,
     deliveryContract.resultProtocol,
-    canonicalHookEvent,
+    CANONICAL_HOOK_EVENTS[spec.event],
     deliveryContract.adapterVersion,
     deliveryContract.launcherDeadlineMs,
   ].join(":");

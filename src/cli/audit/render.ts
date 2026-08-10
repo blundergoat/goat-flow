@@ -98,7 +98,7 @@ function hookSeverityLabel(
   return `${DIM}DISABLED${RESET}`;
 }
 
-/** Render the same per-agent effective-state labels and repairs returned in audit JSON. */
+/** Render coverage per agent because shared files cannot prove shared provider support. */
 function renderHookCoverage(hookCoverage: AuditHookCoverageReport): string {
   const lines = [
     `${BOLD}Effective Hook Coverage:${RESET}  ${statusBadge(hookCoverage.status)}  ${DIM}(${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only)${RESET}`,
@@ -108,8 +108,6 @@ function renderHookCoverage(hookCoverage: AuditHookCoverageReport): string {
     // Only agents selected by this audit belong in its terminal coverage section.
     for (const agentId of hookCoverage.selectedAgents) {
       const agentState = hook.agents[agentId];
-      // A missing registry row is omitted because audit JSON still exposes the complete hook object.
-      if (!agentState) continue;
       lines.push(
         `  ${hook.id}/${agentId}: ${hookSeverityLabel(agentState.effectiveState.severity)} ${agentState.effectiveStateLabel}`,
       );
@@ -366,8 +364,6 @@ function renderMdHookCoverage(
     // The audit filter decides which agent rows belong in this Markdown result.
     for (const agentId of hookCoverage.selectedAgents) {
       const agentState = hook.agents[agentId];
-      // A missing agent row contributes no claim; the JSON hook object remains available for diagnosis.
-      if (!agentState) continue;
       lines.push(
         `- **${hook.id}/${agentId}: ${agentState.effectiveState.severity.toUpperCase()}** - ${agentState.effectiveStateLabel}`,
       );

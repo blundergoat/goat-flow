@@ -84,9 +84,24 @@ type AgentProfilePathKey =
   | "hooksDir";
 
 /**
+ * Detect a relative path that leaves the project the user selected.
+ * Use for both lexical and physical containment checks.
+ * @param pathFromProject - relative path; empty means the project root itself
+ * @returns true for parent traversal or an absolute path; false for descendants and root
+ */
+function relativePathLeavesSelectedProject(pathFromProject: string): boolean {
+  // Parent traversal and absolute paths can resolve outside the user's selected project.
+  return (
+    pathFromProject === ".." ||
+    pathFromProject.startsWith(`..${String.fromCharCode(47)}`) ||
+    pathFromProject.startsWith(`..${String.fromCharCode(92)}`) ||
+    isAbsolute(pathFromProject)
+  );
+}
+
+/**
  * Refuse a managed write outside the project selected by the user.
  * Use before setup derives any destination from agent metadata.
- *
  * @param projectPath - selected project root; empty text resolves to the process directory and is rejected by callers
  * @param targetPath - proposed managed destination; empty text cannot remain inside a valid project root
  * @returns nothing; a safe target continues, while an escape throws a 400 registrar error
@@ -102,10 +117,7 @@ function assertWithinProject(projectPath: string, targetPath: string): void {
   // A descendant stays inside the project, so setup may continue for the user.
   if (
     targetPathFromProject === "" ||
-    (targetPathFromProject !== ".." &&
-      !targetPathFromProject.startsWith(`..${String.fromCharCode(47)}`) &&
-      !targetPathFromProject.startsWith(`..${String.fromCharCode(92)}`) &&
-      !isAbsolute(targetPathFromProject))
+    !relativePathLeavesSelectedProject(targetPathFromProject)
   ) {
     return;
   }
@@ -119,7 +131,6 @@ function assertWithinProject(projectPath: string, targetPath: string): void {
 /**
  * Resolve one managed hook file inside the agent folder shown in setup.
  * Use whenever status or sync needs the same installed path.
- *
  * @param projectPath - selected project; empty text cannot identify an owned destination
  * @param agent - selected agent profile; a null hook directory means that agent has no hook surface
  * @param hookScriptName - managed filename; empty text cannot identify an installable script
@@ -141,7 +152,6 @@ function installedHookTarget(
 /**
  * List every installed/template pair required for one current hook.
  * Use when a Hooks screen checks completeness, version, and trust together.
- *
  * @param projectPath - selected project; empty text cannot locate installed files
  * @param agent - selected agent; an absent hook directory makes target resolution fail
  * @param hookSpec - registry contract; an empty script list produces no current install
@@ -181,9 +191,40 @@ function managedHookFileContracts(
 }
 
 /**
+ * Check every path segment before the UI treats a managed file as safe to run.
+ * Use after lexical containment so linked or non-directory parents remain untrusted.
+ * @param selectedProjectPath - real project root; empty text cannot own a managed file
+ * @param managedPathParts - descendant segments; empty input cannot identify a file
+ * @returns true only when parents are real directories and the final file is regular and unshared
+ */
+function managedPathEntriesAreTrusted(
+  selectedProjectPath: string,
+  managedPathParts: string[],
+): boolean {
+  let inspectedManagedPath = selectedProjectPath;
+  // Every segment must remain real so the user's hook cannot escape through a link.
+  for (const [pathPartIndex, managedPathPart] of managedPathParts.entries()) {
+    inspectedManagedPath = join(inspectedManagedPath, managedPathPart);
+    const inspectedManagedEntry = lstatSync(inspectedManagedPath);
+    // A linked segment can redirect execution away from the selected project.
+    if (inspectedManagedEntry.isSymbolicLink()) return false;
+    const isFinalManagedPathPart =
+      pathPartIndex === managedPathParts.length - 1;
+    // The runnable file must be regular and unshared before the UI calls it trusted.
+    if (isFinalManagedPathPart) {
+      return (
+        inspectedManagedEntry.isFile() && inspectedManagedEntry.nlink === 1
+      );
+    }
+    // Parent segments remain directories until setup reaches the hook file.
+    if (!inspectedManagedEntry.isDirectory()) return false;
+  }
+  return false;
+}
+
+/**
  * Verify one managed file and its parents use the launcher's trusted shape.
  * Use before a status screen presents installed bytes as safe to execute.
- *
  * @param projectPath - selected project root; empty or redirected roots are untrusted
  * @param managedFilePath - installed hook/config file; missing or empty paths are untrusted
  * @returns true only for one regular file under real directories; false covers missing or redirected paths
@@ -202,10 +243,7 @@ export function managedFileIsTrusted(
   // A path outside the selected project cannot become trusted user protection.
   if (
     managedPathFromProject === "" ||
-    managedPathFromProject === ".." ||
-    managedPathFromProject.startsWith(`..${String.fromCharCode(47)}`) ||
-    managedPathFromProject.startsWith(`..${String.fromCharCode(92)}`) ||
-    isAbsolute(managedPathFromProject)
+    relativePathLeavesSelectedProject(managedPathFromProject)
   ) {
     return false;
   }
@@ -221,26 +259,9 @@ export function managedFileIsTrusted(
     }
 
     const managedPathParts = managedPathFromProject.split(/[\\/]+/u);
-    let inspectedManagedPath = selectedProjectPath;
     // Every parent must be real so a later segment cannot escape through a link.
-    for (const [pathPartIndex, managedPathPart] of managedPathParts.entries()) {
-      inspectedManagedPath = join(inspectedManagedPath, managedPathPart);
-      const inspectedManagedEntry = lstatSync(inspectedManagedPath);
-      const isFinalManagedPathPart =
-        pathPartIndex === managedPathParts.length - 1;
-      // A linked segment can redirect execution away from the project the user chose.
-      if (inspectedManagedEntry.isSymbolicLink()) return false;
-      // Parent segments remain directories until setup reaches the hook file.
-      if (!isFinalManagedPathPart && !inspectedManagedEntry.isDirectory()) {
-        return false;
-      }
-      // The runnable file must be regular and unshared before the UI calls it trusted.
-      if (
-        isFinalManagedPathPart &&
-        (!inspectedManagedEntry.isFile() || inspectedManagedEntry.nlink !== 1)
-      ) {
-        return false;
-      }
+    if (!managedPathEntriesAreTrusted(selectedProjectPath, managedPathParts)) {
+      return false;
     }
 
     const physicalManagedFilePath = realpathSync(installedManagedFilePath);
@@ -248,18 +269,11 @@ export function managedFileIsTrusted(
       realpathSync(selectedProjectPath),
       physicalManagedFilePath,
     );
-    // Physical containment catches redirects that a lexical path cannot show the user.
-    if (
-      physicalPathFromProject === "" ||
-      physicalPathFromProject === ".." ||
-      physicalPathFromProject.startsWith(`..${String.fromCharCode(47)}`) ||
-      physicalPathFromProject.startsWith(`..${String.fromCharCode(92)}`) ||
-      isAbsolute(physicalPathFromProject)
-    ) {
-      return false;
-    }
-
-    return true;
+    // Empty or escaping physical paths cannot represent a managed file below the selected root.
+    return (
+      physicalPathFromProject !== "" &&
+      !relativePathLeavesSelectedProject(physicalPathFromProject)
+    );
   } catch {
     // For example, the user removed a hook while the Hooks screen was loading.
     return false;
@@ -269,7 +283,6 @@ export function managedFileIsTrusted(
 /**
  * Classify the files one installed hook needs before users rely on it.
  * Use when CLI, audit, or dashboard builds the local effective-state chain.
- *
  * @param projectPath - selected project; empty text produces missing installation facts
  * @param agent - selected agent; an absent hook surface cannot produce complete facts
  * @param hookSpec - registry contract; an empty script set cannot establish runnable coverage
@@ -320,7 +333,6 @@ export function managedHookInstallationFacts(
 /**
  * Check whether one profile path identifies only the selected agent.
  * Use before shared instruction or skill paths count as an installed hook surface.
- *
  * @param agentProfiles - known agents; empty means no path can be unique
  * @param profilePathKey - profile field compared across agents
  * @param profilePath - candidate marker; null or empty means no installed marker
@@ -345,7 +357,6 @@ function profilePathIsUnique(
 /**
  * Detect whether the selected project already contains one agent's own surface.
  * Use before sync writes hook files, so untouched agents are never scaffolded.
- *
  * @param projectPath - selected project; empty text cannot contain a valid marker
  * @param agent - candidate agent profile
  * @param agentProfiles - all profiles used to exclude shared markers; empty leaves only explicit config paths
@@ -385,7 +396,6 @@ function agentInstalledSurfaceExists(
 /**
  * Detect managed script residue even when the agent's config marker is gone.
  * Use during upgrades so stale Goat Flow files can be pruned without scaffolding.
- *
  * @param projectPath - selected project; empty text cannot contain meaningful residue
  * @param agent - candidate agent profile; a null hook directory skips its current path
  * @param hookSpec - managed scripts to find; an empty list produces no residue
@@ -425,7 +435,6 @@ function hookScriptResidueExists(
 /**
  * Decide whether sync should touch one agent in the selected project.
  * Use to preserve projects that never installed that agent or hook surface.
- *
  * @param projectPath - selected project; empty text has no reconciliable surface
  * @param agent - candidate agent profile
  * @param hookSpec - hook being reconciled; empty scripts leave no residue
@@ -447,7 +456,6 @@ export function shouldReconcileAgent(
 /**
  * Check whether the selected agent already has a hook config to preserve.
  * Use before writing disabled optional-hook state.
- *
  * @param projectPath - selected project; empty text cannot locate config
  * @param agent - selected agent; a null hook config means no writable surface
  * @returns true when the agent config exists; false means disabling creates nothing
@@ -465,7 +473,6 @@ export function hookConfigExists(
 /**
  * Add one required managed path to the project-local ignore policy.
  * Use while enabling hooks so files needed after clone stay tracked.
- *
  * @param projectPath - selected project; empty text cannot own a safe ignore file
  * @param gitignoreEntry - exact negation shown in the ignore file; empty text adds no useful rule
  * @returns nothing; an existing entry leaves the file unchanged
@@ -505,7 +512,6 @@ function ensureGoatFlowGitignoreEntry(
 /**
  * Keep the shared deny policy store tracked for fresh-clone protection.
  * Use after installing any managed hook files into `.goat-flow/hooks/`.
- *
  * @param projectPath - selected project; empty text cannot own the ignore policy
  * @returns nothing; both required negations are present when setup finishes
  */
@@ -517,7 +523,6 @@ function ensureHookGitignoreEntries(projectPath: string): void {
 /**
  * Remove one old per-agent script when an upgrade centralizes hook files.
  * Use during enable, disable, and sync migrations.
- *
  * @param projectPath - selected project; empty text cannot own a safe removal
  * @param legacyHookDirectory - old agent hook folder; empty text resolves to the project root and is rejected
  * @param hookScriptName - managed filename; empty text cannot identify intended residue
@@ -541,7 +546,6 @@ function removeLegacyAgentScriptIfPresent(
 /**
  * Remove every legacy per-agent copy owned by one current hook.
  * Use after central files are installed or when a hook is disabled.
- *
  * @param projectPath - selected project; empty text cannot own safe cleanup paths
  * @param hookSpec - managed scripts to remove; an empty list removes no current files
  * @returns nothing; user-owned commands and files remain untouched
@@ -577,7 +581,6 @@ function removeLegacyAgentHookScripts(
 /**
  * Read one managed hook from the bundled workflow source.
  * Use when sync writes the exact release bytes into a user's project.
- *
  * @param hookScriptName - managed filename; empty text cannot resolve an installable source
  * @returns bundled script text; empty means the shipped source itself is empty
  */
@@ -591,7 +594,6 @@ function hookScriptContent(hookScriptName: string): string {
 /**
  * Protect a newer installed hook from an older CLI sync.
  * Use immediately before replacing managed bytes.
- *
  * @param installedHookPath - hook about to be replaced; empty or missing paths are not newer
  * @returns true when the installed stamp is ahead; false includes missing, unreadable, or unstamped files
  * @throws Never; unreadable or unstamped user files return false so sync can continue
@@ -620,7 +622,6 @@ function installedHookIsNewer(installedHookPath: string): boolean {
 /**
  * Remove one current managed script by exact name.
  * Use for disable and migration cleanup while preserving user scripts.
- *
  * @param projectPath - selected project; empty text cannot own a safe removal
  * @param agent - selected agent; a null hook directory cannot resolve a script
  * @param hookScriptName - exact managed filename; empty text is rejected by target validation
@@ -647,7 +648,6 @@ function removeScriptIfPresent(
 /**
  * Install current managed bytes and prune obsolete per-agent copies.
  * Use when a user enables a hook or syncs an existing agent surface.
- *
  * @param projectPath - selected project; empty text cannot own safe destinations
  * @param agent - selected agent; a null hook directory leaves setup unchanged
  * @param hookSpec - hook files to install; an empty list writes no runnable hook
@@ -723,7 +723,6 @@ export function copyHookScripts(
 /**
  * Remove current and legacy managed files for one disabled hook.
  * Use when a user disables coverage or setup prunes an unsupported provider.
- *
  * @param projectPath - selected project; empty text cannot own safe removals
  * @param agent - selected agent; a null hook directory cannot resolve current files
  * @param hookSpec - managed files to remove; empty scripts leave only the primary exact-name attempt

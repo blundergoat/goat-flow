@@ -9,11 +9,13 @@ import { performance } from "node:perf_hooks";
 
 import { getAgentProfiles } from "./agents/registry.js";
 import type { HookScenario } from "./cli-types.js";
+import { AUDIT_VERSION } from "./constants.js";
 import {
   recordEvidenceEvent,
   type AppendEvidenceEnvelopeResult,
   type CreateEvidenceEnvelopeInput,
 } from "./evidence/envelope.js";
+import { HOOK_VERIFICATION_CONTRACTS } from "./hook-verification-contracts.js";
 import { buildAgentHookCommand } from "./server/agent-hook-writer.js";
 import { readAllHookStates } from "./server/hook-registrar.js";
 import { getHookSpec } from "./server/hooks-registry.js";
@@ -21,16 +23,18 @@ import type { AgentId } from "./types.js";
 
 /** Versioned result shape shared by deny and configured feedback proof. */
 export const REPORT_SCHEMA = "goat-flow.hook-runtime-report.v1";
-export const MANAGED_HOOK_PROOF_LEVEL = "managed-hook-classifier";
+export const MANAGED_HOOK_PROOF_LEVEL =
+  HOOK_VERIFICATION_CONTRACTS["deny-hook"].evidenceLevel;
 /** Evidence level for replay through the exact command shown in user config. */
-export const CONFIGURED_HOOK_PROOF_LEVEL = "configured-hook-command";
+const CONFIGURED_HOOK_PROOF_LEVEL =
+  HOOK_VERIFICATION_CONTRACTS["gruff-hook"].evidenceLevel;
 /** Probe timeout. Rationale: five seconds loads local hooks but bounds stalled checkout code. */
 export const PROBE_TIMEOUT_MS = 5_000; // Cap: bounds stalled project hook code.
 /** Output cap. Rationale: sixteen kilobytes retains one diagnostic without unbounded text. */
 export const PROBE_OUTPUT_CAP_BYTES = 16_384;
 
 /** Final classification shown to terminal users and machine consumers. */
-export type HookRuntimeVerdict =
+type HookRuntimeVerdict =
   "pass" | "fail" | "unsupported" | "not-configured" | "error";
 
 /** Stable explanation codes that avoid exposing captured hook diagnostics. */
@@ -238,7 +242,7 @@ export interface ConfiguredHookRuntimeRequest {
 
 const POST_TURN_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
   {
-    id: "valid-stop-result",
+    id: HOOK_VERIFICATION_CONTRACTS["post-turn-hook"].requiredScenarioIds[0],
     label: "Valid Stop input returns one recognized safety result",
     expected: "typed-result",
     payload: JSON.stringify({
@@ -249,7 +253,7 @@ const POST_TURN_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
     acceptedObservations: ["clean", "finding", "incomplete"],
   },
   {
-    id: "invalid-stop-input",
+    id: HOOK_VERIFICATION_CONTRACTS["post-turn-hook"].requiredScenarioIds[1],
     label: "Wrong-event input remains an incomplete Stop result",
     expected: "incomplete",
     payload: JSON.stringify({
@@ -263,14 +267,14 @@ const POST_TURN_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
 
 const GRUFF_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
   {
-    id: "unsupported-tool-input",
+    id: HOOK_VERIFICATION_CONTRACTS["gruff-hook"].requiredScenarioIds[0],
     label: "Unsupported tool input remains incomplete",
     expected: "incomplete",
     payload: JSON.stringify({ tool_name: "Read", tool_input: {} }),
     acceptedObservations: ["incomplete"],
   },
   {
-    id: "non-source-edit",
+    id: HOOK_VERIFICATION_CONTRACTS["gruff-hook"].requiredScenarioIds[1],
     label: "A non-source edit produces explicit not-applicable feedback",
     expected: "advisory",
     payload: JSON.stringify({
@@ -280,7 +284,7 @@ const GRUFF_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
     acceptedObservations: ["finding"],
   },
   {
-    id: "source-dependency-result",
+    id: HOOK_VERIFICATION_CONTRACTS["gruff-hook"].requiredScenarioIds[2],
     label:
       "A source edit reports its available, incomplete, or clean analyzer result",
     expected: "typed-result",
@@ -296,9 +300,7 @@ const GRUFF_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
 function hookIdForConfiguredScenario(
   scenarioGroup: Exclude<HookScenario, "deny-hook">,
 ): "post-turn-safety" | "gruff-code-quality" {
-  // The Stop group owns repository safety; the remaining group owns edit feedback.
-  if (scenarioGroup === "post-turn-hook") return "post-turn-safety";
-  return "gruff-code-quality";
+  return HOOK_VERIFICATION_CONTRACTS[scenarioGroup].hookId;
 }
 
 /** Return the fixed scenario set selected explicitly by the terminal or CI user. */
@@ -520,6 +522,7 @@ function recordConfiguredScenarioEvidence(
     projectRoot: request.projectPath,
     payload: {
       hook_id: hookId,
+      framework_version: AUDIT_VERSION,
       scenario_group: request.scenarioGroup,
       scenario_id: result.id,
       agent: request.agent,
@@ -549,6 +552,116 @@ function recordConfiguredScenarioEvidence(
 }
 
 /**
+ * Check whether local setup is complete enough to run the user's configured command.
+ * Use before replay so partial installs stay visible as not configured.
+ *
+ * @param hookState - current local hook links; a null command means no runnable registration
+ * @returns true only when every local link and the configured command are ready
+ */
+function configuredHookCanRun(
+  hookState: ManagedConfiguredHookState,
+): hookState is ManagedConfiguredHookState & { configuredCommand: string } {
+  // Every local link and the command itself must be present before user-requested proof can run.
+  return (
+    hookState.enabled &&
+    hookState.installed &&
+    hookState.isCurrentVersionInstalled &&
+    hookState.isTrusted &&
+    hookState.configuredCommand !== null
+  );
+}
+
+/**
+ * Select the runnable or skipped scenario rows shown by hooks verify.
+ * Use so the public command keeps one clear reason for every unavailable state.
+ *
+ * @param request - selected provider and trust choice; never null
+ * @param hookState - inspected registration state; a null command cannot execute
+ * @param scenarios - fixed user-visible scenarios; empty input returns no rows
+ * @returns complete scenario rows, including skipped outcomes when execution is unsafe
+ */
+function selectConfiguredScenarioResults(
+  request: ConfiguredHookRuntimeRequest,
+  hookState: ManagedConfiguredHookState,
+  scenarios: readonly ConfiguredHookScenario[],
+): HookRuntimeScenarioResult[] {
+  // An untrusted checkout never executes its hook command or writes target-local evidence.
+  if (request.isTargetUntrusted) {
+    return skippedConfiguredScenarioResults(
+      scenarios,
+      "unsupported",
+      "target-marked-untrusted",
+    );
+  }
+  // Missing registry metadata is an internal error, not a provider limitation.
+  if (hookState.reasonCode === "hook-registry-missing") {
+    return skippedConfiguredScenarioResults(
+      scenarios,
+      "error",
+      "hook-registry-missing",
+    );
+  }
+  // Unsupported providers remain explicit and never run a shared file accidentally.
+  if (!hookState.isSupported) {
+    return skippedConfiguredScenarioResults(
+      scenarios,
+      "unsupported",
+      "agent-hook-unsupported",
+    );
+  }
+  // Disabled, absent, stale, or untrusted setup cannot provide configured-command proof.
+  if (!configuredHookCanRun(hookState)) {
+    return skippedConfiguredScenarioResults(
+      scenarios,
+      "not-configured",
+      hookState.reasonCode ?? "hook-not-installed",
+    );
+  }
+
+  const configuredCommand = hookState.configuredCommand;
+  // Every fixed payload reaches the exact command the selected agent will invoke.
+  return scenarios.map((scenario) =>
+    completedConfiguredScenarioResult(
+      request.scenarioGroup,
+      scenario,
+      executeConfiguredFeedbackProbe(
+        request.projectPath,
+        configuredCommand,
+        scenario,
+      ),
+    ),
+  );
+}
+
+/**
+ * Record safe scenario metadata unless the user marked the checkout untrusted.
+ * Use after replay so later audit views can distinguish observed proof from a transient result.
+ *
+ * @param request - selected checkout and trust choice; never null
+ * @param hookId - registry hook id; empty text would produce unusable evidence
+ * @param scriptPath - managed script path; null records proof without a target-file anchor
+ * @param scenarioResults - completed or skipped rows; empty input writes no events
+ * @returns rows with durable-evidence flags; unchanged when the target is untrusted
+ */
+function recordConfiguredScenarioResults(
+  request: ConfiguredHookRuntimeRequest,
+  hookId: string,
+  scriptPath: string | null,
+  scenarioResults: HookRuntimeScenarioResult[],
+): HookRuntimeScenarioResult[] {
+  // An untrusted target suppresses every target-local write, including evidence events.
+  if (request.isTargetUntrusted) return scenarioResults;
+  return scenarioResults.map((scenarioResult) =>
+    recordConfiguredScenarioEvidence(
+      request,
+      hookId,
+      scriptPath,
+      scenarioResult,
+    ),
+  );
+}
+
+/**
  * Replay the selected feedback hook through its exact registered command.
  * Use for explicit post-turn or Gruff verification without launching a model.
  *
@@ -561,68 +674,17 @@ export function verifyManagedConfiguredHook(
   const hookId = hookIdForConfiguredScenario(request.scenarioGroup);
   const scenarios = configuredScenarios(request.scenarioGroup);
   const hookState = readManagedConfiguredHookState(request);
-  let scenarioResults: HookRuntimeScenarioResult[];
-
-  // An untrusted checkout never executes its hook command or writes target-local evidence.
-  if (request.isTargetUntrusted) {
-    scenarioResults = skippedConfiguredScenarioResults(
-      scenarios,
-      "unsupported",
-      "target-marked-untrusted",
-    );
-    // Missing registry metadata is an internal error, not a provider limitation.
-  } else if (hookState.reasonCode === "hook-registry-missing") {
-    scenarioResults = skippedConfiguredScenarioResults(
-      scenarios,
-      "error",
-      "hook-registry-missing",
-    );
-    // Unsupported providers remain explicit and never run a shared file accidentally.
-  } else if (!hookState.isSupported) {
-    scenarioResults = skippedConfiguredScenarioResults(
-      scenarios,
-      "unsupported",
-      "agent-hook-unsupported",
-    );
-    // Disabled, absent, stale, or untrusted local setup cannot provide configured-command proof.
-  } else if (
-    !hookState.enabled ||
-    !hookState.installed ||
-    !hookState.isCurrentVersionInstalled ||
-    !hookState.isTrusted ||
-    hookState.configuredCommand === null
-  ) {
-    scenarioResults = skippedConfiguredScenarioResults(
-      scenarios,
-      "not-configured",
-      hookState.reasonCode ?? "hook-not-installed",
-    );
-  } else {
-    const configuredCommand = hookState.configuredCommand;
-    // Every fixed payload reaches the exact command the selected agent will invoke.
-    scenarioResults = scenarios.map((scenario) =>
-      completedConfiguredScenarioResult(
-        request.scenarioGroup,
-        scenario,
-        executeConfiguredFeedbackProbe(
-          request.projectPath,
-          configuredCommand,
-          scenario,
-        ),
-      ),
-    );
-  }
-
-  const recordedScenarios = request.isTargetUntrusted
-    ? scenarioResults
-    : scenarioResults.map((scenarioResult) =>
-        recordConfiguredScenarioEvidence(
-          request,
-          hookId,
-          hookState.scriptPath,
-          scenarioResult,
-        ),
-      );
+  const scenarioResults = selectConfiguredScenarioResults(
+    request,
+    hookState,
+    scenarios,
+  );
+  const recordedScenarios = recordConfiguredScenarioResults(
+    request,
+    hookId,
+    hookState.scriptPath,
+    scenarioResults,
+  );
   const summary = summarizeScenarioResults(recordedScenarios);
   return {
     schema: REPORT_SCHEMA,

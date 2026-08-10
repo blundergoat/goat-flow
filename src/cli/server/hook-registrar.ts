@@ -1,6 +1,5 @@
 /**
- * Registrar that reconciles `.goat-flow/config.yaml` hook truth to detected
- * hook-capable agent surfaces in the selected project.
+ * Reconciles hook settings with agents detected in the user's selected project.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -16,6 +15,7 @@ import {
   type HookEffectiveState,
   type HookEffectiveStateFacts,
 } from "../hook-contracts.js";
+import { hookScenarioForHookId } from "../hook-verification-contracts.js";
 import type { AgentId, AgentProfile } from "../types.js";
 import {
   currentHookProviderSupportGate,
@@ -27,6 +27,7 @@ import {
 import {
   readAgentHookState,
   writeAgentHookState,
+  type AgentHookReadState,
   type AgentHookRegistrationIssue,
 } from "./agent-hook-writer.js";
 import {
@@ -39,6 +40,7 @@ import {
   shouldReconcileAgent,
   type ManagedHookInstallationFacts,
 } from "./hook-managed-installation.js";
+import { hookSupportGateAfterLocalProof } from "./hook-runtime-proof.js";
 import { writeFileAtomic } from "./safe-exec.js";
 
 const REMOVED_HOOK_TOMBSTONES: HookSpec[] = [
@@ -59,7 +61,7 @@ const REMOVED_HOOK_TOMBSTONES: HookSpec[] = [
 
 type HookDrift = "desired-on-actual-off" | "desired-off-actual-on";
 /** Names the installed-file repair shown when registration exists but local coverage is stale. */
-export type HookInstallationIssue =
+type HookInstallationIssue =
   | "managed-files-missing"
   | "installed-version-mismatch"
   | "managed-path-untrusted";
@@ -116,6 +118,31 @@ const HOOK_EFFECTIVE_STATE_LABELS: Record<HookEffectiveStatus, string> = {
   effective: "effective",
 };
 
+/** Registry gate overrides applied to the optimistic effective-state chain shown in hook UIs. */
+const HOOK_GATE_FACT_OVERRIDES: Record<
+  HookEffectiveStatus,
+  Partial<HookEffectiveStateFacts>
+> = {
+  disabled: { isDesired: false },
+  "provider-undocumented": { providerDocumentation: "absent" },
+  "provider-documentation-stale": { providerDocumentation: "stale" },
+  "provider-documented-unsupported": {
+    providerDocumentation: "fresh-unsupported",
+  },
+  "provider-capture-absent": { providerCapture: "absent" },
+  "provider-capture-stale": { providerCapture: "stale" },
+  "provider-capture-untrusted": { providerCapture: "untrusted" },
+  "provider-capture-inconclusive": { providerCapture: "inconclusive" },
+  "provider-live-unsupported": { providerCapture: "fresh-unsupported" },
+  "not-registered": { isRegistered: false },
+  "installation-stale": { isCurrentVersionInstalled: false },
+  "runtime-untrusted": { isTrusted: false },
+  "not-observed": { hasObservedRun: false },
+  "result-undelivered": { hasDeliveredResult: false },
+  "scenario-unverified": { isScenarioVerified: false },
+  effective: {},
+};
+
 /** Validate and resolve a hook id into the registry spec; bad ids throw 400 and unknown ids throw 404. Throws on invalid input. */
 function resolveSpec(hookId: string): HookSpec {
   if (!isValidHookIdShape(hookId)) {
@@ -146,7 +173,6 @@ function unsupportedReasonForSpec(
 /**
  * Remove one retired Goat Flow ignore rule while preserving user entries.
  * Use when an upgrade prunes a removed hook's final state file.
- *
  * @param projectPath - selected project; empty text cannot locate an owned ignore file
  * @param gitignoreEntry - exact managed rule; empty text matches no useful entry
  * @returns nothing; missing files or rules leave the user's policy unchanged
@@ -180,7 +206,7 @@ function providerGateFacts(
   isDesiredByUser: boolean,
   effectiveSupportGate: HookEffectiveStatus,
 ): HookEffectiveStateFacts {
-  const providerFacts: HookEffectiveStateFacts = {
+  const fullyEffectiveFacts: HookEffectiveStateFacts = {
     isDesired: isDesiredByUser,
     providerDocumentation: "fresh-supported",
     providerCapture: "fresh-supported",
@@ -191,68 +217,23 @@ function providerGateFacts(
     hasDeliveredResult: true,
     isScenarioVerified: true,
   };
-
-  switch (effectiveSupportGate) {
-    case "disabled":
-      providerFacts.isDesired = false;
-      break;
-    case "provider-undocumented":
-      providerFacts.providerDocumentation = "absent";
-      break;
-    case "provider-documentation-stale":
-      providerFacts.providerDocumentation = "stale";
-      break;
-    case "provider-documented-unsupported":
-      providerFacts.providerDocumentation = "fresh-unsupported";
-      break;
-    case "provider-capture-absent":
-      providerFacts.providerCapture = "absent";
-      break;
-    case "provider-capture-stale":
-      providerFacts.providerCapture = "stale";
-      break;
-    case "provider-capture-untrusted":
-      providerFacts.providerCapture = "untrusted";
-      break;
-    case "provider-capture-inconclusive":
-      providerFacts.providerCapture = "inconclusive";
-      break;
-    case "provider-live-unsupported":
-      providerFacts.providerCapture = "fresh-unsupported";
-      break;
-    case "not-registered":
-      providerFacts.isRegistered = false;
-      break;
-    case "installation-stale":
-      providerFacts.isCurrentVersionInstalled = false;
-      break;
-    case "runtime-untrusted":
-      providerFacts.isTrusted = false;
-      break;
-    case "not-observed":
-      providerFacts.hasObservedRun = false;
-      break;
-    case "result-undelivered":
-      providerFacts.hasDeliveredResult = false;
-      break;
-    case "scenario-unverified":
-      providerFacts.isScenarioVerified = false;
-      break;
-    case "effective":
-      break;
-  }
-
-  return providerFacts;
+  return {
+    ...fullyEffectiveFacts,
+    ...HOOK_GATE_FACT_OVERRIDES[effectiveSupportGate],
+  };
 }
 
-/** Return the explicit CLI scenario that verifies one installed hook without launching a model. */
-function configuredScenarioForHook(spec: HookSpec): string {
-  // The policy hook uses its bounded allow-and-block classifier group.
-  if (spec.id === "deny-dangerous") return "deny-hook";
-  // The Stop guard uses clean, finding, and incomplete repository fixtures.
-  if (spec.id === "post-turn-safety") return "post-turn-hook";
-  return "gruff-hook";
-}
+/** States repaired by regenerating the user's managed config and files. */
+const HOOK_SYNC_REPAIR_STATES = new Set<HookEffectiveStatus>([
+  "not-registered",
+  "installation-stale",
+]);
+/** States repaired by running the user's bounded offline scenarios. */
+const HOOK_VERIFY_REPAIR_STATES = new Set<HookEffectiveStatus>([
+  "not-observed",
+  "result-undelivered",
+  "scenario-unverified",
+]);
 
 /**
  * Explain the next operator-controlled action for the first unmet effective-state link.
@@ -274,59 +255,53 @@ function effectiveStateRepair(
         "Provider result delivery must be proven before Goat Flow can register this hook.",
     };
   }
-  switch (effectiveState.status) {
-    case "disabled":
-      return {
-        command: null,
-        summary:
-          "The hook is intentionally disabled; enable it when this coverage is wanted.",
-      };
-    case "provider-undocumented":
-    case "provider-documentation-stale":
-    case "provider-documented-unsupported":
-    case "provider-capture-absent":
-    case "provider-capture-stale":
-    case "provider-capture-untrusted":
-    case "provider-capture-inconclusive":
-    case "provider-live-unsupported":
-      return {
-        command: null,
-        summary:
-          "Provider evidence must be refreshed before local setup can claim this hook is effective.",
-      };
-    case "not-registered":
-    case "installation-stale":
-      return {
-        command: `goat-flow hooks sync ${quotedProjectPath}`,
-        summary:
-          "Re-sync the selected project to restore the registry-owned command and current hook files.",
-      };
-    case "runtime-untrusted":
-      return {
-        command: null,
-        summary:
-          "Inspect the managed config and hook paths, remove symlinks or hard links, then re-sync.",
-      };
-    case "not-observed":
-    case "result-undelivered":
-    case "scenario-unverified":
-      return {
-        command: `goat-flow hooks verify ${quotedProjectPath} --agent ${agent.id} --scenario ${configuredScenarioForHook(spec)}`,
-        summary:
-          "Run the explicit configured-command scenarios; normal audit does not execute project hooks.",
-      };
-    case "effective":
-      return {
-        command: null,
-        summary: "Every required hook link has current evidence.",
-      };
+  // A disabled hook is an intentional user choice, so no repair command is offered.
+  if (effectiveState.status === "disabled") {
+    return {
+      command: null,
+      summary:
+        "The hook is intentionally disabled; enable it when this coverage is wanted.",
+    };
   }
+  // Provider evidence gaps require new proof rather than a local project mutation.
+  if (effectiveState.status.startsWith("provider-")) {
+    return {
+      command: null,
+      summary:
+        "Provider evidence must be refreshed before local setup can claim this hook is effective.",
+    };
+  }
+  // Missing or stale managed files can be restored through the canonical sync path.
+  if (HOOK_SYNC_REPAIR_STATES.has(effectiveState.status)) {
+    return {
+      command: `goat-flow hooks sync ${quotedProjectPath}`,
+      summary:
+        "Re-sync the selected project to restore the registry-owned command and current hook files.",
+    };
+  }
+  // Untrusted paths need human inspection before Goat Flow can safely rewrite them.
+  if (effectiveState.status === "runtime-untrusted") {
+    return {
+      command: null,
+      summary:
+        "Inspect the managed config and hook paths, remove symlinks or hard links, then re-sync.",
+    };
+  }
+  // Missing runtime proof has one bounded offline verification command for the user.
+  if (HOOK_VERIFY_REPAIR_STATES.has(effectiveState.status)) {
+    return {
+      command: `goat-flow hooks verify ${quotedProjectPath} --agent ${agent.id} --scenario ${hookScenarioForHookId(spec.id)}`,
+      summary:
+        "Run the explicit configured-command scenarios; normal audit does not execute project hooks.",
+    };
+  }
+  return {
+    command: null,
+    summary: "Every required hook link has current evidence.",
+  };
 }
 
-/**
- * Combine registry evidence with the selected project's local install and trust facts.
- * Registry exclusions keep their causal provider gap ahead of unavailable local files.
- */
+/** Combine registry and local facts while preserving the user's causal provider gap. */
 function effectiveAgentState(
   projectPath: string,
   agent: AgentProfile,
@@ -346,9 +321,15 @@ function effectiveAgentState(
 > {
   const providerEvidence = spec.providerEvidence?.[agent.id];
   // Missing evidence keeps the user at an unverified provider state.
-  const effectiveSupportGate = providerEvidence
+  const registrySupportGate = providerEvidence
     ? currentHookProviderSupportGate(providerEvidence)
     : "provider-undocumented";
+  const effectiveSupportGate = hookSupportGateAfterLocalProof(
+    projectPath,
+    agent.id,
+    spec.id,
+    registrySupportGate,
+  );
   const effectiveStateFacts = providerGateFacts(
     isDesiredByUser,
     effectiveSupportGate,
@@ -435,10 +416,7 @@ function installationIssueReason(
   return issueReasons[installationIssue];
 }
 
-/**
- * Build the state payload for an agent that cannot host the requested hook.
- * Provider exclusions show their root cause; missing surfaces show the local setup gap.
- */
+/** Build an unsupported-agent row that preserves the user's causal delivery gap. */
 function unsupportedAgentHookState(
   projectPath: string,
   agent: AgentProfile,
@@ -481,6 +459,63 @@ function hookDrift(
   return undefined;
 }
 
+/**
+ * Resolve local trust, installed-file drift, script path, and the first repair reason.
+ * Use once per supported agent so every Hooks UI presents the same local diagnosis.
+ * @param projectPath - selected project; empty text cannot identify trusted managed files
+ * @param agent - selected provider; null config or hook paths remain untrusted or absent
+ * @param spec - managed hook contract; empty script metadata cannot produce a path
+ * @param registrationState - parsed config state; empty issue flags mean registration is healthy
+ * @param isRegistered - false keeps installed-file issues behind registration repair
+ * @param installationFacts - managed file facts; false values identify missing, stale, or unsafe files
+ * @returns complete local details; null fields mean no path or repair issue is available
+ */
+function supportedHookLocalDetails(
+  projectPath: string,
+  agent: AgentProfile,
+  spec: HookSpec,
+  registrationState: AgentHookReadState,
+  isRegistered: boolean,
+  installationFacts: ManagedHookInstallationFacts,
+) {
+  const hookConfigPath =
+    agent.hookConfigFile === null
+      ? null
+      : join(projectPath, agent.hookConfigFile);
+  const isTrusted =
+    installationFacts.hasTrustedRequiredFiles &&
+    hookConfigPath !== null &&
+    managedFileIsTrusted(projectPath, hookConfigPath);
+  const installationIssue = installedHookIssue(
+    isRegistered,
+    installationFacts,
+    isTrusted,
+  );
+  let repairReason: string | null = null;
+  // Managed file and trust problems are the last local link and the first repair shown.
+  if (installationIssue !== null) {
+    repairReason = installationIssueReason(installationIssue);
+    // Registration mismatches are more specific than generic config flags.
+  } else if (registrationState.registrationIssue !== undefined) {
+    repairReason = registrationIssueReason(registrationState.registrationIssue);
+    // Invalid JSON prevents the user from relying on any configured row.
+  } else if (registrationState.configInvalid) {
+    repairReason = "Hook config file is invalid JSON.";
+    // A missing config tells the user to create or sync the provider registration.
+  } else if (registrationState.configMissing) {
+    repairReason = "Hook config file is missing.";
+  }
+  const scriptPath =
+    agent.hooksDir === null
+      ? null
+      : `${agent.hooksDir}/${spec.primaryScript}`.replace(/\/+/gu, "/");
+  return { isTrusted, installationIssue, scriptPath, repairReason };
+}
+
+/**
+ * Build one supported provider row for CLI, audit, and dashboard hook views.
+ * Use when the manifest exposes registration surfaces for the selected agent.
+ */
 function supportedAgentHookState(
   projectPath: string,
   agent: AgentProfile,
@@ -497,17 +532,13 @@ function supportedAgentHookState(
   const installed = isRegistered && installationFacts.hasAllRequiredFiles;
   const isCurrentVersionInstalled =
     installed && installationFacts.hasCurrentRequiredFiles;
-  const configFilePath = agent.hookConfigFile
-    ? join(projectPath, agent.hookConfigFile)
-    : null;
-  const isTrusted =
-    installationFacts.hasTrustedRequiredFiles &&
-    configFilePath !== null &&
-    managedFileIsTrusted(projectPath, configFilePath);
-  const installationIssue = installedHookIssue(
+  const localDetails = supportedHookLocalDetails(
+    projectPath,
+    agent,
+    spec,
+    registrationState,
     isRegistered,
     installationFacts,
-    isTrusted,
   );
   const drift = hookDrift(isDesiredByUser, installed);
   const effectivePresentation = effectiveAgentState(
@@ -517,35 +548,27 @@ function supportedAgentHookState(
     isDesiredByUser,
     isRegistered,
     isCurrentVersionInstalled,
-    isTrusted,
+    localDetails.isTrusted,
   );
-  return {
+  const hookState: HookAgentState = {
     supported: true,
     installed,
     isRegistered,
     isCurrentVersionInstalled,
-    isTrusted,
+    isTrusted: localDetails.isTrusted,
     registrationIssue: registrationState.registrationIssue ?? null,
-    installationIssue,
+    installationIssue: localDetails.installationIssue,
     ...effectivePresentation,
-    scriptPath: agent.hooksDir
-      ? `${agent.hooksDir}/${spec.primaryScript}`.replace(/\/+/gu, "/")
-      : null,
+    scriptPath: localDetails.scriptPath,
     configPath: agent.hookConfigFile,
-    ...(drift ? { drift } : {}),
-    ...(registrationState.configMissing
-      ? { reason: "Hook config file is missing." }
-      : {}),
-    ...(registrationState.configInvalid
-      ? { reason: "Hook config file is invalid JSON." }
-      : {}),
-    ...(registrationState.registrationIssue
-      ? { reason: registrationIssueReason(registrationState.registrationIssue) }
-      : {}),
-    ...(installationIssue
-      ? { reason: installationIssueReason(installationIssue) }
-      : {}),
   };
+  // Drift is omitted when the user's desired and installed states already agree.
+  if (drift !== undefined) hookState.drift = drift;
+  // A null reason keeps healthy rows concise while preserving exact local repair context.
+  if (localDetails.repairReason !== null) {
+    hookState.reason = localDetails.repairReason;
+  }
+  return hookState;
 }
 
 function agentHookState(
@@ -627,7 +650,6 @@ function reconcileHook(
 /**
  * Disable and remove one hook that used to exist in older installs.
  * Use during hook reconciliation so users do not keep stale controls for removed hooks.
- *
  * @param projectPath - project being cleaned; empty means no project hook files can be found
  * @param spec - removed hook descriptor; empty script lists mean only config state is cleared
  * @returns nothing; stale files and agent registrations are removed when present
@@ -650,7 +672,6 @@ function pruneRemovedHookTombstone(projectPath: string, spec: HookSpec): void {
 /**
  * Remove all tombstoned hook artifacts from a project.
  * Use during reconciliation after a user upgrades from an older hook set.
- *
  * @param projectPath - project being cleaned; empty means there are no hook files or config blocks to edit
  * @returns nothing; removed hooks disappear from config, gitignore, and agent hook folders
  */
