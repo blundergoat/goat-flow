@@ -12,7 +12,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Setup installer | `workflow/install-goat-flow.sh` | Manifest-driven installation with ownership checks, safe parent-path validation, and adjacent per-file atomic staging |
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 7 goat-flow skill templates (6 functional + 1 dispatcher) |
-| Hook scripts | `workflow/hooks/` | Copyable `deny-dangerous.sh` dispatcher, shared `deny-dangerous/` policy templates, opt-in `gruff-code-quality.sh`, default `post-turn-safety.sh`, and per-agent config templates |
+| Hook scripts | `workflow/hooks/` | Managed launcher/runtime and provider adapters, copyable `deny-dangerous.sh` policies, opt-in `gruff-code-quality.sh`, default `post-turn-safety.sh`, and per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI auditor | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
@@ -166,11 +166,11 @@ M01 timing adds `plan.time`; route/checkpoint/promotion event families and all o
 
 `src/cli/hook-contracts.ts` is the provider-neutral contract boundary. Provider records keep official documentation separate from an exact live capture. A capture names provider version and mode, hook and adapter versions, configuration source, trust state, event and canonical tool, observed payload fields, response channels, timeout and continuation behavior, result delivery, and model visibility. Raw payload values are not part of this committed contract.
 
-Documentation and capture records expire after 30 days. They become stale earlier when the provider version or mode, configuration source or trust, hook or adapter version, or relevant official contract changes. Documentation can establish `provider-documented`; only a fresh trusted capture with delivered results can establish `live-supported`.
+Documentation and capture records expire after 30 days. They become stale earlier when the provider version or mode, configuration source or trust, lifecycle event, hook or adapter version, registration shape, or relevant official contract changes. Documentation can establish `provider-documented`; only a fresh trusted capture with delivered results can establish `live-supported`.
 
 Every user-facing surface follows one effective-state chain: `desired` -> `provider-documented` -> `live-supported` -> `registered` -> `installed-current` -> `trusted` -> `observed-running` -> `result-delivered` -> `scenario-verified`. Disabled is neutral; absent, stale, unsupported, unregistered, outdated, unobserved, or unverified states are warnings; untrusted or observed-but-undelivered states are danger; only the complete chain is success.
 
-Hook results use `pass`, `block`, `advisory`, `incomplete`, or `unavailable`. A pass requires complete declared coverage, and findings are capped at 20 before the provider adapter runs. Adapters may translate the envelope into a host protocol, but they must preserve blocks and must not promote incomplete or unavailable work to pass.
+Hook results use `pass`, `block`, `advisory`, `incomplete`, or `unavailable`. A pass requires complete declared coverage, and findings are capped at 20 before the provider adapter runs. Adapters preserve blocks and never promote incomplete or unavailable work to pass. One exact repeated infrastructure failure may return a provider continuation only with `bounded-reentry-ended`; its neutral envelope remains incomplete so the user regains control without a false clean scan.
 
 For the current security model, a user-selected checkout is trusted executable content. Project hooks protect against accidental and prompt-influenced agent actions; they are not a sandbox against a malicious branch, dependency, helper, or analyzer. Bringing hostile checkout content into scope requires a new decision that supersedes ADR-032, moves executable policy to a reviewed versioned installation, and gives project-local analyzers explicit provenance.
 
