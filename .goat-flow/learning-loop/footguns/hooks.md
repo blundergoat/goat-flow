@@ -173,7 +173,7 @@ Current primary documentation changed again by 2026-08-09: Codex and Antigravity
 
 **Status:** resolved | **Created:** 2026-06-07 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
 
-**Resolution:** Current migration code removes managed legacy gruff registrations before pruning per-agent scripts and rebuilds only supported/enabled central entries. The focused regression `test/integration/setup-install-migrations.test.ts` (search: `prunes legacy Codex gruff hook registrations because Codex gruff is unsupported`) verifies unsupported Codex registrations are pruned while the deny hook remains registered. `test/unit/hook-registrar-surfaces.test.ts` (search: `enables gruff-code-quality for a detected Antigravity surface`) verifies a supported, detected surface receives the enabled central gruff registration.
+**Resolution:** Current migration removes managed legacy Gruff registrations before pruning per-agent scripts and rebuilds only provider-supported, enabled central entries. `test/integration/setup-install-migrations.test.ts` (search: `prunes legacy Codex gruff hook registrations because Codex gruff is unsupported`) verifies unsupported Codex registration is removed while the deny hook remains. `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) verifies an enabled desired state does not restore a registration whose feedback cannot reach the model.
 
 **Original symptoms:** The installer could successfully copy the new central hook scripts, prune legacy per-agent hook files, and still leave an existing agent hook config pointing at the deleted legacy `gruff-code-quality.sh` path. The failure appeared only after upgrade because fresh installs used the new template shape and disabled optional hooks did not expose the stale entry.
 
@@ -184,7 +184,7 @@ Current primary documentation changed again by 2026-08-09: Codex and Antigravity
 - `workflow/install-goat-flow.sh` (search: `appendGruffHookEntries`) re-adds central gruff registrations from the enabled hook toggle rather than preserving stale per-agent paths.
 - `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`) reads the existing config toggle so enabled optional hooks survive upgrades while disabled hooks stay absent.
 
-**Prevention:** Any future optional hook must enter the managed-hook removal list before legacy files are pruned. Regenerate current registrations from registry/config state, and add upgrade fixtures whenever an optional hook's install path changes.
+**Prevention:** Add every future optional hook to the managed removal list before legacy files are pruned. Rebuild registrations from current registry and config state, preserve desired toggles for unsupported providers, and add upgrade fixtures whenever install paths or delivery support changes.
 
 ## Footgun: Fail-soft analyzer skips can silently uncover a configured language
 

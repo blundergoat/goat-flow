@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-10
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -68,19 +68,21 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Agent capability metadata goes stale when upstream docs add hooks
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Re-check each provider, event, and result channel instead of carrying agent-level support forward.
+**Trigger phase:** READ
+**Incident count:** 3 | **Latest occurrence:** 2026-08-10
 
-**Symptoms:** Dashboard and docs can report an agent as "not supported" for hooks while the runtime has a project-local hook config or a viable fallback path. The 2026-05-26 Antigravity correction found stale "not wired" claims in `workflow/setup/agents/antigravity.md` (search: `.agents/hooks.json`), `workflow/hooks/README.md` (search: `secret-bearing file tools`), and `workflow/manifest.json` (search: `"antigravity"`) after official Antigravity docs documented `.agents/hooks.json` and PreToolUse hooks. The 2026-05-28 gruff correction then removed a stale `gruff-code-quality` exclusion after the hook gained Antigravity file-tool matchers and a git-changed-file fallback.
+**Symptoms:** Hook support can drift independently by event and response channel. Antigravity's 2026-05-26 correction proved PreToolUse config, and its 2026-05-28 Gruff correction proved PostToolUse input through file matchers and a changed-file fallback. On 2026-08-10, those input paths were still cited as full Gruff support after provider evidence showed their output could not reach the active model.
 
-**Why it happens:** Agent capability tables freeze a past product observation. Manifest fields, setup docs, dashboard state, audit logic, and changelog prose then reinforce each other, so structural checks can pass while the primary upstream docs have moved on.
+**Why it happens:** Capability tables freeze one observation and reuse it across events. Setup docs, dashboard state, audit logic, tests, and learning entries then reinforce a user-visible claim that structural checks cannot validate.
 
 **Evidence:**
-- `workflow/manifest.json` (search: `"hook_config_file": ".agents/hooks.json"`) now records the corrected Antigravity hook config.
-- `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`) maps `gruff-code-quality` to Antigravity file-edit tool names.
-- `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`) prefers payload paths, and `workflow/hooks/gruff-code-quality.sh` (search: `git_changed_supported_paths`) falls back to git-changed supported files when a PostToolUse payload omits the edited path.
-- `workflow/hooks/agent-config/antigravity-hooks.json` (search: `run_command|view_file`) is the new Antigravity config template.
-- `.agents/hooks.json` (search: `deny-dangerous`) is the installed mirror that proves this controlling workspace no longer treats Antigravity as hookless.
+- `workflow/manifest.json` (search: `"hook_config_file": ".agents/hooks.json"`) records the project hook surface without claiming every event can return a result.
+- `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`) proves Antigravity input routing only.
+- `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`) records the current delivery limit.
+- `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) proves the desired toggle does not create unusable registration.
 
-**Prevention:** Before marking an agent capability "unsupported" or "capability-limited", check current primary product docs and the local binary version, then test whether an agent-specific matcher or repository-state fallback can preserve the contract. Use hook-specific unsupported reasons only after the fallback path is disproven. After correcting capability metadata, grep docs, changelog, footguns, manifest, audit, dashboard, templates, and installed mirrors for the old unsupported wording.
+**Prevention:** Check current primary docs and the local binary, then prove the exact event, payload, command, response, continuation, and model visibility separately. Treat config, matchers, and fallbacks as feasibility evidence. After a correction, grep every product, prose, template, and test consumer for the superseded claim.
 
 ## Footgun: Hook additions and renames cross runtime, dashboard, and audit surfaces
 
@@ -98,8 +100,8 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** When a behavior fix changes evidence cited by an active footgun, update or resolve that entry in the same change.
 **Trigger phase:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-08-07
+**Incident count:** 4
+**Latest occurrence:** 2026-08-10
 
 **Symptoms:** A footgun is tagged `**Status:** active` and reads as a current trap. The Prevention rules are still good, but the Symptoms paragraph describes an obsolete code shape. Its search anchor either resolves to behavior that now contradicts the prose or resolves to nothing. Future agents following it either make the wrong current-state decision, chase a removed implementation, or distrust the entire footgun bucket because one entry is verifiably wrong.
 
@@ -110,6 +112,8 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 **Recurrence 2026-08-04:** The first evaluator missed chained needles and root dotfiles; naive carry-over then crossed sentence boundaries. The final grammar follows chains only from an explicit same-sentence target, recognizes dotfiles, and ignores fences. Contracts: `test/unit/check-content-quality.test.ts` (search: `validates every chained search needle`), (search: `does not guess a target for an unqualified search anchor`), and (search: `validates root dotfile search anchors`).
 
 **Recurrence 2026-08-07:** `.goat-flow/learning-loop/footguns/auditor.md` (search: `## Footgun: The deny-mechanism runtime smoke executes the target checkout's own hook command`) and the lesson that cited it were corrected at 07:09 to describe a dashboard audit using `"full"`. Commit `19046c08` changed `src/cli/server/dashboard-audit-routes.ts` (search: `agentFilter === null ? "present-only" : "static"`) at 17:06 without refreshing either entry. The route-level contract in `test/integration/dashboard-audit-api.test.ts` (search: `does not execute selected-project hook launcher in /api/audit`) proves the old present-tense claim is now false.
+
+**Recurrence 2026-08-10:** The Antigravity capability footgun and a resolved optional-hook migration entry still cited local Gruff wiring as current support after the registry and installer stopped registering it. The corrected entries now distinguish runnable input handling from model-visible result delivery. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`) and `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`).
 
 **Prevention:**
 1. When you fix a bug that has a footgun entry, in the same PR EITHER (a) rewrite the Symptoms paragraph to describe the principle the fix demonstrates and update the search anchors to point at the current shape, OR (b) move the entry to the file's "Resolved Entries" section with a one-line summary of what was learned. Do not leave an `active` footgun whose Symptoms anchors don't resolve.

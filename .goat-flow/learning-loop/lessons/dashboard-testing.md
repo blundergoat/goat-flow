@@ -1,19 +1,24 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-07-13
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: Prove hook capability before marking an agent unsupported
 
 **Status:** active | **Created:** 2026-05-26
+**Decision changed:** Treat provider input, command execution, result delivery, and model visibility as separate support gates.
+**Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-10
 
-**What happened:** The Hooks dashboard first used `not supported`, then `unavailable`, for Antigravity on `gruff-code-quality` after Antigravity already had project-local hook wiring. The registry then excluded Antigravity for that hook because I treated missing edited-path payload evidence as a hard blocker. That was too narrow: the hook can still register for Antigravity file-write tool names and fall back to git-changed supported files while preserving changed-line filtering.
+**What happened:** The Hooks dashboard first used `not supported`, then `unavailable`, for Antigravity Gruff before the local command path had been tested. Antigravity had project-local config, file-tool matchers, and a changed-file fallback, so the agent-wide label was too broad. That evidence proved local command feasibility, not model-visible Gruff feedback.
 
-**Root cause:** I collapsed "payload path may be absent" into "the hook cannot work for this agent" before testing the writer mapping and available fallback data. The UI label made that mistaken runtime exclusion look like an agent-level capability failure.
+**Root cause:** I first collapsed missing payload evidence into no hook capability, then collapsed local input handling into delivered feedback. Both shortcuts let one layer stand in for the entire effective-state chain.
 
-**Recurrence update (2026-07-13):** M18's first four-runner capability fixture reused a helper that asserted hard secret file-read protection for every agent. The RED run disproved that assumption: Antigravity and Copilot are script-only and correctly report limited file-tool protection, while Claude and Codex have settings-backed coverage. Shared shell/hook assertions were separated from explicit per-runner file-read expectations. A final negative reader fixture also showed that a `hard` row with an empty source list survived dashboard decoding; source-less rows are now dropped before rendering. Evidence anchors: `test/unit/enforcement-capability.test.ts` (search: `assertSecretFileStatusForAgent`), `src/cli/audit/enforcement.ts` (search: `secretFileReadCapability`), and `src/dashboard/dashboard-readers.ts` (search: `hasVisibleEvidence`).
+**Recurrence update (2026-07-13):** A four-runner capability fixture asserted hard secret file-read protection for every agent. The failing run showed that Antigravity and Copilot are script-only and correctly report limited file-tool protection, while Claude and Codex have settings-backed coverage. Shared shell assertions were separated from per-runner file-read expectations. A negative reader fixture also showed that a `hard` row with no source survived dashboard decoding; source-less rows are now dropped before rendering. Evidence anchors: `test/unit/enforcement-capability.test.ts` (search: `assertSecretFileStatusForAgent`), `src/cli/audit/enforcement.ts` (search: `secretFileReadCapability`), and `src/dashboard/dashboard-readers.ts` (search: `hasVisibleEvidence`).
 
-**Prevention:** Before adding unsupported labels or shared capability expectations, verify each agent's mechanism and available evidence separately. Keep common hook behavior in shared assertions, but make settings-backed, script-only, unknown, and unsupported expectations explicit per runner. For gruff, Antigravity uses `write_to_file`, `replace_file_content`, and `multi_replace_file_content`; the hook should prefer payload paths and use git-changed supported files only as a fallback. Evidence anchors: `src/cli/server/agent-hook-writer.ts` (search: `spec.id === "gruff-code-quality"`), `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`), `workflow/hooks/gruff-code-quality.sh` (search: `git_changed_supported_paths`), `test/unit/hook-registrar-surfaces.test.ts` (search: `enables gruff-code-quality for a detected Antigravity surface`), and `test/integration/gruff-code-quality-smoke.test.ts` (search: `runs for Antigravity file-tool payloads without a file path`).
+**Recurrence update (2026-08-10):** A registrar test still treated Antigravity's runnable PostToolUse command as usable Gruff support. The full suite showed that current setup intentionally removes the registration because its output cannot reach the active model. The corrected fixture keeps the user's desired toggle visible, leaves the hook unregistered, reports `result-undelivered`, and offers no local repair command. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`), `src/cli/server/hook-registrar.ts` (search: `doesProviderExclusionOwnState`), and `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`).
+
+**Prevention:** Verify each hook layer separately before choosing a support label. A payload fixture proves input extraction; an installed script proves local availability; neither proves the host returned feedback to the model. Keep provider-specific expectations explicit and use the first causal gap for the UI state and repair guidance. `test/integration/gruff-code-quality-smoke.test.ts` (search: `runs for Antigravity file-tool payloads without a file path`) remains input-path proof only.
 
 ---
 

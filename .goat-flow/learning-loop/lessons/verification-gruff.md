@@ -1,12 +1,12 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
 **Status:** active | **Created:** 2026-05-25
-**Incident count:** 7 | **Latest occurrence:** 2026-08-09
+**Incident count:** 8 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Treat a human-readable comment, boolean, compact test, or typed contract as unfinished until targeted and repository-wide analyzers accept the exact source shape.
 **Trigger phase:** VERIFY
 
@@ -23,6 +23,8 @@ last_reviewed: 2026-08-09
 **Fifth recurrence (2026-08-09):** A follow-up launcher refactor stopped at exactly 750 lines according to `wc`, but gruff-ts counted 751 and still emitted `size.file-length`. Removing one non-semantic blank line created a one-line buffer and returned the scan to only the three tracked process-execution warnings. Evidence anchor: `workflow/hooks/run-with-bash.mjs` (search: `hookProcess.once("error"`).
 
 **Sixth recurrence (2026-08-09):** Typed delivery assertions grew a registrar fixture to 752 lines, and only full preflight caught the new file-length warning. Remove optional separators in touched long files, then run targeted Gruff before preflight. Evidence: `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps deterministic delivery evidence below live support`).
+
+**Seventh recurrence (2026-08-10):** Formatting a Gruff contract test exposed five fixture-purpose and test-loop advisories. Moving looped assertions into named cases cleared that cluster, but separate adjacent purpose and side-effect or invariant comments produced six follow-up advisories because only the nearest source shape carried each contract. Combining both meanings in one concise comment reduced the working-tree scan to zero findings. Evidence anchors: `test/integration/gruff-code-quality-contract.test.ts` (search: `Fixture purpose: adapts one neutral finding`) and (search: `Fixture purpose: proves helper bypass`).
 
 **Root cause:** I treated human-readable comments, compact boolean names, a local rename, and focused contract checks as complete before checking analyzer vocabulary, branch budgets, public type use, test structure, and parallel type surfaces.
 

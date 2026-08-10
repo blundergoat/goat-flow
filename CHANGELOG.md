@@ -5,7 +5,7 @@
 - **Hook support claims have an evidence contract** - Dated provider capture, trust, delivered results, and complete coverage are required before future adapters can report effective or passing hooks.
 - **Hook result migration fails visibly** - Legacy output stays intact; malformed, partial, oversized, or block-weakening envelopes are rejected.
 - **Gruff feedback distinguishes failure from clean work** - Claude and Copilot get bounded findings; analysis gaps stay explicit.
-- **Hook coverage names broken links** - Audit, hook listing, and dashboard distinguish registration, version, trust, delivery, and scenario gaps.
+- **Hook coverage names causal gaps** - Audit, hook listing, and dashboard separate local drift from provider delivery and omit impossible repairs.
 - **Hook verification covers all managed commands** - Fixed deny, post-turn, and Gruff scenarios replay each agent's exact configured command.
 - **Antigravity Gruff is no longer registered** - Its PostToolUse channel cannot return feedback; setup removes stale optional registrations.
 - **Post-turn scan failures block cleanly** - Missing roots, parser errors, and failed scan commands now fail closed on native and Bash 3 paths.

@@ -443,21 +443,13 @@ export function writeContractGruffBinary(
   mkdirSync(binDir, { recursive: true });
   const bin = join(binDir, "gruff-ts");
   const analyzerOutputProgram =
-    envelope.length === 0
-      ? ":"
-      : ["cat <<'JSON'", envelope, "JSON"].join("\n");
+    envelope.length === 0 ? ":" : ["cat <<'JSON'", envelope, "JSON"].join("\n");
   const analyzerErrorProgram =
     (behavior.standardError ?? "").length === 0
       ? ":"
-      : [
-          "cat >&2 <<'ERROR'",
-          behavior.standardError ?? "",
-          "ERROR",
-        ].join("\n");
+      : ["cat >&2 <<'ERROR'", behavior.standardError ?? "", "ERROR"].join("\n");
   const analyzerDelayProgram =
-    (behavior.delaySeconds ?? 0) > 0
-      ? `sleep ${behavior.delaySeconds}`
-      : ":";
+    (behavior.delaySeconds ?? 0) > 0 ? `sleep ${behavior.delaySeconds}` : ":";
   writeFileSync(
     bin,
     `#!/usr/bin/env bash

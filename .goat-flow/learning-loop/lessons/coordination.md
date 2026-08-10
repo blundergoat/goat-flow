@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: Git status cannot prove milestone work disappeared after HEAD moves
@@ -144,10 +144,12 @@ last_reviewed: 2026-08-09
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** VERIFY
-**Incident count:** 2
-**Latest occurrence:** 2026-08-09
+**Incident count:** 3
+**Latest occurrence:** 2026-08-10
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
+
+**Recurrence 2026-08-10:** A hook-coverage milestone left its product receipt open overnight across approval pauses. Because the stop time could no longer distinguish agent work from human waiting, the span had to be discarded; its Actual is incomplete and cannot calibrate future forecasts.
 
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
 

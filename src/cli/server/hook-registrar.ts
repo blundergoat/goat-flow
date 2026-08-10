@@ -726,14 +726,26 @@ function configuredScenarioForHook(spec: HookSpec): string {
   return "gruff-hook";
 }
 
-/** Explain the next operator-controlled action for the first unmet effective-state link. */
+/**
+ * Explain the next operator-controlled action for the first unmet effective-state link.
+ * Provider exclusions stay command-free because project sync cannot repair host delivery.
+ */
 function effectiveStateRepair(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
   effectiveState: HookEffectiveState,
+  doesProviderExclusionOwnState = false,
 ): { command: string | null; summary: string } {
   const quotedProjectPath = JSON.stringify(resolve(projectPath));
+  // A provider-limited hook needs new delivery evidence, not a local command the user can rerun.
+  if (doesProviderExclusionOwnState && effectiveState.status !== "disabled") {
+    return {
+      command: null,
+      summary:
+        "Provider result delivery must be proven before Goat Flow can register this hook.",
+    };
+  }
   switch (effectiveState.status) {
     case "disabled":
       return {
@@ -783,7 +795,10 @@ function effectiveStateRepair(
   }
 }
 
-/** Combine registry evidence with the selected project's local install and trust facts. */
+/**
+ * Combine registry evidence with the selected project's local install and trust facts.
+ * Registry exclusions keep their causal provider gap ahead of unavailable local files.
+ */
 function effectiveAgentState(
   projectPath: string,
   agent: AgentProfile,
@@ -792,6 +807,7 @@ function effectiveAgentState(
   isRegistered: boolean,
   isCurrentVersionInstalled: boolean,
   isTrusted: boolean,
+  doesProviderExclusionOwnState = false,
 ): Pick<
   HookAgentState,
   | "effectiveState"
@@ -807,11 +823,23 @@ function effectiveAgentState(
     isDesiredByUser,
     effectiveSupportGate,
   );
-  effectiveStateFacts.isRegistered = isRegistered;
-  effectiveStateFacts.isCurrentVersionInstalled = isCurrentVersionInstalled;
-  effectiveStateFacts.isTrusted = isTrusted;
+  effectiveStateFacts.isRegistered = doesProviderExclusionOwnState
+    ? true
+    : isRegistered;
+  effectiveStateFacts.isCurrentVersionInstalled = doesProviderExclusionOwnState
+    ? true
+    : isCurrentVersionInstalled;
+  effectiveStateFacts.isTrusted = doesProviderExclusionOwnState
+    ? true
+    : isTrusted;
   const effectiveState = classifyHookEffectiveState(effectiveStateFacts);
-  const repair = effectiveStateRepair(projectPath, agent, spec, effectiveState);
+  const repair = effectiveStateRepair(
+    projectPath,
+    agent,
+    spec,
+    effectiveState,
+    doesProviderExclusionOwnState,
+  );
   return {
     effectiveState,
     effectiveStateLabel: HOOK_EFFECTIVE_STATE_LABELS[effectiveState.status],
@@ -875,13 +903,17 @@ function installationIssueReason(
   return issueReasons[installationIssue];
 }
 
-/** Build the state payload for an agent that cannot host the requested hook. */
+/**
+ * Build the state payload for an agent that cannot host the requested hook.
+ * Provider exclusions show their root cause; missing surfaces show the local setup gap.
+ */
 function unsupportedAgentHookState(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
   isDesiredByUser: boolean,
   reason: string,
+  doesProviderExclusionOwnState = false,
 ): HookAgentState {
   const effectivePresentation = effectiveAgentState(
     projectPath,
@@ -891,6 +923,7 @@ function unsupportedAgentHookState(
     false,
     false,
     false,
+    doesProviderExclusionOwnState,
   );
   return {
     supported: false,
@@ -998,6 +1031,7 @@ function agentHookState(
       spec,
       desired,
       unsupportedReason,
+      true,
     );
   }
   // A profile without registration surfaces cannot make this hook effective for the user.

@@ -620,25 +620,40 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   });
 
-  /** Proves an existing legacy registration stays compatible without claiming result delivery. */
-  // Side effects: writes one disposable Antigravity config and verifies its legacy hook state.
-  it("enables gruff-code-quality for a detected Antigravity surface", () => {
+  /** Proves an enabled toggle stays visible without installing feedback the model cannot receive. */
+  // Side effects: writes one disposable Antigravity config and removes any managed Gruff entry.
+  it("keeps gruff-code-quality unregistered for Antigravity without result delivery", () => {
     withTempProject((root) => {
       mkdirSync(join(root, ".agents"), { recursive: true });
       writeFileSync(join(root, ".agents", "hooks.json"), "{}\n");
       const state = applyHookState("gruff-code-quality", true, root);
-      assertPresent(root, [
-        ".agents/hooks.json",
+      assertPresent(root, [".agents/hooks.json"]);
+      assertMissing(root, [
         ".goat-flow/hooks/gruff-code-quality.sh",
+        ".goat-flow/hooks/hook-provider-adapters.mjs",
       ]);
-      assertMissing(root, [".goat-flow/hooks/hook-provider-adapters.mjs"]);
       const config = JSON.parse(
         readFileSync(join(root, ".agents", "hooks.json"), "utf-8"),
       ) as Record<string, unknown>;
-      assert.ok(config["gruff-code-quality"]);
-      assert.equal(state.agents.antigravity.supported, true);
-      assert.equal(state.agents.antigravity.installed, true);
-      // Fixture evidence cannot turn the legacy registration into a delivered-result claim.
+      assert.equal(config["gruff-code-quality"], undefined);
+      assert.equal(state.enabled, true);
+      assert.equal(state.agents.antigravity.supported, false);
+      assert.equal(state.agents.antigravity.installed, false);
+      assert.equal(state.agents.antigravity.isRegistered, false);
+      assert.deepEqual(state.agents.antigravity.effectiveState, {
+        status: "result-undelivered",
+        severity: "danger",
+      });
+      assert.equal(state.agents.antigravity.repairCommand, null);
+      assert.match(
+        state.agents.antigravity.repairSummary,
+        /Provider result delivery must be proven/iu,
+      );
+      assert.match(
+        state.agents.antigravity.reason ?? "",
+        /cannot deliver Gruff feedback to the active model/iu,
+      );
+      // Registry evidence keeps the dashboard reason aligned with the unregistered state.
       assert.equal(
         getHookSpec("gruff-code-quality")?.providerEvidence?.antigravity
           ?.effectiveSupportGate,

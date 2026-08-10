@@ -52,11 +52,7 @@ function makeContractProject(
   } = {},
 ): string {
   const projectRoot = makeRoot();
-  writeContractGruffBinary(
-    projectRoot,
-    analyzerEnvelope,
-    analyzerBehavior,
-  );
+  writeContractGruffBinary(projectRoot, analyzerEnvelope, analyzerBehavior);
   writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
   mkdirSync(join(projectRoot, "src"), { recursive: true });
   writeFileSync(join(projectRoot, "src", "sample.ts"), "a\nb\nc\nd\n");
@@ -409,60 +405,61 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     }
   });
 
-  // Missing setup and unsupported analyzer versions must name the prerequisite the user lacks.
-  it("reports missing config, ambiguous config, missing binary, and unsupported capability", () => {
-    const prerequisiteFixtures = [
-      {
-        label: "missing config",
-        prepare(projectRoot: string) {
-          writeContractGruffBinary(projectRoot, CLEAN_CONTRACT_ENVELOPE);
-        },
-        findingCode: "analyzer-config-missing",
+  const prerequisiteFixtures = [
+    {
+      label: "missing config",
+      /** Installs the analyzer while leaving the user's project config absent. */
+      prepareProject(projectRoot: string) {
+        writeContractGruffBinary(projectRoot, CLEAN_CONTRACT_ENVELOPE);
       },
-      {
-        label: "ambiguous config",
-        prepare(projectRoot: string) {
-          writeContractGruffBinary(projectRoot, CLEAN_CONTRACT_ENVELOPE);
-          writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
-          writeFileSync(join(projectRoot, ".gruff-ts.yml"), "rules: {}\n");
-        },
-        findingCode: "analyzer-config-ambiguous",
+      findingCode: "analyzer-config-missing",
+    },
+    {
+      label: "ambiguous config",
+      /** Side effects: writes both accepted config names so the user must choose one. */
+      prepareProject(projectRoot: string) {
+        writeContractGruffBinary(projectRoot, CLEAN_CONTRACT_ENVELOPE);
+        writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
+        writeFileSync(join(projectRoot, ".gruff-ts.yml"), "rules: {}\n");
       },
-      {
-        label: "missing binary",
-        prepare(projectRoot: string) {
-          writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
-        },
-        findingCode: "analyzer-binary-missing",
+      findingCode: "analyzer-config-ambiguous",
+    },
+    {
+      label: "missing binary",
+      /** Side effects: writes project config without installing the matching analyzer. */
+      prepareProject(projectRoot: string) {
+        writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
       },
-      {
-        label: "unsupported capability",
-        prepare(projectRoot: string) {
-          const binaryDirectoryPath = join(projectRoot, "bin");
-          mkdirSync(binaryDirectoryPath, { recursive: true });
-          writeFileSync(
-            join(binaryDirectoryPath, "gruff-ts"),
-            '#!/usr/bin/env bash\n# A user may still have a pre-JSON analyzer on PATH after enabling Gruff.\nif [[ "$1" == "analyse" && "$2" == "--help" ]]; then printf "Usage: gruff analyse FILE\\n"; fi\nexit 0\n',
-          );
-          chmodSync(join(binaryDirectoryPath, "gruff-ts"), 0o755);
-          writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
-        },
-        findingCode: "analyzer-capability-unsupported",
+      findingCode: "analyzer-binary-missing",
+    },
+    {
+      label: "unsupported capability",
+      /** Side effects: writes an older analyzer and config without JSON hook output. */
+      prepareProject(projectRoot: string) {
+        const binaryDirectoryPath = join(projectRoot, "bin");
+        mkdirSync(binaryDirectoryPath, { recursive: true });
+        writeFileSync(
+          join(binaryDirectoryPath, "gruff-ts"),
+          '#!/usr/bin/env bash\n# A user may still have a pre-JSON analyzer on PATH after enabling Gruff.\nif [[ "$1" == "analyse" && "$2" == "--help" ]]; then printf "Usage: gruff analyse FILE\\n"; fi\nexit 0\n',
+        );
+        chmodSync(join(binaryDirectoryPath, "gruff-ts"), 0o755);
+        writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
       },
-    ] as const;
+      findingCode: "analyzer-capability-unsupported",
+    },
+  ] as const;
 
-    // Every prerequisite fixture starts with the same edited TypeScript file.
-    for (const fixture of prerequisiteFixtures) {
+  // Each named test shows the exact prerequisite a user must repair.
+  for (const fixture of prerequisiteFixtures) {
+    // Fixture purpose: omits one setup requirement while keeping the edited file identical.
+    // Side effects: creates a disposable project and writes its selected setup files.
+    it(`reports ${fixture.label} as unavailable`, () => {
       const projectRoot = makeRoot();
       mkdirSync(join(projectRoot, "src"), { recursive: true });
       writeFileSync(join(projectRoot, "src", "sample.ts"), "a\nb\nc\n");
-      fixture.prepare(projectRoot);
+      fixture.prepareProject(projectRoot);
       const result = migratedResult(
-        runMigratedHook(
-          projectRoot,
-          sampleEditPayload(),
-          "/usr/bin:/bin",
-        ),
+        runMigratedHook(projectRoot, sampleEditPayload(), "/usr/bin:/bin"),
       );
 
       assert.equal(result.outcome, "unavailable", fixture.label);
@@ -472,19 +469,19 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
         fixture.findingCode,
         fixture.label,
       );
-    }
-  });
+    });
+  }
 
-  // Adapter goldens prove local response shapes without promoting live provider support.
-  it("adapts one Gruff finding for supported and candidate provider fixtures", () => {
-    const expectedProviderFields = [
-      { provider: "claude", pattern: /"hookSpecificOutput"/u },
-      { provider: "codex", pattern: /"additionalContext"/u },
-      { provider: "copilot", pattern: /^\{"additionalContext"/u },
-    ] as const;
+  const expectedProviderFields = [
+    { provider: "claude", pattern: /"hookSpecificOutput"/u },
+    { provider: "codex", pattern: /"additionalContext"/u },
+    { provider: "copilot", pattern: /^\{"additionalContext"/u },
+  ] as const;
 
-    // Every provider result is produced by Gruff itself before its final host translation.
-    for (const fixture of expectedProviderFields) {
+  // Each provider case names the host translation a user would receive after an edit.
+  for (const fixture of expectedProviderFields) {
+    // Fixture purpose: adapts one neutral finding; Invariant: the host response preserves it.
+    it(`adapts one Gruff finding for ${fixture.provider}`, () => {
       const projectRoot = makeContractProject(FINDING_CONTRACT_ENVELOPE);
       const result = migratedResult(
         runMigratedHook(
@@ -503,8 +500,11 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
       assert.equal(providerResult.state, "adapted", fixture.provider);
       assert.match(providerResult.stdout ?? "", fixture.pattern);
-    }
+    });
+  }
 
+  // Fixture purpose: proves runnable Antigravity input never becomes a model-feedback claim.
+  it("keeps Antigravity Gruff feedback unsupported", () => {
     const antigravityProjectRoot = makeContractProject(
       FINDING_CONTRACT_ENVELOPE,
     );
@@ -518,11 +518,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
       ),
     );
     assert.deepEqual(
-      adaptHookResultForProvider(
-        antigravityResult,
-        "antigravity",
-        "post-tool",
-      ),
+      adaptHookResultForProvider(antigravityResult, "antigravity", "post-tool"),
       {
         state: "unsupported",
         reason: "Antigravity PostToolUse cannot deliver hook feedback",
@@ -595,7 +591,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     );
   });
 
-  // Git helpers are project-controlled, so scope detection must bypass them deterministically.
+  // Fixture purpose: proves helper bypass; Side effects: writes Git history, attributes, helpers, and an edit.
   it("derives Git ranges without invoking external diff or textconv helpers", () => {
     const projectRoot = makeContractProject(CLEAN_CONTRACT_ENVELOPE);
     initGit(projectRoot);
@@ -609,7 +605,12 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     writeFileSync(join(projectRoot, ".gitattributes"), "*.ts diff=fixture\n");
     git(projectRoot, ["config", "diff.external", helperScriptPath]);
     git(projectRoot, ["config", "diff.fixture.textconv", helperScriptPath]);
-    git(projectRoot, ["add", ".gitattributes", ".gruff-ts.yaml", "src/sample.ts"]);
+    git(projectRoot, [
+      "add",
+      ".gitattributes",
+      ".gruff-ts.yaml",
+      "src/sample.ts",
+    ]);
     git(projectRoot, [
       "-c",
       "user.email=t@test",

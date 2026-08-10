@@ -615,6 +615,21 @@ export function makeAuditReport(
     },
     concerns: null,
     enforcement: [],
+    // This minimal fixture selects no agent surfaces, so users see an empty passing coverage section.
+    hookCoverage: {
+      status: "pass",
+      selectedAgents: [],
+      summary: {
+        selectedSurfaces: 0,
+        requiredSurfaces: 0,
+        requiredIneffective: 0,
+        effective: 0,
+        warning: 0,
+        danger: 0,
+        disabled: 0,
+      },
+      hooks: [],
+    },
     drift: null,
     content: null,
     overall: { status },

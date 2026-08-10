@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-10
 ---
 
 ## Lesson: Artifact scanners need explicit mirror maps and command grammar controls
@@ -41,13 +41,15 @@ last_reviewed: 2026-08-01
 
 **Status:** active | **Created:** 2026-05-17
 
-**What happened:** M09 added `AuditReport.enforcement` and updated the main audit fixtures, but the first full `npm test` run failed in an older contract fixture that called `renderAuditText` with a minimal report object lacking the new field. The new report producer was correct; the text renderer had become stricter than historical report-shaped fixtures.
+**What happened:** Adding `AuditReport.enforcement` and updating the main audit fixtures left an older contract fixture that called `renderAuditText` with a minimal report object lacking the new field. The first full `npm test` run failed because the text renderer had become stricter than historical report-shaped fixtures.
 
 **Root cause:** I treated an additive report field as universally present at every renderer call site. Tests had multiple report construction paths, and only the obvious unit helper was updated before the full suite.
 
 **Prevention:** When adding fields to `AuditReport` or other shared CLI/dashboard payloads, grep for direct renderer/reader fixture construction and either update every fixture or make consumers default missing additive fields. Evidence anchors: `src/cli/audit/render.ts` (search: `Array.isArray(report.enforcement)`), `test/contract/command-phrases.test.ts` (search: `renderAuditText does not mention scan`).
 
-**Recurrence update (2026-07-31):** M07's first JSON proof queried pass findings on a per-check result, but `toCheckResult` exposes status/details there and aggregates pass findings under the owning concern. Inspect the output mapper before scripting field-level proof. Evidence: `src/cli/audit/harness-scoring.ts` (search: `function toCheckResult`).
+**Recurrence update (2026-07-31):** The first JSON proof queried pass findings on a per-check result, but `toCheckResult` exposes status/details there and aggregates pass findings under the owning concern. Inspect the output mapper before scripting field-level proof. Evidence: `src/cli/audit/harness-scoring.ts` (search: `function toCheckResult`).
+
+**Recurrence update (2026-08-10):** Adding required `hookCoverage` data reached the main audit builders but missed two direct renderer fixtures. The full suite found both because the source typecheck does not inspect those test-only object literals. Completing `hookCoverage` in the contract fixture and shared scoring helper restored terminal and Markdown rendering. Evidence anchors: `test/contract/command-phrases.test.ts` (search: `hookCoverage:`) and `test/unit/audit-command/helpers.ts` (search: `This minimal fixture selects no agent surfaces`).
 
 ---
 

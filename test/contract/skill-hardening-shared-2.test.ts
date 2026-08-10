@@ -224,7 +224,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     );
     assert.match(
       optionalMigration,
-      /hook-registrar-surfaces\.test\.ts[^\n]+enables gruff-code-quality for a detected Antigravity surface/u,
+      /hook-registrar-surfaces\.test\.ts[^\n]+keeps gruff-code-quality unregistered for Antigravity without result delivery/u,
     );
     assert.match(
       failSoftAnalyzer,
