@@ -168,6 +168,10 @@ function readCalibrationSample(
 
   // A zero-minute estimate has no ratio to report, so it contributes nothing.
   if (effort.totalMinutes <= 0) return undefined;
+
+  // `plans time` permits a same-second receipt. Its 0.00 min/unit rate would be prescribed as a
+  // reforecast that `readSafePositiveRate` then rejects, blocking the milestone indefinitely.
+  if (summary.totalSeconds <= 0) return undefined;
   return {
     sourceFile: record.sourceFile,
     ratio: summary.totalSeconds / (effort.totalMinutes * 60),

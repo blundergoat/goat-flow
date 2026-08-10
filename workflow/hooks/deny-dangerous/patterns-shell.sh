@@ -125,6 +125,19 @@ find_has_destructive_action() {
   return 1
 }
 
+# Decide whether a bare command word names a POSIX-family shell binary.
+# Shared so pipeline classification and the script-file exemption cover the same shells; a shell
+# recognized by only one of them would either bypass the guard or lose a legitimate exemption.
+is_shell_name() {
+  case "$1" in
+    bash|sh|dash|zsh|ksh|ksh93|mksh|ash|yash) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Decide whether a command word starts a shell that would execute piped bytes as its program.
+# Every POSIX-family shell reads stdin the same way, so classifying only bash and sh would let
+# `printf payload | dash` run the payload while `printf payload | bash` stayed blocked.
 is_shell_command() {
   local c
   c=$(normalize_command_candidate "$1")
@@ -132,7 +145,16 @@ is_shell_command() {
   local word="${c%%[[:space:]]*}"
   local base="${word##*/}"
 
-  [[ "$base" == "bash" || "$base" == "sh" ]]
+  # BusyBox is a multi-call binary, so only its shell applets read stdin as a program.
+  if [[ "$base" == "busybox" ]]; then
+    local busybox_rest="${c#"$word"}"
+    busybox_rest="${busybox_rest#"${busybox_rest%%[![:space:]]*}"}"
+    local busybox_applet="${busybox_rest%%[[:space:]]*}"
+    [[ "$busybox_applet" == "sh" || "$busybox_applet" == "ash" ]]
+    return $?
+  fi
+
+  is_shell_name "$base"
 }
 
 # Decide whether Bash or sh reads its program from an explicit local script file.
@@ -145,8 +167,9 @@ is_script_file_shell_command() {
   # A shell plus one script operand is the smallest safe file-backed shape.
   [[ "${#shell_words[@]}" -gt 1 ]] || return 1
   local shell_name="${shell_words[0]##*/}"
-  # This exemption belongs only to the two shells already classified by this policy.
-  [[ "$shell_name" == "bash" || "$shell_name" == "sh" ]] || return 1
+  # The exemption must cover exactly the shells the pipeline check classifies; a shell blocked
+  # there but unrecognized here would lose its legitimate explicit-script-file exemption.
+  is_shell_name "$shell_name" || return 1
 
   local shell_word_index=1
   local shell_word=""
@@ -165,11 +188,25 @@ is_script_file_shell_command() {
       -s|-s?*)
         return 1
         ;;
-      -O|-o|--init-file|--rcfile)
+      --init-file|--rcfile)
+        # A startup file is read before the script operand, so `--rcfile /dev/stdin -i script.sh`
+        # would execute the piped bytes as the interactive rcfile while the operand looked safe.
+        # A checked-in startup file stays allowed; only stdin-backed sources are rejected.
+        shell_word_index=$((shell_word_index + 1))
+        script_file_word_is_safe "${shell_words[$shell_word_index]:-}" || return 1
+        shell_word_index=$((shell_word_index + 1))
+        continue
+        ;;
+      --init-file=*|--rcfile=*)
+        script_file_word_is_safe "${shell_word#*=}" || return 1
+        shell_word_index=$((shell_word_index + 1))
+        continue
+        ;;
+      -O|-o)
         shell_word_index=$((shell_word_index + 2))
         continue
         ;;
-      -O?*|-o?*|--init-file=*|--rcfile=*|--noprofile|--norc|--posix|--restricted|--verbose|--version)
+      -O?*|-o?*|--noprofile|--norc|--posix|--restricted|--verbose|--version)
         shell_word_index=$((shell_word_index + 1))
         continue
         ;;

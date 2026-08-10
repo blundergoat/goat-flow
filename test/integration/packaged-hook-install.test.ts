@@ -26,11 +26,13 @@ const CODEX_GRUFF_HOST_TIMEOUT_SECONDS = 90;
 const CODEX_GRUFF_LAUNCH_CONTRACT = `codex:gruff:goat-flow.hook-result.v1:post-tool:1:${CODEX_GRUFF_LAUNCHER_DEADLINE_MS}`;
 const disposablePackagePaths: string[] = [];
 
+/** Paths a release test uses to distinguish archived package code from its npm-style command. */
 interface PackedCliInstallation {
   packedPackageRoot: string;
   packedCliExecutablePath: string;
 }
 
+/** Minimal installed Codex shape needed to replay the exact user-facing deny command. */
 interface CodexHookConfiguration {
   hooks?: {
     PreToolUse?: Array<{
@@ -120,6 +122,7 @@ function extractPackedCandidate(): string {
 /**
  * Expose the archived package's declared CLI at a disposable npm-style bin path.
  * Use before release to run package code while borrowing only installed dependencies offline.
+ * Side effect: writes disposable package paths and spawns npm and tar before later cleanup.
  *
  * @returns Packed package and executable paths; neither is empty after archive validation.
  */
@@ -179,6 +182,7 @@ function runPackedCli(
 /**
  * Read an exact prior-release file for a real upgrade fixture.
  * Use when migration behavior must not be approximated from current source.
+ * Side effects: starts a read-only Git process without changing the checkout.
  *
  * @param relativePath - non-empty tagged file path; empty cannot identify prior release bytes
  * @returns Tagged bytes, or `null` when a shallow checkout cannot provide the release fixture.
@@ -228,6 +232,7 @@ function readInstalledCodexDenyCommand(targetProjectPath: string): string {
 /**
  * Replay the user's installed policy command and prove safe work passes while danger blocks.
  * Use after fresh install or migration so direct-script success cannot hide stale registration.
+ * Side effects: starts two bounded policy processes; the submitted shell text is classified, not run.
  *
  * @param targetProjectPath - non-empty installed project root; empty cannot resolve managed hooks
  * @returns Nothing; failed policy outcomes throw assertions with captured user-facing output.

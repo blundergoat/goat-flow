@@ -11,6 +11,8 @@ export const HOOK_PROVIDER_EVIDENCE_SCHEMA =
 export const HOOK_RESULT_SCHEMA = "goat-flow.hook-result.v1";
 export const HOOK_RESULT_FINDING_LIMIT = 20; // Cap: matches both shipped hook limits across agent UIs.
 export const HOOK_RESULT_OUTPUT_LIMIT_BYTES = 10_000; // Cap: fits Copilot's smallest documented feedback channel.
+/** Cap: the 30-day revalidation window ADR-052 documents for documentation and capture records. */
+export const HOOK_EVIDENCE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** Provider-neutral lifecycle points shown consistently across hook screens. */
 export type HookLifecycleEvent = "pre-tool" | "post-tool" | "turn-stop";
@@ -82,16 +84,41 @@ export interface HookProviderEvidenceAssessment {
  * Decide whether dated evidence can still back a support label shown to users.
  * Use before documentation or capture advances a hook toward effective coverage.
  *
+ * Both dates are enforced. `expiresAt` alone is author-supplied, so a record claiming a decade
+ * of validity would otherwise pin a stale support badge forever; the observation date caps every
+ * record at the window ADR-052 documents, whatever expiry its author wrote.
+ *
+ * @param observedAt - ISO date the record was checked or captured; empty or invalid text is stale
  * @param expiresAt - ISO expiry from the evidence record; empty or invalid text means users see stale evidence
  * @param currentDate - time of the support check; an invalid date cannot establish fresh evidence
- * @returns `true` when the record is expired or invalid, so support remains unverified
+ * @returns `true` when the record is expired, too old, or invalid, so support remains unverified
  */
-function hookEvidenceHasExpired(expiresAt: string, currentDate: Date): boolean {
+function hookEvidenceHasExpired(
+  observedAt: string,
+  expiresAt: string,
+  currentDate: Date,
+): boolean {
   const expiryMilliseconds = Date.parse(expiresAt);
+  const observedMilliseconds = Date.parse(observedAt);
   const currentMilliseconds = currentDate.getTime();
 
   // Invalid dates cannot justify a fresh support badge for the user.
-  if (Number.isNaN(expiryMilliseconds) || Number.isNaN(currentMilliseconds)) {
+  if (
+    Number.isNaN(expiryMilliseconds) ||
+    Number.isNaN(observedMilliseconds) ||
+    Number.isNaN(currentMilliseconds)
+  ) {
+    return true;
+  }
+
+  // Evidence recorded in the future cannot describe an observation the user can trust.
+  if (observedMilliseconds > currentMilliseconds) return true;
+
+  // The documented window caps the author's expiry so no record outlives revalidation.
+  if (
+    currentMilliseconds - observedMilliseconds >
+    HOOK_EVIDENCE_MAX_AGE_MS
+  ) {
     return true;
   }
 
@@ -115,7 +142,13 @@ function classifyProviderDocumentation(
   if (!documentation) return "absent";
 
   // Expired documentation prompts re-checking instead of preserving a timeless claim.
-  if (hookEvidenceHasExpired(documentation.expiresAt, currentDate)) {
+  if (
+    hookEvidenceHasExpired(
+      documentation.checkedAt,
+      documentation.expiresAt,
+      currentDate,
+    )
+  ) {
     return "stale";
   }
 
@@ -145,7 +178,11 @@ function classifyProviderCapture(
   if (capture.trustState !== "trusted") return "untrusted";
 
   // An expired provider/version observation asks the user to re-run live verification.
-  if (hookEvidenceHasExpired(capture.expiresAt, currentDate)) return "stale";
+  if (
+    hookEvidenceHasExpired(capture.capturedAt, capture.expiresAt, currentDate)
+  ) {
+    return "stale";
+  }
 
   // A supported capture counts only when the intended result reached its destination.
   if (

@@ -149,6 +149,7 @@ for registration_file in \
   .claude/settings.json \
   .codex/hooks.json \
   .github/hooks/hooks.json \
+  .agents/hooks.json \
   workflow/manifest.json
 do
   # A present file can prove that the user's agent loads the central dispatcher.

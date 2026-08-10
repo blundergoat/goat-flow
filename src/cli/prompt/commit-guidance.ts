@@ -89,3 +89,33 @@ export function ensureGitCommitInstructions(
     path: GIT_COMMIT_INSTRUCTIONS_PATH,
   };
 }
+
+/**
+ * Print commit-guide setup status after an install that already succeeded.
+ * Use as the final install step; it never rethrows, because guidance is additive and a
+ * completed, recorded install must not be reported to the user as a crash.
+ *
+ * @param projectPath - selected project root; a non-Git target prints nothing
+ */
+export function emitCommitGuidanceInstallResult(projectPath: string): void {
+  let result: CommitGuidanceWriteResult;
+  try {
+    result = ensureGitCommitInstructions(projectPath);
+  } catch (error) {
+    // A read-only docs tree, a Windows permission error, or the race that renameLegacyGuide
+    // documents must read as a skipped extra, not as a failed install.
+    const reason = error instanceof Error ? error.message : String(error);
+    console.log("");
+    console.log("Git commit instructions:");
+    console.log(`  ! skipped (${reason})`);
+    return;
+  }
+  if (result.status !== "copied" && result.status !== "renamed") return;
+  console.log("");
+  console.log("Git commit instructions:");
+  const summary =
+    result.status === "copied"
+      ? "copied from goat-flow template"
+      : "renamed from docs/coding-standards/git-commit.md";
+  console.log(`  ✓ ${result.path} (${summary})`);
+}

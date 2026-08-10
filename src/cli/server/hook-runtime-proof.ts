@@ -87,7 +87,13 @@ function hasCurrentHookRuntimeProof(
   let evidenceEvents: EvidenceEnvelope[];
 
   try {
-    evidenceEvents = tailEvidenceEvents(projectPath, MAX_HOOK_PROOF_EVENTS);
+    // Tailing this kind alone keeps proof readable after unrelated terminal or dashboard
+    // activity; a global window would evict every verification event and re-prompt the user.
+    evidenceEvents = tailEvidenceEvents(
+      projectPath,
+      MAX_HOOK_PROOF_EVENTS,
+      "hook.verify",
+    );
   } catch {
     // For example, a user may revoke access to local logs; the UI then asks for proof again.
     return false;

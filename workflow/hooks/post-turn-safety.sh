@@ -337,11 +337,18 @@ try {
   return 0
 }
 
-# Resolve the one ignored owner-local state file used to bound a repeated Stop failure.
+# Resolve the ignored owner-local state file used to bound a repeated Stop failure.
 # The path contains hashes only, so it never stores the user's session ID or changed content.
+# The record is session-specific, so the filename must be too: two sessions working in one
+# project would otherwise overwrite each other's record, and a clean result in either would
+# delete the sibling's, leaving both to keep blocking instead of reaching the second-Stop exit.
 set_stop_state_paths() {
   stop_state_directory="$1/.goat-flow/scratchpad"
-  stop_state_path="$stop_state_directory/post-turn-safety-reentry-v1.state"
+  # The fingerprint is validated hex, so a bounded slice is always a safe filename component.
+  local session_key="${stop_session_fingerprint:0:32}"
+  # A direct user run parses no session and still needs one stable owner-local path.
+  [ -n "$session_key" ] || session_key="direct"
+  stop_state_path="$stop_state_directory/post-turn-safety-reentry-v1-$session_key.state"
   stop_state_temp_path="$stop_state_path.tmp"
 }
 

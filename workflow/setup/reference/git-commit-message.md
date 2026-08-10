@@ -36,8 +36,8 @@ Subject lines are optimised for `git log`, changelogs, and bisect notes.
 
 - Imperative mood. Test: the subject must complete the sentence "If applied, this commit will
   ___".
-- One line, as short as it can be while still naming the observable change. No hard character
-  limit.
+- One line, as short as it can be while still naming the observable change, and never longer
+  than 72 characters including any `#<digits> ` prefix.
 - Lowercase after the colon unless the word is a proper noun, identifier, or API name.
 - No trailing period.
 - Name the observable change, not the quality aspiration.
@@ -105,3 +105,4 @@ expanded unquoted at three call sites.
 - quote all path expansions in workflow/install-hooks.sh
 - add a regression test using a spaced tmpdir
 ```
+

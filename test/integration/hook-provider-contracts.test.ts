@@ -9,6 +9,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -473,10 +474,20 @@ describe("hook provider contracts", () => {
         const forceBash3Fallback = scannerVariant.forceBash3Fallback;
         withTempRepo((projectRoot) => {
           const sessionIdentifier = `fixture-session-${forceBash3Fallback}`;
-          const reentryStatePath = join(
+          const reentryStateDirectory = join(
             projectRoot,
-            ".goat-flow/scratchpad/post-turn-safety-reentry-v1.state",
+            ".goat-flow/scratchpad",
           );
+          // State is keyed per session so concurrent sessions cannot clobber one another,
+          // so the record is located by its stable prefix rather than one fixed filename.
+          const reentryStatePaths = (): string[] =>
+            existsSync(reentryStateDirectory)
+              ? readdirSync(reentryStateDirectory)
+                  .filter((entry) =>
+                    entry.startsWith("post-turn-safety-reentry-v1"),
+                  )
+                  .map((entry) => join(reentryStateDirectory, entry))
+              : [];
           writeFile(projectRoot, "settings.env", "API_KEY=your_api_key_here\n");
 
           withCommandShim("wc", "exit 2", (commandShimEnvironment) => {
@@ -489,7 +500,9 @@ describe("hook provider contracts", () => {
               buildStopPayload(sessionIdentifier, false),
             );
             assert.equal(firstFailure.status, 2, firstFailure.stderr);
-            assert.equal(existsSync(reentryStatePath), true);
+            const writtenStatePaths = reentryStatePaths();
+            assert.equal(writtenStatePaths.length, 1);
+            const reentryStatePath = writtenStatePaths[0] as string;
             assert.equal(statSync(reentryStatePath).mode & 0o777, 0o600);
             assert.equal(
               readFileSync(reentryStatePath, "utf8").includes(
@@ -497,6 +510,8 @@ describe("hook provider contracts", () => {
               ),
               false,
             );
+            // The per-session filename must carry the hash, never the raw session identifier.
+            assert.equal(reentryStatePath.includes(sessionIdentifier), false);
 
             // Example: the user edits the file after a failed scan and introduces a real token.
             writeFile(
@@ -554,7 +569,7 @@ describe("hook provider contracts", () => {
               repeatedActiveFailure.stderr,
               /ending repeated Stop.*infrastructure failure/iu,
             );
-            assert.equal(existsSync(reentryStatePath), false);
+            assert.deepEqual(reentryStatePaths(), []);
           });
         });
       });

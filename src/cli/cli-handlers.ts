@@ -40,7 +40,7 @@ import {
   emitIndexGenerationInstallResult,
   handleIndexCommand,
 } from "./learning-loop-index/command.js";
-import { ensureGitCommitInstructions } from "./prompt/commit-guidance.js";
+import { emitCommitGuidanceInstallResult } from "./prompt/commit-guidance.js";
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
@@ -378,19 +378,6 @@ function collectInstallerFlags(options: ParsedCLI, agent: AgentId): string[] {
   if (options.cleanDeprecated) flags.push("--clean-deprecated");
   flags.push(...deriveInstallFlags(options.projectPath, agent, options));
   return flags;
-}
-
-/** Print commit-guide setup status only when install copied or renamed guidance. */
-function emitCommitGuidanceInstallResult(projectPath: string): void {
-  const result = ensureGitCommitInstructions(projectPath);
-  if (result.status !== "copied" && result.status !== "renamed") return;
-  console.log("");
-  console.log("Git commit instructions:");
-  const summary =
-    result.status === "copied"
-      ? "copied from goat-flow template"
-      : "renamed from docs/coding-standards/git-commit.md";
-  console.log(`  ✓ ${result.path} (${summary})`);
 }
 
 /**

@@ -941,15 +941,17 @@ strip_xargs_payload_command() {
         xargs_word_index=$((xargs_word_index + 1))
         break
         ;;
-      -0|--null|-r|--no-run-if-empty|-t|--verbose|-p|--interactive)
+      -0|--null|-r|--no-run-if-empty|-t|--verbose|-p|--interactive|-x|--exit|--show-limits)
         xargs_word_index=$((xargs_word_index + 1))
         continue
         ;;
-      -a|--arg-file|-I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter)
+      # A separated value must be skipped with its option; otherwise the value itself looks like
+      # the payload and hides the real command, as `--process-slot-var VAR git push` once did.
+      -a|--arg-file|-I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter|--process-slot-var)
         xargs_word_index=$((xargs_word_index + 2))
         continue
         ;;
-      -a?*|--arg-file=*|-I?*|-i?*|-L?*|-l?*|-n?*|-P?*|-s?*|-E?*|-e?*|-d?*|--replace=*|--max-lines=*|--max-args=*|--max-procs=*|--max-chars=*|--eof=*|--delimiter=*)
+      -a?*|--arg-file=*|-I?*|-i?*|-L?*|-l?*|-n?*|-P?*|-s?*|-E?*|-e?*|-d?*|--replace=*|--max-lines=*|--max-args=*|--max-procs=*|--max-chars=*|--eof=*|--delimiter=*|--process-slot-var=*)
         xargs_word_index=$((xargs_word_index + 1))
         continue
         ;;

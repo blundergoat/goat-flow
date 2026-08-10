@@ -172,6 +172,26 @@ function removeHookEntries(
 }
 
 /**
+ * Drop every managed row this spec owns, whatever lifecycle event now holds it.
+ * Use before appending the canonical row so a registration that drifted to another event
+ * cannot survive a sync or a disable and keep firing on user actions it no longer covers.
+ *
+ * @param config - parsed agent config; a missing hooks container yields nothing to remove
+ * @param spec - managed hook contract whose owned rows are removed from every event
+ */
+function removeOwnedHookEntriesEverywhere(
+  config: AgentHookJsonObject,
+  spec: HookSpec,
+): void {
+  const hooks = ensureHooksObject(config);
+  // Snapshot the keys because removal clears emptied event groups while iterating.
+  for (const event of Object.keys(hooks)) {
+    if (!Array.isArray(hooks[event])) continue;
+    removeHookEntries(config, event, spec);
+  }
+}
+
+/**
  * Build the exact Claude or Codex rows setup shows in agent config.
  * Use when enabling Stop or tool-triggered coverage for either provider.
  *
@@ -616,7 +636,6 @@ export function writeAgentHookState(
       `${agent.id} hook config is not valid JSON: ${agent.hookConfigFile}`,
     );
   }
-  const event = hookEventKey(agent, spec);
   // Antigravity keeps managed hooks as top-level definitions with provider-specific migration ids.
   if (agent.id === "antigravity") {
     Reflect.deleteProperty(config.value, spec.id);
@@ -636,7 +655,9 @@ export function writeAgentHookState(
     );
     return;
   }
-  removeHookEntries(config.value, event, spec);
+  // A row moved to another lifecycle event still belongs to this spec and must not outlive
+  // the sync that reinstates the canonical row, nor survive the user disabling the hook.
+  removeOwnedHookEntriesEverywhere(config.value, spec);
   // Enabling appends exact current rows after stale managed rows are removed.
   if (enabled) appendHookEntries(config.value, agent, spec);
   writeFileAtomic(

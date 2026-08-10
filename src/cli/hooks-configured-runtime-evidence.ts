@@ -229,6 +229,7 @@ interface ManagedConfiguredHookState {
   isTrusted: boolean;
   scriptPath: string | null;
   configuredCommand: string | null;
+  probeTimeoutMs: number;
   reasonCode: HookRuntimeReasonCode | null;
 }
 
@@ -334,6 +335,7 @@ function readManagedConfiguredHookState(
       isTrusted: false,
       scriptPath: null,
       configuredCommand: null,
+      probeTimeoutMs: PROBE_TIMEOUT_MS,
       reasonCode: "hook-registry-missing",
     };
   }
@@ -350,6 +352,12 @@ function readManagedConfiguredHookState(
     isTrusted: agentHookState.isTrusted,
     scriptPath: agentHookState.scriptPath,
     configuredCommand,
+    // The hook's own registered deadline is the budget its script was written against; the fast
+    // classifier cap would fail a Gruff or post-turn scan that is still legitimately working.
+    probeTimeoutMs:
+      hookSpec.timeoutSec === undefined
+        ? PROBE_TIMEOUT_MS
+        : hookSpec.timeoutSec * 1000,
     reasonCode: managedHookReasonCode(
       agentHookState.supported,
       hookState.enabled,
@@ -364,6 +372,7 @@ function executeConfiguredFeedbackProbe(
   projectPath: string,
   configuredCommand: string,
   scenario: ConfiguredHookScenario,
+  timeoutMs: number,
 ): HookProbeExecution {
   const startedAt = performance.now();
   const execution = spawnSync("bash", ["-c", configuredCommand], {
@@ -372,7 +381,7 @@ function executeConfiguredFeedbackProbe(
     env: managedHookEnvironment(projectPath),
     input: scenario.payload,
     shell: false,
-    timeout: PROBE_TIMEOUT_MS,
+    timeout: timeoutMs,
     maxBuffer: PROBE_OUTPUT_CAP_BYTES,
   });
   return {
@@ -628,6 +637,7 @@ function selectConfiguredScenarioResults(
         request.projectPath,
         configuredCommand,
         scenario,
+        hookState.probeTimeoutMs,
       ),
     ),
   );

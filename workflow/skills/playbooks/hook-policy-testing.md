@@ -149,6 +149,7 @@ for registration_file in \
   .claude/settings.json \
   .codex/hooks.json \
   .github/hooks/hooks.json \
+  .agents/hooks.json \
   workflow/manifest.json
 do
   # A present file can prove that the user's agent loads the central dispatcher.
@@ -163,8 +164,14 @@ if test "${#registration_files[@]}" -eq 0; then
   exit 1
 fi
 
-rg -n --with-filename \
-  '\.goat-flow/hooks/deny-dangerous\.sh' "${registration_files[@]}"
+# Ripgrep is not installed on every consumer machine; POSIX grep always is.
+if command -v rg >/dev/null 2>&1; then
+  rg -n --with-filename \
+    '\.goat-flow/hooks/deny-dangerous\.sh' "${registration_files[@]}"
+else
+  grep -nHE \
+    '\.goat-flow/hooks/deny-dangerous\.sh' "${registration_files[@]}"
+fi
 ```
 
 Then run the structural checks that detect packaging or registration drift:
