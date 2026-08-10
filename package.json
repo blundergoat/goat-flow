@@ -75,7 +75,7 @@
     "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "prepublishOnly": "npm run publish:check",
-    "publish:check": "npm run check-versions && npm run check-instruction-parity && npm run build && npm run check-package-links && npm run test:full"
+    "publish:check": "npm run check-versions && npm run check-instruction-parity && npm run build && npm run check-package-links && npm run test:fast && node scripts/run-tests.mjs slow"
   },
   "keywords": [
     "goat-flow",
