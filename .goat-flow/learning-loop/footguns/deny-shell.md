@@ -1,6 +1,6 @@
 ---
 category: deny-shell
-last_reviewed: 2026-08-04
+last_reviewed: 2026-08-11
 ---
 
 Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
@@ -130,6 +130,7 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 - Pre-restoration probes wrongly allowed `git -C /tmp push`, `git -c core.sshCommand=foo push`, `/usr/bin/git push`, `gh --repo owner/repo issue comment`, `gh workflow run deploy.yml`, `rm -r src`, `cat .envrc`, `cat '.'env`, `python3 -c 'print(open(".env").read())'`; and wrongly blocked `rm -rf ./node_modules`, `rg "&& rm -rf /" src/`, `bash -c "echo hello"`, `python -c 'print(1)'`.
 - 2026-06-07 wrapper-prefix bypass: `normalize_command_candidate` stripped `command`/`builtin`/`time`/`nohup`/`nice`/`sudo`/`env`, but not `exec`, `timeout`, `setsid`, `stdbuf`, `ionice`, `taskset`, `chrt`, or `flock`, so first-word rules could miss wrapped `rm -rf`, `git push --force`, `git reset --hard`, `git clean -fdx`, and `find -delete`. Fix: add conservative wrapper grammars that strip only command-bearing forms and leave no-command forms like `ionice -p`, `taskset -p`, `chrt -p`, and `exec 2>/dev/null` allowed. Regression cases: self-test (search: `Wrapper-prefix normalization`).
 - 2026-06-07 startup-unavailable hang: `deny_dangerous_unavailable` read stdin before checking invocation mode, so a broken policy store plus `--self-test=full` could block on interactive or delayed stdin instead of failing closed. Fix: skip startup payload reads for `--self-test`/`--check`/TTY invocations; real hook JSON payloads still get JSON deny responses. Regression case: self-test (search: `self-test startup should not read stdin`).
+- **2026-08-11 option-table abandonment:** `strip_watch_payload_command` and `strip_parallel_payload_command` end their option loops with `-*) return 1`, so an option outside the table abandons the unwrap and `normalize_command_candidate` keeps the wrapper text. Both tables carry short forms without their long equivalents (`-b` without `--beep`, `-c` without `--color`). Measured against branch `dev` at `9adf06be`: `watch git push origin main`, `watch -b …`, `watch -n 2 …`, and `parallel git push ::: a` all exit 2, while `watch --beep git push origin main`, `watch --color git push origin main`, and `parallel --verbose git push ::: a` exit 0. The same commands also exit 0 at base `3db06657`, so the new wrapper support narrows the gap rather than opening it. On Codex, Copilot, and Antigravity this hook is the only layer that blocks a push: `workflow/hooks/agent-config/codex.toml` (search: `Command deny policy still lives in those PreToolUse hooks`) records that permission profiles cover filesystem and network access, not command patterns. Claude retains the settings glob `Bash(*git push*)`.
 - **Recurrence update (2026-07-14):** M25 labeled Codex push `permissive` while the live audit found the block. `src/cli/facts/agent/settings.ts` (`checkDenyPatterns`) saw only the dispatcher; `src/cli/facts/agent/hooks.ts` (`siblingGuardrailPaths`) saw the split policy. The report now uses `AgentFacts.hooks.denyBlocksGitPush`; its regression keeps the legacy summary false and expects restricted push.
 - Anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm_has_recursive`), `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git -C push`, `quoted destructive search literal`).
 
@@ -140,6 +141,8 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 4. Keep the central self-test broad enough to fail on both bypasses and false positives; smoke checks alone prove only headline examples.
 5. Startup failure handlers must not unconditionally read stdin before CLI mode is known; diagnostics and self-tests need deterministic fail-closed output even when stdin is a TTY or delayed pipe.
 6. Reports must use `AgentFacts.hooks.denyBlocks*`; dispatcher text is incomplete after a policy split.
+7. A wrapper parser that abandons its unwrap on an unrecognised option fails open, because the caller then classifies the wrapper instead of the payload. Prefer skipping the unknown option to returning; if the parser must bail, the caller has to treat an unparsed wrapper as unresolved rather than allowed.
+8. Every option table needs both spellings of each option, and the self-test needs one case for an option the table does not list. A corpus drawn from the table can only prove the table, so `watch -n 1 git push` and `parallel --halt soon,fail=1 git push` passed while the long-form spellings went unblocked.
 
 ---
 

@@ -30,7 +30,6 @@ Resolve conflicts in this order: verified facts and safety; the user's task, aud
 | Issue and pull-request bodies, commit message bodies | Yes |
 | `ISSUE.md`, milestone narrative, and testing-plan narrative | Yes |
 | Learning-loop entry bodies (footguns, lessons, patterns, decisions) | Yes - body prose only |
-| Any in-scope surface under roughly 40 words | Correctness and residue only |
 | Comments and replies addressed to a person | Correctness and residue only |
 | Skill files, playbooks and other agent-read references, shared preambles, instruction files, hook output | No |
 | Code blocks, fixed schema fields, task/proof checklists, commands, approved requirements and acceptance/proof/verification/exit criteria, tables, INDEX and catalogue formats | No |
@@ -41,8 +40,6 @@ Resolve conflicts in this order: verified facts and safety; the user's task, aud
 If an exempt control surface conflicts with a source of truth, report the discrepancy to the owning workflow; do not silently rewrite it as style work.
 
 **Replies are deliberately narrow.** Apply only the correctness pass and residue checks. The social-meaning guard and Colleague check constrain even those edits; no other style rule applies.
-
-**Why short prose stops early.** Below roughly 40 words - a one-line changelog entry, a commit body, a brief issue comment - there is no structure to audit, and editing past correctness trades a working sentence for a differently worded one. Length never makes an exempt surface editable.
 
 **Why agent-read control text is exempt.** In a skill file, playbook, preamble, or instruction file, emphasis and repetition are compliance mechanisms, not style defects. A rule stated three times is stated three times on purpose, because an agent that skips a pass is a real cost. Route problems there to the file's own contract.
 
@@ -216,7 +213,7 @@ Each has a rule above; the failure is applying it where it does not belong.
 
 Walk this once against the actual draft. Do not mark an item clean from memory.
 
-1. Scope Gate, register, and source classification applied; no exempt surface edited for style, nothing under roughly 40 words edited past correctness and residue.
+1. Scope Gate, register, and source classification applied; no exempt surface edited for style.
 2. Names, numbers, units, versions, flags, paths, claim strength, attribution, and cited claims match the source of truth; no identifier or term generalised for smoothness.
 3. Meaning preserved: status, requirement level, uncertainty, and provenance unchanged; no planned check became passed.
 4. No leaked scaffolding, shipped placeholder, or broken dash spacing survives.

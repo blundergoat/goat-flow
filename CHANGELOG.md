@@ -27,6 +27,7 @@
 - **goat-debug keeps onboarding investigative** - Investigate mode no longer inherits bug hypotheses, reproduction, or minimisation.
 - **Clean critiques stay truthful** - A 100/100 meta-audit keeps its results section and states that no checks failed.
 - **Plans keep issue templates read-only** - Standard+ creates `ISSUE.md` beside milestones instead of overwriting shared guidance.
+- **goat-review honours the configured PR base** - Reviews resolve `skills.goat-review.local_pr_base` before remote default-branch discovery.
 - **Hook registration checks fit consumer projects** - Verification scans present configs, shows file names, and fails when none exist.
 - **Plan forecasts expose inputs** - Exports retain work units, strict checks reject stale scope math, and measured receipts trigger reforecasting.
 - **Published README links stay usable** - npm packages now include the guardrails and coding-standards pages linked from the project index.

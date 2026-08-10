@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-11
 ---
 
 **Scope:** Hook runtime delivery, Stop-scanner behavior, execution performance, and resolved hook history. Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -90,6 +90,24 @@ Recurrence on 2026-08-10: Codex CLI 0.147.0 repeated the trust distinction. Igno
 A migrated child result used the provider adapter, but timeout and adapter-failure branches returned through the legacy unavailable reporter. The terminal showed human stderr while Codex received empty stdout, so a stopped analyzer looked silent to the active model.
 
 Route every migrated launcher-owned failure through the neutral unavailable envelope and provider adapter. Keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), and `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
+
+## Footgun: Rejecting invalid hook configuration instead of clamping it wedges every tool call
+
+**Status:** active | **Created:** 2026-08-11 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** When a blocking hook validates user configuration, decide what an out-of-range or empty value does before shipping the validator; rejection is a session-wide outage, not a local error.
+**Trigger phase:** ACT
+
+**Symptoms:** Every Bash tool call is denied with `Policy hook unavailable: hook timeout configuration is invalid`, and the turn cannot stop either, because the Stop hook fails the same way. The message names neither the variable that caused it nor the value that would be accepted, so the user cannot recover without reading the launcher source.
+
+**Why it happens:** `workflow/hooks/hook-launch-runtime.mjs` (search: `resolveHookLaunchTimeoutMs`) returns `null` for any `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` that is not a plain decimal at or below the mode ceiling, and `workflow/hooks/run-with-bash.mjs` (search: `hook timeout configuration is invalid`) turns `null` into a fail-closed unavailable result. Three ordinary values reach that branch. An exported-but-empty variable arrives as `""` rather than `undefined`, so it fails the digit test instead of falling back to the ceiling. A value above the ceiling is rejected rather than clamped. The ceilings differ per mode, so one value can be accepted for the feedback hooks and rejected for the policy hook in the same session, which reads as an intermittent fault rather than a configuration error.
+
+**Evidence:** Measured on branch `dev` at `9adf06be` by running the launcher directly. `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` unset and `=1000` both exit 0; `=30000` (above the 25s policy ceiling), `=abc`, `=0`, and the empty string all exit 2 with the same message. The post-turn hook fails the same way at exit 2, so one variable blocks both command execution and turn completion.
+
+**Prevention:**
+1. Treat unset and empty as the same input. A shell exports an empty string for `export VAR=`, and a validator that only checks `undefined` will reject it.
+2. Clamp a value that exceeds a ceiling rather than rejecting it, or reject it with a message naming the variable, the supplied value, and the accepted maximum.
+3. Decide the failure mode per hook class. Fail-closed is right for a policy hook and defensible for a Stop hook, but a configuration error that blocks both leaves no path back to a working session.
+4. Pair each validator branch with a launcher-level test that asserts the resulting exit status, not just the resolver's return value; the harm lives in the caller's translation of `null`, not in the resolver.
 
 ## Footgun: Blocking Stop scanners can wedge on gitignored local state
 
