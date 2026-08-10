@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # post-turn-safety.sh
-# goat-flow-hook-version: 1.15.0
+# goat-flow-hook-version: 1.15.1
 #
 # Purpose:
 #   Universal Stop-event safety guard for supported agents. This hook checks
@@ -53,10 +53,213 @@ fallback_max_seconds="${GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS:-60}"
 fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
 post_turn_action="scan"
+post_turn_hook_version="1.15.1"
+post_turn_result_schema="goat-flow.hook-result.v1"
+post_turn_migrated_result_mode=0
+post_turn_result_records_path=""
+post_turn_result_record_error=0
+post_turn_result_detail=""
+post_turn_result_reason_override=""
+bounded_reentry_ended=0
 stop_payload_present=0
 stop_session_fingerprint=""
 stop_hook_active=0
 stop_payload_error=""
+
+# A managed launcher supplies every identity field needed for one neutral result.
+# Use this mode when provider feedback must come from the final shared adapter.
+if [ "${GOAT_FLOW_HOOK_RESULT_PROTOCOL:-}" = "$post_turn_result_schema" ] && \
+  [ -n "${GOAT_FLOW_HOOK_PROVIDER:-}" ] && \
+  [ -n "${GOAT_FLOW_HOOK_EVENT:-}" ] && \
+  [ -n "${GOAT_FLOW_HOOK_PROVIDER_MODE:-}" ] && \
+  [ -n "${GOAT_FLOW_HOOK_ADAPTER_VERSION:-}" ]; then
+  post_turn_migrated_result_mode=1
+fi
+
+# Store one finding as NUL-separated fields so unusual user filenames remain valid JSON later.
+# Use while scanning; the final emitter turns these records into bounded model feedback.
+record_post_turn_result_finding() {
+  local finding_code="$1"
+  local finding_message="$2"
+  local finding_target="$3"
+
+  # Legacy users already receive the established stderr and exit-code result.
+  if [ "$post_turn_migrated_result_mode" -eq 0 ]; then
+    return 0
+  fi
+  # A missing records path means scanner setup failed before details could be retained.
+  if [ -z "$post_turn_result_records_path" ]; then
+    post_turn_result_record_error=1
+    return 0
+  fi
+  # For example, a user may lose write access to the temporary scan directory mid-turn.
+  if ! printf '%s\0%s\0%s\0' "$finding_code" "$finding_message" "$finding_target" >>"$post_turn_result_records_path"; then
+    post_turn_result_record_error=1
+  fi
+  return 0
+}
+
+# Emit one provider-neutral Stop envelope with truthful coverage and bounded findings.
+# Use after either scanner finishes so the shared adapter can block, allow, or explain the turn.
+emit_post_turn_hook_result() {
+  local scanner_implementation="$1"
+  local scanner_status="$2"
+  local observed_finding_count=0
+  local scan_became_incomplete=0
+  local scan_has_coverage_gap=0
+  local result_outcome="incomplete"
+  local result_reason_code="coverage-incomplete"
+  local result_coverage_status="none"
+  local attempted_scan_units=1
+  local completed_scan_units=0
+  local skipped_scan_units=1
+  local result_detail="$post_turn_result_detail"
+  local result_duration_ms=$((SECONDS * 1000))
+
+  case "$scanner_implementation" in
+    fallback)
+      observed_finding_count="$fallback_findings"
+      scan_became_incomplete="$fallback_bail"
+      scan_has_coverage_gap="$fallback_coverage_gap"
+      result_detail="${fallback_incomplete_reason:-$result_detail}"
+      ;;
+    native)
+      observed_finding_count="$findings"
+      scan_became_incomplete="$BAIL"
+      scan_has_coverage_gap="$COVERAGE_GAP"
+      result_detail="${INCOMPLETE_REASON:-$result_detail}"
+      ;;
+  esac
+
+  # A record-write failure makes detailed provider feedback unavailable even if scanning continued.
+  if [ "$post_turn_result_record_error" -ne 0 ]; then
+    result_outcome="unavailable"
+    result_reason_code="hook-unavailable"
+    result_detail="Hook result details could not be retained for provider delivery"
+  # One verified repeat ends the provider cycle but remains explicitly incomplete for the user.
+  elif [ "$bounded_reentry_ended" -ne 0 ]; then
+    result_outcome="incomplete"
+    result_reason_code="bounded-reentry-ended"
+    result_detail="The unchanged infrastructure failure ended its bounded provider re-entry; no clean scan was recorded"
+  # Actionable findings block the turn, while any concurrent scan gap remains visible in coverage.
+  elif [ "$observed_finding_count" -gt 0 ]; then
+    result_outcome="block"
+    result_reason_code="policy-blocked"
+    # A finding does not erase skipped content when the same scan also became incomplete.
+    if [ "$scan_became_incomplete" -eq 0 ] && [ "$scan_has_coverage_gap" -eq 0 ]; then
+      result_coverage_status="complete"
+      completed_scan_units=1
+      skipped_scan_units=0
+    else
+      result_coverage_status="partial"
+    fi
+  # Status zero with no terminal re-entry means the complete safety scan was clean.
+  elif [ "$scanner_status" -eq 0 ]; then
+    result_outcome="pass"
+    result_reason_code="completed-clean"
+    result_coverage_status="complete"
+    completed_scan_units=1
+    skipped_scan_units=0
+  fi
+
+  # A specific input failure explains why the user's Stop payload could not be scanned.
+  if [ -n "$post_turn_result_reason_override" ]; then
+    result_reason_code="$post_turn_result_reason_override"
+  fi
+  # Empty incomplete detail still needs one practical recovery message in provider feedback.
+  if [ -z "$result_detail" ] && [ "$result_outcome" != "pass" ]; then
+    result_detail="The changed-content safety scan did not complete"
+  fi
+
+  POST_TURN_RESULT_RECORDS_PATH="$post_turn_result_records_path" \
+    POST_TURN_RESULT_OUTCOME="$result_outcome" \
+    POST_TURN_RESULT_REASON_CODE="$result_reason_code" \
+    POST_TURN_RESULT_COVERAGE_STATUS="$result_coverage_status" \
+    POST_TURN_RESULT_ATTEMPTED_UNITS="$attempted_scan_units" \
+    POST_TURN_RESULT_COMPLETED_UNITS="$completed_scan_units" \
+    POST_TURN_RESULT_SKIPPED_UNITS="$skipped_scan_units" \
+    POST_TURN_RESULT_DETAIL="$result_detail" \
+    POST_TURN_RESULT_DURATION_MS="$result_duration_ms" \
+    node -e '
+const { existsSync, readFileSync } = require("node:fs");
+const recordsPath = process.env.POST_TURN_RESULT_RECORDS_PATH ?? "";
+let resultOutcome = process.env.POST_TURN_RESULT_OUTCOME;
+let resultReasonCode = process.env.POST_TURN_RESULT_REASON_CODE;
+let resultDetail = process.env.POST_TURN_RESULT_DETAIL ?? "";
+let userVisibleFindings = [];
+try {
+  // A records file exists only when the scanner found user-facing detail to preserve.
+  if (recordsPath.length > 0 && existsSync(recordsPath)) {
+    const recordFields = readFileSync(recordsPath).toString("utf8").split("\0");
+    // Each complete three-field record becomes one provider-safe finding in scan order.
+    for (let fieldIndex = 0; fieldIndex + 2 < recordFields.length && userVisibleFindings.length < 20; fieldIndex += 3) {
+      userVisibleFindings.push({
+        code: recordFields[fieldIndex],
+        message: recordFields[fieldIndex + 1],
+        target: recordFields[fieldIndex + 2],
+      });
+    }
+  }
+} catch {
+  // For example, cleanup software may remove the temporary records file before Stop finishes.
+  resultOutcome = "unavailable";
+  resultReasonCode = "hook-unavailable";
+  resultDetail = "Hook result details could not be read for provider delivery";
+  userVisibleFindings = [];
+}
+// A non-pass result with no recorded detail still tells the active model what stopped the user flow.
+if (resultOutcome !== "pass" && userVisibleFindings.length === 0) {
+  userVisibleFindings.push({
+    code: resultReasonCode,
+    message: resultDetail,
+    target: "project",
+  });
+}
+const providerIdentifier = process.env.GOAT_FLOW_HOOK_PROVIDER ?? "claude";
+const hookEvent = process.env.GOAT_FLOW_HOOK_EVENT ?? "turn-stop";
+const resultEnvelope = {
+  schema: "goat-flow.hook-result.v1",
+  hookId: "post-turn-safety",
+  event: hookEvent,
+  outcome: resultOutcome,
+  coverage: {
+    status: process.env.POST_TURN_RESULT_COVERAGE_STATUS,
+    attemptedUnits: Number(process.env.POST_TURN_RESULT_ATTEMPTED_UNITS),
+    completedUnits: Number(process.env.POST_TURN_RESULT_COMPLETED_UNITS),
+    skippedUnits: Number(process.env.POST_TURN_RESULT_SKIPPED_UNITS),
+  },
+  reasonCode: resultReasonCode,
+  findings: userVisibleFindings,
+  execution: {
+    hookVersion: process.env.POST_TURN_HOOK_VERSION,
+    provider: providerIdentifier,
+    providerMode: process.env.GOAT_FLOW_HOOK_PROVIDER_MODE ?? "managed",
+    adapterName: `${providerIdentifier}-${hookEvent}`,
+    adapterVersion: process.env.GOAT_FLOW_HOOK_ADAPTER_VERSION ?? "1",
+    durationMs: Number(process.env.POST_TURN_RESULT_DURATION_MS),
+  },
+};
+process.stdout.write(`${JSON.stringify(resultEnvelope)}\n`);
+'
+}
+
+# Preserve legacy exit codes or replace them with one completed neutral-envelope delivery.
+# Use at scanner dispatch so direct terminal users and managed coding agents keep distinct contracts.
+finish_post_turn_scan() {
+  local scanner_implementation="$1"
+  local scanner_function="$2"
+  local scanner_status
+  shift 2
+
+  "$scanner_function" "$@"
+  scanner_status=$?
+  # Managed hooks return zero after emitting the real outcome inside the validated envelope.
+  if [ "$post_turn_migrated_result_mode" -ne 0 ]; then
+    POST_TURN_HOOK_VERSION="$post_turn_hook_version" emit_post_turn_hook_result "$scanner_implementation" "$scanner_status"
+    return $?
+  fi
+  return "$scanner_status"
+}
 
 # Show the two intentional user entry points so a mistyped option never scans a project.
 print_post_turn_usage() {
@@ -275,6 +478,7 @@ finish_infrastructure_failure() {
   fi
   # One exact active replay means the agent cannot repair this infrastructure failure in-turn.
   if [ "$stop_hook_active" -eq 1 ] && stop_reentry_state_matches "$repository_root" "$stop_failure_fingerprint"; then
+    bounded_reentry_ended=1
     clear_stop_reentry_state "$repository_root" >/dev/null 2>&1
     printf 'post-turn-safety: ending repeated Stop after unchanged infrastructure failure; no clean scan was recorded.\n' >&2
     return 0
@@ -349,6 +553,7 @@ fallback_mark_incomplete() {
 # Record one changed path the compatibility scanner cannot safely inspect for the user.
 fallback_mark_coverage_gap() {
   fallback_coverage_gap=1
+  record_post_turn_result_finding "coverage-gap" "$2" "$1"
   printf 'post-turn-safety: scan incomplete (%s in %s).\n' "$2" "$1" >&2
 }
 
@@ -446,6 +651,7 @@ $path|$family
   fallback_reported="${fallback_reported}$path|$family
 "
   fallback_findings=$((fallback_findings + 1))
+  record_post_turn_result_finding "safety-hazard" "Blocked $family in changed content" "$path"
   # The output cap keeps a large edit readable while the final count stays honest.
   if [ "$fallback_findings" -le "$fallback_max_findings" ]; then
     printf 'post-turn-safety: %s in %s (Bash 3 compatibility scan).\n' "$family" "$path" >&2
@@ -1111,23 +1317,27 @@ fallback_main() {
 
   # Without a Git root, the hook cannot identify the project changes for this turn.
   if ! root=$(git rev-parse --show-toplevel 2>/dev/null) || [ -z "$root" ]; then
+    post_turn_result_detail="The selected Git repository root could not be opened"
     printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
     return 2
   fi
 
   # A root the process cannot enter cannot be scanned on the user's behalf.
   if ! cd "$root" 2>/dev/null; then
+    post_turn_result_detail="The selected Git repository root could not be entered"
     printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
     return 2
   fi
 
   # Temporary scan output is required before Git content can be inspected safely.
   if ! fallback_workdir=$(mktemp -d 2>/dev/null) || [ -z "$fallback_workdir" ]; then
+    post_turn_result_detail="A temporary safety-scan workspace could not be created"
     printf 'post-turn-safety: scan incomplete (scan workspace unavailable).\n' >&2
     finish_infrastructure_failure "$root" "fallback:scan workspace unavailable"
     return $?
   fi
   trap 'rm -rf "$fallback_workdir"' EXIT
+  post_turn_result_records_path="$fallback_workdir/hook-result-records"
 
   git -C "$root" rev-parse --verify HEAD >/dev/null 2>&1
   head_status=$?
@@ -1220,13 +1430,20 @@ fi
 
 # Malformed or oversized provider input cannot be treated as a clean user turn.
 if ! read_stop_context; then
+  post_turn_result_detail="The coding agent supplied an invalid Stop payload: $stop_payload_error"
+  post_turn_result_reason_override="input-invalid"
   printf 'post-turn-safety: scan incomplete (invalid Stop payload: %s).\n' "$stop_payload_error" >&2
+  # Managed users need the malformed-input result inside provider feedback, not only terminal text.
+  if [ "$post_turn_migrated_result_mode" -ne 0 ]; then
+    POST_TURN_HOOK_VERSION="$post_turn_hook_version" emit_post_turn_hook_result "input" 2
+    exit $?
+  fi
   exit 2
 fi
 
 # Stock macOS Bash uses the compatibility implementation with the same Stop context.
 if ((BASH_VERSINFO[0] < 4)) || [ "${GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK:-0}" = 1 ]; then
-  fallback_main "$@"
+  finish_post_turn_scan "fallback" fallback_main "$@"
   exit $?
 fi
 
@@ -1287,6 +1504,7 @@ mark_coverage_gap() {
   COVERAGE_GAP=1
   COVERAGE_GAP_REPORTED["$coverage_key"]=1
   COVERAGE_GAP_MESSAGES+=("$2 in $1")
+  record_post_turn_result_finding "coverage-gap" "$2" "$1"
 }
 
 # Stop native work when the user's time limit or a prior failure makes it incomplete.
@@ -1645,6 +1863,7 @@ $fingerprint
   reported_findings="${reported_findings}${fingerprint}
 "
   findings=$((findings + 1))
+  record_post_turn_result_finding "safety-hazard" "Blocked $family in changed content" "$path"
   # The output cap keeps a large edit readable while the final count stays honest.
   if [ "$findings" -le "$MAX_FINDINGS" ]; then
     printf 'post-turn-safety: blocked %s in %s\n' "$family" "$path" >&2
@@ -2298,11 +2517,13 @@ main() {
   local head_status
   # Without a Git root, the hook cannot identify the project changes for this turn.
   if ! root="$(repo_root)" || [ -z "$root" ]; then
+    post_turn_result_detail="The selected Git repository root could not be opened"
     printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
     return 2
   fi
 
   cd "$root" 2>/dev/null || {
+    post_turn_result_detail="The selected Git repository root could not be entered"
     printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
     return 2
   }
@@ -2310,12 +2531,14 @@ main() {
   WORKDIR="$(mktemp -d 2>/dev/null)" || WORKDIR=""
   # Temporary scan output is required before Git content can be inspected safely.
   if [ -z "$WORKDIR" ]; then
+    post_turn_result_detail="A temporary safety-scan workspace could not be created"
     printf 'post-turn-safety: scan incomplete (scan workspace unavailable).\n' >&2
     finish_infrastructure_failure "$root" "native:scan workspace unavailable"
     return $?
   fi
   # shellcheck disable=SC2064
   trap "rm -rf '$WORKDIR'" EXIT
+  post_turn_result_records_path="$WORKDIR/hook-result-records"
 
   local head_present=0
   has_head
@@ -2525,4 +2748,4 @@ main() {
   return 0
 }
 
-main "$@"
+finish_post_turn_scan "native" main "$@"

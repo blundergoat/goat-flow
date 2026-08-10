@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.15.0
+// goat-flow-hook-version: 1.15.1
 /**
  * Cross-platform launcher for goat-flow's Bash hook scripts.
  * Agent hook commands use Node so native Windows avoids the System32 WSL shim.
@@ -15,6 +15,11 @@ import {
   win32,
 } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  captureHookProcessUntilDeadline,
+  prepareProviderLauncherUnavailableDelivery,
+  resolveHookLaunchTimeoutMs,
+} from "./hook-launch-runtime.mjs";
 
 const LEGACY_POLICY_DEADLINE_MS = 25_000; // Ceiling: leaves five seconds for host failure output.
 const LEGACY_FEEDBACK_DEADLINE_MS = 75_000; // Ceiling: leaves fifteen seconds for host feedback.
@@ -306,6 +311,63 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
 }
 
 /**
+ * Return one launcher-owned failure through a migrated adapter or the legacy response path.
+ * Use when no trustworthy child envelope exists but the active user still needs visible context.
+ *
+ * @param {string} hookResponseMode - registered mode; empty text falls back to policy failure
+ * @param {object | null} providerAdapterRuntime - loaded adapter, or null for legacy hooks
+ * @param {object | null} launchContract - decoded managed contract, or null for legacy hooks
+ * @param {string} unavailableReasonCode - stable failure code; empty text cannot explain the outcome
+ * @param {string} userFacingReason - practical detail; empty text would leave the user without recovery context
+ * @param {string} childStandardError - bounded child diagnostics; empty means the child produced none
+ * @param {number} launcherDurationMs - measured wait; zero means no meaningful duration completed
+ * @returns {number} Exit status the registered host treats as handled or blocked.
+ */
+function reportLauncherUnavailable(
+  hookResponseMode,
+  providerAdapterRuntime,
+  launchContract,
+  unavailableReasonCode,
+  userFacingReason,
+  childStandardError = "",
+  launcherDurationMs = 0,
+) {
+  // A migrated hook can translate launcher failure into the active provider's model response.
+  if (providerAdapterRuntime !== null && launchContract !== null) {
+    const providerUnavailableDelivery =
+      prepareProviderLauncherUnavailableDelivery(
+        providerAdapterRuntime,
+        launchContract,
+        unavailableReasonCode,
+        userFacingReason,
+        childStandardError,
+        launcherDurationMs,
+      );
+    // A valid provider response reaches the model instead of becoming plain terminal text.
+    if (providerUnavailableDelivery.state === "delivered") {
+      // Empty stderr means neither the child nor adapter has a human-only diagnostic.
+      if (providerUnavailableDelivery.stderr.length > 0) {
+        process.stderr.write(providerUnavailableDelivery.stderr);
+      }
+      // Empty stdout is valid only when the selected provider needs no model-facing object.
+      if (providerUnavailableDelivery.stdout.length > 0) {
+        process.stdout.write(providerUnavailableDelivery.stdout);
+      }
+      return providerUnavailableDelivery.exitCode;
+    }
+    // For example, an unsupported provider event may retain bounded child diagnostics for the user.
+    if (providerUnavailableDelivery.stderr.length > 0) {
+      process.stderr.write(providerUnavailableDelivery.stderr);
+    }
+    return reportUnavailable(
+      hookResponseMode,
+      providerUnavailableDelivery.reason,
+    );
+  }
+  return reportUnavailable(hookResponseMode, userFacingReason);
+}
+
+/**
  * Refuse a managed hook whose file shape could redirect the user's execution.
  * Use before Bash starts so rejected shapes become a visible unavailable result.
  * Error behavior: never throws; path races return "hook script was not found".
@@ -362,30 +424,6 @@ function hookScriptShapeFailure(projectRoot, hookScriptPath) {
     return "hook script path escaped the project root";
   }
   return null;
-}
-
-/**
- * Select a safe user wait below the host deadline; invalid overrides return null.
- *
- * @param {number} timeoutCeiling - validated host deadline; zero or missing values are rejected earlier
- * @param {NodeJS.ProcessEnv} environment - Hook environment containing an optional lower test/host override.
- * @returns {number | null} Timeout in milliseconds, or null when the override is invalid.
- */
-function hookLaunchTimeoutMs(timeoutCeiling, environment) {
-  const configuredTimeout = environment.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS;
-  // Missing configuration uses the mode ceiling, which remains below supported host limits.
-  if (configuredTimeout === undefined) return timeoutCeiling;
-  // Only a plain positive decimal can lower the ceiling; signs, spaces, and fractions are ambiguous.
-  if (!/^[0-9]+$/u.test(configuredTimeout)) return null;
-  const parsedTimeout = Number(configuredTimeout);
-  if (
-    !Number.isSafeInteger(parsedTimeout) ||
-    parsedTimeout < 1 ||
-    parsedTimeout > timeoutCeiling
-  ) {
-    return null;
-  }
-  return parsedTimeout;
 }
 
 /**
@@ -455,104 +493,30 @@ function runHookProcessUntilDeadline(
   hostPlatform,
   appendCapturedHookOutput,
 ) {
-  return new Promise((resolveHookResult) => {
-    // A null adapter keeps the user's legacy hook output attached directly to the host.
-    const shouldCaptureResult = appendCapturedHookOutput !== null;
-    const validatedBashExecutable =
-      bashExecutable === "bash" ? "bash" : bashExecutable;
-    const hookProcess = spawn(
-      validatedBashExecutable,
-      [hookScriptPath.replace(/\\/gu, "/")],
-      {
-        cwd: projectRoot,
-        detached: hostPlatform !== "win32",
-        env: hookEnvironment,
-        shell: false,
-        stdio: shouldCaptureResult ? ["inherit", "pipe", "pipe"] : "inherit",
-        windowsHide: true,
-      },
-    );
-    let hasDeliveredHookResult = false;
-    let hasHookReachedDeadline = false;
-    let hasExceededOutputLimit = false;
-    const capturedHookOutput = { stdout: "", stderr: "" };
-    const launchDeadlineTimer = setTimeout(() => {
-      hasHookReachedDeadline = true;
-      stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment);
-      hookProcess.unref();
-      // A deadline has no trustworthy exit code or startup error; the user receives the timeout outcome.
-      deliverHookResult(null, null);
-    }, launchTimeout);
-
-    /**
-     * Deliver the first terminal result and discard later close/error events.
-     * Use when Bash either exits or fails so the agent receives one response.
-     *
-     * @param {number | null} hookStatus - Hook exit code; null means no user-visible status was produced.
-     * @param {Error | null} launchError - Startup error; null means Bash started successfully.
-     * @returns {void} No return value; resolving the promise resumes the user's agent.
-     */
-    function deliverHookResult(hookStatus, launchError) {
-      // A launch error can be followed by close, but the user must receive only the first result.
-      if (hasDeliveredHookResult) {
-        return;
-      }
-      hasDeliveredHookResult = true;
-      clearTimeout(launchDeadlineTimer);
-      resolveHookResult({
-        status: hookStatus,
-        timedOut: hasHookReachedDeadline,
-        launchError,
-        stdout: capturedHookOutput.stdout,
-        stderr: capturedHookOutput.stderr,
-        hasExceededOutputLimit,
-      });
-    }
-    /**
-     * Retain one migrated-hook stream chunk or stop the tree before it floods user feedback.
-     * Use for stdout and stderr because either channel can exhaust the shared host limit.
-     *
-     * @param {"stdout" | "stderr"} outputStreamName - child channel; empty text cannot select storage
-     * @param {Buffer | string} outputChunk - emitted bytes; empty content leaves the result unchanged
-     * @returns {void} no result; exceeding the limit resolves the user's launch as unavailable
-     */
-    function captureHookOutputChunk(outputStreamName, outputChunk) {
-      // A second stream event after shutdown cannot add a new user-visible result.
-      if (hasExceededOutputLimit) return;
-      // A retained chunk keeps the hook running toward its normal result.
-      if (
-        appendCapturedHookOutput(
-          capturedHookOutput,
-          outputStreamName,
-          outputChunk,
-        )
-      ) {
-        return;
-      }
-      hasExceededOutputLimit = true;
-      stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment);
-      hookProcess.unref();
-      deliverHookResult(null, null);
-    }
-
-    // Envelope mode owns both child streams; legacy mode leaves them inherited and null here.
-    if (shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
-      hookProcess.stdout.on("data", (outputChunk) => {
-        captureHookOutputChunk("stdout", outputChunk);
-      });
-      hookProcess.stderr.on("data", (outputChunk) => {
-        captureHookOutputChunk("stderr", outputChunk);
-      });
-    }
-    hookProcess.once("error", (launchError) => {
-      // A launch failure has no hook exit status for the user.
-      deliverHookResult(null, launchError);
-    });
-    hookProcess.once("close", (hookStatus) => {
-      // A normal close has no launch error to show the user.
-      deliverHookResult(hookStatus, null);
-    });
-  });
+  // A null adapter keeps the user's legacy hook output attached directly to the host.
+  const shouldCaptureResult = appendCapturedHookOutput !== null;
+  const validatedBashExecutable =
+    bashExecutable === "bash" ? "bash" : bashExecutable;
+  const hookProcess = spawn(
+    validatedBashExecutable,
+    [hookScriptPath.replace(/\\/gu, "/")],
+    {
+      cwd: projectRoot,
+      detached: hostPlatform !== "win32",
+      env: hookEnvironment,
+      shell: false,
+      stdio: shouldCaptureResult ? ["inherit", "pipe", "pipe"] : "inherit",
+      windowsHide: true,
+    },
+  );
+  return captureHookProcessUntilDeadline(
+    hookProcess,
+    hookEnvironment,
+    launchTimeout,
+    hostPlatform,
+    appendCapturedHookOutput,
+    stopHookProcessTree,
+  );
 }
 
 /**
@@ -672,7 +636,10 @@ export async function runHookWithBash(
   }
   const timeoutCeiling =
     launchContract?.launcherDeadlineMs ?? legacyHookDeadline;
-  const launchTimeout = hookLaunchTimeoutMs(timeoutCeiling, hookEnvironment);
+  const launchTimeout = resolveHookLaunchTimeoutMs(
+    timeoutCeiling,
+    hookEnvironment,
+  );
   // Invalid or empty timeout configuration cannot safely bound the user's wait.
   if (launchTimeout === null) {
     return reportUnavailable(
@@ -694,14 +661,26 @@ export async function runHookWithBash(
   );
   // A deadline means the hook tree was stopped before the user-facing response is rendered.
   if (hookExecution.timedOut) {
-    return reportUnavailable(
+    return reportLauncherUnavailable(
       hookResponseMode,
+      providerAdapterRuntime,
+      launchContract,
+      "execution-timeout",
       "hook exceeded its deadline and was killed",
+      hookExecution.stderr,
+      launchTimeout,
     );
   }
   // For example, endpoint protection may stop Git Bash before the user's hook starts.
   if (hookExecution.launchError) {
-    return reportUnavailable(hookResponseMode, "Bash could not start");
+    return reportLauncherUnavailable(
+      hookResponseMode,
+      providerAdapterRuntime,
+      launchContract,
+      "hook-unavailable",
+      "Bash could not start",
+      hookExecution.stderr,
+    );
   }
   // Migrated hooks use the bounded neutral result and final provider adapter path.
   if (providerAdapterRuntime !== null) {
@@ -710,13 +689,20 @@ export async function runHookWithBash(
         hookExecution,
         launchContract,
       );
+    // An unavailable translation uses the registered fail-open or fail-closed policy.
+    if (providerHookDelivery.state !== "delivered") {
+      return reportLauncherUnavailable(
+        hookResponseMode,
+        providerAdapterRuntime,
+        launchContract,
+        "adapter-delivery-failed",
+        providerHookDelivery.reason,
+        providerHookDelivery.stderr,
+      );
+    }
     // Empty stderr means neither the child nor adapter has a human-only diagnostic.
     if (providerHookDelivery.stderr.length > 0) {
       process.stderr.write(providerHookDelivery.stderr);
-    }
-    // An unavailable translation uses the registered fail-open or fail-closed policy.
-    if (providerHookDelivery.state !== "delivered") {
-      return reportUnavailable(hookResponseMode, providerHookDelivery.reason);
     }
     // Empty stdout is the documented clean response for several host/event combinations.
     if (providerHookDelivery.stdout.length > 0) {
