@@ -55,10 +55,11 @@ If an exempt control surface conflicts with a source of truth, report the discre
 Run this before every style rule on every in-scope surface, against the source of truth: the diff, manifest, issue, decision, evidence, or cited source described.
 
 - Correct typos, wrong word forms, dangling subjects, and broken parallelism.
-- Check names, numbers, units, versions, flags, options, and paths.
+- Check names, numbers, units, versions, flags, options, and paths; a code identifier named in prose must resolve in a fresh clone - never a gitignored path - and a diagram abbreviation is marked or spelled out once.
 - Open a cited document, issue, or benchmark and confirm it supports the claim.
 - When prose describes code behaviour, open the function, query, or getter it describes and confirm the claim; code is a citation like any other.
 - Match claim strength and specificity to the evidence. Do not inflate a narrow result or hedge a supported conclusion.
+- A scope claim about a change - `comments only`, `no functional changes` - is checked against the diff like any claim; one rename or signature change falsifies it, so name such changes instead.
 - Connect named attribution to a specific inspectable point; otherwise name the evidence or remove the prestige cue.
 - Preserve claims, constraints, uncertainty, and provenance. Do not turn a proposal into a decision, an assumption into a fact, an optional action into a required one, or a planned or pending check into a passed check.
 
@@ -111,7 +112,7 @@ These diagnose reader cost, not authorship. A diagnosed instance justifies an ed
 
 **Copula avoidance.** `Serves as the foundation for` is `is the base of`; `provides support for` is `supports`. When `is` or `has` carries the meaning, use it.
 
-**Manufactured engagement closers.** Do not end a document on an invitation its type does not warrant: `Let us know what you think!` A pointer such as `Report issues at the tracker` routes action and is not engagement bait.
+**Manufactured engagement closers.** Do not end a document on an invitation its type does not warrant: `Let us know what you think!` A pointer such as `Report issues at the tracker` routes action, not engagement.
 
 **Residue.** Mechanical evidence that text was pasted rather than written.
 
@@ -125,13 +126,13 @@ These diagnose reader cost, not authorship. A diagnosed instance justifies an ed
 
 Run these before sentence-level work on anything longer than a few paragraphs. When a document reads as assembled, the shape is the cause and the sentences are fine.
 
-**Duplicate representation.** The same content as prose, then a table, then a bullet list. Each is clear alone; together they read as padding. Keep the most informative one.
+**Duplicate representation.** The same content as prose, then a table, then a bullet list - clear alone, padding together. Keep the most informative one.
 
-**Fractal summaries.** A closing section that restates the document's own structure to a reader who just read it. Cut it: the recap will not fix the structure problem that produced it.
+**Fractal summaries.** A closing section that restates the document's own structure to a reader who just read it. Cut it: the recap will not fix the structure problem.
 
 **Repeated section templates.** Three or more sections running the identical movement, such as `[problem] → [what breaks] → [the fix is X]`. Catalogue-shaped repetition is exempt: a repeated option-and-tradeoff beat aids scanning. Repetition is defective only when it hides priority or causality.
 
-**Framework stacking.** Two frameworks, models, or taxonomies introduced side by side and then never used apart. The opening teaches vocabulary the document does not need. Keep the one it actually uses.
+**Framework stacking.** Two frameworks, models, or taxonomies introduced side by side and never used apart: the opening teaches vocabulary the document does not need. Keep the one it actually uses.
 
 **Process bleed.** Do not narrate the drafting session instead of describing the result. Write verified facts in the reader's order; keep chronology only when the sequence explains a cause or constraint. Illustrative before: `We inspected the parser, ran a fixture, and then found the flag is ignored.` After: `The parser ignores the flag when the fixture omits a value.`
 
@@ -183,7 +184,7 @@ Cheap enough to run on a finished draft. On anything longer than a few paragraph
 6. **Colleague check.** For a reply to a person, would the exact sentence preserve the intended confidence and social meaning if sent to a colleague?
 7. **Substitution test.** Swap the subject for a neighbouring concept. If the sentence still reads cleanly, that raises suspicion, not proof; open the source and verify it.
 
-On a substantial plan, decision record, or release note, a fresh reader may check whether the decision, action, and uncertainty survive without drafting context. Do not add a reviewer or sub-agent for this without existing authorization.
+On a substantial plan, decision record, or release note, a fresh reader may check that decision, action, and uncertainty survive without drafting context; do not add a reviewer or sub-agent without existing authorization.
 
 ## Worked Example
 

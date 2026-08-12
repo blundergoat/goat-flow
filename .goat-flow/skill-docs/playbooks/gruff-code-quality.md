@@ -88,6 +88,10 @@ Before editing comments, run Gruff on the exact paths and keep the before-edit J
 
 A clean Gruff run does not prove comment meaning. Gruff checks detectable presence and shape; a reviewer still verifies claims against the code they describe.
 
+A documentation pass edits comments, doc blocks, and local names; extractions and signature changes stay out. Public and exported symbols get their own reviewed change; run Public API Safety on any local rename and list every rename where the change is described. A comment that already meets the `code-comments.md` bar is out of scope - rewrite only on a diagnosed defect, and do not re-align untouched tag columns or reflow compliant lines unless a formatter enforces it.
+
+The identity diff proves no new finding, not that the pass earned its review cost. Report compliant comments left untouched and any whitespace-only churn, and size the pass like any cluster: one subsystem a human can actually review, not the whole tree.
+
 ## Triage Actions
 
 Classify high-volume rules before editing individual findings.
@@ -162,7 +166,7 @@ Use `allowlists.acceptedAbbreviations` for accepted project vocabulary instead o
 - Empty/silent catches need real handling plus rationale if swallowing is intentional.
 - High-entropy MIME/path/rule strings and telemetry token metric names may be accepted false positives; do not reduce readability to game entropy.
 - `createMock` -> `createStub` does not by itself clear mock-without-expectation.
-- Report a documentation-caused size finding such as `size.file-length` or `size.class-length`; do not trim requested meaning, and do not smuggle in a file split during a documentation pass.
+- Report a documentation-caused size finding such as `size.file-length` or `size.class-length`; do not trim requested meaning, and do not smuggle in a file split or a rename during a documentation pass.
 
 ## Baselines and Reports
 
@@ -185,6 +189,11 @@ Fixed:
 - docs.missing-error-behavior-doc: 12 -> 0 on src/payments
 - naming.short-variable: 9 -> 1 on test helpers
 
+Pass hygiene (documentation pass):
+- compliant comments left untouched: 214
+- whitespace-only churn: 0 lines
+- renames: 2 local, listed in the PR body
+
 Remaining:
 - complexity.cognitive in renderTextOutput: LARGER-REFACTOR
 - naming.* public API params: SKIP to avoid breaking callers
@@ -202,7 +211,7 @@ Before claiming gruff work is done:
 6. Confirm no mid-cleanup baseline was generated.
 7. For renames, grep the old identifier.
 8. For doc findings, confirm `code-comments.md` bar was followed.
-9. For a documentation pass, compare before/after identities and report any documentation-caused size finding.
+9. For a documentation pass, compare before/after identities and report any documentation-caused size finding, the untouched-compliant count, and every rename.
 10. Report remaining findings by action category, not as "fixed".
 
 ## Troubleshooting
