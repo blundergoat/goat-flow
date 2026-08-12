@@ -198,6 +198,7 @@ type HookEffectiveStatus =
 type HookEffectiveSeverity = "neutral" | "warning" | "danger" | "success";
 type HookRegistrationIssue =
   | "registration-missing"
+  | "duplicate-registration"
   | "retired-registration"
   | "event-mismatch"
   | "matcher-mismatch"

@@ -95,17 +95,28 @@ last_reviewed: 2026-08-12
 
 **Root cause:** I ran behavioural proof before the formatter gate for touched TypeScript.
 
-**Recurrence update (2026-05-17):** M11 SARIF repeated this across three TypeScript files. Evidence: `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`).
+**Recurrences through 2026-08-12:** M11 SARIF and later contract, setup, dashboard, review, and hook batches repeated the same ordering error. M01 again passed focused tests and typecheck before scoped Prettier rejected its touched TypeScript.
 
-**Recurrences (2026-07-13, 2026-07-18, 2026-07-19, 2026-08-01):** M04/M09 contracts, the skill-quality truncation fixes, M07 setup-truth contracts, M10 scaffold/drift regressions, and the review-validator relationship corpus each reached behavioral GREEN before scoped Prettier rejected touched TypeScript. Evidence anchors: `test/contract/skill-hardening-shared-3.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`), `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`), and `test/unit/review-validate-verdict.test.ts` (search: `structuralValidationCases`).
+Evidence anchors:
 
-**Recurrences (2026-08-03, 2026-08-07, 2026-08-09):** A later skill-contract batch repeated the focused-GREEN-before-Prettier failure; following batches formatted first. Evidence anchors: `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`), and `test/integration/post-turn-safety-hook.helpers.ts` (search: `withCommandShim`).
-
-**2026-08-09 hook-contract evidence:** `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`); `test/contract/skill-hardening-skills-2.test.ts` (search: `truthful goat-critique`); `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
+- `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`); `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
+- `test/contract/skill-hardening-shared-3.test.ts` (search: `requires an evidence budget before optional orchestration`).
+- `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`).
+- `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`).
+- `test/unit/review-validate-verdict.test.ts` (search: `structuralValidationCases`).
+- `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`).
+- `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`).
+- `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`).
+- `test/integration/post-turn-safety-hook.helpers.ts` (search: `withCommandShim`).
+- `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`).
+- `test/contract/skill-hardening-skills-2.test.ts` (search: `truthful goat-critique`).
+- `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
+- `src/cli/server/agent-hook-writer.ts` (search: `deriveManagedHookDesiredState`).
+- `test/unit/hook-registrar.test.ts` (search: `repairs a duplicate registration`).
 
 **Prevention:** Format touched TypeScript before focused proof; retain Prettier in final verification.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 15 | **Latest occurrence:** 2026-08-12
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 16 | **Latest occurrence:** 2026-08-12
 
 ---
 

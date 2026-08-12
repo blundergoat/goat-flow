@@ -5,12 +5,19 @@
  * Every case builds a real project and reads back what the registrar actually wrote.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import {
+  deriveManagedHookDesiredState,
   readAgentHookState,
   writeAgentHookState,
 } from "../../src/cli/server/agent-hook-writer.js";
@@ -45,6 +52,65 @@ import {
   assertLauncherAllows,
   runCodexLauncher,
 } from "./hook-registrar.helpers.js";
+
+/** Exact enabled targets for every provider/hook pair the registry currently supports. */
+const SUPPORTED_PROVIDER_HOOK_CASES = [
+  {
+    agent: PROFILES.claude,
+    hookId: "deny-dangerous",
+    registrationTargets: [{ event: "PreToolUse", matcher: "Bash" }],
+  },
+  {
+    agent: PROFILES.claude,
+    hookId: "gruff-code-quality",
+    registrationTargets: [
+      { event: "PostToolUse", matcher: "Edit" },
+      { event: "PostToolUse", matcher: "Write" },
+      { event: "PostToolUse", matcher: "Bash" },
+    ],
+  },
+  {
+    agent: PROFILES.claude,
+    hookId: "post-turn-safety",
+    registrationTargets: [{ event: "Stop", matcher: null }],
+  },
+  {
+    agent: PROFILES.codex,
+    hookId: "deny-dangerous",
+    registrationTargets: [{ event: "PreToolUse", matcher: "Bash" }],
+  },
+  {
+    agent: PROFILES.codex,
+    hookId: "gruff-code-quality",
+    registrationTargets: [{ event: "PostToolUse", matcher: "^apply_patch$" }],
+  },
+  {
+    agent: PROFILES.codex,
+    hookId: "post-turn-safety",
+    registrationTargets: [{ event: "Stop", matcher: null }],
+  },
+  {
+    agent: PROFILES.antigravity,
+    hookId: "deny-dangerous",
+    registrationTargets: [
+      {
+        event: "PreToolUse",
+        matcher:
+          "run_command|view_file|write_to_file|replace_file_content|multi_replace_file_content",
+      },
+    ],
+  },
+  {
+    agent: PROFILES.copilot,
+    hookId: "deny-dangerous",
+    registrationTargets: [{ event: "preToolUse", matcher: null }],
+  },
+  {
+    agent: PROFILES.copilot,
+    hookId: "gruff-code-quality",
+    registrationTargets: [{ event: "postToolUse", matcher: null }],
+  },
+] as const;
 
 describe("hook registrar: launchers and installation", () => {
   /** Proves installed hooks can find default Git Bash when PATH exposes only WSL. */
@@ -166,6 +232,128 @@ describe("hook registrar: launchers and installation", () => {
       assert.equal(getHookSpec("plan-checkbox-guard"), null);
       assert.equal(isValidHookIdShape("gruff-code-quality"), true);
       assert.equal(isValidHookIdShape("../bad"), false);
+    });
+  });
+
+  it("covers every supported provider and hook in the desired-state fixtures", () => {
+    const coveredProviderHooks = SUPPORTED_PROVIDER_HOOK_CASES.map(
+      ({ agent, hookId }) => `${agent.id}:${hookId}`,
+    );
+    const registryProviderHooks = Object.values(PROFILES).flatMap((agent) =>
+      listHookSpecs()
+        .filter((hookSpec) => !hookSpec.unsupportedAgents?.[agent.id])
+        .map((hookSpec) => `${agent.id}:${hookSpec.id}`),
+    );
+    assert.deepEqual(coveredProviderHooks.sort(), registryProviderHooks.sort());
+  });
+
+  // Separate TAP cases identify the provider and lifecycle whose desired-state contract drifted.
+  for (const desiredStateCase of SUPPORTED_PROVIDER_HOOK_CASES) {
+    it(`${desiredStateCase.agent.id}:${desiredStateCase.hookId} derives enabled and disabled targets`, () => {
+      const hookSpec = getHookSpec(desiredStateCase.hookId);
+      assert.ok(hookSpec);
+
+      assert.deepEqual(
+        deriveManagedHookDesiredState(desiredStateCase.agent, hookSpec, true),
+        {
+          managedScriptFiles: hookSpec.scriptFiles,
+          registrationTargets: desiredStateCase.registrationTargets,
+        },
+      );
+      assert.deepEqual(
+        deriveManagedHookDesiredState(desiredStateCase.agent, hookSpec, false),
+        {
+          managedScriptFiles: hookSpec.scriptFiles,
+          registrationTargets: [],
+        },
+      );
+    });
+
+    it(`${desiredStateCase.agent.id}:${desiredStateCase.hookId} repairs a duplicate registration`, () => {
+      withTempProject((root) => {
+        const hookSpec = getHookSpec(desiredStateCase.hookId);
+        assert.ok(hookSpec);
+        writeAgentHookState(root, desiredStateCase.agent, hookSpec, true);
+        assert.ok(desiredStateCase.agent.hookConfigFile);
+        const hookConfigPath = join(
+          root,
+          desiredStateCase.agent.hookConfigFile,
+        );
+        const hookConfig = JSON.parse(
+          readFileSync(hookConfigPath, "utf-8"),
+        ) as Record<string, unknown>;
+        const firstRegistrationTarget = desiredStateCase.registrationTargets[0];
+        assert.ok(firstRegistrationTarget);
+
+        // Antigravity nests event rows below the hook id; other providers share a hooks object.
+        const eventEntries =
+          desiredStateCase.agent.id === "antigravity"
+            ? (hookConfig[hookSpec.id] as Record<string, unknown[]>)[
+                firstRegistrationTarget.event
+              ]
+            : (hookConfig.hooks as Record<string, unknown[]>)[
+                firstRegistrationTarget.event
+              ];
+        assert.ok(Array.isArray(eventEntries));
+        assert.ok(eventEntries[0]);
+        eventEntries.push(structuredClone(eventEntries[0]));
+        hookConfig.userOwnedMarker = "preserve";
+        writeFileSync(
+          hookConfigPath,
+          `${JSON.stringify(hookConfig, null, 2)}\n`,
+        );
+
+        assert.equal(
+          readAgentHookState(root, desiredStateCase.agent, hookSpec)
+            .registrationIssue,
+          "duplicate-registration",
+        );
+
+        writeAgentHookState(root, desiredStateCase.agent, hookSpec, true);
+        const repairedConfig = JSON.parse(
+          readFileSync(hookConfigPath, "utf-8"),
+        ) as Record<string, unknown>;
+        assert.equal(
+          readAgentHookState(root, desiredStateCase.agent, hookSpec).installed,
+          true,
+        );
+        assert.equal(repairedConfig.userOwnedMarker, "preserve");
+      });
+    });
+  }
+
+  it("keeps current managed files while a user leaves a hook disabled", () => {
+    withTempProject((root) => {
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "");
+
+      applyHookState(HOOK_IDENTIFIER, false, root);
+
+      const managedHookPath = join(
+        root,
+        ".goat-flow",
+        "hooks",
+        "deny-dangerous.sh",
+      );
+      assert.equal(existsSync(managedHookPath), true);
+      assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+
+      // For example, the user may restore a checkout after its managed hook file was deleted.
+      rmSync(managedHookPath);
+      syncHookStates(root);
+
+      const denyDangerousSpec = getHookSpec(HOOK_IDENTIFIER);
+      assert.ok(denyDangerousSpec);
+      assert.equal(existsSync(managedHookPath), true);
+      assert.equal(
+        readAgentHookState(root, PROFILES.codex, denyDangerousSpec)
+          .registrationIssue,
+        "registration-missing",
+      );
+      assert.doesNotMatch(
+        readFileSync(join(root, ".codex", "hooks.json"), "utf-8"),
+        /deny-dangerous\.sh/u,
+      );
     });
   });
 

@@ -25,6 +25,7 @@ import {
   type HookSpec,
 } from "./hooks-registry.js";
 import {
+  deriveManagedHookDesiredState,
   readAgentHookState,
   writeAgentHookState,
   type AgentHookReadState,
@@ -58,7 +59,6 @@ const REMOVED_HOOK_TOMBSTONES: HookSpec[] = [
     requiresConfirmDialog: false,
   },
 ];
-
 type HookDrift = "desired-on-actual-off" | "desired-off-actual-on";
 /** Names the installed-file repair shown when registration exists but local coverage is stale. */
 type HookInstallationIssue =
@@ -94,9 +94,7 @@ export interface HookState extends Record<"togglable" | "enabled", boolean> {
   requiresConfirmDialog: boolean;
   agents: Record<AgentId, HookAgentState>;
 }
-
 export { HookRegistrarError };
-
 type HookEffectiveStatus = HookEffectiveState["status"];
 
 const HOOK_EFFECTIVE_STATE_LABELS: Record<HookEffectiveStatus, string> = {
@@ -387,6 +385,8 @@ function registrationIssueReason(
 ): string {
   const issueReasons: Record<AgentHookRegistrationIssue, string> = {
     "registration-missing": "The managed hook command is not registered.",
+    "duplicate-registration":
+      "The managed hook is registered more than once for the same user action.",
     "retired-registration":
       "A retired hook registration must be migrated to the current dispatcher.",
     "event-mismatch":
@@ -639,10 +639,15 @@ function reconcileHook(
     }
     if (!isSupportedAgent(agent)) continue;
     if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) continue;
-    if (enabled) copyHookScripts(projectPath, agent, spec);
-    else removeHookScripts(projectPath, agent, spec);
-    if (enabled || hookConfigExists(projectPath, agent)) {
-      writeAgentHookState(projectPath, agent, spec, enabled);
+    const desiredState = deriveManagedHookDesiredState(agent, spec, enabled);
+    // Current inert files let install and sync repair drift without changing the user's disabled choice.
+    if (desiredState.managedScriptFiles.length > 0) {
+      copyHookScripts(projectPath, agent, spec);
+    }
+    const shouldRegisterHook = desiredState.registrationTargets.length > 0;
+    // A disabled hook removes managed rows from existing config but never scaffolds a missing config file.
+    if (shouldRegisterHook || hookConfigExists(projectPath, agent)) {
+      writeAgentHookState(projectPath, agent, spec, shouldRegisterHook);
     }
   }
 }

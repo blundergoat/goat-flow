@@ -621,7 +621,7 @@ function installedHookIsNewer(installedHookPath: string): boolean {
 
 /**
  * Remove one current managed script by exact name.
- * Use for disable and migration cleanup while preserving user scripts.
+ * Use only when migration retires a hook while preserving user scripts.
  * @param projectPath - selected project; empty text cannot own a safe removal
  * @param agent - selected agent; a null hook directory cannot resolve a script
  * @param hookScriptName - exact managed filename; empty text is rejected by target validation
@@ -647,7 +647,7 @@ function removeScriptIfPresent(
 
 /**
  * Install current managed bytes and prune obsolete per-agent copies.
- * Use when a user enables a hook or syncs an existing agent surface.
+ * Use whenever sync reconciles an installed agent, including intentionally disabled hooks.
  * @param projectPath - selected project; empty text cannot own safe destinations
  * @param agent - selected agent; a null hook directory leaves setup unchanged
  * @param hookSpec - hook files to install; an empty list writes no runnable hook
@@ -721,8 +721,8 @@ export function copyHookScripts(
 }
 
 /**
- * Remove current and legacy managed files for one disabled hook.
- * Use when a user disables coverage or setup prunes an unsupported provider.
+ * Remove current and legacy managed files for one retired hook.
+ * Use when an upgrade prunes a registry tombstone; active disabled hooks keep current inert bytes.
  * @param projectPath - selected project; empty text cannot own safe removals
  * @param agent - selected agent; a null hook directory cannot resolve current files
  * @param hookSpec - managed files to remove; empty scripts leave only the primary exact-name attempt
