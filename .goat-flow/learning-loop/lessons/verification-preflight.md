@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-12
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -105,7 +105,7 @@ last_reviewed: 2026-08-09
 
 **Prevention:** Format touched TypeScript before focused proof; retain Prettier in final verification.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 14 | **Latest occurrence:** 2026-08-09
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 15 | **Latest occurrence:** 2026-08-12
 
 ---
 
@@ -123,7 +123,7 @@ last_reviewed: 2026-08-09
 
 ## Lesson: Final verification gates need supported scopes and captured logs
 
-**Status:** active | **Created:** 2026-05-19 | **Incident count:** 3 | **Latest occurrence:** 2026-08-09
+**Status:** active | **Created:** 2026-05-19 | **Incident count:** 4 | **Latest occurrence:** 2026-08-12
 
 **What happened:** Several closeouts sent ignored tests or workflow `.mjs` files to TypeScript-only ESLint. One also ran `npm test` beside expensive checks and lost the failing block; a captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
 
@@ -149,7 +149,7 @@ last_reviewed: 2026-08-09
 
 **Recurrence update (2026-08-07):** An EXIT-trap cleanup made the executor reject M05's `test:fast` wrapper before npm ran. Retaining the printed `mktemp` log produced `1580` pass / `0` fail. Gate wrappers no longer bundle destructive cleanup.
 
-**Prevention:** Use supported final scopes: `npx eslint src/cli src/dashboard`, `npm run format:check`, and `npx knip --no-progress`. Run full tests alone or capture their log before parallel gates. Remove obsolete Knip ignores, and use representative fixtures with same-process relative performance budgets. Evidence anchors: `package.json` (search: `test:fast`) and `knip.json` (search: `ignoreDependencies`).
+**Prevention:** Run supported format, lint, Knip, and test gates with captured output. A predecessor may exempt one named RED fixture only when a blocked dependent owns it: preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`), `package.json` (search: `test:fast`), and `knip.json` (search: `ignoreDependencies`).
 
 ---
 
@@ -303,16 +303,18 @@ last_reviewed: 2026-08-09
 
 **Status:** active | **Created:** 2026-06-07
 **Decision changed:** Validate persisted anchors with the literal search shape a future agent will run.
-**Incident count:** 5 | **Latest occurrence:** 2026-08-10
+**Incident count:** 6 | **Latest occurrence:** 2026-08-11
 
 **What happened:** Shell commands copied Markdown-formatted anchors into executable arguments. Bash treated backticks as command substitution, mangled searches, and once ran embedded CLI names. Later PreToolUse checks blocked the same shape before execution, including a redaction draft sent through a generated shell command.
 
-**Root cause:** Display formatting crossed into shell syntax.
+**2026-08-11 recurrence:** Three plan Context references used remembered paths or symbols. A literal resolver caught them before handoff. Resolve every persisted path/anchor and mark future paths task-owned. Evidence: `src/cli/hooks-configured-runtime-evidence.ts` (search: `type HookRuntimeVerdict`).
 
-**Fix:** Searches use plain single-quoted or fixed-string tokens. Prose containing backticks goes directly to the running redactor over stdin. An architecture anchor that included formatted `EvidenceEnvelope` text now uses its stable section heading.
+**Root cause:** Persisted search anchors were treated as prose or memory instead of executable future-agent contracts.
+
+**Fix:** Resolve paths and fixed-string anchors against current source before persistence. Keep Markdown formatting out of shell arguments, and require every future path to be task-owned.
 
 **Evidence:** `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`) blocks the unsafe command shape; `src/cli/redact-command.ts` (search: `readFileSync(0`) accepts direct stdin; `.goat-flow/architecture.md` (search: `## Local Data and Evidence Budget`) supplies the formatting-independent anchor.
 
-**Prevention:** Keep Markdown formatting out of shell arguments. Use `rg -F` with a plain token for searches, direct stdin for formatted prose, and reject any proof output containing shell diagnostics.
+**Prevention:** Run each persisted anchor exactly as a future agent will. Use `rg -F` with plain tokens, direct stdin for formatted prose, and reject unresolved or shell-diagnostic output.
 
 ---

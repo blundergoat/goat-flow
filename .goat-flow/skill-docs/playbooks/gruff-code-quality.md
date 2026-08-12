@@ -11,6 +11,8 @@ You are a coding agent. Your job is to run the right gruff tool, fix one cohesiv
 
 Set `target` from the requested language; another gruff binary is not enough.
 
+Look for a project wrapper first in `bin/`, `scripts/`, or package scripts, inspect what it invokes, and prefer it when it targets the requested Gruff port. Wrappers often preserve the working directory, config discovery, or exit-code contract that a raw binary call would lose.
+
 ```bash
 target=gruff-ts  # gruff-go | gruff-rs | gruff-ts | gruff-php | gruff-py
 found=
@@ -80,6 +82,12 @@ Current ports are converging on `schemaVersion: "gruff.analysis.v2"` and flat fi
 
 If JSON is empty or non-JSON, suspect a real diagnostic or config `schemaVersion` failure before assuming the schema changed.
 
+## Comment and Documentation Passes
+
+Before editing comments, run Gruff on the exact paths and keep the before-edit JSON outside tracked source. Re-run the same paths afterwards and compare introduced, removed, and unchanged `stableIdentity` values. Zero introduced identities means no new finding; legitimate removals are fine. Aggregate equality is not proof because one finding can replace another without changing totals.
+
+A clean Gruff run does not prove comment meaning. Gruff checks detectable presence and shape; a reviewer still verifies claims against the code they describe.
+
 ## Triage Actions
 
 Classify high-volume rules before editing individual findings.
@@ -120,13 +128,15 @@ For each cluster:
 
 ## Documentation Findings
 
-For `docs.*`, load [`code-comments.md`](./code-comments.md) first. Doc comments are mandatory under that playbook, so missing-doc findings default to FIX, not suppress.
+For `docs.*`, load [`code-comments.md`](./code-comments.md) first. Doc comments are mandatory under that playbook, so missing-doc findings default to FIX, not suppress. Clearing a missing-doc finding means meeting its block shape and 150-character limit, not adding the shortest line that silences the analyzer.
 
 Write comments for caller-visible contract: obligations, edge values, side effects, error behavior, thresholds, determinism, compatibility, or non-obvious rationale. Do not restate syntax or add marker words just to satisfy the analyzer. If `@param`/`@returns` tags are used, each tag needs meaning beyond the type signature.
 
 Rule scopes differ by port: gruff-ts can flag internal helpers; gruff-py covers every function; gruff-go/rust mostly cover public/exported docs; gruff-php focuses on public/class/file/constant phpdoc. The rule IDs use `docs.`, while the pillar is `documentation`.
 
 Test functions still need the playbook's doc bar, but a descriptive test name plus one tight line is enough. Do not expand tests into contract essays.
+
+A per-dependency missing-doc finding is an accepted false positive only for an obvious non-null service-only constructor whose intent is already documented. A scalar, optional, configured, or side-effectful input is not pure DI and remains a finding.
 
 ## Public API Safety
 
@@ -152,6 +162,7 @@ Use `allowlists.acceptedAbbreviations` for accepted project vocabulary instead o
 - Empty/silent catches need real handling plus rationale if swallowing is intentional.
 - High-entropy MIME/path/rule strings and telemetry token metric names may be accepted false positives; do not reduce readability to game entropy.
 - `createMock` -> `createStub` does not by itself clear mock-without-expectation.
+- Report a documentation-caused size finding such as `size.file-length` or `size.class-length`; do not trim requested meaning, and do not smuggle in a file split during a documentation pass.
 
 ## Baselines and Reports
 
@@ -166,7 +177,7 @@ Generate or update a baseline only after remaining findings are deliberately acc
 
 ## Progress Reporting
 
-Report targeted deltas, not only global score:
+Report targeted deltas, not only global score. The following is an illustrative output shape, not evidence of a real scan:
 
 ```text
 Fixed:
@@ -191,7 +202,8 @@ Before claiming gruff work is done:
 6. Confirm no mid-cleanup baseline was generated.
 7. For renames, grep the old identifier.
 8. For doc findings, confirm `code-comments.md` bar was followed.
-9. Report remaining findings by action category, not as "fixed".
+9. For a documentation pass, compare before/after identities and report any documentation-caused size finding.
+10. Report remaining findings by action category, not as "fixed".
 
 ## Troubleshooting
 

@@ -352,7 +352,12 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       );
       assert.match(
         scopeGate,
-        /Comments and replies addressed to a person\s*\|\s*Correctness and residue only/u,
+        /Review comments and replies to a person\s*\|\s*Correctness and residue only/u,
+        playbookPath,
+      );
+      assert.match(
+        scopeGate,
+        /Code comments and docstrings\s*\|\s*No - see `code-comments\.md`/u,
         playbookPath,
       );
       assert.match(

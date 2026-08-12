@@ -3,19 +3,19 @@ goat-flow-reference-version: "1.15.1"
 ---
 # Writing Style
 
-Use this when producing or editing prose a person will read; the Scope Gate table lists the surfaces. It names common reader-cost patterns in generated prose, and the cases where those same shapes are correct and must be left alone.
+Use this for human-read prose listed in the Scope Gate. It names generated reader-cost patterns and load-bearing exceptions.
 
-Sibling playbooks own their formats: `changelog.md` owns changelog structure, `release-notes.md` owns per-release narrative shape. This playbook owns how the sentences inside them read.
+Sibling playbooks own changelog and release-note structure; this playbook owns the sentences inside them.
 
 ## Availability Check
 
-Documentary discipline reference; no CLI probe applies. Mechanical checks may catch residue or placeholders, but none prove factual accuracy, semantic preservation, or a correct exception. Load this file when a task produces or edits human-read prose, then apply the Scope Gate first. A review authorizes diagnosis, not an unrequested rewrite.
+This is a discipline reference, not a CLI. Mechanical checks may catch residue, but none prove factual accuracy, preserved meaning, or a correct exception. Apply the Scope Gate first. A review authorizes diagnosis, not an unrequested rewrite.
 
 ## Intent
 
-Generated prose fails readers in a specific way: fluent, agreeable, and empty. It announces before it acts, inflates ordinary facts into milestones, cushions every negative, and repeats its own shape until the argument disappears.
+Generated prose can be fluent but empty: it announces, inflates ordinary facts, cushions negatives, and repeats its shape until the argument disappears.
 
-The customer is a maintainer reading a release note during an incident, or a reviewer scanning a decision record for the constraint that matters. The failure this prevents is prose that costs reading time and returns nothing. The goal is readability, never disguised authorship.
+The reader may be handling an incident or scanning a decision for its constraint. Prevent prose that costs time and returns nothing; the goal is readability, never disguised authorship.
 
 ## Scope Gate
 
@@ -30,7 +30,8 @@ Resolve conflicts in this order: verified facts and safety; the user's task, aud
 | Issue and pull-request bodies, commit message bodies | Yes |
 | `ISSUE.md`, milestone narrative, and testing-plan narrative | Yes |
 | Learning-loop entry bodies (footguns, lessons, patterns, decisions) | Yes - body prose only |
-| Comments and replies addressed to a person | Correctness and residue only |
+| Review comments and replies to a person | Correctness and residue only |
+| Code comments and docstrings | No - see `code-comments.md` |
 | Skill files, playbooks and other agent-read references, shared preambles, instruction files, hook output | No |
 | Code blocks, fixed schema fields, task/proof checklists, commands, approved requirements and acceptance/proof/verification/exit criteria, tables, INDEX and catalogue formats | No |
 | Direct quotations, cited titles, and examples of a pattern | No |
@@ -47,7 +48,7 @@ If an exempt control surface conflicts with a source of truth, report the discre
 
 **Why tables, code, and catalogues are exempt.** Parallel structure is the point. A table with varied row shapes is a worse table.
 
-**Why examples are exempt.** Text discussing a pattern is not using it. The bad-example column below is not a defect in this file.
+**Why examples are exempt.** Examples are exempt from stylistic rewriting, not correctness, syntax, or security. Text discussing a pattern is not using it; the bad-example column below is not a defect.
 
 ## Correctness and Meaning
 
@@ -56,6 +57,7 @@ Run this before every style rule on every in-scope surface, against the source o
 - Correct typos, wrong word forms, dangling subjects, and broken parallelism.
 - Check names, numbers, units, versions, flags, options, and paths.
 - Open a cited document, issue, or benchmark and confirm it supports the claim.
+- When prose describes code behaviour, open the function, query, or getter it describes and confirm the claim; code is a citation like any other.
 - Match claim strength and specificity to the evidence. Do not inflate a narrow result or hedge a supported conclusion.
 - Connect named attribution to a specific inspectable point; otherwise name the evidence or remove the prestige cue.
 - Preserve claims, constraints, uncertainty, and provenance. Do not turn a proposal into a decision, an assumption into a fact, an optional action into a required one, or a planned or pending check into a passed check.
@@ -179,6 +181,7 @@ Cheap enough to run on a finished draft. On anything longer than a few paragraph
 4. **Feelings check.** Is the sentence telling the reader how to feel about a fact? State the fact instead.
 5. **Reader/action check.** Does the artifact name the behaviour or decision, affected surface, consequence, evidence, required action, and completion condition? A decision record states the strongest case for a rejected option before saying why it lost.
 6. **Colleague check.** For a reply to a person, would the exact sentence preserve the intended confidence and social meaning if sent to a colleague?
+7. **Substitution test.** Swap the subject for a neighbouring concept. If the sentence still reads cleanly, that raises suspicion, not proof; open the source and verify it.
 
 On a substantial plan, decision record, or release note, a fresh reader may check whether the decision, action, and uncertainty survive without drafting context. Do not add a reviewer or sub-agent for this without existing authorization.
 
@@ -224,7 +227,7 @@ Walk this once against the actual draft. Do not mark an item clean from memory.
 9. Bolded bullets pass the restatement test; each referent keeps one canonical name.
 10. Every example, metric, incident, and quotation is real or labelled illustrative.
 11. Protected passages retain their voice; agent-written prose is not called human-authored.
-12. The six Quick Tests pass at document level.
+12. The seven Quick Tests pass at document level.
 
 If the gate passes, stop editing.
 
@@ -232,3 +235,4 @@ If the gate passes, stop editing.
 
 - `changelog.md` - changelog structure, categories, and cadence. This playbook governs the prose inside the entries.
 - `release-notes.md` - per-release narrative shape and user-impact framing. This playbook governs its sentences.
+- `code-comments.md` - code comments and docstrings; this playbook applies only its correctness and integrity gates to that prose.

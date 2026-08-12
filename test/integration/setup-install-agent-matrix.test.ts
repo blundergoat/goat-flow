@@ -13,7 +13,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, posix } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
@@ -43,6 +43,216 @@ interface MatrixDoctorReport {
       staticEligibility: string;
     }>;
   }>;
+}
+
+type ManagedHookMatrixState =
+  | "first-install"
+  | "upgrade"
+  | "enabled"
+  | "disabled"
+  | "missing"
+  | "locally-edited"
+  | "duplicated"
+  | "forced";
+
+type ManagedHookWriteTarget =
+  | "all-managed-files"
+  | "primary-managed-file"
+  | "agent-hook-config"
+  | "goat-flow-config"
+  | "install-state";
+
+/** One pre-install state and the exact hook-state result M01 must derive. */
+interface ManagedHookDesiredStateFixture {
+  state: ManagedHookMatrixState;
+  currentManagedFiles:
+    "absent" | "current" | "missing" | "stale" | "locally-edited";
+  currentRegistrationCount: number;
+  isDesiredEnabled: boolean;
+  authority: "normal" | "force-managed";
+  expectedManagedFiles: "current" | "preserved-local";
+  expectedRegistrationCount: number;
+  expectedResult: "ready" | "repair" | "blocked-conflict";
+  expectedWriteTargets: ManagedHookWriteTarget[];
+}
+
+const MANAGED_HOOK_STATE_NAMES: ManagedHookMatrixState[] = [
+  "first-install",
+  "upgrade",
+  "enabled",
+  "disabled",
+  "missing",
+  "locally-edited",
+  "duplicated",
+  "forced",
+];
+
+const MANAGED_HOOK_DESIRED_STATE_FIXTURES: ManagedHookDesiredStateFixture[] = [
+  {
+    state: "first-install",
+    currentManagedFiles: "absent",
+    currentRegistrationCount: 0,
+    isDesiredEnabled: true,
+    authority: "normal",
+    expectedManagedFiles: "current",
+    expectedRegistrationCount: 1,
+    expectedResult: "repair",
+    expectedWriteTargets: [
+      "all-managed-files",
+      "agent-hook-config",
+      "goat-flow-config",
+      "install-state",
+    ],
+  },
+  {
+    state: "upgrade",
+    currentManagedFiles: "stale",
+    currentRegistrationCount: 1,
+    isDesiredEnabled: true,
+    authority: "normal",
+    expectedManagedFiles: "current",
+    expectedRegistrationCount: 1,
+    expectedResult: "repair",
+    expectedWriteTargets: [
+      "all-managed-files",
+      "agent-hook-config",
+      "goat-flow-config",
+      "install-state",
+    ],
+  },
+  {
+    state: "enabled",
+    currentManagedFiles: "current",
+    currentRegistrationCount: 1,
+    isDesiredEnabled: true,
+    authority: "normal",
+    expectedManagedFiles: "current",
+    expectedRegistrationCount: 1,
+    expectedResult: "ready",
+    expectedWriteTargets: [],
+  },
+  {
+    state: "disabled",
+    currentManagedFiles: "current",
+    currentRegistrationCount: 0,
+    isDesiredEnabled: false,
+    authority: "normal",
+    expectedManagedFiles: "current",
+    expectedRegistrationCount: 0,
+    expectedResult: "ready",
+    expectedWriteTargets: [],
+  },
+  {
+    state: "missing",
+    currentManagedFiles: "missing",
+    currentRegistrationCount: 0,
+    isDesiredEnabled: false,
+    authority: "normal",
+    expectedManagedFiles: "current",
+    expectedRegistrationCount: 0,
+    expectedResult: "repair",
+    expectedWriteTargets: ["primary-managed-file", "install-state"],
+  },
+  {
+    state: "locally-edited",
+    currentManagedFiles: "locally-edited",
+    currentRegistrationCount: 1,
+    isDesiredEnabled: true,
+    authority: "normal",
+    expectedManagedFiles: "preserved-local",
+    expectedRegistrationCount: 1,
+    expectedResult: "blocked-conflict",
+    expectedWriteTargets: [],
+  },
+  {
+    state: "duplicated",
+    currentManagedFiles: "current",
+    currentRegistrationCount: 2,
+    isDesiredEnabled: true,
+    authority: "normal",
+    expectedManagedFiles: "current",
+    expectedRegistrationCount: 1,
+    expectedResult: "repair",
+    expectedWriteTargets: ["agent-hook-config", "install-state"],
+  },
+  {
+    state: "forced",
+    currentManagedFiles: "locally-edited",
+    currentRegistrationCount: 0,
+    isDesiredEnabled: false,
+    authority: "force-managed",
+    expectedManagedFiles: "current",
+    expectedRegistrationCount: 0,
+    expectedResult: "repair",
+    expectedWriteTargets: ["primary-managed-file", "install-state"],
+  },
+];
+
+const DENY_POLICY_PATHS = [
+  ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
+  ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+  ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
+];
+
+/** Expand one matrix row into the project-relative paths apply is allowed to mutate. */
+function expectedManagedHookWritePaths(
+  fixture: ManagedHookDesiredStateFixture,
+  agentProfile: AgentProfile,
+): string[] {
+  const denyDangerousHook = getHookSpec("deny-dangerous");
+  assert.ok(denyDangerousHook);
+  assert.ok(agentProfile.hooksDir);
+  assert.ok(agentProfile.hookConfigFile);
+
+  const allManagedPaths = [
+    ...denyDangerousHook.scriptFiles.map((fileName) =>
+      posix.join(agentProfile.hooksDir ?? "", fileName),
+    ),
+    ...DENY_POLICY_PATHS,
+    ".goat-flow/.gitignore",
+  ];
+  const targetPaths: Record<ManagedHookWriteTarget, string[]> = {
+    "all-managed-files": allManagedPaths,
+    "primary-managed-file": [
+      posix.join(agentProfile.hooksDir, denyDangerousHook.primaryScript),
+    ],
+    "agent-hook-config": [agentProfile.hookConfigFile],
+    "goat-flow-config": [".goat-flow/config.yaml"],
+    "install-state": [`.goat-flow/install-state/${agentProfile.id}.json`],
+  };
+  return fixture.expectedWriteTargets.flatMap((target) => targetPaths[target]);
+}
+
+/** Count logical command rows for one managed script without double-counting shell fields. */
+function countManagedHookRegistrations(
+  configValue: unknown,
+  primaryScript: string,
+): number {
+  if (Array.isArray(configValue)) {
+    return configValue.reduce(
+      (count, nestedValue) =>
+        count + countManagedHookRegistrations(nestedValue, primaryScript),
+      0,
+    );
+  }
+  if (configValue === null || typeof configValue !== "object") return 0;
+  const configEntry = configValue as Record<string, unknown>;
+  const ownsManagedCommand = [
+    configEntry.command,
+    configEntry.bash,
+    configEntry.powershell,
+  ].some(
+    (command) => typeof command === "string" && command.includes(primaryScript),
+  );
+  return (
+    (ownsManagedCommand ? 1 : 0) +
+    Object.values(configEntry).reduce(
+      (count, nestedValue) =>
+        count + countManagedHookRegistrations(nestedValue, primaryScript),
+      0,
+    )
+  );
 }
 
 /**
@@ -379,6 +589,11 @@ function verifyStandaloneInstallerHookSemantics(
   // Hook installation must not turn the user's ordinary folder into a Git repository.
   assert.equal(existsSync(join(targetProjectPath, ".git")), false);
 
+  assert.ok(agentProfile.hookConfigFile);
+  const installedHookConfig = JSON.parse(
+    readFileSync(join(targetProjectPath, agentProfile.hookConfigFile), "utf-8"),
+  ) as unknown;
+
   // Every shipped hook must match the enabled state this agent can actually support.
   for (const hookSpec of listHookSpecs()) {
     const installedHookState = readAgentHookState(
@@ -393,6 +608,17 @@ function verifyStandaloneInstallerHookSemantics(
       shouldInstallHook,
       `${agentProfile.id} ${hookSpec.id} diverged between installer and writer`,
     );
+    // A matcherless event has one logical row, so existential checks must not hide duplicates.
+    if (hookSpec.matcher === "") {
+      assert.equal(
+        countManagedHookRegistrations(
+          installedHookConfig,
+          hookSpec.primaryScript,
+        ),
+        shouldInstallHook ? 1 : 0,
+        `${agentProfile.id} ${hookSpec.id} must have one exact registration`,
+      );
+    }
   }
   // An enabled Codex Gruff hook uses the canonical tool observed by the active provider.
   if (agentProfile.id === "codex") {
@@ -413,6 +639,46 @@ describe("cross-agent install smoke matrix", () => {
     supportedAgentProfiles.map((profile) => profile.id),
     ["claude", "codex", "antigravity", "copilot"],
   );
+
+  it("defines one complete managed-hook desired-state matrix per agent", () => {
+    assert.deepEqual(
+      MANAGED_HOOK_DESIRED_STATE_FIXTURES.map((fixture) => fixture.state),
+      MANAGED_HOOK_STATE_NAMES,
+    );
+
+    for (const agentProfile of supportedAgentProfiles) {
+      for (const fixture of MANAGED_HOOK_DESIRED_STATE_FIXTURES) {
+        const expectedWritePaths = expectedManagedHookWritePaths(
+          fixture,
+          agentProfile,
+        );
+        assert.equal(
+          new Set(expectedWritePaths).size,
+          expectedWritePaths.length,
+          `${agentProfile.id} ${fixture.state} repeats a write path`,
+        );
+        assert.equal(
+          expectedWritePaths.every(
+            (path) =>
+              path.length > 0 &&
+              !path.startsWith("/") &&
+              !path.split("/").includes(".."),
+          ),
+          true,
+          `${agentProfile.id} ${fixture.state} has a non-project-relative write`,
+        );
+        assert.equal(
+          fixture.expectedRegistrationCount,
+          fixture.isDesiredEnabled ? 1 : 0,
+          `${agentProfile.id} ${fixture.state} registration target disagrees with config`,
+        );
+        if (fixture.expectedResult === "blocked-conflict") {
+          assert.deepEqual(expectedWritePaths, []);
+          assert.equal(fixture.expectedManagedFiles, "preserved-local");
+        }
+      }
+    }
+  });
 
   // Separate names make the failing agent visible in TAP output and CI summaries.
   for (const agentProfile of supportedAgentProfiles) {
