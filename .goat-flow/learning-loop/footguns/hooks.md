@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-11
+last_reviewed: 2026-08-13
 ---
 
 **Scope:** Hook runtime delivery, Stop-scanner behavior, execution performance, and resolved hook history. Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -233,8 +233,8 @@ Route every migrated launcher-owned failure through the neutral unavailable enve
 **Why it happened:** `workflow/install-goat-flow.sh` originally treated only deny-dangerous and the old split guardrail scripts as managed during hook-config migration. Optional `gruff-code-quality.sh` registrations were outside that managed set, so pruning `.claude/hooks/`, `.codex/hooks/`, `.agents/hooks/`, or `.github/hooks/` could delete the script while preserving the old registration.
 
 **Durable anchors:**
-- `workflow/install-goat-flow.sh` (search: `managedScripts`) includes `gruff-code-quality.sh` in the managed migration set.
-- `workflow/install-goat-flow.sh` (search: `appendGruffHookEntries`) re-adds central gruff registrations from the enabled hook toggle rather than preserving stale per-agent paths.
+- `scripts/generate-managed-hook-desired-state.mjs` (search: `commandScriptNames`) publishes each hook's current and legacy registration ownership tokens.
+- `workflow/install-goat-flow.sh` (search: `appendSharedHookFragment`) re-adds enabled generated fragments rather than preserving stale per-agent paths.
 - `workflow/install-goat-flow.sh` (search: `configuredHookEnabled`) reads the existing config toggle so enabled optional hooks survive upgrades while disabled hooks stay absent.
 
 **Prevention:** Add every future optional hook to the managed removal list before legacy files are pruned. Rebuild registrations from current registry and config state, preserve desired toggles for unsupported providers, and add upgrade fixtures whenever install paths or delivery support changes.

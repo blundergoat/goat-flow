@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-12
 ---
 
 ## Lesson: Reference-pack wording fixes must check word budget immediately
@@ -81,6 +81,24 @@ last_reviewed: 2026-08-09
 **Recurrence 2026-05-16:** While moving setup instruction surfaces into manifest-backed agent capabilities, full `npm test` failed because a source-grep prompt test still asserted literal `CLAUDE.md, .claude/settings.json` strings in `dashboard-setup-quality.ts`. The product change was correct; the test had become a stale parallel authority. For manifest-backed refactors, update source-grep tests to assert the data boundary (`workflow/manifest.json` plus injected fields) instead of the old duplicated literals.
 
 **Recurrences 2026-05-27 and 2026-05-31:** `npx prettier --check` flagged touched dashboard classic-script test files - `test/unit/dashboard-terminal-launch.test.ts` after long fake-timer assertions (paste-submit hardening in `src/dashboard/dashboard-terminal.ts`), then `test/unit/dashboard-terminal-launch/helpers.ts` after a rename's source-list edit. Running Prettier on the touched files before the focused rerun fixed both. Prevention unchanged: format changed dashboard classic-script tests before claiming verification complete.
+---
+
+## Lesson: Config mergers must preserve user-visible serialization
+
+**Status:** active | **Created:** 2026-08-12
+
+**Decision changed:** Compare both parsed state and serialized output when replacing config migration logic.
+
+**Trigger phase:** VERIFY | **Incident count:** 1 | **Latest occurrence:** 2026-08-12
+
+**What happened:** M01's generated desired-state merger produced semantically correct Codex hooks but wrote minified JSON. The focused installer matrix failed two user-visible formatting assertions, including the expected `"timeout": 90` form.
+
+**Root cause:** I reused compact serialization for both semantic equality and the final file write, overlooking the installer's established two-space JSON output.
+
+**Fix:** Keep compact JSON only for before/after comparison and pretty-print the user file. Evidence anchors: `workflow/install-goat-flow.sh` (search: `JSON.stringify(currentConfig, null, 2)`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `timeout\": 90`).
+
+**Prevention:** When migrating a config writer, reproduce its whitespace, trailing newline, and key-shape contract as well as parsed semantics. Run the exact consumer-facing fixture before broader verification.
+
 ---
 
 ## Lesson: Regressions caught too late - tests run at milestone granularity, not edit granularity

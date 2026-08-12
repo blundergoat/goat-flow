@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-13
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -230,7 +230,7 @@ last_reviewed: 2026-08-10
 
 **Recurrence 2026-08-09 (partial hook propagation):** A dormant adapter changed legacy commands and file lists before installer propagation, so the cross-agent matrix passed only 1 of 13 cases. Protocol-gating adapter loads and namespaced modes restored 12; deferring a separate Antigravity support removal restored 13 of 13. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `legacyHookLaunchMode`), `workflow/hooks/run-with-bash.mjs` (search: `LEGACY_HOOK_DEADLINES_MS`), and `test/integration/setup-install-agent-matrix.test.ts` (search: `diverged between installer and writer`).
 
-**Recurrence 2026-08-10 (standalone protocol precedence):** The TypeScript writer chose the Gruff response kind before provider-specific policy output, while the standalone installer checked Copilot first. The cross-agent matrix passed 43 of 44 cases and read Copilot Gruff as uninstalled because its generated command differed. Matching response-kind precedence restored installer/writer parity. Evidence anchors: `workflow/install-goat-flow.sh` (search: `responseKind === "gruff"`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `diverged between installer and writer`).
+**Recurrence 2026-08-10 (standalone protocol precedence):** The TypeScript writer chose Gruff before provider policy, while the standalone installer checked Copilot first. The matrix passed 43 of 44 cases until precedence matched. The generated contract now removes that second decision. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `responseKind === "gruff"`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `diverged between installer and writer`).
 
 **Prevention:** Verify configured guard replay as well as direct self-tests. Run safe and dangerous payloads from each audited cwd, require policy-specific denial text, reject hidden script paths, and fail on exit 126/127. Test doubles branch on payload and command shape, never spawn order. Build single-axis drift fixtures from the canonical command, then grep renamed outcomes and rerun their message assertions. A non-empty `unsupportedAgents` reason means unsupported. Protocol seams keep legacy commands and files unchanged; support changes update writer and installer atomically. Test both launcher decoding and startup output when a generated mode changes. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`), `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
 

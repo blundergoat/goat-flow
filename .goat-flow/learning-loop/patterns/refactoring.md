@@ -1,6 +1,6 @@
 ---
 category: refactoring
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-13
 ---
 
 ## Pattern: Hold the file-length line continuously, not in a cleanup pass
@@ -12,6 +12,8 @@ last_reviewed: 2026-08-06
 **Evidence (ACTUAL_MEASURED, 2026-08-04):** A goat-flow gruff sweep found 35 files over the 750-line gate totalling ~13,200 lines above threshold, topped by a 5,069-line contract test and a 2,069-line source file. Splitting the first one, `src/cli/facts/shared/learning-loop-common.ts` (836 lines), took roughly 15 tool calls and produced three modules rather than the two originally planned, because `isFileRef`, `isIntentionallyGitignored`, and `isCheckableForStaleness` were each used on both sides of the intended seam and had to become a third shared module. Evidence anchors: `src/cli/facts/shared/reference-paths.ts` (search: `isCheckableForStaleness`), `src/cli/facts/shared/search-anchors.ts` (search: `evaluateSearchAnchors`).
 
 Three second-order effects make deferral worse than it looks. Doc-comment rules and the size gate pull against each other - adding required documentation pushed one test file from 749 to 753 lines and *created* a size finding. Clearing an entire pillar can lower the reported composite, so a long deferred cleanup shows the score sagging while the codebase improves; judge progress on per-pillar finding counts instead.
+
+**Recurrence 2026-08-13:** M01's provider migration fixture reached 751 lines after formatting; the focused behavior suite was green, but Gruff stopped closeout. Removing one non-semantic blank line restored the ceiling. Measure the formatted file, not the pre-format draft. Evidence anchor: `test/integration/setup-install-migrations.test.ts` (search: `keeps disabled hooks installed and inert`).
 
 Most dangerous: **moving a symbol silently breaks every learning-loop anchor that cites it by path.** Four entries pointed at symbols that still existed but no longer lived where the anchor said. Typecheck and focused tests stayed green throughout - nothing in the compiler can see a Markdown citation - and it surfaced only as `support-bundle` exiting 1 through the `feedback-loop-active` harness check. After any extraction, run `goat-flow stats --check` and re-run `goat-flow index`, and treat a passing typecheck as no evidence at all about artifact references. Evidence anchors: `.goat-flow/learning-loop/lessons/audit-contracts.md` (search: `function toCheckResult`), `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `checkCodexWorkspaceRootExactPaths`).
 

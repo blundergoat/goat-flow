@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-13
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-shell.md](deny-shell.md) (command grammar), [deny-secrets.md](deny-secrets.md) (secret-path reads), and [deny-writes.md](deny-writes.md) (external writes).
@@ -100,7 +100,7 @@ last_reviewed: 2026-08-09
 
 **Evidence:**
 - 2026-06-04 live incident: a session in `~/projects/gruff-workspace/gruff-rs` cd'd to `/tmp`, after which every Bash returned `Guard cannot start: git repository root unavailable.`; `cd <repo> && pwd` was blocked too. Both launcher generations fail from `/tmp`: `git rev-parse --show-toplevel` and `--git-common-dir` each exit 128 with empty output → fail-closed branch.
-- End-to-end probe (real guard, from `/tmp`): WITH `$CLAUDE_PROJECT_DIR` + the resolved child cwd → benign allowed (exit 0), `rm -rf /` blocked (exit 2); WITHOUT the env var → fail-closed (exit 2); script-path lookup alone (without the corrected cwd) still failed closed. Anchors: `src/cli/server/agent-hook-command.ts` (search: `CLAUDE_PROJECT_DIR`), and the generated launchers in `workflow/hooks/agent-config/claude.json`, `workflow/hooks/agent-config/antigravity-hooks.json`, and `workflow/install-goat-flow.sh` (search: `CLAUDE_PROJECT_DIR`).
+- End-to-end probe (real guard, from `/tmp`): WITH `$CLAUDE_PROJECT_DIR` + the resolved child cwd → benign allowed (exit 0), `rm -rf /` blocked (exit 2); WITHOUT the env var → fail-closed (exit 2); script-path lookup alone (without the corrected cwd) still failed closed. Anchors: `src/cli/server/agent-hook-command.ts` and generated `workflow/hooks/agent-config/managed-hook-desired-state.json` (search: `CLAUDE_PROJECT_DIR`).
 - 2026-08-09 recurrence: the first managed-ancestor classifier treated the shared `run-with-bash.mjs` as a relevant requested-hook trace. A nested root with only another managed hook would therefore appear corrupt and suppress a valid outer candidate. Relevance now requires the requested script or an exact registration operand; the shared launcher is validated only after that threshold is met. Anchors: `src/cli/server/agent-hook-command.ts` (search: `const relevant=scriptSeen||registered`) and `test/unit/hook-registrar.test.ts` (search: `skips unrelated configs but stops at a partial managed trace`).
 - 2026-08-10 packaged-bin reproduction: archived 1.15.1 bytes installed into a bare non-Git project, upgraded exact tagged 1.15.0 launcher bytes through `hooks sync`, allowed safe input, and denied destructive input. Anchor: `test/integration/packaged-hook-install.test.ts` (search: `runs fresh install and 1.15.0 sync through the archived CLI bin`).
 
