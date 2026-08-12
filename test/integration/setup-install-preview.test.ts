@@ -243,6 +243,146 @@ describe("managed setup preview", () => {
     assert.notEqual(readFileSync(managedReadmePath, "utf-8"), localEdit);
   });
 
+  /** Fixture purpose: force refreshes one edited managed file while preserving user choices and separate cleanup authority.
+   * Filesystem side effects: creates and rewrites a disposable project, then spawns the installer subprocess. */
+  it("limits force to managed conflicts and preserves user-owned content", () => {
+    const projectPath = makeTempProject();
+    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+
+    const managedReadmePath = join(
+      projectPath,
+      ".goat-flow",
+      "logs",
+      "quality",
+      "README.md",
+    );
+    const locallyEditedManagedContent = "force may replace this managed edit\n";
+    writeFileSync(managedReadmePath, locallyEditedManagedContent);
+
+    const securityPolicyPath = join(
+      projectPath,
+      ".goat-flow",
+      "security-policy.md",
+    );
+    const userSecurityPolicy =
+      "# Team security policy\n\nKeep this project-specific rule.\n";
+    writeFileSync(securityPolicyPath, userSecurityPolicy);
+
+    const decisionGuidePath = join(
+      projectPath,
+      ".goat-flow",
+      "learning-loop",
+      "decisions",
+      "README.md",
+    );
+    const userDecisionGuide =
+      "# Team decisions\n\nKeep this local decision format.\n";
+    writeFileSync(decisionGuidePath, userDecisionGuide);
+
+    const configPath = join(projectPath, ".goat-flow", "config.yaml");
+    const userConfig = [
+      "# User-selected setup remains authoritative during a managed refresh.",
+      'version: "local"',
+      'project_name: "operator-console"',
+      "skills:",
+      "  install: all",
+      "hooks:",
+      "  deny-dangerous:",
+      "    enabled: false",
+      "  post-turn-safety:",
+      "    enabled: true",
+      "  gruff-code-quality:",
+      "    enabled: false",
+      "ui:",
+      "  density: compact",
+      "",
+    ].join("\n");
+    writeFileSync(configPath, userConfig);
+
+    const activePlanPath = join(projectPath, ".goat-flow", "plans", ".active");
+    mkdirSync(join(projectPath, ".goat-flow", "plans", "9.9.9"), {
+      recursive: true,
+    });
+    const userActivePlan = "manual-plan-selection\n";
+    writeFileSync(activePlanPath, userActivePlan);
+
+    const codexSettingsPath = join(projectPath, ".codex", "config.toml");
+    const installedCodexSettings = readFileSync(codexSettingsPath, "utf-8");
+    const userCodexSettings = [
+      installedCodexSettings.trimEnd(),
+      "",
+      "# Keep this UI preference and its explanation.",
+      "[ui]",
+      'theme = "high-contrast"',
+      "",
+    ].join("\n");
+    writeFileSync(codexSettingsPath, userCodexSettings);
+
+    const codexHooksPath = join(projectPath, ".codex", "hooks.json");
+    const userHookConfig = JSON.parse(
+      readFileSync(codexHooksPath, "utf-8"),
+    ) as {
+      hooks?: Record<string, Array<Record<string, unknown>>>;
+      userInterface?: { statusMessage: string };
+    };
+    userHookConfig.userInterface = { statusMessage: "keep my status" };
+    userHookConfig.hooks ??= {};
+    userHookConfig.hooks.PreToolUse ??= [];
+    userHookConfig.hooks.PreToolUse.push({
+      matcher: "UserTool",
+      hooks: [{ type: "command", command: "node user-hook.js" }],
+    });
+    writeFileSync(
+      codexHooksPath,
+      `${JSON.stringify(userHookConfig, null, 2)}\n`,
+    );
+
+    const deprecatedSkillNotePath = join(
+      projectPath,
+      ".agents",
+      "skills",
+      "goat-audit",
+      "user-notes.md",
+    );
+    mkdirSync(join(projectPath, ".agents", "skills", "goat-audit"), {
+      recursive: true,
+    });
+    writeFileSync(deprecatedSkillNotePath, "keep until explicit cleanup\n");
+
+    const forcedInstall = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--force",
+    );
+    assert.equal(
+      forcedInstall.status,
+      0,
+      forcedInstall.stderr || forcedInstall.stdout,
+    );
+    assert.notEqual(
+      readFileSync(managedReadmePath, "utf-8"),
+      locallyEditedManagedContent,
+    );
+    assert.equal(readFileSync(securityPolicyPath, "utf-8"), userSecurityPolicy);
+    assert.equal(readFileSync(decisionGuidePath, "utf-8"), userDecisionGuide);
+    assert.equal(readFileSync(configPath, "utf-8"), userConfig);
+    assert.equal(readFileSync(activePlanPath, "utf-8"), userActivePlan);
+    assert.equal(readFileSync(codexSettingsPath, "utf-8"), userCodexSettings);
+    assert.equal(existsSync(deprecatedSkillNotePath), true);
+
+    const installedHookConfig = readFileSync(codexHooksPath, "utf-8");
+    assert.match(installedHookConfig, /node user-hook\.js/u);
+    assert.match(installedHookConfig, /keep my status/u);
+    assert.doesNotMatch(installedHookConfig, /deny-dangerous\.sh/u);
+    assert.match(installedHookConfig, /post-turn-safety\.sh/u);
+  });
+
   it("keeps dry-run state unchanged after a local managed edit", () => {
     const projectPath = makeTempProject();
     const firstInstall = runCliInstaller(projectPath, "--agent", "codex");

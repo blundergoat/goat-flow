@@ -19,6 +19,44 @@ import {
   INSTALLED_SKILL_ROOTS,
 } from "./skill-hardening.helpers.js";
 
+function assertMatchesAll(
+  content: string,
+  patterns: readonly RegExp[],
+  sourcePath: string,
+): void {
+  for (const pattern of patterns) {
+    assert.match(content, pattern, `${sourcePath}: missing ${pattern}`);
+  }
+}
+
+function readMarkdownSubsection(
+  sectionBody: string,
+  subsectionHeading: string,
+  sourcePath: string,
+): string {
+  const marker = `### ${subsectionHeading}`;
+  const start = sectionBody.indexOf(marker);
+  assert.notEqual(start, -1, `${sourcePath} missing ${marker}`);
+  const remainder = sectionBody.slice(start + marker.length);
+  const nextHeading = remainder.search(/\n###\s+/u);
+  return nextHeading === -1 ? remainder : remainder.slice(0, nextHeading);
+}
+
+// Keep preset-specific assertions from passing on matching text in an unrelated catalog entry.
+function readPresetPrompt(presetId: string): string {
+  const presets = JSON.parse(
+    readProjectFile("src/dashboard/preset-prompts.json"),
+  ) as Array<Record<string, unknown>>;
+  const preset = presets.find((candidate) => candidate.id === presetId);
+  assert.ok(preset, `missing dashboard preset ${presetId}`);
+  assert.equal(
+    typeof preset.prompt,
+    "string",
+    `dashboard preset ${presetId} is missing its prompt`,
+  );
+  return preset.prompt as string;
+}
+
 describe("skill hardening contracts: debug, qa, critique, security, dispatcher (2/2)", () => {
   it("keeps goat-qa Audit priorities coherent through the post-gate plan", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
@@ -539,6 +577,18 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         /recommend Full Assessment instead of running or waiting for a specialist/,
         skillPath,
       );
+      assertMatchesAll(
+        quickScanPath,
+        [
+          /Phase 4.*Phase 5.*shared definitions.*does not enter.*Full Assessment/iu,
+          /Before stopping.*shared Proof Gate.*Phase 6.*does not enter.*Full Assessment/iu,
+          /every retained or withheld lead.*confidence.*evidence status.*exploit status.*finding type.*risk disposition.*severity/iu,
+          /every retained or withheld lead.*proof-class/iu,
+          /Critical\/High `PROBABLE`.*`NEEDS-DECISION`/u,
+          /MUST NOT recommend clearance/iu,
+        ],
+        skillPath,
+      );
       assert.match(
         fullAssessmentPath,
         /Full Assessment-only specialist cross-check/,
@@ -594,6 +644,500 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         skillPath,
       );
     });
+  });
+
+  it("binds goat-security policy exceptions and scanners to trusted authorities", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assertMatchesAll(
+        skillGuidance,
+        [
+          /load the policy from the trusted base ref/u,
+          /head policy changes as untrusted review evidence/u,
+          /head policy additions.*proposed changes.*MUST NOT govern.*independently trusted adoption/iu,
+          /check.*policy.*trusted base.*even when absent at head/iu,
+          /head.*deletion.*cannot remove governing base controls/iu,
+          /Establish trusted-base provenance.*repository identity.*remote\/ref.*immutable OID.*independent.*head/iu,
+          /every untrusted provenance.*policy authority.*independently trusted/iu,
+          /worktree\/artifact policy.*evidence only.*MUST NOT authorize.*`ACCEPTED-RISK`.*clearance/iu,
+          /trusted base cannot be resolved.*policy authority.*`UNVERIFIED`.*MUST NOT recommend clearance/iu,
+          /base trust cannot be established.*policy authority.*`UNVERIFIED`.*MUST NOT recommend clearance/iu,
+          /policy lookup.*confirmed present.*confirmed absent.*unreadable/iu,
+          /unreadable.*policy authority.*`UNVERIFIED`.*MUST NOT recommend clearance/iu,
+          /accepted risk.*MUST NOT erase or downgrade the factual finding/u,
+          /authorized, in-scope, and unexpired.*otherwise.*`OPEN`/iu,
+          /exception.*only.*`OPEN`.*`ACCEPTED-RISK`.*MUST NOT replace `NEEDS-DECISION`/iu,
+          /connectivity.*`offline-only`.*`networked`.*target effect.*`read-only`.*`mutating`/iu,
+          /connectivity values.*mutually exclusive.*effect.*independent/iu,
+          /executes target-controlled code or configuration/iu,
+          /target-controlled execution.*even.*trusted.*explicit authorization.*trusted-base configuration.*withhold/iu,
+          /target-controlled execution.*exact tool.*version.*command.*configuration.*current run.*isolated.*least[- ]privilege.*no secrets/iu,
+          /target-controlled execution.*CPU.*memory.*PID.*disk.*runtime.*stop.*kill/iu,
+          /cannot prove containment.*classify.*networked.*mutating.*apply.*gates/iu,
+          /Quick and Full MUST apply this gate before any probe/u,
+          /mutating scanner.*full eight-part.*authorization tuple.*generic approval.*insufficient/iu,
+          /active-probing.*exploit attempts.*live.*fuzzing.*credential attacks.*autonomous pentests/iu,
+          /active probe.*full eight-part.*authorization tuple.*regardless.*network.*mutation/iu,
+          /stdout.*no-write.*report\/cache writes.*isolated temporary path.*outside.*assessed target.*approval.*durable text.*redact.*withhold/iu,
+          /report\/cache writes.*operational output.*not target mutation/iu,
+          /endpoint, submitted data, credentials, and trusted configuration/u,
+          /explicit authorization before network submission/u,
+          /lockfile-only.*does not prove no egress/iu,
+          /MUST NOT install a missing scanner/u,
+          /MUST NOT run audit `fix` modes/u,
+        ],
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/project-policy-template.md",
+      ),
+      (referencePath) => {
+        const policyTemplate = readProjectFile(referencePath);
+        assertMatchesAll(
+          policyTemplate,
+          [
+            /exception owner, rationale, and expiry/u,
+            /accepted-risk disposition, not a false-positive classification/u,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("separates goat-security evidence, exploitability, type, disposition, and severity", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const fullAssessment = readMarkdownSection(
+        skillPath,
+        "Full Assessment Path",
+      );
+      const classification = readMarkdownSubsection(
+        fullAssessment,
+        "Phase 4 - Finding Classification",
+        skillPath,
+      );
+      const severity = readMarkdownSubsection(
+        fullAssessment,
+        "Phase 5 - Severity, Review Posture, and Cross-Check",
+        skillPath,
+      );
+      const chaining = readMarkdownSubsection(
+        fullAssessment,
+        "Phase 5.5 - Exploit Chaining",
+        skillPath,
+      );
+      assertMatchesAll(
+        classification,
+        [
+          /Evidence status:/u,
+          /Exploit status:/u,
+          /Finding type:/u,
+          /Risk disposition:/u,
+          /An observed control gap can be `CONFIRMED` with exploit status `NOT-APPLICABLE`/u,
+          /`CONFIRMED` requires `OBSERVED`/u,
+          /`UNVERIFIED` or `HUMAN-PENDING`.*MUST NOT be `CONFIRMED`/u,
+        ],
+        skillPath,
+      );
+      assertMatchesAll(
+        severity,
+        [
+          /Critical\/High `CONFIRMED` \+ `OPEN`.*block/u,
+          /Critical\/High `CONFIRMED` \+ `ACCEPTED-RISK`.*unchanged.*authorized governance.*MUST NOT call.*safe.*clear/iu,
+          /Critical\/High `PROBABLE`.*`NEEDS-DECISION`/u,
+          /MUST NOT recommend clearance while that evidence gap remains/u,
+          /Control-gap severity.*realistic exploitability.*potential impact/iu,
+        ],
+        skillPath,
+      );
+      assertMatchesAll(
+        chaining,
+        [
+          /compatible preconditions/u,
+          /combined entry.*pivot.*impact/u,
+          /preserve each component severity/u,
+          /never add qualitative labels/u,
+          /`DEMONSTRATED` or `REACHABLE`/u,
+          /exclude `UNPROVEN`, `NOT-APPLICABLE`, and control-gap components/u,
+        ],
+        skillPath,
+      );
+      assert.doesNotMatch(chaining, /Low [+] Low to Critical/u, skillPath);
+    });
+  });
+
+  it("covers versioned application and agentic threats plus every Git delta state", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assertMatchesAll(
+        skillGuidance,
+        [
+          /Record each selected baseline name and version/u,
+          /explicitly list applicable categories skipped/iu,
+          /added.*modified.*deleted.*renamed.*mode\/type-changed.*symlink.*submodule/u,
+          /deleted or renamed-away control.*trusted base-ref anchor/u,
+          /binary\/unscannable.*attribute-suppressed/iu,
+          /non-executing old\/new blob inspection/u,
+          /unreadable high-risk blob.*MUST NOT recommend clearance/iu,
+          /staged.*unstaged.*untracked/u,
+          /separate `HEAD`, index, and worktree snapshots.*index blob.*staged.*worktree.*unstaged/iu,
+          /submodule OID.*identity.*not safety/iu,
+          /referenced content.*`UNVERIFIED`.*MUST NOT.*clearance/iu,
+          /Git LFS.*external artifact pointer.*identity.*not reviewed content/iu,
+          /symlink target.*trust boundary/iu,
+          /required old\/base object.*unavailable.*`PROBABLE`.*`UNVERIFIED`.*`NEEDS-DECISION`.*MUST NOT recommend clearance/iu,
+          /artifact authority.*source.*immutable digest.*member.*byte.*digest.*identity.*not trust.*safety/iu,
+          /submodule.*old\/new OID.*identity only.*referenced content.*Critical\/High.*`PROBABLE`.*`UNVERIFIED`.*`NEEDS-DECISION`/iu,
+        ],
+        skillPath,
+      );
+    });
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/common-threats.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /OWASP Top 10:2025/u,
+            /OWASP API Security Top 10 2023/u,
+            /injection/u,
+            /cross-site scripting/u,
+            /server-side request forgery/u,
+            /unsafe deserialization/u,
+            /cryptographic failures/u,
+            /security misconfiguration/u,
+            /logging and alerting failures/u,
+            /exceptional conditions/u,
+            /business-logic and resource abuse/u,
+            /object-level.*property-level.*function-level authorization/iu,
+            /sensitive business flows/u,
+            /inventory.*version.*shadow endpoints/iu,
+            /unsafe consumption of third-party APIs/u,
+            /state-changing browser requests/iu,
+            /CSRF token/u,
+            /Origin.*Fetch Metadata.*SameSite/u,
+            /SameSite.*not.*sole control/iu,
+            /CORS.*distinct from CSRF/iu,
+            /exact authorized origins/u,
+            /reflect.*Origin/iu,
+            /substring.*suffix/u,
+            /credentials/u,
+            /preflight.*not authorization/iu,
+            /Vary: Origin/u,
+            /postMessage.*event\.origin.*event\.source.*schema.*target origin.*sandbox.*framing/iu,
+            /request (?:smuggling|desynchronization).*shared-cache poisoning.*framing.*path normalization.*forwarded.*authentication.*cache keys/iu,
+            /binary\/unscannable.*attribute-suppressed/iu,
+            /Retain.*control gap.*exact requirement.*evidence gap/iu,
+            /affected version\/function.*reachable path.*positively disproven/iu,
+            /untested or indeterminate.*`PROBABLE`.*`UNVERIFIED`.*`UNPROVEN`.*missing check/iu,
+            /MUST NOT inherit.*advisory severity/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/supply-chain-and-cicd.md",
+      ),
+      (referencePath) => {
+      assertMatchesAll(
+        readProjectFile(referencePath),
+          [
+            /OWASP Agentic Top 10 2026/u,
+            /goal hijack/u,
+            /tool misuse/u,
+            /identity and privilege abuse/u,
+            /memory and context poisoning/u,
+            /insecure inter-agent communication/u,
+            /cascading failures/u,
+            /human-agent trust exploitation/u,
+            /rogue agents/u,
+          ],
+          referencePath,
+        );
+      },
+    );
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/supply-chain-and-cicd.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /Infrastructure, IaC, cloud, container, and orchestrator/u,
+            /named provider\/project baseline.*`not assessed`/iu,
+            /public exposure.*network boundar/iu,
+            /IAM.*workload identity/iu,
+            /secret.*state.*encryption/iu,
+            /privileged.*root.*host mount.*capabilit/iu,
+            /metadata.*network polic/iu,
+            /destructive drift/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("covers project runtime classes and complementary LLM risks", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      assertMatchesAll(
+        readProjectFile(skillPath),
+        [
+          /inventory.*project.*runtime classes.*native.*mobile.*embedded.*GenAI.*LLM.*RAG/iu,
+          /applicable class.*without.*named baseline.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/iu,
+          /native.*desktop.*mobile.*embedded.*unsafe.*FFI/iu,
+          /generative AI.*LLM.*RAG.*model.*agent/iu,
+        ],
+        skillPath,
+      );
+    });
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/common-threats.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /Native, desktop, mobile, embedded, and unsafe-code review/u,
+            /integer.*overflow.*bounds.*use-after-free.*double-free.*data race/iu,
+            /unsafe.*FFI.*ABI.*ownership.*lifetime/iu,
+            /IPC.*deep link.*permission.*update signing.*local storage.*transport/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/supply-chain-and-cicd.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /OWASP Top 10 for LLM Applications 2025/u,
+            /prompt injection/u,
+            /sensitive information disclosure/u,
+            /data and model poisoning/u,
+            /improper output handling/u,
+            /system prompt leakage/u,
+            /vector and embedding weaknesses/u,
+            /misinformation/u,
+            /unbounded consumption/u,
+            /complementary.*Agentic/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("keeps goat-security identity preconditions and sensitive hashes calibrated", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/identity-and-data.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /Authentication changes attacker preconditions; it does not make an unauthorized disclosure safe/u,
+            /session fixation.*rotation/iu,
+            /OIDC.*issuer.*audience.*nonce/u,
+            /MFA.*recovery/iu,
+            /cookie-authenticated.*CSRF/iu,
+            /adaptive password hash/iu,
+            /credential stuffing/u,
+            /MFA bypass/iu,
+            /Secure.*HttpOnly.*SameSite/u,
+            /API key.*service account.*scope.*rotation/iu,
+            /webhook.*signature.*freshness.*replay/iu,
+            /password hashes.*remain sensitive/iu,
+            /data classification.*minimization.*retention/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("makes goat-security compliance source-bound with complete dispositions", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      assertMatchesAll(
+        readMarkdownSection(skillPath, "Compliance Mode"),
+        [
+          /overlay on a selected Quick Scan or Full Assessment.*does not replace/iu,
+          /map controls only after.*Proof Gate/iu,
+          /authoritative clause or control source/u,
+          /framework name and version/u,
+          /jurisdiction, applicability, and effective date/u,
+          /ask for it and keep affected controls `not assessed`/u,
+        /every supplied control.*including.*not applicable/iu,
+        /compliant.*partially compliant.*non-compliant.*not assessed.*not applicable/u,
+          /MUST NOT claim certification/u,
+          /Compliance output.*control identifier.*source.*status.*evidence.*gap/iu,
+        ],
+        skillPath,
+      );
+    });
+    assertMatchesAll(
+      readMarkdownSection("docs/skills.md", "/goat-security"),
+      [
+        /Quick.*shared Proof Gate/iu,
+        /Compliance.*overlay.*Quick or Full/iu,
+      ],
+      "docs/skills.md",
+    );
+    assertMatchesAll(
+      readPresetPrompt("compliance-check"),
+      [
+        /row for every supplied control.*not applicable/iu,
+        /compliant, partially compliant, non-compliant, not assessed, or not applicable/u,
+        /do not claim certification/u,
+      ],
+      "dashboard preset compliance-check",
+    );
+  });
+
+  it("uses non-executing Git inspection and phase-aware persistence recovery", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      assertMatchesAll(
+        readProjectFile(skillPath),
+        [
+          /apply.*common-threats.*non-executing Git inspection profile.*before.*Git/iu,
+          /skill-local.*narrows.*durable-artifact convention.*MUST NOT use.*redact --output.*final/iu,
+          /failure before.*publish.*`persist-skipped`.*publish succeeds.*`persisted`.*cleanup fails.*`persisted-cleanup-pending`/isu,
+        ],
+        skillPath,
+      );
+    });
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/common-threats.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /non-executing Git inspection profile.*`--no-replace-objects`.*`--no-pager`.*`core\.fsmonitor=false`.*`--no-ext-diff`.*`--no-textconv`/isu,
+            /MUST NOT checkout.*clean\/smudge.*fetch.*submodule.*LFS/iu,
+            /verify.*inspected object bytes.*cited.*OID/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("hardens supply-chain verification and binds active testing to exact scope", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/supply-chain-and-cicd.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /full-length commit SHA or a verified immutable release/u,
+            /artifact attestations/u,
+            /SBOM/u,
+            /OIDC trust/u,
+            /cache poisoning/u,
+            /self-hosted runner/u,
+            /install or build-time execution does not require runtime reachability/u,
+            /exact targets/u,
+            /start, end, timezone, and allowed windows/u,
+            /allowed and prohibited techniques/u,
+            /rate, concurrency, and data limits/u,
+            /credential boundaries/u,
+            /emergency stop/u,
+            /escalation contact/u,
+            /authorization tuple changes, run the full gate again/u,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("covers upload resource abuse and race-safe path handling", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/file-upload-and-paths.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /post-decompression limits/u,
+            /storage quotas/u,
+            /download amplification/u,
+            /server-generated random names/u,
+            /antivirus, sandbox, or CDR/u,
+            /CSRF protection/u,
+            /outside the webroot or on a separate host/u,
+            /symlink and TOCTOU races/u,
+            /safe-open primitive/u,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("gives goat-security distinct quick and full reporting contracts", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      assertMatchesAll(
+        readMarkdownSection(skillPath, "Output Format"),
+        [
+          /Quick Scan output/u,
+          /Full Assessment output/u,
+          /retained\/withheld leads.*severity.*risk disposition/u,
+          /Quick Scan output.*confidence.*evidence status.*exploit status.*finding type.*severity.*risk disposition.*proof-class/iu,
+          /Quick Scan output.*accepted risk.*exception.*clause.*owner.*rationale.*expiry.*scope/iu,
+          /up to three verified chains; state `none` when no chain survives/u,
+          /recommended remediation/u,
+          /evidence needed/u,
+          /exception authority.*clause.*owner.*rationale.*expiry.*scope/iu,
+          /UNVERIFIED/u,
+          /HUMAN-PENDING/u,
+        ],
+        skillPath,
+      );
+      assertMatchesAll(readProjectFile(skillPath), [
+        /Quick and Full.*zero-findings defence.*what was scanned.*surfaces.*why/iu,
+        /material critical surface.*unassessed.*coverage-degraded.*MUST NOT recommend clearance/iu,
+        /posture-relevant applicable.*skipped.*coverage-degraded.*MUST NOT recommend clearance/iu,
+        /redact.*fresh private temporary.*atomic exclusive.*publish.*MUST NOT.*directly.*final.*persist-skipped/iu,
+      ], skillPath);
+    });
+    assertMatchesAll(
+      readPresetPrompt("security"),
+      [
+        /evidence needed/u,
+        /accepted risk.*exception.*clause.*owner.*rationale.*expiry.*scope/iu,
+      ],
+      "dashboard preset security",
+    );
   });
 
   it("keeps goat dispatcher from routing bare task paths to implementation", () => {

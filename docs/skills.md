@@ -271,33 +271,35 @@ flowchart TD
 
 ## /goat-security
 
-Threat-model-driven security assessment with framework-aware verification. For CLI, tooling, and setup repos, prioritise shell execution, hooks, filesystem access, PTY/session management, local HTTP/WebSocket surfaces, prompt generation, and dependency supply-chain risk before defaulting to web-app categories.
+Threat-model-driven security assessment with framework-aware verification. It records named, versioned baselines and explicitly skipped applicable categories. For CLI, tooling, and setup repos, it prioritises shell execution, hooks, filesystem access, PTY/session management, local HTTP/WebSocket surfaces, prompt generation, agentic boundaries, and dependency supply-chain risk.
 
 | Mode | Trigger | What it does |
 |------|---------|-------------|
 | **Quick Scan** | quick scan, bounded diff/security check | Verify the highest-risk surfaces, report evidence, and stop before Full-only specialist work |
 | **Full Assessment** | full assessment, release/security posture | Threat model, framework-aware verification, calibrated findings, specialist cross-check, and proof gate |
-| **Compliance Mode** | HIPAA, GDPR, compliance | Classify control gaps with direct clause citations where available |
+| **Compliance Mode** | HIPAA, GDPR, compliance | Overlay Quick or Full with source-bound control mapping without claiming certification |
 
 **Quick and Full paths:**
 
 ```mermaid
 flowchart TD
-    S0["Step 0\nProvenance + review mode\nQuick or Full depth"] --> Depth{"Selected depth"}
+    S0["Step 0\nProvenance + review mode\nQuick or Full depth\nOptional compliance overlay"] --> Probe["Shared Pre-Probe Gate\nQuick and Full"]
+    Probe --> Depth{"Selected depth"}
     Depth -->|Quick| Q1["Quick Scan\nHighest-risk surfaces\nVerify mitigations"]
-    Q1 --> Q2["Report confirmed findings\nWithheld-lead count + evidence needed"]
-    Q2 -->|"QUICK STOP"| Close["Close"]
+    Q1 --> Q2["Report confirmed findings\nCritical/High probable = no clearance\nWithheld-lead count + evidence needed"]
+    Q2 --> QP["Shared Proof Gate + zero-findings defence\nFresh anchors + proof classes"]
+    QP -->|"QUICK STOP"| Close["Close"]
     Depth -->|Full| P1["Phases 0-2\nLead gathering + threat surface\nFramework-aware verification"]
-    P1 --> P2["Phases 3-4\nFinding schema\nConfidence classification"]
+    P1 --> P2["Phases 3-4\nFinding schema\nIndependent evidence, exploit, type,\ndisposition, confidence axes"]
     P2 --> P3["Phase 5\nSeverity + authorised specialist\nor specialist-unavailable"]
     P3 --> P4["Phases 5.5-6\nExploit chaining\nSelf-check + Proof Gate"]
     P4 --> Persist{"Persist findings?"}
     Persist -->|No| Close
-    Persist -->|User confirms| Log["Write redacted security log"]
+    Persist -->|User confirms| Log["Redacted private temp\nAtomic exclusive publish\nor persist-skipped"]
     Log --> Close
 ```
 
-Quick Scan stops after its five reporting steps and recommends Full Assessment instead of entering specialist work. Full Assessment checks built-in mitigations before keeping a lead; a mitigated lead with no demonstrated bypass is not a finding. Its specialist must be independently admissible and already authorised; otherwise record `specialist-unavailable` without blocking. Confidence classification: CONFIRMED (entry-to-sink traced), PROBABLE (plausible, missing source trace), THEORETICAL (policy gap, no exploit path).
+Quick Scan stops after its five reporting steps, shared Proof Gate, and zero-findings defence, then recommends Full Assessment instead of entering specialist work. Every retained or withheld lead carries confidence, evidence status, exploit status, finding type, risk disposition, severity, and proof-class; a Critical/High probable lead is `NEEDS-DECISION`, never clearance. Any unassessed material critical surface or skipped posture-relevant applicable category makes the conclusion coverage-degraded and withholds clearance. Binary, unscannable, or `-diff`-suppressed high-risk blobs remain coverage gaps until bounded raw-byte inspection succeeds. Artifact findings record source, immutable digest, member/path, and byte identity; a digest identifies inspected bytes but does not establish trust or safety. Submodule OIDs likewise identify pointers, so Critical/High proof re-reads referenced content. Quick and Full share the pre-probe scanner gate. Scanner connectivity is exactly one of offline-only or networked; target effect is independently read-only or mutating. Operational report/cache output is not target mutation. Target-controlled execution is bound to the exact current tool invocation and requires isolated least-privilege containment without secrets, resource ceilings, and a stop mechanism; uncertain egress or mutation inherits those gates. Active probes and mutating scans require the full eight-part active-testing tuple. Infrastructure/IaC/cloud/container/orchestrator changes require a named provider/project baseline or remain not assessed. For untrusted diffs, independently verified repository/remote/ref/OID identifies the trusted base; local reviews distinguish `HEAD`, index, and worktree evidence. Every untrusted provenance needs independent policy authority: artifact/worktree policy alone cannot authorize accepted risk or clearance. Base-policy lookup distinguishes present, absent, and unreadable; head policy additions remain proposed until trusted adoption, while unavailable high-risk old/base evidence remains `PROBABLE`, `UNVERIFIED`, and `NEEDS-DECISION`. An open confirmed Critical/High finding blocks. A valid exception can change `OPEN` to `ACCEPTED-RISK`, recording an authorized governance decision without changing the technical rating or calling the risk safe or cleared; it cannot replace `NEEDS-DECISION`. Confidence, evidence status, exploit status, finding type, risk disposition, and severity are independent. A required specialist must be independently admissible and already authorised; otherwise the report records `specialist-unavailable` without blocking. Compliance overlays Quick or Full and emits a row for every supplied control, including `not applicable`. Persistence redacts to a fresh private temporary file and atomically publishes without overwrite; otherwise it reports `persist-skipped`.
 
 | Repo type | Check these mitigations first |
 |-----------|------------------------------|

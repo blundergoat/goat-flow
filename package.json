@@ -49,7 +49,7 @@
     ]
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
+    "build": "npm run check:managed-hook-contract && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
     "build:dashboard": "tsc -p tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs",
     "test": "npm run test:fast",
     "test:fast": "node scripts/run-tests.mjs fast",
@@ -72,6 +72,8 @@
     "check-instruction-parity": "node scripts/check-instruction-parity.mjs",
     "check-versions": "node scripts/check-versions.mjs",
     "check-package-links": "node scripts/check-package-readme-links.mjs",
+    "generate:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --write",
+    "check:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --check",
     "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "prepublishOnly": "npm run publish:check",

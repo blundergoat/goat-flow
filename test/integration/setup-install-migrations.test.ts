@@ -1,15 +1,15 @@
 /**
- * setup --apply installer upgrade migrations: legacy artifacts are migrated or pruned
- * without overwriting target collisions - tasks workspace/config to plans, learning-loop
- * dirs, hook-lib content and fat per-agent hook copies, enabled gruff hook registrations,
- * Codex permission entries, stale Claude MultiEdit/unmatched-form deny rules, legacy skill docs, 1.8.0
- * split guard hooks and registrations, and stale per-skill reference files.
+ * Exercises setup migrations that remove retired managed state while preserving user-owned files and settings.
+ * Use when installer cleanup or hook convergence changes what returning users receive during an upgrade.
+ * Fixtures cover historical layouts, provider registrations, config aliases, and repeated installation.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { getAgentProfiles } from "../../src/cli/agents/registry.js";
+import { listHookSpecs } from "../../src/cli/server/hooks-registry.js";
 import {
   makeTempProject,
   POST_TURN_SAFETY_TIMEOUT_SECONDS,
@@ -65,6 +65,7 @@ describe("setup --apply installer upgrade migrations", () => {
                     command: "bash .goat-flow/hooks/post-turn-safety.sh",
                     timeout: 60,
                   },
+                  { type: "command", command: "node user-stop-hook.js" },
                 ],
               },
               {
@@ -106,12 +107,12 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.doesNotMatch(gitignore, /plan-guard-state/u);
     assert.doesNotMatch(settings, /plan-checkbox-guard\.sh/u);
     assert.match(settings, /post-turn-safety\.sh/u);
+    assert.match(settings, /user-stop-hook\.js/u);
     assert.equal(
       readClaudePostTurnSafetyTimeout(root),
       POST_TURN_SAFETY_TIMEOUT_SECONDS,
     );
   });
-
   // Covers the same prune on CRLF config a Windows user committed: writes it and expects a clean result.
   it("prunes retired plan guard config from CRLF config files", () => {
     const root = makeTempProject();
@@ -653,6 +654,51 @@ describe("setup --apply installer upgrade migrations", () => {
     );
     assert.match(config, /deny-dangerous:\n    enabled: false/);
   });
+
+  const disabledHookSpecs = listHookSpecs();
+  const managedScriptFiles = [
+    ...new Set(disabledHookSpecs.flatMap((hookSpec) => hookSpec.scriptFiles)),
+  ];
+  const disabledConfig =
+    "hooks:\n  deny-dangerous:\n    enabled: false\n  gruff-code-quality:\n    enabled: false\n  post-turn-safety:\n    enabled: false\n";
+  // Each named fixture writes an all-off config and launches setup twice so provider defaults cannot silently return.
+  for (const agentProfile of getAgentProfiles()) {
+    it(`${agentProfile.id} keeps disabled hooks installed and inert`, () => {
+      const consumerRoot = makeTempProject();
+      const { id: agentId, hookConfigFile, hooksDir } = agentProfile;
+      mkdirSync(join(consumerRoot, ".goat-flow"), { recursive: true });
+      writeFileSync(
+        join(consumerRoot, ".goat-flow", "config.yaml"),
+        disabledConfig,
+      );
+      const firstInstall = runInstaller(consumerRoot, "--agent", agentId);
+      assert.equal(
+        firstInstall.status,
+        0,
+        firstInstall.stderr || firstInstall.stdout,
+      );
+      assert.ok(hookConfigFile && hooksDir);
+      const hookConfigPath = join(consumerRoot, hookConfigFile);
+      const firstHookConfig = readFileSync(hookConfigPath, "utf-8");
+      assert.equal(
+        disabledHookSpecs.some((hookSpec) =>
+          firstHookConfig.includes(hookSpec.primaryScript),
+        ),
+        false,
+        `${agentId} restored a hook the user disabled`,
+      );
+      assert.equal(
+        managedScriptFiles.every((file) =>
+          existsSync(join(consumerRoot, hooksDir, file)),
+        ),
+        true,
+        `${agentId} removed files needed by a later UI toggle`,
+      );
+      const repeatedInstall = runInstaller(consumerRoot, "--agent", agentId);
+      assert.equal(repeatedInstall.status, 0, repeatedInstall.stderr);
+      assert.equal(readFileSync(hookConfigPath, "utf-8"), firstHookConfig);
+    });
+  }
 
   it("prunes stale per-skill reference files during upgrades", () => {
     const root = makeTempProject();

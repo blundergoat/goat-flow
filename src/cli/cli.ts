@@ -85,7 +85,7 @@ Flags:
   --discard-open    Plans time stop: discard an interrupted span without inventing an end
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
   --dry-run         Install/setup: preview managed template drift without changing the target
-  --force           Install/setup --apply: overwrite managed seeds; plans export: regenerate output
+  --force           Install/setup --apply: replace inspected system-owned conflicts; plans export: regenerate output
   --update-config-version  Install: update only the version field in existing config.yaml
   --clean-deprecated       Install: remove deprecated skill directories
   --verbose         Show per-check details
