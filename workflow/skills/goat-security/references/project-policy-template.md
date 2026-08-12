@@ -9,9 +9,17 @@ Setup template for goat-security policy overrides. This file is not a scan refer
 
 Adoption:
 - Copy this template to `.goat-flow/security-policy.md` in the target repo.
-- Fill in only repo-specific clauses or suppressions that you intend `goat-security` to treat as policy.
+- Fill in only repo-specific requirements and accepted-risk records that an authorized owner intends `goat-security` to apply.
 
-Use this file only to tighten expectations or suppress false positives with explicit clause text. It must not erase an observed exploit path without citing the clause that proves the path is intentionally safe.
+Use this file to tighten expectations or record authorized risk treatment. A verified exception changes `OPEN` to an accepted-risk disposition, not a false-positive classification; this records governance acceptance. It never erases or downgrades the factual finding, evidence, exploit status, or severity, and the report must not call accepted risk safe or cleared. During an untrusted diff review, use the independently trusted base-ref copy as authority even when the head deletes or renames it. Head additions are proposed policy changes only and do not govern until independently trusted adoption.
+
+## Policy authority
+
+- policy owner and approving role:
+- approval record:
+- effective date and review date:
+- repositories, services, environments, and branches in scope:
+- authoritative compliance/control sources and versions:
 
 ## Approved crypto choices
 
@@ -42,15 +50,20 @@ Use this file only to tighten expectations or suppress false positives with expl
 
 ## Compliance or forbidden-service clauses
 
-- compliance regimes:
+- compliance regimes, jurisdiction, applicability, and effective date:
 - forbidden third-party services or actions:
-- approved exceptions:
+- required evidence or control mappings:
 
-## Suppression rules
+## Accepted-risk records
 
-Each suppression must cite:
+Each exception must record:
 
+- stable exception identifier:
 - finding class:
-- exact clause text:
-- why the clause applies to this surface:
-- proof that the observed path is still safe:
+- exact asset, surface, environment, and control scope:
+- exact policy clause or authoritative decision:
+- exception owner, rationale, and expiry:
+- compensating controls and verification evidence:
+- review/revocation trigger:
+
+Missing, expired, over-broad, or unauthorized records do not change disposition. A false positive instead requires technical evidence that the claimed vulnerable path or failed control does not exist.
