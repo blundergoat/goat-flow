@@ -31,7 +31,7 @@ Package audits are lead generators. Before running one, apply the core skill's s
 
 ## Infrastructure, IaC, cloud, container, and orchestrator review
 
-Select a named provider/project baseline; if none is available, mark the surface `not assessed`. Check public exposure and network boundaries, IAM and workload identity, secrets and state-file handling, encryption, privileged/root workloads, host mounts and capabilities, metadata-service access and network policy, and destructive drift between declared and deployed state. An infrastructure-only project with a posture-relevant unassessed category is coverage-degraded, not cleared.
+For every applicable layer—IaC tool, provider/cloud, container runtime/image, and orchestrator/platform—record a separate named/versioned baseline and currency evidence/status. An omitted applicable layer is `not assessed` and `coverage-degraded`; MUST NOT recommend clearance. Check public exposure and network boundaries, IAM and workload identity, secrets and state-file handling, encryption, privileged/root workloads, host mounts and capabilities, metadata-service access and network policy, and destructive drift between declared and deployed state. An infrastructure-only project with a posture-relevant unassessed category is coverage-degraded, not cleared.
 
 ## Local server, PTY, and shell surfaces
 
@@ -39,6 +39,25 @@ Select a named provider/project baseline; if none is available, mark the surface
 - Require high-entropy, scoped session credentials before browser-controlled input reaches a shell, PTY, terminal runner, or privileged filesystem operation.
 - Reject unsafe command interpolation, attacker-controlled destructive paths, predictable temp files, and silent overwrites of tracked configuration.
 - Verify exit codes and the evidence behind success claims.
+
+## Generative AI and LLM application baseline
+
+This bundled checklist maps to **OWASP Top 10 for LLM Applications 2025**. Record that version and verify the authoritative source before calling it current. Select or explicitly skip:
+
+- prompt injection across user, retrieved, multimodal, and tool-returned content
+- sensitive information disclosure across prompts, outputs, logs, training, and retrieval
+- model/component/data supply chain and data and model poisoning
+- improper output handling before code, templates, queries, tools, or downstream systems
+- excessive agency; system prompt leakage without treating the prompt as a security boundary
+- vector and embedding weaknesses, retrieval authorization, tenant isolation, and poisoning
+- misinformation where downstream trust creates security impact
+- unbounded consumption of tokens, compute, storage, tools, or paid services
+
+This baseline is complementary to the Agentic baseline: use both when an LLM application can plan, act, call tools, retain memory, or delegate.
+
+## Non-generative ML and model baseline
+
+Select a named, authoritative complementary baseline for non-generative ML/model systems; general application and LLM baselines do not cover this class. Assess adversarial evasion, model extraction, model inversion, membership inference, training-data/model poisoning, unsafe serialization, model provenance/integrity, query/rate controls, and security impact from confidence-score or feature leakage. If no current baseline can be verified under the core authority/currency gate, the class is `not assessed` and `coverage-degraded`; MUST NOT recommend clearance.
 
 ## Agentic baseline
 

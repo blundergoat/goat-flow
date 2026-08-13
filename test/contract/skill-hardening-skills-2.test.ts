@@ -43,18 +43,26 @@ function readMarkdownSubsection(
 }
 
 // Keep preset-specific assertions from passing on matching text in an unrelated catalog entry.
-function readPresetPrompt(presetId: string): string {
+function readPresetStringField(
+  presetId: string,
+  field: "desc" | "prompt",
+): string {
   const presets = JSON.parse(
     readProjectFile("src/dashboard/preset-prompts.json"),
   ) as Array<Record<string, unknown>>;
   const preset = presets.find((candidate) => candidate.id === presetId);
   assert.ok(preset, `missing dashboard preset ${presetId}`);
   assert.equal(
-    typeof preset.prompt,
+    typeof preset[field],
     "string",
-    `dashboard preset ${presetId} is missing its prompt`,
+    `dashboard preset ${presetId} is missing ${field}`,
   );
-  return preset.prompt as string;
+  return preset[field] as string;
+}
+
+// Read prompt copy through the preset-scoped field guard above.
+function readPresetPrompt(presetId: string): string {
+  return readPresetStringField(presetId, "prompt");
 }
 
 describe("skill hardening contracts: debug, qa, critique, security, dispatcher (2/2)", () => {
@@ -584,6 +592,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
           /Before stopping.*shared Proof Gate.*Phase 6.*does not enter.*Full Assessment/iu,
           /every retained or withheld lead.*confidence.*evidence status.*exploit status.*finding type.*risk disposition.*severity/iu,
           /every retained or withheld lead.*proof-class/iu,
+          /every retained or withheld lead.*file \+ semantic anchor.*authority.*entry→sink.*requirement gap.*recommended remediation.*proof-of-fix/iu,
           /Critical\/High `PROBABLE`.*`NEEDS-DECISION`/u,
           /MUST NOT recommend clearance/iu,
         ],
@@ -650,6 +659,15 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assertMatchesAll(
+        readMarkdownSection(skillPath, "Step 0 - Intake"),
+        [
+          /exception.*identifier.*trusted policy source.*ref.*OID.*anchor.*named authorized approver.*independently trusted approval evidence.*owner.*rationale.*expiry.*verified scope match/iu,
+          /authorized, in-scope, unexpired exception.*valid only.*independently trusted evidence.*authenticat.*named approver.*policy-authorized role.*approval time.*bind.*identifier.*clause\/decision.*exact scope.*expiry/iu,
+          /mismatch.*unverifiable.*identity.*role.*binding.*retain.*`OPEN`/iu,
+        ],
+        skillPath,
+      );
+      assertMatchesAll(
         skillGuidance,
         [
           /load the policy from the trusted base ref/u,
@@ -658,14 +676,15 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
           /check.*policy.*trusted base.*even when absent at head/iu,
           /head.*deletion.*cannot remove governing base controls/iu,
           /Establish trusted-base provenance.*repository identity.*remote\/ref.*immutable OID.*independent.*head/iu,
-          /every untrusted provenance.*policy authority.*independently trusted/iu,
+          /every untrusted provenance.*independently trusted policy authority/iu,
           /worktree\/artifact policy.*evidence only.*MUST NOT authorize.*`ACCEPTED-RISK`.*clearance/iu,
           /trusted base cannot be resolved.*policy authority.*`UNVERIFIED`.*MUST NOT recommend clearance/iu,
           /base trust cannot be established.*policy authority.*`UNVERIFIED`.*MUST NOT recommend clearance/iu,
           /policy lookup.*confirmed present.*confirmed absent.*unreadable/iu,
           /unreadable.*policy authority.*`UNVERIFIED`.*MUST NOT recommend clearance/iu,
           /accepted risk.*MUST NOT erase or downgrade the factual finding/u,
-          /authorized, in-scope, and unexpired.*otherwise.*`OPEN`/iu,
+          /exception.*identifier.*trusted policy source.*ref.*OID.*anchor.*approval evidence.*owner.*rationale.*expiry.*scope/iu,
+          /mismatch.*unverifiable.*identity.*role.*binding.*retains.*`OPEN`/iu,
           /exception.*only.*`OPEN`.*`ACCEPTED-RISK`.*MUST NOT replace `NEEDS-DECISION`/iu,
           /connectivity.*`offline-only`.*`networked`.*target effect.*`read-only`.*`mutating`/iu,
           /connectivity values.*mutually exclusive.*effect.*independent/iu,
@@ -680,8 +699,8 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
           /active probe.*full eight-part.*authorization tuple.*regardless.*network.*mutation/iu,
           /stdout.*no-write.*report\/cache writes.*isolated temporary path.*outside.*assessed target.*approval.*durable text.*redact.*withhold/iu,
           /report\/cache writes.*operational output.*not target mutation/iu,
-          /endpoint, submitted data, credentials, and trusted configuration/u,
-          /explicit authorization before network submission/u,
+          /endpoint.*data.*credentials.*trusted configuration/u,
+          /explicit authorization before.*submission/u,
           /lockfile-only.*does not prove no egress/iu,
           /MUST NOT install a missing scanner/u,
           /MUST NOT run audit `fix` modes/u,
@@ -697,15 +716,43 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       ),
       (referencePath) => {
         const policyTemplate = readProjectFile(referencePath);
+        const acceptedRiskRecords = readMarkdownSection(
+          referencePath,
+          "Accepted-risk records",
+        );
         assertMatchesAll(
           policyTemplate,
+          [/accepted-risk disposition, not a false-positive classification/u],
+          referencePath,
+        );
+        assertMatchesAll(
+          acceptedRiskRecords,
           [
-            /exception owner, rationale, and expiry/u,
-            /accepted-risk disposition, not a false-positive classification/u,
+            /stable exception identifier/iu,
+            /trusted policy source\/ref\/OID\/anchor/iu,
+            /named authorized approver/iu,
+            /independently trusted approval evidence/iu,
+            /exception owner/iu,
+            /rationale/iu,
+            /expiry/iu,
+            /verified scope match/iu,
+            /approval evidence.*authenticate.*named approver.*bind.*identifier.*clause\/decision.*scope.*expiry/iu,
+            /trusted.*evidence.*named approver.*policy-authorized role.*approval time/iu,
+            /mismatch.*unverifiabl.*bound.*`OPEN`/iu,
           ],
           referencePath,
         );
       },
+    );
+    assert.match(
+      readMarkdownSection("docs/skills.md", "/goat-security"),
+      /approval evidence.*authenticate.*named approver.*policy-authorized role.*approval time.*bind.*identifier.*clause\/decision.*scope.*expiry/iu,
+      "docs/skills.md",
+    );
+    assert.match(
+      readPresetPrompt("security"),
+      /approval evidence.*authenticate.*named approver.*policy-authorized role.*approval time.*bind.*identifier.*clause\/decision.*scope.*expiry/iu,
+      "dashboard preset security",
     );
   });
 
@@ -746,6 +793,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       assertMatchesAll(
         severity,
         [
+          /every assessment mode.*map posture/iu,
           /Critical\/High `CONFIRMED` \+ `OPEN`.*block/u,
           /Critical\/High `CONFIRMED` \+ `ACCEPTED-RISK`.*unchanged.*authorized governance.*MUST NOT call.*safe.*clear/iu,
           /Critical\/High `PROBABLE`.*`NEEDS-DECISION`/u,
@@ -776,7 +824,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       assertMatchesAll(
         skillGuidance,
         [
-          /Record each selected baseline name and version/u,
+          /For each applicable class.*record.*named\/versioned baseline/iu,
           /explicitly list applicable categories skipped/iu,
           /added.*modified.*deleted.*renamed.*mode\/type-changed.*symlink.*submodule/u,
           /deleted or renamed-away control.*trusted base-ref anchor/u,
@@ -807,6 +855,8 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
           [
             /OWASP Top 10:2025/u,
             /OWASP API Security Top 10 2023/u,
+            /application and API surfaces.*select both baselines.*separate currency evidence\/status/iu,
+            /omitting either.*`not assessed`.*`coverage-degraded`/iu,
             /injection/u,
             /cross-site scripting/u,
             /server-side request forgery/u,
@@ -849,8 +899,8 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         "references/supply-chain-and-cicd.md",
       ),
       (referencePath) => {
-      assertMatchesAll(
-        readProjectFile(referencePath),
+        assertMatchesAll(
+          readProjectFile(referencePath),
           [
             /OWASP Agentic Top 10 2026/u,
             /goal hijack/u,
@@ -876,7 +926,8 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
           readProjectFile(referencePath),
           [
             /Infrastructure, IaC, cloud, container, and orchestrator/u,
-            /named provider\/project baseline.*`not assessed`/iu,
+            /every applicable layer.*separate named\/versioned baseline.*currency evidence\/status/iu,
+            /omitted applicable layer.*`not assessed`.*`coverage-degraded`/iu,
             /public exposure.*network boundar/iu,
             /IAM.*workload identity/iu,
             /secret.*state.*encryption/iu,
@@ -888,17 +939,40 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         );
       },
     );
+    assert.match(
+      readMarkdownSection("docs/skills.md", "/goat-security"),
+      /application and API surfaces.*both baselines.*separate currency evidence\/status/iu,
+      "docs/skills.md",
+    );
+    assert.match(
+      readPresetPrompt("security"),
+      /application and API surfaces.*both baselines.*separate currency evidence\/status/iu,
+      "dashboard preset security",
+    );
   });
 
   it("covers project runtime classes and complementary LLM risks", () => {
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       assertMatchesAll(
+        readMarkdownSection(skillPath, "Step 0 - Intake"),
+        [
+          /every project\/runtime class.*applicable.*not applicable.*not assessed.*scope\/deployment evidence/iu,
+          /unresolved or inferred applicability.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/iu,
+          /baseline identity.*currency.*independently trusted authoritative source/iu,
+          /target\/head.*baseline.*currency claims.*evidence only/iu,
+          /authority-unverified.*baseline.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/iu,
+        ],
+        skillPath,
+      );
+      assertMatchesAll(
         readProjectFile(skillPath),
         [
-          /inventory.*project.*runtime classes.*native.*mobile.*embedded.*GenAI.*LLM.*RAG/iu,
-          /applicable class.*without.*named baseline.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/iu,
+          /inventory.*project.*runtime class.*native.*mobile.*embedded.*GenAI.*LLM.*RAG/iu,
+          /Inventory.*project\/runtime class.*other\/unknown/iu,
+          /missing, stale, or currency-unverified.*baseline.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/iu,
           /native.*desktop.*mobile.*embedded.*unsafe.*FFI/iu,
           /generative AI.*LLM.*RAG.*model.*agent/iu,
+          /non-generative ML\/model.*`supply-chain-and-cicd\.md`/iu,
         ],
         skillPath,
       );
@@ -940,10 +1014,55 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
             /misinformation/u,
             /unbounded consumption/u,
             /complementary.*Agentic/iu,
+            /Non-generative ML and model baseline/u,
+            /named.*authoritative.*complementary baseline/iu,
+            /adversarial evasion.*model extraction.*model inversion.*membership inference.*poisoning/iu,
+            /every applicable layer.*IaC.*provider\/cloud.*container.*orchestrator.*separate named\/versioned baseline.*currency evidence\/status/iu,
+            /omitted applicable layer.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/iu,
           ],
           referencePath,
         );
       },
+    );
+    assert.match(
+      readMarkdownSection("docs/skills.md", "/goat-security"),
+      /every applicable infrastructure layer.*separate named\/versioned baseline.*currency evidence\/status/iu,
+      "docs/skills.md",
+    );
+    assert.match(
+      readPresetPrompt("security"),
+      /every applicable infrastructure layer.*separate named\/versioned baseline.*currency evidence\/status/iu,
+      "dashboard preset security",
+    );
+    assert.match(
+      readMarkdownSection("docs/skills.md", "/goat-security"),
+      /baseline identity.*currency.*independently trusted authoritative source.*target\/head.*evidence only/iu,
+      "docs/skills.md",
+    );
+    assert.match(
+      readPresetPrompt("security"),
+      /baseline identity.*currency.*independently trusted authoritative source.*target\/head.*evidence only/iu,
+      "dashboard preset security",
+    );
+    assert.match(
+      readMarkdownSection("docs/skills.md", "/goat-security"),
+      /non-generative ML.*adversarial evasion.*model extraction.*membership inference.*poisoning/iu,
+      "docs/skills.md",
+    );
+    assert.match(
+      readPresetPrompt("security"),
+      /non-generative ML.*adversarial evasion.*model extraction.*membership inference.*poisoning/iu,
+      "dashboard preset security",
+    );
+    assert.match(
+      readMarkdownSection("docs/skills.md", "/goat-security"),
+      /every runtime class.*applicable.*not applicable.*not assessed.*scope\/deployment evidence.*unresolved or inferred applicability.*not assessed.*coverage-degraded.*clearance/iu,
+      "docs/skills.md",
+    );
+    assert.match(
+      readPresetPrompt("security"),
+      /every runtime class.*applicable.*not applicable.*not assessed.*scope\/deployment evidence.*unresolved or inferred applicability.*not assessed.*coverage-degraded.*clearance/iu,
+      "dashboard preset security",
     );
   });
 
@@ -988,10 +1107,16 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
           /framework name and version/u,
           /jurisdiction, applicability, and effective date/u,
           /ask for it and keep affected controls `not assessed`/u,
-        /every supplied control.*including.*not applicable/iu,
-        /compliant.*partially compliant.*non-compliant.*not assessed.*not applicable/u,
+          /every supplied control.*including.*not applicable/iu,
+          /compliant.*partially compliant.*non-compliant.*not assessed.*not applicable/u,
+          /every disposition except `not assessed`.*current `OBSERVED` evidence.*applicable control authority/iu,
+          /`partially compliant`.*observed satisfied portions.*observed gap/iu,
+          /`non-compliant`.*observed gap/iu,
+          /unresolved or inferred satisfaction, gap, or applicability.*`not assessed`/iu,
           /MUST NOT claim certification/u,
           /Compliance output.*control identifier.*source.*status.*evidence.*gap/iu,
+          /Compliance output.*evidence authority\/status\/proof-class/iu,
+          /Compliance output.*jurisdiction.*effective date/iu,
         ],
         skillPath,
       );
@@ -1001,6 +1126,8 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       [
         /Quick.*shared Proof Gate/iu,
         /Compliance.*overlay.*Quick or Full/iu,
+        /every disposition except `not assessed`.*current `OBSERVED` evidence.*applicable control authority/iu,
+        /Compliance rows.*evidence authority.*evidence status.*proof-class/iu,
       ],
       "docs/skills.md",
     );
@@ -1009,6 +1136,12 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       [
         /row for every supplied control.*not applicable/iu,
         /compliant, partially compliant, non-compliant, not assessed, or not applicable/u,
+        /every disposition except not assessed.*current observed evidence.*applicable control authority/iu,
+        /partially compliant.*observed satisfied portions.*observed gap/iu,
+        /non-compliant.*observed gap/iu,
+        /unresolved or inferred satisfaction, gap, or applicability.*not assessed/iu,
+        /evidence authority, evidence status, and proof-class/iu,
+        /Report.*jurisdiction.*effective date/iu,
         /do not claim certification/u,
       ],
       "dashboard preset compliance-check",
@@ -1017,11 +1150,20 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
 
   it("uses non-executing Git inspection and phase-aware persistence recovery", () => {
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      assert.match(
+        readMarkdownSection(skillPath, "Step 0 - Intake"),
+        /Before any Git read.*common-threats.*non-executing profile/iu,
+        skillPath,
+      );
       assertMatchesAll(
         readProjectFile(skillPath),
         [
           /apply.*common-threats.*non-executing Git inspection profile.*before.*Git/iu,
+          /networked tools.*endpoint.*data.*credentials.*trusted configuration.*explicit authorization before submission.*effective destination/isu,
+          /DNS\/redirects.*approved scope.*before forwarding.*stop\/re-authorize.*change/iu,
           /skill-local.*narrows.*durable-artifact convention.*MUST NOT use.*redact --output.*final/iu,
+          /untrusted provenance.*MUST NOT use.*source-checkout redactor fallback.*independently trusted absolute installed binary.*`persist-skipped`/iu,
+          /write approval.*MUST NOT satisfy.*target-controlled execution authorization/iu,
           /failure before.*publish.*`persist-skipped`.*publish succeeds.*`persisted`.*cleanup fails.*`persisted-cleanup-pending`/isu,
         ],
         skillPath,
@@ -1036,13 +1178,66 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         assertMatchesAll(
           readProjectFile(referencePath),
           [
-            /non-executing Git inspection profile.*`--no-replace-objects`.*`--no-pager`.*`core\.fsmonitor=false`.*`--no-ext-diff`.*`--no-textconv`/isu,
+            /non-executing Git inspection profile.*GIT_NO_LAZY_FETCH=1.*--no-replace-objects.*--no-pager.*core\.fsmonitor=false.*--no-ext-diff.*--no-textconv/isu,
+            /GIT_NO_LAZY_FETCH=1.*GIT_OPTIONAL_LOCKS=0.*git/iu,
+            /trusted absolute Git binary.*clean, allowlisted environment.*clear every inherited `GIT_\*`/iu,
+            /GIT_DIR.*GIT_WORK_TREE.*GIT_COMMON_DIR.*GIT_INDEX_FILE.*GIT_OBJECT_DIRECTORY.*GIT_ALTERNATE_OBJECT_DIRECTORIES.*GIT_EXEC_PATH.*GIT_CONFIG_/u,
+            /GIT_CONFIG_NOSYSTEM=1.*GIT_CONFIG_GLOBAL=\/dev\/null/u,
+            /before invoking Git.*non-Git.*repository config.*includes.*alternates/iu,
+            /before invoking Git.*non-Git no-follow.*gitfile.*commondir.*resolved common directory.*bind.*--git-dir.*--work-tree/iu,
+            /resolved Git and common directories.*config.*includes.*alternates.*`UNVERIFIED`.*Git MUST NOT run/iu,
+            /allowlisted non-executing plumbing/iu,
+            /signature verification.*configured helper.*target-controlled execution.*independently pinned helper.*Shared Pre-Probe Gate/iu,
+            /core\.fsmonitor=false.*core\.hooksPath=\/dev\/null/iu,
+            /pin.*--git-dir.*--work-tree.*independently validated/iu,
+            /paths.*repository-local config.*alternates.*cannot be validated.*`UNVERIFIED`.*MUST NOT recommend clearance/iu,
+            /MUST NOT run worktree-sensitive Git diff\/status.*attributes.*filter drivers.*independently neutralized/iu,
+            /committed\/index objects.*fixed plumbing.*worktree bytes.*non-Git read-only primitives.*conversion-dependent.*`UNVERIFIED`/iu,
+            /before every worktree content read.*no-follow.*classification/iu,
+            /symlink.*link text\/object metadata only/iu,
+            /escape.*validated worktree.*`UNVERIFIED`/iu,
+            /descriptor-anchored.*race-safe.*no-follow.*open/iu,
+            /post-open.*identity\/type/iu,
+            /cannot be proven.*`UNVERIFIED`/iu,
             /MUST NOT checkout.*clean\/smudge.*fetch.*submodule.*LFS/iu,
+            /missing objects.*`UNVERIFIED`.*MUST NOT fetch/iu,
             /verify.*inspected object bytes.*cited.*OID/iu,
           ],
           referencePath,
         );
       },
+    );
+    assertMatchesAll(
+      readMarkdownSection("docs/skills.md", "/goat-security"),
+      [
+        /trusted absolute Git binary.*clean, allowlisted environment.*inherited `GIT_\*`/iu,
+        /worktree-sensitive Git diff\/status.*filters.*neutralized.*worktree bytes.*non-Git read-only/iu,
+        /no-follow.*before every worktree content read.*symlink.*link text.*escape.*`UNVERIFIED`/iu,
+        /descriptor-anchored.*race-safe.*no-follow.*post-open.*identity\/type.*`UNVERIFIED`/iu,
+        /before invoking Git.*non-Git.*repository config.*includes.*alternates/iu,
+        /before invoking Git.*non-Git no-follow.*gitfile.*commondir.*resolved common directory.*bind.*Git-dir.*work-tree/iu,
+        /signature verification.*configured helper.*target-controlled execution.*independently pinned helper/iu,
+        /untrusted provenance.*source-checkout redactor fallback.*independently trusted absolute installed binary.*persist-skipped/iu,
+        /write approval.*target-controlled execution authorization/iu,
+        /effective destination.*DNS\/redirects.*approved scope.*stop.*re-authoriz/iu,
+      ],
+      "docs/skills.md",
+    );
+    assertMatchesAll(
+      readPresetPrompt("security"),
+      [
+        /trusted absolute Git binary.*clean, allowlisted environment.*inherited GIT_\*/iu,
+        /worktree-sensitive Git diff\/status.*filters.*neutralized.*worktree bytes.*non-Git read-only/iu,
+        /no-follow.*before every worktree content read.*symlink.*link text.*escape.*UNVERIFIED/iu,
+        /descriptor-anchored.*race-safe.*no-follow.*post-open.*identity\/type.*UNVERIFIED/iu,
+        /before invoking Git.*non-Git.*repository config.*includes.*alternates/iu,
+        /before invoking Git.*non-Git no-follow.*gitfile.*commondir.*resolved common directory.*bind.*git-dir.*work-tree/iu,
+        /signature verification.*configured helper.*target-controlled execution.*independently pinned helper/iu,
+        /untrusted provenance.*source-checkout redactor fallback.*independently trusted absolute installed binary.*persist-skipped/iu,
+        /write approval.*target-controlled execution authorization/iu,
+        /effective destination.*DNS\/redirects.*approved scope.*stop.*re-authorize/iu,
+      ],
+      "dashboard preset security",
     );
   });
 
@@ -1113,30 +1308,87 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
           /Full Assessment output/u,
           /retained\/withheld leads.*severity.*risk disposition/u,
           /Quick Scan output.*confidence.*evidence status.*exploit status.*finding type.*severity.*risk disposition.*proof-class/iu,
-          /Quick Scan output.*accepted risk.*exception.*clause.*owner.*rationale.*expiry.*scope/iu,
+          /Quick Scan output.*named\/versioned baselines.*currency.*selected\/skipped categories/iu,
+          /Quick Scan output.*class applicability\/evidence/iu,
+          /Quick Scan output.*pre-probe record.*tool\/run.*connectivity.*target effect.*target-controlled execution.*active-probing.*destination.*submitted data.*credentials.*authorization\/withheld/iu,
+          /Quick Scan output.*file \+ semantic anchor.*authority.*entry→sink.*requirement gap.*recommended remediation.*proof-of-fix/iu,
+          /Quick Scan output.*accepted risk.*identifier.*clause.*trusted policy source.*ref.*OID.*anchor.*independently trusted approval evidence.*owner.*named authorized approver.*rationale.*expiry.*scope/iu,
           /up to three verified chains; state `none` when no chain survives/u,
-          /recommended remediation/u,
           /evidence needed/u,
-          /exception authority.*clause.*owner.*rationale.*expiry.*scope/iu,
+          /exception authority.*identifier.*clause.*trusted policy source.*ref.*OID.*anchor.*independently trusted approval evidence.*owner.*named authorized approver.*rationale.*expiry.*scope/iu,
+          /Baselines:.*name\/version.*currency evidence.*status/iu,
           /UNVERIFIED/u,
           /HUMAN-PENDING/u,
+          /Positive observations.*authority.*evidence status.*proof-class.*only `OBSERVED` may support clearance.*`INFERRED`\/`UNVERIFIED`\/`HUMAN-PENDING` MUST NOT/isu,
+          /Class-dispositions:.*class.*applicable.*not-applicable.*not-assessed.*scope\/deployment-evidence.*baseline-name\/version.*currency-evidence\/status/iu,
         ],
         skillPath,
       );
-      assertMatchesAll(readProjectFile(skillPath), [
-        /Quick and Full.*zero-findings defence.*what was scanned.*surfaces.*why/iu,
-        /material critical surface.*unassessed.*coverage-degraded.*MUST NOT recommend clearance/iu,
-        /posture-relevant applicable.*skipped.*coverage-degraded.*MUST NOT recommend clearance/iu,
-        /redact.*fresh private temporary.*atomic exclusive.*publish.*MUST NOT.*directly.*final.*persist-skipped/iu,
-      ], skillPath);
+      assertMatchesAll(
+        readProjectFile(skillPath),
+        [
+          /Quick and Full.*zero-findings defence.*what was scanned.*surfaces.*why/iu,
+          /material critical surface.*unassessed.*coverage-degraded.*MUST NOT recommend clearance/iu,
+          /posture-relevant applicable.*skipped.*coverage-degraded.*MUST NOT recommend clearance/iu,
+          /redact.*fresh private temporary.*atomic exclusive.*publish/iu,
+          /MUST NOT use.*overwrite-capable.*final path/iu,
+          /write approval.*resolved destination.*race-safe.*no-follow parent traversal.*approved root.*`persist-skipped`/iu,
+          /failure before.*publish.*`persist-skipped`/iu,
+        ],
+        skillPath,
+      );
     });
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/common-threats.md",
+      ),
+      (referencePath) => {
+        assert.match(
+          readMarkdownSection(
+            referencePath,
+            "Positive observations worth calling out",
+          ),
+          /claim.*authority.*evidence status.*proof-class.*only `OBSERVED` may support clearance.*`INFERRED`\/`UNVERIFIED`\/`HUMAN-PENDING` MUST NOT/isu,
+          referencePath,
+        );
+      },
+    );
     assertMatchesAll(
       readPresetPrompt("security"),
       [
+        /GIT_NO_LAZY_FETCH=1/u,
+        /GIT_OPTIONAL_LOCKS=0/u,
+        /pin.*--git-dir.*--work-tree/iu,
+        /other\/unknown/iu,
+        /currency-unverified.*not assessed.*coverage-degraded.*clearance/iu,
+        /Quick output.*pre-probe record.*tool\/run.*connectivity.*target effect.*target-controlled execution.*active probing.*destination.*submitted data.*credentials.*authorization.*withheld/iu,
         /evidence needed/u,
-        /accepted risk.*exception.*clause.*owner.*rationale.*expiry.*scope/iu,
+        /accepted risk.*identifier.*clause.*trusted policy source.*ref.*OID.*anchor.*independently trusted approval evidence.*owner.*named authorized approver.*rationale.*expiry.*scope/iu,
+        /positive observations.*authority.*evidence status.*proof-class.*only observed.*support clearance.*inferred.*unverified.*human-pending.*must not/iu,
+        /Full output.*per-class disposition.*scope\/deployment evidence.*baseline name\/version.*currency evidence\/status/iu,
       ],
       "dashboard preset security",
+    );
+    assertMatchesAll(
+      readMarkdownSection("docs/skills.md", "/goat-security"),
+      [
+        /Quick output.*pre-probe record.*tool\/run.*connectivity.*target effect.*target-controlled execution.*active probing.*destination.*submitted data.*credentials.*authorization.*withheld/iu,
+        /persistence.*resolved destination.*race-safe.*no-follow parent traversal.*approved root.*persist-skipped/iu,
+        /positive observations.*authority.*evidence status.*proof-class.*only `OBSERVED`.*support clearance.*`INFERRED`.*`UNVERIFIED`.*`HUMAN-PENDING`.*cannot/iu,
+        /Full output.*per-class disposition.*scope\/deployment evidence.*baseline name\/version.*currency evidence\/status/iu,
+      ],
+      "docs/skills.md",
+    );
+    assert.match(
+      readPresetStringField("security", "desc"),
+      /Quick or full threat assessment/iu,
+      "dashboard preset security description",
+    );
+    assert.equal(
+      readProjectFile("dist/dashboard/preset-prompts.json"),
+      readProjectFile("src/dashboard/preset-prompts.json"),
+      "dashboard preset source/dist parity",
     );
   });
 

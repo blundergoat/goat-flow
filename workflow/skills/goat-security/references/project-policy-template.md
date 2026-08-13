@@ -61,9 +61,15 @@ Each exception must record:
 - stable exception identifier:
 - finding class:
 - exact asset, surface, environment, and control scope:
+- verified scope match:
 - exact policy clause or authoritative decision:
-- exception owner, rationale, and expiry:
+- trusted policy source/ref/OID/anchor:
+- named authorized approver:
+- independently trusted approval evidence authenticates the named approver, proves their policy-authorized role at approval time, and binds identifier, clause/decision, exact scope, and expiry:
+- exception owner:
+- rationale:
+- expiry:
 - compensating controls and verification evidence:
 - review/revocation trigger:
 
-Missing, expired, over-broad, or unauthorized records do not change disposition. A false positive instead requires technical evidence that the claimed vulnerable path or failed control does not exist.
+Missing, expired, over-broad, unauthorized, role-unverified, mismatched, or unverifiably bound records retain `OPEN`. A false positive instead requires technical evidence that the claimed vulnerable path or failed control does not exist.
