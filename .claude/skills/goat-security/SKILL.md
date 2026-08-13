@@ -179,7 +179,7 @@ Every disposition except `not assessed` requires current `OBSERVED` evidence at 
 
 ## Output Format
 
-Positive observations: claim @ authority|evidence status|proof-class; `INFERRED`/`UNVERIFIED` MUST NOT support clearance.
+Positive observations: claim @ authority|evidence status|proof-class; only `OBSERVED` may support clearance; `INFERRED`/`UNVERIFIED`/`HUMAN-PENDING` MUST NOT.
 
 **Quick Scan output:** TL;DR; Threat Model Snapshot; scope/provenance; class applicability/evidence; named/versioned baselines, currency evidence/status, selected/skipped categories; pre-probe record: tool/run, connectivity, target effect, target-controlled execution, active-probing, destination, submitted data, credentials, authorization/withheld; retained/withheld leads: title, `file + semantic anchor` @ authority, entry→sink/requirement gap, confidence/evidence status/exploit status/finding type/severity/risk disposition/proof-class/evidence needed/recommended remediation/proof-of-fix; What I Didn't Check. Accepted risk: identifier/clause/trusted policy source/ref/OID/anchor/independently trusted approval evidence/owner/named authorized approver/rationale/expiry/verified scope match. Exclude Full-only specialist/chaining ceremony.
 
@@ -197,6 +197,7 @@ Positive observations: claim @ authority|evidence status|proof-class; `INFERRED`
 ## False Positives Removed / Accepted Risks / Positive Observations
 ## Security Assessment Integrity
 - Review mode/provenance: [values]|Baselines: [name/version, currency evidence/status]
+- Class-dispositions: [class|applicable/not-applicable/not-assessed|scope/deployment-evidence|baseline-name/version|currency-evidence/status]
 - Surfaces scanned: [list]|Applicable categories skipped: [list or "none"]
 - Scanner tools: [connectivity + target effect + target-controlled execution/active-probing + endpoint/approval]|Withheld/unavailable: [list or "none"]
 - Evidence: <N> OBSERVED / <M> INFERRED / <K> UNVERIFIED / <L> HUMAN-PENDING
