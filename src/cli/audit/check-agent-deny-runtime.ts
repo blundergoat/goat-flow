@@ -330,9 +330,11 @@ function normalizedRegisteredDenyRelPath(
 
 const CONFIGURED_RUNTIME_SCRIPTS = ["deny-dangerous.sh"] as const;
 
-/** Hook command extracted from agent config for runtime-shaped smoke validation. */
+/** Hook handler extracted from agent config for runtime-shaped smoke validation. */
 interface ConfiguredHookCommand {
   command: string;
+  /** Exec-form arguments; null means the command string is parsed by Bash. */
+  args: string[] | null;
   scriptFile: string;
   scriptPath: string | null;
   configPath: string;
@@ -366,19 +368,16 @@ function extractConfiguredScriptPath(
 }
 
 /**
- * Decide whether a configured hook command launches the managed deny script.
- * Use when picking which commands the trusted audit replays with a blocked payload, so the user's own
- * hooks are never run or reported. The name must appear as a whole path token: a project hook called
- * `custom-deny-dangerous.sh` merely contains the managed name, and replaying it would tell the user
- * their guard is broken when it is simply their own script.
+ * Match a complete managed script token while preserving similar user filenames.
+ * Local copy: importing the shared matcher from server/agent-hook-command would
+ * close a module-init cycle through manifest.ts, which loads this audit check.
  *
- * @param command - one command string from the project's hook config; empty is never a match
+ * @param commands - runnable text from one config row; empty is never a match
  * @param script - managed script filename to look for, such as `deny-dangerous.sh`
- * @returns true when this command launches the managed script and is worth replaying; false skips it
- *   so an unrelated project hook is left alone
+ * @returns true when the text launches the managed script; false leaves user hooks alone
  */
-function commandReferencesScriptToken(
-  command: string,
+function commandsReferenceScriptToken(
+  commands: string,
   script: string,
 ): boolean {
   const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -387,7 +386,37 @@ function commandReferencesScriptToken(
     `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
     "mu",
   );
-  return scriptTokenPattern.test(command);
+  return scriptTokenPattern.test(commands);
+}
+
+/**
+ * Pick the exec-form operand naming the managed script without shell parsing.
+ * Use for structured handlers whose argv elements are already exact tokens.
+ *
+ * @param argumentValues - string argv elements from one config row; empty finds no path
+ * @param scriptFile - managed script filename, such as `deny-dangerous.sh`
+ * @returns contained repo-relative script path, or null when no operand names it safely
+ */
+function extractConfiguredArgvScriptPath(
+  argumentValues: string[],
+  scriptFile: string,
+): string | null {
+  // Each operand may be the script path; escaping or absolute candidates are skipped.
+  for (const argumentValue of argumentValues) {
+    const normalizedCandidate = argumentValue.replace(/\\/g, "/");
+    if (posix.basename(normalizedCandidate) !== scriptFile) continue;
+    const relative = normalizedCandidate.replace(/^\.\//, "");
+    const normalised = posix.normalize(relative);
+    if (
+      normalised.startsWith("../") ||
+      normalised === ".." ||
+      posix.isAbsolute(normalised)
+    ) {
+      continue;
+    }
+    return normalised;
+  }
+  return null;
 }
 
 /**
@@ -402,14 +431,49 @@ function pushConfiguredCommand(
   // Empty or non-text values cannot be launchers the user's agent will run.
   if (typeof command !== "string" || command.length === 0) return;
   const managedScriptFile = CONFIGURED_RUNTIME_SCRIPTS.find((script) =>
-    commandReferencesScriptToken(command, script),
+    commandsReferenceScriptToken(command, script),
   );
   // Unrelated user hooks stay outside the managed runtime audit.
   if (!managedScriptFile) return;
   commands.push({
     command,
+    args: null,
     scriptFile: managedScriptFile,
     scriptPath: extractConfiguredScriptPath(command, managedScriptFile),
+    configPath,
+  });
+}
+
+/**
+ * Add one structured exec-form handler found in an agent config to the runtime audit queue.
+ * Rows whose argv never names a managed deny script stay outside the replay, untouched.
+ */
+function pushConfiguredArgvCommand(
+  commands: ConfiguredHookCommand[],
+  command: unknown,
+  argumentValues: unknown[],
+  configPath: string,
+): void {
+  // A runnable exec-form row needs one executable string beside its argument array.
+  if (typeof command !== "string" || command.length === 0) return;
+  const stringArguments = argumentValues.filter(
+    (argumentValue): argumentValue is string =>
+      typeof argumentValue === "string",
+  );
+  const argumentText = stringArguments.join("\n");
+  const managedScriptFile = CONFIGURED_RUNTIME_SCRIPTS.find((script) =>
+    commandsReferenceScriptToken(argumentText, script),
+  );
+  // Unrelated user hooks stay outside the managed runtime audit.
+  if (!managedScriptFile) return;
+  commands.push({
+    command,
+    args: stringArguments,
+    scriptFile: managedScriptFile,
+    scriptPath: extractConfiguredArgvScriptPath(
+      stringArguments,
+      managedScriptFile,
+    ),
     configPath,
   });
 }
@@ -427,7 +491,12 @@ function collectNestedCommandValues(
   }
   if (!value || typeof value !== "object") return;
   const obj = value as Record<string, unknown>;
-  pushConfiguredCommand(commands, obj.command, configPath);
+  // Exec-form rows carry their operands in args; string rows keep shell text in command.
+  if (Array.isArray(obj.args)) {
+    pushConfiguredArgvCommand(commands, obj.command, obj.args, configPath);
+  } else {
+    pushConfiguredCommand(commands, obj.command, configPath);
+  }
   pushConfiguredCommand(commands, obj.bash, configPath);
   for (const child of Object.values(obj)) {
     if (typeof child === "object") {
@@ -455,11 +524,23 @@ function configuredGuardCommands(
   collectNestedCommandValues(parsed, configPath, commands);
   const seen = new Set<string>();
   return commands.filter((command) => {
-    const key = `${command.configPath}\0${command.command}`;
+    // Args join the identity so two handlers sharing one executable stay distinct.
+    const key = [
+      command.configPath,
+      command.command,
+      ...(command.args ?? []),
+    ].join(" ");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+/** Render one configured handler for failure messages without re-quoting operands. */
+function describeConfiguredCommand(configured: ConfiguredHookCommand): string {
+  return configured.args === null
+    ? configured.command
+    : [configured.command, ...configured.args].join(" ");
 }
 
 function configuredHookCommandPathFailure(
@@ -467,14 +548,14 @@ function configuredHookCommandPathFailure(
   configured: ConfiguredHookCommand,
 ): string | null {
   if (configured.scriptPath === null) {
-    return `${agentFacts.agent.id} configured hook command does not name an exact managed hook script path: ${configured.command}`;
+    return `${agentFacts.agent.id} configured hook command does not name an exact managed hook script path: ${describeConfiguredCommand(configured)}`;
   }
   const expectedScriptPath = normalizedRegisteredDenyRelPath(agentFacts);
   if (
     expectedScriptPath !== null &&
     configured.scriptPath !== expectedScriptPath
   ) {
-    return `${agentFacts.agent.id} configured hook command points at ${configured.scriptPath}, expected ${expectedScriptPath}: ${configured.command}`;
+    return `${agentFacts.agent.id} configured hook command points at ${configured.scriptPath}, expected ${expectedScriptPath}: ${describeConfiguredCommand(configured)}`;
   }
   return null;
 }
@@ -582,17 +663,27 @@ function verifyConfiguredHookRuntime(
   for (const probeLocation of configuredHookProbeLocations(ctx, agentFacts)) {
     // A safe command followed by a blocked one proves policy is selective, not broadly broken.
     for (const runtimeProbe of runtimeProbes) {
-      const probeResult = childProcess.spawnSync(
-        "bash",
-        ["-c", pipeRuntimeProbeTo(configured.command)],
-        {
-          cwd: probeLocation.cwd,
-          encoding: "utf8",
-          env: runtimeProbeEnvironment(runtimeProbe.hookInput),
-          input: "",
-          timeout: 5000,
-        },
-      );
+      // Exec-form handlers replay their exact argv with the probe on stdin, as the provider runs them.
+      const probeResult =
+        configured.args === null
+          ? childProcess.spawnSync(
+              "bash",
+              ["-c", pipeRuntimeProbeTo(configured.command)],
+              {
+                cwd: probeLocation.cwd,
+                encoding: "utf8",
+                env: runtimeProbeEnvironment(runtimeProbe.hookInput),
+                input: "",
+                timeout: 5000,
+              },
+            )
+          : childProcess.spawnSync(configured.command, configured.args, {
+              cwd: probeLocation.cwd,
+              encoding: "utf8",
+              env: process.env,
+              input: runtimeProbe.hookInput,
+              timeout: 5000,
+            });
       const runtimeFailure = configuredHookProbeFailureFromResult(
         probeResult,
         agentFacts,

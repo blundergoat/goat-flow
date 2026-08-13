@@ -20,7 +20,7 @@ import {
   writeFileSync,
   writeHookFixtures,
 } from "./audit-drift.helpers.ts";
-import { buildAgentHookCommand } from "../../src/cli/server/agent-hook-writer.js";
+import { buildAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 describe("checkDrift: hook templates", () => {
@@ -34,6 +34,15 @@ describe("checkDrift: hook templates", () => {
       mkdirSync(claudeSettingsDirectory, { recursive: true });
       const postTurnSafetySpec = getHookSpec("post-turn-safety");
       assert.ok(postTurnSafetySpec);
+      // Claude registers the structured argv handler, so the fixture carries the same shape.
+      const postTurnDescriptor = buildAgentHookDescriptor(
+        "claude",
+        ".goat-flow/hooks",
+        postTurnSafetySpec,
+      );
+      if (postTurnDescriptor.form !== "argv") {
+        assert.fail("Claude must register the approved argv handler");
+      }
       const claudeSettings = {
         hooks: {
           Stop: [
@@ -41,11 +50,8 @@ describe("checkDrift: hook templates", () => {
               hooks: [
                 {
                   type: "command",
-                  command: buildAgentHookCommand(
-                    "claude",
-                    ".goat-flow/hooks",
-                    postTurnSafetySpec,
-                  ),
+                  command: postTurnDescriptor.command,
+                  args: postTurnDescriptor.args,
                   timeout: 60,
                 },
               ],

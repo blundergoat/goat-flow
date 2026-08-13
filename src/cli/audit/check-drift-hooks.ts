@@ -10,6 +10,12 @@ import type { ReadonlyFS } from "../types.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
 import { buildAgentHookCommand } from "../server/agent-hook-writer.js";
+import {
+  buildAgentHookDescriptor,
+  commandEntryReferencesSpec,
+  entryCarriesHandlerDescriptor,
+  entryReferencesSpec,
+} from "../server/agent-hook-command.js";
 import type { AgentId } from "../types.js";
 import type { AgentProfile } from "../manifest/types.js";
 import type { DriftFinding } from "./types.js";
@@ -66,78 +72,6 @@ function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
     powershell: crossPlatformCommand,
     timeoutSec: timeoutSeconds,
   };
-}
-
-/**
- * Detect whether one agent command directly starts the selected managed hook.
- * Use during drift checks so unrelated user hooks remain untouched and unreported.
- *
- * @param entry - Parsed config value; null, arrays, and primitives cannot be commands.
- * @param spec - Managed hook to find; an empty script list cannot match.
- * @returns True for a direct managed command; false for unrelated or empty values.
- */
-/**
- * Decide whether a hook entry in the project's agent config is one goat-flow installed.
- * Use while auditing for drift, so a user's own hook is never reported as a broken managed one. The
- * name must appear as a whole path token: a project hook called `custom-post-turn-safety.sh` merely
- * contains a managed name, and treating it as managed would show the user drift they cannot fix.
- *
- * @param commands - command strings from one config entry, joined by newlines; empty means the entry
- *   runs nothing and is never reported as managed drift
- * @param script - managed script filename to look for, such as `post-turn-safety.sh`
- * @returns true when this entry launches the managed script and belongs in the drift comparison;
- *   false leaves it out as the user's own hook
- */
-function commandsReferenceScriptToken(
-  commands: string,
-  script: string,
-): boolean {
-  const escapedScript = script.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // The name must start at a path or word boundary and end at one, so `custom-<name>` never matches.
-  const scriptTokenPattern = new RegExp(
-    `(?:^|[\\s"'\`=/\\\\])${escapedScript}(?=$|[\\s"'\`;|&),])`,
-    "mu",
-  );
-  return scriptTokenPattern.test(commands);
-}
-
-/**
- * Check whether one config entry directly launches this managed hook's own script.
- * Used per entry while auditing, so drift is only reported against registrations goat-flow installed.
- *
- * @param entry - one hook entry from the project's agent config; non-object JSON can hold no command
- *   and is never treated as managed
- * @param spec - the managed hook being audited, naming the scripts it may launch
- * @returns true when this entry belongs to the managed hook; false leaves the user's own hook alone
- */
-function commandEntryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
-  // Non-object JSON cannot represent a runnable hook command.
-  if (!isRecord(entry)) return false;
-  const commands = [
-    typeof entry.command === "string" ? entry.command : "",
-    typeof entry.bash === "string" ? entry.bash : "",
-    typeof entry.powershell === "string" ? entry.powershell : "",
-  ].join("\n");
-  // The shared Node launcher is named in every managed command, so matching it would claim
-  // any hook the user routes through the same launcher.
-  return spec.scriptFiles.some(
-    (script) =>
-      script !== "run-with-bash.mjs" &&
-      commandsReferenceScriptToken(commands, script),
-  );
-}
-
-/** Detect managed hook entries by script reference so drift repair preserves unrelated hooks. */
-function entryReferencesSpec(entry: unknown, spec: HookSpec): boolean {
-  // Non-object JSON cannot contain a managed hook command or nested hook list.
-  if (!isRecord(entry)) return false;
-  // A direct command match identifies an entry setup owns.
-  if (commandEntryReferencesSpec(entry, spec)) return true;
-  // Matcher groups nest runnable commands under their hooks array.
-  if (Array.isArray(entry.hooks)) {
-    return entry.hooks.some((hook) => entryReferencesSpec(hook, spec));
-  }
-  return false;
 }
 
 /**
@@ -504,17 +438,19 @@ function compareManagedHookCommand(
   );
   // A missing registration is setup state, not content drift.
   if (matchingCommands.length === 0) return 0;
-  const expectedCommand = buildAgentHookCommand(
+  const expectedDescriptor = buildAgentHookDescriptor(
     agentIdentifier,
     hooksDirectory,
     hookSpec,
   );
-  // Any alternate launcher text could send the user's command to stale or unsafe code.
-  const staleCommands = matchingCommands.filter((commandEntry) =>
-    agentIdentifier === "copilot"
-      ? commandEntry.bash !== expectedCommand ||
-        commandEntry.powershell !== expectedCommand
-      : commandEntry.command !== expectedCommand,
+  // Any alternate launcher shape could send the user's command to stale or unsafe code.
+  const staleCommands = matchingCommands.filter(
+    (commandEntry) =>
+      !entryCarriesHandlerDescriptor(
+        commandEntry,
+        agentIdentifier,
+        expectedDescriptor,
+      ),
   );
   // Exact launcher identity means this part of the user's registration is current.
   if (staleCommands.length === 0) return 1;

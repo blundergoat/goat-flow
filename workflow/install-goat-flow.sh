@@ -1208,10 +1208,17 @@ function commandReferencesScriptToken(commandText, scriptName) {
 function entryReferencesManagedScript(entry, scriptNames) {
   // Null, primitive, and array values cannot be direct runnable command objects.
   if (!isObject(entry)) return false;
+  // Structured exec-form rows name their script operands as argv elements, not one shell string.
+  const structuredArgumentText = Array.isArray(entry.args)
+    ? entry.args
+        .filter((argumentValue) => typeof argumentValue === "string")
+        .join("\n")
+    : "";
   const commandText = [
     typeof entry.command === "string" ? entry.command : "",
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
+    structuredArgumentText,
   ].join("\n");
   return scriptNames.some((scriptName) =>
     commandReferencesScriptToken(commandText, scriptName),

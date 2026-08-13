@@ -18,6 +18,7 @@ import {
   entryReferencesSpec,
   isAgentHookJsonObject,
   managedAgentHookCommand,
+  managedAgentHookDescriptor,
   matcherForAgent,
   type AgentHookJsonObject,
 } from "./agent-hook-command.js";
@@ -293,10 +294,15 @@ function claudeCodexEntries(
   registrationTargets: ManagedHookRegistrationTarget[],
 ): AgentHookJsonObject[] {
   return registrationTargets.map((registrationTarget) => {
+    const handlerDescriptor = managedAgentHookDescriptor(agent, spec);
     const command: AgentHookJsonObject = {
       type: "command",
-      command: managedAgentHookCommand(agent, spec),
+      command: handlerDescriptor.command,
     };
+    // Approved argv handlers register exact operands the host passes without a shell.
+    if (handlerDescriptor.form === "argv") {
+      command.args = [...handlerDescriptor.args];
+    }
     // An owned host deadline gives the migrated hook time to return model-visible Stop feedback.
     if (
       agentRegistersHostTimeout(agent, spec) &&

@@ -26,6 +26,7 @@ import {
   HookRegistrarError,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
+import { managedAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import {
   getHookSpec,
   isValidHookIdShape,
@@ -416,6 +417,201 @@ describe("hook registrar: launchers and installation", () => {
     });
   });
 
+  it("migrates a historical inline Claude row to the structured descriptor without touching user hooks", () => {
+    withTempProject((root) => {
+      const denySpec = getHookSpec(HOOK_IDENTIFIER);
+      assert.ok(denySpec);
+      // Historical registrations carried one shell string whose operands name the managed scripts.
+      const historicalInlineCommand = [
+        "node",
+        "-e",
+        JSON.stringify("process.exit(0);"),
+        JSON.stringify(".goat-flow/hooks/deny-dangerous.sh"),
+        JSON.stringify("policy"),
+        JSON.stringify("CLAUDE_PROJECT_DIR"),
+        JSON.stringify(".claude/settings.json"),
+        JSON.stringify(".goat-flow/hooks/run-with-bash.mjs"),
+      ].join(" ");
+      const userHook = {
+        type: "command",
+        command: "./scripts/custom-audit.sh --strict",
+        timeout: 15,
+      };
+      mkdirSync(join(root, ".claude"), { recursive: true });
+      writeFileSync(
+        join(root, ".claude", "settings.json"),
+        `${JSON.stringify(
+          {
+            permissions: { deny: ["Bash(*sudo *)"] },
+            hooks: {
+              PreToolUse: [
+                { matcher: "Bash", hooks: [userHook] },
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    {
+                      type: "command",
+                      command: historicalInlineCommand,
+                      timeout: 30,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      writeAgentHookState(root, PROFILES.claude, denySpec, true);
+      const migratedText = readFileSync(
+        join(root, ".claude", "settings.json"),
+        "utf-8",
+      );
+      const migrated = JSON.parse(migratedText) as {
+        permissions?: unknown;
+        hooks: {
+          PreToolUse: Array<{
+            matcher?: string;
+            hooks: Array<Record<string, unknown>>;
+          }>;
+        };
+      };
+
+      // The user's own hook row and unrelated settings survive migration untouched.
+      assert.deepEqual(migrated.hooks.PreToolUse[0], {
+        matcher: "Bash",
+        hooks: [userHook],
+      });
+      assert.deepEqual(migrated.permissions, { deny: ["Bash(*sudo *)"] });
+
+      // Exactly one managed row remains, carrying the complete structured descriptor.
+      const managedRows = migrated.hooks.PreToolUse.slice(1);
+      assert.equal(managedRows.length, 1);
+      const expectedDescriptor = managedAgentHookDescriptor(
+        PROFILES.claude,
+        denySpec,
+      );
+      if (expectedDescriptor.form !== "argv") {
+        assert.fail("Claude must register the approved argv handler");
+      }
+      assert.deepEqual(managedRows[0], {
+        matcher: "Bash",
+        hooks: [
+          {
+            type: "command",
+            command: expectedDescriptor.command,
+            args: expectedDescriptor.args,
+            timeout: denySpec.timeoutSec,
+          },
+        ],
+      });
+
+      // A second enable write is byte-identical, so migration cannot oscillate.
+      writeAgentHookState(root, PROFILES.claude, denySpec, true);
+      assert.equal(
+        readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
+        migratedText,
+      );
+    });
+  });
+
+  it("keeps deferred provider deny descriptors byte-identical to the committed installer contract", () => {
+    const denySpec = getHookSpec(HOOK_IDENTIFIER);
+    assert.ok(denySpec);
+    const contract = JSON.parse(
+      readFileSync(
+        join(
+          import.meta.dirname,
+          "..",
+          "..",
+          "workflow",
+          "hooks",
+          "agent-config",
+          "managed-hook-desired-state.json",
+        ),
+        "utf-8",
+      ),
+    ) as {
+      agents: Record<
+        string,
+        { hooks: Record<string, { config: Record<string, never> }> }
+      >;
+    };
+    const denyContractConfig = (agentId: string): Record<string, never> =>
+      contract.agents[agentId]!.hooks["deny-dangerous"]!.config;
+
+    // Codex and Antigravity store one deferred shell command each; bytes must not move.
+    const codexDescriptor = managedAgentHookDescriptor(
+      PROFILES.codex,
+      denySpec,
+    );
+    if (codexDescriptor.form !== "shell") {
+      assert.fail("Codex stays on its deferred shell registration");
+    }
+    const codexContractRow = (
+      denyContractConfig("codex") as {
+        hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> };
+      }
+    ).hooks.PreToolUse[0]!.hooks[0]!;
+    assert.equal(codexContractRow.command, codexDescriptor.command);
+
+    const antigravityDescriptor = managedAgentHookDescriptor(
+      PROFILES.antigravity,
+      denySpec,
+    );
+    if (antigravityDescriptor.form !== "shell") {
+      assert.fail("Antigravity stays on its deferred shell registration");
+    }
+    const antigravityContractRow = (
+      denyContractConfig("antigravity") as {
+        "deny-dangerous": {
+          PreToolUse: Array<{ hooks: Array<{ command: string }> }>;
+        };
+      }
+    )["deny-dangerous"].PreToolUse[0]!.hooks[0]!;
+    assert.equal(antigravityContractRow.command, antigravityDescriptor.command);
+
+    // Copilot's deferred registration keeps the same command in both shell fields.
+    const copilotDescriptor = managedAgentHookDescriptor(
+      PROFILES.copilot,
+      denySpec,
+    );
+    if (copilotDescriptor.form !== "shell") {
+      assert.fail("Copilot stays on its deferred shell registration");
+    }
+    const copilotContractRow = (
+      denyContractConfig("copilot") as {
+        hooks: {
+          preToolUse: Array<{ bash: string; powershell: string }>;
+        };
+      }
+    ).hooks.preToolUse[0]!;
+    assert.equal(copilotContractRow.bash, copilotDescriptor.command);
+    assert.equal(copilotContractRow.powershell, copilotDescriptor.command);
+
+    // Claude's approved argv handler is the only migrated fragment in the contract.
+    const claudeDescriptor = managedAgentHookDescriptor(
+      PROFILES.claude,
+      denySpec,
+    );
+    if (claudeDescriptor.form !== "argv") {
+      assert.fail("Claude must register the approved argv handler");
+    }
+    const claudeContractRow = (
+      denyContractConfig("claude") as {
+        hooks: {
+          PreToolUse: Array<{
+            hooks: Array<{ command: string; args: string[] }>;
+          }>;
+        };
+      }
+    ).hooks.PreToolUse[0]!.hooks[0]!;
+    assert.equal(claudeContractRow.command, claudeDescriptor.command);
+    assert.deepEqual(claudeContractRow.args, claudeDescriptor.args);
+  });
+
   it("generated Claude launchers resolve active worktrees, submodules, bare repos, and outside-repo cwd", () => {
     withTempProject((root) => {
       const main = join(root, "main");
@@ -428,9 +624,13 @@ describe("hook registrar: launchers and installation", () => {
 
       const mainLauncher = installClaudeDenyHook(main);
       commitAll(main, "install central hooks");
-      assert.match(mainLauncher, /run-with-bash\.mjs/u);
-      assert.match(mainLauncher, /--show-toplevel/u);
-      assert.doesNotMatch(mainLauncher, /git-common-dir/u);
+      // The registered handler is exec-form, so its contract lives in the argv tuple.
+      const mainLauncherText = [mainLauncher.command, ...mainLauncher.args].join(
+        "\n",
+      );
+      assert.match(mainLauncherText, /run-with-bash\.mjs/u);
+      assert.match(mainLauncherText, /--show-toplevel/u);
+      assert.doesNotMatch(mainLauncherText, /git-common-dir/u);
       runGit(main, [
         "worktree",
         "add",
@@ -457,9 +657,13 @@ describe("hook registrar: launchers and installation", () => {
       runGit(subSource, ["init", "-q"]);
       writeFileSync(join(subSource, "README.md"), "# submodule\n");
       const sourceLauncher = installClaudeDenyHook(subSource);
-      assert.match(sourceLauncher, /run-with-bash\.mjs/u);
-      assert.match(sourceLauncher, /--show-toplevel/u);
-      assert.doesNotMatch(sourceLauncher, /git-common-dir/u);
+      const sourceLauncherText = [
+        sourceLauncher.command,
+        ...sourceLauncher.args,
+      ].join("\n");
+      assert.match(sourceLauncherText, /run-with-bash\.mjs/u);
+      assert.match(sourceLauncherText, /--show-toplevel/u);
+      assert.doesNotMatch(sourceLauncherText, /git-common-dir/u);
       commitAll(subSource, "initial submodule with central hooks");
 
       const parent = join(root, "parent");
@@ -484,9 +688,10 @@ describe("hook registrar: launchers and installation", () => {
         runGit(subWorktree, ["rev-parse", "--git-common-dir"]),
         /\.git\/modules\/sub$/u,
       );
+      // Git prints forward-slash paths on Windows, so compare in one slash style.
       assert.equal(
         runGit(subWorktree, ["rev-parse", "--show-toplevel"]),
-        subWorktree,
+        subWorktree.replaceAll("\\", "/"),
       );
       assertLauncherAllows(subLauncher, subWorktree);
 

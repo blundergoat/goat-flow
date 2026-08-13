@@ -49,7 +49,7 @@ interface ClaudeHookSettingsFixture {
     string,
     Array<{
       matcher?: string;
-      hooks?: Array<{ command?: string; timeout?: number }>;
+      hooks?: Array<{ command?: string; args?: string[]; timeout?: number }>;
     }>
   >;
 }
@@ -330,9 +330,10 @@ describe("effective hook state", () => {
       (eventEntry) => eventEntry.matcher === "Bash",
     )?.hooks?.[0];
     assert.ok(denyCommand?.command);
-    denyCommand.command = denyCommand.command.replace(
-      '"policy"',
-      '"policy-stale"',
+    assert.ok(Array.isArray(denyCommand.args));
+    // Claude's structured handler keeps its response mode as one argv operand.
+    denyCommand.args = denyCommand.args.map((argumentValue) =>
+      argumentValue === "policy" ? "policy-stale" : argumentValue,
     );
     writeClaudeHookSettings(projectPath, commandSettings);
     assert.equal(
