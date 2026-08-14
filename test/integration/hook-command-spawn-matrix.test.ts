@@ -65,7 +65,9 @@ interface RegisteredHandler {
  * @returns hostile-named project root ready for exact handler replay
  */
 function createRegisteredHostileProject(): string {
-  const disposableParent = mkdtempSync(join(tmpdir(), "goat-flow-spawn-matrix-"));
+  const disposableParent = mkdtempSync(
+    join(tmpdir(), "goat-flow-spawn-matrix-"),
+  );
   disposableParents.push(disposableParent);
   const projectRoot = join(disposableParent, "goat flow & (matrix) [m03]");
   mkdirSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous"), {
@@ -79,19 +81,34 @@ function createRegisteredHostileProject(): string {
 
   // Ship the exact repository hook bytes so the replay covers real launch code.
   for (const sharedHookFile of SHARED_HOOK_FILES) {
-    const installedPath = join(projectRoot, ".goat-flow", "hooks", sharedHookFile);
+    const installedPath = join(
+      projectRoot,
+      ".goat-flow",
+      "hooks",
+      sharedHookFile,
+    );
     cpSync(join(WORKFLOW_HOOKS, sharedHookFile), installedPath);
     chmodSync(installedPath, 0o755);
   }
   for (const denyPolicyFile of DENY_POLICY_FILES) {
     cpSync(
       join(WORKFLOW_HOOKS, "deny-dangerous", denyPolicyFile),
-      join(projectRoot, ".goat-flow", "hooks", "deny-dangerous", denyPolicyFile),
+      join(
+        projectRoot,
+        ".goat-flow",
+        "hooks",
+        "deny-dangerous",
+        denyPolicyFile,
+      ),
     );
   }
 
   // Register through the public writer so the fixture rows equal user rows.
-  for (const hookId of ["deny-dangerous", "gruff-code-quality", "post-turn-safety"]) {
+  for (const hookId of [
+    "deny-dangerous",
+    "gruff-code-quality",
+    "post-turn-safety",
+  ]) {
     const hookSpec = getHookSpec(hookId);
     assert.ok(hookSpec);
     writeAgentHookState(projectRoot, PROFILES.claude, hookSpec, true);
@@ -288,7 +305,9 @@ const DEGRADATION_CASES: DegradationCase[] = [
     lifecycleEvent: "PreToolUse",
     payload: denyPayload("git status"),
     mutate: (projectRoot) =>
-      rmSync(join(projectRoot, ".goat-flow", "hooks", "hook-launch-runtime.mjs")),
+      rmSync(
+        join(projectRoot, ".goat-flow", "hooks", "hook-launch-runtime.mjs"),
+      ),
     expectedStatus: 2,
     expectedStderr:
       /BLOCKED: Policy hook unavailable: managed launcher could not start\./u,

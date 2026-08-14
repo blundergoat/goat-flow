@@ -5,18 +5,6 @@
   "minimumAnalysedFiles": 449,
   "entries": [
     {
-      "stableIdentity": "07bafa2d3aab29a9",
-      "ruleId": "size.file-length",
-      "file": "test/unit/hook-registrar.helpers.ts",
-      "rationale": "Reviewed oversized file; grew by the ADR-053 exec-form replay helpers, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
-      "occurrences": [
-        {
-          "lines": 795,
-          "threshold": 750
-        }
-      ]
-    },
-    {
       "stableIdentity": "19af30392f9d5c19",
       "ruleId": "size.file-length",
       "file": "test/integration/stats-command.test.ts",
@@ -84,6 +72,18 @@
       "occurrences": [
         {
           "lines": 1517,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "36b627ddf7d54fa4",
+      "ruleId": "size.file-length",
+      "file": "test/unit/hook-registrar.test.ts",
+      "rationale": "Reviewed oversized file; grew by the ADR-053 migration, descriptor-parity, and duplicate-convergence cases, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 1177,
           "threshold": 750
         }
       ]
@@ -217,6 +217,18 @@
       ]
     },
     {
+      "stableIdentity": "9cabc69dadf04b0d",
+      "ruleId": "size.file-length",
+      "file": "test/unit/hook-registrar.helpers.ts",
+      "rationale": "Reviewed oversized file; grew by the ADR-053 exec-form replay helpers, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 798,
+          "threshold": 750
+        }
+      ]
+    },
+    {
       "stableIdentity": "9ffc57818669d0f5",
       "ruleId": "security.process-exec",
       "file": "src/cli/hooks-configured-runtime-evidence.ts",
@@ -276,18 +288,6 @@
           "callName": "spawn",
           "argumentSource": "member",
           "shellEnabled": false
-        }
-      ]
-    },
-    {
-      "stableIdentity": "c68f8024af4c3f8d",
-      "ruleId": "size.file-length",
-      "file": "test/unit/hook-registrar.test.ts",
-      "rationale": "Reviewed oversized file; grew by the ADR-053 migration, descriptor-parity, and duplicate-convergence cases, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
-      "occurrences": [
-        {
-          "lines": 1176,
-          "threshold": 750
         }
       ]
     },

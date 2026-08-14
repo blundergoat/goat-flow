@@ -127,8 +127,9 @@ function installedEntryRunnableText(
       )
     : [];
   return [commandEntry.command, commandEntry.bash, commandEntry.powershell]
-    .filter((commandValue): commandValue is string =>
-      typeof commandValue === "string",
+    .filter(
+      (commandValue): commandValue is string =>
+        typeof commandValue === "string",
     )
     .concat(argumentOperands)
     .join("\n");
@@ -373,7 +374,9 @@ export function readClaudeDenyLauncher(root: string): ClaudeReplayHandler {
     readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
   ) as {
     hooks: {
-      PreToolUse: Array<{ hooks: Array<{ command?: string; args?: string[] }> }>;
+      PreToolUse: Array<{
+        hooks: Array<{ command?: string; args?: string[] }>;
+      }>;
     };
   };
   const registeredHook = settings.hooks.PreToolUse[0]!.hooks[0]!;

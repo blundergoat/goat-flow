@@ -348,7 +348,9 @@ describe("hook registrar: launchers and installation", () => {
               }
             : {
                 matcher: firstRegistrationTarget.matcher ?? undefined,
-                hooks: [{ type: "command", command: "./scripts/team-audit.sh" }],
+                hooks: [
+                  { type: "command", command: "./scripts/team-audit.sh" },
+                ],
               };
         eventEntries.push(structuredClone(userHookRow));
         hookConfig.userOwnedMarker = "preserve";
@@ -483,9 +485,9 @@ describe("hook registrar: launchers and installation", () => {
       );
 
       const codexHooksPath = join(root, ".codex", "hooks.json");
-      const codexHooks = JSON.parse(
-        readFileSync(codexHooksPath, "utf-8"),
-      ) as { hooks: { PreToolUse: unknown[] } };
+      const codexHooks = JSON.parse(readFileSync(codexHooksPath, "utf-8")) as {
+        hooks: { PreToolUse: unknown[] };
+      };
       const codexDenyRow = codexHooks.hooks.PreToolUse[0];
       assert.ok(codexDenyRow);
       codexHooks.hooks.PreToolUse.push(
@@ -493,10 +495,7 @@ describe("hook registrar: launchers and installation", () => {
         structuredClone(staleShellRow),
         structuredClone(userShellRow),
       );
-      writeFileSync(
-        codexHooksPath,
-        `${JSON.stringify(codexHooks, null, 2)}\n`,
-      );
+      writeFileSync(codexHooksPath, `${JSON.stringify(codexHooks, null, 2)}\n`);
 
       const antigravityHooksPath = join(root, ".agents", "hooks.json");
       const antigravityHooks = JSON.parse(
@@ -505,7 +504,8 @@ describe("hook registrar: launchers and installation", () => {
         string,
         unknown
       >;
-      const antigravityDenyGroup = antigravityHooks["deny-dangerous"].PreToolUse[0];
+      const antigravityDenyGroup =
+        antigravityHooks["deny-dangerous"].PreToolUse[0];
       assert.ok(antigravityDenyGroup);
       antigravityHooks["deny-dangerous"].PreToolUse.push(
         structuredClone(antigravityDenyGroup),
@@ -910,9 +910,10 @@ describe("hook registrar: launchers and installation", () => {
       const mainLauncher = installClaudeDenyHook(main);
       commitAll(main, "install central hooks");
       // The registered handler is exec-form, so its contract lives in the argv tuple.
-      const mainLauncherText = [mainLauncher.command, ...mainLauncher.args].join(
-        "\n",
-      );
+      const mainLauncherText = [
+        mainLauncher.command,
+        ...mainLauncher.args,
+      ].join("\n");
       assert.match(mainLauncherText, /run-with-bash\.mjs/u);
       assert.match(mainLauncherText, /--show-toplevel/u);
       assert.doesNotMatch(mainLauncherText, /git-common-dir/u);

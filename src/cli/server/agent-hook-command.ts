@@ -111,7 +111,9 @@ function unavailableHookResponseProgram(hookResponseMode: string): string {
  * @param unavailableResponseProgram - provider failure responder source; never empty
  * @returns ordered source fragments; never empty because every bootstrap needs its operands
  */
-function bootstrapPreludeFragments(unavailableResponseProgram: string): string[] {
+function bootstrapPreludeFragments(
+  unavailableResponseProgram: string,
+): string[] {
   return [
     "const childProcess=require('node:child_process');",
     "const filesystem=require('node:fs');",
@@ -449,7 +451,7 @@ export function managedAgentHookCommand(
  * @returns true when this entry launches the managed script, so setup owns it; false leaves the
  *   entry untouched as the user's own hook
  */
-export function commandsReferenceScriptToken(
+function commandsReferenceScriptToken(
   commands: string,
   script: string,
 ): boolean {
@@ -469,7 +471,7 @@ export function commandsReferenceScriptToken(
  * @param entry - keyed config row; missing command, shell, and args fields yield empty text
  * @returns newline-joined command strings and string argv elements; empty means nothing runnable
  */
-export function entryCommandSearchText(entry: AgentHookJsonObject): string {
+function entryCommandSearchText(entry: AgentHookJsonObject): string {
   // Structured handlers carry their operands as argv elements rather than one shell string.
   const argumentOperands = Array.isArray(entry.args)
     ? entry.args.filter(

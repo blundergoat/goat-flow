@@ -529,7 +529,7 @@ function configuredGuardCommands(
       command.configPath,
       command.command,
       ...(command.args ?? []),
-    ].join(" ");
+    ].join("\0");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

@@ -127,7 +127,10 @@ describe("checkDrift: hook templates", () => {
         `expected missing hook script finding, findings=${JSON.stringify(missingScriptReport.findings)}`,
       );
       assert.match(missingFinding.message, /run goat-flow hooks sync/u);
-      writeFileSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh"), HOOK_STUB);
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        HOOK_STUB,
+      );
 
       // A version-drifted shared launcher must surface the same local repair,
       // without claiming anything about provider-side delivery.

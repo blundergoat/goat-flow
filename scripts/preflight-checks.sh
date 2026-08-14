@@ -860,6 +860,16 @@ function collect(value, out = []) {
     return out;
   }
   if (!value || typeof value !== "object") return out;
+  // Structured exec-form rows (ADR-053) name the guard script as an argv element.
+  if (typeof value.command === "string" && Array.isArray(value.args)) {
+    const argumentOperands = value.args.filter(
+      (argumentValue) => typeof argumentValue === "string",
+    );
+    const script = guardScripts.find((name) =>
+      argumentOperands.some((argumentValue) => argumentValue.includes(name)),
+    );
+    if (script) out.push({ command: value.command, args: argumentOperands, script });
+  }
   for (const key of ["command", "bash"]) {
     if (typeof value[key] !== "string") continue;
     const script = guardScripts.find((name) => value[key].includes(name));
@@ -880,8 +890,17 @@ function smokeCwds(agent) {
   return cwds;
 }
 
-function runCommand(command, input, cwd) {
-  return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${command}; }`], {
+function runCommand(entry, input, cwd) {
+  // Exec-form handlers replay their exact argv with the payload on stdin, as the provider runs them.
+  if (entry.args) {
+    return spawnSync(entry.command, entry.args, {
+      cwd,
+      encoding: "utf8",
+      input,
+      timeout: 5000,
+    });
+  }
+  return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${entry.command}; }`], {
     cwd,
     encoding: "utf8",
     env: { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: input },
@@ -912,7 +931,8 @@ for (const config of configs) {
   }
   const seen = new Set();
   const commands = collect(parsed).filter((entry) => {
-    const key = `${entry.command}\0${entry.script}`;
+    // Args join the identity so two handlers sharing one executable stay distinct.
+    const key = [entry.command, ...(entry.args ?? []), entry.script].join("\0");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -925,7 +945,7 @@ for (const config of configs) {
     checked += 1;
     const smoke = payloadFor(config.mode, entry.script);
     for (const smokeCwd of smokeCwds(config.agent)) {
-      const result = runCommand(entry.command, smoke.input, smokeCwd.cwd);
+      const result = runCommand(entry, smoke.input, smokeCwd.cwd);
       const spawnFailure = spawnFailureMessage(
         result,
         `${config.agent}: ${entry.script} configured command`,
@@ -936,7 +956,8 @@ for (const config of configs) {
       }
       const status = result.status ?? (result.error ? -1 : 0);
       if (status === 126 || status === 127) {
-        emit("FAIL", `${config.agent}: ${entry.script} configured command exited ${status} from ${smokeCwd.label}: ${entry.command}`);
+        const shownCommand = entry.args ? [entry.command, ...entry.args].join(" ") : entry.command;
+        emit("FAIL", `${config.agent}: ${entry.script} configured command exited ${status} from ${smokeCwd.label}: ${shownCommand}`);
         continue;
       }
       const stream = smoke.stream === "stdout" ? result.stdout : result.stderr;
