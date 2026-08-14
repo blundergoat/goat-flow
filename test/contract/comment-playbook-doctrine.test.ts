@@ -22,7 +22,7 @@ function assertForPlaybook(
 }
 
 describe("comment playbook verification doctrine", () => {
-  it("replaces the live 110/120 rules with one 150-character contract", () => {
+  it("treats 150 as a ceiling instead of a width target", () => {
     assertForPlaybook("code-comments.md", (content, playbookPath) => {
       assert.doesNotMatch(
         content,
@@ -30,10 +30,123 @@ describe("comment playbook verification doctrine", () => {
         playbookPath,
       );
       assert.match(content, /hard maximum of 150 characters/u, playbookPath);
-      assert.match(content, /Use the available width/u, playbookPath);
+      assert.match(content, /150 is a hard ceiling/u, playbookPath);
+      assert.match(
+        content,
+        /shortest complete useful comment wins/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /never split one point across lines merely to stay short/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        content,
+        /use the available width|run it toward 150/iu,
+        playbookPath,
+      );
       assert.match(
         content,
         /measure the longest existing comment line/u,
+        playbookPath,
+      );
+    });
+  });
+
+  it("removes syntax quotas without weakening consequential branches", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.doesNotMatch(
+        content,
+        /not subject to any "omit by default"|A context line above every|Every function\/method[\s\S]+including trivial and private|Even private one-liners need this/iu,
+        playbookPath,
+      );
+      assert.match(content, /trigger plus consequence/u, playbookPath);
+      assert.match(
+        content,
+        /only honest line restates code[\s\S]+gets none/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Improve a name only when authorised/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /report or defer structural remedies separately/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /project or language canon requires/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /public\/exported APIs[\s\S]+non-obvious contract/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /self-explanatory private\/local units need none/u,
+        playbookPath,
+      );
+    });
+  });
+
+  it("separates interface-reader selection from the code-layer lens", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.match(content, /interface reader/u, playbookPath);
+      assert.match(content, /separate layer lens/u, playbookPath);
+      assert.match(
+        content,
+        /domain\/service[\s\S]+invariant or business consequence/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /repository\/query[\s\S]+result-set contract or exceptional join rationale/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /infrastructure[\s\S]+operator consequence and mechanism/u,
+        playbookPath,
+      );
+    });
+  });
+
+  it("keeps defect codes report-only and rejects compensating prose", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      for (const defectCode of [
+        "STALE",
+        "FALSE",
+        "RESTATES",
+        "TERM",
+        "METAPHOR",
+        "HISTORY",
+        "REMOTE",
+        "VERBOSE",
+        "MISSING-CONSEQUENCE",
+      ]) {
+        assert.match(content, new RegExp(`\\b${defectCode}\\b`, "u"), playbookPath);
+      }
+      assert.match(content, /one primary code/u, playbookPath);
+      assert.match(content, /optional secondary codes/u, playbookPath);
+      assert.match(content, /ledger or report/u, playbookPath);
+      assert.match(content, /never in source comments/u, playbookPath);
+      assert.match(content, /report-only/u, playbookPath);
+      assert.match(content, /compensating prose/u, playbookPath);
+      assert.match(content, /better name, type, or structure/u, playbookPath);
+      assert.match(
+        content,
+        /already-authorised code change[\s\S]+report or defer/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /comment pass grants no structural authority/u,
         playbookPath,
       );
     });

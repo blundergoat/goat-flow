@@ -132,13 +132,19 @@ For each cluster:
 
 ## Documentation Findings
 
-For `docs.*`, load [`code-comments.md`](./code-comments.md) first. Doc comments are mandatory under that playbook, so missing-doc findings default to FIX, not suppress. Clearing a missing-doc finding means meeting its block shape and 150-character limit, not adding the shortest line that silences the analyzer.
+For `docs.*`, load [`code-comments.md`](./code-comments.md) first. A missing-doc finding is a candidate,
+not proof that prose is required. Apply it when project or language canon requires documentation, or
+when a public/exported API or file/module/class boundary has a non-obvious contract. Otherwise classify
+the finding against the project's deliberate no-doc convention instead of adding a restatement. When a
+doc comment is required, meet the playbook's block shape and 150-character ceiling; do not add the
+shortest line that merely silences the analyzer.
 
 Write comments for caller-visible contract: obligations, edge values, side effects, error behavior, thresholds, determinism, compatibility, or non-obvious rationale. Do not restate syntax or add marker words just to satisfy the analyzer. If `@param`/`@returns` tags are used, each tag needs meaning beyond the type signature.
 
 Rule scopes differ by port: gruff-ts can flag internal helpers; gruff-py covers every function; gruff-go/rust mostly cover public/exported docs; gruff-php focuses on public/class/file/constant phpdoc. The rule IDs use `docs.`, while the pillar is `documentation`.
 
-Test functions still need the playbook's doc bar, but a descriptive test name plus one tight line is enough. Do not expand tests into contract essays.
+Test functions follow the useful-contract gate. A descriptive test name and assertions often need no
+comment; document only a non-obvious test contract, and do not expand tests into contract essays.
 
 A per-dependency missing-doc finding is an accepted false positive only for an obvious non-null service-only constructor whose intent is already documented. A scalar, optional, configured, or side-effectful input is not pure DI and remains a finding.
 
