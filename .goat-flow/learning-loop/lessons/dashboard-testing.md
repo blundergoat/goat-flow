@@ -163,6 +163,8 @@ last_reviewed: 2026-08-10
 
 **Prevention:** After changing dashboard static assets that are copied by `build:dashboard`, run `npm run build:dashboard` before dashboard-server asset smoke tests, or explicitly remove stale `dist/` before relying on source fallback.
 
+**Recurrence (2026-08-14):** M03 changed the four QA-facing records in `src/dashboard/preset-prompts.json`. Focused preset and doctrine tests passed, but a later full-suite run failed the existing source/dist parity contract because `dist/dashboard/preset-prompts.json` still held the earlier catalog. Evidence anchor: `test/contract/skill-hardening-security-2.test.ts` (search: `dashboard preset source/dist parity`). Refresh the copied asset before the first expanded suite, not after a favourable focused run.
+
 ---
 
 ## Lesson: Built dashboard browser smoke needs a restarted server after template edits

@@ -29,6 +29,7 @@ export const STANDALONE_PLAYBOOK_FILES = [
   ".goat-flow/skill-docs/playbooks/page-capture.md",
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
+  ".goat-flow/skill-docs/playbooks/test-selection.md",
   ".goat-flow/skill-docs/playbooks/writing-style.md",
 ] as const;
 

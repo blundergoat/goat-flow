@@ -5,8 +5,6 @@ goat-flow-reference-version: "1.15.1"
 
 Use this before adding or editing a comment, docstring, or annotation. Start naming and placement work in [`naming-and-placement.md`](./naming-and-placement.md), then return here for prose that remains necessary. Write for the maintainer who later reads the code cold. Use plain English from the reader's perspective: what they did, see, or get next, never mechanics already shown by code.
 
-House style is mandatory across TypeScript, Python, Go, Rust, PHP, and shell. This playbook owns when and why to comment, tag separators, block shape, and the hard maximum of 150 characters.
-
 ## Availability Check
 
 This is a discipline reference, not a runnable tool. Load it when:
@@ -16,6 +14,10 @@ This is a discipline reference, not a runnable tool. Load it when:
 - Editing code with existing comments, or reviewing a diff that changes them.
 
 Enforcement is partial: static tools may flag mechanical items, not `[judge]` semantic checks. Do not claim more enforcement than the project runs.
+
+## Project Authority
+
+Project-documented comment conventions govern discipline choices. When no designated project comment standard exists, use this playbook's defaults. Explicit current instructions and the authoritative project hierarchy remain above both. Project convention and playbook defaults cannot override safety, accepted architecture, verified facts, evidence requirements, or verification gates.
 
 ## Pick the Reader First
 

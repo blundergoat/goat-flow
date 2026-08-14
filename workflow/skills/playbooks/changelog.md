@@ -16,6 +16,10 @@ This is a discipline reference, not a runnable tool. Load it when:
 
 No availability command applies. If the project has changelog, version, or link checks, run them; they augment the **Verification Gate** and do not replace it.
 
+## Project Authority
+
+Project-documented changelog style and policy govern categories, ordering, links, and version shape. When no designated project standard exists, use this playbook's defaults. Explicit current instructions and the authoritative project hierarchy remain controlling. Project policy and generic defaults cannot override safety, accepted architecture, verified facts, evidence requirements, or verification gates.
+
 ## Intent
 
 You are a coding agent producing or reviewing a release artifact. Your job is to read evidence, write the smallest accurate changelog entry, and verify it before claiming done.

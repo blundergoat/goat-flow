@@ -216,14 +216,16 @@ last_reviewed: 2026-08-14
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Switch the receipt category at the work boundary, not at the milestone boundary; a stale category is a silent data error, not a rounding detail.
 **Trigger phase:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-08-09
+**Incident count:** 4
+**Latest occurrence:** 2026-08-14
 
 **What happened:** Effort-estimation-timing M02 opened a `product` span and left it open across implementation, a full test-suite run, lint, format, and unused-export checks. The finalized receipt reported 1112 product / 99 proof seconds. The total (1354s) was correct and system-stamped, but the split was badly wrong - most of that "product" time was proof. Nothing flagged it: the receipt was open, finalized cleanly, reconciled against the Actual, and passed strict validation, because the CLI can only stamp the category it was given.
 
 **Recurrence 2026-08-04:** The quality-findings milestone left its first `product` span open through focused content tests, both 327-case hook corpora, the interleaved benchmark, and skill contract runs. The category switched only for final repository verification. The receipt total remains prospective, but its product/proof split is knowingly inaccurate and must be disclosed rather than used for calibration.
 
 **Recurrence 2026-08-09:** M03 left its first `product` span open across goat-debug RED confirmation, delegated pressure runs, and the deployment test matrix, then into goat-critique RED. The mistake was caught after 1,604 seconds when the user challenged forecast quality; the receipt switched to `proof` immediately. Total elapsed time remains prospective, but the first segment's category is knowingly mixed and cannot calibrate product-versus-proof rates.
+
+**Recurrence 2026-08-14:** Code-quality-upstream M03 left one `product` span open across product edits, three fresh evaluator runs, formatting recovery, full-suite diagnosis, portability-proof correction, and final repository gates. The mistake was caught before the human gate. Because no prospective category boundaries survived, the open span was discarded and `Actual` was recorded as incomplete instead of publishing the entire mixed session as measured product time. Evidence anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
 
 **Root cause:** Starting a receipt feels like the whole discipline, so category maintenance gets treated as optional bookkeeping. A single long span is also the path of least resistance - `stop` then `start` is two commands, while doing nothing is zero. The resulting split carries the full authority of a `measured` Actual while being no better than a guess.
 
@@ -235,6 +237,27 @@ last_reviewed: 2026-08-14
 5. Prefer under-claiming: the total is the trustworthy part of a mis-tagged receipt, so say so explicitly.
 
 **Evidence anchors:** `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) performs the category change; `src/cli/plans-check.ts` (search: `function collectMeasuredActualErrors`) reconciles Actual against the receipt but cannot detect a mis-tagged category. Related: `.goat-flow/learning-loop/lessons/coordination.md` (search: `## Lesson: Actual time must come from prospective active-time segments`) covers the prior failure of never starting a receipt at all.
+
+---
+
+## Lesson: Activate a milestone before starting its timing receipt
+
+**Status:** active | **Created:** 2026-08-14
+**Decision changed:** Set exactly one active milestone status before starting its first timing segment; lifecycle state precedes measurement.
+**Trigger phase:** ACT
+**Incident count:** 1
+**Latest occurrence:** 2026-08-14
+
+**What happened:** While starting code-quality-upstream M04, I ran `plans time start` while its rendered `Status` was still `not-started`. The CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`; I then changed the status and reran the command successfully.
+
+**Root cause:** I treated receipt creation as the transition that made the milestone active. The CLI instead treats active lifecycle state as a precondition for opening a clock, so my operation order was inverted.
+
+**Prevention:**
+1. Change the milestone to `in-progress` or `testing-gate` before the first `plans time start` command.
+2. Confirm the milestone renders exactly one `Status` field, then start the category and inspect the returned open segment.
+3. If start is rejected, correct the state and retry prospectively; never fabricate or backfill the missed interval.
+
+**Evidence anchor:** `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) rejects missing, competing, empty, or inactive milestone states before opening a receipt.
 
 ---
 

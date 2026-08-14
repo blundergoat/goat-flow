@@ -2,11 +2,11 @@
 
 **Status:** Implemented
 **Date:** 2026-08-13
-**Ticket/Context:** `.goat-flow/plans/hook-command-portability/` (M01 evidence spike, M02 implementation)
+**Ticket/Context:** `.goat-flow/plans/1.16.0/hook-command-portability/` (M01 evidence spike, M02 implementation)
 
 ## Context
 
-The hook writer serialized one 5,648-character `node -e` shell command for every provider. On Windows, all three transports mangled that command before Goat Flow's policy code could start: cmd.exe exited 255 on an unrecognized token, Windows PowerShell failed at the operand-tokenizer regex, and the `bash -c` argv round-trip collapsed `\\` and `\"` into a Node `[eval]:1` SyntaxError. A Bash file control ran the same bootstrap successfully, so the failure belonged to command transport, not policy behavior. Measured 2026-08-13 on Windows with Node v24.9.0 and Git Bash 5.3.15; reproduction: `.goat-flow/plans/hook-command-portability/spawn-matrix.mjs`.
+The hook writer serialized one 5,648-character `node -e` shell command for every provider. On Windows, all three transports mangled that command before Goat Flow's policy code could start: cmd.exe exited 255 on an unrecognized token, Windows PowerShell failed at the operand-tokenizer regex, and the `bash -c` argv round-trip collapsed `\\` and `\"` into a Node `[eval]:1` SyntaxError. A Bash file control ran the same bootstrap successfully, so the failure belonged to command transport, not policy behavior. Measured 2026-08-13 on Windows with Node v24.9.0 and Git Bash 5.3.15; reproduction: `.goat-flow/plans/1.16.0/hook-command-portability/spawn-matrix.mjs`.
 
 Provider handler contracts are not interchangeable. A live capture of Claude Code 2.1.229 on Windows loaded exec-form `command` plus `args` handlers, preserved an operand containing spaces, ampersands, parentheses, and a pipe, ran from the project root, and delivered an exit-2 denial to the active model. Disposable captures of Codex CLI 0.147.0, Copilot CLI 0.0.409, and Antigravity CLI 1.1.9 produced no handler start or delivered result, so ADR-052's evidence gate blocks their migration.
 

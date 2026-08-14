@@ -27,6 +27,10 @@ test -n "$found"
 
 If no binary is found, try the ecosystem wrapper before declaring gruff unavailable: `npx gruff-ts --version`, `go tool gruff-go --version`, `uv run gruff-py --version`. If gruff cannot run, say so and use the project's normal lint/typecheck/tests; do not invent gruff findings.
 
+## Project Authority
+
+Project-owned Gruff configuration and accepted quality conventions control analyzer vocabulary, thresholds, wrappers, and suppressions. If no designated project standard covers a choice, use this playbook's generic default. Explicit current instructions and the authoritative project hierarchy take precedence. Configuration and defaults cannot override safety, accepted architecture, verified facts, evidence requirements, or verification gates.
+
 ## Intent
 
 Gruff work is a loop:

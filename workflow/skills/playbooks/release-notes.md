@@ -16,6 +16,10 @@ This is a discipline reference, not a runnable tool. Load it when:
 
 No availability command applies. If the project has draft-shape, link, or version checks, run them; they augment the **Verification Gate** and do not replace it.
 
+## Project Authority
+
+An authoritative project release-note policy controls the chosen surface, voice, structure, and required notices. If no such project standard exists, fall back to this playbook's defaults. Active instructions and the project's authoritative hierarchy still rank higher. Those lower layers must not weaken safety, accepted architecture, verified facts, evidence requirements, or verification gates.
+
 ## Intent
 
 You are a coding agent producing or reviewing a release artifact. Your job is to turn verified changelog evidence into the shortest useful user-facing release notes.

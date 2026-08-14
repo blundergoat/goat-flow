@@ -157,3 +157,30 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 1. After refactoring manifest/registry code that filters ids and then indexes a `Record`, run `npm run typecheck` even if the focused unit tests already pass.
 2. When a helper signature or typed callback changes in a touched `.ts` file, include `prettier --check` or `prettier --write` in the focused verification pass before closeout.
 ---
+
+## Lesson: Semantic prose contracts must bind to the owned section
+
+**Status:** active | **Created:** 2026-08-14
+
+**Decision changed:** Make semantic wording assertions case-insensitive unless casing is the contract, and bound shared files to the exact owned section, object, or fence.
+
+**Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-08-14
+
+**What happened:** The first partial GREEN for test-selection rejected correct prose because heading and table capitalization differed, stopped a template block at a nested heading before its records, and scanned an entire shared preset catalog instead of the four owned prompts. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `function templateBlock`) and (search: `affectedPresetIds`).
+
+**Recurrence (2026-08-14):** The first portability sweep repeated the shared-container mistake by scanning every complete ledger file. It stopped on an older absolute path in the generated lessons index, while the local milestone necessarily contained the deny patterns it documented. The corrected proof keeps ledger existence exhaustive but binds residue assertions to the redacted receipts, new doctrine, byte-identical catalog mirror, and exact QA-facing owner slices. Evidence anchor: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `test-selection source neutrality`).
+
+**Recurrence (2026-08-14):** M05's first GREEN rejected three correct fallback clauses because the semantic matcher accepted singular `default` but not plural `defaults`. The doctrine was present; the contract owned incidental morphology. Expanding only that token to `defaults?` restored semantic variation without weakening the bounded authority checks. A sentence-level sweep then found an identical protected-boundary sentence in three disciplines; varying those sentences kept the shared meaning without turning one formulation into policy. Evidence anchor: `test/contract/playbook-precedence-doctrine.test.ts` (search: `generic fallback is not bounded`).
+
+**Recurrence (2026-08-14):** M05's first unsafe-authority sweep searched every playbook for `This playbook owns` and rejected valid discipline routing in writing-style plus an out-of-scope hook playbook. The corrected sweep inspects precedence direction inside the eight target disciplines and keeps unrelated ownership statements outside the semantic owner. Evidence anchor: `workflow/skills/playbooks/writing-style.md` (search: `Sibling playbooks own`).
+
+**Root cause:** The contract parser treated presentation boundaries and a shared container as the semantic owner. The assertions therefore coupled correct doctrine to incidental casing, Markdown nesting, and unrelated sibling content.
+
+**Fix:** Use case-insensitive semantic regular expressions, bound template extraction to its code fence, inspect only the named prompt objects owned by the change, and separate exhaustive path-existence proof from content checks over exact semantic owners.
+
+**Prevention:**
+1. Treat capitalization as formatter or prose presentation unless exact casing is itself the contract.
+2. Extract the narrowest semantic owner: a fenced template, named section, or explicit object set.
+3. Keep unrelated sibling content outside neutrality and doctrine assertions.
+4. Rerun the focused contract before expanding verification.
+---

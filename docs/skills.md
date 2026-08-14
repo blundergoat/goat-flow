@@ -346,6 +346,8 @@ flowchart TD
 
 Standard presents Phase 2 and pauses by default. An explicit "what should I test" or "test plan" intent auto-releases the gate as a checkpoint and continues through Phase 3. Audit mode always waits after its A4 gap report.
 
+Before recommending an addition or a change to an existing test, goat-qa reads `.goat-flow/skill-docs/playbooks/test-selection.md`. Its value gate records a plausible regression and impact, current overlap and why other coverage is insufficient, and the stable contract; it then chooses the cheapest trustworthy level and assigns a creation or existing-test disposition. The result remains report-only: ordinary implementation re-reads current code and coverage before any approved mutation.
+
 ---
 
 ## Shared Conventions

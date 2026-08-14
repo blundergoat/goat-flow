@@ -1,6 +1,6 @@
 ---
 category: integration-verification
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-14
 ---
 
 ## Lesson: Manifest canonical vs stale_names misclassification silently broke skill installs
@@ -99,13 +99,16 @@ last_reviewed: 2026-08-09
 
 **Status:** active | **Created:** 2026-04-25
 
-**What happened:** A v1.3.0 version-bump pass added one Essential Commands line to `.github/copilot-instructions.md`. `wc -l` reported 120 lines, but `npm test` still failed the Copilot contract because the test counts `readFileSync(...).split(/\r?\n/)`, so a trailing newline makes a 120-line file count as 121 entries.
+**Incident count:** 2 | **Latest occurrence:** 2026-08-14
 
-**Root cause:** I checked the human line count after the failure instead of reading the contract's counting helper first. The repository's enforced ceiling is the test helper, not `wc -l`.
+**What happened:** A v1.3.0 version-bump pass added one Essential Commands line to `.github/copilot-instructions.md`. `wc -l` reported 120 lines, but `npm test` still failed the Copilot contract because the test counts `readFileSync(...).split(/\r?\n/)`, so a trailing newline makes a 120-line file count as 121 entries. The same mistake recurred during the v1.16.0 naming-and-placement verification: I refreshed `scripts/gruff-warning-baseline.json` from a `wc -l` result of 752, while Gruff's emitted metadata counted 753 lines and rejected the baseline.
+
+**Root cause:** I treated `wc -l` as the repository's universal line metric instead of reading the enforcing contract or analyzer output. The consumer of the count owns the enforced value; a terminal newline can make that value differ from `wc -l`.
 
 **Prevention:**
 1. When touching `.github/copilot-instructions.md`, keep `wc -l` below the configured target or run the instruction-line-count gate in `bash scripts/preflight-checks.sh` before broader verification.
-2. For line-budget failures, read the exact line-count implementation before deciding how many lines need to be trimmed. Evidence anchor: `scripts/preflight-checks.sh` (search: `line_target`).
+2. For any line-budget or accepted-debt update, run the owning checker and copy its emitted metric; do not translate a `wc -l` result into contract metadata.
+3. Read the exact enforcement path before deciding how many lines need to be trimmed or baselined. Evidence anchors: `scripts/preflight-checks.sh` (search: `line_target`) and `scripts/gruff-warning-ratchet-checks.mjs` (search: `metadata regression`).
 
 ---
 

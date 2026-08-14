@@ -18,6 +18,10 @@ This is a discipline reference, not a runnable tool. Load it when:
 
 No CLI check applies; correctness is verified at review time using the **Verification Gate** below, not by running a command.
 
+## Project Authority
+
+Project observability standards govern signal vocabulary, namespaces, field names, severity mappings, and cardinality limits. Without a designated project convention, these generic examples are the fallback. Explicit current instructions and accepted architecture remain authoritative. Project patterns and playbook defaults cannot override safety, verified facts, evidence requirements, or verification gates.
+
 ## Intent
 
 A coding agent adds instrumentation so a future operator can answer a concrete operational question without reopening the code: what happened, where, who or what was affected, and what action is expected. If a log, metric, or span event has no named consumer - dashboard, alert, runbook, incident query, or debugging workflow - do not add it.

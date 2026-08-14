@@ -53,6 +53,7 @@ const SHARED_PLAYBOOK_FILENAMES = [
   "page-capture.md",
   "release-notes.md",
   "skill-playbook-authoring-sync.md",
+  "test-selection.md",
   "writing-style.md",
 ] as const;
 export const HOOK_STUB = "#!/usr/bin/env bash\n# deny hook stub\n";

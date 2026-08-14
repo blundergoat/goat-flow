@@ -19,6 +19,10 @@ Non-runnable authoring methodology - no CLI check applies. Load when creating or
 | `adversarial-framing.md` | Cynical-reviewer role, zero-findings HALT, parallel reviewer pattern, finding schema | Authoring or hardening review-class skills. |
 | `deployment.md` | Deployment checklist, verification claim evidence, consumer/API skill guardrails, STOP rule | Finalising before merge. |
 
+## Evaluation contract
+
+Match fixtures and controls to the skill's capability and risk in `tdd-iteration.md`. Every fixture names an already-correct control and scores application, not citation. Load `adversarial-framing.md` only for review-class specialisation; it does not own the universal fixture or scoring rules.
+
 ## The iron law (always-loaded anchor)
 
 > **No skill without a failing test first.**

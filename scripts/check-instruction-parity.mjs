@@ -71,6 +71,14 @@ const SHARED_PHRASES = [
     ],
   },
   {
+    label: "test-selection READ route",
+    section: "Execution Loop",
+    phrases: [
+      "Before creating, changing, reviewing, consolidating, moving, or pruning tests",
+      ".goat-flow/skill-docs/playbooks/test-selection.md",
+    ],
+  },
+  {
     label: "hallucination red flags",
     section: "Execution Loop",
     phrases: [

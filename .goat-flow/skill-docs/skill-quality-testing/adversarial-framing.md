@@ -11,6 +11,10 @@ Companion files in this pack:
 
 Load this file when authoring or hardening a review-class skill, or any skill whose job is to find problems in other artefacts.
 
+## Review-class control handling
+
+Start with the generic fixture and scoring rules in `tdd-iteration.md`. Add at least one compliant review control whose expected no-op is no finding or recommendation. Use this file's adversarial roles only when the risk warrants combined pressures; review-class suspicion does not justify blanket reporting.
+
 ## Setting the reviewer role
 
 For skills that critique or review artefacts, set the role directly:

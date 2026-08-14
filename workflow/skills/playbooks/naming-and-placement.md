@@ -24,6 +24,15 @@ Also load the project's accepted architecture, local instructions, vocabulary,
 and compatibility policy. If one is unavailable, record that evidence boundary
 instead of inventing a convention.
 
+## Project Authority
+
+Project naming and placement canon governs vocabulary, role meanings,
+compatibility depth, and structural boundaries. When no designated project
+convention resolves a choice, use the playbook default. Explicit current
+instructions and accepted architecture retain authority. Local precedent and
+playbook defaults cannot override safety, verified facts, evidence requirements,
+or verification gates.
+
 ## Intent
 
 A future maintainer with none of the author's context should be able to tell why

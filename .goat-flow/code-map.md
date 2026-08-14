@@ -301,6 +301,7 @@ docs/                            = user and maintainer documentation
 │       ├── page-capture.md      = Playwright/browser page-capture usage tiers
 │       ├── release-notes.md     = per-release narrative surfaces derived from changelog
 │       ├── skill-playbook-authoring-sync.md = built-in playbook enrollment and verification contract
+│       ├── test-selection.md    = value-led test placement, dispositions, and safe mutation handoff
 │       └── writing-style.md     = prose style for human-read artifacts incl. learning-loop entry bodies; agent-read control text exempt
 ├── logs/                        = local session, quality, events, critique, review, security, upload history
 ├── plans/                       = local milestone/plan files; gitignored except anchors

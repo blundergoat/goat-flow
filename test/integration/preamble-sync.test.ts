@@ -116,6 +116,14 @@ const INSTALLED_PLAYBOOK_AUTHORING_SYNC = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
 );
+const TEMPLATE_TEST_SELECTION = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/test-selection.md",
+);
+const INSTALLED_TEST_SELECTION = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/test-selection.md",
+);
 const TEMPLATE_WRITING_STYLE = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/writing-style.md",
@@ -337,6 +345,19 @@ describe("preamble/conventions sync: current state", () => {
       ),
       0,
       "skill-playbook-authoring-sync.md: template and installed should match",
+    );
+  });
+
+  it("template and installed test-selection.md match", () => {
+    assertMirrorExists(
+      TEMPLATE_TEST_SELECTION,
+      INSTALLED_TEST_SELECTION,
+      "test-selection.md",
+    );
+    assert.equal(
+      diffQuiet(TEMPLATE_TEST_SELECTION, INSTALLED_TEST_SELECTION),
+      0,
+      "test-selection.md: template and installed should match",
     );
   });
 
