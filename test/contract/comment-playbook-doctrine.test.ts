@@ -84,7 +84,7 @@ describe("comment playbook verification doctrine", () => {
       );
       assert.match(
         content,
-        /public\/exported APIs[\s\S]+non-obvious contract/u,
+        /for public\/exported APIs, and for\s+file\/module\/class boundaries with a non-obvious contract/u,
         playbookPath,
       );
       assert.match(
@@ -99,6 +99,21 @@ describe("comment playbook verification doctrine", () => {
     assertForPlaybook("code-comments.md", (content, playbookPath) => {
       assert.match(content, /interface reader/u, playbookPath);
       assert.match(content, /separate layer lens/u, playbookPath);
+      assert.match(
+        content,
+        /Product code behind a UI[\s\S]+person using the screen/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /CLI, library, SDK, framework[\s\S]+developer calling it/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Daemon, job, migration, infrastructure[\s\S]+operator reading the log/u,
+        playbookPath,
+      );
       assert.match(
         content,
         /domain\/service[\s\S]+invariant or business consequence/u,
@@ -261,7 +276,17 @@ describe("Gruff documentation-pass doctrine", () => {
       assert.match(content, /do not smuggle in a file split/u, playbookPath);
       assert.match(
         content,
-        /block shape and 150-character limit/u,
+        /when the symbol is a public\/exported API/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /file\/module\/class boundary has a non-obvious\s+contract/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /block shape and 150-character ceiling/u,
         playbookPath,
       );
       assert.match(

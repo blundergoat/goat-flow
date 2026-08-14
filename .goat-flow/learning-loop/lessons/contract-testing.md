@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-08-12
+last_reviewed: 2026-08-14
 ---
 
 ## Lesson: Reference-pack wording fixes must check word budget immediately
@@ -74,6 +74,8 @@ last_reviewed: 2026-08-12
 
 **Fix:** Keep source-regex tests focused on semantic tokens and tolerate formatter-owned whitespace. Evidence anchors: `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `warms xterm when the workspace or setup view opens`), `src/dashboard/dashboard-app-init.ts` (search: `view === "workspace" || view === "setup"`).
 
+**Recurrence (2026-08-14):** M01's new Gruff D6 assertion preserved the intended qualifier order but required a literal space between `non-obvious` and `contract`; Markdown wrapping inserted a newline and left correct prose RED. Allowing whitespace only at that gap kept the semantic boundary pinned without owning layout. Evidence anchor: `test/contract/comment-playbook-doctrine.test.ts` (search: `file\\/module\\/class boundary has a non-obvious\\s+contract`).
+
 **Prevention:** After changing source-grep tests for dashboard classic scripts, run Prettier before the focused test rerun. If a regex only protects structure, make whitespace flexible enough for formatter reflow or use a small VM helper test instead.
 
 **Recurrence 2026-05-12:** While self-hosting xterm assets, `test/integration/dashboard-server.test.ts` fetched `/assets/xterm.js` successfully but failed because the assertion looked for `XTerm`, a string not present in the minified upstream bundle. The route was correct; the test anchor was wrong. For vendored/minified assets, assert route status/content type and stable feature strings observed in the actual bundle, such as `bracketedPasteMode`, not package names or branding text.
@@ -107,12 +109,15 @@ last_reviewed: 2026-08-12
 
 **What happened:** Claude Insights reported 68 buggy-code friction events across 112 sessions (61% of sessions had at least one). The `/goat-qa` skill generates test plans after implementation, and `stop-lint.sh` used to run linting after every turn before its removal from goat-flow core per ADR-015, but neither caught logic regressions mid-implementation. Tests only run when the user explicitly asks or when a milestone completes. Regressions introduced in turn 3 of a 10-turn implementation aren't caught until the end, when the debugging context is stale.
 
+**Recurrence (2026-08-14):** During M01 comment-doctrine work, reader/layer and defect-vocabulary edits crossed a declared focused-test checkpoint before the earlier width/branch slice was proven green. The later edits were rewound and resumed only after the intended contract slice passed. Evidence anchor: `test/contract/comment-playbook-doctrine.test.ts` (search: `treats 150 as a ceiling instead of a width target`).
+
 **Root cause:** The verification loop runs at the wrong granularity. Lint after every turn catches syntax. Tests after every milestone catch logic. The gap between these two is where regressions hide.
 
 **Prevention:**
 1. Consider an optional post-write hook that runs the project's test command after file changes (configured via `config.yaml`, off by default)
 2. Skills with implementation phases should include a "run tests" checkpoint every N edits, not just at phase boundaries
 3. For test-heavy projects (1000+ tests), a focused test subset (changed files only) avoids the full-suite penalty while still catching regressions early
+4. Treat an explicit mid-implementation proof as a write boundary: stop later edits until the named focused slice is green.
 ---
 
 ## Lesson: Semantic drift checks must normalize natural-language lists before claiming mismatch

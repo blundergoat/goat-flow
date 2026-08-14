@@ -133,9 +133,9 @@ For each cluster:
 ## Documentation Findings
 
 For `docs.*`, load [`code-comments.md`](./code-comments.md) first. A missing-doc finding is a candidate,
-not proof that prose is required. Apply it when project or language canon requires documentation, or
-when a public/exported API or file/module/class boundary has a non-obvious contract. Otherwise classify
-the finding against the project's deliberate no-doc convention instead of adding a restatement. When a
+not proof that prose is required. Apply it when project or language canon requires documentation,
+when the symbol is a public/exported API, or when a file/module/class boundary has a non-obvious
+contract. Otherwise classify the finding against the project's deliberate no-doc convention. When a
 doc comment is required, meet the playbook's block shape and 150-character ceiling; do not add the
 shortest line that merely silences the analyzer.
 

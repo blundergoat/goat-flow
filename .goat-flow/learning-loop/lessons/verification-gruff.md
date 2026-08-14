@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-14
 ---
 
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
@@ -58,7 +58,7 @@ last_reviewed: 2026-08-10
 
 **Root cause:** Two correct rules collide: gruff rules must not be disabled, but comments must only explain non-obvious WHY. This rule had no tuning options, leaving only fix, rename, or baseline.
 
-**Prevention:** Triage `docs.missing-internal-function-doc` with the gruff-code-quality playbook. Add comments only when they meet the contract bar; otherwise rename or baseline with rationale. Revisit when gruff-ts gains threshold/name-match tuning. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Doc comments are mandatory under that playbook`), `scripts/preflight-checks.sh` (search: `Gruff Policy`).
+**Prevention:** Triage `docs.missing-internal-function-doc` with the gruff-code-quality playbook. Treat each missing-doc finding as a candidate: add a comment when project or language canon requires it, when the symbol is a public/exported API, or when a file/module/class boundary has a non-obvious contract. Otherwise classify the deliberate no-doc convention, rename when that removes ambiguity, or baseline the residue with rationale. Revisit when gruff-ts gains threshold/name-match tuning. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `when the symbol is a public/exported API`), `scripts/preflight-checks.sh` (search: `Gruff Policy`).
 
 ## Lesson: Keep the binary path returned by the gruff availability check
 

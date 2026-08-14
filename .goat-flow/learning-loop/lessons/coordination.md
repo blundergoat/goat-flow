@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-14
 ---
 
 ## Lesson: Git status cannot prove milestone work disappeared after HEAD moves
@@ -8,9 +8,11 @@ last_reviewed: 2026-08-10
 **Status:** active | **Created:** 2026-08-09
 **Decision changed:** Compare the recorded baseline tree, current HEAD, and file hashes before attempting recovery when a changed path disappears from `git status`.
 **Trigger phase:** VERIFY
-**Incident count:** 1 | **Latest occurrence:** 2026-08-09
+**Incident count:** 2 | **Latest occurrence:** 2026-08-14
 
 **What happened:** During M03 verification, goat-debug paths disappeared from `git status`, so I paused writes on the assumption that a test process had restored them. The files still had the expected hashes and differed from the recorded M03 baseline tree; current HEAD had advanced to a user-created commit that already contained those changes.
+
+**Recurrence (2026-08-14):** During M01 pending-state validation, ADR-059 and both playbook mirrors disappeared from `git status` after HEAD advanced to `8a8eb2f`. A read-only comparison confirmed that the new commit contained all seven doctrine paths while the six later corrections remained uncommitted, so no recovery write was needed. Evidence anchors: `.goat-flow/learning-loop/decisions/ADR-059-useful-comment-doctrine.md` (search: `Prefer useful comment contracts`) and `test/contract/comment-playbook-doctrine.test.ts` (search: `treats 150 as a ceiling instead of a width target`).
 
 **Root cause:** I read `git status` as a comparison with the milestone's recorded baseline. It compares the index and working tree with current HEAD, so a commit made during the milestone can make preserved work disappear from status without removing it.
 
@@ -150,14 +152,16 @@ last_reviewed: 2026-08-10
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** VERIFY
-**Incident count:** 4
-**Latest occurrence:** 2026-08-10
+**Incident count:** 5
+**Latest occurrence:** 2026-08-14
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
 
 **Recurrence 2026-08-10:** A hook-coverage milestone left its product receipt open overnight across approval pauses. Because the stop time could no longer distinguish agent work from human waiting, the span had to be discarded; its Actual is incomplete and cannot calibrate future forecasts.
 
 **Recurrence 2026-08-10:** During release-plan closeout, I passed a display identifier to `plans time stop` instead of the required milestone-file path. The CLI rejected the command and left the receipt open until the invocation used the exact `M*.md` path. Evidence anchor: `src/cli/plans-time.ts` (search: `requires an M*.md milestone file`).
+
+**Recurrence 2026-08-14:** M01 called `plans time start` while its single rendered status was still `not-started`; the CLI rejected the clock before writing a segment. Moving the milestone to `in-progress` before retrying preserved prospective timing. Evidence anchors: `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) and `test/unit/plans-export-parsing.test.ts` (search: `rejects Start with`).
 
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
 
@@ -169,6 +173,7 @@ last_reviewed: 2026-08-10
 5. If timing was not started prospectively, label Actual as a low-confidence retrospective estimate. Never call it measured or derive it from the plan.
 6. Calibrate future estimates only after at least three comparable measured milestones. Use the median `actual / estimate` ratio plus a low/likely/high range; one fast milestone is evidence, not a universal multiplier.
 7. Pass the exact milestone-file path to timing commands; a display identifier is not a file locator.
+8. Set exactly one rendered milestone status to `in-progress` or `testing-gate` before `plans time start`; the lifecycle transition precedes clock opening.
 
 **Evidence anchors:** `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI proof records`) defines the handoff requirement; `src/cli/plans-effort.ts` (search: `renderActualLine`) renders the recorded value but cannot create timing evidence.
 
