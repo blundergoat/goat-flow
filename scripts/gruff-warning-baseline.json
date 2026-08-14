@@ -53,25 +53,13 @@
       ]
     },
     {
-      "stableIdentity": "30e2d47f28577274",
+      "stableIdentity": "f4fa8e63b347d37d",
       "ruleId": "size.file-length",
       "file": "src/cli/server/agent-hook-writer.ts",
-      "rationale": "Reviewed oversized file; ADR-053 structured descriptor rows added six lines, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "rationale": "Reviewed oversized file; reduced to three analyzer-counted lines above the threshold, with the remaining split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
       "occurrences": [
         {
-          "lines": 756,
-          "threshold": 750
-        }
-      ]
-    },
-    {
-      "stableIdentity": "3482358c083e39c9",
-      "ruleId": "size.file-length",
-      "file": "test/contract/skill-hardening-skills-2.test.ts",
-      "rationale": "Reviewed oversized file; grew past the threshold in the 1.15.1 skill-hardening coverage commits before this review, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
-      "occurrences": [
-        {
-          "lines": 1517,
+          "lines": 753,
           "threshold": 750
         }
       ]
