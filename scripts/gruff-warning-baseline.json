@@ -29,6 +29,18 @@
       ]
     },
     {
+      "stableIdentity": "26df55241efaf5a0",
+      "ruleId": "size.file-length",
+      "file": "test/integration/setup-install-agent-matrix.test.ts",
+      "rationale": "Reviewed oversized file; grew by the executable duplicate-convergence installer fixtures, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 910,
+          "threshold": 750
+        }
+      ]
+    },
+    {
       "stableIdentity": "27839c15fa244820",
       "ruleId": "size.file-length",
       "file": "test/integration/skill-author.test.ts",
@@ -73,6 +85,19 @@
         {
           "lines": 1517,
           "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "4713374c07b6f58e",
+      "ruleId": "security.process-exec",
+      "file": "test/integration/hook-command-spawn-matrix.test.ts",
+      "rationale": "Spawn-matrix suite replays the registered exec-form Claude handler via argv spawnSync with shell disabled.",
+      "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "member",
+          "shellEnabled": false
         }
       ]
     },
@@ -140,18 +165,6 @@
           "callName": "spawnSync",
           "argumentSource": "member",
           "shellEnabled": false
-        }
-      ]
-    },
-    {
-      "stableIdentity": "6efd7ddf9f9f517a",
-      "ruleId": "size.file-length",
-      "file": "test/unit/hook-registrar.test.ts",
-      "rationale": "Reviewed oversized file; grew by the ADR-053 migration and descriptor-parity cases, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
-      "occurrences": [
-        {
-          "lines": 891,
-          "threshold": 750
         }
       ]
     },
@@ -263,6 +276,18 @@
           "callName": "spawn",
           "argumentSource": "member",
           "shellEnabled": false
+        }
+      ]
+    },
+    {
+      "stableIdentity": "c68f8024af4c3f8d",
+      "ruleId": "size.file-length",
+      "file": "test/unit/hook-registrar.test.ts",
+      "rationale": "Reviewed oversized file; grew by the ADR-053 migration, descriptor-parity, and duplicate-convergence cases, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 1176,
+          "threshold": 750
         }
       ]
     },

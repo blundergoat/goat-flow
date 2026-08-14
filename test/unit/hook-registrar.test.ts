@@ -26,11 +26,15 @@ import {
   HookRegistrarError,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
-import { managedAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
+import {
+  commandEntryReferencesSpec,
+  managedAgentHookDescriptor,
+} from "../../src/cli/server/agent-hook-command.js";
 import {
   getHookSpec,
   isValidHookIdShape,
   listHookSpecs,
+  type HookSpec,
 } from "../../src/cli/server/hooks-registry.js";
 import {
   discoverWindowsBashCandidates as discoverHookWindowsBashCandidates,
@@ -112,6 +116,41 @@ const SUPPORTED_PROVIDER_HOOK_CASES = [
     registrationTargets: [{ event: "postToolUse", matcher: null }],
   },
 ] as const;
+
+/**
+ * Count the physical command rows one hook owns anywhere in a provider config.
+ * Use so convergence proof counts rows instead of trusting installed state alone.
+ *
+ * @param configValue - parsed config value; null and primitives contain no rows
+ * @param hookSpec - managed hook whose owned rows are counted
+ * @returns owned direct command rows; zero means the hook is not registered
+ */
+function countOwnedCommandRows(
+  configValue: unknown,
+  hookSpec: HookSpec,
+): number {
+  // Arrays represent event groups or nested command lists in agent settings.
+  if (Array.isArray(configValue)) {
+    return configValue.reduce<number>(
+      (rowCount, nestedValue) =>
+        rowCount + countOwnedCommandRows(nestedValue, hookSpec),
+      0,
+    );
+  }
+  // Null and primitive values cannot contain a runnable command.
+  if (configValue === null || typeof configValue !== "object") return 0;
+  const directOwnedRow = commandEntryReferencesSpec(configValue, hookSpec)
+    ? 1
+    : 0;
+  return (
+    directOwnedRow +
+    Object.values(configValue).reduce<number>(
+      (rowCount, nestedValue) =>
+        rowCount + countOwnedCommandRows(nestedValue, hookSpec),
+      0,
+    )
+  );
+}
 
 describe("hook registrar: launchers and installation", () => {
   /** Proves installed hooks can find default Git Bash when PATH exposes only WSL. */
@@ -298,12 +337,34 @@ describe("hook registrar: launchers and installation", () => {
         assert.ok(Array.isArray(eventEntries));
         assert.ok(eventEntries[0]);
         eventEntries.push(structuredClone(eventEntries[0]));
+        // A neighbouring user hook in the same event array must survive the repair.
+        const userHookRow =
+          desiredStateCase.agent.id === "copilot"
+            ? {
+                type: "command",
+                bash: "./scripts/team-audit.sh",
+                powershell: "./scripts/team-audit.ps1",
+                timeoutSec: 10,
+              }
+            : {
+                matcher: firstRegistrationTarget.matcher ?? undefined,
+                hooks: [{ type: "command", command: "./scripts/team-audit.sh" }],
+              };
+        eventEntries.push(structuredClone(userHookRow));
         hookConfig.userOwnedMarker = "preserve";
         writeFileSync(
           hookConfigPath,
           `${JSON.stringify(hookConfig, null, 2)}\n`,
         );
 
+        // The seeded duplicate is executable state, not metadata: one extra owned row exists.
+        assert.equal(
+          countOwnedCommandRows(
+            JSON.parse(readFileSync(hookConfigPath, "utf-8")),
+            hookSpec,
+          ),
+          desiredStateCase.registrationTargets.length + 1,
+        );
         assert.equal(
           readAgentHookState(root, desiredStateCase.agent, hookSpec)
             .registrationIssue,
@@ -318,10 +379,234 @@ describe("hook registrar: launchers and installation", () => {
           readAgentHookState(root, desiredStateCase.agent, hookSpec).installed,
           true,
         );
+        // Installed state alone cannot prove convergence; count the physical rows.
+        assert.equal(
+          countOwnedCommandRows(repairedConfig, hookSpec),
+          desiredStateCase.registrationTargets.length,
+        );
         assert.equal(repairedConfig.userOwnedMarker, "preserve");
+        const repairedEventEntries =
+          desiredStateCase.agent.id === "antigravity"
+            ? (repairedConfig[hookSpec.id] as Record<string, unknown[]>)[
+                firstRegistrationTarget.event
+              ]
+            : (repairedConfig.hooks as Record<string, unknown[]>)[
+                firstRegistrationTarget.event
+              ];
+        assert.ok(Array.isArray(repairedEventEntries));
+        // Antigravity definitions are replaced wholesale, so the user row lives elsewhere.
+        if (desiredStateCase.agent.id !== "antigravity") {
+          assert.ok(
+            repairedEventEntries.some(
+              (eventEntry) =>
+                JSON.stringify(eventEntry) === JSON.stringify(userHookRow),
+            ),
+            "the neighbouring user hook row must survive duplicate repair",
+          );
+        }
       });
     });
   }
+
+  it("converges duplicate and mixed stale and current rows across three CLI syncs", () => {
+    withTempProject((root) => {
+      const denySpec = getHookSpec("deny-dangerous");
+      const postTurnSpec = getHookSpec("post-turn-safety");
+      assert.ok(denySpec);
+      assert.ok(postTurnSpec);
+      const staleShellRow = {
+        matcher: "Bash",
+        hooks: [
+          {
+            type: "command",
+            command: "bash .goat-flow/hooks/deny-dangerous.sh",
+          },
+        ],
+      };
+      const userShellRow = {
+        matcher: "Bash",
+        hooks: [{ type: "command", command: "./scripts/team-audit.sh" }],
+      };
+      // The reported consumer state: two byte-identical stale Stop groups.
+      const staleStopGroup = {
+        hooks: [
+          {
+            type: "command",
+            command: [
+              "node",
+              "-e",
+              JSON.stringify("process.exit(0);"),
+              JSON.stringify(".goat-flow/hooks/post-turn-safety.sh"),
+              JSON.stringify("post-turn"),
+              JSON.stringify("CLAUDE_PROJECT_DIR"),
+              JSON.stringify(".claude/settings.json"),
+              JSON.stringify(".goat-flow/hooks/run-with-bash.mjs"),
+            ].join(" "),
+            timeout: 90,
+          },
+        ],
+      };
+
+      // Seed every provider surface with its current rows first.
+      mkdirSync(join(root, ".claude"), { recursive: true });
+      writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "\n");
+      mkdirSync(join(root, ".agents"), { recursive: true });
+      writeFileSync(join(root, ".agents", "hooks.json"), "{}\n");
+      mkdirSync(join(root, ".github", "hooks"), { recursive: true });
+      writeFileSync(join(root, ".github", "hooks", "hooks.json"), "{}\n");
+      writeAgentHookState(root, PROFILES.claude, denySpec, true);
+      writeAgentHookState(root, PROFILES.codex, denySpec, true);
+      writeAgentHookState(root, PROFILES.antigravity, denySpec, true);
+      writeAgentHookState(root, PROFILES.copilot, denySpec, true);
+
+      // Pollute each provider with duplicate, stale, and user-owned rows.
+      const claudeSettingsPath = join(root, ".claude", "settings.json");
+      const claudeSettings = JSON.parse(
+        readFileSync(claudeSettingsPath, "utf-8"),
+      ) as { hooks: { PreToolUse: unknown[]; Stop: unknown[] } };
+      const claudeDenyRow = claudeSettings.hooks.PreToolUse[0];
+      assert.ok(claudeDenyRow);
+      claudeSettings.hooks.PreToolUse.push(
+        structuredClone(claudeDenyRow),
+        structuredClone(staleShellRow),
+        structuredClone(userShellRow),
+      );
+      claudeSettings.hooks.Stop = [
+        structuredClone(staleStopGroup),
+        structuredClone(staleStopGroup),
+      ];
+      writeFileSync(
+        claudeSettingsPath,
+        `${JSON.stringify(claudeSettings, null, 2)}\n`,
+      );
+
+      const codexHooksPath = join(root, ".codex", "hooks.json");
+      const codexHooks = JSON.parse(
+        readFileSync(codexHooksPath, "utf-8"),
+      ) as { hooks: { PreToolUse: unknown[] } };
+      const codexDenyRow = codexHooks.hooks.PreToolUse[0];
+      assert.ok(codexDenyRow);
+      codexHooks.hooks.PreToolUse.push(
+        structuredClone(codexDenyRow),
+        structuredClone(staleShellRow),
+        structuredClone(userShellRow),
+      );
+      writeFileSync(
+        codexHooksPath,
+        `${JSON.stringify(codexHooks, null, 2)}\n`,
+      );
+
+      const antigravityHooksPath = join(root, ".agents", "hooks.json");
+      const antigravityHooks = JSON.parse(
+        readFileSync(antigravityHooksPath, "utf-8"),
+      ) as { "deny-dangerous": { PreToolUse: unknown[] } } & Record<
+        string,
+        unknown
+      >;
+      const antigravityDenyGroup = antigravityHooks["deny-dangerous"].PreToolUse[0];
+      assert.ok(antigravityDenyGroup);
+      antigravityHooks["deny-dangerous"].PreToolUse.push(
+        structuredClone(antigravityDenyGroup),
+      );
+      antigravityHooks["team-audit"] = {
+        enabled: true,
+        PreToolUse: [
+          {
+            matcher: "run_command",
+            hooks: [{ type: "command", command: "./scripts/team-audit.sh" }],
+          },
+        ],
+      };
+      writeFileSync(
+        antigravityHooksPath,
+        `${JSON.stringify(antigravityHooks, null, 2)}\n`,
+      );
+
+      const copilotHooksPath = join(root, ".github", "hooks", "hooks.json");
+      const copilotHooks = JSON.parse(
+        readFileSync(copilotHooksPath, "utf-8"),
+      ) as { hooks: { preToolUse: unknown[] } };
+      const copilotDenyRow = copilotHooks.hooks.preToolUse[0];
+      assert.ok(copilotDenyRow);
+      copilotHooks.hooks.preToolUse.push(
+        structuredClone(copilotDenyRow),
+        {
+          type: "command",
+          bash: "bash .goat-flow/hooks/deny-dangerous.sh",
+          powershell: "bash .goat-flow/hooks/deny-dangerous.sh",
+          timeoutSec: 30,
+        },
+        {
+          type: "command",
+          bash: "./scripts/team-audit.sh",
+          powershell: "./scripts/team-audit.ps1",
+          timeoutSec: 10,
+        },
+      );
+      writeFileSync(
+        copilotHooksPath,
+        `${JSON.stringify(copilotHooks, null, 2)}\n`,
+      );
+
+      // Three consecutive syncs must converge once and then hold exact bytes.
+      const providerConfigPaths = [
+        claudeSettingsPath,
+        codexHooksPath,
+        antigravityHooksPath,
+        copilotHooksPath,
+      ];
+      const configBytesPerRun: string[][] = [];
+      for (let syncRun = 0; syncRun < 3; syncRun += 1) {
+        syncHookStates(root);
+        configBytesPerRun.push(
+          providerConfigPaths.map((configPath) =>
+            readFileSync(configPath, "utf-8"),
+          ),
+        );
+      }
+      assert.deepEqual(configBytesPerRun[1], configBytesPerRun[0]);
+      assert.deepEqual(configBytesPerRun[2], configBytesPerRun[0]);
+
+      // Each provider ends with exactly one owned deny row and no stale text.
+      for (const [configIndex, configPath] of providerConfigPaths.entries()) {
+        const convergedText = configBytesPerRun[0]![configIndex]!;
+        assert.equal(
+          countOwnedCommandRows(JSON.parse(convergedText), denySpec),
+          1,
+          `${configPath} must keep exactly one owned deny row`,
+        );
+        assert.ok(
+          !convergedText.includes("bash .goat-flow/hooks/deny-dangerous.sh"),
+          `${configPath} must drop the stale managed row`,
+        );
+        assert.ok(
+          convergedText.includes("team-audit"),
+          `${configPath} must preserve the user's own hook row`,
+        );
+      }
+
+      // The duplicated stale Stop groups converge to one current structured row.
+      const convergedClaude = JSON.parse(configBytesPerRun[0]![0]!) as {
+        hooks: {
+          Stop: Array<{ hooks: Array<{ command?: string; args?: string[] }> }>;
+        };
+      };
+      assert.equal(
+        countOwnedCommandRows(convergedClaude, postTurnSpec),
+        1,
+        "the reported duplicate Stop state must converge to one row",
+      );
+      assert.equal(convergedClaude.hooks.Stop.length, 1);
+      assert.equal(convergedClaude.hooks.Stop[0]!.hooks[0]!.command, "node");
+      assert.ok(Array.isArray(convergedClaude.hooks.Stop[0]!.hooks[0]!.args));
+      assert.ok(
+        !configBytesPerRun[0]![0]!.includes("process.exit(0);"),
+        "stale inline Stop commands must not survive the sync",
+      );
+    });
+  });
 
   it("keeps current managed files while a user leaves a hook disabled", () => {
     withTempProject((root) => {

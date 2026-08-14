@@ -280,7 +280,7 @@ function compareHookArtifact(
     findings.push({
       kind: "missing",
       path: installedRel,
-      message: `hook template ${templateRel} has no installed copy at ${installedRel}`,
+      message: `hook template ${templateRel} has no installed copy at ${installedRel}; run goat-flow hooks sync`,
     });
     return;
   }
@@ -290,7 +290,7 @@ function compareHookArtifact(
     findings.push({
       kind: "content",
       path: installedRel,
-      message: `hook template (${templateRel}) and installed copy (${installedRel}) differ`,
+      message: `hook template (${templateRel}) and installed copy (${installedRel}) differ; run goat-flow hooks sync`,
     });
   }
 }
