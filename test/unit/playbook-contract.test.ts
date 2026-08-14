@@ -28,6 +28,7 @@ const standalonePlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/code-comments.md",
   ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
   ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
+  ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
   ".goat-flow/skill-docs/playbooks/observability.md",
   ".goat-flow/skill-docs/playbooks/page-capture.md",
   ".goat-flow/skill-docs/playbooks/release-notes.md",
@@ -241,6 +242,17 @@ describe("standalone playbook audit contract", () => {
           playbookPath === ".goat-flow/skill-docs/playbooks/writing-style.md",
       ),
       "writing-style.md must be registered before users can discover it",
+    );
+  });
+
+  it("registers naming-and-placement.md for audit and consumer discovery", () => {
+    assert.ok(
+      STANDALONE_PLAYBOOK_FILES.some(
+        (playbookPath) =>
+          playbookPath ===
+          ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
+      ),
+      "naming-and-placement.md must be registered before users can discover it",
     );
   });
 

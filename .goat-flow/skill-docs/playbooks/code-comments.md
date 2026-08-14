@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.15.1"
 ---
 # Code Comments
 
-Use this before naming an identifier or adding/editing a comment, docstring, or annotation. Write for the maintainer who later reads the code cold. Use plain English from the reader's perspective: what they did, see, or get next, never mechanics already shown by code.
+Use this before adding or editing a comment, docstring, or annotation. Start naming and placement work in [`naming-and-placement.md`](./naming-and-placement.md), then return here for prose that remains necessary. Write for the maintainer who later reads the code cold. Use plain English from the reader's perspective: what they did, see, or get next, never mechanics already shown by code.
 
 House style is mandatory across TypeScript, Python, Go, Rust, PHP, and shell. This playbook owns when and why to comment, tag separators, block shape, and the hard maximum of 150 characters.
 
@@ -12,7 +12,7 @@ House style is mandatory across TypeScript, Python, Go, Rust, PHP, and shell. Th
 This is a discipline reference, not a runnable tool. Load it when:
 
 - About to write a comment, docstring, annotation, or TODO / FIXME / HACK marker.
-- Naming or renaming a variable, method, or class.
+- Naming work has finished and the remaining change needs comment-specific guidance.
 - Editing code with existing comments, or reviewing a diff that changes them.
 
 Enforcement is partial: static tools may flag mechanical items, not `[judge]` semantic checks. Do not claim more enforcement than the project runs.
@@ -51,8 +51,9 @@ not quotas; apply a rule only when its stated contract exists.
    comment is useful, keep its description to 1-3 lines; use 3-8 for a documented boundary.
    For PHP class files, the class PHPDoc is the file/class boundary comment; do not also add a
    separate top-of-file PHPDoc above `declare`, `namespace`, or `use`.
-2. **Self-documenting names in the user's vocabulary.** Every variable and method named for what the user sees and does - `$data` -> `$overdueInvoices`, `handleSubmit` -> `sendRebookingRequest` - not internal mechanics. If the UI says "appointment", the code does not say "booking". Name the outcome the method exists to cause, even when a downstream layer delivers it; renaming toward the user's experience is worth the diff; plumbing values just need non-cryptic names.
-   Improve a name only when authorised, and report or defer structural remedies separately.
+2. **Naming and placement before compensating prose.** Start naming and placement work in
+   [`naming-and-placement.md`](./naming-and-placement.md). This comment route does not authorize a move,
+   guard removal, extraction, public rename, or behaviour change; report or defer anything outside scope.
 3. **Context for a reader-meaningful branch.** Give an `if`, loop, or null/empty path one local
    sentence when its consequence is not clear from the code. State the trigger plus consequence. A
    branch whose only honest line restates code gets none.
@@ -130,7 +131,8 @@ Description budgets remain 3-8 content lines for a class and 1-3 for a method; t
 A branch with a reader-meaningful consequence gets one local sentence stating the trigger plus
 consequence. This applies to `if`, loops, chained transformations, null/empty fallbacks, `else`,
 `switch` / `case`, `match`, ternaries, and default returns. A branch whose only honest line restates
-code gets none. Improve a name only when authorised, and report or defer structural remedies separately.
+code gets none. Route a naming or placement defect through [`naming-and-placement.md`](./naming-and-placement.md)
+and report or defer remedies outside the current authorization.
 
 The line must translate, not restate. `// check if invoice is paid` is banned; "Paid invoices are locked - the user gets a read-only view instead of the edit form" earns its place because that consequence is visible nowhere in the condition. Say what the user did to land here when that is reconstructable.
 
@@ -154,11 +156,12 @@ Before describing code behaviour, open it. Read a query's predicate before claim
 
 Tightening inherited prose turns it into an assertion you own. Verify it before making it more confident: concise false prose is more convincing, not safer. A fluent false comment is worse than a missing one because tests and analyzers may never challenge its meaning.
 
-A rename is a claim too: a name asserting data semantics (`$receivedAt`) is verified against the value's behaviour first. Declare every rename in the change description; public and exported symbols get their own reviewed change.
+Identifier and placement claims are verified through [`naming-and-placement.md`](./naming-and-placement.md)
+before comment work begins. Comments cannot make an unverified claim true.
 
 ## Discretionary Inline Comments (tier 5)
 
-Extra inline comments are a last resort. First **rename**, **extract**, **simplify**, or **enforce**. If intent remains hidden, one of four reasons earns a line above the code. Prefer user/business/domain/legal/vendor rationale and name the constraint, prevented failure, and removal trigger.
+Extra inline comments are a last resort. Resolve or defer authorized naming and structural findings first. If intent remains hidden, one of four reasons earns a line above the code. Prefer user/business/domain/legal/vendor rationale and name the constraint, prevented failure, and removal trigger.
 
 - **Hidden constraint** the code cannot encode - rate limit, vendor contract, regulation, hardware quirk.
   `# Vendor exports omit the timezone; treat as source-local by contract.`
@@ -199,7 +202,7 @@ The next reader cannot use these; fix them when already editing the surrounding 
 
 ## Special Contexts
 
-**Test code.** Naming and useful-contract doc rules apply. A descriptive test name and assertions
+**Test code.** Complete applicable naming work through `naming-and-placement.md`; useful-contract doc rules apply. A descriptive test name and assertions
 usually carry the story; add a comment only for a non-obvious test contract.
 
 **Generated code.** Mark generated files at the top: `// AUTO-GENERATED FROM <source> - DO NOT EDIT`.
@@ -231,12 +234,12 @@ reader consequence remains hidden, state the verified trigger and consequence on
 
 ## Verification Gate
 
-Before claiming a code change is done, check names and comments. **[static]** is mechanical; **[judge]** requires semantic review.
+Before claiming comment work is done, confirm the naming route is complete and check the remaining prose. **[static]** is mechanical; **[judge]** requires semantic review.
 
 1. **[static]+[judge] Required public/exported APIs and non-obvious file/module/class boundaries have useful doc comments.** Project or language canon decides any stronger requirement; PHP class files do not duplicate file and class PHPDoc.
 2. **[judge] Consequence-bearing branches have one local trigger-and-consequence sentence; self-evident branches have none.** No context line restates mechanics or repeats one sentence template through a file.
 3. **[judge] Every `@param` / `@returns` states what null/empty/absent means for the user**, and no tag was deleted while tightening a verbose comment.
-4. **[judge] Names are self-documenting in the product's vocabulary** - identifiers match the words the user sees wherever a UI exists.
+4. **[judge] Applicable naming and placement checks are complete** under `naming-and-placement.md`; comments do not compensate for a deferred defect.
 5. **[judge] Flow entry points carry a user-journey anchor.**
 6. **[judge] Discretionary inline comments satisfy one valid reason**, sit at the decision, and prefer reader-relevant rationale.
 7. **[judge] Rationale and code-behaviour claims are verified**, including query scope, nullability, branches, counts, and inherited prose; they also pass the Half-Life Test.
@@ -249,5 +252,6 @@ If a comment fails any check, fix it before merging.
 
 ## Related References
 
+- [`naming-and-placement.md`](./naming-and-placement.md) - responsibility-first placement and verified identifier claims before comment work.
 - `writing-style.md` - comments and docstrings follow this playbook; other human-read prose follows `writing-style.md`.
 - Sibling playbooks share the same scaffold; project instruction files may point here as the canonical comment policy.

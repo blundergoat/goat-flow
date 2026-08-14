@@ -24,6 +24,7 @@ describe("ADR-023 word budget tiers", () => {
     "code-comments.md",
     "gruff-code-quality.md",
     "hook-policy-testing.md",
+    "naming-and-placement.md",
     "observability.md",
     "page-capture.md",
     "release-notes.md",
@@ -149,5 +150,26 @@ describe("ADR-023 word budget tiers", () => {
     ].map((userFacingWordCount) => userFacingWordCount < PROGRESSIVE_CAP);
 
     assert.deepEqual(progressiveBudgetBoundaryResults, [true, false]);
+  });
+
+  it("M02 playbooks stay within their rollout budgets", () => {
+    const rolloutBudgets = [
+      { filename: "naming-and-placement.md", cap: 2200 },
+      { filename: "code-comments.md", cap: 2880 },
+    ] as const;
+
+    for (const { filename, cap } of rolloutBudgets) {
+      for (const playbookRoot of [
+        "workflow/skills/playbooks",
+        ".goat-flow/skill-docs/playbooks",
+      ]) {
+        const playbookPath = `${playbookRoot}/${filename}`;
+        const userFacingWordCount = countSkillBodyWords(playbookPath);
+        assert.ok(
+          userFacingWordCount <= cap,
+          `${playbookPath}: ${userFacingWordCount} words exceeds M02 cap ${cap}`,
+        );
+      }
+    }
   });
 });

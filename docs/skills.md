@@ -361,6 +361,8 @@ Every skill shares:
 
 See `.goat-flow/skill-docs/skill-preamble.md` (installed) or `workflow/skills/reference/skill-preamble.md` (source template) for the canonical shared conventions.
 
+For code naming or placement work, load `.goat-flow/skill-docs/playbooks/naming-and-placement.md` before the narrower comment-writing guidance. It routes from responsibility and ownership to placement, names, guard classification, and observable verification without prescribing repository-specific layers or vocabulary.
+
 ## Where Skills Live
 
 | Agent | Path |

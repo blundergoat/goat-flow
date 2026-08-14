@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-08-13
+last_reviewed: 2026-08-14
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-shell.md](deny-shell.md) (command grammar), [deny-secrets.md](deny-secrets.md) (secret-path reads), and [deny-writes.md](deny-writes.md) (external writes).
@@ -68,6 +68,26 @@ last_reviewed: 2026-08-13
 1. Preserve `ensureHookGitignoreEntries` beside any code path that writes `.goat-flow/hooks/deny-dangerous/`.
 2. Keep the pre-1.9 gitignore regression fixture and `git check-ignore` assertion for `.goat-flow/hooks/deny-dangerous/patterns-shell.sh`.
 3. Before release, test the clone path: commit hook config plus hooks, clone fresh, then run `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke`.
+
+## Footgun: Workflow hook edits can leave the tracked installed runtime stale
+
+**Status:** active | **Created:** 2026-08-14 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Treat every tracked workflow-hook edit as a source/install mirror change and prove byte parity before provider or repository audits.
+**Trigger phase:** ACT
+
+**Symptoms:** A focused contract against `workflow/hooks/gruff-code-quality.sh` passed, but the repository audit failed because Claude, Codex, and Copilot still loaded a stale `.goat-flow/hooks/gruff-code-quality.sh`.
+
+**Why it happens:** The workflow script is the install source while `.goat-flow/hooks/` is the tracked runtime used in this repository. A test that reads only the workflow source can prove its wording without proving the active runtime received the same edit.
+
+**Evidence:**
+- The 2026-08-14 M02 preflight reported three `gruff-code-quality` installations stale after a wording-only workflow edit; `cmp workflow/hooks/gruff-code-quality.sh .goat-flow/hooks/gruff-code-quality.sh` located the first difference at the edited guidance anchor (search: `Documentation wording mirrors code-comments.md`).
+- `workflow/manifest.json` (search: `".goat-flow/hooks/gruff-code-quality.sh"`) declares the installed file's source, and `workflow/install-goat-flow.sh` (search: `copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh"`) performs that copy for consumers.
+- After the installed mirror received the same two lines, byte comparison returned zero and `test/unit/audit-command/main.test.ts` (search: `passes on this repo`) changed from one failure to `pass 1`, `fail 0`.
+
+**Prevention:**
+1. Before editing a tracked workflow hook, resolve its installed destination from `workflow/manifest.json` and include both paths in scope.
+2. Keep source and installed hook bodies byte-identical; verify with `cmp` before running provider coverage or repository audit checks.
+3. A focused hook contract must exercise the active installed runtime or be paired with mirror parity. Workflow-source assertions alone are incomplete.
 
 ## Footgun: Legacy per-agent hook launchers using --show-toplevel resolve to the worktree, not the main repo
 

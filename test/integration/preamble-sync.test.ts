@@ -60,6 +60,14 @@ const INSTALLED_CODE_COMMENTS = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/code-comments.md",
 );
+const TEMPLATE_NAMING_AND_PLACEMENT = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/naming-and-placement.md",
+);
+const INSTALLED_NAMING_AND_PLACEMENT = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
+);
 const TEMPLATE_GRUFF_CODE_QUALITY = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/gruff-code-quality.md",
@@ -234,6 +242,19 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_CODE_COMMENTS, INSTALLED_CODE_COMMENTS),
       0,
       "code-comments.md: template and installed should match",
+    );
+  });
+
+  it("template and installed naming-and-placement.md match", () => {
+    assertMirrorExists(
+      TEMPLATE_NAMING_AND_PLACEMENT,
+      INSTALLED_NAMING_AND_PLACEMENT,
+      "naming-and-placement.md",
+    );
+    assert.equal(
+      diffQuiet(TEMPLATE_NAMING_AND_PLACEMENT, INSTALLED_NAMING_AND_PLACEMENT),
+      0,
+      "naming-and-placement.md: template and installed should match",
     );
   });
 

@@ -57,6 +57,7 @@ export const SHARED_ARTIFACT_MIRRORS: readonly ArtifactMirrorSpec[] = [
       "code-comments.md",
       "gruff-code-quality.md",
       "hook-policy-testing.md",
+      "naming-and-placement.md",
       "observability.md",
       "changelog.md",
       "page-capture.md",

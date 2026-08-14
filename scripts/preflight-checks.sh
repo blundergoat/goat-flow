@@ -1459,6 +1459,7 @@ const files = [
       "code-comments.md",
       "gruff-code-quality.md",
       "hook-policy-testing.md",
+      "naming-and-placement.md",
       "observability.md",
       "page-capture.md",
       "release-notes.md",
@@ -2186,6 +2187,15 @@ if [[ -f workflow/skills/playbooks/gruff-code-quality.md ]] && [[ -f .goat-flow/
     fi
 else
     skip "gruff-code-quality.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/naming-and-placement.md ]] && [[ -f .goat-flow/skill-docs/playbooks/naming-and-placement.md ]]; then
+    if diff -q workflow/skills/playbooks/naming-and-placement.md .goat-flow/skill-docs/playbooks/naming-and-placement.md >/dev/null 2>&1; then
+        pass "naming-and-placement.md: template and installed copy match"
+    else
+        fail "naming-and-placement.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "naming-and-placement.md sync (one or both files missing)"
 fi
 if [[ -f workflow/skills/playbooks/observability.md ]] && [[ -f .goat-flow/skill-docs/playbooks/observability.md ]]; then
     if diff -q workflow/skills/playbooks/observability.md .goat-flow/skill-docs/playbooks/observability.md >/dev/null 2>&1; then

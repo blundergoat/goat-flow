@@ -69,17 +69,17 @@ describe("comment playbook verification doctrine", () => {
       );
       assert.match(
         content,
-        /Improve a name only when authorised/u,
+        /Start naming and placement work in/u,
         playbookPath,
       );
       assert.match(
         content,
-        /report or defer structural remedies separately/u,
+        /\[`naming-and-placement\.md`\]\(\.\/naming-and-placement\.md\)/u,
         playbookPath,
       );
       assert.match(
         content,
-        /project or language canon requires/u,
+        /does not authorize a move,\s+guard removal, extraction, public rename, or behaviour change/u,
         playbookPath,
       );
       assert.match(
@@ -145,7 +145,11 @@ describe("comment playbook verification doctrine", () => {
         "VERBOSE",
         "MISSING-CONSEQUENCE",
       ]) {
-        assert.match(content, new RegExp(`\\b${defectCode}\\b`, "u"), playbookPath);
+        assert.match(
+          content,
+          new RegExp(`\\b${defectCode}\\b`, "u"),
+          playbookPath,
+        );
       }
       assert.match(content, /one primary code/u, playbookPath);
       assert.match(content, /optional secondary codes/u, playbookPath);
@@ -358,6 +362,7 @@ describe("shipped playbook portability", () => {
     for (const playbookName of [
       "code-comments.md",
       "gruff-code-quality.md",
+      "naming-and-placement.md",
       "writing-style.md",
     ]) {
       assertForPlaybook(playbookName, (content, playbookPath) => {

@@ -9,7 +9,7 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 
 ## How agents should use this directory
 
-1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, code comments, or prose and writing style), check this index for a matching playbook. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, or a learning-loop entry body.
+1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, naming and placement, code comments, or prose and writing style), check this index for a matching playbook. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, or a learning-loop entry body.
 2. Open the playbook. If it has an **Availability Check** section, run the exact `command -v <tool>` or equivalent it specifies before falling back.
 3. Only after the availability check fails AND the playbook's fallback path also fails, declare the capability unavailable.
 
@@ -25,6 +25,7 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 | [`code-comments.md`](./code-comments.md) | Writing or editing source code: user-perspective doc comments, self-documenting names, context comments above branches/loops/null checks, null/empty tag meaning, journey anchors, TODO/FIXME/HACK markers, and concise comment cleanup | n/a (commenting discipline) |
 | [`gruff-code-quality.md`](./gruff-code-quality.md) | Running `gruff-go`, `gruff-rs`, `gruff-ts`, `gruff-php`, or `gruff-py`; triaging findings and verifying analyzer-driven cleanup without low-value comments or suppressions | gruff CLI family |
 | [`hook-policy-testing.md`](./hook-policy-testing.md) | Verifying deny-hook policy, paired blocked/allowed command grammar, source/install parity, and central agent registration after hook changes | `deny-dangerous.sh --self-test` and `--check` |
+| [`naming-and-placement.md`](./naming-and-placement.md) | Choosing or reviewing where code belongs and what symbols should be called: responsibility-first placement, truthful role/cardinality/time claims, guard legitimacy, and verification | n/a (naming and placement discipline) |
 | [`changelog.md`](./changelog.md) | Writing or editing `CHANGELOG.md`: Keep a Changelog categories, SemVer alignment, breaking-change markers and migration paths, write-at-commit vs write-at-release cadence, version-surface sync | n/a (changelog discipline) |
 | [`release-notes.md`](./release-notes.md) | Writing a per-release narrative for end users (GitHub release body, blog post, email, in-app banner, social): theme identification, user-impact lens, inverted-pyramid structure, multi-surface consistency. Derives from `changelog.md` | n/a (release-notes discipline) |
 | [`skill-playbook-authoring-sync.md`](./skill-playbook-authoring-sync.md) | Adding or materially editing a built-in playbook while keeping source/install mirrors, discovery, audit registration, and manifest ownership aligned | n/a (playbook-authoring discipline) |

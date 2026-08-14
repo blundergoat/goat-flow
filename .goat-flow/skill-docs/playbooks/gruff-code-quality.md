@@ -88,7 +88,7 @@ Before editing comments, run Gruff on the exact paths and keep the before-edit J
 
 A clean Gruff run does not prove comment meaning. Gruff checks detectable presence and shape; a reviewer still verifies claims against the code they describe.
 
-A documentation pass edits comments, doc blocks, and local names; extractions and signature changes stay out. Public and exported symbols get their own reviewed change; run Public API Safety on any local rename and list every rename where the change is described. A comment that already meets the `code-comments.md` bar is out of scope - rewrite only on a diagnosed defect, and do not re-align untouched tag columns or reflow compliant lines unless a formatter enforces it.
+A documentation pass edits comments and doc blocks. Route every naming finding through [`naming-and-placement.md`](./naming-and-placement.md); a documentation pass grants no rename, extraction, signature-change, or other structural authority. List each separately authorized rename where the change is described. A comment that already meets the `code-comments.md` bar is out of scope - rewrite only on a diagnosed defect, and do not re-align untouched tag columns or reflow compliant lines unless a formatter enforces it.
 
 The identity diff proves no new finding, not that the pass earned its review cost. Report compliant comments left untouched and any whitespace-only churn, and size the pass like any cluster: one subsystem a human can actually review, not the whole tree.
 
@@ -124,7 +124,7 @@ For each cluster:
 
 1. Read source and nearby tests.
 2. Read rule source for high-volume, surprising, security-sensitive, or potentially breaking findings.
-3. Prefer Rewrite First: rename, extract, simplify, then comment.
+3. Apply only separately authorized naming or structural remedies, then comment where verified intent remains hidden.
 4. Patch the code.
 5. Rerun gruff on touched paths.
 6. Run compile/typecheck, lint/format, and focused tests for the changed language.
@@ -148,15 +148,12 @@ comment; document only a non-obvious test contract, and do not expand tests into
 
 A per-dependency missing-doc finding is an accepted false positive only for an obvious non-null service-only constructor whose intent is already documented. A scalar, optional, configured, or side-effectful input is not pure DI and remains a finding.
 
-## Public API Safety
+## Naming Findings
 
-Naming fixes can break callers. Before renaming, classify the symbol:
-
-- Usually safe: local variables, private helper params, test helper params.
-- Check carefully: closure/callback params, protected method params, framework hooks.
-- Unsafe by default: public/constructor params, interface params, exported object fields, serialized fields, public struct fields, enum variants, trait contracts.
-
-After any rename, grep the old identifier and run the language typecheck/tests. TypeScript can pass while fixtures, ambient declarations, generated code, or dashboard VM tests still expect the old shape.
+For `naming.*`, load [`naming-and-placement.md`](./naming-and-placement.md). It owns role, terminology,
+cardinality, time, placement, guard, and compatibility boundaries. A Gruff finding diagnoses a candidate;
+it never authorizes a rename or structural change. After any separately authorized rename, grep the old
+identifier and run the relevant typecheck and tests.
 
 Use `allowlists.acceptedAbbreviations` for accepted project vocabulary instead of fighting the same naming finding repeatedly.
 
@@ -215,7 +212,7 @@ Before claiming gruff work is done:
 4. Show lint/format if style or TS/JS changed.
 5. Confirm no `enabled: false` rule disablement was added.
 6. Confirm no mid-cleanup baseline was generated.
-7. For renames, grep the old identifier.
+7. For separately authorized renames, follow `naming-and-placement.md` and grep the old identifier.
 8. For doc findings, confirm `code-comments.md` bar was followed.
 9. For a documentation pass, compare before/after identities and report any documentation-caused size finding, the untouched-compliant count, and every rename.
 10. Report remaining findings by action category, not as "fixed".
@@ -230,5 +227,6 @@ Before claiming gruff work is done:
 
 ## Related References
 
+- [`naming-and-placement.md`](./naming-and-placement.md) - placement and identifier doctrine for `naming.*` findings.
 - [`code-comments.md`](./code-comments.md) - comment quality bar for documentation findings.
 - [`observability.md`](./observability.md) - instrumentation guidance when a gruff fix touches logs, metrics, or spans.

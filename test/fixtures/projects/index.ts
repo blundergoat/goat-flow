@@ -30,6 +30,7 @@ const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
   "code-comments.md",
   "gruff-code-quality.md",
   "hook-policy-testing.md",
+  "naming-and-placement.md",
   "observability.md",
   "page-capture.md",
   "release-notes.md",

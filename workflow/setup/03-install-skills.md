@@ -42,7 +42,9 @@ Install the playbook pack from `workflow/skills/playbooks/`:
 - `.goat-flow/skill-docs/playbooks/browser-use.md` from `workflow/skills/playbooks/browser-use.md` - browser evidence capture reference used when tasks involve URLs, local HTML, screenshots, localhost pages, or rendered UI
 - `.goat-flow/skill-docs/playbooks/changelog.md` from `workflow/skills/playbooks/changelog.md` - changelog writing discipline for Keep a Changelog, SemVer, breaking markers, and version-surface sync
 - `.goat-flow/skill-docs/playbooks/code-comments.md` from `workflow/skills/playbooks/code-comments.md` - inline comment, docstring, TODO/FIXME/HACK, and annotation discipline
+- `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` from `workflow/skills/playbooks/gruff-code-quality.md` - gruff analyzer triage, remediation, and verification discipline
 - `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` from `workflow/skills/playbooks/hook-policy-testing.md` - deny-hook policy, source/install parity, and central agent-registration verification
+- `.goat-flow/skill-docs/playbooks/naming-and-placement.md` from `workflow/skills/playbooks/naming-and-placement.md` - responsibility-first placement, truthful naming, guard classification, and verification discipline
 - `.goat-flow/skill-docs/playbooks/observability.md` from `workflow/skills/playbooks/observability.md` - instrumentation discipline for logs, metrics, spans, trace context, and sensitive-data rules
 - `.goat-flow/skill-docs/playbooks/page-capture.md` from `workflow/skills/playbooks/page-capture.md` - batch page capture reference for multi-page browser evidence workflows
 - `.goat-flow/skill-docs/playbooks/release-notes.md` from `workflow/skills/playbooks/release-notes.md` - per-release narrative discipline derived from the changelog source of truth
@@ -100,7 +102,9 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-docs/playbooks/browser-use.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/changelog.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/code-comments.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/naming-and-placement.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/observability.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/page-capture.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/release-notes.md` exists

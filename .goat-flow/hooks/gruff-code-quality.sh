@@ -1442,7 +1442,7 @@ ignored_descriptor() {
 
 # Translate rule families into the specific thing a reviewer will be missing, so an agent
 # fixes the underlying gap instead of inserting marker words to clear the finding. The
-# wording deliberately mirrors code-comments.md, which is the standard these rules approximate.
+# Documentation wording mirrors code-comments.md; naming guidance routes to its dedicated owner.
 print_reviewability_guidance() {
   local report="$1"
   local surfaced_lines
@@ -1463,7 +1463,7 @@ print_reviewability_guidance() {
       *" naming."*)
         [[ "$shown_naming" -eq 1 ]] || {
           shown_naming=1
-          printf 'gruff-code-quality: naming findings want the words a reader already knows, not internal mechanics - a better name often removes the need for the comment too (code-comments.md tier 2).\n'
+          printf 'gruff-code-quality: naming findings require responsibility-first placement and verified identifier claims before edits (naming-and-placement.md).\n'
         }
         ;;
     esac

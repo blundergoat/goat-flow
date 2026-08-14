@@ -188,7 +188,7 @@ workflow/                        = packaged template source copied into target p
 │   ├── goat-qa/SKILL.md         = testing-gap analysis skill template
 │   ├── goat-qa/references/       = progressive output templates loaded only when rendering QA results
 │   ├── reference/               = skill-preamble.md and skill-conventions.md templates
-│   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, observability, page-capture, release-notes, skill-playbook-authoring-sync, skill-quality-testing, writing-style
+│   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, naming-and-placement, observability, page-capture, release-notes, skill-playbook-authoring-sync, skill-quality-testing, writing-style
 │
 ├── hooks/                       = hook templates and agent hook config templates
 │   ├── run-with-bash.mjs        = cross-platform Git Bash discovery and managed shell launcher
@@ -296,6 +296,7 @@ docs/                            = user and maintainer documentation
 │       ├── code-comments.md     = inline comments, docstrings, TODO/FIXME/HACK rules
 │       ├── gruff-code-quality.md = gruff analyzer triage/fix/verification loop
 │       ├── hook-policy-testing.md = deny-hook policy, mirror, and registration verification
+│       ├── naming-and-placement.md = responsibility-first placement, truthful naming, and verification
 │       ├── observability.md     = logs, metrics, spans, and sensitive-data instrumentation rules
 │       ├── page-capture.md      = Playwright/browser page-capture usage tiers
 │       ├── release-notes.md     = per-release narrative surfaces derived from changelog

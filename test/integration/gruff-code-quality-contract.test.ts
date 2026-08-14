@@ -43,6 +43,20 @@ const HOOK_RUNNER = join(
 after(cleanupHookTestDirs);
 
 describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
+  it("routes naming guidance to the naming and placement owner", () => {
+    const hookSource = readFileSync(
+      join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh"),
+      "utf8",
+    );
+    const namingGuidance = hookSource.match(
+      /printf 'gruff-code-quality: naming findings[^']+'/u,
+    );
+
+    assert.ok(namingGuidance?.[0], "hook must retain focused naming guidance");
+    assert.match(namingGuidance[0], /naming-and-placement\.md/u);
+    assert.doesNotMatch(namingGuidance[0], /code-comments\.md/u);
+  });
+
   // Fixture purpose: writes a hook-envelope mock to cover finding and suppression rendering.
   it("renders gruff.hook.v1 output when the analyzer advertises the contract", () => {
     const root = makeRoot();

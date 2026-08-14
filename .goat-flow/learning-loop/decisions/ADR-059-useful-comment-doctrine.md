@@ -1,6 +1,6 @@
 # ADR-059: Prefer useful comment contracts over syntax quotas
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-08-14
 
 ## Context
