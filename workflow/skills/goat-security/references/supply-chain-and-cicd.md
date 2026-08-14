@@ -21,7 +21,7 @@ Package audits are lead generators. Before running one, apply the core skill's s
 ## CI/CD and release verification
 
 - Pin third-party actions and privileged build inputs to a reviewed full-length commit SHA or a verified immutable release. A mutable tag alone is not an integrity boundary.
-- Minimize workflow/job permissions; constrain secrets, environments, and approvals to trusted refs and actors.
+- Minimize workflow and job permissions; constrain secrets, environments, and approvals to trusted refs and actors.
 - Treat artifact attestations as verifiable provenance, not proof that code is safe. Verify identity, repository, workflow, ref, and expected builder before consumption.
 - Generate and retain an SBOM where the project requires component traceability; bind it to the produced artifact and build provenance.
 - Constrain OIDC trust by issuer, audience, repository, ref/environment, workflow identity, and short lifetime. Do not trust a broad repository claim when a narrower subject is available.
@@ -97,4 +97,4 @@ Before execution, restate the resolved tuple and mutative/data-egress effects. D
 
 ## Positive observations
 
-Credit controls only when re-read in the target: least-privilege permissions, immutable reviewed inputs, verified provenance, isolated ephemeral runners, fail-closed hooks, authenticated and origin-checked local sessions, scoped agent tools, provenance-preserving memory, and explicit human confirmation for irreversible actions.
+Credit controls only with current-session `OBSERVED` evidence bound to exact assessed authority/snapshot and affected scope/deployment/path; stale/mismatched/unresolved bindings MUST NOT support clearance. Examples: least privilege, immutable reviewed inputs, verified provenance, isolated ephemeral runners, fail-closed hooks, origin-checked sessions, scoped agent tools, provenance-preserving memory, and human confirmation for irreversible actions.

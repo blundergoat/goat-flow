@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-12
+last_reviewed: 2026-08-14
 ---
 
 ## Lesson: Hook fallback fixes must preserve the caller-visible failure signal
@@ -261,7 +261,7 @@ last_reviewed: 2026-08-12
 
 **What happened:** On 2026-07-12, goat-security Quick Scan entered a Full-only specialist phase and waited about eight minutes. On 2026-07-18, goat-debug Investigate made an explicit read-only scope wait at I1. In both cases, headings implied flow but did not define the runtime boundary.
 
-**Prevention:** Every branch needs an explicit stop or continue rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-skills-2.test.ts` (search: `Quick Scan out of Full-only specialist work`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
+**Prevention:** Every branch needs an explicit stop or continue rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-security-1.test.ts` (search: `Quick Scan out of Full-only specialist work`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
 
 ---
 
@@ -278,7 +278,7 @@ last_reviewed: 2026-08-12
 
 **Recurrence 2026-08-10 (playbook prose):** Adding a reader-selection section and an anti-template rule to `.goat-flow/skill-docs/playbooks/code-comments.md` took it from 2,856 to 3,180 words against the 3,000-word ADR-023 progressive cap. Trimming duplicate representation - a fractal summary restating the worked example, and a PHP class-file rule stated in four places - restored it to 2,983 with no rule lost. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within`).
 
-**Recurrence 2026-08-12:** Recording two verification corrections pushed `.goat-flow/learning-loop/lessons/verification-preflight.md` to 40,736 bytes. `stats --check` stopped closeout; consolidating the new gate rule into its existing Prevention reduced the bucket to 39,999 bytes without dropping the decision or evidence anchor. Evidence: `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `A predecessor may exempt one named RED fixture`).
+**Recurrence 2026-08-12:** Recording two verification corrections pushed `.goat-flow/learning-loop/lessons/verification-preflight.md` to 40,736 bytes. `stats --check` stopped closeout; consolidating the new gate rule into its existing Prevention reduced the bucket to 39,999 bytes without dropping the decision or evidence anchor. Evidence: `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` (search: `A predecessor may exempt one named RED fixture`).
 
 **Prevention:** Before commenting a file that sits within about 20% of its size threshold, check the current count and plan the split first. Splitting by responsibility is the fix, never accepting the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
 

@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-12
+last_reviewed: 2026-08-14
 ---
 
 ## Lesson: Formatter verification must preserve repo style flags
@@ -132,37 +132,6 @@ Evidence anchors:
 
 ---
 
-## Lesson: Final verification gates need supported scopes and captured logs
-
-**Status:** active | **Created:** 2026-05-19 | **Incident count:** 4 | **Latest occurrence:** 2026-08-12
-
-**What happened:** Several closeouts sent ignored tests or workflow `.mjs` files to TypeScript-only ESLint. One also ran `npm test` beside expensive checks and lost the failing block; a captured rerun passed (`# tests 881`, `# pass 881`, `# fail 0`).
-
-**Root cause:** I mixed repo-supported verification scopes with improvised paths and treated parallel final gates as interchangeable with a clean final evidence run. That made the first failure ambiguous and forced a rerun to recover the actual evidence.
-
-**Recurrence update (2026-08-09):** A runtime-adapter check again sent workflow `.mjs` to TypeScript-only ESLint. Workflow modules instead use `node --check`, Prettier, targeted Gruff, runtime fixtures, and preflight. Evidence anchors: `workflow/hooks/hook-provider-adapters.mjs` (search: `Decodes bounded provider-neutral hook results`) and `scripts/preflight-checks.sh` (search: `lint_targets[@]`).
-
-**Recurrence update (2026-05-19):** The same closeout also added a dashboard markdown performance sanity test whose 500KB fixture was newline-heavy. Focused runs passed, but preflight's concurrent fast-suite runner exceeded the 100ms budget. The fixture still needed to be 500KB, but it needed to measure plain markdown throughput rather than line-break parsing stress.
-
-**Recurrence update (2026-05-26, 2026-06-14):** The same dashboard markdown performance sanity test (test/unit/dashboard-markdown.test.ts, since removed in 1.13.0 with the markdown viewer) passed standalone and in `npm test`, but failed under preflight's `npm run test:coverage` because Node's coverage instrumentation and full-suite concurrency pushed the 500KB render over hard 100ms/250ms budgets (`expected <100ms, got 115ms` and later `159ms`; the full preflight still needed the retry path at 250ms). A later fixed `750ms` ceiling was still machine-sensitive, so the test now compares the 500KB render against a same-process 100KB baseline with a generous floor.
-
-**Recurrence updates (2026-05-19, 2026-08-08):** Commit-guidance helpers passed focused tests but failed full preflight with `Knip: 2 unused exports/types`; making internal types private fixed it. Later, removing the history detector removed the cited `CommitGuidanceStatus`, so the audit suite failed on a stale learning-loop anchor. Keeping that type as the template-copy result status fixed the reference. Run `goat-flow stats --check` before deleting cited symbols. Evidence anchor: `src/cli/prompt/commit-guidance.ts` (search: `type CommitGuidanceStatus`).
-
-**Recurrence update (2026-07-03):** 1.13.0 milestones each passed their per-file scoped gates, yet the closing `npm run publish:check` failed three ways only a full-tree run surfaces: (1) an integration assertion still matched a CDN string after an asset was vendored locally (`test/integration/dashboard-server.test.ts`, `alpinejs@3` → `/assets/alpine.js`); (2) `appendQualityReportContract` shipped at complexity 21 because scoped eslint had only run the file's own diff, never the whole `src/cli` tree - as in the M01 recurrence above, route branchy `full ? a : b` / `if (full)` lines through small `pushVariant`/`pushFull` helpers so each decision sits in the helper's scope; (3) deleting the `coming-soon` dashboard view left its name in three prose lists (`.goat-flow/code-map.md`, `docs/dashboard.md`, `.goat-flow/architecture.md`) and orphaned 7 backticked learning-loop refs, tripping the round-trip fixture's embedded preflight. Prevention: when a milestone deletes files, moves symbols between modules, or swaps a served asset, run `npm run publish:check` as the FINAL gate - the fast suite and scoped eslint do not exercise full-tree complexity, cold-path doc drift, or learning-loop ref integrity.
-
-**Recurrences (2026-07-12, 2026-08-09):** Two hook-contract batches aimed ESLint at ignored tests; `--no-ignore` then failed outside the parser project. One also omitted Gruff's `analyse` subcommand. Supported Node tests, typecheck, Prettier, and `gruff-ts analyse <file>` produced valid evidence. Anchors: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`); `test/unit/playbook-contract.test.ts` (search: `assertRegistrationCommandForEachPlaybook`).
-
-**Recurrence update (2026-07-12):** A later testing gate listed ignored unit and integration files in `npx eslint --max-warnings 0`. The corrected gate linted only the changed `src/cli/audit/` files; TypeScript, Prettier, and focused Node tests cover ignored tests. Evidence anchor: `eslint.config.mjs` (search: `"test/**"`).
-
-**Recurrence update (2026-07-13):** A context-report gate hit Prettier on three files, ESLint on out-of-project tests, and Knip on four internal exports. Formatting, scoped source lint/tests, and private types cleared it. Evidence: `test/unit/context-report.test.ts` (search: `static context report`).
-
-**Recurrence update (2026-07-31):** Two audit batches caught ESLint complexity, a Node directory target, a probe without `PATH`, and stale terminal-env smoke expectations. Fixes extracted a helper, targeted `*.test.ts` (91/91), reused `process.env`, and aligned the smoke contract (20/20). Evidence: `src/cli/audit/check-factual-claims.ts` and `test/smoke/dashboard-endpoints.test.ts` (search: `GOAT_CLAUDE_REPORTING_SETTINGS`).
-
-**Recurrence update (2026-08-07):** An EXIT-trap cleanup made the executor reject M05's `test:fast` wrapper before npm ran. Retaining the printed `mktemp` log produced `1580` pass / `0` fail. Gate wrappers no longer bundle destructive cleanup.
-
-**Prevention:** Run supported format, lint, Knip, and test gates with captured output. A predecessor may exempt one named RED fixture only when a blocked dependent owns it: preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`), `package.json` (search: `test:fast`), and `knip.json` (search: `ignoreDependencies`).
-
----
 
 ## Lesson: New dependency-audit gates need a baseline audit first
 
@@ -239,6 +208,8 @@ Evidence anchors:
 **Recurrence update (2026-05-26):** A follow-up double-check used `rg` with the milestone exclusions and returned no hits, but the exact M10 `git grep` acceptance command still found tracked stale references in `.gemini/settings.json`, `.github/git-commit-instructions.md`, and `.goat-flow/learning-loop/decisions/`. The issue was not hook behavior; the search tool choice under-counted tracked files hidden by ignore rules.
 
 **Recurrence update (2026-05-27):** M12 hook hardening passed functional hook checks, but the stale-name closeout grep still found active references to the old gruff hook id in `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, and `.goat-flow/learning-loop/lessons/dashboard-testing.md` after the hook had already been renamed to `gruff-code-quality`. The remaining exact old-id hits are now limited to the migration alias and its regression tests.
+
+**Recurrence update (2026-08-14):** Moving the final-gate lesson from `.goat-flow/learning-loop/lessons/verification-preflight.md` to `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` cleared the bucket-size failure, but `stats --check` then found `.goat-flow/learning-loop/lessons/verification-testing.md` still cited the old file for the moved Prevention anchor. Update tracked semantic-anchor references in the same edit as an entry move. Evidence anchors: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `A predecessor may exempt one named RED fixture`) and `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` (search: `A predecessor may exempt one named RED fixture`).
 
 **Prevention:** After hook file renames, run the full preflight before declaring the rename done and treat drift failures as part of the hook change, not documentation cleanup. For the final old-name proof, use the milestone's exact `git grep` command over tracked files, then optionally run `rg --hidden --no-ignore` only to find local ignored residue. Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`), `scripts/preflight-checks.sh` (search: `Dashboard view names drift`), `.github/copilot-instructions.md` (search: `deny-dangerous.sh --self-test=smoke`).
 

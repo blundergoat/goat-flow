@@ -88,6 +88,78 @@ export function readMarkdownSection(
 }
 
 /**
+ * Assert every required pattern against one installed guidance surface.
+ *
+ * @param content - installed guidance text to inspect
+ * @param patterns - required patterns that must all match
+ * @param sourcePath - assertion label naming the inspected source
+ */
+export function assertMatchesAll(
+  content: string,
+  patterns: readonly RegExp[],
+  sourcePath: string,
+): void {
+  for (const pattern of patterns) {
+    assert.match(content, pattern, `${sourcePath}: missing ${pattern}`);
+  }
+}
+
+/**
+ * Extract one Markdown H3 subsection from an already isolated section body.
+ *
+ * @param sectionBody - Markdown H2 body that contains the subsection
+ * @param subsectionHeading - H3 heading to isolate, without leading hashes
+ * @param sourcePath - assertion label naming the inspected source
+ * @returns subsection body up to the next H3 heading
+ */
+export function readMarkdownSubsection(
+  sectionBody: string,
+  subsectionHeading: string,
+  sourcePath: string,
+): string {
+  const marker = `### ${subsectionHeading}`;
+  const start = sectionBody.indexOf(marker);
+  assert.notEqual(start, -1, `${sourcePath} missing ${marker}`);
+  const remainder = sectionBody.slice(start + marker.length);
+  const nextHeading = remainder.search(/\n###\s+/u);
+  return nextHeading === -1 ? remainder : remainder.slice(0, nextHeading);
+}
+
+/**
+ * Read one string field from a dashboard preset without crossing preset boundaries.
+ *
+ * @param presetId - exact dashboard preset identifier
+ * @param field - supported string field to read
+ * @returns the preset-scoped field value
+ */
+export function readPresetStringField(
+  presetId: string,
+  field: "desc" | "prompt",
+): string {
+  const presets = JSON.parse(
+    readProjectFile("src/dashboard/preset-prompts.json"),
+  ) as Array<Record<string, unknown>>;
+  const preset = presets.find((candidate) => candidate.id === presetId);
+  assert.ok(preset, `missing dashboard preset ${presetId}`);
+  assert.equal(
+    typeof preset[field],
+    "string",
+    `dashboard preset ${presetId} is missing ${field}`,
+  );
+  return preset[field] as string;
+}
+
+/**
+ * Read dashboard prompt copy through the preset-scoped field guard.
+ *
+ * @param presetId - exact dashboard preset identifier
+ * @returns prompt copy for the selected preset
+ */
+export function readPresetPrompt(presetId: string): string {
+  return readPresetStringField(presetId, "prompt");
+}
+
+/**
  * Builds every installed path for a skill so each supported agent sees the same workflow.
  * Use this whenever a safety rule must remain identical across agent integrations.
  *

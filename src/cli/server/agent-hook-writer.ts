@@ -45,7 +45,7 @@ export type AgentHookRegistrationIssue =
   | "timeout-mismatch";
 
 /** One provider event and matcher where the user expects one managed command. */
-export interface ManagedHookRegistrationTarget {
+interface ManagedHookRegistrationTarget {
   event: string;
   matcher: string | null;
 }
@@ -212,10 +212,7 @@ export function deriveManagedHookDesiredState(
  * @param spec - managed hook contract; empty script metadata removes nothing
  * @returns retained row, or undefined when the row contained only this managed hook
  */
-function withoutManagedHookCommand(
-  entry: unknown,
-  spec: HookSpec,
-): unknown | undefined {
+function withoutManagedHookCommand(entry: unknown, spec: HookSpec): unknown {
   // A direct managed command is the exact registration setup owns and may replace.
   if (commandEntryReferencesSpec(entry, spec)) return undefined;
   // Null, primitive, and non-group objects cannot contain a nested managed command.
@@ -430,7 +427,7 @@ function managedRegistrationCommandCount(
 ): number {
   // Every array item may contain one direct command or another provider wrapper.
   if (Array.isArray(value)) {
-    return value.reduce(
+    return value.reduce<number>(
       (count, nestedValue) =>
         count + managedRegistrationCommandCount(nestedValue, spec),
       0,

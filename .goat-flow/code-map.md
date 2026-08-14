@@ -221,6 +221,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── dependency-install.sh        = guarded npm install wrapper
 ├── dependency-update.sh         = guarded dependency update wrapper
 ├── deploy-landing.sh            = docs/site deployment helper
+├── generate-managed-hook-desired-state.mjs = checks or writes the portable managed-hook installer contract from the TypeScript writer
 ├── gruff-ts.sh                  = gruff-ts static-analysis wrapper; args pass through, bare run prints the digest
 ├── install-browser-tools.sh     = browser-use and Playwright install helper
 ├── mutation-test.sh             = opt-in Stryker mutation-testing helper

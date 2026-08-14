@@ -65,11 +65,13 @@ Each exception must record:
 - exact policy clause or authoritative decision:
 - trusted policy source/ref/OID/anchor:
 - named authorized approver:
-- independently trusted approval evidence authenticates the named approver, proves their policy-authorized role at approval time, and binds identifier, clause/decision, exact scope, and expiry:
+- independently trusted approval evidence authenticates the named approver, proves their policy-authorized role at approval time, and binds identifier, clause/decision, exact scope, expiry, review/revocation trigger definition, and governing trusted policy source/ref/OID/anchor:
 - exception owner:
 - rationale:
 - expiry:
+- named status authority:
+- current independently trusted status evidence authenticates the named status authority, proves the governing policy authorized it to attest lifecycle/revocation status at observation time, binds the identifier, governing trusted policy source/ref/OID/anchor, approved review/revocation trigger, exact assessed authority/snapshot/deployment, and observation time, and proves the exception is active, not revoked, and no trigger fired:
 - compensating controls and verification evidence:
 - review/revocation trigger:
 
-Missing, expired, over-broad, unauthorized, role-unverified, mismatched, or unverifiably bound records retain `OPEN`. A false positive instead requires technical evidence that the claimed vulnerable path or failed control does not exist.
+Missing, expired, over-broad, unauthorized, role-unverified, mismatched, unverifiably bound, revoked, trigger-fired, or status-unverified records retain `OPEN`; approval/status policy-authority mismatch also retains `OPEN`. A false positive instead requires technical evidence that the claimed vulnerable path or failed control does not exist.
