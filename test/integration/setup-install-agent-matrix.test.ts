@@ -238,10 +238,18 @@ function countManagedHookRegistrations(
   }
   if (configValue === null || typeof configValue !== "object") return 0;
   const configEntry = configValue as Record<string, unknown>;
+  // Structured exec-form rows carry the script path as an argv element, not command text.
+  const argumentOperands = Array.isArray(configEntry.args)
+    ? configEntry.args.filter(
+        (argumentValue): argumentValue is string =>
+          typeof argumentValue === "string",
+      )
+    : [];
   const ownsManagedCommand = [
     configEntry.command,
     configEntry.bash,
     configEntry.powershell,
+    ...argumentOperands,
   ].some(
     (command) => typeof command === "string" && command.includes(primaryScript),
   );
@@ -633,6 +641,159 @@ function verifyStandaloneInstallerHookSemantics(
   return targetProjectPath;
 }
 
+/** Shell text that names the managed script the way pre-upgrade installs did. */
+const STALE_DENY_COMMAND = "bash .goat-flow/hooks/deny-dangerous.sh";
+/** Marker the installer must never remove from a user's own hook rows. */
+const USER_HOOK_MARKER = "./scripts/team-audit.sh";
+
+/**
+ * Insert duplicate, stale, and user-owned deny rows into one installed config.
+ * Shapes follow each provider's real config format so the seeded state is executable.
+ *
+ * @param agentProfile - provider whose installed config is polluted
+ * @param installedConfig - parsed hook config mutated in place
+ */
+function seedDuplicateAndStaleDenyRows(
+  agentProfile: AgentProfile,
+  installedConfig: Record<string, unknown>,
+): void {
+  // Antigravity stores the managed hook as one top-level definition keyed by id.
+  if (agentProfile.id === "antigravity") {
+    const denyDefinition = installedConfig["deny-dangerous"] as {
+      PreToolUse: unknown[];
+    };
+    denyDefinition.PreToolUse.push(
+      structuredClone(denyDefinition.PreToolUse[0]),
+      {
+        matcher: "run_command",
+        hooks: [{ type: "command", command: STALE_DENY_COMMAND, timeout: 30 }],
+      },
+    );
+    installedConfig["team-audit"] = {
+      enabled: true,
+      PreToolUse: [
+        {
+          matcher: "run_command",
+          hooks: [{ type: "command", command: USER_HOOK_MARKER }],
+        },
+      ],
+    };
+    return;
+  }
+  const hooks = installedConfig.hooks as Record<string, unknown[]>;
+  // Copilot keeps direct dual-shell command rows under camel-case events.
+  if (agentProfile.id === "copilot") {
+    hooks.preToolUse.push(structuredClone(hooks.preToolUse[0]), {
+      type: "command",
+      bash: STALE_DENY_COMMAND,
+      powershell: STALE_DENY_COMMAND,
+      timeoutSec: 30,
+    });
+    hooks.preToolUse.push({
+      type: "command",
+      bash: USER_HOOK_MARKER,
+      powershell: USER_HOOK_MARKER,
+      timeoutSec: 10,
+    });
+    return;
+  }
+  // Claude and Codex nest runnable commands below matcher groups per event.
+  hooks.PreToolUse.push(structuredClone(hooks.PreToolUse[0]), {
+    matcher: "Bash",
+    hooks: [{ type: "command", command: STALE_DENY_COMMAND }],
+  });
+  hooks.PreToolUse.push({
+    matcher: "Bash",
+    hooks: [{ type: "command", command: USER_HOOK_MARKER }],
+  });
+}
+
+/**
+ * Prove the standalone installer converges duplicate and stale deny rows in
+ * three consecutive runs while preserving the user's own hook rows.
+ * Use per agent so a convergence failure names the exact provider shape.
+ *
+ * @param agentProfile - agent selected at install time
+ * @returns converged hook config path; never empty after the three-run flow
+ */
+function verifyInstallerDuplicateConvergence(
+  agentProfile: AgentProfile,
+): string {
+  const targetProjectPath = makeTempProject();
+  const firstInstall = runInstaller(
+    targetProjectPath,
+    "--agent",
+    agentProfile.id,
+  );
+  assert.equal(
+    firstInstall.status,
+    0,
+    firstInstall.stderr || firstInstall.stdout,
+  );
+
+  assert.ok(agentProfile.hookConfigFile);
+  const hookConfigPath = join(targetProjectPath, agentProfile.hookConfigFile);
+  const installedConfig = JSON.parse(
+    readFileSync(hookConfigPath, "utf-8"),
+  ) as Record<string, unknown>;
+  seedDuplicateAndStaleDenyRows(agentProfile, installedConfig);
+  writeFileSync(
+    hookConfigPath,
+    `${JSON.stringify(installedConfig, null, 2)}\n`,
+  );
+  // The seeded state is executable: extra managed rows exist before convergence.
+  assert.ok(
+    countManagedHookRegistrations(installedConfig, "deny-dangerous.sh") > 1,
+    `${agentProfile.id} fixture must seed duplicate managed rows`,
+  );
+
+  // Three consecutive runs must converge once and then hold the exact bytes.
+  const configBytesPerRun: string[] = [];
+  for (let installerRun = 0; installerRun < 3; installerRun += 1) {
+    const repairRun = runInstaller(
+      targetProjectPath,
+      "--agent",
+      agentProfile.id,
+    );
+    assert.equal(repairRun.status, 0, repairRun.stderr || repairRun.stdout);
+    configBytesPerRun.push(readFileSync(hookConfigPath, "utf-8"));
+  }
+  assert.equal(configBytesPerRun[1], configBytesPerRun[0]);
+  assert.equal(configBytesPerRun[2], configBytesPerRun[0]);
+
+  const convergedConfig = JSON.parse(configBytesPerRun[0]!) as Record<
+    string,
+    unknown
+  >;
+  assert.equal(
+    countManagedHookRegistrations(convergedConfig, "deny-dangerous.sh"),
+    1,
+    `${agentProfile.id} must keep exactly one managed deny row`,
+  );
+  // Stable pretty JSON keeps user diffs readable after every future run.
+  assert.equal(
+    configBytesPerRun[0],
+    `${JSON.stringify(convergedConfig, null, 2)}\n`,
+  );
+  assert.ok(
+    configBytesPerRun[0]!.includes(USER_HOOK_MARKER),
+    `${agentProfile.id} must preserve the user's own hook row`,
+  );
+  assert.ok(
+    !configBytesPerRun[0]!.includes(STALE_DENY_COMMAND),
+    `${agentProfile.id} must remove the stale managed row`,
+  );
+  const denyDangerousHook = getHookSpec("deny-dangerous");
+  assert.ok(denyDangerousHook);
+  assert.equal(
+    readAgentHookState(targetProjectPath, agentProfile, denyDangerousHook)
+      .installed,
+    true,
+    `${agentProfile.id} converged registration must read as installed`,
+  );
+  return hookConfigPath;
+}
+
 describe("cross-agent install smoke matrix", () => {
   const supportedAgentProfiles = getAgentProfiles();
   assert.deepEqual(
@@ -708,6 +869,12 @@ describe("cross-agent install smoke matrix", () => {
         existsSync(join(installedTargetPath, agentProfile.hookConfigFile)),
         true,
       );
+    });
+
+    it(`${agentProfile.id} standalone installs converge duplicate and stale deny rows`, () => {
+      const convergedHookConfigPath =
+        verifyInstallerDuplicateConvergence(agentProfile);
+      assert.equal(existsSync(convergedHookConfigPath), true);
     });
   }
 

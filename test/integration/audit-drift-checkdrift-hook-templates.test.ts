@@ -11,6 +11,7 @@ import {
   createFS,
   describe,
   existsSync,
+  HOOK_LAUNCHER_STUB,
   HOOK_STUB,
   it,
   join,
@@ -20,7 +21,7 @@ import {
   writeFileSync,
   writeHookFixtures,
 } from "./audit-drift.helpers.ts";
-import { buildAgentHookCommand } from "../../src/cli/server/agent-hook-writer.js";
+import { buildAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
 describe("checkDrift: hook templates", () => {
@@ -34,6 +35,15 @@ describe("checkDrift: hook templates", () => {
       mkdirSync(claudeSettingsDirectory, { recursive: true });
       const postTurnSafetySpec = getHookSpec("post-turn-safety");
       assert.ok(postTurnSafetySpec);
+      // Claude registers the structured argv handler, so the fixture carries the same shape.
+      const postTurnDescriptor = buildAgentHookDescriptor(
+        "claude",
+        ".goat-flow/hooks",
+        postTurnSafetySpec,
+      );
+      if (postTurnDescriptor.form !== "argv") {
+        assert.fail("Claude must register the approved argv handler");
+      }
       const claudeSettings = {
         hooks: {
           Stop: [
@@ -41,11 +51,8 @@ describe("checkDrift: hook templates", () => {
               hooks: [
                 {
                   type: "command",
-                  command: buildAgentHookCommand(
-                    "claude",
-                    ".goat-flow/hooks",
-                    postTurnSafetySpec,
-                  ),
+                  command: postTurnDescriptor.command,
+                  args: postTurnDescriptor.args,
                   timeout: 60,
                 },
               ],
@@ -89,6 +96,80 @@ describe("checkDrift: hook templates", () => {
         currentTimeoutReport.status,
         "pass",
         `registry timeout should be drift-clean: ${JSON.stringify(currentTimeoutReport.findings)}`,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // Covers missing and stale managed launch assets because a silent gap would
+  // leave the registered handler failing at runtime with no named local repair.
+  it("names absent or stale managed launch assets with the hooks sync repair", () => {
+    const root = setupFixture();
+    try {
+      writeHookFixtures(root);
+
+      // A registered hook script that disappeared must surface as repairable drift.
+      rmSync(join(root, ".goat-flow", "hooks", "deny-dangerous.sh"));
+      const missingScriptReport = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(missingScriptReport.status, "fail");
+      const missingFinding = missingScriptReport.findings.find(
+        (finding) =>
+          finding.kind === "missing" &&
+          finding.path === ".goat-flow/hooks/deny-dangerous.sh",
+      );
+      assert.ok(
+        missingFinding,
+        `expected missing hook script finding, findings=${JSON.stringify(missingScriptReport.findings)}`,
+      );
+      assert.match(missingFinding.message, /run goat-flow hooks sync/u);
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
+        HOOK_STUB,
+      );
+
+      // A version-drifted shared launcher must surface the same local repair,
+      // without claiming anything about provider-side delivery.
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        "// stale launcher bytes from an earlier release\n",
+      );
+      const staleLauncherReport = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(staleLauncherReport.status, "fail");
+      const staleFinding = staleLauncherReport.findings.find(
+        (finding) =>
+          finding.kind === "content" &&
+          finding.path === ".goat-flow/hooks/run-with-bash.mjs",
+      );
+      assert.ok(
+        staleFinding,
+        `expected stale launcher finding, findings=${JSON.stringify(staleLauncherReport.findings)}`,
+      );
+      assert.match(staleFinding.message, /run goat-flow hooks sync/u);
+      assert.doesNotMatch(staleFinding.message, /deliver/iu);
+      writeFileSync(
+        join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        HOOK_LAUNCHER_STUB,
+      );
+
+      // Restored files leave the user with a clean drift report again.
+      const repairedReport = checkDrift({
+        fs: createFS(root),
+        projectPath: root,
+        templateRoot: root,
+      });
+      assert.equal(
+        repairedReport.status,
+        "pass",
+        `repaired assets should be drift-clean: ${JSON.stringify(repairedReport.findings)}`,
       );
     } finally {
       rmSync(root, { recursive: true, force: true });

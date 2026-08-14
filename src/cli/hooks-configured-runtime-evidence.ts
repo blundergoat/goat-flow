@@ -16,7 +16,10 @@ import {
   type CreateEvidenceEnvelopeInput,
 } from "./evidence/envelope.js";
 import { HOOK_VERIFICATION_CONTRACTS } from "./hook-verification-contracts.js";
-import { buildAgentHookCommand } from "./server/agent-hook-writer.js";
+import {
+  buildAgentHookDescriptor,
+  type AgentHookHandlerDescriptor,
+} from "./server/agent-hook-command.js";
 import { readAllHookStates } from "./server/hook-registrar.js";
 import { getHookSpec } from "./server/hooks-registry.js";
 import type { AgentId } from "./types.js";
@@ -220,7 +223,7 @@ interface ConfiguredHookScenario {
   acceptedObservations: HookProbeObserved[];
 }
 
-/** Local state required before an exact registered feedback command may run. */
+/** Local state required before an exact registered feedback handler may run. */
 interface ManagedConfiguredHookState {
   isSupported: boolean;
   enabled: boolean;
@@ -228,7 +231,7 @@ interface ManagedConfiguredHookState {
   isCurrentVersionInstalled: boolean;
   isTrusted: boolean;
   scriptPath: string | null;
-  configuredCommand: string | null;
+  configuredHandler: AgentHookHandlerDescriptor | null;
   probeTimeoutMs: number;
   reasonCode: HookRuntimeReasonCode | null;
 }
@@ -334,15 +337,15 @@ function readManagedConfiguredHookState(
       isCurrentVersionInstalled: false,
       isTrusted: false,
       scriptPath: null,
-      configuredCommand: null,
+      configuredHandler: null,
       probeTimeoutMs: PROBE_TIMEOUT_MS,
       reasonCode: "hook-registry-missing",
     };
   }
   const agentHookState = hookState.agents[request.agent];
-  const configuredCommand =
+  const configuredHandler =
     agentHookState.installed && agentProfile.hooksDir !== null
-      ? buildAgentHookCommand(request.agent, agentProfile.hooksDir, hookSpec)
+      ? buildAgentHookDescriptor(request.agent, agentProfile.hooksDir, hookSpec)
       : null;
   return {
     isSupported: agentHookState.supported,
@@ -351,7 +354,7 @@ function readManagedConfiguredHookState(
     isCurrentVersionInstalled: agentHookState.isCurrentVersionInstalled,
     isTrusted: agentHookState.isTrusted,
     scriptPath: agentHookState.scriptPath,
-    configuredCommand,
+    configuredHandler,
     // The hook's own registered deadline is the budget its script was written against; the fast
     // classifier cap would fail a Gruff or post-turn scan that is still legitimately working.
     probeTimeoutMs:
@@ -367,15 +370,20 @@ function readManagedConfiguredHookState(
   };
 }
 
-/** Execute one fixed payload through the exact command the selected agent configuration names. */
+/** Execute one fixed payload through the exact handler the selected agent configuration names. */
 function executeConfiguredFeedbackProbe(
   projectPath: string,
-  configuredCommand: string,
+  configuredHandler: AgentHookHandlerDescriptor,
   scenario: ConfiguredHookScenario,
   timeoutMs: number,
 ): HookProbeExecution {
   const startedAt = performance.now();
-  const execution = spawnSync("bash", ["-c", configuredCommand], {
+  // Argv handlers run exactly as the provider spawns them; shell handlers keep Bash parsing.
+  const [probeExecutable, probeArguments] =
+    configuredHandler.form === "argv"
+      ? [configuredHandler.command, configuredHandler.args]
+      : ["bash", ["-c", configuredHandler.command]];
+  const execution = spawnSync(probeExecutable, probeArguments, {
     cwd: projectPath,
     encoding: "utf-8",
     env: managedHookEnvironment(projectPath),
@@ -561,22 +569,24 @@ function recordConfiguredScenarioEvidence(
 }
 
 /**
- * Check whether local setup is complete enough to run the user's configured command.
+ * Check whether local setup is complete enough to run the user's configured handler.
  * Use before replay so partial installs stay visible as not configured.
  *
- * @param hookState - current local hook links; a null command means no runnable registration
- * @returns true only when every local link and the configured command are ready
+ * @param hookState - current local hook links; a null handler means no runnable registration
+ * @returns true only when every local link and the configured handler are ready
  */
 function configuredHookCanRun(
   hookState: ManagedConfiguredHookState,
-): hookState is ManagedConfiguredHookState & { configuredCommand: string } {
-  // Every local link and the command itself must be present before user-requested proof can run.
+): hookState is ManagedConfiguredHookState & {
+  configuredHandler: AgentHookHandlerDescriptor;
+} {
+  // Every local link and the handler itself must be present before user-requested proof can run.
   return (
     hookState.enabled &&
     hookState.installed &&
     hookState.isCurrentVersionInstalled &&
     hookState.isTrusted &&
-    hookState.configuredCommand !== null
+    hookState.configuredHandler !== null
   );
 }
 
@@ -585,7 +595,7 @@ function configuredHookCanRun(
  * Use so the public command keeps one clear reason for every unavailable state.
  *
  * @param request - selected provider and trust choice; never null
- * @param hookState - inspected registration state; a null command cannot execute
+ * @param hookState - inspected registration state; a null handler cannot execute
  * @param scenarios - fixed user-visible scenarios; empty input returns no rows
  * @returns complete scenario rows, including skipped outcomes when execution is unsafe
  */
@@ -627,15 +637,15 @@ function selectConfiguredScenarioResults(
     );
   }
 
-  const configuredCommand = hookState.configuredCommand;
-  // Every fixed payload reaches the exact command the selected agent will invoke.
+  const configuredHandler = hookState.configuredHandler;
+  // Every fixed payload reaches the exact handler the selected agent will invoke.
   return scenarios.map((scenario) =>
     completedConfiguredScenarioResult(
       request.scenarioGroup,
       scenario,
       executeConfiguredFeedbackProbe(
         request.projectPath,
-        configuredCommand,
+        configuredHandler,
         scenario,
         hookState.probeTimeoutMs,
       ),

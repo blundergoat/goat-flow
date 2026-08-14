@@ -77,7 +77,7 @@ export function readClaudePostTurnSafetyTimeout(
   ) as {
     hooks?: {
       Stop?: Array<{
-        hooks?: Array<{ command?: string; timeout?: number }>;
+        hooks?: Array<{ command?: string; args?: string[]; timeout?: number }>;
       }>;
     };
   };
@@ -88,8 +88,16 @@ export function readClaudePostTurnSafetyTimeout(
     const commandEntries = stopEventGroup.hooks ?? [];
     // A matching command is the registration Claude will run after the user's turn.
     for (const commandEntry of commandEntries) {
-      // Missing command text means this entry cannot be the managed safety hook.
-      if (commandEntry.command?.includes("post-turn-safety.sh")) {
+      // Structured exec-form rows name the script as an argv operand, not command text.
+      const runnableText = [
+        commandEntry.command ?? "",
+        ...(commandEntry.args ?? []).filter(
+          (argumentValue): argumentValue is string =>
+            typeof argumentValue === "string",
+        ),
+      ].join("\n");
+      // Missing runnable text means this entry cannot be the managed safety hook.
+      if (runnableText.includes("post-turn-safety.sh")) {
         return commandEntry.timeout;
       }
     }

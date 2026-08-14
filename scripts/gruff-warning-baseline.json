@@ -1,7 +1,7 @@
 {
   "schemaVersion": "gruff.analysis.v2",
   "analyzer": "@blundergoat/gruff-ts",
-  "reviewedAt": "2026-08-09",
+  "reviewedAt": "2026-08-13",
   "minimumAnalysedFiles": 449,
   "entries": [
     {
@@ -12,6 +12,18 @@
       "occurrences": [
         {
           "lines": 915,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "26df55241efaf5a0",
+      "ruleId": "size.file-length",
+      "file": "test/integration/setup-install-agent-matrix.test.ts",
+      "rationale": "Reviewed oversized file; grew by the executable duplicate-convergence installer fixtures, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 910,
           "threshold": 750
         }
       ]
@@ -37,6 +49,55 @@
         {
           "lines": 763,
           "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "30e2d47f28577274",
+      "ruleId": "size.file-length",
+      "file": "src/cli/server/agent-hook-writer.ts",
+      "rationale": "Reviewed oversized file; ADR-053 structured descriptor rows added six lines, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 756,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "3482358c083e39c9",
+      "ruleId": "size.file-length",
+      "file": "test/contract/skill-hardening-skills-2.test.ts",
+      "rationale": "Reviewed oversized file; grew past the threshold in the 1.15.1 skill-hardening coverage commits before this review, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 1517,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "36b627ddf7d54fa4",
+      "ruleId": "size.file-length",
+      "file": "test/unit/hook-registrar.test.ts",
+      "rationale": "Reviewed oversized file; grew by the ADR-053 migration, descriptor-parity, and duplicate-convergence cases, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 1177,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "4713374c07b6f58e",
+      "ruleId": "security.process-exec",
+      "file": "test/integration/hook-command-spawn-matrix.test.ts",
+      "rationale": "Spawn-matrix suite replays the registered exec-form Claude handler via argv spawnSync with shell disabled.",
+      "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "member",
+          "shellEnabled": false
         }
       ]
     },
@@ -78,6 +139,31 @@
         {
           "callName": "spawnSync",
           "argumentSource": "parameter",
+          "shellEnabled": false
+        }
+      ]
+    },
+    {
+      "stableIdentity": "66972c9186f285ac",
+      "ruleId": "size.file-length",
+      "file": "src/cli/audit/check-agent-deny-runtime.ts",
+      "rationale": "Reviewed oversized file; exec-form handler replay grew the trusted audit, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 841,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "6ecb77d8597afe44",
+      "ruleId": "security.process-exec",
+      "file": "test/unit/hook-registrar.helpers.ts",
+      "rationale": "Registrar test helper replays the registered exec-form Claude handler via argv spawnSync with shell disabled.",
+      "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "member",
           "shellEnabled": false
         }
       ]
@@ -131,6 +217,31 @@
       ]
     },
     {
+      "stableIdentity": "9cabc69dadf04b0d",
+      "ruleId": "size.file-length",
+      "file": "test/unit/hook-registrar.helpers.ts",
+      "rationale": "Reviewed oversized file; grew by the ADR-053 exec-form replay helpers, split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
+      "occurrences": [
+        {
+          "lines": 798,
+          "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "9ffc57818669d0f5",
+      "ruleId": "security.process-exec",
+      "file": "src/cli/hooks-configured-runtime-evidence.ts",
+      "rationale": "Configured-hook verification replays the registered exec-form handler via argv spawnSync with shell disabled.",
+      "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "parameter",
+          "shellEnabled": false
+        }
+      ]
+    },
+    {
       "stableIdentity": "a128961f5c7af1f7",
       "ruleId": "size.file-length",
       "file": "src/cli/plans-time.ts",
@@ -139,6 +250,19 @@
         {
           "lines": 793,
           "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "b593dc59b1bbd891",
+      "ruleId": "security.process-exec",
+      "file": "src/cli/hooks-runtime-evidence.ts",
+      "rationale": "Deny verification replays the registered exec-form handler via argv spawnSync with shell disabled.",
+      "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "parameter",
+          "shellEnabled": false
         }
       ]
     },
@@ -214,6 +338,19 @@
         {
           "lines": 819,
           "threshold": 750
+        }
+      ]
+    },
+    {
+      "stableIdentity": "f1bdf375854b9be3",
+      "ruleId": "security.process-exec",
+      "file": "src/cli/audit/check-agent-deny-runtime.ts",
+      "rationale": "Trusted audit replays the configured exec-form deny handler via argv spawnSync with shell disabled.",
+      "occurrences": [
+        {
+          "callName": "spawnSync",
+          "argumentSource": "member",
+          "shellEnabled": false
         }
       ]
     },

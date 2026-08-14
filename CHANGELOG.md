@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Claude hooks now start on Windows** - Registrations use exec-form argv; `hooks sync` migrates inline commands and converges duplicate rows.
+
 ## v1.15.1 - 2026-08-10
 
 - **Hook support claims expire automatically** - Dated provider evidence expires, so setup, audit, and dashboard report support as unverified.

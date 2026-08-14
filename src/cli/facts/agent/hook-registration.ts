@@ -141,9 +141,18 @@ function hasSupportedHookType(hookObj: Record<string, unknown>): boolean {
   );
 }
 
-/** Read one shell command field from a normalized hook object. */
+/** Read one hook entry's runnable text: a shell command field or exec-form argv operands. */
 function readHookCommand(hookObj: Record<string, unknown>): string | null {
   if (typeof hookObj.bash === "string") return hookObj.bash;
+  // Structured exec-form entries list their script operands in args, not one shell string.
+  if (typeof hookObj.command === "string" && Array.isArray(hookObj.args)) {
+    return hookObj.args
+      .filter(
+        (argumentValue): argumentValue is string =>
+          typeof argumentValue === "string",
+      )
+      .join("\n");
+  }
   if (typeof hookObj.command === "string") return hookObj.command;
   const nestedCommand = hookObj.command;
   if (!nestedCommand || typeof nestedCommand !== "object") return null;

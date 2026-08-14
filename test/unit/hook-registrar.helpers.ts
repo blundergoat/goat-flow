@@ -25,10 +25,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyHookState } from "../../src/cli/server/hook-registrar.js";
+import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import {
-  buildAgentHookCommand,
-  writeAgentHookState,
-} from "../../src/cli/server/agent-hook-writer.js";
+  buildAgentHookDescriptor,
+  type AgentHookHandlerDescriptor,
+} from "../../src/cli/server/agent-hook-command.js";
 import {
   listHookSpecs,
   type HookSpec,
@@ -114,35 +115,58 @@ function collectInstalledHookCommandEntries(
   }
 }
 
+/** Flatten one installed entry's runnable text: command fields plus string argv elements. */
+function installedEntryRunnableText(
+  commandEntry: Record<string, unknown>,
+): string {
+  // Structured entries carry their response program and operands in args, not the command.
+  const argumentOperands = Array.isArray(commandEntry.args)
+    ? commandEntry.args.filter(
+        (argumentValue): argumentValue is string =>
+          typeof argumentValue === "string",
+      )
+    : [];
+  return [commandEntry.command, commandEntry.bash, commandEntry.powershell]
+    .filter(
+      (commandValue): commandValue is string =>
+        typeof commandValue === "string",
+    )
+    .concat(argumentOperands)
+    .join("\n");
+}
+
 /** Select installed command entries that run one managed hook; empty means no launcher exists. */
 function installedEntriesForHook(
   installedCommandEntries: Array<Record<string, unknown>>,
   hookSpec: HookSpec,
 ): Array<Record<string, unknown>> {
   return installedCommandEntries.filter((commandEntry) =>
-    [commandEntry.command, commandEntry.bash, commandEntry.powershell].some(
-      (commandValue) =>
-        typeof commandValue === "string" &&
-        commandValue.includes(hookSpec.primaryScript),
-    ),
+    installedEntryRunnableText(commandEntry).includes(hookSpec.primaryScript),
   );
 }
 
-/** Assert one installed entry matches the command and deadline the user should receive. */
+/** Assert one installed entry matches the complete handler and deadline the user should receive. */
 function assertManagedHookRegistration(
   agentProfile: AgentProfile,
   hookSpec: HookSpec,
   commandEntry: Record<string, unknown>,
-  expectedCommand: string,
+  expectedDescriptor: AgentHookHandlerDescriptor,
 ): void {
   // Copilot users need the same portable launcher in both supported shell fields.
   if (agentProfile.id === "copilot") {
-    assert.equal(commandEntry.bash, expectedCommand);
-    assert.equal(commandEntry.powershell, expectedCommand);
+    assert.equal(commandEntry.bash, expectedDescriptor.command);
+    assert.equal(commandEntry.powershell, expectedDescriptor.command);
     assert.equal(commandEntry.timeoutSec, hookSpec.timeoutSec);
     return;
   }
-  assert.equal(commandEntry.command, expectedCommand);
+  // Approved argv handlers must match the complete descriptor object, not a substring.
+  if (expectedDescriptor.form === "argv") {
+    assert.equal(commandEntry.command, expectedDescriptor.command);
+    assert.deepEqual(commandEntry.args, expectedDescriptor.args);
+  } else {
+    assert.equal(commandEntry.command, expectedDescriptor.command);
+    assert.equal(commandEntry.args, undefined);
+  }
   // Codex uses the proven 90-second host deadline only for approved feedback and Stop lifecycles.
   if (agentProfile.id === "codex") {
     const codexOwnsHostTimeout =
@@ -218,7 +242,7 @@ export function verifyAgentHookRegistrationMatrix(
   for (const hookSpec of listHookSpecs()) {
     // Unsupported hooks are intentionally absent and have no registration to compare.
     if (hookSpec.unsupportedAgents?.[agentProfile.id]) continue;
-    const expectedCommand = buildAgentHookCommand(
+    const expectedDescriptor = buildAgentHookDescriptor(
       agentProfile.id,
       agentProfile.hooksDir ?? ".goat-flow/hooks",
       hookSpec,
@@ -231,22 +255,20 @@ export function verifyAgentHookRegistrationMatrix(
       matchingCommandEntries.length > 0,
       `${agentProfile.id} missing ${hookSpec.id} registration`,
     );
-    // Multiple host fields must preserve the same managed command and response contract.
+    // Multiple host fields must preserve the same managed handler and response contract.
     for (const commandEntry of matchingCommandEntries) {
       assertManagedHookRegistration(
         agentProfile,
         hookSpec,
         commandEntry,
-        expectedCommand,
+        expectedDescriptor,
       );
-      // Empty command fields mean this registration cannot start a user-visible hook.
-      const installedCommand = String(
-        commandEntry.command ??
-          commandEntry.bash ??
-          commandEntry.powershell ??
-          "",
+      // Empty runnable text means this registration cannot start a user-visible hook.
+      assertHookUnavailableResponse(
+        agentProfile,
+        hookSpec,
+        installedEntryRunnableText(commandEntry),
       );
-      assertHookUnavailableResponse(agentProfile, hookSpec, installedCommand);
     }
   }
   return installedCommandEntries.length;
@@ -335,24 +357,38 @@ export function commitAll(root: string, message: string): void {
   ]);
 }
 
-/** Read the first generated Claude deny launcher because hook arrays are nested by event and matcher.
+/** Exec-form Claude handler as registered: one executable plus its exact argv. */
+export interface ClaudeReplayHandler {
+  command: string;
+  args: string[];
+}
+
+/** Read the first generated Claude deny handler because hook arrays are nested by event and matcher.
+ * The registrar wrote this fixture, so a missing row fails the test naturally.
  *
  * @param root - fixture project root
- * @returns the generated Claude launcher command, proving one was written
+ * @returns the registered exec-form handler, proving one structured row was written
  */
-export function readClaudeDenyLauncher(root: string): string {
+export function readClaudeDenyLauncher(root: string): ClaudeReplayHandler {
   const settings = JSON.parse(
     readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
   ) as {
-    hooks?: {
-      PreToolUse?: Array<{
-        hooks?: Array<{ command?: string }>;
+    hooks: {
+      PreToolUse: Array<{
+        hooks: Array<{ command?: string; args?: string[] }>;
       }>;
     };
   };
-  const command = settings.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
-  assert.equal(typeof command, "string");
-  return command;
+  const registeredHook = settings.hooks.PreToolUse[0]!.hooks[0]!;
+  assert.equal(typeof registeredHook.command, "string");
+  assert.ok(
+    Array.isArray(registeredHook.args),
+    "Claude registration should carry a structured args tuple",
+  );
+  return {
+    command: registeredHook.command as string,
+    args: registeredHook.args as string[],
+  };
 }
 
 /** Read the first generated Codex deny launcher because hook arrays are nested by event and matcher.
@@ -409,12 +445,12 @@ export function assertCodexPreToolUseOnly(root: string): void {
   assert.doesNotMatch(hooksJson, /post-turn-safety\.sh/u);
 }
 
-/** Writes a Claude hook-capable fixture and return the generated deny launcher.
+/** Writes a Claude hook-capable fixture and return the generated deny handler.
  *
  * @param root - fixture project root
- * @returns the installed hook path, ready for a newer-stamp overwrite attempt
+ * @returns the registered exec-form handler, ready for literal replay
  */
-export function installClaudeDenyHook(root: string): string {
+export function installClaudeDenyHook(root: string): ClaudeReplayHandler {
   mkdirSync(join(root, ".claude"), { recursive: true });
   writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
   applyHookState(HOOK_IDENTIFIER, true, root);
@@ -545,18 +581,23 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
 ];
 
 /** One hook entry as the registrar writes it into an agent's config file. */
-export type GeneratedHookEntry = { hooks?: Array<{ command?: string }> };
+export type GeneratedHookEntry = {
+  hooks?: Array<{ command?: string; args?: string[] }>;
+};
 
-/** Flatten generated hook entries into command strings for fixture assertions.
+/** Flatten generated hook entries into runnable text for fixture assertions.
  *
  * @param entries - generated hook entries read back from config; empty means none were written
- * @returns the command strings in registration order; empty means no hooks
+ * @returns runnable text per hook in registration order; argv handlers join command and args
  */
 export function generatedHookCommands(
   entries: GeneratedHookEntry[] = [],
 ): string[] {
   return entries.flatMap(({ hooks = [] }) =>
-    hooks.map(({ command = "" }) => command),
+    hooks.map(({ command = "", args }) =>
+      // Structured rows keep their response program and operands in args elements.
+      Array.isArray(args) ? [command, ...args].join("\n") : command,
+    ),
   );
 }
 
@@ -679,30 +720,50 @@ export function runLauncherWithPayload(
   }
 }
 
-/** Execute the generated Claude launcher with a runtime-shaped payload.
+/** Execute the registered Claude exec-form handler with a runtime-shaped payload.
+ * The exact argv is spawned without any shell, matching how Claude runs the hook.
  *
- * @param command - generated launcher command line to execute
+ * @param handler - registered executable plus argv tuple to replay literally
  * @param cwd - working directory the process runs in
  * @param payload - hook JSON delivered on stdin; defaults to the safe Claude payload
  * @param env - extra environment merged onto the process env; absent means the plain env
- * @returns the finished launcher process for the Claude payload shape
+ * @returns the finished handler process for the Claude payload shape
  */
 export function runClaudeLauncher(
-  command: string,
+  handler: ClaudeReplayHandler,
   cwd: string,
   payload = CLAUDE_SAFE_PAYLOAD,
   env: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof spawnSync> {
-  return runLauncherWithPayload(command, cwd, payload, env);
+  const payloadPath = join(
+    tmpdir(),
+    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
+  );
+  writeFileSync(payloadPath, payload);
+  const fd = openSync(payloadPath, "r");
+  try {
+    return spawnSync(handler.command, handler.args, {
+      cwd,
+      encoding: "utf8",
+      env,
+      stdio: [fd, "pipe", "pipe"],
+    });
+  } finally {
+    closeSync(fd);
+    rmSync(payloadPath, { force: true });
+  }
 }
 
-/** Assert the generated launcher allows a benign payload from this cwd.
+/** Assert the registered handler allows a benign payload from this cwd.
  *
- * @param command - generated launcher command line to execute
+ * @param handler - registered executable plus argv tuple to replay literally
  * @param cwd - working directory the process runs in
  */
-export function assertLauncherAllows(command: string, cwd: string): void {
-  const result = runClaudeLauncher(command, cwd);
+export function assertLauncherAllows(
+  handler: ClaudeReplayHandler,
+  cwd: string,
+): void {
+  const result = runClaudeLauncher(handler, cwd);
   assert.equal(
     result.status,
     0,
