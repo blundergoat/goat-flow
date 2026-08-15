@@ -1719,8 +1719,13 @@ if [[ -f tsconfig.json ]]; then
 
     # Knip (unused exports, dead code - breaking error). The project graph exceeds
     # Node's default 4 GiB heap on the supported Node 20 runtime.
+    # --no-gitignore keeps Knip from walking the whole checkout to collect every nested
+    # .gitignore. That walk, not the analysis, is what exhausts the heap when a developer
+    # keeps large gitignored trees under .goat-flow/scratchpad; Knip's own `ignore` option
+    # cannot help, because it filters the report rather than the file walk. Nothing under
+    # src/, test/, or scripts/ is gitignored, so the analysed set is unchanged.
     if command -v npx >/dev/null 2>&1 && npx knip --version >/dev/null 2>&1; then
-        knip_output=$(node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress 2>&1) && knip_exit=0 || knip_exit=$?
+        knip_output=$(node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress --no-gitignore 2>&1) && knip_exit=0 || knip_exit=$?
         if [[ "$knip_exit" -eq 0 ]]; then
             pass "Knip (no unused exports or deps)"
         else
