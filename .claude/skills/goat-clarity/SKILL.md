@@ -83,7 +83,14 @@ Exclusions: <deleted, ignored, generated, binary, documentation, or unsupported 
 Unknowns: <unresolved identity, access, provenance, or compatibility evidence>
 Read-only context: <instructions, consumers, producers, tests, configuration, and review evidence>
 Baseline proof: <status, hashes, checks, and tool availability used to bind this snapshot>
+Formatter check: <exact repository-owned command scoped to writable formatter-owned paths, or NOT_CHECKED>
+Formatter write: <exact repository-owned command scoped to writable formatter-owned paths, or NOT_CHECKED>
 ```
+
+Before mutation, resolve the exact repository-owned formatter check and write commands for the
+writable formatter-owned paths and preserve their repository flags. Run the frozen formatter check
+before mutation and record its literal command and result in Baseline proof. Disposition a missing or
+failing baseline explicitly before editing; do not replace it with another verification result.
 
 Read outside writable paths only to verify behaviour, ownership, vocabulary, references, and impact.
 Revalidate identity and membership immediately before mutation. Any membership drift stops the run and
@@ -163,9 +170,10 @@ Revalidate the snapshot before each bounded edit batch and stop if identity or m
 Inspect the final diff for paths outside the writable set, behaviour changes, public-shape changes,
 test changes, secrets, and whitespace-only churn. Search old names after every rename.
 
-Run the repository formatter check on the exact modified paths before expensive tests or Gruff. If it
-fails, format only those paths, inspect the resulting diff, rerun the check, and do not claim completion
-while it is failing.
+Rerun the frozen formatter check before typecheck, tests, or Gruff on the exact modified
+formatter-owned paths. If it fails, run the frozen write command only on those paths, inspect the
+resulting diff, and rerun the check. A passing typecheck or test never substitutes for formatter
+proof; do not claim completion while the formatter check is failing.
 
 Use `test-selection.md` to choose the smallest trustworthy focused checks, then run every project gate
 required for the touched language. If Gruff is applicable and available through the project wrapper,
@@ -191,9 +199,12 @@ Deferred: <valid findings requiring Scope v2 or another workflow>
 Excluded: <units outside selector eligibility>
 Inaccessible: <units that could not be read>
 NOT_CHECKED: <claims or proof not completed>
+Formatter proof: <baseline and final literal formatter commands and results, or NOT_CHECKED with reason>
 Verification: <literal commands and results>
 Summary: <paste-ready pull-request summary; never posted>
 ```
+
+A receipt without Formatter proof is incomplete, including a no-findings run.
 
 A run with no diagnosed findings keeps every label in one compact summary with explicit zero or empty
 values. Do not render a separate empty section per label merely to prove completeness.

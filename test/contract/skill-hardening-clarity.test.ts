@@ -50,6 +50,8 @@ describe("skill hardening contracts: goat-clarity", () => {
       "Unknowns:",
       "Read-only context:",
       "Baseline proof:",
+      "Formatter check:",
+      "Formatter write:",
       "membership drift",
     ]);
   });
@@ -142,12 +144,18 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
-  it("runs the repository formatter before expensive verification", () => {
+  it("freezes repository formatter commands and proof before mutation", () => {
+    assert.match(
+      clarityGuidance,
+      /Target Scope Snapshot[\s\S]*Baseline proof:[^\n]*\nFormatter check:[^\n]*\nFormatter write:[^\n]*[\s\S]*\*\*CHECKPOINT:\*\*/u,
+      `${SKILL_PATH}: formatter commands must be part of the pre-mutation snapshot`,
+    );
+
     assertIncludesAll([
-      "repository formatter check on the exact modified paths",
-      "before expensive tests or Gruff",
-      "format only those paths",
-      "do not claim completion",
+      "resolve the exact repository-owned formatter check and write commands",
+      "run the frozen formatter check before mutation",
+      "rerun the frozen formatter check before typecheck, tests, or Gruff",
+      "never substitutes for formatter proof",
     ]);
   });
 
@@ -163,6 +171,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "Excluded:",
       "Inaccessible:",
       "NOT_CHECKED:",
+      "Formatter proof:",
       "Verification:",
       "Summary:",
     ]) {
@@ -174,6 +183,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "no diagnosed findings",
       "compact summary",
       "literal verification results",
+      "receipt without Formatter proof is incomplete",
       "Agent: <claude | codex | antigravity | copilot>",
       "Selector: <github-pr | uncommitted | folder | file>",
     ]);

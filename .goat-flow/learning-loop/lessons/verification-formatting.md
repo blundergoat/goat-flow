@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -83,6 +83,8 @@ last_reviewed: 2026-08-15
 
 **Recurrences through 2026-08-12:** M11 SARIF and later contract, setup, dashboard, review, and hook batches repeated the same ordering error. M01 again passed focused tests and typecheck before scoped Prettier rejected its touched TypeScript.
 
+**Recurrence (2026-08-16):** A Copilot file-selector run changed `src/cli/review-validate-anchors.ts` and reported completion after typecheck, but an exact-path Prettier check still rejected the file. The remediation now freezes formatter commands before mutation and makes literal formatter proof mandatory in the receipt.
+
 Evidence anchors:
 
 - `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`); `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
@@ -99,10 +101,12 @@ Evidence anchors:
 - `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
 - `src/cli/server/agent-hook-writer.ts` (search: `deriveManagedHookDesiredState`).
 - `test/unit/hook-registrar.test.ts` (search: `repairs a duplicate registration`).
+- `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`).
+- `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
 
-**Prevention:** Format touched TypeScript before focused proof; retain Prettier in final verification.
+**Prevention:** Format touched TypeScript before focused proof and retain Prettier in final verification. For goat-clarity, freeze the repository-owned check and write commands before mutation; a receipt without literal formatter proof remains incomplete.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 16 | **Latest occurrence:** 2026-08-12
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 17 | **Latest occurrence:** 2026-08-16
 
 ---
 
@@ -164,4 +168,3 @@ Evidence anchors:
 **Release recurrence (2026-08-09):** Hook notes gained a dated release heading before its manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 
 ---
-

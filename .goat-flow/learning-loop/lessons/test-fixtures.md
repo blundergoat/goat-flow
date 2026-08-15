@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md).
@@ -150,7 +150,7 @@ last_reviewed: 2026-08-15
 **Status:** active | **Created:** 2026-07-12
 **Decision changed:** Validate every pressure fact and evaluator restriction against the loaded contract before launch; non-target constraints must not decide the result.
 **Trigger phase:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-08-10
+**Incident count:** 6 | **Latest occurrence:** 2026-08-16
 
 **What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-025 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
 
@@ -166,7 +166,8 @@ last_reviewed: 2026-08-15
 
 **Recurrence 2026-08-10:** A live provider canary prohibited reads but named only the old and new values for four edits. The coding agent guessed four incompatible declarations, every patch failed, and the run exercised Stop without exercising PostToolUse. Supplying the exact editable declaration made the bounded canary valid. The durable consumer fixture now writes its complete registration and hook inputs explicitly. Evidence anchor: `test/integration/hook-consumer-canary.test.ts` (search: `writeObservedCodexFeedbackConfig`).
 
-**Prevention:** Before using a pressure or application fixture, compare every option and prompt restriction with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend incidents, block mandatory reads, or ask the evaluator to recite the target technique. Keep non-target obligations equal so only the tested rule explains the result. When a canary prohibits reads, provide the exact editable source declaration or allow one bounded read; never require blind patch construction.
+**Recurrence 2026-08-16:** A goat-clarity Copilot evaluator guard recognized read-only Git only when the subcommand was the first argument. Copilot prefixed identity probes with `--no-optional-locks` and sometimes `-C <worktree>`, so the guard denied them and the evaluator misclassified the disposable clone as a non-Git directory. The host discarded the run without credit. This was the same isolation failure through command grammar: a non-target restriction suppressed evidence required by `workflow/skills/goat-clarity/SKILL.md` (search: `repository root resolved from the invocation working directory`).
+
+**Prevention:** Before using a pressure or application fixture, compare every option and prompt restriction with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend incidents, block mandatory reads, or ask the evaluator to recite the target technique. Keep non-target obligations equal so only the tested rule explains the result. Dry-run command guards with the producer's real global flags and working-directory form before launch; parse the semantic subcommand after those flags. When a canary prohibits reads, provide the exact editable source declaration or allow one bounded read; never require blind patch construction.
 
 ---
-
