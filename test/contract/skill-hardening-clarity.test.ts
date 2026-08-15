@@ -102,6 +102,15 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("does not invent catch explanations to satisfy comment coverage", () => {
+    assertIncludesAll([
+      "never add a catch comment merely because a catch exists",
+      "exact cause and next reader-visible state",
+      "leave it comment-free",
+      "record the evidence gap",
+    ]);
+  });
+
   it("keeps safe edits separate from scope expansion", () => {
     assertIncludesAll([
       "Safe apply",
@@ -122,6 +131,15 @@ describe("skill hardening contracts: goat-clarity", () => {
       "never change branch, index, worktree membership, or remote state",
       "checkout, stage, commit, push, fetch, reset",
       "edit, comment, review, merge, close, reopen, or mark ready",
+    ]);
+  });
+
+  it("runs the repository formatter before expensive verification", () => {
+    assertIncludesAll([
+      "repository formatter check on the exact modified paths",
+      "before expensive tests or Gruff",
+      "format only those paths",
+      "do not claim completion",
     ]);
   });
 

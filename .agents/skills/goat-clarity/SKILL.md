@@ -120,6 +120,9 @@ Apply the owners to:
 - `@param` and `@return` or `@returns` null, empty, and absent consequences;
 - verified constraints or surprising behaviour that code cannot express.
 
+Never add a catch comment merely because a catch exists. When the exact cause and next reader-visible
+state are not provable from inspected code, leave it comment-free and record the evidence gap.
+
 Describe the current contract, never history. Do not mention removed symbols, local plans, review
 provenance, or anything a fresh clone cannot inspect. A comment that restates code, compensates for a
 name, invents UI, or rewrites a compliant incumbent is not a clarity improvement.
@@ -155,6 +158,10 @@ pull-request summary text in memory, but do not post it or edit a remote descrip
 Revalidate the snapshot before each bounded edit batch and stop if identity or membership changed.
 Inspect the final diff for paths outside the writable set, behaviour changes, public-shape changes,
 test changes, secrets, and whitespace-only churn. Search old names after every rename.
+
+Run the repository formatter check on the exact modified paths before expensive tests or Gruff. If it
+fails, format only those paths, inspect the resulting diff, rerun the check, and do not claim completion
+while it is failing.
 
 Use `test-selection.md` to choose the smallest trustworthy focused checks, then run every project gate
 required for the touched language. If Gruff is applicable and available through the project wrapper,
