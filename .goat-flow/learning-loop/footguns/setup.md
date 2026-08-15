@@ -60,7 +60,7 @@ last_reviewed: 2026-07-17
 **Why it happened:** `lstat` does not follow a symlink when that symlink is the path being inspected, but it still resolves symlinked parent components while reaching a deeper child. A final-file type check therefore proved only the last component was regular; it did not prove the destination stayed inside the selected project.
 
 **Current evidence:**
-- `src/cli/managed-setup-preview.ts` (search: `Every parent must remain a real directory`) inspects each parent component before hashing the final managed file.
+- `src/cli/managed-setup-write-set.ts` (search: `Every parent must remain a real directory`) inspects each parent component before hashing the final managed file; `src/cli/managed-setup-preview.ts` calls it for every previewed destination.
 - `src/cli/managed-setup-state.ts` (search: `Require project-local directories before any baseline read or write`) applies the same containment check before trusting or replacing install state.
 - `src/cli/managed-setup-preview.ts` (search: `--force cannot bypass path safety`) keeps non-regular and unreadable managed destinations as hard admission failures.
 - `workflow/install-goat-flow.sh` (search: `The shared setup root must be local before migrations`) validates the root and every setup directory before `mkdir` or staged file work.

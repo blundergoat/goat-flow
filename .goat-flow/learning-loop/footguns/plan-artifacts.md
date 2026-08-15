@@ -5,6 +5,20 @@ last_reviewed: 2026-08-15
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts - evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
 
+## Footgun: Prose after the last checklist row silently strips that row's estimate
+
+**Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** `plans check --strict` starts failing on a milestone whose checklist was only ticked, with three errors at once: `proof counted work (N min) does not equal the split component`, `N testing gate item(s) missing an (est: ...) entry`, and `forecast basis declares N agent work units but the plan contains N-1`. The arithmetic looks corrupted even though no estimate was edited, and the named item visibly still carries its `(est: ...)`.
+
+**Evidence:** While closing 1.16.0 M01 on 2026-08-15, a one-paragraph caveat was added under `## Proof`, after C4, to record that C4's last command had not run clean. `plans check --strict` had exited 0 immediately before, and exited 1 straight after with the three errors above; counted proof work dropped from 8 to 6 minutes. Moving the same sentences into `## Mid-implementation evidence` restored exit 0 with no other change.
+
+**Why it happens:** An item's body is not one line. `src/cli/plans-export.ts` (search: `Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate`) runs each item from its checkbox to the next checkbox or the next heading, so a paragraph after the last row is absorbed into that row's body. The estimate is then read by `src/cli/plans-effort.ts` (search: `TASK_ESTIMATE_PATTERN`), whose regex is anchored to the end of the body text - the appended prose pushes `(est: ...)` away from that anchor and the item reads as unestimated. One insertion therefore produces three errors, and none of them names prose as the cause. A heading terminates an item, which is why prose under the *next* `##` heading is safe.
+
+**Prevention:** Keep a checklist section to its rows. Caveats about a gate that has not run clean belong under `## Mid-implementation evidence`, next to the literal command output that supports them. This applies to any section `readChecklistItems` parses - tasks, proof, and mid-proof - not to Proof alone. Run `plans check --strict` immediately after editing a milestone's checklist sections; three errors together with unchanged estimates points at absorbed prose rather than at arithmetic.
+
+---
+
 ## Footgun: Strict validation of a new evidence artifact retroactively fails finished plans
 
 **Status:** active | **Created:** 2026-08-02 | **Evidence:** ACTUAL_MEASURED

@@ -369,6 +369,9 @@ export function writeManagedInstallState(
   const files: ManagedInstallStateEntry[] = [];
   // Only paths still managed by this package belong in the next expected baseline.
   for (const file of preview.files) {
+    // User-owned and generated rows have no exact-copy template, so a baseline
+    // hash for them would later read as drift against content the user owns.
+    if (file.ownership !== "system-owned") continue;
     // Retired paths stay out of the next baseline so future previews do not claim ownership.
     if (file.newExpectedSha256 === null) continue;
     files.push({

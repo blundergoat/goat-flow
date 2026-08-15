@@ -1,9 +1,24 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-15
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md).
+
+## Lesson: A preservation fixture's "user content" must not be a clone of the managed row
+
+**Status:** active | **Created:** 2026-08-15
+**Decision changed:** Preservation fixtures now plant content beside the managed block, and derive its position from the provider's own config shape rather than from the managed row's neighbours.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-15
+
+**What happened:** The 1.16.0 M01 round-trip fixture planted an "unrelated user hook row" by cloning the installed deny row and swapping its script name, then pushed it into the array holding the managed row. Claude, Codex, and Copilot preserved it; Antigravity deleted it, and the fixture read that as a preservation defect. Both readings were wrong. The clone still invoked goat-flow's own launcher, and Antigravity keys each hook block by hook id, so the planted row landed *inside* `.agents/hooks.json` → `deny-dangerous` - a block the registrar owns and rewrites wholesale.
+
+**Root cause:** The fixture inferred ownership from adjacency. A row's position in a shared provider event array means something different from the same position inside a per-hook managed block, and a command that names the managed launcher is owned content wherever it sits.
+
+**Prevention:** Plant preservation content that names no framework path, and choose its container from the provider's shape rather than from the managed row's parent: when the config exposes a shared `hooks` container, add a sibling row there; when it keys blocks by hook id, add a sibling top-level block. Assert against whichever shape was planted so one fixture covers every agent. A cross-agent preservation test that passes for some agents and fails for one is evidence about the fixture until the planted content is proven unowned. Evidence anchors: `test/integration/setup-install-write-set.test.ts` (search: `Rewrite every runnable field inside one cloned structure`) and (search: `planted beside goat-flow's own block, never inside it`).
+
+---
 
 ## Lesson: Command-wrapper fixtures must inspect semantic operands after safety flags
 

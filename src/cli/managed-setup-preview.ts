@@ -1,12 +1,11 @@
 /**
- * Builds the managed-template preview users see before installing goat-flow updates.
- * It compares the last installed hash, the selected target file, and the current
- * package template without exposing file contents or absolute project paths.
+ * Builds the install write-set preview users see before installing goat-flow updates.
+ * For managed templates it compares the last installed hash, the selected target file,
+ * and the current package template without exposing file contents or absolute project paths;
+ * for user-owned and generated destinations it reports the seed-or-preserve action instead.
  * Install handlers use the same result to block ambiguous overwrites and record recovery state.
  */
-import { createHash } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { posix } from "node:path";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import { getSkillFiles, loadManifest } from "./manifest/manifest.js";
@@ -14,6 +13,14 @@ import {
   readManagedInstallBaseline,
   writeManagedInstallState,
 } from "./managed-setup-state.js";
+import {
+  collectProjectWriteDefinitions,
+  hashFile,
+  type ManagedTargetEvidence,
+  type ManagedTargetStatus,
+  type ProjectWriteDefinition,
+  readManagedTargetEvidence,
+} from "./managed-setup-write-set.js";
 import type {
   InstallerInvocation,
   InstallerInvocationError,
@@ -26,7 +33,7 @@ export {
 } from "./managed-setup-state.js";
 
 const MANAGED_SETUP_PREVIEW_SCHEMA =
-  "goat-flow.managed-setup-preview.v1" as const;
+  "goat-flow.managed-setup-preview.v2" as const;
 const BLOCKING_STATES = new Set<ManagedSetupFileState>([
   "local-edited",
   "both-changed",
@@ -35,11 +42,16 @@ const BLOCKING_STATES = new Set<ManagedSetupFileState>([
 ]);
 
 const PREVIEW_LIMITS = [
-  "Config migrations, deprecated cleanup, commit-guidance generation, and index generation are outside this managed-template preview.",
+  "Removals - retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations - are cleanup rather than writes and are not enumerated here.",
   "Direct workflow/install-goat-flow.sh execution does not use this CLI admission gate.",
 ] as const;
 
-/** User-visible three-way comparison outcomes for one managed template. */
+/**
+ * User-visible outcome for one destination.
+ * The first nine values are the three-way template comparison; the last three
+ * describe destinations with no exact-copy template, where install seeds, preserves,
+ * or regenerates rather than matching bytes.
+ */
 export type ManagedSetupFileState =
   | "unchanged"
   | "local-edited"
@@ -49,11 +61,14 @@ export type ManagedSetupFileState =
   | "adopted"
   | "removed"
   | "missing"
-  | "unmanaged";
+  | "unmanaged"
+  | "user-seeded"
+  | "user-preserved"
+  | "regenerated";
 
 /** Action shown beside one path so users know what an approved install would do. */
 type ManagedSetupAction =
-  "none" | "create" | "replace" | "preserve" | "protect";
+  "none" | "create" | "replace" | "preserve" | "protect" | "regenerate";
 
 /** Overall preview outcome used by the CLI before it starts the installer. */
 type ManagedSetupVerdict = "ready" | "warning" | "blocked";
@@ -61,8 +76,8 @@ type ManagedSetupVerdict = "ready" | "warning" | "blocked";
 /** Whether a usable previous-install baseline was available for comparison. */
 export type ManagedSetupBaselineStatus = "loaded" | "missing" | "invalid";
 
-/** Filesystem evidence shown for a managed destination without following target symlinks. */
-type ManagedTargetStatus = "regular" | "missing" | "non-regular" | "unreadable";
+/** Update policy for one destination; only system-owned rows carry an exact-copy template. */
+type ManagedSetupOwnership = "system-owned" | "user-owned" | "generated";
 
 /** Hash inputs for classifying one path without reading user content. */
 export interface ManagedSetupClassificationInput {
@@ -74,7 +89,7 @@ export interface ManagedSetupClassificationInput {
 /** One path row shown in JSON or plain-English preview output. */
 interface ManagedSetupPreviewFile {
   path: string;
-  ownership: "system-owned";
+  ownership: ManagedSetupOwnership;
   state: ManagedSetupFileState;
   action: ManagedSetupAction;
   reason: string;
@@ -90,7 +105,7 @@ interface ManagedSetupPreviewFile {
  */
 export interface ManagedSetupPreview {
   schemaVersion: typeof MANAGED_SETUP_PREVIEW_SCHEMA;
-  coverage: "managed-template-files";
+  coverage: "install-write-set";
   agent: AgentId;
   goatFlowVersion: string;
   baselineStatus: ManagedSetupBaselineStatus;
@@ -128,12 +143,6 @@ export function managedSetupPreviewForInstallerLaunch(
 interface ManagedTemplateDefinition {
   path: string;
   sourcePath: string;
-}
-
-/** One target path's safe status and optional regular-file hash for three-way comparison. */
-interface ManagedTargetEvidence {
-  status: ManagedTargetStatus;
-  sha256: string | null;
 }
 
 /** User-facing action and explanation paired with one deterministic drift state. */
@@ -189,6 +198,19 @@ const STATE_PRESENTATION: Record<
     reason:
       "The target path cannot be verified safely, so goat-flow will not write it.",
   },
+  "user-seeded": {
+    action: "create",
+    reason: "This user-owned file is absent, so install may seed it once.",
+  },
+  "user-preserved": {
+    action: "preserve",
+    reason:
+      "This user-owned file already exists, so install keeps your content.",
+  },
+  regenerated: {
+    action: "regenerate",
+    reason: "Install rewrites this generated file from current project state.",
+  },
 };
 
 /**
@@ -230,66 +252,6 @@ export function classifyManagedSetupFile(
   }
 
   return "both-changed";
-}
-
-/**
- * Hash one package or target file for the managed comparison.
- * Use when users need byte-level evidence without storing or displaying file contents.
- *
- * @param filePath - package or target file to hash; empty is invalid upstream and cannot be read
- * @returns lowercase SHA-256 text; never null or empty after a successful read
- */
-function hashFile(filePath: string): string {
-  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
-}
-
-/**
- * Inspect one managed target without following symlinked path components.
- * Use before preview or install so users never authorize writes redirected outside their project.
- *
- * @param projectPath - selected project root; empty is invalid upstream and cannot contain a target
- * @param managedPath - safe manifest or baseline-relative path; empty is rejected before this helper
- * @returns target status and hash; null hash means missing, non-regular, or unreadable bytes
- */
-function readManagedTargetEvidence(
-  projectPath: string,
-  managedPath: string,
-): ManagedTargetEvidence {
-  const pathSegments = managedPath.split("/");
-  let inspectedPath = projectPath;
-  // Every parent must remain a real directory so setup cannot escape through a nested symlink.
-  for (const directorySegment of pathSegments.slice(0, -1)) {
-    inspectedPath = join(inspectedPath, directorySegment);
-    try {
-      const parentStats = lstatSync(inspectedPath);
-      // A symlink or file parent redirects or blocks the managed destination, so install must pause.
-      if (!parentStats.isDirectory()) {
-        return { status: "non-regular", sha256: null };
-      }
-    } catch (error) {
-      // For example, a first install has no `.goat-flow` parent yet, so the destination is simply missing.
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return { status: "missing", sha256: null };
-      }
-      return { status: "unreadable", sha256: null };
-    }
-  }
-
-  const targetFilePath = join(projectPath, managedPath);
-  try {
-    const targetStats = lstatSync(targetFilePath);
-    // Symlinks and directories must never look equal to a regular managed template.
-    if (!targetStats.isFile()) {
-      return { status: "non-regular", sha256: null };
-    }
-    return { status: "regular", sha256: hashFile(targetFilePath) };
-  } catch (error) {
-    // For example, a user deleted this managed file; absence is evidence and unreadable bytes stay blocked.
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { status: "missing", sha256: null };
-    }
-    return { status: "unreadable", sha256: null };
-  }
 }
 
 /**
@@ -441,6 +403,61 @@ function buildPreviewFile(
 }
 
 /**
+ * Report whether one row must stop the installer before any mutation.
+ * Only exact-copy templates qualify, so a user-owned or generated path never
+ * withholds an unrelated managed refresh.
+ */
+function isBlockingManagedFile(file: ManagedSetupPreviewFile): boolean {
+  return file.ownership === "system-owned" && BLOCKING_STATES.has(file.state);
+}
+
+/**
+ * Turn one non-template destination into the row users read beside managed templates.
+ * Use for user-owned and generated paths, where install seeds, preserves, or rewrites
+ * from project state and there is no package template to compare bytes against.
+ */
+function buildProjectWriteFile(
+  definition: ProjectWriteDefinition,
+  currentTarget: ManagedTargetEvidence,
+): ManagedSetupPreviewFile {
+  const unsafeCurrentTarget =
+    currentTarget.status === "non-regular" ||
+    currentTarget.status === "unreadable";
+  // A redirected or unreadable destination is reported and skipped rather than seeded blindly.
+  const state: ManagedSetupFileState = unsafeCurrentTarget
+    ? "unmanaged"
+    : projectWriteState(definition, currentTarget);
+  const presentation = STATE_PRESENTATION[state];
+  return {
+    path: definition.path,
+    ownership: definition.ownership,
+    state,
+    action: presentation.action,
+    // The definition's own reason names the condition install applies to this path.
+    reason: unsafeCurrentTarget ? presentation.reason : definition.reason,
+    oldExpectedSha256: null,
+    currentStatus: currentTarget.status,
+    currentSha256: currentTarget.sha256,
+    newExpectedSha256: null,
+  };
+}
+
+/**
+ * Select the state for one safe non-template destination from ownership and current evidence.
+ * A non-seedable user file stays `user-preserved` while absent, because install never creates it.
+ */
+function projectWriteState(
+  definition: ProjectWriteDefinition,
+  currentTarget: ManagedTargetEvidence,
+): ManagedSetupFileState {
+  // Generated files are rewritten from project state, so presence changes nothing users must decide.
+  if (definition.ownership === "generated") return "regenerated";
+  return currentTarget.status === "missing" && definition.seedable
+    ? "user-seeded"
+    : "user-preserved";
+}
+
+/**
  * Derive the overall verdict from every managed path and baseline health.
  * Use after classification so users receive one ready, warning, or blocked decision.
  */
@@ -450,8 +467,17 @@ function previewVerdict(
 ): ManagedSetupVerdict {
   // Corrupt baseline data cannot authorize an overwrite even if current bytes happen to look safe.
   if (baselineStatus === "invalid") return "blocked";
-  // Any ambiguous target state pauses the installer until the user supplies explicit force.
-  if (files.some((file) => BLOCKING_STATES.has(file.state))) return "blocked";
+  // Only exact-copy templates can block: install never replaces user-owned or generated content,
+  // so an unsafe path there is reported without withholding every unrelated managed refresh.
+  if (files.some(isBlockingManagedFile)) return "blocked";
+  // An unsafe user-owned or generated destination still needs the user's attention before install.
+  if (
+    files.some(
+      (file) => file.ownership !== "system-owned" && file.state === "unmanaged",
+    )
+  ) {
+    return "warning";
+  }
   // Retired paths are preserved and pre-baseline adoptions replace bytes, so
   // both still deserve user attention before the installer runs.
   if (
@@ -510,6 +536,18 @@ export function buildManagedSetupPreview(
       ),
     );
   }
+
+  // User-owned and generated destinations complete the write set an approved install may touch.
+  for (const definition of collectProjectWriteDefinitions(projectPath, agent)) {
+    // An exact-copy template already classified this path, so the seed rule must not restate it.
+    if (currentTemplatePaths.has(definition.path)) continue;
+    files.push(
+      buildProjectWriteFile(
+        definition,
+        readManagedTargetEvidence(projectPath, definition.path),
+      ),
+    );
+  }
   // Path sorting makes preview output deterministic after current and retired rows are combined.
   files.sort((left, right) => left.path.localeCompare(right.path));
 
@@ -520,7 +558,7 @@ export function buildManagedSetupPreview(
   }
   return {
     schemaVersion: MANAGED_SETUP_PREVIEW_SCHEMA,
-    coverage: "managed-template-files",
+    coverage: "install-write-set",
     agent,
     goatFlowVersion: getPackageVersion(),
     baselineStatus: baseline.status,
@@ -545,12 +583,12 @@ export function renderManagedSetupPreviewText(
     `Coverage: ${preview.coverage}`,
     `Baseline: ${preview.baselineStatus}`,
     "",
-    "Managed files:",
+    "Files install may write:",
   ];
   // Every row stays grep-friendly while explaining the action in user language.
   for (const file of preview.files) {
     lines.push(
-      `  ${file.action.padEnd(8)} ${file.path} [${file.state}] - ${file.reason}`,
+      `  ${file.action.padEnd(10)} ${file.ownership.padEnd(12)} ${file.path} [${file.state}] - ${file.reason}`,
     );
   }
   lines.push("", "Limits:");
@@ -567,9 +605,7 @@ export function renderManagedSetupPreviewText(
  */
 function managedSetupBlockingSummary(preview: ManagedSetupPreview): string[] {
   // Only states requiring user intent belong in the blocking error.
-  const blockingFiles = preview.files.filter((file) =>
-    BLOCKING_STATES.has(file.state),
-  );
+  const blockingFiles = preview.files.filter(isBlockingManagedFile);
   // Each path stays on one line so users can inspect or copy it directly.
   const lines = blockingFiles.map(
     (file) => `${file.path} [${file.state}]: ${file.reason}`,
@@ -636,9 +672,11 @@ export function recordManagedInstallAfterVerification(
   agent: AgentId,
 ): string[] {
   const installedPreview = buildManagedSetupPreview(projectPath, agent);
-  // Only current package templates are verified; retired paths are preserved and excluded.
+  // Only current package templates are verified; retired paths are preserved and
+  // excluded, and user-owned or generated rows legitimately differ from any template.
   const installationMismatches = installedPreview.files.filter(
     (file) =>
+      file.ownership === "system-owned" &&
       file.newExpectedSha256 !== null &&
       file.currentSha256 !== file.newExpectedSha256,
   );

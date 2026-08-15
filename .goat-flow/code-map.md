@@ -31,6 +31,7 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 ├── managed-setup-command.ts     = managed preview request validation, report output, and blocked exit status
 ├── managed-setup-preview.ts     = hash-only three-way managed template classification and dry-run rendering
 ├── managed-setup-state.ts       = validated local install baselines for later managed setup comparisons
+├── managed-setup-write-set.ts   = user-owned and generated install destinations plus symlink-safe target inspection
 ├── hooks-command.ts             = CLI entry for hook state, toggles, sync, and explicit runtime proof
 ├── hooks-runtime-evidence.ts    = bounded managed deny-hook scenarios, verdicts, renderers, and local events
 ├── install-invocation.ts        = install/setup invocation parsing plus Windows-compatible Bash discovery

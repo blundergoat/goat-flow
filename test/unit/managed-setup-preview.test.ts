@@ -163,8 +163,8 @@ describe("managed setup prerequisites", () => {
   /** Contract: preview and install share the blocker while the input stays unchanged. */
   it("blocks dry-run with the same launch failure the real install would report", () => {
     const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v1",
-      coverage: "managed-template-files",
+      schemaVersion: "goat-flow.managed-setup-preview.v2",
+      coverage: "install-write-set",
       agent: "claude",
       goatFlowVersion: "1.15.0",
       baselineStatus: "missing",
@@ -203,8 +203,8 @@ describe("managed install state", () => {
   it("writes only relative paths and hashes for the next user preview", () => {
     const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-preview-state-"));
     const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v1",
-      coverage: "managed-template-files",
+      schemaVersion: "goat-flow.managed-setup-preview.v2",
+      coverage: "install-write-set",
       agent: "codex",
       goatFlowVersion: "1.13.1",
       baselineStatus: "missing",
@@ -245,8 +245,8 @@ describe("managed install state", () => {
       join(tmpdir(), "goat-flow-preview-redirect-"),
     );
     const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v1",
-      coverage: "managed-template-files",
+      schemaVersion: "goat-flow.managed-setup-preview.v2",
+      coverage: "install-write-set",
       agent: "codex",
       goatFlowVersion: "1.13.1",
       baselineStatus: "missing",
@@ -285,8 +285,8 @@ describe("managed install state", () => {
       "victim.json",
     );
     const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v1",
-      coverage: "managed-template-files",
+      schemaVersion: "goat-flow.managed-setup-preview.v2",
+      coverage: "install-write-set",
       agent: "codex",
       goatFlowVersion: "1.13.1",
       baselineStatus: "missing",

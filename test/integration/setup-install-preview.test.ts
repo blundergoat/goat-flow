@@ -69,6 +69,61 @@ function downgradeCodexBaselineToSevenSkills(projectPath: string): void {
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
+/** One preview row as the JSON contract publishes it. */
+interface PreviewRow {
+  path: string;
+  ownership: string;
+  state: string;
+  action: string;
+  reason: string;
+  currentStatus: string;
+  newExpectedSha256: string | null;
+}
+
+/** Every row on a fresh target names a safe relative path with an explained absent destination. */
+function isSafeFreshTargetRow(file: PreviewRow): boolean {
+  return (
+    file.path.length > 0 &&
+    !file.path.startsWith("/") &&
+    file.reason.length > 0 &&
+    file.currentStatus === "missing"
+  );
+}
+
+/** An exact-copy template on a fresh target is created from a package hash. */
+function isFreshTemplateCreate(file: PreviewRow): boolean {
+  return (
+    file.state === "added" &&
+    file.action === "create" &&
+    /^[a-f0-9]{64}$/u.test(file.newExpectedSha256 ?? "")
+  );
+}
+
+/** A non-template destination declares user or generated ownership and carries no template hash. */
+function isProjectWriteRow(file: PreviewRow): boolean {
+  return (
+    (file.ownership === "user-owned" || file.ownership === "generated") &&
+    file.newExpectedSha256 === null
+  );
+}
+
+/**
+ * Assert the preview lists one path, optionally with the exact fields the user must see.
+ *
+ * @param files - every row the preview reported for this target
+ * @param expected - path to find plus any row fields that must match it
+ */
+function assertPreviewLists(
+  files: PreviewRow[],
+  expected: Partial<PreviewRow> & { path: string },
+): void {
+  const row = files.find((file) => file.path === expected.path);
+  assert.ok(row, `preview must list ${expected.path}`);
+  for (const [field, value] of Object.entries(expected)) {
+    assert.equal(row[field as keyof PreviewRow], value, expected.path);
+  }
+}
+
 describe("managed setup preview", () => {
   it("reports a fresh target without writing any project files", () => {
     const projectPath = makeTempProject();
@@ -86,47 +141,44 @@ describe("managed setup preview", () => {
       schemaVersion: string;
       coverage: string;
       verdict: string;
-      files: Array<{
-        path: string;
-        ownership: string;
-        state: string;
-        action: string;
-        reason: string;
-        currentStatus: string;
-        newExpectedSha256: string | null;
-      }>;
+      files: PreviewRow[];
     };
-    assert.equal(report.schemaVersion, "goat-flow.managed-setup-preview.v1");
-    assert.equal(report.coverage, "managed-template-files");
+    assert.equal(report.schemaVersion, "goat-flow.managed-setup-preview.v2");
+    assert.equal(report.coverage, "install-write-set");
     assert.equal(report.verdict, "ready");
     assert.equal(
       report.files.some((file) => file.state === "added"),
       true,
     );
+    assert.equal(report.files.every(isSafeFreshTargetRow), true);
+    // Every exact-copy template on a fresh target is a create backed by a package hash.
     assert.equal(
-      report.files.every(
-        (file) =>
-          file.path.length > 0 &&
-          !file.path.startsWith("/") &&
-          file.ownership === "system-owned" &&
-          file.state === "added" &&
-          file.action === "create" &&
-          file.reason.length > 0 &&
-          file.currentStatus === "missing" &&
-          /^[a-f0-9]{64}$/u.test(file.newExpectedSha256 ?? ""),
-      ),
+      report.files
+        .filter((file) => file.ownership === "system-owned")
+        .every(isFreshTemplateCreate),
       true,
     );
+    // User-owned and generated destinations complete the write set and carry no template hash.
     assert.equal(
-      report.files.some(
-        (file) => file.path === ".goat-flow/hooks/deny-dangerous.sh",
-      ),
+      report.files
+        .filter((file) => file.ownership !== "system-owned")
+        .every(isProjectWriteRow),
       true,
     );
-    assert.equal(
-      report.files.some((file) => file.path === ".agents/skills/goat/SKILL.md"),
-      true,
-    );
+    assertPreviewLists(report.files, {
+      path: ".goat-flow/config.yaml",
+      ownership: "user-owned",
+      state: "user-seeded",
+    });
+    assertPreviewLists(report.files, {
+      path: ".codex/hooks.json",
+      ownership: "user-owned",
+      action: "create",
+    });
+    assertPreviewLists(report.files, {
+      path: ".goat-flow/hooks/deny-dangerous.sh",
+    });
+    assertPreviewLists(report.files, { path: ".agents/skills/goat/SKILL.md" });
     const repeatedResult = runCliInstaller(
       projectPath,
       "--agent",
@@ -153,10 +205,14 @@ describe("managed setup preview", () => {
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Verdict: ready/u);
-    assert.match(result.stdout, /Coverage: managed-template-files/u);
+    assert.match(result.stdout, /Coverage: install-write-set/u);
     assert.match(
       result.stdout,
-      /create\s+\.goat-flow\/hooks\/deny-dangerous\.sh \[added\] - The current goat-flow package adds this managed file\./u,
+      /create\s+system-owned\s+\.goat-flow\/hooks\/deny-dangerous\.sh \[added\] - The current goat-flow package adds this managed file\./u,
+    );
+    assert.match(
+      result.stdout,
+      /create\s+user-owned\s+\.goat-flow\/config\.yaml \[user-seeded\] - Install scaffolds this config once/u,
     );
     assert.deepEqual(readdirSync(projectPath), []);
   });
@@ -209,7 +265,7 @@ describe("managed setup preview", () => {
     assert.equal(dryRun.status, 0, dryRun.stderr || dryRun.stdout);
     const report = JSON.parse(dryRun.stdout) as {
       verdict: string;
-      files: Array<{ path: string; state: string; action: string }>;
+      files: PreviewRow[];
     };
     assert.equal(report.verdict, "warning");
     const adoptedFile = report.files.find(
@@ -273,7 +329,7 @@ describe("managed setup preview", () => {
     assert.equal(repeatPreview.status, 0, repeatPreview.stderr);
     const report = JSON.parse(repeatPreview.stdout) as {
       verdict: string;
-      files: Array<{ path: string; state: string; action: string }>;
+      files: PreviewRow[];
     };
     const clarityFile = report.files.find(
       (file) => file.path === CODEX_GOAT_CLARITY_PATH,
@@ -308,12 +364,7 @@ describe("managed setup preview", () => {
     assert.notEqual(preview.status, 0);
     const report = JSON.parse(preview.stdout) as {
       verdict: string;
-      files: Array<{
-        path: string;
-        state: string;
-        action: string;
-        reason: string;
-      }>;
+      files: PreviewRow[];
     };
     const clarityFile = report.files.find(
       (file) => file.path === CODEX_GOAT_CLARITY_PATH,
@@ -545,7 +596,7 @@ describe("managed setup preview", () => {
     assert.notEqual(preview.status, 0);
     const report = JSON.parse(preview.stdout) as {
       verdict: string;
-      files: Array<{ path: string; state: string }>;
+      files: PreviewRow[];
     };
     assert.equal(report.verdict, "blocked");
     assert.equal(
@@ -607,12 +658,7 @@ describe("managed setup preview", () => {
       assert.notEqual(preview.status, 0);
       const report = JSON.parse(preview.stdout) as {
         verdict: string;
-        files: Array<{
-          path: string;
-          state: string;
-          currentStatus: string;
-          reason: string;
-        }>;
+        files: PreviewRow[];
       };
       const redirectedManagedFile = report.files.find(
         (file) => file.path === ".goat-flow/logs/quality/README.md",
