@@ -19,6 +19,7 @@ const templates = [
   "workflow/skills/goat-critique/SKILL.md",
   "workflow/skills/goat-security/SKILL.md",
   "workflow/skills/goat-qa/SKILL.md",
+  "workflow/skills/goat-clarity/SKILL.md",
 ];
 
 /**

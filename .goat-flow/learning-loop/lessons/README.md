@@ -33,3 +33,33 @@ last_reviewed: 2026-04-20
 Inside a bucket, add entries as `## Lesson:` or `## Pattern:` blocks. Each entry SHOULD include a `**Created:**` line in `YYYY-MM-DD` form so tooling can detect stale content. New lessons SHOULD also include `**Decision changed:**` naming the future agent choice affected; `goat-flow stats --check` reports missing values as advisory backfill work, not a failure. Add `**Trigger phase:** READ|SCOPE|ACT|VERIFY` when one execution-loop phase should retrieve the memory. When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`. Legacy one-entry files still work during migration, but category buckets with the frontmatter contract are the preferred and audited format.
 
 Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-style.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
+
+## Status Values
+
+`**Status:**` is optional; an entry without one is treated as active. When present it must be one of three:
+
+| Status | Meaning | Indexed? |
+|---|---|---|
+| `active` | The mistake is still available to make. | Yes |
+| `historical` | The worked example names a removed subsystem, but the behavioural principle still applies. | **Yes** - the principle is still retrievable |
+| `resolved` | A shipped guardrail makes the mistake mechanically impossible, or the behaviour it describes no longer exists. | No |
+
+`historical` entries MUST carry a `**Reason:**` naming what died and what survives - "Rubric check 2.4.3 no longer exists (ADR-013); normalization-invariant principle applies to any parser". Without that sentence a reader cannot tell whether the entry is still safe to apply. The generated index keeps them because the principle is the retrievable part; only `resolved` is filtered out (`src/cli/learning-loop-index/parse-bucket.ts`, search: `Status:\*\*\s*resolved`).
+
+## Retiring A Lesson
+
+Lessons accumulate faster than they retire, because a behavioural mistake has no natural end event the way an architectural trap does. Retire deliberately, on one of three triggers:
+
+- **Superseded by a guardrail.** A hook, audit check, or contract test now prevents the mistake rather than reminding an agent not to make it. Cite the enforcing surface; the lesson becomes `resolved`.
+- **Obsolete surface.** The subsystem the lesson describes was removed. If the principle generalises beyond that subsystem it becomes `historical` with a `**Reason:**`, not `resolved` - deleting a still-true principle because its example died is the failure mode to avoid.
+- **Folded into a sibling.** The same root cause already exists elsewhere. Merge the distinct evidence into that entry and retire this one; do not leave two entries describing one cause.
+
+Recurrence is the opposite signal. An entry with `**Incident count:**` above one is load-bearing and stays regardless of age.
+
+## Bucket Size
+
+Split a bucket at roughly 200 lines or 10 entries (ADR-033). Split along a real seam in the subject matter, and extract the new bucket **out of** the existing file rather than renaming it, so paths cited from code, ADRs, and sibling entries keep resolving. Re-run `goat-flow index` afterwards and let `stats --check` find any anchor that pointed at a moved entry.
+
+Those figures are guidance. The gate that actually blocks is measured in bytes: `stats --check` raises a `bucket-size` finding and fails when a bucket exceeds 40,000 bytes (`src/cli/stats/stats.ts`, search: `BUCKET_SIZE_WARN_BYTES`). A bucket can sit under ten entries and still trip it, so check size after adding a long entry rather than counting headings.
+
+When a directory holds several buckets a reader could confuse - `verification.md` beside `verification-testing.md`, or five `*-testing.md` files - each MUST open with a `**Scope:**` line saying what it owns and naming the sibling that owns the rest. INDEX-first retrieval shows titles, not contents; without that line an agent cannot tell which bucket to open.

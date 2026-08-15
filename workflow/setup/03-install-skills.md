@@ -1,6 +1,6 @@
 # Step 03 - Install Skills
 
-Install the 7 goat-flow skills (6 functional + 1 dispatcher) in the agent's skills directory.
+Install the 8 goat-flow skills (7 functional + 1 dispatcher) in the agent's skills directory.
 
 ## Pre-existing skills
 
@@ -8,7 +8,7 @@ If non-goat-prefixed skills exist (e.g., audit/, review/, preflight/), IGNORE th
 
 ## Skills to install
 
-Read the detailed templates in `workflow/skills/` (each skill is a directory containing `SKILL.md` and, for some skills, a nested `references/` subdir) before creating. Create or update these 7 skills in the agent's skills directory (see agent config file for path):
+Read the detailed templates in `workflow/skills/` (each skill is a directory containing `SKILL.md` and, for some skills, a nested `references/` subdir) before creating. Create or update these 8 skills in the agent's skills directory (see agent config file for path):
 
 1. **goat-debug/SKILL.md** - Diagnosis-first debugging. Hypothesis tracking, recurrence checks. Includes investigate mode for code exploration.
 2. **goat-review/SKILL.md** - Structured code review + quality audit. RFC 2119 severity, negative verification, footgun matching.
@@ -16,7 +16,8 @@ Read the detailed templates in `workflow/skills/` (each skill is a directory con
 4. **goat-plan/SKILL.md** - Milestone planner and manager. Routes to inline or file-write mode based on scope and signals: inline for hotfix/small features, file-write for Standard+ scope.
 5. **goat-critique/SKILL.md** - Multi-perspective critique using sub-agent orchestration. Phases 1-5 plus mandatory Phase 5.5 meta-audit and Phase 5.6 outcome capture; 3 critique agents (risk, alternatives, fresh eyes), up to 3 conditional cross-exam agents, and 1 mandatory meta-agent.
 6. **goat-qa/SKILL.md** - Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort.
-7. **goat/SKILL.md** - Dispatcher. Routes natural language to the right skill. Required - audit checks for it (audit check: agent-skills).
+7. **goat-clarity/SKILL.md** - Bounded comment, documentation, naming, and private-placement remediation for one pull request, uncommitted set, folder, or source file.
+8. **goat/SKILL.md** - Dispatcher. Routes natural language to the right skill. Required - audit checks for it (audit check: agent-skills).
 
 ## Requirements for each skill
 
@@ -92,9 +93,9 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 ---
 
 **Verification gate:**
-- [ ] All 7 skill files exist in the agent's skills directory
+- [ ] All 8 skill files exist in the agent's skills directory
 - [ ] goat/SKILL.md (dispatcher) exists
-- [ ] All 7 skills have matching `goat-flow-skill-version` tags
+- [ ] All 8 skills have matching `goat-flow-skill-version` tags
 - [ ] No installed goat skill has unlisted stale `references/*.md` files
 - [ ] `.goat-flow/skill-docs/README.md` exists
 - [ ] `.goat-flow/skill-docs/skill-preamble.md` exists
@@ -123,6 +124,6 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] Instruction file router table references the skills directory
 
 **Progress marker:** Append one line to the shared setup session log:
-- `Step 03 complete: 7 skills installed`
+- `Step 03 complete: 8 skills installed`
 
 NEXT: proceed to `04-architecture-code-map.md`

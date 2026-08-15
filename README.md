@@ -40,7 +40,7 @@ The embedded terminal needs the optional `node-pty` package to compile. See [Tro
 | Component | What it prevents |
 |---|---|
 | **Execution loop** (READ → SCOPE → ACT → VERIFY) | Guessing at unread code or shipping without checks |
-| **Seven skills** (six `/goat-*` workflows plus dispatcher) | Free-form prompting that drifts mid-task |
+| **Eight skills** (seven `/goat-*` workflows, including direct `/goat-clarity`, plus dispatcher) | Free-form prompting that drifts mid-task |
 | **Enforcement hooks** | Destructive commands, repository publication, and direct secret-path access |
 | **Learning loop** | The same mistake recurring in later sessions |
 | **Autonomy tiers** | Agent overreach and missed approval boundaries |
@@ -202,7 +202,7 @@ Regenerate from the dashboard Setup page, which shows detected stack info alongs
 | [Deterministic Audit Checks](docs/audit-checks.md) | Stable check IDs, scopes, and command matrix |
 | [Harness Engineering](docs/harness-engineering.md) | The five-concern model and its sources |
 | [Harness Audit](docs/harness-audit.md) | Harness scoring, evidence limits, and check semantics |
-| [Skills](docs/skills.md) | All seven skills, their modes, gates, and outputs |
+| [Skills](docs/skills.md) | All eight skills, their modes, gates, and outputs |
 | [Skill Authoring](docs/skill-authoring.md) | Candidacy, RED evidence, scaffolding, and draft validation |
 | [Guardrails](docs/guardrails.md) | Runtime command-safety surfaces and limitations |
 | [Coding Standards](docs/coding-standards/conventions.md) | Repository architecture, commands, and implementation conventions |

@@ -41,6 +41,34 @@ function symlinkDirectoryOrSkip(
   }
 }
 
+const CODEX_GOAT_CLARITY_PATH = ".agents/skills/goat-clarity/SKILL.md";
+
+/**
+ * Rewrite one disposable Codex install-state file without its goat-clarity row.
+ * Reads and replaces only the fixture baseline so the next installer run sees a loaded seven-skill state.
+ */
+function downgradeCodexBaselineToSevenSkills(projectPath: string): void {
+  const statePath = join(
+    projectPath,
+    ".goat-flow",
+    "install-state",
+    "codex.json",
+  );
+  const state = JSON.parse(readFileSync(statePath, "utf-8")) as {
+    files: Array<{ path: string; expectedSha256: string }>;
+  };
+  const originalFileCount = state.files.length;
+  state.files = state.files.filter(
+    (file) => file.path !== CODEX_GOAT_CLARITY_PATH,
+  );
+  assert.equal(
+    state.files.length,
+    originalFileCount - 1,
+    "the installed baseline must contain goat-clarity before the fixture removes it",
+  );
+  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
+}
+
 describe("managed setup preview", () => {
   it("reports a fresh target without writing any project files", () => {
     const projectPath = makeTempProject();
@@ -203,6 +231,104 @@ describe("managed setup preview", () => {
       ),
       true,
       "the first managed upgrade must record a baseline",
+    );
+  });
+
+  it("upgrades a seven-skill baseline and repeats without drift", () => {
+    const projectPath = makeTempProject();
+    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    downgradeCodexBaselineToSevenSkills(projectPath);
+    const installedClarityPath = join(projectPath, CODEX_GOAT_CLARITY_PATH);
+    rmSync(installedClarityPath);
+
+    const upgrade = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(upgrade.status, 0, upgrade.stderr || upgrade.stdout);
+    assert.equal(
+      readFileSync(installedClarityPath, "utf-8"),
+      readFileSync(
+        getTemplatePath("workflow/skills/goat-clarity/SKILL.md"),
+        "utf-8",
+      ),
+    );
+
+    const repeatInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      repeatInstall.status,
+      0,
+      repeatInstall.stderr || repeatInstall.stdout,
+    );
+    const repeatPreview = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(repeatPreview.status, 0, repeatPreview.stderr);
+    const report = JSON.parse(repeatPreview.stdout) as {
+      verdict: string;
+      files: Array<{ path: string; state: string; action: string }>;
+    };
+    const clarityFile = report.files.find(
+      (file) => file.path === CODEX_GOAT_CLARITY_PATH,
+    );
+    assert.equal(report.verdict, "ready");
+    assert.equal(clarityFile?.state, "unchanged");
+    assert.equal(clarityFile?.action, "none");
+  });
+
+  it("protects an existing goat-clarity path a loaded baseline never owned", () => {
+    const projectPath = makeTempProject();
+    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    downgradeCodexBaselineToSevenSkills(projectPath);
+    const installedClarityPath = join(projectPath, CODEX_GOAT_CLARITY_PATH);
+    const developerOwnedBytes =
+      "# Local goat-clarity\n\nKeep this developer-owned skill.\n";
+    writeFileSync(installedClarityPath, developerOwnedBytes);
+
+    const preview = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.notEqual(preview.status, 0);
+    const report = JSON.parse(preview.stdout) as {
+      verdict: string;
+      files: Array<{
+        path: string;
+        state: string;
+        action: string;
+        reason: string;
+      }>;
+    };
+    const clarityFile = report.files.find(
+      (file) => file.path === CODEX_GOAT_CLARITY_PATH,
+    );
+    assert.equal(report.verdict, "blocked");
+    assert.equal(clarityFile?.state, "unmanaged");
+    assert.equal(clarityFile?.action, "protect");
+    assert.match(clarityFile?.reason ?? "", /loaded install baseline/u);
+
+    const blockedInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.notEqual(blockedInstall.status, 0);
+    assert.match(blockedInstall.stderr, /goat-clarity/u);
+    assert.equal(
+      readFileSync(installedClarityPath, "utf-8"),
+      developerOwnedBytes,
     );
   });
 

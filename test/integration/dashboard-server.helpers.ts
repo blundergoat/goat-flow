@@ -646,6 +646,7 @@ skills:
       "goat-critique",
       "goat-security",
       "goat-qa",
+      "goat-clarity",
     ]) {
       await writeProjectFile(
         root,

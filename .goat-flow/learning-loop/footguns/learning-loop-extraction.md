@@ -7,9 +7,13 @@ last_reviewed: 2026-08-15
 
 ## Footgun: Learning-loop record counts have two grammars that disagree on resolved entries
 
-**Status:** active | **Created:** 2026-06-10 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-06-10 | **Updated:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
 
 **Symptoms:** Two surfaces show different counts under the same bucket label. Measured 2026-06-10: the dashboard Home LEARNING LOOP pill said `94 footguns` while the Learning loop card's per-bucket bar said `footguns 78`. Both are correct - they use different counting grammars.
+
+**Stays active after the 2026-08-15 label fix.** The two grammars are deliberate (Prevention 1) and both remain in the payload, so any new surface can re-collide them. What was fixed is the specific Home violation of Prevention 2: the pill now reads `N footgun records` / `N lesson records` against the card's `N active entries`, and `dashboard-reporting.ts` marks each field's grammar at the point it is set. The trap is the shape, not that one instance.
+
+**Recurrence 2026-08-15:** Hit again outside the dashboard while reconciling this directory by hand - 129 `## Footgun:` headings against 105 `INDEX.md` rows. The gap was 23 resolved entries plus one `## Footgun:` template inside `README.md`, which is a heading but not an entry. Any tool counting headings must exclude the README and decide which grammar it means.
 
 **Evidence:**
 - `src/cli/server/dashboard-reporting.ts` (search: `footgunCount: stats.footguns.totalEntries`) - pill counts come from `buildStatsReport`, which counts every entry heading including `Status: resolved` footguns.

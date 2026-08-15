@@ -79,4 +79,4 @@ boundary, not a silent gap.
 Two-way door: the overlay, prompt, and server changes revert with git, and the headless-spawn
 fallback is pre-identified. Revisit if a future Claude Code release makes heredoc commands
 matchable by settings rules - re-probe using the positive-control method recorded in
-`.goat-flow/learning-loop/lessons/test-execution-environment.md` (search: `Nested Claude permission probes`) before trusting any new matcher behaviour.
+`.goat-flow/learning-loop/lessons/test-shell-environment.md` (search: `Nested Claude permission probes`) before trusting any new matcher behaviour.

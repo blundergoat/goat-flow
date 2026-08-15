@@ -29,6 +29,8 @@ Prefer category bucket files such as `hooks.md`, `setup.md`, or `auditor.md`. Ev
 
 Split a bucket at roughly 200 lines or 10 entries (ADR-033). Split along a real seam in the subject matter, not at the line that happens to cross the threshold, and extract the new bucket **out of** the existing file rather than renaming it - audit provenance in `src/cli/audit/` cites bucket paths such as `footguns/auditor.md` and `footguns/skills.md` as `evidence_paths`, so a renamed base file breaks code, not just links. Re-run `goat-flow index` afterwards and let `stats --check` find any anchor that pointed at a moved entry.
 
+Those figures are guidance. The gate that actually blocks is measured in bytes: `stats --check` raises a `bucket-size` finding and fails when a bucket exceeds 40,000 bytes (`src/cli/stats/stats.ts`, search: `BUCKET_SIZE_WARN_BYTES`). A bucket can sit under ten entries and still trip it, so check size after adding a long entry rather than counting headings.
+
 ```yaml
 ---
 category: hooks

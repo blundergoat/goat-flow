@@ -12,6 +12,35 @@
  */
 import type { LearningLoopAutoCaptureTarget } from "./types.js";
 
+/**
+ * Recognized keys one level inside each named config block.
+ *
+ * Top-level typos were already reported, but a misspelling below the root was
+ * indistinguishable from leaving the setting out: the validator read the fields it
+ * knew and never looked at the rest, so `learning-loop.auto-captrue` and an omitted
+ * block produced identical output. Keyed by the config path of the owning block.
+ *
+ * Blocks whose keys are user-chosen names are deliberately absent. `hooks` is keyed
+ * by hook id and `quality` is handed to `loadQualityConfig` unparsed, so neither has
+ * a closed key set to check against; `HOOK_ROW_KEYS` covers the fixed fields inside
+ * one hook row instead.
+ */
+export const KNOWN_NESTED_KEYS = new Map<string, ReadonlySet<string>>([
+  ["line-limits", new Set(["target", "limit"])],
+  ["toolchain", new Set(["test", "lint", "build", "package", "format"])],
+  ["skills", new Set(["install", "goat-review"])],
+  ["harness", new Set(["acknowledge"])],
+  ["terminal", new Set(["idle-timeout"])],
+  ["learning-loop", new Set(["auto-capture"])],
+  ["learning-loop.auto-capture", new Set(["enabled", "targets"])],
+]);
+
+/** Fixed fields inside one `hooks.<hook-id>` row; the row key itself is a hook id. */
+export const HOOK_ROW_KEYS: ReadonlySet<string> = new Set([
+  "enabled",
+  "binaries",
+]);
+
 /** Top-level config keys recognized by the validator (others trigger warnings). */
 export const KNOWN_TOP_LEVEL_KEYS = new Set([
   "version",

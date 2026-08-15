@@ -373,3 +373,80 @@ harness:
     );
   });
 });
+
+describe("config surfaces misspelled nested keys", () => {
+  /**
+   * Root-level typos were already reported, but a misspelling one level down read
+   * exactly like leaving the setting out: the validator consumed the fields it knew
+   * and never looked at the rest, so the user saw a feature that "did nothing".
+   */
+  it("warns on an unread key inside a fixed-shape block", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+learning-loop:
+  auto-captrue:
+    enabled: true
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    // Warning, not error: an unknown key must not stop an older CLI loading a newer config.
+    assert.equal(result.valid, true);
+    assert.ok(
+      result.warnings.some(
+        (warning) => warning.path === "learning-loop.auto-captrue",
+      ),
+      JSON.stringify(result.warnings),
+    );
+  });
+
+  it("warns on an unread key inside a hook row keyed by hook id", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+hooks:
+  gruff-code-quality:
+    enabled: true
+    binariez:
+      py: some/path
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.ok(
+      result.warnings.some(
+        (warning) => warning.path === "hooks.gruff-code-quality.binariez",
+      ),
+      JSON.stringify(result.warnings),
+    );
+  });
+
+  it("stays silent on correctly spelled nested keys", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+learning-loop:
+  auto-capture:
+    enabled: false
+terminal:
+  idle-timeout: 30
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.equal(result.valid, true);
+    assert.deepEqual(
+      result.warnings.filter((warning) => warning.message === "unknown key"),
+      [],
+    );
+  });
+
+  /** Hook ids and the quality block are user-chosen, so neither can be swept. */
+  it("does not warn on user-named hook ids", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+hooks:
+  some-project-hook:
+    enabled: true
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.deepEqual(
+      result.warnings.filter(
+        (warning) => warning.path === "hooks.some-project-hook",
+      ),
+      [],
+    );
+  });
+});

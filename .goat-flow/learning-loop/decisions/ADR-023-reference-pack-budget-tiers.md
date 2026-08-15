@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-20
 **Status:** Accepted
-**Updated:** 2026-05-18 - Path references amended for the v1.6.0 `skill-reference/` and `skill-playbooks/` split; obsolete line citation retargeted to the current deployment playbook anchor. 2026-06-08 - Installed skill-quality-testing index path clarified after the `.goat-flow/skill-docs/skill-quality-testing/` layout split. 2026-07-13 - Shared mirror registry anchor retargeted after the artifact-integrity extraction. 2026-08-15 - absorbed ADR-008 (instruction budget), ADR-007 (shared conventions extraction), and ADR-027 (remove DDT layer packs). Every one of them rations the same scarce resource: how many words an agent must read before it can work.
+**Updated:** 2026-05-18 - Path references amended for the v1.6.0 `skill-reference/` and `skill-playbooks/` split; obsolete line citation retargeted to the current deployment playbook anchor. 2026-06-08 - Installed skill-quality-testing index path clarified after the `.goat-flow/skill-docs/skill-quality-testing/` layout split. 2026-07-13 - Shared mirror registry anchor retargeted after the artifact-integrity extraction. 2026-08-15 - absorbed ADR-008 (instruction budget), ADR-007 (shared conventions extraction), and ADR-027 (remove DDT layer packs), then added goat-clarity to the functional tier. Every one of them rations the same scarce resource: how many words an agent must read before it can work.
 **Milestone:** Quality-report follow-up (reports 1-4, persistent MAJOR finding across four runs)
 
 ## Context
@@ -55,7 +55,7 @@ Every rule MUST apply to every session. Situation-specific guidance belongs in s
 | Tier | Budget | Applies to |
 |------|--------|-----------|
 | Dispatcher skill | ≤555 words | `goat/SKILL.md` |
-| Functional skill | <2500 words | `goat-debug/SKILL.md`, `goat-plan/SKILL.md`, `goat-qa/SKILL.md`, `goat-review/SKILL.md`, `goat-critique/SKILL.md`, `goat-security/SKILL.md` |
+| Functional skill | <2500 words | `goat-debug/SKILL.md`, `goat-plan/SKILL.md`, `goat-qa/SKILL.md`, `goat-review/SKILL.md`, `goat-critique/SKILL.md`, `goat-security/SKILL.md`, `goat-clarity/SKILL.md` |
 | Always-loaded shared content | <1500 words per file | `skill-preamble.md`, `skill-conventions.md` (loaded by every goat-* skill on invocation) |
 | Progressive reference pack | <3000 words per file | Files under per-skill `references/` subdirs, `.goat-flow/skill-docs/skill-quality-testing/`, and `.goat-flow/skill-docs/playbooks/` (loaded only when a skill enters the mode that needs them) |
 

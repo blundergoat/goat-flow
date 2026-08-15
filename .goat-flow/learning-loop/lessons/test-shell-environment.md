@@ -1,0 +1,92 @@
+---
+category: test-shell-environment
+last_reviewed: 2026-08-15
+---
+
+**Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
+
+## Lesson: The session shell's `grep` is a ugrep wrapper that silently skips gitignored paths
+
+**Status:** active | **Created:** 2026-06-13
+**Trigger phase:** VERIFY
+**Incident count:** 8 | **Latest occurrence:** 2026-08-15
+**Decision changed:** Recursive ripgrep searches over gitignored plan or log trees must use `--no-ignore` or `-uuu` and a known-positive control before a zero-match result is accepted; a negative-search proof is clean only when the search exits with its documented no-match status, not an invocation error.
+
+**What happened:** During the M02b review, `grep -rl "plan-checkbox-guard" .goat-flow --include="*.md"` returned nothing even though `.goat-flow/plans/1.12.0/M02b-plan-checkbox-guard.md` and ADR-038 matched when grepped directly. `type grep` showed the Claude Code session shell defines `grep` as a function that execs the claude binary as `ugrep -G --ignore-files --hidden -I ...`, and `--ignore-files` applies `.gitignore`-style ignore files during recursion - so sweeps that descend into ignored trees (`.goat-flow/plans/`, `.goat-flow/logs/`) silently return clean.
+
+**Recurrence 2026-06-14:** While verifying new plan files under `.goat-flow/plans/1.12.1/`, `rg -n "Status: not-started|## Testing Gate|## Mid-Implementation Proof|## Kill Criteria|## Deferred" .goat-flow/plans/1.12.1` returned no matches because ripgrep honored the ignored plan directory. Rerunning with `rg --no-ignore` found the expected milestone headings. Durable evidence anchors: `workflow/setup/reference/goat-flow-gitignore` (search: `plans/`), `.goat-flow/learning-loop/decisions/ADR-037-separate-post-turn-safety-from-validation.md` (search: `shipped and reverted`).
+
+**Recurrence 2026-07-03:** During the 1.13.0 plan review, recursive greps for stale roadmap tokens (`1.9.2`, `GEMINI`, `1.13.0/M`) over `.goat-flow/plans/` returned zero hits, and the reviewer concluded the stale classes were "phantom" - even though the reviewed plans themselves warned to use `rg -uuu`. The tell that finally exposed it: a pattern KNOWN to exist (the literal `1.9.2` inside a plan file read moments earlier) also returned zero. `find .goat-flow/plans -name '*.md' | xargs grep -l` then found 25+ live files per class. The false conclusion survived several verification rounds because every zero-hit result looked like a clean answer, not a broken tool.
+
+**Recurrence 2026-08-04:** After deleting a commit-subject gate script from `scripts/` and pruning its references, a recursive sweep for its filename and helper symbols returned nothing and was reported to the user as "zero residual references". The wrapper had skipped `.goat-flow/logs/` and `.goat-flow/plans/`, where 17 references survived. The tell surfaced only by luck on an unrelated task: a sweep for `executed=[0-9]` missed `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `mode=smoke, executed=`) moments after that exact line had been read from the file - the known-positive control from Prevention, hit by accident rather than by discipline. Removal-completeness claims are the highest-risk use of this tool, because a false clean and a real clean are the same empty output.
+
+**Recurrence 2026-08-06:** During a 12-directory roadmap shift, `rg --hidden` reported zero old-version matches under `.goat-flow/plans/`, and the in-progress audit treated that as a clean result. Reading a renamed milestone directly exposed multiple `1.16.0` references; rerunning with `rg --no-ignore --hidden` found 14 matches for that version and the remaining roadmap references. Evidence anchors: `.goat-flow/plans/.gitignore` (search: `*`), `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`).
+
+**Recurrence 2026-08-09:** While reconciling the 1.15.1 roadmap, `rg` over `.goat-flow/plans/1.15.1` returned no matches for premises already read in the milestones. Rerunning the same proof with `rg --hidden --no-ignore` found the expected host-timeout and oversized-file references. The corrected verification command now carries both flags so a clean result cannot depend on repository ignore rules. Evidence anchor: `workflow/setup/reference/goat-flow-gitignore` (search: `plans/`).
+
+**Recurrence 2026-08-10:** The same wrapper masked a *missing binary* rather than filtered results. Two `playbook-contract` cases failed with `rg: command not found`, and `command -v rg` in the session shell answered `rg`, so I first called the failure a sanitized-PATH harness artifact. `type rg` showed `rg is a function`, and `bash -c 'command -v rg'` found nothing: ripgrep is not installed here at all. The real defect was in the shipped playbook, whose documented registration check hard-required ripgrep and exited 127 for any consumer without it. Evidence anchor: `workflow/skills/playbooks/hook-policy-testing.md` (search: `Ripgrep is not installed on every consumer machine`).
+
+**Recurrence 2026-08-15:** While verifying the rewritten goat-clarity plan, I quoted a brace-shaped list of Markdown operands in one `rg` command. Bash therefore passed the braces literally, `rg` emitted an I/O error for the nonexistent path, and the surrounding `if rg ...; then ...; else echo OLD_SCOPE_SWEEP_OK; fi` converted that error into the same success message used for a genuine no-match result. I discarded the result and reran the sweep with explicit operands. The incident's plan files are gitignored, so they are not durable evidence anchors; the tracked wrapper-availability evidence and prevention anchors for this consolidated lesson remain below.
+
+**Root cause:** I treated a search command's apparent result as filesystem truth without proving that the command had searched the intended operands successfully. Ignore filtering can false-clean the result, shell wrappers can misreport tool availability, and control flow can collapse an invocation error into the same branch as a legitimate no-match status.
+
+**Prevention:** For verification sweeps that must include gitignored content, use `rg --no-ignore` / `rg -uuu`, `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with an ignore-bypassing search. For a negative `rg` proof, capture and classify the status explicitly: `0` means a match was found, `1` means no match, and any other status means the proof failed. Do not use one `else` branch for both no-match and error, and do not rely on quoted brace expansion to build operand lists. When the question is "is this consistent in what ships" rather than "does this string exist on disk", prefer `git grep` - it searches tracked files by construction, so local logs, plans, and scratch artifacts cannot mask a real residue or manufacture a false one. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`.
+
+---
+
+## Lesson: Hook tests should feed stdin through files when child `cat` must see EOF
+
+**Status:** active | **Created:** 2026-06-13
+
+**What happened:** While implementing M02b, the retired plan checkbox guard integration test repeatedly timed out when it invoked the hook with `spawnSync("bash", [HOOK_PATH], { input: payload })`. Tracing with `bash -x` showed the hook stalled at `payload="$(cat)"`: the child saw the payload bytes but did not receive EOF in this sandbox. The same hook sequence completed from a normal shell with file redirection and produced `baseline_exit=0`, `changed_repo_exit=2`, and `plan_changed_exit=0`.
+
+**Root cause:** I assumed Node's `spawnSync` `input` option was equivalent to a real stdin file for hook scripts. In this execution environment it was not reliable for hooks that read all stdin with `cat`, and it made correct hook behavior look like a product hang.
+
+**Recurrence 2026-06-14:** A Codex workspace-terminal `bash scripts/preflight-checks.sh` run reached `TESTS` and then stayed silent while `scripts/preflight-checks.sh` captured `npm run test:coverage` output. Process inspection showed the only remaining test workers were `test/integration/gruff-code-quality-contract.test.ts` and `test/integration/gruff-code-quality-smoke.test.ts`, each blocked under `workflow/hooks/gruff-code-quality.sh` at `read_stdin` -> `cat`. The shared gruff test helper still used `spawnSync("bash", [HOOK], { input: JSON.stringify(payload) })`, so it needed the same file-redirection mitigation.
+
+**Prevention:** When a test executes an installed hook that reads stdin with `cat`, write the payload to a temp file and pass an open read-only fd or shell redirection instead of `spawnSync(..., { input })`. Capture hook stderr explicitly if the hook launches nested runtimes. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `File-backed stdin keeps Bash`), `test/unit/hook-registrar.helpers.ts` (search: `runLauncherWithPayload`).
+
+---
+
+## Lesson: A hook's silent output is not proof of non-execution - verify through the test harness
+
+**Status:** active | **Created:** 2026-06-01
+
+**What happened:** Proving the gruff-code-quality hook no longer discovers binaries from the removed `*/.venv/bin` glob or `target/debug` paths (ADR-032), I wrote ad-hoc bash repros that ran the old and new hook against a planted binary. Both printed nothing, so the before/after looked identical and the fix unprovable. The isolated discovery loop, however, showed the old glob clearly resolved the binary - so the repros were wrong, not the fix. They `git init`-ed the temp repo and discarded stderr.
+
+**Root cause:** The hook resolves its root with `repo_root() { git rev-parse --show-toplevel 2>/dev/null || pwd; }`, then fail-soft-exits silently at several early gates (no `.<binary>.yaml` config at root, no `jq`, no binary, no changed range). The smoke-test fixtures deliberately do NOT init git, so `repo_root` falls to `pwd` and the planted files resolve; my `git init` made `repo_root` resolve elsewhere, so the hook bailed before discovery. Discarding stderr hid the diagnostic that would have shown the early exit. A "silent" run looked like "binary not executed" when it was really "exited before reaching discovery."
+
+**Fix:** Stop trusting the ad-hoc repro. Verify through the project's node test harness, which already encodes the right preconditions, and prove the guard by swapping the pre-fix hook in: the regression test failed against commit 4e43cf3d (`not ok ... expected silence for src/example.ts`) and passed against the fix - a real before/after.
+
+**Prevention:** To prove a PostToolUse hook's behaviour change, run it through the project's test harness and mirror its fixture setup exactly, rather than an ad-hoc shell repro; if you must repro by hand, replicate `repo_root` (git-vs-pwd), the pinned `PATH` (must include `jq`), and the config/binary preconditions, and never discard stderr. Treat a silent hook run as inconclusive until every fail-soft early-exit gate is ruled out. To prove a regression test actually guards a fix, run it against the pre-fix revision and confirm it fails. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `repo_root`), `workflow/hooks/gruff-code-quality.sh` (search: `no changed lines detected`), `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not discover binaries from the removed`).
+
+---
+
+## Lesson: Nested Claude permission probes inherit the host session's profile without full env isolation
+
+**Status:** active | **Created:** 2026-07-31
+**Decision changed:** Before reading any nested `claude -p` permission result as ground truth, prove the child ran with a clean local profile and include a positive-control row that an existing rule provably allows.
+**Trigger phase:** VERIFY
+
+**What happened:** The approved M06 probe of the trailing `:*` heredoc matcher (`Bash(node --import tsx src/cli/cli.ts quality save '<PROJECT_ROOT>' <<'JSON':*)`) launched `claude -p --setting-sources= --settings <overlay-json> --permission-mode dontAsk` from inside an interactive Claude Code session with no positive-control row. Both probe rows returned the generic dontAsk denial, which cannot distinguish "rule did not match" from "overlay never consulted" - so the run produced no verdict, and reading it as "trailing form disqualified" would have activated M06's kill criterion on unproven evidence. I initially attributed the ambiguity to host-session contamination because the child's init event showed cloud-looking markers (`Workflow`/`CronCreate` in the tool roster, claude.ai slash commands, the host memory path, `"model":"claude-opus-5[1m]"`, `"apiKeySource":"none"`) and the environment carried surviving `CLAUDE_CODE_*` variables.
+
+**Root cause:** No positive control. The corrected rerun under `env -i HOME PATH TERM SHELL` displayed the SAME init markers while its control row executed - proving those markers reflect this machine's logged-in CLI state, not session attachment, and that init-roster inspection is not a contamination test. The only discriminator that converts a denial into evidence is a control row an existing rule provably allows.
+
+**Prevention:**
+1. Always include a positive-control row an existing rule provably allows (for the reporting overlay: `node --import tsx src/cli/cli.ts --version`). Control executes + target denied = valid negative verdict; control denied = void probe, report a harness fault, not a matcher verdict.
+2. Keep `env -i HOME="$HOME" PATH="$PATH" TERM=xterm SHELL=/bin/bash` as cheap hygiene for nested CLI probes, but do not treat env stripping or init-event marker greps as proof in either direction.
+3. The real launch environment is a dashboard server spawn, not an interactive session; mirror the flag set in `src/cli/server/terminal-spawn.ts` (search: `CLAUDE_REPORTING_ARGS`) when reproducing it.
+
+**Outcome (2026-07-31):** With the control proven (`goat-flow v1.14.0` executed under dontAsk), the heredoc row's denial became a valid measurement: the trailing `:*` prefix form does not match multi-line quoted-heredoc Bash commands on Claude Code 2.1.220.
+
+---
+
+## Lesson: Missing-helper self-tests must close stdin
+
+**Status:** active | **Created:** 2026-05-27
+
+**What happened:** `deny-dangerous-self-test.sh --self-test=full` hung on an interactive terminal while copying a thin hook into a temp directory without `deny-dangerous.sh`. The copied hook hit the missing-helper branch before `--check` parsing, then read from the inherited terminal instead of receiving closed stdin.
+
+**Root cause:** The missing-dependency test proved fail-closed behavior only when stdin was already closed. Interactive terminals changed the control flow enough to hide the PASS/FAIL line behind a blocked read.
+
+**Prevention:** Any self-test that intentionally runs a degraded hook or helper must redirect stdin from `/dev/null`, and smoke mode should include the missing-helper branch so startup failures are caught quickly. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `run_common_dependency_checks`).

@@ -150,7 +150,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     assert.match(publicPlanGuidance, /claim → evidence/u);
 
     const exporterLesson = readMarkdownSection(
-      ".goat-flow/learning-loop/lessons/integration-verification.md",
+      ".goat-flow/learning-loop/lessons/milestone-accounting.md",
       "Lesson: Milestone plans need exporter-contract verification before handoff",
     );
     assert.match(

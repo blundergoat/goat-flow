@@ -361,7 +361,26 @@ function collectManagedTemplates(agent: AgentId): ManagedTemplateDefinition[] {
 }
 
 /**
- * Turn one hash comparison into the concise path row shown to users.
+ * Decide whether a loaded baseline leaves an existing, non-package target outside installer ownership.
+ * Use to protect developer-owned bytes while still adopting an existing target that matches the package.
+ */
+function loadedBaselineProtectsExistingDifferentTarget(
+  baselineStatus: ManagedSetupBaselineStatus,
+  oldExpectedSha256: string | null,
+  currentTarget: ManagedTargetEvidence,
+  newExpectedSha256: string | null,
+): boolean {
+  return (
+    baselineStatus === "loaded" &&
+    oldExpectedSha256 === null &&
+    currentTarget.status === "regular" &&
+    newExpectedSha256 !== null &&
+    currentTarget.sha256 !== newExpectedSha256
+  );
+}
+
+/**
+ * Turn one hash comparison and baseline status into the concise path row shown to users.
  * Use for every managed destination so text and JSON explain the same action and reason.
  */
 function buildPreviewFile(
@@ -369,19 +388,28 @@ function buildPreviewFile(
   oldExpectedSha256: string | null,
   currentTarget: ManagedTargetEvidence,
   newExpectedSha256: string | null,
+  baselineStatus: ManagedSetupBaselineStatus,
 ): ManagedSetupPreviewFile {
   const unsafeCurrentTarget =
     newExpectedSha256 !== null &&
     (currentTarget.status === "non-regular" ||
       currentTarget.status === "unreadable");
-  // A path that could redirect or hide an install is always unmanaged and blocked while still managed.
-  const state = unsafeCurrentTarget
-    ? "unmanaged"
-    : classifyManagedSetupFile({
-        oldExpectedSha256,
-        currentSha256: currentTarget.sha256,
-        newExpectedSha256,
-      });
+  const loadedBaselineDoesNotOwnExistingTarget =
+    loadedBaselineProtectsExistingDifferentTarget(
+      baselineStatus,
+      oldExpectedSha256,
+      currentTarget,
+      newExpectedSha256,
+    );
+  // Unsafe paths and existing files absent from a loaded baseline stay protected from default writes.
+  const state =
+    unsafeCurrentTarget || loadedBaselineDoesNotOwnExistingTarget
+      ? "unmanaged"
+      : classifyManagedSetupFile({
+          oldExpectedSha256,
+          currentSha256: currentTarget.sha256,
+          newExpectedSha256,
+        });
   const presentation = STATE_PRESENTATION[state];
   let reason = presentation.reason;
   // Symlinked or non-directory components block with the exact repair clue the user needs.
@@ -393,6 +421,11 @@ function buildPreviewFile(
   if (newExpectedSha256 !== null && currentTarget.status === "unreadable") {
     reason =
       "The target path could not be read safely, so goat-flow cannot verify an overwrite.";
+  }
+  // A loaded baseline proves the prior install never owned this existing destination.
+  if (loadedBaselineDoesNotOwnExistingTarget) {
+    reason =
+      "The loaded install baseline does not own this existing path, so goat-flow will not overwrite it by default.";
   }
   return {
     path: managedPath,
@@ -458,6 +491,7 @@ export function buildManagedSetupPreview(
         oldExpectedSha256,
         readManagedTargetEvidence(projectPath, template.path),
         hashFile(getTemplatePath(template.sourcePath)),
+        baseline.status,
       ),
     );
   }
@@ -472,6 +506,7 @@ export function buildManagedSetupPreview(
         expectedSha256,
         readManagedTargetEvidence(projectPath, managedPath),
         null,
+        baseline.status,
       ),
     );
   }

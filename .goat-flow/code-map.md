@@ -187,6 +187,7 @@ workflow/                        = packaged template source copied into target p
 │   ├── goat-security/SKILL.md   = security assessment skill template
 │   ├── goat-qa/SKILL.md         = testing-gap analysis skill template
 │   ├── goat-qa/references/       = progressive output templates loaded only when rendering QA results
+│   ├── goat-clarity/SKILL.md    = bounded comment, naming, and private-placement remediation template
 │   ├── reference/               = skill-preamble.md and skill-conventions.md templates
 │   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, naming-and-placement, observability, page-capture, release-notes, skill-playbook-authoring-sync, skill-quality-testing, writing-style
 │

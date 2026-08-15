@@ -226,6 +226,10 @@ describe("custom prompt helpers", () => {
       helpers.dashboardInferPromptRoute("$goat-qa audit coverage"),
       "goat-qa",
     );
+    assert.equal(
+      helpers.dashboardInferPromptRoute("/goat-clarity uncommitted files"),
+      "goat-clarity",
+    );
   });
 
   it("saves, loads, edits, duplicates, and deletes custom prompts locally", () => {
@@ -368,6 +372,11 @@ describe("custom prompt helpers", () => {
       helpers
         .dashboardCustomPromptRouteOptions()
         .some((route) => route.id === "goat-security"),
+    );
+    assert.ok(
+      helpers
+        .dashboardCustomPromptRouteOptions()
+        .some((route) => route.id === "goat-clarity"),
     );
     assert.deepEqual(
       Array.from(

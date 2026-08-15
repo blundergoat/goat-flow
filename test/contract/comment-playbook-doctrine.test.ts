@@ -368,7 +368,7 @@ describe("shipped playbook portability", () => {
       assertForPlaybook(playbookName, (content, playbookPath) => {
         assert.doesNotMatch(
           content,
-          /PracticeAssistant|pracGroup|COM-[0-9]|improve-coding-standards|goat-flow-ownership/u,
+          /https?:\/\/|#[0-9]{3,}|\/home\/|\.goat-flow\/(?:plans|scratchpad)\//u,
           playbookPath,
         );
       });

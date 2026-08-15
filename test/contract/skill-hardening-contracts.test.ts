@@ -40,6 +40,7 @@ describe("ADR-023 word budget tiers", () => {
     "goat-review",
     "goat-critique",
     "goat-security",
+    "goat-clarity",
   ] as const;
 
   it("dispatcher /goat stays within the 555-word cap across all mirrors", () => {

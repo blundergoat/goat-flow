@@ -73,7 +73,7 @@ Sample harness output:
 
 ```
 GOAT Flow Setup:          PASS
-  Skills:                 7/7 installed
+  Skills:                 8/8 installed
   Config:                 valid, version 1.15.1
   InstructionFile:        118 lines
 
@@ -109,13 +109,13 @@ npx @blundergoat/goat-flow@latest quality . --agent antigravity
 
 The generated prompt asks the agent to:
 
-1. **Assess each of the 7 skills** - `/goat` (dispatcher), `/goat-debug`, `/goat-plan`, `/goat-review`, `/goat-critique`, `/goat-security`, `/goat-qa`. Preferred method is file analysis (read each SKILL.md and evaluate structure, constraints, and coherence against the codebase); live invocation on real code when context budget allows.
+1. **Assess each of the 8 skills** - `/goat` (dispatcher), `/goat-debug`, `/goat-plan`, `/goat-review`, `/goat-critique`, `/goat-security`, `/goat-qa`, `/goat-clarity`. Preferred method is file analysis (read each SKILL.md and evaluate structure, constraints, and coherence against the codebase); live invocation on real code when context budget allows. Run mutation-capable probes only against a disposable copy with a frozen write boundary.
 2. **Evaluate setup quality** - was the instruction file adapted or generic?
 3. **Find contradictions** across instruction file, skill files, and `.goat-flow/` docs
 4. **Identify false paths** - references to files that don't exist, stale concepts, dead modes
 5. **Rate the system** - setup accuracy/relevance/completeness/friction + system usefulness/signal-to-noise/adaptability/learnability
 
-**Time and cost expectation:** A full assessment evaluates all 7 skills (file analysis by default; live invocation when context allows - `goat-critique` alone spawns 3 sub-agents if invoked). Expect 15-60 minutes depending on depth, with moderate token usage. If context is limited, the generated prompt requires at minimum testing `/goat` (routing), `/goat-review` (most common use), and `/goat-critique` (highest-cost skill).
+**Time and cost expectation:** A full assessment evaluates all 8 skills (file analysis by default; live invocation when context allows - `goat-critique` alone spawns 3 sub-agents if invoked). Expect 15-60 minutes depending on depth, with moderate token usage. If context is limited, the generated prompt requires at minimum testing `/goat` (routing), `/goat-review` (most common use), and `/goat-critique` (highest-cost skill).
 
 The prompt includes the current `audit` summary so the agent knows what's
 already passing or failing. If audit is failing, the prompt explicitly asks the

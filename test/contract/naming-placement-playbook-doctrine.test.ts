@@ -285,7 +285,7 @@ describe("naming and placement playbook doctrine", () => {
       );
       assert.doesNotMatch(
         content,
-        /https?:\/\/|#[0-9]{3,}|\/home\/|_reference\/code-quality|PracticeAssistant|pracGroup|COM-[0-9]/u,
+        /https?:\/\/|#[0-9]{3,}|\/home\/|_reference\/code-quality|\.goat-flow\/(?:plans|scratchpad)\//u,
         playbookPath,
       );
     });

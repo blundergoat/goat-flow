@@ -377,10 +377,37 @@ describe("quality report contract: CLI surfaces", () => {
     assert.ok(harnessPrompt.includes('evidence_method: "static-analysis"'));
     assert.ok(
       skillsPrompt.includes(
-        "Method rule: prefer live skill invocation only when the runner supports it safely. If live invocation or delegated/sub-agent calls are unavailable, perform a file-grounded protocol run against SKILL.md and label the evidence limit. Never imply a dry run is bulletproof TDD evidence.",
+        "Method rule: prefer live skill invocation only when the runner supports it safely.",
       ),
     );
+    assert.ok(
+      skillsPrompt.includes(
+        "never let a quality probe edit the assessed checkout",
+      ),
+    );
+    assert.ok(
+      skillsPrompt.includes("file-grounded protocol run against SKILL.md"),
+    );
     assert.equal(skillsPrompt.includes(focusedDenialRule), false);
+  });
+
+  it("skills mode names all eight skills and requires eight sections", () => {
+    const skillsPrompt = composeQuality(makeInput("skills")).prompt;
+    const agentSetupPrompt = composeQuality(makeInput("agent-setup")).prompt;
+    const canonicalSkills =
+      "/goat,/goat-debug,/goat-plan,/goat-review,/goat-critique,/goat-security,/goat-qa,/goat-clarity".split(
+        ",",
+      );
+
+    assert.match(skillsPrompt, /Assess all eight goat-flow skills/u);
+    assert.match(skillsPrompt, /After the eight sections/u);
+    for (const skillName of canonicalSkills) {
+      assert.ok(skillsPrompt.includes(skillName), `missing ${skillName}`);
+    }
+    assert.equal(
+      agentSetupPrompt.match(/^\d+\. \*\*`\/goat[^`]*`\*\*/gmu)?.length,
+      canonicalSkills.length,
+    );
   });
 
   it("focused (harness) prompt carries the full contract", () => {

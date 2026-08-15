@@ -3,6 +3,8 @@ category: verification-gruff
 last_reviewed: 2026-08-14
 ---
 
+**Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates are [verification-preflight.md](verification-preflight.md).
+
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
 **Status:** active | **Created:** 2026-05-25
@@ -75,3 +77,32 @@ last_reviewed: 2026-08-14
 **Root cause:** I verified that a gruff binary existed but treated discovery as a boolean instead of preserving the executable path for the verification command. I also omitted pipeline failure propagation on a command whose analyzer output was piped through `jq`.
 
 **Prevention:** Keep and reuse `$found` for the complete gruff loop, and enable `pipefail` whenever analyzer output is filtered. Confirm the analyzer emitted a JSON object before interpreting counts. Evidence anchor: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `## Availability Check`).
+
+## Lesson: Gruff-driven direct imports must preserve facade proof
+
+**Status:** active | **Created:** 2026-05-31
+
+**What happened:** During `test-quality` cleanup, gruff's nearby-test requirement pushed several tests from public facade imports to implementation-module imports. The first full `npm test` rerun then failed the installer round-trip preflight because Knip found `8 unused exports/types`, including facade re-exports such as `createAuditFactsView`, `scoreAllArtifacts`, and `normalizeAgentVersionOutput`. The same verification pass caught an order-sensitive dashboard tasks assertion: `/api/tasks` returned `Milestone-malformed.md` before `Milestone-side-menu-navigation.md`, so the test failed with `# fail 1` even though both milestone records were present.
+
+**Root cause:** I treated "direct implementation import for gruff" and "facade import for Knip/API stability" as mutually exclusive, and one endpoint test asserted incidental filesystem ordering instead of selecting the record that carried the behavior under test.
+
+**Recurrence 2026-05-31:** Deleting 25 low-quality tests produced the same shape from the other direction: `npx knip` flagged production exports that only deleted tests imported, `npm run typecheck` caught the route inventory left behind for the deleted route-classification test, and the installer round-trip preflight caught hidden `.goat-flow` anchors that still cited deleted test paths.
+
+**Prevention:** When direct imports are needed to prove a nearby implementation module, keep stable facade exports exercised with explicit alignment assertions in existing nearby tests. For endpoint arrays that do not declare a sort contract, select records by semantic identifier before asserting fields. Evidence anchors: `src/cli/audit/audit.ts` (search: `createAuditFactsView`), `src/cli/quality/skill-quality.ts` (search: `scoreAllArtifacts`), `test/integration/dashboard-tasks-api.test.ts` (search: `milestoneByFilename`).
+
+---
+
+## Lesson: Gruff side-effect comments must name the side effect
+
+**Status:** active | **Created:** 2026-05-30
+
+**What happened:** During the M00 gruff docs continuation, the first internal-helper comment batch cleared `docs.missing-internal-function-doc` but left the full snapshot at only 175 findings down because gruff then reported `docs.missing-side-effect-doc` on helpers that write fixture files or spawn tools. Retuning those comments to explicitly say `Writes` or `Spawns` moved the full snapshot to `summary error=0 warning=121 advisory=598 total=719` and both doc clusters to zero.
+
+**Recurrence update (2026-08-06):** Windows discovery described its purpose and fallback but did not explicitly name the `where.exe` process side effect. Adding that concrete process action cleared the three targeted side-effect findings.
+
+**Root cause:** I wrote purpose comments for side-effecting helpers but did not include analyzer-recognised side-effect language. For gruff-ts docs rules, a human-useful purpose sentence is not enough when the helper mutates filesystem state or runs a subprocess.
+
+**Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, include the side effect in plain maintainer language (`Write`, `Run`, `filesystem`) instead of a generic purpose sentence. After large docs batches, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
+
+---
+

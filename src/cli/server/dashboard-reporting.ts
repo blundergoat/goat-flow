@@ -248,8 +248,8 @@ function buildDashboardLearningLoopSummary(
           : "fresh";
     return {
       recordCount,
-      footgunCount: stats.footguns.totalEntries,
-      lessonCount: stats.lessons.totalEntries,
+      footgunCount: stats.footguns.totalEntries, // total: includes resolved entries
+      lessonCount: stats.lessons.totalEntries, // total; `entryCount` below is active-only
       staleCount,
       invalidLineRefCount,
       oversizedCount,

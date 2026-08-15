@@ -163,7 +163,7 @@ describe("quality history and diff CLI", () => {
     ]);
     assert.equal(diff.status, 0, diff.stderr);
     const diffPayload = JSON.parse(diff.stdout);
-    assert.equal(diffPayload.resolved.length, 1);
+    assert.equal(diffPayload.absent.length, 1);
     assert.equal(diffPayload.newFindings.length, 1);
     assert.equal(diffPayload.persisted.length, 1);
     assert.equal(diffPayload.from.id, "2026-04-01-0900-claude-aaaaa");

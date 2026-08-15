@@ -71,7 +71,7 @@ export interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
 
 /**
  * Diff result for two same-agent, same-mode quality-history entries.
- * Use when a user asks whether a quality run resolved, introduced, or carried findings forward.
+ * Use when a user asks which findings appeared, disappeared, or carried forward between runs.
  * Invariant: both entries must be comparable before these buckets are rendered to the CLI.
  */
 export interface QualityDiffResult {
@@ -79,7 +79,20 @@ export interface QualityDiffResult {
   to: QualityHistoryEntry;
   setupDelta: number;
   systemDelta: number;
-  resolved: QualityDiffFindingRow[];
+  /**
+   * Findings present in the older report and missing from the newer one.
+   *
+   * Absence is not proof of a fix. The bucket is a pure id set difference, so a
+   * finding lands here when the defect was repaired, when the newer run never
+   * examined that artifact, and when the finding's id shifted because it encodes
+   * a line number. A degraded run is the worst case: a report generated without
+   * prior-report context carries `prior_report_id: null`, nothing can be tagged
+   * `persisted`, and every earlier finding reads as absent.
+   *
+   * Treat this as a prompt to re-check each cited artifact, never as evidence for
+   * closing remediation work.
+   */
+  absent: QualityDiffFindingRow[];
   newFindings: QualityDiffFindingRow[];
   persisted: QualityDiffFindingRow[];
   stuck: QualityDiffFindingRow[];

@@ -13,6 +13,7 @@ const CUSTOM_PROMPT_ROUTES = new Set([
   "goat-qa",
   "goat-review",
   "goat-security",
+  "goat-clarity",
 ]);
 
 const DEFAULT_CUSTOM_PROMPT_ROUTE: CustomPromptRouteOption = {
@@ -57,6 +58,11 @@ const CUSTOM_PROMPT_ROUTE_OPTIONS: CustomPromptRouteOption[] = [
     id: "goat-security",
     label: "goat-security",
     desc: "Assess security implications, supply-chain risk, and agent surfaces.",
+  },
+  {
+    id: "goat-clarity",
+    label: "goat-clarity",
+    desc: "Improve comments, names, and private placement within one frozen target.",
   },
 ];
 

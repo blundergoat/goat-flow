@@ -1,7 +1,7 @@
 /**
  * Compares two saved quality runs so a user can see what actually changed between them.
  * Answering "did this get better" means more than two scores: it means naming the findings
- * that appeared, the ones that were resolved, the ones still present, and how long the
+ * that appeared, the ones that went absent, the ones still present, and how long the
  * stubborn ones have been outstanding.
  *
  * Findings are matched by their attached ids rather than by wording, because an agent
@@ -79,7 +79,7 @@ function diffRowSort(
 
 /**
  * Build a finding map keyed by stable finding id.
- * Use when comparing two reports into resolved/new/persisted buckets.
+ * Use when comparing two reports into absent/new/persisted buckets.
  *
  * @param report - saved quality report; empty findings produce an empty map
  * @returns finding map; empty map means this report has no visible findings
@@ -147,7 +147,7 @@ function countConsecutivePresence(
 
 /**
  * Build the diff between two comparable quality-history runs.
- * Use when the user asks what was resolved, introduced, persisted, or stuck between runs.
+ * Use when the user asks what went absent, was introduced, persisted, or stuck between runs.
  *
  * @param entries - sorted quality-history entries; empty entries cannot produce a diff
  * @param options - agent, explicit pair, and mode filters; missing pair uses latest two matching runs
@@ -263,8 +263,9 @@ export function buildQualityDiff(
   const fromMap = getFindingMap(sourceEntry.report);
   const toMap = getFindingMap(targetEntry.report);
 
-  // Resolved findings existed before and are absent from the newer report.
-  const resolved = [...fromMap.values()]
+  // Absent findings existed before and are missing from the newer report. Missing
+  // is not fixed: an unexamined artifact and a shifted line-based id land here too.
+  const absent = [...fromMap.values()]
     .filter((finding) => !toMap.has(finding.id))
     .map((finding) => ({
       id: finding.id,
@@ -349,7 +350,7 @@ export function buildQualityDiff(
       systemDelta:
         targetEntry.report.scores.system.total -
         sourceEntry.report.scores.system.total,
-      resolved,
+      absent,
       newFindings,
       persisted,
       stuck,

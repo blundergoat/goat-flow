@@ -25,6 +25,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
       "goat-critique",
       "goat-security",
       "goat-qa",
+      "goat-clarity",
     ];
 
     assertForEachTarget(canonicalSkills, (skillName) => {
@@ -42,6 +43,34 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
         assert.match(boundaryCommands, /\*\*DEFER TO:\*\*/, skillPath);
       });
     });
+  });
+
+  it("enrolls goat-clarity in canonical registry and release owners", () => {
+    for (const ownerPath of [
+      "workflow/manifest.json",
+      ".goat-flow/config.yaml",
+      "scripts/check-versions.mjs",
+      ".github/workflows/context-validation.yml",
+    ]) {
+      assert.match(readProjectFile(ownerPath), /goat-clarity/u, ownerPath);
+    }
+  });
+
+  it("keeps the shared skill-document index identical after installation", () => {
+    assert.equal(
+      readProjectFile(".goat-flow/skill-docs/README.md"),
+      readProjectFile("workflow/skills/reference/README.md"),
+    );
+  });
+
+  it("includes goat-clarity in every setup inventory", () => {
+    for (const ownerPath of [
+      "workflow/setup/01-system-overview.md",
+      "workflow/setup/03-install-skills.md",
+      "src/dashboard/views/setup.html",
+    ]) {
+      assert.match(readProjectFile(ownerPath), /goat-clarity/u, ownerPath);
+    }
   });
 
   it("carries explicit build intent through planning into ordinary ACT", () => {

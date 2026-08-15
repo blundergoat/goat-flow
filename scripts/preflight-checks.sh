@@ -1636,8 +1636,11 @@ fi
 section "Instruction File Quality"
 
 # Line-count check (thresholds from manifest, not hard-coded)
-line_target=$(node -e "console.log(require('./workflow/manifest.json').instruction_file.line_target)" 2>/dev/null || echo "125")
-line_limit=$(node -e "console.log(require('./workflow/manifest.json').instruction_file.line_limit)" 2>/dev/null || echo "150")
+# String() is load-bearing: console.log of a bare number is inspected, and Node colourizes
+# inspected numbers when FORCE_COLOR is set, which injects ANSI codes into the arithmetic
+# comparisons below and silently skips every per-file verdict.
+line_target=$(node -e "console.log(String(require('./workflow/manifest.json').instruction_file.line_target))" 2>/dev/null || echo "125")
+line_limit=$(node -e "console.log(String(require('./workflow/manifest.json').instruction_file.line_limit))" 2>/dev/null || echo "150")
 
 for ifile in "${agent_files[@]}"; do
     count=$(wc -l < "$ifile")

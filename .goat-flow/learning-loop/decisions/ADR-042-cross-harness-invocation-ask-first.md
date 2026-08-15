@@ -42,7 +42,7 @@ response cross a vendor boundary without the user deciding that they should.
 
 Native sub-agent delegation is different in kind: same harness, same session record, already
 governed by the sub-agent rules in every instruction file, and universal across the four
-supported runtimes (`.goat-flow/learning-loop/lessons/agent-behavior.md`, search: `Sub-agent
+supported runtimes (`.goat-flow/learning-loop/lessons/agent-tooling.md`, search: `Sub-agent
 delegation is universal`).
 
 Precedent class: ADR-025 (agents never commit or push) and ADR-028 (GitHub CLI mostly

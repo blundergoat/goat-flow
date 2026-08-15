@@ -36,7 +36,7 @@ Three changes:
 
 ## Consequences
 
-- Supersedes the earlier dispatcher-counting split that now lives inside ADR-009. Dispatcher is now "6 skills + dispatcher" (7 total: goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa + goat dispatcher).
+- Supersedes the earlier dispatcher-counting split that now lives inside ADR-009. The canonical set is now 7 specialized skills plus the dispatcher (8 total: goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa, goat-clarity, and goat). `goat-clarity` is a bounded remediation workflow, not a general implementation destination.
 - Dispatcher routing table gains implementation-intent rows (shipped).
 - goat-plan **did not** gain Phase 5 (Execute). After Phase 2, `return-to-implement` hands authorized build/change work to ordinary ACT; plan-only routes stop, and new Ask First boundaries still gate. Bug fixes use `/goat-debug` D3/D4.
 - `.goat-flow/config.yaml` **did not** gain a `persona` field. Persona-based mode locking was scoped out; CLAUDE.md `Autonomy Tiers` plus `Ask First` boundaries cover the same ground without a machine-readable lockout.

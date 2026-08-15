@@ -96,7 +96,7 @@ export function appendSkillTesting(lines: string[]): void {
     "**Option A (preferred): File analysis.** Read each SKILL.md and evaluate its structure, constraints, routing logic, cross-references, and coherence against the codebase. This is safe for reporting-only assessment and covers most quality signals.",
   );
   lines.push(
-    "**Option B (if context allows): Live invocation.** Invoke the skill through the agent's normal slash-command/runtime path on a real target. Monitor for committed-file changes or implementation attempts - stop immediately if the skill tries to modify tracked files or code. Gitignored reporting/local-state writes are allowed under reporting-only probes. This tests runtime behavior but costs significant context.",
+    "**Option B (if context allows): Live invocation.** Invoke reporting-only skills through the agent's normal slash-command/runtime path on a real target. Run mutation-capable skills only against a disposable copy of current project evidence with a frozen write boundary. Stop immediately on writes outside that boundary or on any attempt to modify the assessed checkout. Gitignored reporting/local-state writes are allowed under reporting-only probes. This tests runtime behavior but costs significant context.",
   );
   lines.push("");
   lines.push("Either approach is acceptable. State which you used.");
@@ -122,12 +122,15 @@ export function appendSkillTesting(lines: string[]): void {
   lines.push(
     "7. **`/goat-qa`** - find testing gaps in recent changes or audit coverage for a module without creating new tests",
   );
+  lines.push(
+    "8. **`/goat-clarity`** - inspect the four selector contracts, frozen write-set rules, naming-before-comments order, and receipt completeness. Prefer file analysis; if live invocation is available, use only a disposable copy of current project source and verify that compliant bytes and out-of-scope paths stay unchanged.",
+  );
   lines.push("");
   lines.push(
     "For each skill report: (a) what worked, (b) what was confusing or failed, (c) what was useless ceremony. Cite file + semantic anchor where possible.",
   );
   lines.push(
-    "If any skill attempts to edit tracked files, implement code, or write outside the allowed gitignored local-state/reporting paths, stop that probe immediately and report it as a finding.",
+    "If any reporting-only skill attempts to edit tracked files or implement code, stop that probe immediately and report it as a finding. For `/goat-clarity`, stop on any write outside its disposable frozen target or any mutation of the assessed checkout.",
   );
   lines.push("");
   lines.push(

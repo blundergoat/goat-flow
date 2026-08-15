@@ -3,6 +3,8 @@ category: audit-contracts
 last_reviewed: 2026-08-14
 ---
 
+**Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
+
 ## Lesson: Artifact scanners need explicit mirror maps and command grammar controls
 
 **Status:** active | **Created:** 2026-07-12

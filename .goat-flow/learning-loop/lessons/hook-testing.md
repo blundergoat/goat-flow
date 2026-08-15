@@ -3,6 +3,8 @@ category: hook-testing
 last_reviewed: 2026-08-15
 ---
 
+**Scope:** Hook test coverage strategy - what a self-test actually exercised, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
+
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
 
 **Status:** active | **Created:** 2026-06-11
@@ -22,36 +24,6 @@ last_reviewed: 2026-08-15
 **Root cause:** The test generated dangerous fixture content by storing the exact dangerous strings in the source file. That made the repository source itself look like changed secret material, even though the test only needed the dangerous value inside a temporary repo at runtime.
 
 **Prevention:** Secret-scanner tests should construct secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner, but the committed source does not contain contiguous token/private-key patterns. After adding or editing scanner fixtures, run the scanner against the current repo, not only against temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`) and `workflow/hooks/post-turn-safety.sh` (search: `scan_line`).
-
-## Lesson: Bash case patterns need syntax proof for template delimiters
-
-**Status:** active | **Created:** 2026-06-19
-
-**What happened:** While adding `post-turn-safety` false-positive coverage for Twig/Jinja/ERB interpolation delimiters, the first Bash `case` pattern used unescaped `<`, `>`, `{`, and `}` tokens. The focused runtime tests then failed before scanner logic ran with `syntax error near unexpected token '<'`, and ShellCheck flagged the brace literals after the parse error was fixed.
-
-**Root cause:** I treated delimiter strings as inert glob text inside a Bash `case` arm. In shell syntax, redirection-looking characters and brace literals still need quoting or escaping for a clean parser/static-analysis pass, even when the surrounding intent is just pattern matching.
-
-**Prevention:** For hook scanner changes that add template or shell delimiter patterns, run `bash -n` and ShellCheck before trusting behavior tests, and escape delimiter metacharacters in `case` arms. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_reference_or_interpolation`) and `test/integration/post-turn-safety-hook.test.ts` (search: `template interpolations`).
-
-## Lesson: Generated hook templates need template-safe ShellCheck annotations
-
-**Status:** resolved | **Created:** 2026-06-11 | **Resolved:** 2026-06-12
-
-**What happened:** ShellCheck failed on an unrendered generated-hook template with SC2317 because its helper was only called after install-time rendering inserted project commands between template markers.
-
-**Root cause:** The template and generated installed script have different control-flow shapes. The function is intentionally unreachable in the fail-closed template but reachable in the installed copy, so checking both files with the same command needs a scoped annotation.
-
-**Prevention:** Generated shell templates should keep the unrendered template syntactically valid and fail-closed, but annotate template-only unreachable helpers with a narrow `shellcheck disable=SC2317` plus a comment naming the render-time call path. Regenerate installed output after changing a template before rerunning ShellCheck. This specific generated-hook path was removed before release; current replacement decision: `.goat-flow/learning-loop/decisions/ADR-037-separate-post-turn-safety-from-validation.md` (search: `does not ship a generated project-validation Stop hook`).
-
-## Lesson: Generated hook bodies must expose literal validation commands
-
-**Status:** resolved | **Created:** 2026-06-11 | **Resolved:** 2026-06-12
-
-**What happened:** The verification-score spike proved that a post-turn hook whose body delegates to config at runtime remains invisible to `POST_TURN_VALIDATION_COMMAND_PATTERN`, so `post-turn-hook-integrity` correctly reports "no validation logic" even when a separate config file names real commands.
-
-**Root cause:** The audit detector reads installed hook script content, not arbitrary config. A runtime config loader inside the hook collapses validation evidence into opaque indirection; the audit can see a runner, but not the commands whose failures need to propagate.
-
-**Prevention:** If a future custom validation hook is intended to count toward Verification, keep auditable command lines visible in the installed script. Do not make a hook parse config at runtime and then claim deterministic validation evidence. goat-flow itself no longer ships this generated hook; current replacement decision: `.goat-flow/learning-loop/decisions/ADR-037-separate-post-turn-safety-from-validation.md` (search: `Ship one goat-flow post-turn hook`). Detector evidence anchor: `src/cli/facts/agent/hooks.ts` (search: `POST_TURN_VALIDATION_COMMAND_PATTERN`).
 
 ## Lesson: Drift render helpers must apply every hook toggle
 
@@ -75,44 +47,6 @@ last_reviewed: 2026-08-15
 
 ---
 
-## Lesson: Interpreter-pipe tests need flag-operand and producer-language controls
-
-**Status:** active | **Created:** 2026-07-05
-
-**What happened:** A review of the local-data-to-interpreter pipe fix found two gaps after the full self-test was green. `cat script.js | node --require ./package.json` returned exit 0 even though Node executed stdin as the program, because the classifier treated the path-shaped `--require` operand as a script file. `printf x | sed '1e echo SED_EXECUTED' | python3 -c ...` also returned exit 0 while the producer executed a command, because `sed`/`awk` were included in a "read-only producer" allowlist.
-
-**Root cause:** The added grammar matrix covered bare interpreters, `-`, `/dev/stdin`, `python -m`, non-path flag values, downloader latching, and script-file allows, but it did not include path-shaped interpreter flag operands or command-capable producer languages. The test corpus proved the intended examples, not the edges where "path-shaped" and "read-only" assumptions break.
-
-**Prevention:** Every interpreter-pipe exemption needs paired controls for (1) a flag operand that looks like a script path but is not positional code, (2) a real script path after that same flag, and (3) producer tools that can execute commands before emitting bytes. Run those controls through the live dispatcher path before declaring the self-test enough. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `interpreter_option_action`), (search: `is_local_data_pipe_source`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `node require flag operand is not a script file`), (search: `sed producer with shell escape stays blocked`), (search: `local data pipe to node script after require flag`).
-
----
-
-## Lesson: Copilot JSON hook probes must use Copilot-shaped payloads
-
-**Status:** active | **Created:** 2026-06-07
-
-**What happened:** A cross-version no-jq probe set an invented JSON-mode switch and called the hook's direct-check interface. That produced stderr and exit 2; the real Copilot-shaped payload returned a JSON denial through the host's expected exit path.
-
-**Root cause:** I invented an output-mode environment switch instead of reading the hook's `detect_output_mode` path and existing self-test helper. Copilot JSON mode is selected from payload shape (`toolName` / `toolArgs`), and Copilot denies intentionally exit 0 so the host can consume the JSON decision.
-
-**Prevention:** Manual Copilot/no-jq hook probes must copy the self-test contract: feed a top-level Copilot payload such as `{"toolName":"bash","toolArgs":"{\"command\":\"...\"}"}` to `bash workflow/hooks/deny-dangerous.sh` without `--check`, with `GOAT_DENY_FORCE_NO_JQ=1` only when testing the fallback parser. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `detect_output_mode`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_no_jq_copilot_block`).
-
----
-
-## Lesson: Codex sandbox hook probes must distinguish direct Bash from Node child-process
-
-**Status:** active | **Created:** 2026-06-05
-
-**What happened:** During the v1.9.1 quality follow-up, I first rejected a Codex sandbox finding after `codex sandbox --permissions-profile goat-flow ... bash .goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke` passed. A stricter repro then showed the real failing layer: the same sandbox allowed direct Bash, but a Node script using `execFileSync("bash", ["-n", hook])` and `spawnSync("bash", ...)` returned `EPERM`. The audit therefore reported `bash -n failed` even though direct `bash -n` on the hook passed.
-
-**Root cause:** I treated direct shell execution as equivalent to the Node child-process path used by audit and preflight. Codex's managed sandbox can allow the initial Bash process while blocking child processes spawned from Node, so direct hook self-tests are necessary but not sufficient evidence for TypeScript validation gates.
-
-**Prevention:** When a sandbox finding involves audit/preflight hook checks, reproduce the exact runtime layer: direct hook script, configured command smoke, and a Node `child_process` probe. Audit and preflight diagnostics must surface `EPERM`/`ENOENT`/timeout as environment failures instead of syntax or hook-behavior defects. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `spawnFailureFor`), `scripts/preflight-checks.sh` (search: `spawnFailureMessage`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `reports sandbox spawn denial`).
-
-**Updated 2026-06-05:** A follow-up probe showed two subtler cases: Node `execFileSync` / `spawnSync` can attach `EPERM` error metadata while also reporting a successful child status and expected stdout/stderr, and `spawnSync(..., { input })` can hang while a shell-side `printf` pipe completes. Treating any `result.error` as fatal caused a false audit failure after the hook had actually completed; pushing runtime JSON through Node-owned stdin caused configured-command smoke timeouts. Prevention: check `status` before classifying child-process errors, and feed hook runtime payloads through a shell-side pipe when validating from Node in the Codex sandbox. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `pipeRuntimeProbeTo`), `scripts/preflight-checks.sh` (search: `GOAT_HOOK_SMOKE_PAYLOAD`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `ignores sandbox error metadata when hook commands completed`).
-
----
-
 ## Lesson: Manual hook matrices must avoid live-guard self-interference
 
 **Status:** active | **Created:** 2026-06-03
@@ -122,7 +56,7 @@ last_reviewed: 2026-08-15
 
 **Root cause:** I treated the verification shell as neutral while testing the same guardrail family that inspects shell text. The outer command was itself subject to `deny-dangerous.sh`, so payload replay patterns that are safe inside a test harness (`pipe to bash`, literal secret paths, long case bodies) were blocked before the hook under test ran.
 
-**Prevention:** For manual guardrail matrices, either run one direct case at a time or create a temporary harness file with a plain invocation command. Construct secret-path payloads from variables when the outer live guard would otherwise see them, avoid `printf | bash hook` in favor of here-strings or files, and record temp roots in the parent shell before using command substitution. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `Command has more than 50 chained segments`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`), and `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Temp cleanup must satisfy destructive-command hooks`).
+**Prevention:** For manual guardrail matrices, either run one direct case at a time or create a temporary harness file with a plain invocation command. Construct secret-path payloads from variables when the outer live guard would otherwise see them, avoid `printf | bash hook` in favor of here-strings or files, and record temp roots in the parent shell before using command substitution. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `Command has more than 50 chained segments`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`), and `.goat-flow/learning-loop/lessons/verification-scanners.md` (search: `Temp cleanup must satisfy destructive-command hooks`).
 
 **Updated 2026-07-14:** A disposable-target walkthrough repeated the failure: an all-in-one validation command was blocked before setup. A short temporary harness kept each reviewed step visible and unblocked.
 
@@ -156,44 +90,6 @@ last_reviewed: 2026-08-15
 
 **Prevention:** When splitting a safety hook, define the ownership boundary before porting code. If the hooks must stay self-contained, generate or review each file from explicit function sets: common payload parsing is allowed, but secret, repository, and destructive policy helpers must not cross guard boundaries. A line-count spike across every split file is a review blocker until the duplication is explained or removed. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm_has_recursive`), `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `npm token delete/revoke`).
 
-## Lesson: Keep generated Bash regexes out of inline conditionals
-
-**Status:** active | **Created:** 2026-05-27
-
-**What happened:** While regenerating the self-contained split hooks, inline Bash EREs lost escaping for `>`, `|`, `<<<`, and quote classes. `bash -n` caught parse failures, and the full deny-dangerous self-test caught `bash -c "echo ok; rm -rf /"` returning exit 0 because the inline quote regex captured only `r` instead of the inner command.
-
-**Root cause:** I generated Bash through JavaScript strings and left complex regexes directly inside `[[ ... =~ ... ]]`, where shell parsing and string escaping both matter.
-
-**Prevention:** In hook scripts, put EREs containing shell metacharacters or quote classes into named variables before matching. Run `bash -n` before mirror fanout, then run the central full self-test before treating behavior as restored. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `shell_c_re`), `workflow/hooks/deny-dangerous.sh` (search: `redirect_append_re`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `bash -c chained rm`).
-
-**Updated 2026-08-10:** An apostrophe in embedded Node broke Bash parsing; a template literal then raised SC2016. Keep embedded comments quote-neutral and run `bash -n` plus ShellCheck before mirror fanout. Structural audits must recognize embedded `//` comments before reporting a missing Bash comment. Evidence: `workflow/hooks/post-turn-safety.sh` (search: `read_stop_context`).
-
-**Second update 2026-08-10:** Release ShellCheck flagged the provider-result Node program because its single quotes deliberately prevent shell expansion. A narrow SC2016 directive now records that invariant beside the command in both byte-identical mirrors. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `Literal JavaScript prevents shell expansion of user feedback`) and `.goat-flow/hooks/post-turn-safety.sh` (search: `Literal JavaScript prevents shell expansion of user feedback`).
-
-## Lesson: Dynamic hook helpers need explicit ShellCheck handling
-
-**Status:** active | **Created:** 2026-05-27
-
-**What happened:** After extracting `deny-dangerous.sh`, I expected `# shellcheck source=deny-dangerous.sh` above the runtime-computed source line to satisfy linting. The repo's hook lint command does not run ShellCheck with `-x`, so ShellCheck failed or warned every mirrored policy hook with SC1091/SC1090 before any behavior checks could matter.
-
-**Root cause:** I treated the source directive as enough without checking it against the exact lint invocation used by preflight and CI.
-
-**Prevention:** For sourced hook helpers resolved through runtime variables, shellcheck the helper as its own input and suppress SC1090/SC1091 only on the dynamic `source` line in the dispatcher. Verify the workflow and installed mirrors with the same no-`-x` ShellCheck command used by preflight. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `source "$GOAT_HOOK_LIB_DIR/patterns-shell.sh"`) and `workflow/hooks/deny-dangerous.sh` (search: `shellcheck disable=SC1090,SC1091`).
-
-**Updated 2026-08-07:** Release ShellCheck caught SC2016 because gruff guidance put Markdown backticks inside a single-quoted `printf` in both hook mirrors. Escape command backticks in a double-quoted string, then lint the full workflow and installed hook sets before treating the mirrors as ready. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`) and `.goat-flow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`).
-
-**Updated 2026-05-27:** When git parsing moved into `deny-dangerous.sh`, ShellCheck still warned in thin hooks with SC2154 because helper-owned output variables (`__goat_git_rest`, `__goat_git_aliased_push`) were assigned dynamically in the sourced file. Initialize helper output variables in each thin hook before first reference so static analysis sees the contract. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_aliased_push=0`) and `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `__goat_git_rest=""`).
-
-## Lesson: Shared hook helpers need missing-dependency runtime tests
-
-**Status:** active | **Created:** 2026-05-27
-
-**What happened:** After splitting the guard hooks through `deny-dangerous.sh`, PreToolUse started reporting hook failures with exit code 127 when a thin policy hook could not load the shared helper. The script used `set -uo pipefail`, so a failed `source` did not stop execution; the hook then reached `main "$@"` before `main` existed.
-
-**Root cause:** I tested normal installed mirrors but did not test the degraded install shape where a policy hook exists without its required shared helper. That missed the actual failure users see during partial installs, stale mirrors, or interrupted setup.
-
-**Prevention:** Any Bash hook that sources a shared helper must guard the source path explicitly and include a self-test that runs the hook from a temp directory without the helper. The expected result is a fail-closed guardrail message, never exit 127. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `deny_dangerous_unavailable`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_missing_common_fails_closed`).
-
 ## Lesson: Codex hook commands must use the git-root wrapper shape
 
 **Status:** active | **Created:** 2026-05-27
@@ -204,76 +100,3 @@ last_reviewed: 2026-08-15
 
 **Updated 2026-08-06:** This lesson is narrowed, not a blanket ban on all shell substitution. Codex hook commands run with the session cwd, so bare `.goat-flow/hooks/...` paths fail from nested directories. The current safe shape is a Node bootstrap that resolves the active git root, loads `run-with-bash.mjs`, passes the selected hook as an argument, and starts the launcher with the resolved root as cwd. Codex deliberately receives no `$CLAUDE_PROJECT_DIR` fallback. Evidence anchors: `workflow/hooks/agent-config/codex-hooks.json` (search: `run-with-bash.mjs`), `.codex/hooks.json` (search: `run-with-bash.mjs`), and `test/unit/hook-registrar.test.ts` (search: `generated Codex launchers resolve the active root`).
 
-## Lesson: Configured hook smoke must verify the registered guard path
-
-**Status:** active | **Created:** 2026-05-27 | **Incident count:** 8 | **Latest occurrence:** 2026-08-10
-
-**Decision changed:** Treat configured replay as a safe-and-dangerous semantic matrix, and make mocks identify the command boundary rather than infer it from call order.
-
-**Trigger phase:** VERIFY
-
-**What happened:** A configured-hook review found that audit and preflight smoke tests launched hook scripts directly, so they could pass even when an agent config contained a stale command string or a command shape that exited before the hook started. The fix parses `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json`, requires an exact configured guard script path, then runs that script with runtime-shaped safe and dangerous payloads.
-
-**Root cause:** The verification target was the hook file, not the runtime contract. That missed stale paths, executable-bit loss, and shell-substitution assumptions before guard code could run.
-
-**Recurrence 2026-08-09:** Expanding configured replay from one dangerous probe to safe-plus-dangerous exposed two mocks that returned a deny result for every spawn. The first correction encoded a fixed call count and failed again because its implicit project path did not create the expected descendant replay. The fixture was rewound to distinguish the configured launcher from the later direct `bash` replay by semantic command shape. Evidence anchor: `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `configuredRuntimeProbeCalls`).
-
-**Recurrence 2026-08-09 (drift fixture):** The timeout-drift test changed `60` to `90` and expected a pass, but its direct `bash .goat-flow/hooks/post-turn-safety.sh` command was independently stale under the new command-identity contract. Rebuilding the fixture from `buildAgentHookCommand` and mutating only the timeout restored a true single-axis test. Evidence anchor: `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `postTurnSafetySpec`).
-
-**Recurrence 2026-08-09 (outcome wording):** The comment and naming pass changed the user-visible probe outcome from `safe allow` to `allow`, but one focused assertion still matched `safe`. The audit suite caught the stale contract before final proof. Evidence anchor: `src/cli/audit/check-agent-deny-runtime.ts` (search: `expectedOutcome`).
-
-**Recurrence 2026-08-10:** A recursive self-test created a fixture repository but invoked its hook from the framework working directory, so it scanned the wrong checkout. Resolve the hook path, enter the fixture, then invoke it. Evidence: `workflow/hooks/post-turn-safety.sh` (search: `The recursive hook resolves the current project`).
-
-**Recurrence 2026-08-09 (support metadata):** A matrix-helper refactor treated `unsupportedAgents` like a boolean map and compared its values with literal `true`; the registry actually stores non-empty reason strings. Cross-agent install tests then expected Codex Gruff and Antigravity/Copilot post-turn hooks to install. Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `shouldInstallHook`).
-
-**Recurrence 2026-08-09 (namespaced launcher mode):** Generated commands moved from one-word response modes to a six-field delivery contract, but the startup bootstrap still matched only the legacy words. Registrar fixtures then showed Claude Gruff, Antigravity policy, and Copilot policy startup failures all falling through to the generic policy response. Decoding the generated provider and response kind before choosing startup output restored each user-facing contract. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `hasNamespacedResponseMode`) and `test/unit/hook-registrar.helpers.ts` (search: `assertHookUnavailableResponse`).
-
-**Recurrence 2026-08-09 (partial hook propagation):** A dormant adapter changed legacy commands and file lists before installer propagation, so the cross-agent matrix passed only 1 of 13 cases. Protocol-gating adapter loads and namespaced modes restored 12; deferring a separate Antigravity support removal restored 13 of 13. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `legacyHookLaunchMode`), `workflow/hooks/run-with-bash.mjs` (search: `LEGACY_HOOK_DEADLINES_MS`), and `test/integration/setup-install-agent-matrix.test.ts` (search: `diverged between installer and writer`).
-
-**Recurrence 2026-08-10 (standalone protocol precedence):** The TypeScript writer chose Gruff before provider policy, while the standalone installer checked Copilot first. The matrix passed 43 of 44 cases until precedence matched. The generated contract now removes that second decision. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `responseKind === "gruff"`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `diverged between installer and writer`).
-
-**Prevention:** Verify configured guard replay as well as direct self-tests. Run safe and dangerous payloads from each audited cwd, require policy-specific denial text, reject hidden script paths, and fail on exit 126/127. Test doubles branch on payload and command shape, never spawn order. Build single-axis drift fixtures from the canonical command, then grep renamed outcomes and rerun their message assertions. A non-empty `unsupportedAgents` reason means unsupported. Protocol seams keep legacy commands and files unchanged; support changes update writer and installer atomically. Test both launcher decoding and startup output when a generated mode changes. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`), `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
-
-## Lesson: Hook parser regressions need false-positive grammar probes
-
-**Status:** active | **Created:** 2026-05-27
-
-**What happened:** A parser-hardening pass found missing PowerShell and Git option forms plus false positives for shell comments and dotted query syntax.
-
-**Root cause:** The tests covered obvious dangerous strings and a few equals-valued options, but not valid long-option space forms, shell comments, or dotted query syntax that resembles key-file extensions.
-
-**Prevention:** For shell hooks, build regression matrices from valid CLI grammar and common inert syntax, not only incident strings. Include single-dash and double-dash eval flags, equals-valued and space-valued global options, unquoted shell comments, quoted `#`, jq/yq dotted queries, and filename controls such as `private.key`, `deploy.pem`, and `prod.pfx`. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `powershell double-dash command remove-item`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git --git-dir push`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `jq bare key query`).
-
-## Lesson: Normalize agent hook payload variants before field access
-
-**Status:** active | **Created:** 2026-05-26
-
-**What happened:** While adding Antigravity hook payload support, I changed the guardrail jq extractor to read `.toolArgs.command` directly. Copilot can send `toolArgs` as a JSON string, so jq errored before reaching the `fromjson?` fallback. `bash workflow/hooks/deny-dangerous.sh --self-test=full` caught three Copilot deny regressions before the change shipped.
-
-**Root cause:** I added a new agent payload shape without first normalizing the existing polymorphic field shape shared by another agent. The fallback was present, but the earlier direct field access made it unreachable for string payloads.
-
-**Prevention:** For hook payload parsing, normalize variant fields first, then read subfields. Keep self-tests for every registered agent payload shape in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_copilot_block`, `expect_antigravity_block`) and run the full self-test after every extractor edit. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `def extract_command(value)`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_antigravity_secret_file_block`).
-
-**Updated 2026-06-05:** The same parser gap recurred for file-tool paths instead of shell commands: jq normalized stringified Copilot `toolArgs` for `command`, but the path extractor did not parse stringified `path` / `file_path`. Safe non-bash payloads such as Copilot `view README.md` returned deny JSON until `extract_path` normalized object and string forms. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `def extract_path(value)`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `stringified non-bash file read`).
-
-## Lesson: Hook write-block tests must vary valid CLI grammar
-
-**Status:** active | **Created:** 2026-05-20
-
-**What happened:** The first GitHub CLI write-block fix covered the reported `gh issue comment ... --body-file ...` command, `gh api` writes, direct read-only controls, and one pre-topic `--repo` form. A follow-up review still found valid write shapes returning exit 0: `gh issue --repo owner/repo comment 64620 --body hi` and `printf '%s\n' body | xargs -I{} gh issue comment 64620 --body {}`.
-
-**Root cause:** I tested the incident shape and a few nearby commands, but not the CLI grammar surface. GitHub CLI accepts inherited flags after the topic, and shell pipeline consumers can move the real command behind a wrapper such as `xargs`.
-
-**Prevention:** For hook rules that classify write-capable CLI commands, build the regression set as a grammar matrix before mirror fanout: direct incident form, global flags before topic, inherited flags after topic, short flag forms, shell wrappers, pipeline consumers such as `xargs`, write-method API forms, and read-only allow controls. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment`).
-
-**Note (2026-06-02):** ADR-028 was amended to allow `gh issue comment` and `gh pr comment` through the hook (other `gh` writes still blocked). The specific block this lesson originally described no longer applies to comments, but the methodological lesson - test the CLI grammar matrix, not only the incident command - stands. The grammar matrix in the self-test now covers both blocked (`gh pr review`, `gh workflow run`, `gh api ... -X POST -f body=...`) and allowed (`gh issue comment`, `gh pr comment`) cases, so the prevention rule still has live coverage.
-
-## Lesson: Restricted-PATH hook fixtures break helpers that shell out
-
-**Status:** active | **Created:** 2026-07-03
-
-**What happened:** The gruff-code-quality self-test isolates binary discovery with `PATH="$tmp/empty-bin"` so a system-installed `gruff-py` cannot leak into assertions. The new repo-owned config override (`hooks.gruff-code-quality.binaries.<lang>`) parses `.goat-flow/config.yaml` with `awk`. Under the restricted PATH, `awk` was not found; the command substitution's `2>/dev/null || true` swallowed the failure, the parser returned empty, and the config-override self-test failed with an empty value while the production code path was actually correct.
-
-**Root cause:** Restricted-PATH fixtures constrain every external command in the function under test, not just the binary the fixture means to hide. A helper that shells out (`awk`, `sed`, `git`) silently degrades when the fixture PATH omits it, and fail-soft error handling converts the missing tool into a wrong answer instead of a visible error.
-
-**Prevention:** When a hook self-test restricts PATH to hide one binary, first check which branch of the code under test can reach a PATH lookup for that binary. If the branch short-circuits earlier (env/config override present returns before the PATH search), append the real PATH - `PATH="$tmp/empty-bin:$PATH"` - so shell-out helpers keep working; keep the bare restricted PATH only for assertions that genuinely exercise PATH-based discovery. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `they never reach the PATH binary search`), (search: `config_binary_override`).

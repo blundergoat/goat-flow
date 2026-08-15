@@ -1,6 +1,6 @@
 # Skills
 
-Seven focused capabilities (six plus dispatcher) loaded on demand. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked - they stay out of the instruction budget.
+Eight focused capabilities (seven plus dispatcher) loaded on demand. Each skill has a distinct artifact, a hard quality gate, and a repeatable output. Skills don't load unless invoked - they stay out of the instruction budget.
 
 All skills use the `goat-` prefix to avoid conflicts with built-in agent commands.
 
@@ -25,6 +25,7 @@ flowchart LR
     Dispatcher --> Critique["/goat-critique"]
     Dispatcher --> QA["/goat-qa"]
     Dispatcher --> Security["/goat-security"]
+    User --> Clarity["/goat-clarity\n(direct)"]
 ```
 
 | Skill | Purpose | Hard Gate | When to Use |
@@ -36,6 +37,7 @@ flowchart LR
 | [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Runs only with delegated sub-agents; blocks on unresolved disputes before synthesis | High-stakes decisions, plans, assessments |
 | [/goat-security](#goat-security) | Threat-model-driven security assessment | MUST re-check framework/tooling mitigations before flagging findings | Before releases, after dependency changes, during audits |
 | [/goat-qa](#goat-qa) | Testing gap analysis and verification planning | Does not run or write tests; generates gap analysis and testing plan | After a milestone or 30-60 min of coding |
+| [/goat-clarity](#goat-clarity) | Bounded comment, documentation, naming, and private-placement remediation | Freezes writable paths before editing; Scope v2 requires explicit approval | When selected source code needs a clarity pass without behaviour or public-contract changes |
 
 ---
 
@@ -55,6 +57,7 @@ flowchart LR
 | "Is this bug fix verified?" | /goat-debug | Re-run the original repro and adjacent regressions |
 | "Is this diff/PR verified?" | /goat-review | Two-pass review with Review Integrity |
 | "Is this plan/assessment sound?" | /goat-critique | Multi-perspective critique before shipping |
+| "Bring these comments and names up to standard" | /goat-clarity (direct invocation) | Applies a bounded remediation pass instead of returning review findings |
 
 ---
 
@@ -350,6 +353,25 @@ Before recommending an addition or a change to an existing test, goat-qa reads `
 
 ---
 
+## /goat-clarity
+
+Bounded clarity remediation for comments, documentation, local/private names, and contained private placement. Release one uses direct invocation so the developer names exactly one write-authority selector:
+
+```text
+/goat-clarity https://github.com/OWNER/REPOSITORY/pull/123
+/goat-clarity uncommitted files
+/goat-clarity path/to/folder
+/goat-clarity path/to/file.ext
+```
+
+The skill freezes a Target Scope Snapshot before its first edit. A PR selector must match the local repository and head; `uncommitted files` freezes the staged, unstaged, and untracked non-ignored source paths present at intake; folder and file selectors must resolve inside the repository without symlink traversal. Ambiguous, unmerged, generated, binary, empty, or escaping targets stop rather than widen authority.
+
+Naming and placement diagnosis runs before comment work so prose does not compensate for a weak name. Safe apply permits only verified comment/doc changes, complete local/private renames, and contained private placement within the frozen paths. Public names, signatures, behaviour, compatibility, tests, or extra write paths require a proposed Scope v2 and explicit approval.
+
+Every run ends with one Clarity Remediation Receipt that reconciles modified, compliant, deferred, excluded, inaccessible, and unchecked units. Git state and GitHub state remain read-only throughout the workflow.
+
+---
+
 ## Shared Conventions
 
 Every skill shares:
@@ -376,4 +398,4 @@ For code naming or placement work, load `.goat-flow/skill-docs/playbooks/naming-
 
 Skills are created during step 03 of the GOAT Flow setup. The skill templates in `workflow/skills/` document the prompts used to create them. A skill may also ship a nested `references/` directory; install and parity checks treat those files as part of the skill surface.
 
-> **Consolidation history (v0.8.0-v1.1.0):** Nine skills were consolidated into the current seven. See ADR-009 for the full rationale. goat-critique was extracted as a standalone critique skill in v1.1.0, then renamed from goat-sbao in v1.2.0 (ADR-019).
+> **Consolidation history (v0.8.0-v1.1.0):** Nine skills were consolidated into seven. `goat-critique` was extracted as a standalone critique skill in v1.1.0, then renamed from `goat-sbao` in v1.2.0. `goat-clarity` later passed the membership test and became the eighth canonical skill. ADR-009 holds the current set and the full rationale.

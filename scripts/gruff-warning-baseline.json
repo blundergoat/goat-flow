@@ -343,13 +343,13 @@
       ]
     },
     {
-      "stableIdentity": "fb156add7406974b",
+      "stableIdentity": "a35ae1921595af17",
       "ruleId": "size.file-length",
       "file": "test/unit/dashboard-home.test.ts",
       "rationale": "Reviewed oversized file; split deferred to the post-1.15.0 Gruff debt-reduction backlog item.",
       "occurrences": [
         {
-          "lines": 815,
+          "lines": 818,
           "threshold": 750
         }
       ]

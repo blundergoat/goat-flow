@@ -11,7 +11,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Setup prompts | `workflow/setup/` | Agent-specific setup instructions, upgrade guides |
 | Setup installer | `workflow/install-goat-flow.sh` | Manifest-driven installation with ownership checks, safe parent-path validation, and adjacent per-file atomic staging |
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
-| Skill templates | `workflow/skills/` | Reference prompts for the 7 goat-flow skill templates (6 functional + 1 dispatcher) |
+| Skill templates | `workflow/skills/` | Reference prompts for the 8 goat-flow skill templates (7 functional, including direct `goat-clarity`, + 1 dispatcher) |
 | Hook scripts | `workflow/hooks/` | Managed launcher/runtime and provider adapters, copyable `deny-dangerous.sh` policies, opt-in `gruff-code-quality.sh`, default `post-turn-safety.sh`, and per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |

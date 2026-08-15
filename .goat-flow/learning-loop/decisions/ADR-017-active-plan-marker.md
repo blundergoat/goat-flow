@@ -4,7 +4,7 @@
 **Date:** 2026-04-17
 **Updated:** 2026-08-15 - status corrected from "Superseded by ADR-033". ADR-033 moved the marker from `.goat-flow/tasks/.active` to `.goat-flow/plans/.active` and says so explicitly; it never replaced the marker semantics below, which remain load-bearing in `workflow/install-goat-flow.sh` (search: `ADR-017`), `src/cli/prompt/compose-quality-static-sections.ts`, and `/goat-plan` routing. The wrong status made the generated INDEX advertise a live decision as dead.
 **Supersedes:** -
-**Related:** ADR-033 (current marker path); `lessons/verification.md` "rename-survivor class" cross-reference fragility note.
+**Related:** ADR-033 (current marker path); `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Cross-reference fragility across docs`).
 
 ## Context
 
@@ -24,7 +24,7 @@ The install script (`workflow/install-goat-flow.sh`) writes `.active` automatica
 
 ## Alternatives considered
 
-**Option A - Directory rename (`active/`).** Rename the current plan's subdir to `active/` and have skills scan only that. **Rejected.** On the goat-flow repo, renaming the active versioned plan directory would have broken many cross-references inside local plan files and archived local plans. The rename-survivor failure class is documented in `lessons/verification.md`. The find-replace sweep needed is out of proportion to the problem.
+**Option A - Directory rename (`active/`).** Rename the current plan's subdir to `active/` and have skills scan only that. **Rejected.** On the goat-flow repo, renaming the active versioned plan directory would have broken many cross-references inside local plan files and archived local plans. That failure class is documented in `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Cross-reference fragility across docs`). The find-replace sweep needed is out of proportion to the problem.
 
 **Option C - Version-derived from `config.yaml`.** Use `config.yaml:version` to compute the active task-plan directory. **Rejected.** Config version is semver-stable; task plan versions churn faster. Strict coupling breaks when active work, pre-release work, experimental forks, or version-lag projects do not match the package version.
 

@@ -67,11 +67,14 @@ describe("artifact discovery", () => {
     const artifacts = getRepoArtifacts();
     const skills = artifacts.filter((a) => a.kind === "skill");
     assert.ok(
-      skills.length >= 7,
-      `expected at least 7 skills, got ${skills.length}`,
+      skills.length >= 8,
+      `expected at least 8 skills, got ${skills.length}`,
     );
     assert.ok(skills.some((s) => s.id === "skill:goat-plan"));
     assert.ok(skills.some((s) => s.id === "skill:goat-review"));
+    const clarityArtifact = skills.find((s) => s.id === "skill:goat-clarity");
+    assert.ok(clarityArtifact);
+    assert.deepEqual(clarityArtifact.missingMirrors, []);
   });
 
   it("discovers shared references and playbooks", () => {

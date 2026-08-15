@@ -3,6 +3,8 @@ category: contract-testing
 last_reviewed: 2026-08-14
 ---
 
+**Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
+
 ## Lesson: Reference-pack wording fixes must check word budget immediately
 
 **Status:** active | **Created:** 2026-05-19
@@ -164,7 +166,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Decision changed:** Make semantic wording assertions case-insensitive unless casing is the contract, and bound shared files to the exact owned section, object, or fence.
 
-**Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-08-14
+**Trigger phase:** VERIFY | **Incident count:** 5 | **Latest occurrence:** 2026-08-15
 
 **What happened:** The first partial GREEN for test-selection rejected correct prose because heading and table capitalization differed, stopped a template block at a nested heading before its records, and scanned an entire shared preset catalog instead of the four owned prompts. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `function templateBlock`) and (search: `affectedPresetIds`).
 
@@ -174,13 +176,16 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Recurrence (2026-08-14):** M05's first unsafe-authority sweep searched every playbook for `This playbook owns` and rejected valid discipline routing in writing-style plus an out-of-scope hook playbook. The corrected sweep inspects precedence direction inside the eight target disciplines and keeps unrelated ownership statements outside the semantic owner. Evidence anchor: `workflow/skills/playbooks/writing-style.md` (search: `Sibling playbooks own`).
 
-**Root cause:** The contract parser treated presentation boundaries and a shared container as the semantic owner. The assertions therefore coupled correct doctrine to incidental casing, Markdown nesting, and unrelated sibling content.
+**Recurrence (2026-08-15):** Goat-clarity's first-use cardinality proof expected literal lowercase agent and selector IDs, while the receipt template allowed a free-form integration name and accepted invocation. Real agents emitted values such as `Codex`, `uncommitted files`, and Markdown-emphasized labels, so a complete receipt could never satisfy its consumer. The correction makes canonical IDs part of the producer contract and lets the scanner ignore optional emphasis without weakening the values. Evidence anchors: `workflow/skills/goat-clarity/SKILL.md` (search: `Agent: <claude | codex | antigravity | copilot>`) and `test/contract/skill-hardening-clarity.test.ts` (search: `Selector: <github-pr | uncommitted | folder | file>`).
 
-**Fix:** Use case-insensitive semantic regular expressions, bound template extraction to its code fence, inspect only the named prompt objects owned by the change, and separate exhaustive path-existence proof from content checks over exact semantic owners.
+**Root cause:** The contract parser treated presentation boundaries and a shared container as the semantic owner, or expected canonical values that the producer never promised. The assertions therefore coupled correct doctrine to incidental casing, Markdown nesting, unrelated sibling content, and free-form labels.
+
+**Fix:** Use case-insensitive semantic regular expressions, bound template extraction to its code fence, inspect only the named prompt objects owned by the change, define machine-counted values in the producer, normalize presentation-only wrappers, and separate exhaustive path-existence proof from content checks over exact semantic owners.
 
 **Prevention:**
 1. Treat capitalization as formatter or prose presentation unless exact casing is itself the contract.
 2. Extract the narrowest semantic owner: a fenced template, named section, or explicit object set.
 3. Keep unrelated sibling content outside neutrality and doctrine assertions.
 4. Rerun the focused contract before expanding verification.
+5. When a downstream check counts prose records, define canonical values in the producer and normalize only presentation wrappers; do not infer identity from unconstrained display text.
 ---

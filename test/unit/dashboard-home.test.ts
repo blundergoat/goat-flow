@@ -756,7 +756,10 @@ describe("Home learning loop", () => {
     });
     assert.equal(home.learningLoopReady(), true);
     assert.equal(home.learningPillValue(), "Fresh");
-    assert.equal(home.learningPillDetail(), "5 footguns, 7 lessons");
+    assert.equal(
+      home.learningPillDetail(),
+      "5 footgun records, 7 lesson records",
+    );
     assert.equal(home.learningIndexButtonDisabled(), false);
   });
 

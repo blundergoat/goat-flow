@@ -18,6 +18,8 @@ import {
   KNOWN_TOP_LEVEL_KEYS,
   KNOWN_USER_ROLES,
   LEARNING_LOOP_AUTO_CAPTURE_TARGETS,
+  KNOWN_NESTED_KEYS,
+  HOOK_ROW_KEYS,
 } from "./config-vocabulary.js";
 
 /**
@@ -85,11 +87,62 @@ function validateUnknownTopLevelKeys(
 }
 
 /**
+ * Warn about keys inside a block that no validator reads.
+ * Use wherever a block has a closed key set, so a misspelling is distinguishable
+ * from an omission instead of both producing silence.
+ *
+ * @param value - block contents; an empty block produces no warnings
+ * @param knownKeys - keys some validator reads at this level; every other key is reported
+ * @param path - dot-separated config path of the owning block; used to build the reported key
+ * @param warnings - warning accumulator shown by config/audit callers
+ * @returns nothing; unrecognized keys append warnings in place
+ */
+function warnUnrecognizedKeys(
+  value: RawConfig,
+  knownKeys: ReadonlySet<string>,
+  path: string,
+  warnings: ValidationIssue[],
+): void {
+  for (const key of Object.keys(value)) {
+    // An unread key is either a typo or a setting this version dropped; both are worth saying aloud.
+    if (!knownKeys.has(key)) {
+      pushWarning(warnings, `${path}.${key}`, "unknown key");
+    }
+  }
+}
+
+/**
+ * Warn about unread keys in a block whose path has a registered key set.
+ * Use for blocks reached by a fixed config path; blocks nested under a user-chosen
+ * name call `warnUnrecognizedKeys` directly with the set for that level.
+ *
+ * @param value - block contents; an empty block produces no warnings
+ * @param path - dot-separated config path of the owning block; an unregistered path is skipped
+ * @param warnings - warning accumulator shown by config/audit callers
+ * @returns nothing; unrecognized keys append warnings in place
+ */
+function warnUnknownNestedKeys(
+  value: RawConfig,
+  path: string,
+  warnings: ValidationIssue[],
+): void {
+  const knownKeys = KNOWN_NESTED_KEYS.get(path);
+  // Blocks keyed by user-chosen names have no closed set and cannot be checked here.
+  if (knownKeys === undefined) return;
+  warnUnrecognizedKeys(value, knownKeys, path, warnings);
+}
+
+/**
  * Validate that an optional top-level field is an object before reading nested keys.
  * Use so nested validators can assume a named-field block.
  *
+ * Sweeping unknown keys here rather than in each nested validator means a new block
+ * cannot forget the check: adding its entry to `KNOWN_NESTED_KEYS` is what turns the
+ * sweep on, and a block with no entry is skipped rather than warned about wholesale.
+ *
  * @param raw - parsed config object; missing key means the user omitted this optional block
  * @param key - top-level config key; empty would produce an unusable error path
+ * @param warnings - warning accumulator; receives one entry per unrecognized nested key
  * @param errors - error accumulator shown to the user
  * @param onValid - nested validator to run when the block is an object
  * @returns nothing; errors or nested validation mutate accumulators
@@ -97,6 +150,7 @@ function validateUnknownTopLevelKeys(
 function validateObjectField(
   raw: RawConfig,
   key: string,
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
   onValid: (value: RawConfig) => void,
 ): void {
@@ -108,6 +162,7 @@ function validateObjectField(
     pushError(errors, key, "must be an object");
     return;
   }
+  warnUnknownNestedKeys(value, key, warnings);
   onValid(value);
 }
 
@@ -218,10 +273,10 @@ function validateLegacyAgentsField(
  */
 function validateLineLimitsField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "line-limits", errors, (value) => {
+  validateObjectField(raw, "line-limits", warnings, errors, (value) => {
     // Target controls the soft budget the user sees in instruction audits.
     if ("target" in value)
       validatePositiveNumber(value.target, "line-limits.target", errors);
@@ -250,10 +305,10 @@ function validateLineLimitsField(
  */
 function validateToolchainField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "toolchain", errors, (value) => {
+  validateObjectField(raw, "toolchain", warnings, errors, (value) => {
     // Each optional command family must be a list of commands the user can run.
     if ("test" in value)
       validateStringArray(value.test, "toolchain.test", errors);
@@ -331,10 +386,10 @@ function validateUserRoleField(
  */
 function validateSkillsField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "skills", errors, (value) => {
+  validateObjectField(raw, "skills", warnings, errors, (value) => {
     // Install policy controls which skills the user gets during setup.
     if ("install" in value) {
       const { install } = value;
@@ -385,10 +440,10 @@ function validateSkillsField(
  */
 function validateHarnessField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "harness", errors, (value) => {
+  validateObjectField(raw, "harness", warnings, errors, (value) => {
     // Missing acknowledge list means the user has not muted any known harness caveats.
     if (!("acknowledge" in value)) return;
     validateStringArray(value.acknowledge, "harness.acknowledge", errors);
@@ -406,10 +461,10 @@ function validateHarnessField(
  */
 function validateHooksField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "hooks", errors, (value) => {
+  validateObjectField(raw, "hooks", warnings, errors, (value) => {
     // Each hook row configures one dashboard-visible guardrail.
     for (const [hookId, hookValue] of Object.entries(value)) {
       // Hook ids must match registry-style names so dashboard rows can find them.
@@ -422,6 +477,13 @@ function validateHooksField(
         pushError(errors, `hooks.${hookId}`, "must be an object");
         continue;
       }
+      // The row key is a hook id, but the fields inside one row are a fixed set.
+      warnUnrecognizedKeys(
+        hookValue,
+        HOOK_ROW_KEYS,
+        `hooks.${hookId}`,
+        warnings,
+      );
       // Enabled must be explicit so ambiguous strings do not flip a guardrail.
       if (typeof hookValue.enabled !== "boolean") {
         pushError(errors, `hooks.${hookId}.enabled`, "must be a boolean");
@@ -501,10 +563,10 @@ function validateTelemetryField(
  */
 function validateLearningLoopField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "learning-loop", errors, (value) => {
+  validateObjectField(raw, "learning-loop", warnings, errors, (value) => {
     // Missing auto-capture block keeps the writer disabled.
     if (!("auto-capture" in value)) return;
     const autoCapture = value["auto-capture"];
@@ -513,6 +575,7 @@ function validateLearningLoopField(
       pushError(errors, "learning-loop.auto-capture", "must be an object");
       return;
     }
+    warnUnknownNestedKeys(autoCapture, "learning-loop.auto-capture", warnings);
 
     // Enabled must be boolean so text values do not accidentally enable writes.
     if ("enabled" in autoCapture && typeof autoCapture.enabled !== "boolean") {
@@ -601,10 +664,10 @@ function validateSkillOverridesField(
  */
 function validateTerminalField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "terminal", errors, (value) => {
+  validateObjectField(raw, "terminal", warnings, errors, (value) => {
     // Missing timeout means the dashboard uses the default session cleanup window.
     if (!("idle-timeout" in value)) return;
     const timeout = value["idle-timeout"];

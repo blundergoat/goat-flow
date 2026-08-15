@@ -318,7 +318,8 @@
       "goat-review",
       "goat-critique",
       "goat-security",
-      "goat-qa"
+      "goat-qa",
+      "goat-clarity"
     ],
     "references": {
       "goat-debug": ["references/diagnostic-techniques.md"],

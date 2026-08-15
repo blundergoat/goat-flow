@@ -75,7 +75,11 @@ export function renderQualityHistoryText(
  *
  * The four fixed sections mirror the lifecycle buckets because saved-report
  * diffs are scanned by humans and shell output, not just JSON clients.
- * Invariant: section order must match resolved, new, persisted, then stuck findings.
+ * Invariant: section order must match absent, new, persisted, then stuck findings.
+ *
+ * The absent section carries an inline caveat whenever it has rows. Readers
+ * previously took that bucket as a fixed-issue list and closed remediation on the
+ * count, so the warning belongs next to the rows rather than in documentation.
  *
  * @param diff - diff returned by `buildQualityDiff`; empty buckets render as `(none)` so users see no hidden rows
  * @returns human-readable diff grouped by finding lifecycle for CLI review
@@ -84,12 +88,14 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
   const header = `Setup ${diff.from.report.scores.setup.total}/100 → ${diff.to.report.scores.setup.total}/100 (${diff.setupDelta >= 0 ? `+${diff.setupDelta}` : diff.setupDelta}). System ${diff.from.report.scores.system.total}/100 → ${diff.to.report.scores.system.total}/100 (${diff.systemDelta >= 0 ? `+${diff.systemDelta}` : diff.systemDelta}).`;
   const lines = [header, ""];
 
-  /** Render one labeled diff section. */
+  /** Render one labeled diff section, with an optional caveat shown only when rows exist. */
   const renderSection = (
     title: string,
     rows: QualityDiffFindingRow[],
+    caveat?: string,
   ): void => {
     lines.push(`${title} (${rows.length})`);
+    if (rows.length > 0 && caveat !== undefined) lines.push(caveat);
     for (const row of rows) {
       lines.push(`${row.id} | ${row.severity} | ${row.type} | ${row.summary}`);
     }
@@ -97,7 +103,11 @@ export function renderQualityDiffText(diff: QualityDiffResult): string {
     lines.push("");
   };
 
-  renderSection("Resolved", diff.resolved);
+  renderSection(
+    "Absent from newer report",
+    diff.absent,
+    "Not proof of a fix: a finding also lands here when the newer run never checked that artifact, or when its id shifted. Re-read each cited file before closing anything.",
+  );
   renderSection("New", diff.newFindings);
   renderSection("Persisted", diff.persisted);
   renderSection("Stuck", diff.stuck);

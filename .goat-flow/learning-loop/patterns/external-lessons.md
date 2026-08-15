@@ -1,6 +1,6 @@
 ---
 category: external-lessons
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-15
 ---
 
 Patterns extracted from reviewing merged PRs in external projects relevant to goat-flow's
@@ -134,3 +134,26 @@ This is the task-tracking analogue of the goat-flow baseline pain point #2 (scan
 4. For interactive sessions that span multiple turns, save-as-you-go on the marker file is necessary but not sufficient — the corresponding edit on the underlying file must land in the same session, or the marker must be reverted before the session closes. Treat any session-end state where the marker advances without a corresponding code diff as a defect.
 
 Goat-flow surfaces where this could bite: every milestone Exit Criteria checklist; every Mid-Implementation Proof; every change to `.goat-flow/plans/*.md` that doesn't pair with a code diff in the same PR. Cross-reference: `.goat-flow/learning-loop/footguns/quality.md` (search: `Structural validation passes while content is still unanswerable`) records the parallel structural-vs-content failure at the audit boundary; this lesson is its task-tracking analogue. Also reinforces existing CLAUDE.md verification discipline ("MUST read relevant files before changes. Never fabricate codebase facts.") — the marker file is part of the relevant set, but it is not authoritative about what was actually changed.
+
+---
+
+## Pattern: Provider message shapes are union types with per-provider ordering constraints
+
+**Status:** active | **Created:** 2026-08-15
+
+**Context:** Code that wraps LM-provider responses crashes on edge cases the happy-path fixtures never cover. `content` is `None` rather than `""`. An assistant message is rejected because a `thinking` block landed last. A `tool_result` block gets its text extracted as if it were a `text` block. The shapes are documented in each SDK but easy to violate when slicing or filtering messages defensively.
+
+**Root cause:** `content` is `string | list[Block] | None` in the wild, and each provider adds hard constraints of its own - Anthropic's thinking-block ordering, tool-use-only turns carrying `None` content. Code shaped as `for item in msg["content"]`, `if len(msg["content"]) > 0`, or `text = msg["content"][0]` passes the fixture and crashes on the real variant.
+
+**Evidence (external - mini-swe-agent, three PRs in two months):**
+- PR #708 (merged 2026-01-21): Anthropic requires `thinking` / `redacted_thinking` blocks not be final in assistant content. The fix re-orders blocks and appends an empty `text` block when only thinking blocks exist.
+- PR #704 (merged 2026-01-19): tool-use-only assistant turns carry `content=None`, not `""`; `entry["content"][0][...]` crashed until explicit `is None` checks were added at every access point.
+- PR #783 (merged 2026-03-21): extracting text needed separate handling for `tool_use` (read `input`), `tool_result` (read `content`), and text blocks; the original joined `item.get("text", "")` and returned empty strings for the first two.
+
+**Approach when goat-flow grows this surface:**
+1. Never assume the content field is non-null: check `is None` before `len()` before `[0]`.
+2. Where a provider documents an ordering constraint, normalise at the boundary unconditionally rather than relying on every caller to preserve it.
+3. For a union type, write a fixture per variant plus the empty-list edge case.
+4. Port a known-good sanitiser wholesale rather than re-deriving it.
+
+**Why this is a pattern and not a footgun:** goat-flow does not wrap LM providers today. Verified 2026-08-15: no AG-UI code exists under `src/`, and the evidence-envelope and trajectory-replay surfaces this was originally filed against live only in gitignored plan notes. There is no present trap to avoid, so it is an external lesson to apply when such a surface is built.

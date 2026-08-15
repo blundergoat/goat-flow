@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-06
-**Updated:** 2026-08-15 - absorbed the membership rulings formerly held in ADR-002 (goat-preflight), ADR-018 (goat-verify), ADR-019 (goat-sbao and goat-test renames), and ADR-050 (goat-audit). Each applied this ADR's justification test; keeping them as separate files split one doctrine across four.
+**Updated:** 2026-08-15 - absorbed the membership rulings formerly held in ADR-002 (goat-preflight), ADR-018 (goat-verify), ADR-019 (goat-sbao and goat-test renames), and ADR-050 (goat-audit), then enrolled goat-clarity after it passed the same justification test.
 
 ## Context
 
@@ -40,7 +40,9 @@ Applying the test:
 - count the dispatcher when it is part of the installed canonical set
 - prefer modes inside an existing skill when the difference is routing or emphasis, not artifact, gate, failure mode, or output
 
-Current canonical skills are 7 total: `/goat`, `/goat-debug`, `/goat-review`, `/goat-plan`, `/goat-security`, `/goat-qa`, `/goat-critique`.
+Current canonical skills are 8 total: `/goat`, `/goat-debug`, `/goat-plan`, `/goat-review`, `/goat-critique`, `/goat-security`, `/goat-qa`, `/goat-clarity`.
+
+`goat-clarity` qualifies through a distinct `Clarity Remediation Receipt`, a frozen Target Scope Snapshot and Scope v2 gate, selector-specific refusal states, and repeatable bounded output. It remediates comments, documentation, local/private names, and contained private placement; broader or public refactoring remains ordinary implementation or `/goat-plan`.
 
 There is no implementation skill (see ADR-005). Implementation is what the agent does natively. Skills govern everything around it.
 
@@ -99,4 +101,4 @@ Sibling disambiguation between `/goat-critique` and `/goat-review` stays the job
 - A reader assessing a proposed skill finds the test and every prior ruling in one file
 - Dispatcher counting follows from whether the dispatcher is a shipped canonical skill surface, not a separate open question
 - Fewer skills means less maintenance, less drift, and less context consumed
-- Adding a canonical skill costs 3 hardcoded surfaces (`workflow/install-goat-flow.sh` (search: `readarray -t SKILL_NAMES`), `src/cli/constants.ts` (search: `export function getSkillNames()`), `workflow/manifest.json` (search: `"canonical": [`)), plus audit-drift coverage and installed-copy parity. That cost is the reason the bar is a distinct artefact, gate, failure mode, or structured output
+- Adding a canonical skill costs a manifest entry, three installed mirrors, release-version and CI lists, the functional-budget contract, dashboard routing, setup/current documentation, audit-drift coverage, and installed-copy parity. Runtime CLI and installer names remain manifest-derived rather than becoming a second hardcoded list. That integration cost is the reason the bar is a distinct artefact, gate, failure mode, or structured output
