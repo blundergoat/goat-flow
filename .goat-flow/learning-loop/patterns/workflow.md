@@ -39,7 +39,7 @@ Trigger checklist: (1) GitHub returns "exceeds 20,000 lines"; (2) reviewer asks 
 8. **`## Troubleshooting`** (optional). Q&A-shaped responses to common confusions when applying the playbook.
 9. **`## Related References`.** Cross-links to sibling playbooks, external standards (semver.org, keepachangelog.com, OTel docs), and project-internal docs (CLAUDE.md, ADRs).
 
-Add the new playbook to all 13 surfaces named in `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Adding a skill-playbook requires lock-step updates`) before declaring done. Skipping the body sections (3) and (4) is the most common defect - playbooks without an Availability Check fail their own purpose; playbooks without an Intent become reference walls of text with no decision-shape.
+Add the new playbook to all 13 surfaces named in `.goat-flow/learning-loop/footguns/lockstep-surfaces.md` (search: `Adding a skill-playbook requires lock-step updates`) before declaring done. Skipping the body sections (3) and (4) is the most common defect - playbooks without an Availability Check fail their own purpose; playbooks without an Intent become reference walls of text with no decision-shape.
 
 ## Pattern: Gruff docs cleanup is a tight analyzer loop
 **Context:** Fixing `gruff-ts` documentation findings by adding maintainer comments, especially `docs.missing-*`, `docs.magic-threshold-without-rationale`, `docs.missing-error-behavior-doc`, or `docs.missing-why-for-complex-code`.

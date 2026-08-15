@@ -5,6 +5,8 @@
 - **Claude hooks now start on Windows** - Registrations use exec-form argv; `hooks sync` and the standalone installer migrate inline commands.
 - **Doubled managed hook rows converge on one** - Sync and standalone install repair duplicate and stale registrations while preserving user hooks.
 - **Hook launch failures block visibly** - Missing or corrupt managed files return Claude's deny or unavailable response; Node is a host prerequisite.
+- **Milestones state user impact and rationale** - Standard goat-plan milestones gain the user-impact and rationale sections ISSUE.md already carried.
+- **Rationale section is named Motivation** - The rationale section in goat-plan milestones and ISSUE.md briefs is `Motivation`, replacing `Why`.
 
 ## v1.15.1 - 2026-08-10
 

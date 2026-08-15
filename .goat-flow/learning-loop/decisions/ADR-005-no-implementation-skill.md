@@ -2,7 +2,7 @@
 
 **Status:** Accepted (partial). Core decision stands - no implementation skill was added. Phase 5 (Execute) in goat-plan and the `persona` config field in the "Consequences" section were never shipped. Implementation is handled in the ordinary ACT step per the execution loop; goat-plan remains planning-only and can deliver inline/read-only or file-based milestones without an execution phase.
 **Date:** 2026-04-03
-**Updated:** 2026-07-18 - encoded dispatcher-to-plan carry-through while keeping implementation in ordinary ACT.
+**Updated:** 2026-08-15 - the 2026-07-18 dispatcher-to-plan carry-through remains unchanged.
 
 ## Context
 

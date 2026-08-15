@@ -462,9 +462,9 @@ describe("preamble/conventions sync: regression detection", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Proof Gate heading is present in both template and installed preamble (ADR-018)
+// Proof Gate heading is present in both template and installed preamble (ADR-009)
 // ---------------------------------------------------------------------------
-describe("preamble/conventions sync: Proof Gate presence (ADR-018)", () => {
+describe("preamble/conventions sync: Proof Gate presence (ADR-009)", () => {
   it("template skill-preamble.md contains '## Proof Gate' heading", () => {
     assert.equal(
       existsSync(TEMPLATE_PREAMBLE),

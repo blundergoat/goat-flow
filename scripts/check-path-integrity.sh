@@ -167,7 +167,7 @@ if [[ -d "$docs_dir" ]]; then
             # the gitignored `.goat-flow/plans/<name>/` - the same local-state
             # exemption section 2 applies. `docs/coding-standards/git-commit.md`
             # is the compatibility commit-guide path goat-flow still accepts in
-            # existing consumer projects but no longer ships itself (ADR-043).
+            # existing consumer projects but no longer ships itself (ADR-051).
             case "$ref" in
                 ISSUE.md | docs/coding-standards/git-commit.md) continue ;;
             esac

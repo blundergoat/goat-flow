@@ -1,11 +1,12 @@
-# ADR-021: goat-critique is full delegated mode only (no quick/inline fallback)
+# ADR-021: goat-critique is a core feature, full delegated mode only
 
 **Status:** Accepted
 **Date:** 2026-04-19
 **Updated:** 2026-05-18 - stale file-line citations replaced with current anchors or historical notes where Quick-mode text was removed.
-**Updated:** 2026-05-27 - Runtime slot updated per ADR-030; delegation revisit trigger now names Claude, Codex, Antigravity, and Copilot.
+**Updated:** 2026-05-27 - Runtime slot updated per ADR-020; delegation revisit trigger now names Claude, Codex, Antigravity, and Copilot.
 **Updated:** 2026-07-17 - lifecycle and delegation counts aligned with mandatory meta-audit and outcome capture.
 **Updated:** 2026-08-04 - refreshed skill and factual-drift anchors after contract refactors.
+**Updated:** 2026-08-15 - absorbed ADR-011 (critique is a core feature, not optional ceremony). Its standing rule and this ADR's mode contract answer the same recurring proposal: reduce what critique costs by weakening what critique does.
 
 ## Context
 
@@ -14,9 +15,20 @@
 - The skill's own historical Quick-mode text admitted this gap: under Quick mode, Phase 2 required every split finding to be tagged as inconclusive because cross-examination was skipped. That deleted rule was a concession that Quick mode could not do the job the skill exists to do.
 - Low-ceremony multi-lens review is already covered elsewhere. `/goat-review` handles diff-level analysis, pre-existing separation, and single-reviewer quality questions without delegation. Users who want inline lens thinking have that surface; they do not need a Quick fallback inside goat-critique.
 - Recent in-repo experience during the 2026-04-19 quality follow-up ran in Quick mode because delegation authorization was implicit rather than explicit. The output was usable but structurally misrepresented the work done: section headings suggested multi-agent coverage while only one context was ever produced. Open-question tagging flagged the inconclusive findings, but the artifact shape still read like delegated critique on a quick scan.
-- The earlier rename captured by ADR-019 aligned the skill's command name with its mechanism. Collapsing to delegated-only aligns the skill's behaviour with the mechanism the name now promises.
+- The earlier rename recorded in ADR-009 aligned the skill's command name with its mechanism. Collapsing to delegated-only aligns the skill's behaviour with the mechanism the name now promises.
+- Proposals to remove, demote, or auto-skip critique recur in reviews, always framed as ceremony reduction. That pressure is what the standing rule below exists to answer, and it is the same pressure Quick mode was an accommodation to.
 
 ## Decision
+
+### Standing rule: critique is a core feature
+
+1. **The critique skill is never removed, demoted, or auto-skipped.** It is a core product feature.
+2. **Improvements reduce ceremony around critique**, not the critique method itself.
+3. **Skills are installed verbatim**, so setup agents cannot compress or remove critique sections during adaptation (`workflow/setup/03-install-skills.md`).
+4. **The dispatcher routes users toward goat-plan and, when needed, the critique skill faster** - not away from them.
+5. **Future critique methodology must evaluate critique as a feature, not as overhead.** Score "how well does critique improve plan quality", not "how much time critique adds".
+
+### Mode contract
 
 1. **goat-critique runs in one mode: full delegated.** The mandatory lifecycle is Phases 1-5 plus Phase 5.5 meta-audit and Phase 5.6 outcome capture. Phase 1 spawns three isolated critique sub-agents, Phase 3 may spawn up to three cross-exam agents when disputes require them, and Phase 5.5 always spawns one meta-agent. No inline role-play substitute is permitted.
 2. ~~**If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.~~ **Superseded (2026-04-23; updated 2026-05-27):** All four supported agents (Claude Code, Codex, Antigravity, Copilot) ship sub-agent delegation. The redirect is dead ceremony per `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Sub-agent delegation is universal`). Removed from `docs/skills.md` and skill files.
@@ -53,8 +65,7 @@
 
 ## Related decisions
 
-- **ADR-011** - multi-perspective critique is a core goat-flow feature. This ADR does not revisit the feature's role; it constrains the implementation to the delegated-only form.
-- **ADR-019** - renamed `goat-sbao` to `goat-critique`. That rename aligned the skill's command name with its operation. This ADR aligns the operation with its mechanism.
+- **ADR-009** - canonical skill set. It records the `goat-sbao` to `goat-critique` rename, which aligned the command name with the operation; this ADR aligns the operation with its mechanism.
 
 ## Revisit Triggers
 
@@ -72,6 +83,5 @@ Open a new ADR only if one of these occurs after the change ships:
 - `.github/skills/goat-critique/SKILL.md`
 - `docs/skills.md` (search: `goat-critique runs in one mode`)
 - `src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`)
-- `.goat-flow/learning-loop/decisions/ADR-011-critique-mob-core-features.md`
-- `.goat-flow/learning-loop/decisions/ADR-019-rename-sbao-to-critique-and-test-to-qa.md`
+- `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md`
 - `.goat-flow/skill-docs/skill-preamble.md`

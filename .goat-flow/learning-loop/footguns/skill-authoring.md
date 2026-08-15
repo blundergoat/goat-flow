@@ -1,0 +1,165 @@
+---
+category: skill-authoring
+last_reviewed: 2026-08-15
+---
+
+**Scope:** Authoring and editing skill, playbook, and slash-command bodies - candidacy, word-budget and contract-phrase caps, tool-isolation constraints on prescribed commands, and pressure to reword load-bearing language. Keeping workflow templates and installed copies in sync lives in [skills.md](skills.md).
+
+## Footgun: Bash-prescribed slash-command or skill bodies break under per-block tool isolation
+
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A SKILL.md or slash-command body grows past one or two `!cmd` invocations into a multi-block bash program. The agent runtime treats each bash block as an independent tool invocation. Variables defined in block N are gone in block N+1; heredocs with substitution, `BASH_REMATCH`, associative arrays, and `$(tool …)` substitution all become unreliable because the shell state is reset between blocks. The command starts producing parse errors or silently does the wrong thing.
+
+**Why it happens:** Authors write a skill body the way they'd write a shell script — top to bottom, with variables shared across steps. Claude Code (and Codex/Gemini) treat each fenced bash block as a separate `Bash` tool call. The slash-command body should describe steps declaratively for the agent to execute; it should not prescribe an exact multi-block bash program. The cost is hidden until the body crosses ~10 lines or ~2 blocks — short skills look fine.
+
+**Evidence:**
+- External: `kennyjpowers/claude-flow` PR #2 ("feat: add feedback workflow command" follow-up, MERGED 2025-11-21, 1,691 additions / 3,174 deletions). The original `feedback.md` shipped in PR #1 had 26+ bash blocks using `BASH_REMATCH`, heredocs with substitution, and `$(stm list …)` substitution. The PR #2 feedback log in the external specs/add-feedback-workflow-command/05-feedback.md file (search: `Variable Persistence Problem: Bash variables don't persist between separate Bash tool invocations`) names the root cause: *"The command tries to prescribe exact bash scripts instead of providing declarative guidance for Claude to follow."* Fix: declarative steps + direct `!claudekit status stm` invocations replacing `$(claudekit status stm)` substitution.
+- External, follow-up: the same defect remained in sibling `decompose.md` (16 bash blocks) until a second feedback cycle. Same author, same codebase, same fix needed twice. Reinforces "when refactoring is the right answer, do the same refactor across sibling files."
+- Goat-flow surfaces at risk: every `workflow/skills/*/SKILL.md`, especially the dispatcher (`goat`) and any skill that orchestrates multi-step shell work. Verification: `rg -c '^```bash' workflow/skills/*/SKILL.md` lists current bash-block counts per skill.
+
+**Prevention:**
+1. If a SKILL.md body contains a bash block longer than ~10 lines OR more than 2 bash blocks total, refactor to declarative steps that name the tool and the inputs but let the agent pick the invocation.
+2. Use direct `!` tool invocations (e.g. `!goat-flow audit`) not `$(goat-flow audit)` substitution — the substitution form forces a subshell whose state doesn't persist beyond the block.
+3. Replace heredocs-with-substitution and associative-array tricks with a single file write + read, or with prose that asks the agent to track the value across steps.
+4. Validate by reading the SKILL.md as if a fresh agent ran each bash block in isolation: if any block expects a variable from a prior block, the body is prescriptive — refactor before shipping.
+5. When a sibling skill has the same shape (multiple skills wrapping the same kind of tool orchestration), audit them together. The kennyjpowers PR #2/decompose.md pattern shows that fixing only the one that bit leaves the rest as latent traps.
+
+Applies wherever goat-flow ships a SKILL.md or command body that orchestrates multi-step bash work. Cross-reference: `.goat-flow/learning-loop/footguns/skills.md` (search: `Skill parity edits can miss`) for the parallel concern about edits not propagating across installed mirrors — a bash-heavy skill compounds that risk because each block must remain byte-identical across all four installed copies.
+
+## Footgun: Release-version bumps can break skill-rename work through stale fixtures and hardcoded current-version routing
+
+**Status:** active | **Created:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A skill rename can look complete on directory, manifest, and docs surfaces but still fail verification because release-coupled helpers lag the version bump. On 2026-04-18, the M07 rename run first failed `npm test` in `test/integration/audit-build.test.ts` because the shared config stub still encoded the previous release version. After fixing that, the same verification pass exposed a second break: setup routing still hardcoded `1.1.x` as the only current branch, so a healthy `1.2.0` project was misclassified as needing an upgrade.
+
+**Evidence:**
+- `src/cli/audit/check-goat-flow.ts` (search: `configVersionCurrent`) enforces exact equality between `.goat-flow/config.yaml` and `AUDIT_VERSION`.
+- `test/fixtures/projects/index.ts` (search: `stubConfig`) is the shared config stub used by audit-build fixtures; if it drifts from `AUDIT_VERSION`, "healthy project" tests fail for the wrong reason.
+- `src/cli/classify-state.ts` (search: `CURRENT_VERSION_FAMILY`) derives the current version family and routes current vs outdated installs; hardcoding a previous family breaks `composeSetup()` as soon as the package version advances.
+- `workflow/install-goat-flow.sh` (search: `Read version from package.json`) must derive the install version from `package.json`; a hardcoded fallback recreates the same stale-version trap at install time.
+
+**Prevention:** When a skill rename ships with a version bump, treat version-sensitive helpers as part of the rename surface. Update current-version classifiers, shared config fixtures, install-script version discovery, and setup-routing tests in the same change before trusting `npm test`.
+
+## Footgun: New skill proposals can be configuration systems shaped around one workflow rather than general-purpose tools
+
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
+
+**Symptoms:** A thoughtful, first-person, well-written proposal lands for an eighth canonical skill. It solves a real problem the author actually had. On read-through it turns out the skill is parameterised by the proposer's working style (multi-domain isolation, per-project keyword auto-loading, session-locked context, personal taxonomy) rather than by a structural property of any goat-flow project. Accepting it grows the canonical skill set and forces every downstream consumer (and every audit pass that scores skill quality) to carry weight for a workflow most projects do not have.
+
+**Why it happens:** goat-flow has no prose document defining what makes a skill belong in `workflow/manifest.json` (search: `"canonical"`) vs in an out-of-tree plugin. ADR-009 (search: `A skill must have at least one of`) records the *historical* doctrine of consolidating skills, and ADR-021 (search: `goat-critique runs in one mode: full delegated`) records the rejection of one over-narrow mode, but neither serves as a forward-facing scoping checklist for new skill proposals. `docs/skill-authoring.md` covers how to write a skill once accepted, not whether to accept one. Without that gate, well-intentioned skill PRs are evaluated on craft (which they often pass) rather than scope (where they should fail).
+
+**Evidence:**
+- `workflow/manifest.json` (search: `"canonical"`) enumerates the seven canonical skills; an eighth grows the surface area of every per-harness mirror, every audit check, and every parity script.
+- `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `A skill must have at least one of`) records the doctrine but does not encode it as an authoring-time gate.
+- `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`) is the closest prior art for rejecting a configuration-flavored alternative; it lives as a per-skill decision, not a generic test.
+- `docs/skill-authoring.md` (search: `Decide First`) is structured as scaffold / validate / interactive / dashboard / authoring checks; none of the sections gate on general-purpose vs. workflow-specific.
+- External corroboration: obra/superpowers PR #1571 ("feat: add context-management skill with domain isolation") was closed with the maintainer comment "the skill as designed is shaped around your specific multi-domain workflow ... that's a configuration system, not [a skill]." Superpowers and goat-flow share the same risk because both maintain a small canonical-skill surface.
+
+**Prevention:**
+1. Before adding any skill to `workflow/manifest.json` `skills.canonical`, write a one-paragraph "general-purpose justification" answering: would a project with no overlap to the proposer's workflow still benefit? Record it in the corresponding ADR.
+2. Treat skill-shaped configuration (per-domain context auto-loading, session-locked taxonomies, opinion-locked keyword maps) as a signal that the work belongs in a downstream plugin or `.goat-flow/skill-docs/playbooks/` rather than a new canonical skill.
+3. If the proposal is craft-strong but scope-narrow, route to `.goat-flow/skill-docs/playbooks/` (which agents can opt into per project) rather than `workflow/skills/` (which every harness installs).
+
+## Footgun: Linter or security-scanner output can pressure rewrites of load-bearing skill language
+
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
+
+**Symptoms:** An automated tool (security scanner, prompt-injection detector, prose linter) flags a phrase or framing inside a canonical SKILL.md - `**EXTREMELY IMPORTANT**`-style emphasis, the Excuse | Reality tables, a forceful "Iron Law" line, the deliberate "your AI partner" phrasing. A well-meaning PR rewrites the flagged language to "comply" with the tool's guidance. The rewrite passes the tool, passes typecheck, passes structural skill-quality scoring (`src/cli/quality/skill-quality-score.ts` — search: `scoreContent`), and silently degrades the skill's behaviour-shaping power because the flagged phrasing was load-bearing.
+
+**Why it happens:** Excuse | Reality tables and forceful framing exist precisely *because* they shift agent behaviour under pressure. They look like editorial emphasis to an external tool (and to agents reading them cold) but they are the persuasion mechanism the skill depends on. goat-flow's existing structural scorer measures shape (presence of gates, table rows, frontmatter) but not behaviour, so a "compliance" rewrite passes every CI check while quietly weakening the runtime contract. The trap is structural: load-bearing prose has no machine-distinguishable signature from decorative prose.
+
+**Evidence:**
+- `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` (search: `cynical reviewer with zero patience`, `Zero-findings HALT rule`) documents that specific phrasing in review-class skills is the mechanism, not the message.
+- `src/cli/quality/skill-quality-score.ts` (search: `scoreContent`, `scoreAllArtifacts`) — the scorer composes text and runs rubric metrics; it does not execute the skill against agent prompts, so a "compliance" rewrite that preserves shape can pass scoring.
+- `.claude/skills/goat-plan/SKILL.md` (search: `Excuse`, `Reality`) — the Excuse | Reality table is the persuasion surface most likely to attract a "this is unprofessional / aggressive / could be softened" rewrite suggestion.
+- External corroboration: obra/superpowers PR #1608 ("fix(skill): remove prompt-injection marker") was closed as slop. The maintainer's comment: "the framing the scanner flagged is intentional — it's the mechanism that makes Superpowers actually shape agent behavior." Same shape of trap applies here.
+
+**Prevention:**
+1. Mark known-load-bearing prose surfaces (Excuse | Reality tables, hard gates, forceful framing lines, the `your AI partner` term) as protected in `docs/skill-authoring.md` so authors know rewording requires evidence.
+2. Treat any PR that rewords skill text in response to *tool output* (scanner, linter, model review) as requiring before/after behavioural eval evidence, not just passing structural checks. When the M10 behavioural eval harness lands, this becomes enforceable.
+3. CI rule (cheap, valuable): fail PRs whose bodies match canned scanner output patterns (`Risk score:`, `Matched signals:`, `pre-flight guardrails passed`) unless an explicit `[manual-review]` marker is present in the body.
+
+---
+
+## Footgun: Playbook content edits collide with the ADR-023 word cap and exact-phrase contract assertions
+
+**Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** An approved content addition to a shipped playbook passes typecheck, content lint, and the playbook contract test, then fails preflight twice. First on the ADR-023 progressive-pack word cap. Then, after the compression pass that makes room, on skill-hardening assertions pinning exact sentences the compression reworded.
+
+**Why it happens:** Playbooks under `.goat-flow/skill-docs/playbooks/` are trimmed to sit just below the 3000-word cap, so headroom is often single digits and any addition forces compression across sections unrelated to the change. Those same sections carry regex assertions matching literal phrasing, including capitalisation. Word-count pressure and phrase-exactness pressure point in opposite directions, and neither is visible while editing the Markdown.
+
+**Evidence:** 2026-08-10, `writing-style.md`. Eight approved additions took the body from 2998 to 3672 words; `test/contract/skill-hardening-contracts.test.ts` (search: `ADR-023 word budget tiers`) reported `3672 words meets or exceeds progressive cap 3000`. Compressing back to 2997 broke eight assertions in `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps writing-style edits truth-preserving and source-aware`), among them `claim strength and specificity to the evidence`, `Reference-list labels remain valid`, `Illustrative before`, and a capitalisation-only change from `status,` to `Status,` at the head of a Verification Gate item.
+
+**Prevention:** Before editing a playbook, measure its body word count and grep the contract tests for its filename to list the pinned phrases:
+
+```bash
+node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8").replace(/^---\n[\s\S]*?\n---\n?/,"");console.log(t.split(/\s+/).filter(Boolean).length)' .goat-flow/skill-docs/playbooks/<name>.md
+grep -n "<name>" test/contract/skill-hardening-*.test.ts
+```
+
+Restore pinned phrases verbatim after any compression, take the compensating words from prose no assertion covers, and run both skill-hardening contract tests before preflight. Mirror the result to `workflow/skills/playbooks/` in the same turn; preflight diffs the pair.
+
+## Footgun: goat-plan surface additions collide with near-full word-budget contract caps
+
+**Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A small approved addition to goat-plan's SKILL.md or reference files passes every phrase-pinning assertion and the mirror byte-identical check, then fails `keeps the redesigned goat-plan canonical surface within its tighter budget` in the contract suite.
+
+**Why it happens:** Two caps bound the goat-plan canonical surface: the SKILL.md body alone, and SKILL.md plus `references/milestone-examples.md` plus `references/issue-format.md` combined. The redesign left both within a few words of their caps (2099/2100 and 4499/4500 before 2026-08-15), so any addition overflows and forces a choice: condense existing prose, much of which is pinned by regex assertions, or raise the caps with user approval. Same trap class as the ADR-023 playbook word cap (search: "Playbook content edits collide with the ADR-023 word cap"), on a different surface with different caps in a different test file.
+
+**Evidence:** 2026-08-15, adding `## How users will notice the difference` and `## Why` (renamed to `## Motivation` later the same day) to the Standard milestone template plus one SKILL.md sentence (97 words total) tipped both caps: 2117/2100 and 4596/4500. `test/contract/skill-hardening-plan-2.test.ts` (search: `redesign target of 2150 words`) holds the SKILL.md body cap; the same file (search: `canonical goat-plan surface has`) holds the combined cap; `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) excludes frontmatter from the body count. Resolved by raising the caps to 2150/4650 with user approval.
+
+**Prevention:** Before adding content to goat-plan's SKILL.md or references, measure both counts against the caps in `test/contract/skill-hardening-plan-2.test.ts`. On overflow, present condense-versus-raise to the user instead of silently trimming pinned prose. Edit all four skill mirrors (`workflow/skills/`, `.claude/skills/`, `.agents/skills/`, `.github/skills/`) in the same batch and rerun the fast contract suite. After raising a cap, grep gitignored plan files and docs for the old numbers and the old assertion-message text: a milestone that budgeted against the old cap keeps citing it, and its `(search:)` anchor into the assertion message stops resolving the moment the message changes. That happened the same day to `.goat-flow/plans/1.16.0/M38-goat-plan-dispatchable-tasks.md`, which cited `redesign target of 2100 words` in a Read-first line plus the old caps in its Commands table and stop condition.
+
+---
+
+## Resolved Entries
+
+> Historical record. These entries are no longer active traps.
+
+## Footgun: Review skills can choose the wrong PR base when they hardcode `origin/main`
+
+**Status:** resolved | **Created:** 2026-04-25 | **Resolved:** 2026-04-25 | **Evidence:** ACTUAL_MEASURED
+
+**Original symptoms:** `/goat-review` could misclassify PR-style review scope or generate the wrong comparison diff in consumer projects whose real integration branch is not `main`. A consumer quality report on 2026-04-25 found a project comparing feature branches to `origin/deploy` while `/goat-review` defaulted local PR detection and fallback review to `origin/main`/`main`.
+
+**Why it happened:** The review skill treated a common GitHub default as a universal project invariant. That leaked a goat-flow/framework assumption into consumer repositories, where the correct base may be `deploy`, `develop`, `trunk`, a release branch, or a PR-specific base returned by hosting metadata.
+
+**Original evidence:**
+- `workflow/skills/goat-review/SKILL.md` (search: `commits ahead of \`origin/main\``) makes PR-style auto-detection depend on `origin/main`.
+- `workflow/skills/goat-review/SKILL.md` (search: `Base branch? (default: \`main\``) makes local PR fallback default to `main`.
+- `.claude/skills/goat-review/SKILL.md` (search: `commits ahead of \`origin/main\``) shows the installed Claude mirror has the same behaviour.
+- `.agents/skills/goat-review/SKILL.md` (search: `Base branch? (default: \`main\``) shows the installed Codex/agents mirror has the same behaviour.
+- `.github/skills/goat-review/SKILL.md` (search: `Base branch? (default: \`main\``) shows the installed GitHub/Copilot mirror has the same behaviour.
+
+**Resolution:** `/goat-review` now resolves PR bases by preference order instead of assuming `main`: PR metadata, explicit user base, remote default-branch discovery, then asking the user. `main` remains only a last-resort fallback with `base-detection-failed` recorded in Review Integrity.
+
+**Resolution evidence:**
+- `workflow/skills/goat-review/SKILL.md` (search: `baseRefName`) prefers PR metadata when a PR URL or number is available.
+- `workflow/skills/goat-review/SKILL.md` (search: `remote HEAD`) discovers the remote default branch before asking.
+- `workflow/skills/goat-review/SKILL.md` (search: `base-detection-failed`) records degraded fallback use instead of hiding it.
+
+**Prevention:** Review-base selection must be discovered, not assumed. Prefer PR metadata (`gh pr view ... baseRefName`) when available, then an explicit user-provided base, then remote default-branch discovery from remote HEAD or `git remote show origin`; ask for the base before diffing if discovery fails. Treat `main` only as a last-resort fallback and record a degradation flag when fallback is used.
+
+---
+
+## Footgun: Skills have phase gates but no time/call budget for context gathering
+
+**Status:** resolved | **Created:** 2026-04-05 | **Resolved:** 2026-04-15 | **Evidence:** ACTUAL_MEASURED
+
+Skills enforce phase gates (Step 0 must complete before Phase 1, gates pause for human approval) but have no budget for how long Step 0 can take. Claude can spend an entire session reading templates, exploring the codebase, and gathering context without ever producing output or asking a question.
+
+**Resolution:** Both preventions implemented in `.goat-flow/skill-docs/skill-preamble.md` (search: `## Step 0 Budget`):
+1. Step 0 budget: "If Step 0 exceeds 5 file reads without producing output or asking a question, checkpoint with what you know so far."
+2. Mid-Step-0 checkpointing: "Checkpoint mid-Step-0 for complex projects rather than silently reading indefinitely."
+
+**Original evidence (historical):** Claude Insights (112 sessions) showed agents reading 20+ files in Step 0 without checkpointing, requiring user intervention to interrupt.
+
+---
+
+- **Workflow-summarising skill descriptions cause CSO shortcutting** (resolved 2026-04-19) - All 7 current goat-* descriptions (including the dispatcher) are compliant with the trigger-only rule ("Use when …"), not workflow summaries. The rule is enforced in `workflow/skills/playbooks/skill-quality-testing/deployment.md` (search: `CSO-optimised`). Original incident was in the external `superpowers-skills` repo; the goat-flow regression was on the dispatcher description and was rewritten the same day it was caught.
+- **Dispatcher intent mapping has no coverage for analysis/evaluation verbs** (resolved 2026-04-14) - Added analysis/evaluation verbs to the dispatcher disambiguation table so ambiguous requests prompt skill selection instead of auto-routing.
+- **CI template derives skill names by prefixing instead of listing them** (resolved 2026-04-14) - Removed `src/cli/prompt/fragments/` directory in v1.1.0; CI template generation no longer exists.
+- **Blind mv/cp/Write can overwrite existing files** (resolved 2026-04-18) - Covered by the Never-tier no-clobber rule and destination-check guidance in the hot-path instruction files; no longer kept as an active architectural footgun.

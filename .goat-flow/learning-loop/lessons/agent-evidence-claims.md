@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-08-14
+last_reviewed: 2026-08-15
 ---
 
 ## Lesson: Agent cited gitignored content as evidence in committed docs
@@ -105,7 +105,7 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 ## Lesson: Final verification gates need supported scopes and captured logs
 
-**Status:** active | **Created:** 2026-05-19 | **Incident count:** 6 | **Latest occurrence:** 2026-08-14
+**Status:** active | **Created:** 2026-05-19 | **Incident count:** 9 | **Latest occurrence:** 2026-08-15
 
 **Decision changed:** Use repository-owned package scripts when a verification target loads TypeScript. | **Trigger phase:** VERIFY
 
@@ -114,6 +114,12 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Root cause:** I mixed repo-supported verification scopes with improvised paths and treated parallel final gates as interchangeable with a clean final evidence run. That made the first failure ambiguous and forced a rerun to recover the actual evidence.
 
 **Recurrence update (2026-08-14):** The M03 generator-inventory gate invoked `scripts/generate-managed-hook-desired-state.mjs` with plain Node, which failed to resolve `registry.ts`'s `.js` import of the TypeScript manifest. `package.json`'s `check:managed-hook-contract` script includes `--import tsx`, and the same artifact check exited zero. Use the package script instead of reconstructing its runtime loader. Evidence anchors: `package.json` (search: `check:managed-hook-contract`), `src/cli/agents/registry.ts` (search: `loadManifest`), and `scripts/generate-managed-hook-desired-state.mjs` (search: `managed-hook contract current`).
+
+**Recurrence update (2026-08-15):** Four PR-backed skill RED attempts spent their bounded implementation calls reproducing fixture seals. One tried unavailable JavaScript-isolate hashing, another exceeded the command-chain safety limit, and a cleanup attempt displaced final state verification. All four runs were excluded rather than scored. Fixture acquisition and canonical sealing now belong to the independent host preflight; evaluator evidence calls consume the already-verified fixture, and the last call stays reserved for checkout state and actual-diff proof. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `Command has more than 50 chained segments`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`), and `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Each phase is one isolated evaluator run`).
+
+**Recurrence update (2026-08-15, exact-owner comparison):** A later fixture pass repeated the more-than-50-segment failure while comparing complete authority sets. The command was blocked before execution, so it proved nothing about those files. The corrected transport uses one bounded read result per owner with immediate completion evidence; exact-set comparison remains a separate root-verifier operation. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `Command has more than 50 chained segments`) and `AGENTS.md` (search: `Sub-agents: ONE objective`).
+
+**Recurrence update (2026-08-15, reserved final call):** A fresh skill evaluator hit orchestration guards in its evidence and mutation calls, then used the verification-only fifth call to finish unread evidence, write four files, and run checks. It defended the deviation with unchanged scope, but path containment does not satisfy a phase contract: the run was invalid even though the final diff stayed inside the write set. Reserve the final call behaviorally, not just numerically; an earlier guard failure cannot borrow it for mutation. Evidence anchors: `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Each phase is one isolated evaluator run`) and `AGENTS.md` (search: `Fix verification`).
 
 **Recurrence update (2026-08-14):** Full preflight rejected the prose phrase joining “workflow” and “job permissions” with a slash in all three installed goat-security mirrors because `scripts/check-path-integrity.sh` treats every installed-skill occurrence of that path-shaped token as a framework-local path. The canonical reference contained the same committed phrase. Use “workflow and job permissions” when the text names two permission layers rather than a path, and run path integrity after skill-reference edits. The generic skill-creator validator then rejected goat-flow’s required `goat-flow-skill-version` field. Do not remove repository-owned metadata to satisfy a generic validator; use `npm run check-versions` and full preflight for this repository. While recording this recurrence, backticking the slash-joined phrase triggered `stale-ref`; describe non-path slash prose without a path-shaped code span. Evidence anchors: `scripts/check-path-integrity.sh` (search: `framework-local`), `scripts/check-versions.mjs` (search: `goat-flow-skill-version`), `src/cli/facts/shared/reference-paths.ts` (search: `export function isFileRef`), and `workflow/skills/goat-security/references/supply-chain-and-cicd.md` (search: `workflow and job permissions`).
 

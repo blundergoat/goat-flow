@@ -44,7 +44,7 @@ Most dangerous: **moving a symbol silently breaks every learning-loop anchor tha
 A canary path — apply to `LocalEnvironment` only first, run mini against a real task for a week, then propagate to `DockerEnvironment` / `SingularityEnvironment` / `BubblewrapEnvironment` / configs / tests — would have surfaced the failure mode against a 1-file revert surface instead of 15.
 
 **Goat-flow application:**
-- Cross-file contracts that share this shape: `CheckResult` / `HarnessCheckResult` in `src/cli/audit/types.ts`, manifest schema in `workflow/manifest.json`, skill composition contract in `src/cli/audit/check-drift.ts`, hook event naming (per `.goat-flow/plans/1.45.0/M01-hook-programme-foundation.md`).
+- Cross-file contracts that share this shape: `CheckResult` / `HarnessCheckResult` in `src/cli/audit/types.ts`, manifest schema in `workflow/manifest.json`, skill composition contract in `src/cli/audit/check-drift.ts`, hook event naming (per `.goat-flow/plans/1.60.0/M01-hook-programme-foundation.md`).
 - "Smallest canary" usually means: one audit check (not all of them), one environment-style class (not all), one skill (not all six), one agent harness config (not all four).
 - The canary's PR description must name *why* this consumer is representative. If the canary doesn't share the failure mode with peers, it's not a canary — it's just a smaller change.
 - Reverting a breadth-first contract change is structurally expensive even when the per-file revert is trivial — the diff is wide, parity has to be re-proven across the same surface, and reviewers can't tell which file's symptom motivated the revert. The canary caps that downside.

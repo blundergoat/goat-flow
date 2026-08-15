@@ -1,10 +1,10 @@
 # ADR-017: Active-Plan Marker for `.goat-flow/plans/.active`
 
-**Status:** Superseded by ADR-033
+**Status:** Accepted
 **Date:** 2026-04-17
-**Updated:** 2026-05-01
+**Updated:** 2026-08-15 - status corrected from "Superseded by ADR-033". ADR-033 moved the marker from `.goat-flow/tasks/.active` to `.goat-flow/plans/.active` and says so explicitly; it never replaced the marker semantics below, which remain load-bearing in `workflow/install-goat-flow.sh` (search: `ADR-017`), `src/cli/prompt/compose-quality-static-sections.ts`, and `/goat-plan` routing. The wrong status made the generated INDEX advertise a live decision as dead.
 **Supersedes:** -
-**Related:** `lessons/verification.md` "rename-survivor class" cross-reference fragility note.
+**Related:** ADR-033 (current marker path); `lessons/verification.md` "rename-survivor class" cross-reference fragility note.
 
 ## Context
 

@@ -27,6 +27,8 @@ Agents should scan only entries above the `## Resolved Entries` section. Resolve
 
 Prefer category bucket files such as `hooks.md`, `setup.md`, or `auditor.md`. Every bucket file MUST start with a YAML frontmatter block that includes BOTH a `category` and a `last_reviewed` date (ISO `YYYY-MM-DD`). `goat-flow stats --check` fails when `last_reviewed` is missing.
 
+Split a bucket at roughly 200 lines or 10 entries (ADR-033). Split along a real seam in the subject matter, not at the line that happens to cross the threshold, and extract the new bucket **out of** the existing file rather than renaming it - audit provenance in `src/cli/audit/` cites bucket paths such as `footguns/auditor.md` and `footguns/skills.md` as `evidence_paths`, so a renamed base file breaks code, not just links. Re-run `goat-flow index` afterwards and let `stats --check` find any anchor that pointed at a moved entry.
+
 ```yaml
 ---
 category: hooks
@@ -49,6 +51,10 @@ Inside a bucket, add entries as `## Footgun:` blocks. Each entry MUST begin with
 Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-style.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
 
 Evidence labels are mutually exclusive: `ACTUAL_MEASURED` means reproduced or measured in the current project; `OBSERVED` means directly verified from current code or configuration without runtime measurement; `EXTERNAL_REFERENCE` means a cited real external incident with explicit local applicability. `goat-flow stats --check` fails unless every entry has exactly one of these labels. Hypothetical scenarios are never evidence.
+
+`EXTERNAL_REFERENCE` needs the local half to be real, not anticipated. Name the goat-flow surface the trap reaches today and cite it. An entry whose own applicability note says the hazard is absent here - "preventative", "not currently", "future" - is a hypothetical wearing a citation, and belongs in `.goat-flow/learning-loop/patterns/` or a backlog item instead.
+
+**Prevention items are rules, not work orders.** Write what a future agent must do when it touches this surface. A Prevention that reads "write doc X" or "adopt lint rule Y" is a backlog item parked inside an active entry, where nothing tracks it and it silently ages - the same defect `decisions/README.md` rejects as "TODOs disguised as decisions". If the fix is worth doing, open a plan or an issue and state the rule here in the meantime.
 
 New entries SHOULD include `**Decision changed:**`; stats JSON exposes missing guidance for migration visibility without turning every legacy entry into a `stats --check` warning. Add `**Trigger phase:** READ|SCOPE|ACT|VERIFY` when one execution-loop phase should retrieve the memory. When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`.
 

@@ -15,7 +15,7 @@ last_reviewed: 2026-08-14
 
 **Prevention:** When adding or tightening path validation, classify paths before checking existence: committed setup/doc files must resolve; gitignored local-state paths should be treated as valid navigation vocabulary. Keep `scripts/check-path-integrity.sh` and `doc-paths-resolve` aligned so clean checkouts and installed skills use the same local-state exemption policy.
 
-**Recurrence update (2026-08-01):** Same script, opposite direction. `scripts/check-path-integrity.sh` section 8 resolved a `docs/*.md` ref by finding its basename anywhere under the repo, pruning only `node_modules`, `.git`, and `dist` - so untracked trees *satisfied* refs instead of failing them: worktree and scratchpad copies of the renamed commit guide resolved `docs/coding-standards/git-commit.md`, and `.goat-flow/plans/*/ISSUE.md` resolved `ISSUE.md`. It passed on every developer machine and failed only on CI's tracked-only checkout, inside PR #57's installer round-trip preflight. Section 8 now prunes `.claude/worktrees`, `.goat-flow/plans`, `.goat-flow/scratchpad`, and `.goat-flow/logs` from that fallback, and exempts the two refs absent by design: the `/goat-plan` `ISSUE.md` artifact and the ADR-043 compatibility commit-guide path. `test/integration/path-integrity.test.ts` (search: `docs cross-references`) covers both directions. A basename fallback is only as trustworthy as the tree it searches.
+**Recurrence update (2026-08-01):** Same script, opposite direction. `scripts/check-path-integrity.sh` section 8 resolved a `docs/*.md` ref by finding its basename anywhere under the repo, pruning only `node_modules`, `.git`, and `dist` - so untracked trees *satisfied* refs instead of failing them: worktree and scratchpad copies of the renamed commit guide resolved `docs/coding-standards/git-commit.md`, and `.goat-flow/plans/*/ISSUE.md` resolved `ISSUE.md`. It passed on every developer machine and failed only on CI's tracked-only checkout, inside PR #57's installer round-trip preflight. Section 8 now prunes `.claude/worktrees`, `.goat-flow/plans`, `.goat-flow/scratchpad`, and `.goat-flow/logs` from that fallback, and exempts the two refs absent by design: the `/goat-plan` `ISSUE.md` artifact and the ADR-051 compatibility commit-guide path. `test/integration/path-integrity.test.ts` (search: `docs cross-references`) covers both directions. A basename fallback is only as trustworthy as the tree it searches.
 
 **Recurrence update (2026-08-04):** `evaluateSearchAnchors` initially called `isCheckableForStaleness` before classifying gitignored evidence, making that violation branch unreachable. `test/unit/learning-loop.test.ts` (search: `flags a gitignored plans path used as a search anchor even when the file exists`) caught it. Classify exceptional policy paths before generic skip predicates.
 
@@ -37,34 +37,6 @@ last_reviewed: 2026-08-14
 
 **Recurrence update (2026-07-14):** M16 initially linked `hook-policy-testing.md` to three goat-flow-authored ADR/footgun files and two gitignored 1.25.0 milestone files. Source/install byte parity and focused playbook contracts passed, but `test/integration/audit-drift.test.ts` failed because the relative links resolved under nonexistent `workflow/learning-loop/` and `workflow/plans/` paths, while `test/integration/setup-quality-lifecycle.test.ts` proved the milestone files never reached a consumer. The playbook now carries the necessary policy boundaries inline and links only the shipped sibling at `.goat-flow/skill-docs/playbooks/hook-policy-testing.md` (search: `## Related References`).
 
-## Footgun: Flipping a doctrine in one playbook leaves siblings citing the old stance
-
-**Status:** active | **Created:** 2026-05-29 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** A policy change in one doc passes its own review, but a sibling playbook or instruction file still encodes - and triages by - the OLD stance. The two cross-reference each other, so they now contradict. A sibling may even quote another file's stance that no longer exists. Structural checks (drift parity, path resolution) stay green because nothing moved or renamed; only the meaning changed.
-
-**Why it happens:** Doctrine lives in prose spread across densely cross-referencing docs. Changing the canonical statement does not update the docs that cite or depend on it, and no structural check compares *meaning*.
-
-**Evidence:** After `code-comments.md` flipped from "default no comments" to mandatory doc comments on every unit (2026-05-29), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` still triaged `docs.missing-internal-function-doc` as "gold-plating the playbook forbids" per the old "no comment unless WHY" default, and attributed that default to `CLAUDE.md` - which contains no such stance (grep of `CLAUDE.md` / `AGENTS.md` / `.github/copilot-instructions.md` returned zero comment-policy hits). The 2026-05-29 reconciliation made that then-current mandatory-doc stance explicit. ADR-059 narrowed it on 2026-08-14. The first sibling rewrite accidentally let the "non-obvious contract" qualifier cover public/exported APIs as well as file/module/class boundaries; final review caught the mismatch. The corrected sibling separates those cases at `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `when the symbol is a public/exported API`).
-
-**Prevention:** When you flip a doctrine, grep sibling playbooks, instruction files, and reference docs for the OLD stance's phrasing AND for any doc that cites the changed file by name; reconcile them in the same change. Grep the ACTUAL old wording, not a guessed token - the first cross-ref pass missed "Default to writing no comments" by grepping for "default-no-comment". Verify cross-file quotes: a doc that says `X says "..."` must actually match X. When a rule uses a qualifier, pin its grammatical scope in a contract test; keyword presence cannot distinguish "A or B with Q" from "A, or B with Q".
-
-## Footgun: Adding an instruction-file section ripples across four section-list sources plus the line target
-
-**Status:** active | **Created:** 2026-05-29 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Adding one `## <Section>` heading to an instruction file (e.g. `## Commit Messages` in the 2026-05-29 commit-doc consolidation) fails seemingly-unrelated contracts: the instruction-parity script reports "canonical H2 order mismatch"; live instruction files can overflow the `line_target` budget; setup-guide ordering and the shared skeleton can drift; and - if the heading is added to manifest `required_sections` - the harness `instruction-sections-present` check fails every stub instruction fixture that lacks it (`boundaryInstruction` / `completeInstruction`).
-
-**Why it happens:** The canonical instruction-file section set is declared in multiple places that must agree, and a separate line-count contract caps the same files:
-- `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`) - exact H2-order match across all 7 instruction files (3 live + 4 setup guides).
-- `workflow/manifest.json` (search: `"required_sections"`) - drives the harness `instruction-sections-present` check on EVERY audited project, including test stubs and downstream installs.
-- `workflow/setup/reference/execution-loop.md` (search: `Required Sections`) - the lettered skeleton each setup guide mirrors; a test asserts it names every section.
-Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) also cap at `line_target` 125 (search: `line_target`), so adding a section to an already-full file (they sit at ~124) overflows.
-
-**Evidence:** `scripts/check-instruction-parity.mjs` (search: `"Commit Messages"`), `workflow/setup/agents/codex.md` (search: `## Commit Messages`), and `workflow/setup/reference/execution-loop.md` (search: `e) Commit Messages`) gained the section in lock-step. `workflow/manifest.json` `required_sections` deliberately does NOT list it because the stub instructions lack the heading. Room was reclaimed by condensing the numbered Truth Order to one prose line (search: `User's explicit instruction (this session) >`).
-
-**Prevention:** To add a canonical instruction-file section, update the parity `CANONICAL_SECTIONS`, the setup guides, and the skeleton `execution-loop.md` (with re-lettering) together, then add the section to all 7 instruction files. Leave manifest `required_sections` alone unless you also give every stub instruction fixture the heading - enforce instead via parity (own files) and setup templates (downstream). Budget the ~125-line live-file cap by condensing existing content. See ADR-031.
-
 ## Footgun: Agent capability metadata goes stale when upstream docs add hooks
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
@@ -83,17 +55,6 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 - `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) proves the desired toggle does not create unusable registration.
 
 **Prevention:** Check current primary docs and the local binary, then prove the exact event, payload, command, response, continuation, and model visibility separately. Treat config, matchers, and fallbacks as feasibility evidence. After a correction, grep every product, prose, template, and test consumer for the superseded claim.
-
-## Footgun: Hook additions and renames cross runtime, dashboard, and audit surfaces
-
-**Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
-**Symptoms:** A hook script can exist and pass its own smoke test while the dashboard registry, installer, manifest, preflight parity, audit facts, agent config templates, installed mirrors, and docs disagree about whether it is installed or togglable.
-
-**Evidence:** The 2026-05-25 split touched `src/cli/server/hooks-registry.ts` (search: `deny-dangerous`), the hook self-test, manifest, installer, preflight, agent templates and mirrors, `src/cli/facts/agent/hooks.ts` (search: `LEGACY_GUARDRAIL_HOOK_FILES`), and `src/cli/hooks-command.ts` (search: `handleHooksCommand`).
-
-**Recurrence 2026-05-26:** The `gruff-code-quality` hook rename focused drift run failed because `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `writeHookFixtures`) copied only `patterns-writes.sh` and `deny-dangerous-self-test.sh` into its temporary hook fixture. The live manifest now declares all split guardrails, so the fixture had to copy `patterns-shell.sh`, `patterns-paths.sh`, and `patterns-writes.sh` in lock-step.
-
-**Prevention:** When adding, renaming, or deleting a goat-flow hook, update this lock-step list: canonical script(s), central self-test, registry entry, config default, installer copy list, manifest `hooks[]`, per-agent config templates, installed repo mirrors, audit fact extraction, preflight self-test/parity/runtime smoke, dashboard view/API if response shape changes, CLI help if command surface changes, docs/code-map/architecture/changelog, and tests. Then run a source grep for the old hook id and a runtime-shaped smoke through an installed hook.
 
 ## Footgun: Active footgun Symptoms paragraph drifts after the underlying bug is fixed
 
@@ -120,22 +81,6 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 2. When reviewing a footgun bucket, treat a zero-hit anchor or a resolved anchor that contradicts the prose as a SEV signal: either the evidence was always wrong or the underlying behavior changed. Rewrite or resolve the entry; documentation rot is not a guard.
 3. `stats --check` validates literal `(search: ...)` anchors in footguns and lessons, and promotes stale existing-target anchors in pattern entries to blocking findings. `audit --check-content` applies the same literal check to current guidance and accepted ADR evidence. History may explain removed code, but its pointer must still resolve to live proof rather than a moved literal.
 4. The lifecycle is: incident → footgun (active) → fix lands → footgun rewritten or moved to Resolved. Skipping the last step leaves a trap that punishes the most-careful agents (the ones who actually follow search anchors).
-
----
-
-## Footgun: Adding a skill-playbook requires lock-step updates across 13+ surfaces
-
-**Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** A playbook appears in `workflow/skills/playbooks/` and `.goat-flow/skill-docs/playbooks/`, but one parity, audit, prompt, install, or docs surface is not enrolled. The playbook works locally until template-vs-installed drift or missing setup context surfaces later.
-
-**Why it happens:** `workflow/manifest.json` is the nominal source of truth, but playbooks are still hand-enumerated across template, installed copy, manifest required files and directory prose, installer copy lines, both README indexes, `scripts/preflight-checks.sh`, `test/integration/preamble-sync.test.ts`, `test/integration/audit-build.test.ts`, `src/cli/audit/check-goat-flow.ts`, `src/cli/audit/check-artifact-integrity.ts`, `workflow/setup/03-install-skills.md`, `.goat-flow/architecture.md`, `.goat-flow/code-map.md`, and sometimes `knip.json`.
-
-**Evidence:** `code-comments.md` and `observability.md` initially shipped without full parity enrollment; the gap was closed when later playbooks forced updates to `scripts/preflight-checks.sh` (search: `if [[ -f workflow/skills/playbooks/code-comments.md`), `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), and `test/integration/preamble-sync.test.ts` (search: `template and installed code-comments.md match`). The 2026-05-25 gruff-code-quality addition also proved package-surface coupling when preflight exposed a Knip dependency classification issue.
-
-**Prevention:** When adding a playbook, grep the new filename through every surface above before declaring done. Then run `bash scripts/preflight-checks.sh`; the output must name the new playbook in parity rows. Run `npm test`; `preamble-sync.test.ts` must include the new playbook. If the playbook documents a CLI-only package, run `npx knip --no-progress` and only add `ignoreDependencies` after real npm-script or shell usage still leaves Knip unable to see it.
-
-**Recurrence update (2026-07-13):** M12 registered `skill-playbook-authoring-sync.md` in manifest and audit surfaces, so focused checks and the live controlling-workspace audit passed. The full consumer setup lifecycle then failed because `workflow/install-goat-flow.sh` lacked its explicit copy line; the same sweep found missing preflight, parity-test, setup-doc, architecture, code-map, and quality-prompt enrollment. The next preflight also rejected the playbook because its worked YAML example repeated the exact installed version assignment, producing `1.13.1 | 1.13.1`; examples now use an unquoted `CURRENT_VERSION` sentinel. The decisive reproductions are `test/integration/setup-quality-lifecycle.test.ts` (search: "keeps setup, audit, prompts, and report history on the selected consumer") and `scripts/preflight-checks.sh` (search: "Installed shared reference").
 
 ---
 
@@ -193,20 +138,6 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 
 ---
 
-## Footgun: Hot-path agent instructions drift unevenly across agents
-
-**Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** One agent receives weaker release or routing guidance than the others even though all four instruction files are supposed to express the same core contract.
-
-**Why it happens:** Claude, Codex, Antigravity, and Copilot use separate hot-path files with different compression levels (Codex and Antigravity share `AGENTS.md`). Cross-agent consistency checks cover a few structural sections, but not every command line or router-table detail.
-
-**Evidence:** A 2026-04-27 quality-review pass found `.github/copilot-instructions.md` needed the same release command now present at `.github/copilot-instructions.md` (search: `test:full`) because it still told Copilot to run only the slow suite while `CLAUDE.md` and `AGENTS.md` used the full release gate. The same pass found `AGENTS.md` Shared skill reference rows omitted topical files; those rows are now split into meta and playbook entries at `AGENTS.md` (search: `Skill reference (meta)`). (Pre-v1.8.0 evidence also cited `GEMINI.md`; that file was removed when Antigravity replaced Gemini.)
-
-**Prevention:** When changing Essential Commands or Router Table rows in one agent instruction file, grep all hot-path files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) for the same concept and update them together. Add preflight coverage when the row affects release validation or canonical reference discovery.
-
----
-
 ## Footgun: Filesystem-backed validation can miss untracked or ignored replacement files
 
 **Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
@@ -239,7 +170,7 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 - `workflow/manifest.json` (search: `"skills_dir"`) - four entries, but only three distinct paths: `.claude/skills/`, `.agents/skills/` (shared by Codex and Antigravity), `.github/skills/`. Name-based inference gives the wrong answer for Antigravity.
 - `docs/audit-and-quality.md` (search: `satellite agents' skill dirs`) - previously named `.gemini/skills/` as a satellite-agent skill-dir example; that path never existed per the manifest, and the harness caught it only because it does not exist on disk.
 - `src/cli/audit/harness/check-context.ts` (search: `extractBacktickPaths`) - existence-only check; an agent-wrong path that exists (e.g. `.claude/skills/` in an Antigravity example) would pass.
-- `.goat-flow/learning-loop/decisions/ADR-030-replace-gemini-with-antigravity.md` (search: `Canonical agents`) - current four-agent identity is Claude, Codex, Antigravity, and Copilot.
+- `.goat-flow/learning-loop/decisions/ADR-020-add-copilot-cli.md` (search: `Canonical agents`) - current four-agent identity is Claude, Codex, Antigravity, and Copilot.
 
 **Prevention:**
 1. Before hand-writing an agent-specific path in prose, grep `workflow/manifest.json` for that agent's `skills_dir` / `hooks_dir` / `settings` / `instruction_file` entry and copy the exact value.
@@ -259,7 +190,7 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 - **Skill template paths use framework-local paths instead of project-local paths** (resolved 2026-04-12) - Changed skill template references away from `workflow/templates/`. The interim landing path `.goat-flow/templates/` was later retired; today the shared references live at `.goat-flow/skill-docs/`.
 - **Refactor cleanup doesn't reach bash script conditional guards** (resolved 2026-04-13) - Removed dead `[[ -f src/cli/rubric/version.ts ]]` guard that silently skipped 74 lines of version-consistency checks.
 - **Partial feature removal leaves type and detection artifacts** (resolved 2026-04-14) - Removed Copilot from type unions, UI name mappers, terminal runner maps, and SKILL_ROOTS after agent removal.
-- **Line target inconsistency for project shapes** (resolved 2026-03-18) - Line target canonicalized to one value for all shapes in ADR-008; read ADR-008 for the current target.
+- **Line target inconsistency for project shapes** (resolved 2026-03-18) - Line target canonicalized to one value for all shapes in ADR-023; read ADR-023 for the current target.
 - **CONTRIBUTING.md directs contributors to the wrong subsystem** (resolved 2026-04-13) - Rewritten to describe build checks in `check-goat-flow.ts` + `check-agent-setup.ts` and quality checks in `src/cli/audit/harness/`.
 - **Stale references from old project structure** (resolved 2026-04-15) - `ai-workflow-framework` no longer appears anywhere in the repo (verified by `rg "ai-workflow-framework"`).
 - **Preflight validates doc totals but not sub-breakdowns** (resolved 2026-04-17) - `scripts/preflight-checks.sh` (search: `B.8a2: Sub-breakdown validation`) now extracts `setup_count` and `agent_count` from the audit modules and validates the `(N setup + M agent)` breakdown claim in `.goat-flow/architecture.md`, not just the total. Verified by grep of preflight source.

@@ -136,7 +136,7 @@ else:
 **Goat-flow application:**
 - Ban `Math.random()` in `src/cli/server/` (where session IDs live) — `randomUUID()` is already the convention (`src/cli/server/terminal.ts` search: `randomUUID`, `src/cli/server/dashboard-routes.ts` search: `randomUUID`). The grep test prevents regression.
 - Ban `console.log` in MCP server code (when added) — see `.goat-flow/learning-loop/footguns/cli.md` (search: `Diagnostic logs to stdout corrupt structured-output modes`).
-- Ban `JSON.stringify` as a `Set<string>` dedupe key in merge functions — see `.goat-flow/learning-loop/footguns/config.md` (search: `as a dedupe key silently drops function values`).
+- Ban `JSON.stringify` as a `Set<string>` dedupe key in merge functions — the failure mode and its three-PR calibration arc are in `.goat-flow/learning-loop/patterns/external-lessons.md` (search: `Bug-fix clusters arc fix`).
 - Ban bare `setTimeout` / `setInterval` without an associated `clearTimeout` / `clearInterval` in the same file (dashboard server long-running handlers in `src/cli/server/`).
 
 **Shape of the test (TypeScript, Node's built-in test runner):**

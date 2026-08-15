@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-15
 ---
 
 ## Lesson: I edited a dead code path because I assumed one implementation
@@ -208,9 +208,9 @@ last_reviewed: 2026-08-10
 
 **Why stronger rules haven't worked:** Each recurrence added a stronger prevention rule. M1: "tick immediately." M29: "FIRST action must be editing the milestone file." M32: "before doing anything else." All failed because documentation-level enforcement does not work for this pattern - the forcing function competes with whatever the agent wants to do next, and loses.
 
-**Mechanical enforcement was tried and withdrawn (do not re-propose it blind).** ADR-038 (search: `Plan Checkbox Guard`) shipped `plan-checkbox-guard.sh` as a Claude-only Stop hook in v1.12.0 - exactly the "hook or gate" this lesson asks for. ADR-039 (search: `Remove Plan Checkbox Guard`) removed it one day later in v1.12.1: the reminder cost default Stop surface, dashboard hook list, installer/config schema, manifest, and audit fixtures, while non-Claude Stop delivery stayed unverified and stale registrations could keep invoking a deleted script. ADR-039 also explicitly rejected swapping in a replacement reminder immediately, because that "risks rebuilding the same plan-state heuristics under a new name" - a replacement needs its own plan.
+**Mechanical enforcement was tried and withdrawn (do not re-propose it blind).** ADR-037 (search: `shipped and reverted`) shipped `plan-checkbox-guard.sh` as a Claude-only Stop hook in v1.12.0 - exactly the "hook or gate" this lesson asks for. ADR-037 (search: `tombstone only`) removed it one day later in v1.12.1: the reminder cost default Stop surface, dashboard hook list, installer/config schema, manifest, and audit fixtures, while non-Claude Stop delivery stayed unverified and stale registrations could keep invoking a deleted script. ADR-037 also explicitly rejects swapping in a replacement reminder immediately, because that "risks rebuilding the same plan-state heuristics under a new name" - a replacement needs its own plan.
 
-**Status:** Unresolved, and deliberately so. The gap is real but the obvious fix has already been paid for once and reverted. Any new proposal must start from ADR-039's rejection list and show what it does differently - not restate "needs a hook."
+**Status:** Unresolved, and deliberately so. The gap is real but the obvious fix has already been paid for once and reverted. Any new proposal must start from ADR-037's rejection list and show what it does differently - not restate "needs a hook."
 
 ---
 
@@ -262,3 +262,41 @@ last_reviewed: 2026-08-10
 **Root cause:** I added meaningful nonzero returns to a shared helper without auditing every caller for shell error-mode semantics. A command substitution assignment is still a failing command under `set -e`.
 
 **Prevention:** When a shell helper uses nonzero statuses as data, wrap each call in `set +e`, capture `$?` immediately, restore `set -e`, and test the top-level script exit as well as its message. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `range_status=$?`) and `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not print whole-file findings when no changed range is available`).
+
+---
+
+## Lesson: Skill RED baselines must retain current owner guidance
+
+**Status:** active | **Created:** 2026-08-14
+**Decision changed:** Before treating an unskilled run as evidence for a new skill, include every current owner and classify each failure against those owners before crediting the candidate.
+**Trigger phase:** VERIFY
+**Incident count:** 6
+**Latest occurrence:** 2026-08-15
+
+**What happened:** Goat-clarity candidacy runs reproduced compliant-comment churn after receiving a short project preservation rule. The first interpretation treated repetition as evidence for a code-clarity skill. The baseline had omitted the current comment and naming playbooks, including their stronger incumbent-tie rule and existing ledger/report contract, so the runs measured reduced-context instruction adherence rather than whether a new skill outperformed ordinary ACT plus its owners.
+
+**Root cause:** “Without the candidate skill” was treated as “with only a distilled fixture rule.” That removed both the proposed artifact and the existing alternative, making the counterfactual unfair. Repeated failure cannot establish artifact need when the comparison baseline is weaker than the shipped route.
+
+**Recurrence (2026-08-15, complete-owner transport):** A compact PR baseline moved fixture sealing out of the evaluator but placed all nine current owners into one orchestration result. Both fresh evaluators received a truncated `gruff-code-quality.md` and omitted outputs for the remaining five owners, even though the nested reads requested larger output budgets. They stopped before reading either PR. The two runs were transport failures, not RED: configuring complete reads is not evidence that the evaluator received them.
+
+**Recurrence (2026-08-15, immutable PR range):** A merged-pull-request fixture trusted the live `base.sha` in closed-PR metadata after the base branch had advanced. The resulting local range contained hundreds of paths while the pull request's `/files` endpoint contained only the original handful, so the first seal described the branch's later history instead of the reviewed change. The fixture was rejected and rebuilt from immutable commit-graph evidence; its sorted local path manifest then matched `/files` exactly.
+
+**Recurrence (2026-08-15, end-to-end context capacity):** Immediate per-file delivery proved that every owner reached a fresh evaluator without truncation, but one complete run still exhausted the model context during its fifth call after adding the selected diff, full source, learning entries, consumers, and verification output. Transport completeness is not end-to-end evaluability. After a probe passes, the worst-case RED fixture must still finish inside the same context and call budget before its result can count.
+
+**Recurrence (2026-08-15, mixed score ledgers):** Two isolated U-selector baselines received all nine owners and completed within their call caps. Both actors selected, contained, and reconciled the intended paths, but they also rewrote a compliant control. Their verifiers placed preservation beside candidate workflow rows and returned one overall failure. The host initially recorded candidate reproduction `1/2`; re-reading the frozen classification showed that comment churn was owner noncompliance and every candidate-only row had passed. Work stopped before recording `2/2`, and the receipt was corrected to `0/2`.
+
+**Prevention:** Freeze the baseline-owner manifest before RED. Give evaluators the same current instructions, playbooks, and routing an ordinary run would receive; remove only the candidate artifact. Prove delivery with per-file completion markers at the exact baseline volume before dispatch; a requested output budget or successful nested command is not proof that the parent evaluator received every byte. Then run one end-to-end capacity probe with the full diff, source, learning, consumer, and verification volume; owner-only transport proof is insufficient. For pull-request fixtures, freeze immutable comparison commits and require the sorted local diff-path manifest to equal the authenticated `/files` result before dispatch; a closed PR's current base-branch pointer is not sufficient evidence. If the five-call constraint cannot carry the complete baseline through a separately verified end-to-end run, stop candidacy instead of scoring reduced context. Before scoring, map every failed row back to that manifest: violating an already-loaded owner's gate or output remains owner noncompliance even when it repeats. Preserve omitted-owner or loaded-owner noncompliance as fixture evidence, but credit only a candidate-owned failure toward candidacy. Require separate owner, candidate, and infrastructure verdicts before any overall result. A candidate verdict must cite one exact candidate-only clause; a generic failure is insufficient. Evidence anchors: `AGENTS.md` (search: `Sub-agents: ONE objective`), `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Current constraints`), `.goat-flow/skill-docs/playbooks/code-comments.md` (search: `tie goes to the incumbent`), `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (search: `Reconcile work using one unit per equation`), and `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `prefer modes inside an existing skill`).
+
+---
+
+## Lesson: Finalized timing receipts require their parsed summaries
+
+**Status:** active | **Created:** 2026-08-14
+**Decision changed:** Finalize milestone timing through the plans-time command; when repairing a receipt manually, reconcile both summary lines before claiming measured Actual.
+**Trigger phase:** VERIFY
+
+**What happened:** A milestone's segment table, receipt state, and measured Actual were finalized by hand, but the first strict completion check rejected them. The receipt omitted the `Recorded seconds` and `Allocated minutes` lines, so the parser had no summary object against which to validate the Actual claim. After those lines were added, the next check rejected a manually rounded category split that did not follow the canonical largest-remainder allocation.
+
+**Root cause:** The visible segment arithmetic was treated as the whole embedded receipt, then category minutes were rounded by intuition. The strict checker requires both canonical parsed summaries and its deterministic allocation; a complete-looking table alone is insufficient evidence for measured Actual.
+
+**Prevention:** Use `plans time stop <milestone> --finalize` for normal closure. If manual recovery is necessary, compare the receipt with the canonical rendered shape, derive rather than eyeball the largest-remainder split, and rerun strict validation after the terminal status change. Evidence anchors: `docs/cli.md` (search: `plans time stop .goat-flow/plans/<active>/M01-example.md --finalize`), `src/cli/plans-time-receipt.ts` (search: `Compare rounded total, category sum, and largest-remainder allocation`), and `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).

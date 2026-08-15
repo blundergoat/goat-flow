@@ -571,7 +571,7 @@ describe("checkDrift: artifact integrity", () => {
   });
 
   // Covers a project still on the old commit-guidance filename: writes it; the audit must not fail it.
-  it("accepts the ADR-043 commit-guidance compatibility path", () => {
+  it("accepts the ADR-051 commit-guidance compatibility path", () => {
     const fixtureRoot = setupFixture();
     try {
       const guidePath = join(fixtureRoot, "docs", "audit-checks.md");

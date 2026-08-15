@@ -1,6 +1,6 @@
 ---
 category: docs-drift
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-15
 ---
 
 ## Footgun: Cold-path docs drift while structural audit passes
@@ -11,7 +11,7 @@ last_reviewed: 2026-08-01
 
 **Why it happens:** The audit validates structure (files exist, paths resolve, versions match). Partial content automation exists: `src/cli/audit/check-factual-claims.ts` catches count-claim drift across `PROSE_TARGETS` plus `docs/*.md`; `src/cli/audit/check-content-quality.ts` full-scans instruction files, skill references, every registered standalone playbook, public docs, ADRs, setup templates, and installed skills. It also discovers footgun, lesson, and pattern buckets dynamically, but scans those historical surfaces only for generic and non-actionable wording; `stats --check` separately enforces their schema and `(search: ...)` anchors. None of those checks fact-checks arbitrary prose, so uncovered factual claims can still drift as code changes.
 
-**Evidence (5 rounds, 37 findings, all resolved - kept as pattern evidence, not an open defect list):**
+**Evidence (6 rounds, 42 findings, all resolved - kept as pattern evidence, not an open defect list):**
 
 | Round | Date | Findings | Surfaced by | Representative drift |
 |---|---|---|---|---|
@@ -20,6 +20,9 @@ last_reviewed: 2026-08-01
 | 3 | 2026-04-24 | 3 | 3 independent Copilot quality reports | `docs/skills.md` describing a `/goat-plan` default that contradicted the shipped skill; hot-path listing omitting `.github/copilot-instructions.md` |
 | 4 | 2026-05-11 | 15 | full documentation audit during the v1.6.0 wave | four instruction files carrying materially different Never tiers; header dates stamped from the wrong release; ADR status vocabulary violations |
 | 5 | 2026-08-01 | 4 | external review re-verified against the live goat-review bundle | three anchors retained a retired automated-review label; one systemic-pattern anchor named wording that never existed |
+| 6 | 2026-08-15 | 5 | manual path/anchor sweep during the 48→24 ADR consolidation | ADR bodies cited a retired `feedback-recency` audit check, a `verify coverage` goat-qa trigger, the `GOAT_LINT_ENFORCE` env var, and two moved files (check-verification.ts, since relocated under `src/cli/audit/harness/`; a per-agent patterns-writes.sh under the Copilot hooks dir, since centralised) - none of which still exist as named |
+
+**Search-anchor enforcement skips `decisions/`.** Measured 2026-08-15: an ADR was given a backticked `src/cli/constants.ts` reference followed by a search-anchor marker naming an identifier that appears nowhere in the repo. `goat-flow stats --check` returned `"status": "pass"` with zero findings. The identical construction inside a footgun or lesson is reported as `stale-ref` - which is why this paragraph describes the probe in prose instead of reproducing it. Enforcement covers footguns, lessons, and patterns only, so ADR evidence is the one learning-loop surface where a citation can rot silently. `check-content-quality.ts` does scan ADRs, but for generic wording rather than citation resolution. This is the gap Prevention #9 below closes. Until it ships, treat ADR anchors as unverified: sweep them by hand when editing an ADR, and run `audit --harness` too - its `doc-paths-resolve` check catches dead *paths* in glossary and code-map, but no check catches a dead *anchor* in an ADR.
 
 Three findings from Round 4 (2026-05-11) drove Prevention 5-7 below and are the ones worth remembering in detail:
 

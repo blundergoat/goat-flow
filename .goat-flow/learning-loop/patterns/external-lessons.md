@@ -51,7 +51,7 @@ The three PRs landed within 72 hours. Each commit message says "fix" but the bug
 3. Expect a follow-up PR. When the commit message says "fix X" and X involves equality / dedupe / merge / hash-keying, schedule a calibration pass within the same milestone. The promptfoo team shipped the calibration on day 3; budgeting for it up front would have saved the second incident.
 4. For goat-flow merge surfaces (`compose-setup.ts` skill merging, manifest reconciliation, hook config dedupe), prefer "preserve when uncertain" over "drop on suspected duplicate." A visible duplicate is a loud failure; a silent loss is a quiet one. Document the rule once in the merge function's docstring.
 
-Reinforces existing CLAUDE.md verification discipline: "Fix verified by passing the test suite" is not "fix verified." The reproducer for the OPPOSITE failure mode must also be exercised. Cross-reference: `.goat-flow/learning-loop/footguns/config.md` (search: `dedupe key silently drops function values`) documents the specific footgun this arc fixed.
+Reinforces existing CLAUDE.md verification discipline: "Fix verified by passing the test suite" is not "fix verified." The reproducer for the OPPOSITE failure mode must also be exercised. The specific dedupe-key hazard this arc fixed is recorded above rather than as a goat-flow footgun: the promptfoo defect has no counterpart in this codebase, so it is an external pattern to learn from, not a local trap to avoid.
 
 ---
 

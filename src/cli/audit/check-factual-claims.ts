@@ -470,7 +470,7 @@ function scanPathReferences(
 
 const INTENTIONAL_LOCAL_STATE_PATHS = new Set([".goat-flow/project-id"]);
 
-/** ADR-043 compatibility alias; remove this entry only when support for the former commit-guide path retires. */
+/** ADR-051 compatibility alias; remove this entry only when support for the former commit-guide path retires. */
 const INTENTIONAL_COMPAT_PATHS = new Set([
   "docs/coding-standards/git-commit.md",
 ]);

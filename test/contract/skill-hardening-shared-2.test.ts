@@ -208,7 +208,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       "Footgun: Optional hook migration must remove old registrations and re-add enabled central entries",
     );
     const failSoftAnalyzer = readMarkdownSection(
-      ".goat-flow/learning-loop/footguns/hooks.md",
+      ".goat-flow/learning-loop/footguns/hook-scanning.md",
       "Footgun: Fail-soft analyzer skips can silently uncover a configured language",
     );
 

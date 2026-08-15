@@ -42,7 +42,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
           "## Outcome",
           "## At a glance",
           "## How users will notice the difference",
-          "## Why",
+          "## Motivation",
           "## What",
           "## How",
           "## Out of scope",
@@ -165,8 +165,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
 
   it("keeps the redesigned goat-plan canonical surface within its tighter budget", () => {
     assert.ok(
-      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") <= 2100,
-      "workflow goat-plan must stay at or below the redesign target of 2100 words",
+      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") <= 2150,
+      "workflow goat-plan must stay at or below the redesign target of 2150 words",
     );
 
     const canonicalSurfaceWords = [
@@ -180,8 +180,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       .filter(Boolean).length;
 
     assert.ok(
-      canonicalSurfaceWords <= 4500,
-      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 4500`,
+      canonicalSurfaceWords <= 4650,
+      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 4650`,
     );
   });
 

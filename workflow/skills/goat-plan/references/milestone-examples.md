@@ -51,6 +51,12 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 ## Objective
 <Binary outcome this milestone proves or delivers.>
 
+## How users will notice the difference
+<Observable change a user sees or does once this ships; if not user-visible, name the internal beneficiary.>
+
+## Motivation
+<Problem or value driving this milestone; what stays broken without it.>
+
 ## Context
 - Read first: `<file>` (search: `<semantic anchor>`) — <non-obvious convention or reference>.
 - Drift: `git diff --stat <sha> -- <paths>` and `git status --short -- <paths>`.
@@ -107,6 +113,8 @@ High-risk detail has no safety-reducing hard cap; output above 1,200 words names
 | Field | Rule |
 |---|---|
 | Outcome | Name what becomes true; add Objective only when the title needs clarification. |
+| How users notice | Name the observable change from the user's seat; when nothing is user-visible, name the internal beneficiary instead. |
+| Motivation | State the problem or value the milestone answers; keep it distinct from the Objective's outcome. |
 | Tasks | Order `[RISKY]`, `[CORE]`, `[SAFE]`; one action and one done condition per checkbox. |
 | Proof | State claim → evidence with relevant tags; human sign-off belongs to the blocking gate. |
 | Exit | State binary transition truth and reference proof claims without copying commands. |

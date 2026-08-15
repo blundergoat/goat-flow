@@ -68,12 +68,12 @@ Use two to six before-and-after bullets. Distinguish relevant reader groups, cit
 
 Mention unchanged safeguards or delayed payoff only when materially relevant; never invent either to fill the section.
 
-## Why
+## Motivation
 
 Explain the problem and value, not the implementation. Use concise bullets grounded in observed evidence where available.
 
 ```markdown
-## Why
+## Motivation
 
 - <Current problem and why it matters to affected users or maintainers.>
 - <Evidence showing the problem is material enough to address now.>

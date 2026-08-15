@@ -4,6 +4,7 @@
 **Status:** Accepted
 **Updated:** 2026-05-18 - removed drift-prone `compose-setup.ts` line-count claim; scanner removal rationale now cites the durable branching simplification.
 **Updated:** 2026-08-04 - refreshed setup-handler semantic anchors after CLI/server decomposition.
+**Updated:** 2026-08-15 - absorbed the determinism constraint from the retired ADR-012, whose remaining content was a historical check-count expansion its own 2026-05-27 note already marked superseded.
 **Supersedes:** Earlier draft that proposed keeping both systems
 
 ## Context
@@ -39,6 +40,10 @@ Later audit-era cleanup that also no longer needs standalone ADRs is preserved h
 ## Decision
 
 Delete the scanner/rubric system entirely. Make audit the single evaluation engine driving all goat-flow commands including setup.
+
+Every audit check is fully deterministic: no LLM calls, no randomness, no network I/O, and no clock dependence. A check that cannot produce the same verdict from the same filesystem state does not belong in the audit. The scanner-era `feedback-recency` check compared file dates against a 90-day window; it no longer exists, and `src/cli/audit/` now carries no time-dependent logic at all.
+
+Determinism is what makes audit usable as a CI gate and as the single engine above. Agent-driven judgment lives in the separate `quality` command surface, which produces a prompt and a saved report rather than an audit verdict.
 
 ## Setup Flow After Migration
 

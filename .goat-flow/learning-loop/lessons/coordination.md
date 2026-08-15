@@ -94,7 +94,7 @@ last_reviewed: 2026-08-14
 **Status:** active | **Created:** 2026-05-01
 **Decision changed:** Run the plan arithmetic gate immediately after writing estimates, then independently derive every ISSUE-level roll-up from the validated milestone headlines.
 **Trigger phase:** VERIFY
-**Incident count:** 5
+**Incident count:** 6
 **Latest occurrence:** 2026-08-10
 
 **What happened:** Programme headline stated ~33 weekends (council's estimate). Phase breakdowns summed to ~26. The gap was unexplained - some combination of CF items, overhead, and double-counted shared infrastructure. The headline lost legitimacy when the math didn't add up.
@@ -106,6 +106,8 @@ last_reviewed: 2026-08-14
 **Recurrence 2026-08-09:** Expanding M03 for a runtime-hook repair added 20 product minutes and 20 proof minutes, but I initially left its headline split at 140 product / 110 proof. Strict validation reported counted totals of 160 / 130; the live estimate was corrected while the original 260-minute baseline stayed explicit in Forecast calibration. Evidence anchor: `src/cli/plans-check.ts` (search: `counted work`).
 
 **Recurrence 2026-08-10:** A release plan used 15 work units and a 12.42-minute high rate, then manually recorded the high bound as 186 minutes. The deterministic ceiling was 187, so strict validation blocked closeout until the displayed range matched the formula. Evidence anchor: `src/cli/plans-effort.ts` (search: `forecast basis derives`).
+
+**Recurrence 2026-08-14:** Reforecasting three downstream milestones used nearest-integer transcription for one or both bounds instead of the deterministic floor/ceiling rule. Strict validation derived `16-42`, `12-32`, and `15-39`, then blocked reconciliation because the plan displayed `17-41`, `13-32`, and `15-38`. The ISSUE roll-up also needed recomputation from `45-111` to `43-113` after the milestone ranges were corrected.
 
 **Prevention:** Programme documents should show effort accounting explicitly and derive each roll-up from the milestone headlines after strict validation. If two totals intentionally differ, name the accounting difference; do not transcribe a mental sum into the summary.
 
@@ -266,15 +268,17 @@ last_reviewed: 2026-08-14
 **Status:** active | **Created:** 2026-08-07
 **Decision changed:** Reserve Tasks for estimated implementation checkboxes and keep each `(est: ...)` entry at the end of its item.
 **Trigger phase:** VERIFY
-**Incident count:** 2
-**Latest occurrence:** 2026-08-08
+**Incident count:** 3
+**Latest occurrence:** 2026-08-14
 
 **What happened:** M05 recorded a completed test-audit result as another checkbox under `## Tasks`. Strict plan validation counted it as implementation work, then reported one missing `(est: ...)` entry and a 15/20-minute product mismatch.
 
 **Recurrence update (2026-08-08):** M01 completion notes were appended after all four task estimates. The terminal estimate parser then treated every task as unestimated and reported zero counted product minutes against the declared 60-minute split. Moving each completion note before its estimate restored strict validation.
 
+**Recurrence update (2026-08-14):** A final strict sweep of four completed hook-command-portability milestones found completion notes after terminal estimates in Tasks and Proof, forecast-only `Plan/admin overhead` fields overwritten with measured administrative time, and an Actual reason extended beyond its fixed receipt grammar. The malformed items undercounted work units and category totals even though their intended minutes remained visible to a human. Restoring forecast fields, moving notes before terminal estimates, and keeping variance in a separate field preserved both planning history and measured receipts.
+
 **Root cause:** The task section was treated as a convenient narrative checklist without preserving its terminal estimate grammar. Its checkboxes and final `(est: ...)` entries are machine-readable work records that feed estimate coverage and category totals.
 
-**Prevention:** Keep `## Tasks` to estimated work items. Put discoveries in `## Context` and literal gate output in `## Actual evidence`; if a task needs a completion note, place it before the terminal estimate and rerun strict plan validation.
+**Prevention:** Keep `## Tasks` to estimated work items. Put discoveries in `## Context` and literal gate output in `## Actual evidence`; if a task or proof needs a completion note, place it before the terminal estimate. Keep `Plan/admin overhead` as the forecast input, keep measured variance outside the fixed Actual receipt reason, and rerun strict plan validation after closeout edits.
 
 **Evidence anchor:** `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task-section checkbox into an estimate-bearing record; `src/cli/plans-effort.ts` (search: `const TASK_ESTIMATE_PATTERN`) requires the estimate at the item's end; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.

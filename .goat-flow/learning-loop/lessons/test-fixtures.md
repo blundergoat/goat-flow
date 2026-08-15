@@ -238,7 +238,7 @@ last_reviewed: 2026-08-10
 **Trigger phase:** VERIFY
 **Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
-**What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-040 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
+**What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-025 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
 
 **Root cause:** The scenario varied both test ordering and repository-history authority. Its wrong answer was independently invalid under always-loaded policy.
 

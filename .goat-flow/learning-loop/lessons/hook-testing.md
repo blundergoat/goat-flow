@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-08-13
+last_reviewed: 2026-08-15
 ---
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
@@ -116,7 +116,7 @@ last_reviewed: 2026-08-13
 ## Lesson: Manual hook matrices must avoid live-guard self-interference
 
 **Status:** active | **Created:** 2026-06-03
-**Decision changed:** Feed hook payloads from a temporary file when the live shell guard inspects the outer command. | **Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-08-10
+**Decision changed:** Split all-in-one shell verification into bounded direct commands, and feed hook payloads from a temporary file when the live shell guard inspects the outer command. | **Trigger phase:** VERIFY | **Incident count:** 5 | **Latest occurrence:** 2026-08-15
 
 **What happened:** During a manual pass over the canonical deny and Gruff hooks, my first all-in-one shell harness was blocked by the active PreToolUse guard for having more than 50 chained segments. Smaller batches then tripped the same live guard with command substitution, fixed `printf | bash hook` payload replay, and literal `.env.example` strings in the outer verification command. A temporary Gruff harness also leaked temporary directories because root creation happened inside command substitutions, so the parent cleanup array never recorded them.
 

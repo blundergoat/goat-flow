@@ -108,7 +108,7 @@ jobs:
 
       - name: Validate settings.json
         run: |
-          # Current agent hook/settings JSON surfaces (Gemini retired, ADR-030)
+          # Current agent hook/settings JSON surfaces (Gemini retired, ADR-020)
           for f in .claude/settings.json .codex/hooks.json .github/hooks/hooks.json; do
             if [ -f "$f" ]; then
               python3 -c "import json; json.load(open('$f'))" 2>&1 || {

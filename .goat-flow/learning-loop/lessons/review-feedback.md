@@ -48,7 +48,7 @@ last_reviewed: 2026-08-11
 
 **Evidence:** `workflow/skills/goat-qa/SKILL.md` (search: `Exhaustive priority matrix`; `Phase 2 - Gap Analysis`) contained the contradiction; `test/contract/skill-hardening-skills-2.test.ts` (search: `carries MEDIUM high-value gaps into goat-qa Standard Phase 2`) now extracts both the phase and output template.
 
-**Name note:** `goat-sbao` was the predecessor of `goat-critique` per ADR-019.
+**Name note:** `goat-sbao` was the predecessor of `goat-critique` per ADR-009.
 
 **Why these were missed:**
 1. **Tests validated shape, not truth.** Contract tests checked "does this section heading exist" not "is the skill count correct." An old `evaluate-check.test.ts` assertion literally said "All 6 skills present" - nobody noticed when goat-sbao made it 7.
