@@ -1,7 +1,19 @@
 ---
 category: setup
-last_reviewed: 2026-07-17
+last_reviewed: 2026-08-15
 ---
+
+## Footgun: A preview-layer classification change is inert until apply consumes the decision
+
+**Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** The CLI reports the new classification correctly - dry-run shows the row, the verdict changes, the exit code changes - and the user's file is still overwritten. Every unit test of the classifier passes, and typecheck cannot see the gap, because the two halves are written in different languages.
+
+**Evidence:** While implementing 1.16.0 M02's `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` was changed and the CLI stopped blocking, so `install` exited 0. The integration fixture still failed: `workflow/install-goat-flow.sh` (search: `copy_file()`) replaces every system-owned destination unconditionally and had no channel to hear that one path was now preserved. The fix was a decision channel, not a second classifier - `src/cli/install-command.ts` (search: `Each row's own decision travels to Bash`) turns preview rows into `--preserve-path` and `--replace-user-path` flags, and `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) consults them inside `copy_file`.
+
+**Why it happens:** The write path spans TypeScript and Bash. Preview classification, admission, and authority live in TypeScript; the writes live in the installer script. Nothing in the type system, the linter, or a classifier unit test crosses that boundary, so a change to what the CLI *says* looks complete while what the installer *does* is unchanged.
+
+**Prevention:** When changing what a preview row means, ask which process performs the write. If that is the shell installer, the change is not done until a per-path decision reaches it and `copy_file` honours the decision. Prove it with an integration fixture that runs the public CLI and asserts on target bytes afterwards - `test/integration/setup-install-upgrade-1150.test.ts` (search: `the upgrade must preserve project content under an unchanged template`) is the shape. Never re-derive the classification in Bash: one contract, generated or passed, is the standing rule for this surface.
 
 ## Footgun: Optional-hook agent profiles break when installer treats hooks as universal
 
@@ -62,7 +74,7 @@ last_reviewed: 2026-07-17
 **Current evidence:**
 - `src/cli/managed-setup-write-set.ts` (search: `Every parent must remain a real directory`) inspects each parent component before hashing the final managed file; `src/cli/managed-setup-preview.ts` calls it for every previewed destination.
 - `src/cli/managed-setup-state.ts` (search: `Require project-local directories before any baseline read or write`) applies the same containment check before trusting or replacing install state.
-- `src/cli/managed-setup-preview.ts` (search: `--force cannot bypass path safety`) keeps non-regular and unreadable managed destinations as hard admission failures.
+- `src/cli/managed-setup-admission.ts` (search: `no authority bypasses path safety`) keeps non-regular and unreadable managed destinations as hard admission failures that no authority flag can clear.
 - `workflow/install-goat-flow.sh` (search: `The shared setup root must be local before migrations`) validates the root and every setup directory before `mkdir` or staged file work.
 - `test/integration/setup-install-preview.test.ts` (search: `blocks symlinked managed parents even when force is supplied`) reproduces the nested redirect and asserts that the outside sentinel remains byte-identical.
 - `test/unit/managed-setup-preview.test.ts` (search: `rejects a valid baseline behind a symlinked install-state directory`) proves valid-looking outside hashes remain invalid evidence.

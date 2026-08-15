@@ -174,10 +174,24 @@ PROJECT=""
 AGENT=""
 UPDATE_CONFIG_VERSION=false
 CLEAN_DEPRECATED=false
+# System-owned destinations the CLI preview classified as preserved local content.
+PRESERVE_PATHS=()
+# User-owned destinations the CLI admitted for replacement under named, twice-given authority.
+REPLACE_USER_PATHS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --agent) AGENT="$2"; shift 2 ;;
+    --preserve-path)
+      # The CLI decides which paths this package leaves alone; the installer does not re-derive that.
+      PRESERVE_PATHS+=("$2")
+      shift 2
+      ;;
+    --replace-user-path)
+      # Only the CLI can admit this, and only for a path named by both --force-user-owned and --force-path.
+      REPLACE_USER_PATHS+=("$2")
+      shift 2
+      ;;
     --force)
       # The CLI already limits force to inspected system-owned conflicts; this installer never uses it to reset user content.
       shift
@@ -519,12 +533,42 @@ assert_file_ownership() {
   fi
 }
 
+# Report whether the CLI preview asked this destination to keep its current bytes.
+# A preserved path holds local content that the current package template does not change,
+# so replacing it would destroy project content for no delivered difference.
+installer_path_is_preserved() {
+  local candidate="$1" preserved_path
+  # The empty-array guard keeps `set -u` satisfied when no path was preserved.
+  for preserved_path in ${PRESERVE_PATHS+"${PRESERVE_PATHS[@]}"}; do
+    [[ "$preserved_path" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+# Report whether the CLI admitted this user-owned destination for replacement.
+# Reaching here needs both --force-user-owned and a matching --force-path, so the
+# create-only rule is lifted for exactly the paths the user named and nothing else.
+installer_user_path_is_replaceable() {
+  local candidate="$1" replaceable_path
+  for replaceable_path in ${REPLACE_USER_PATHS+"${REPLACE_USER_PATHS[@]}"}; do
+    [[ "$replaceable_path" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
 # Copy one canonical template or create-only user seed into the selected project.
 # Use after ownership lookup confirms how setup may change the destination.
 copy_file() {
   local src="$1" dst="$2" expected_ownership="${3:-system-owned}" requested_mode="${4:-}"
   local replacement_mode="replace"
   assert_file_ownership "$dst" "$expected_ownership" "$src"
+
+  # Ownership still validates first, so a preserved path cannot hide a manifest mismatch.
+  if installer_path_is_preserved "$dst"; then
+    SKIPPED=$((SKIPPED + 1))
+    echo "  · $dst (preserved local content; this package does not change it)"
+    return
+  fi
 
   # Missing packaged content would leave the user's installation incomplete.
   if [[ ! -f "$src" ]]; then
@@ -546,6 +590,10 @@ copy_file() {
   # User-owned files stay create-only, so refreshing managed files cannot replace the user's project choices.
   if [[ "$expected_ownership" == "user-owned" ]]; then
     replacement_mode="create-only"
+    # An explicitly named and separately authorized path is the one exception.
+    if installer_user_path_is_replaceable "$dst"; then
+      replacement_mode="replace"
+    fi
   fi
   commit_staged_payload "$dst" "$replacement_mode"
   COPIED=$((COPIED + 1))
@@ -558,8 +606,8 @@ copy_if_missing() {
   local src="$1" dst="$2"
   assert_file_ownership "$dst" "user-owned" "$src"
 
-  # Existing user content remains authoritative during normal and forced managed refreshes.
-  if [[ -f "$dst" ]]; then
+  # Existing user content remains authoritative unless the user named this exact path.
+  if [[ -f "$dst" ]] && ! installer_user_path_is_replaceable "$dst"; then
     SKIPPED=$((SKIPPED + 1))
     echo "  · $dst (exists, skipped)"
     return

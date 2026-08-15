@@ -7,7 +7,6 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { AgentId, ProjectFacts } from "./types.js";
 import type { AuditReport, AuditScope, CheckResult } from "./audit/types.js";
-import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import { handleDiagnosticsCommand } from "./diagnostics-command.js";
@@ -18,29 +17,11 @@ import {
   validAgents,
 } from "./cli-agent-options.js";
 import type { Command, ParsedCLI } from "./cli-types.js";
-import { createFS } from "./facts/fs.js";
 import { handleHooksCommand } from "./hooks-command.js";
+import { handleInstallCommand } from "./install-command.js";
 import { handleReviewCommand } from "./review-validate.js";
-import {
-  buildInstallerInvocation,
-  buildInstallerSpawnSpec,
-} from "./install-invocation.js";
-import {
-  buildManagedSetupPreview,
-  managedSetupPreviewForInstallerLaunch,
-  managedSetupAdmissionFailure,
-  recordManagedInstallAfterVerification,
-} from "./managed-setup-preview.js";
-import {
-  emitManagedSetupDryRun,
-  validateManagedSetupRequest,
-} from "./managed-setup-command.js";
-import { getPackageVersion, getTemplatePath } from "./paths.js";
-import {
-  emitIndexGenerationInstallResult,
-  handleIndexCommand,
-} from "./learning-loop-index/command.js";
-import { emitCommitGuidanceInstallResult } from "./prompt/commit-guidance.js";
+import { getPackageVersion } from "./paths.js";
+import { handleIndexCommand } from "./learning-loop-index/command.js";
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
@@ -342,127 +323,6 @@ async function handleSetupCommand(
   if (parts.length > 0) {
     writeOutput(options, parts.join("\n\n---\n\n"));
   }
-}
-
-/** Derive installer flags from the project's adoption state. */
-function deriveInstallFlags(
-  projectPath: string,
-  agentId: string,
-  options: ParsedCLI,
-): string[] {
-  if (options.shouldForce) return [];
-  try {
-    const projectFS = createFS(projectPath);
-    const state = classifyProjectState(projectFS, agentId);
-    const flags: string[] = [];
-    if (
-      !options.updateConfigVersion &&
-      (state.state === "outdated" || state.state === "v0.9")
-    ) {
-      flags.push("--update-config-version");
-    }
-    if (!options.cleanDeprecated && state.state === "v0.9") {
-      flags.push("--clean-deprecated");
-    }
-    return flags;
-  } catch {
-    return [];
-  }
-}
-
-/** Build the user-supplied installer flag list for the bundled bash script. */
-function collectInstallerFlags(options: ParsedCLI, agent: AgentId): string[] {
-  const flags: string[] = [];
-  if (options.shouldForce) flags.push("--force");
-  if (options.updateConfigVersion) flags.push("--update-config-version");
-  if (options.cleanDeprecated) flags.push("--clean-deprecated");
-  flags.push(...deriveInstallFlags(options.projectPath, agent, options));
-  return flags;
-}
-
-/**
- * Run a managed preview or deterministic install after the user chooses an agent.
- * Use for install or setup dry-run/apply; it throws CLI errors or preserves a non-zero child exit.
- *
- * @param options - parsed user choices; a missing agent is rejected before preview or installation
- * @returns completion after preview or install; no value means output and exit state already describe the result
- */
-async function handleInstallCommand(options: ParsedCLI): Promise<void> {
-  const selectedAgent = validateManagedSetupRequest(options);
-  const installPreview = buildManagedSetupPreview(
-    options.projectPath,
-    selectedAgent,
-  );
-  const installerLaunch = buildInstallerInvocation({
-    scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
-    projectPath: options.projectPath,
-    agent: selectedAgent,
-    installerFlags: collectInstallerFlags(options, selectedAgent),
-    platform: process.platform,
-  });
-  // A dry-run reports the exact managed-template result and exits before installer side effects.
-  if (options.shouldDryRun) {
-    emitManagedSetupDryRun(
-      options,
-      managedSetupPreviewForInstallerLaunch(installPreview, installerLaunch),
-    );
-    return;
-  }
-
-  const overwriteBlocker = managedSetupAdmissionFailure(
-    installPreview,
-    options.shouldForce,
-  );
-  // A conflict report is returned before Bash starts, so the user's target remains unchanged.
-  if (overwriteBlocker !== null) throw new CLIError(overwriteBlocker, 1);
-
-  // Invalid launch arguments stop before Bash can change the selected target.
-  if (!installerLaunch.ok) {
-    throw new CLIError(installerLaunch.error, 1);
-  }
-
-  const { spawnInheritedSync } = await import("./server/safe-exec.js");
-  const installerProcess = buildInstallerSpawnSpec(installerLaunch);
-  const installResult = spawnInheritedSync({
-    command: installerProcess.command,
-    args: installerProcess.args,
-    allowedBasenames: ["bash", "bash.exe"],
-    env: installerProcess.env,
-  });
-  // A spawn failure means the installer never started, so users receive the operating-system error.
-  if (installResult.error) {
-    throw new CLIError(
-      `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
-      1,
-    );
-  }
-  // A signal means installation ended mid-flow and cannot be recorded as a verified baseline.
-  if (installResult.signal) {
-    throw new CLIError(
-      `Installer terminated by signal ${installResult.signal}`,
-      1,
-    );
-  }
-  // A non-zero or missing child status is preserved as failure instead of running post-install writes.
-  if (installResult.status !== 0) {
-    // Missing numeric status still maps to exit 1 so scripts never mistake it for success.
-    process.exitCode = installResult.status ?? 1;
-    return;
-  }
-
-  const installationMismatches = recordManagedInstallAfterVerification(
-    options.projectPath,
-    selectedAgent,
-  );
-  // A successful process exit is insufficient when managed bytes still differ from their templates.
-  if (installationMismatches.length > 0) {
-    throw new CLIError(
-      `Installer exited successfully, but ${installationMismatches.length} managed file(s) do not match their templates. Install state was not recorded.`,
-      1,
-    );
-  }
-  emitCommitGuidanceInstallResult(options.projectPath);
-  emitIndexGenerationInstallResult(options.projectPath);
 }
 
 /** Handle the removed info command; throws CLIError with the current audit replacement. */

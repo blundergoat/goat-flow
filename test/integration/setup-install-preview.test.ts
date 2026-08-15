@@ -19,55 +19,15 @@ import {
 import { join } from "node:path";
 
 import { getTemplatePath } from "../../src/cli/paths.js";
-import { makeTempProject, runCliInstaller } from "./setup-install.helpers.js";
-
-/** Create a directory symlink, or skip when the host forbids the fixture. */
-function symlinkDirectoryOrSkip(
-  testContext: TestContext,
-  target: string,
-  link: string,
-): boolean {
-  try {
-    symlinkSync(target, link, "dir");
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EPERM") {
-      testContext.skip(
-        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
-      );
-      return false;
-    }
-    throw error;
-  }
-}
+import {
+  downgradeCodexBaselineToSevenSkills,
+  makeTempProject,
+  recordStaleBaselineHashes,
+  runCliInstaller,
+  symlinkDirectoryOrSkip,
+} from "./setup-install.helpers.js";
 
 const CODEX_GOAT_CLARITY_PATH = ".agents/skills/goat-clarity/SKILL.md";
-
-/**
- * Rewrite one disposable Codex install-state file without its goat-clarity row.
- * Reads and replaces only the fixture baseline so the next installer run sees a loaded seven-skill state.
- */
-function downgradeCodexBaselineToSevenSkills(projectPath: string): void {
-  const statePath = join(
-    projectPath,
-    ".goat-flow",
-    "install-state",
-    "codex.json",
-  );
-  const state = JSON.parse(readFileSync(statePath, "utf-8")) as {
-    files: Array<{ path: string; expectedSha256: string }>;
-  };
-  const originalFileCount = state.files.length;
-  state.files = state.files.filter(
-    (file) => file.path !== CODEX_GOAT_CLARITY_PATH,
-  );
-  assert.equal(
-    state.files.length,
-    originalFileCount - 1,
-    "the installed baseline must contain goat-clarity before the fixture removes it",
-  );
-  writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
-}
 
 /** One preview row as the JSON contract publishes it. */
 interface PreviewRow {
@@ -383,7 +343,7 @@ describe("managed setup preview", () => {
     );
   });
 
-  it("blocks a local managed edit until the user supplies force", () => {
+  it("blocks a changed template over a local edit until the user supplies force", () => {
     const projectPath = makeTempProject();
     const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
     assert.equal(
@@ -400,10 +360,14 @@ describe("managed setup preview", () => {
     );
     const localEdit = "keep this local managed edit\n";
     writeFileSync(managedReadmePath, localEdit);
+    // Divergent bytes alone are preserved now; a stale baseline makes the package want this path too.
+    recordStaleBaselineHashes(projectPath, "codex", [
+      ".goat-flow/logs/quality/README.md",
+    ]);
 
     const blockedInstall = runCliInstaller(projectPath, "--agent", "codex");
     assert.notEqual(blockedInstall.status, 0);
-    assert.match(blockedInstall.stderr, /local-edited/u);
+    assert.match(blockedInstall.stderr, /both-changed/u);
     assert.equal(readFileSync(managedReadmePath, "utf-8"), localEdit);
 
     const forcedInstall = runCliInstaller(
@@ -440,6 +404,10 @@ describe("managed setup preview", () => {
     );
     const locallyEditedManagedContent = "force may replace this managed edit\n";
     writeFileSync(managedReadmePath, locallyEditedManagedContent);
+    // Only a package template change makes this row a conflict force is allowed to resolve.
+    recordStaleBaselineHashes(projectPath, "codex", [
+      ".goat-flow/logs/quality/README.md",
+    ]);
 
     const securityPolicyPath = join(
       projectPath,
@@ -593,17 +561,18 @@ describe("managed setup preview", () => {
       "json",
     );
 
-    assert.notEqual(preview.status, 0);
+    assert.equal(preview.status, 0, preview.stderr);
     const report = JSON.parse(preview.stdout) as {
       verdict: string;
       files: PreviewRow[];
     };
-    assert.equal(report.verdict, "blocked");
+    // Preserved local content is not a conflict, so the preview reads ready and still writes nothing.
+    assert.equal(report.verdict, "ready");
     assert.equal(
       report.files.some(
         (file) =>
           file.path === ".goat-flow/logs/quality/README.md" &&
-          file.state === "local-edited",
+          file.state === "local-preserved",
       ),
       true,
     );
@@ -678,7 +647,7 @@ describe("managed setup preview", () => {
         "--force",
       );
       assert.notEqual(forcedInstall.status, 0);
-      assert.match(forcedInstall.stderr, /--force cannot bypass path safety/u);
+      assert.match(forcedInstall.stderr, /no authority bypasses path safety/u);
       assert.deepEqual(
         readFileSync(redirectedReadmePath),
         redirectedBytesBefore,
@@ -723,7 +692,7 @@ describe("managed setup preview", () => {
       );
 
       assert.notEqual(forcedInstall.status, 0);
-      assert.match(forcedInstall.stderr, /--force cannot bypass path safety/u);
+      assert.match(forcedInstall.stderr, /no authority bypasses path safety/u);
       assert.equal(
         existsSync(join(projectPath, ".agents", "skills", "goat", "SKILL.md")),
         false,

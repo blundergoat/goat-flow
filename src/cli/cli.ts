@@ -84,8 +84,11 @@ Flags:
   --finalize        Plans time stop: close the open span and finalize a measured receipt
   --discard-open    Plans time stop: discard an interrupted span without inventing an end
   --apply           Setup: copy/update deterministic system files instead of generating a prompt
-  --dry-run         Install/setup: preview managed template drift without changing the target
-  --force           Install/setup --apply: replace inspected system-owned conflicts; plans export: regenerate output
+  --dry-run         Install/setup: preview every path apply may write, changing nothing
+  --force           Alias for --force-managed; plans export: regenerate output
+  --force-managed   Install/setup --apply: authorize every inspected system-owned conflict
+  --force-path <p>  Install/setup --apply: authorize one conflict by project-relative path (repeatable)
+  --force-user-owned  Install/setup --apply: with matching --force-path, replace that user-owned file
   --update-config-version  Install: update only the version field in existing config.yaml
   --clean-deprecated       Install: remove deprecated skill directories
   --verbose         Show per-check details

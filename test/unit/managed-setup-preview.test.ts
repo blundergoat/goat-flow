@@ -53,11 +53,11 @@ const CLASSIFICATION_FIXTURES: ClassificationFixture[] = [
     expectedState: "unchanged",
   },
   {
-    name: "local-edited",
+    name: "local-preserved",
     oldExpectedSha256: OLD_EXPECTED_HASH,
     currentSha256: CURRENT_FILE_HASH,
     newExpectedSha256: OLD_EXPECTED_HASH,
-    expectedState: "local-edited",
+    expectedState: "local-preserved",
   },
   {
     name: "template-changed",

@@ -97,7 +97,10 @@ export interface CandidacyInputArg {
 }
 
 /** Raw values returned by Node's `parseArgs`; keys intentionally mirror CLI flag names. */
-export type ParsedArgValues = Partial<Record<string, string | boolean>>;
+/** Raw `parseArgs` output; repeatable options such as `--force-path` arrive as string lists. */
+export type ParsedArgValues = Partial<
+  Record<string, string | boolean | string[]>
+>;
 
 export const COMMANDS: Command[] = [
   "setup",
@@ -147,6 +150,9 @@ export interface ParsedCLI extends CLIOptions {
   shouldApply: boolean;
   shouldDryRun: boolean;
   shouldForce: boolean;
+  shouldForceManaged: boolean;
+  shouldForceUserOwned: boolean;
+  forcePaths: readonly string[];
   updateConfigVersion: boolean;
   cleanDeprecated: boolean;
   qualitySubcommand: QualitySubcommand;

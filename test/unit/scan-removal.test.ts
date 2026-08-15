@@ -148,7 +148,22 @@ describe("backwards compatibility", () => {
     );
   });
 
-  it("rejects write flags that would be ignored by dry-run", () => {
+  it("previews the same authority apply would use", () => {
+    const parsed = parseCLIArgs([
+      "install",
+      ".",
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--force",
+    ]);
+
+    // Dry-run answers "what would this authority do", so it must accept the flags.
+    assert.equal(parsed.shouldDryRun, true);
+    assert.equal(parsed.shouldForce, true);
+  });
+
+  it("rejects a broad user-owned override with no named path", () => {
     assert.throws(
       () =>
         parseCLIArgs([
@@ -156,10 +171,9 @@ describe("backwards compatibility", () => {
           ".",
           "--agent",
           "codex",
-          "--dry-run",
-          "--force",
+          "--force-user-owned",
         ]),
-      /--dry-run cannot be combined with --force/u,
+      /--force-user-owned requires at least one --force-path/u,
     );
   });
 

@@ -118,6 +118,18 @@ function rejectFlagOutsideCommand(
 }
 
 /** Return whether a raw `parseArgs` boolean flag was explicitly set. */
+/** Read one repeatable string option as a list; an absent option yields an empty list. */
+function parsedStringList(
+  values: ParsedArgValues,
+  name: string,
+): readonly string[] {
+  const raw = values[name];
+  // `parseArgs` omits the key entirely until the user supplies the option at least once.
+  return Array.isArray(raw)
+    ? raw.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
 function parsedFlag(values: ParsedArgValues, name: string): boolean {
   return values[name] === true;
 }
@@ -319,14 +331,35 @@ function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
   if (shouldDryRun && !commandSupportsDryRun) {
     throw new CLIError("--dry-run is only valid for install or setup.", 2);
   }
-  const hasIgnoredWriteFlag =
-    parsedFlag(values, "force") ||
-    parsedFlag(values, "update-config-version") ||
-    parsedFlag(values, "clean-deprecated");
-  // Force and migration flags mutate broader surfaces and cannot change a read-only preview.
-  if (shouldDryRun && hasIgnoredWriteFlag) {
+  // Authority and migration flags change what apply would do, so a preview that
+  // rejected them could not answer the question the user is actually asking.
+}
+
+/** Reject authority combinations that would widen a write past what the user named. */
+function validateAuthorityFlags(
+  command: Command,
+  values: ParsedArgValues,
+): void {
+  const authorityFlags: Array<[string, boolean]> = [
+    ["--force-managed", parsedFlag(values, "force-managed")],
+    ["--force-user-owned", parsedFlag(values, "force-user-owned")],
+    ["--force-path", parsedStringList(values, "force-path").length > 0],
+  ];
+  for (const [flag, isSupplied] of authorityFlags) {
+    if (isSupplied && !isInstallCommand(command, values)) {
+      throw new CLIError(
+        `${flag} is only valid for install or setup --apply.`,
+        2,
+      );
+    }
+  }
+  // Replacing user-owned content is never a broad choice; it names each path it touches.
+  if (
+    parsedFlag(values, "force-user-owned") &&
+    parsedStringList(values, "force-path").length === 0
+  ) {
     throw new CLIError(
-      "--dry-run cannot be combined with --force, --update-config-version, or --clean-deprecated. Preview first, then run the chosen write command separately.",
+      "--force-user-owned requires at least one --force-path <path>. Name each user-owned file to replace; there is no broad user-owned override.",
       2,
     );
   }
@@ -335,6 +368,7 @@ function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
 /** Validate deterministic install/setup flags; throws CLIError when flags target the wrong command. */
 function validateInstallFlags(command: Command, values: ParsedArgValues): void {
   validateDryRunFlag(command, values);
+  validateAuthorityFlags(command, values);
   if (command !== "setup" && parsedFlag(values, "apply")) {
     throw new CLIError("--apply is only valid for the setup command.", 2);
   }
@@ -468,6 +502,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       apply: { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
       force: { type: "boolean", default: false },
+      "force-managed": { type: "boolean", default: false },
+      "force-user-owned": { type: "boolean", default: false },
+      "force-path": { type: "string", multiple: true },
       "update-config-version": { type: "boolean", default: false },
       "clean-deprecated": { type: "boolean", default: false },
       dev: { type: "boolean", default: false },
@@ -587,6 +624,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     shouldApply: parsedFlag(parsedValues, "apply"),
     shouldDryRun: parsedFlag(parsedValues, "dry-run"),
     shouldForce: parsedFlag(parsedValues, "force"),
+    shouldForceManaged: parsedFlag(parsedValues, "force-managed"),
+    shouldForceUserOwned: parsedFlag(parsedValues, "force-user-owned"),
+    forcePaths: parsedStringList(parsedValues, "force-path"),
     updateConfigVersion: parsedFlag(parsedValues, "update-config-version"),
     cleanDeprecated: parsedFlag(parsedValues, "clean-deprecated"),
     qualitySubcommand: qualityPositionals.qualitySubcommand,
