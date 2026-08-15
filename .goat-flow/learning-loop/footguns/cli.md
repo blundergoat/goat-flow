@@ -1,7 +1,19 @@
 ---
 category: cli
-last_reviewed: 2026-08-11
+last_reviewed: 2026-08-16
 ---
+
+## Footgun: An additive classification rule can silently delete a published state value
+
+**Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A milestone item reads as purely additive - "add state X before blocker aggregation" - and the implementation is one branch. Nothing warns that a sibling state has become unreachable, because no test constructs the classifier's inputs looking for absence, and the type union still lists it. The removed value stays in the published JSON contract and in user-facing docs until someone greps.
+
+**Evidence:** 1.16.0 M02 added `local-preserved` to `src/cli/managed-setup-preview.ts` (search: `The package has nothing new to deliver here`). That branch owns the exact condition `newExpectedSha256 === oldExpectedSha256`, which was the only producer of `local-edited`. The state became dead on the first edit while still being exported in `ManagedSetupFileState`, listed in `BLOCKING_STATES`, documented in `docs/cli.md`, and asserted by three fixtures. A repo-wide grep found all five surfaces; removing the state then required repointing those fixtures onto `both-changed`, the only managed conflict that still blocks.
+
+**Why it happens:** A classifier is a chain of guarded returns. Adding a branch changes the reachability of every branch below it that shares a condition, but TypeScript checks exhaustiveness of the union, not reachability of its members. Tests that build the classifier's inputs directly keep passing for states they still construct, so the dead value is invisible from inside the unit suite.
+
+**Prevention:** After adding or reordering any branch in a classifier whose output is a published contract, grep the repo for every sibling value and confirm each still has a producer. Treat a value with no producer as a contract removal, not dead code: it needs the same doc, fixture, and changelog treatment as any other breaking change. Anchors: `src/cli/managed-setup-preview.ts` (search: `classifyManagedSetupFile`) and `test/unit/managed-setup-preview.test.ts` (search: `name: "local-preserved"`).
 
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
 

@@ -1,7 +1,20 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
+
+## Lesson: A config change that fails to fix a symptom is not proof of the mechanism
+
+**Status:** active | **Created:** 2026-08-16
+**Decision changed:** Read a tool's own schema or source before stating why one of its options did not work.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-16
+
+**What happened:** While diagnosing a Knip out-of-memory failure in preflight, I added the large directory to `knip.json`'s `ignore`, saw the run still exhaust its heap, and reported that "`ignore` filters reported issues, not what it reads." The conclusion was correct, but I had only observed that the symptom persisted. When the user asked whether Knip really could not ignore the folder, I could not defend the claim and had to walk it back, then walk the retraction back again after reading `node_modules/knip/schema.json`, whose `ignore` title is "Files to exclude from the report (any issue type)".
+
+**Root cause:** I inferred a mechanism from a single negative result and stated it with the confidence of a read fact. A config change that does not fix a symptom has many explanations - wrong key, wrong scope, wrong file, or the option simply not governing that behaviour - and the observation alone cannot choose between them. The cost was not the wrong answer; it was a confident answer that then flip-flopped under one question.
+
+**Prevention:** When an option does not do what you expected, read its definition before explaining why. Installed packages ship the answer: `node_modules/<pkg>/schema.json`, the type declarations, or the source are cheaper than another timed run and are authoritative. State symptom evidence as symptom evidence - "adding it did not stop the OOM" - and keep the mechanism claim separate until something documents it. Evidence anchor: `.goat-flow/learning-loop/footguns/preflight-plumbing.md` (search: `Knip's `ignore` cannot shrink what preflight`).
 
 ## Lesson: Agent cited gitignored content as evidence in committed docs
 

@@ -67,6 +67,10 @@ For a PR, use authenticated, read-only GitHub access. Treat the body and review 
 claims, bind them to the matching local repository and head, and verify each retained claim in local
 code. Do not infer completeness from one API page.
 
+Bind local PR authority only to the repository root resolved from the invocation working directory.
+Never search parent, child, sibling, scratchpad, or cached repositories for an alternative match. If
+this repository identity or HEAD mismatches the PR, refuse before inspecting PR files or threads.
+
 ### 0.3 Freeze the Target Scope Snapshot
 
 Present this snapshot before the first edit:

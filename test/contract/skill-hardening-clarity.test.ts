@@ -134,6 +134,14 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("binds PR authority to the repository containing the invocation", () => {
+    assertIncludesAll([
+      "repository root resolved from the invocation working directory",
+      "never search parent, child, sibling, scratchpad, or cached repositories",
+      "refuse before inspecting PR files or threads",
+    ]);
+  });
+
   it("runs the repository formatter before expensive verification", () => {
     assertIncludesAll([
       "repository formatter check on the exact modified paths",

@@ -1,9 +1,21 @@
 ---
 category: preflight-plumbing
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Data crossing the Node-to-shell boundary inside preflight and CI scripts - command substitution, formatting that shell arithmetic cannot parse, and stdout fed into pattern matchers. What the audit checks *mean* lives in [auditor.md](auditor.md).
+
+## Footgun: Knip's `ignore` cannot shrink what preflight's Knip step reads
+
+**Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** Preflight's TypeScript phase fails with `Knip: 0 | ? unused exports/types`. The `0 | ?` is parsed out of an OOM stack trace, not from findings, because `scripts/preflight-checks.sh` (search: `knip_output=$(node --max-old-space-size=5120`) counts result lines and falls back to `?`. Knip exits 134. Adding the offending directory to `knip.json`'s `ignore` changes nothing.
+
+**Why it happens:** `ignore` is a report filter by definition. The installed schema at `node_modules/knip/schema.json` titles it "Files to exclude from the report (any issue type)", and `ignoreFiles` as "Unused files to exclude from the report". Neither governs the file walk. `project` and `entry` do define the analysed set, and in this repo they are already narrow - `src/**/*.ts`, `scripts/**/*.mjs`, `test/**/*.ts` - so gitignored local state was never in the analysed set to begin with. The heap goes somewhere earlier than analysis.
+
+**Evidence:** Measured 2026-08-16. `.goat-flow/scratchpad` held 31,249 `.ts` files across 5.4 GB. A detached `git worktree` at the same commit, carrying the same source, passed the identical command under the identical 5120 MB cap; this tree exhausted it. Adding `.goat-flow/**` and `_temp/**` to `ignore` in the real repo-root config still exhausted it. Running with a 10240 MB heap completed and reported zero findings, so there was never a real finding behind the failure.
+
+**Prevention:** Do not reach for `ignore` or `ignoreFiles` to fix a Knip memory failure - by their own schema they cannot help. The two levers that work are the heap in `scripts/preflight-checks.sh` and the number of files in the working tree. Before treating a Knip failure as a code defect, run it once with a larger heap: if it exits 0 with no findings, the change set is clean and the failure is local state. A detached worktree at the last commit carrying the same changed files separates the two in one run.
 
 ## Footgun: Colourized `node -e` output silently disables shell numeric guards
 
