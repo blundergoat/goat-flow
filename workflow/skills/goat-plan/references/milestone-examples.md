@@ -99,9 +99,17 @@ Add only sections that prevent a named failure:
 - **Boundary Notes:** authorization, irreversible actions, recovery ownership, and rollback.
 - **Current-state evidence:** observed facts that determine the design.
 - **Assumptions:** unresolved premises, dependent work, and required evidence.
-- **Verification baseline:** pre-change results referenced by command purpose, never the literal command.
+- **Verification baseline:** pre-change results referenced by command purpose.
 - **Layered Proof:** distinct compatibility, rollback, security, migration, and behavioural claims.
 - **Maintenance notes:** non-obvious post-delivery traps only.
+
+### Verification baseline
+
+Record the observed pre-change result beside a command purpose; never repeat the literal command.
+
+### Maintenance notes
+
+Include only a real trap a future maintainer cannot infer.
 
 High-risk detail has no safety-reducing hard cap; output above 1,200 words names the safety reason. The artifact never delegates commit, push, or implementation authority.
 

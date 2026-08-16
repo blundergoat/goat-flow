@@ -104,10 +104,9 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   });
 
   /*
-   * The two plain-language sections are the only part of a milestone a reader outside the
-   * project can act on. An agent that renames them back to jargon, or drops the worked
-   * BAD/GOOD pair that shows the register, silently returns plans to internal vocabulary -
-   * so both the names and the demonstration are pinned, not just the names.
+   * The two plain-language sections are the only part of a milestone a reader outside the project can act on.
+   * Renaming them back to jargon, or dropping the worked BAD/GOOD pair that carries the register, returns plans to
+   * internal vocabulary, so the demonstration is pinned alongside the names.
    */
   it("pins the plain-language milestone sections and the example that shows their register", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
@@ -119,7 +118,10 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     });
 
     assertForEachTarget(
-      installedSkillReferencePaths("goat-plan", "references/milestone-examples.md"),
+      installedSkillReferencePaths(
+        "goat-plan",
+        "references/milestone-examples.md",
+      ),
       (examplesPath) => {
         const examples = readProjectFile(examplesPath);
         const templateLines = examples.split(/\r?\n/u);
@@ -138,6 +140,16 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         );
         assert.match(examples, /^- BAD: /mu, examplesPath);
         assert.match(examples, /^- GOOD: /mu, examplesPath);
+
+        // An author trimming for the word cap deletes these three rules first, and every other check here still passes without
+        // them: correct headings, correct order, one line each, written by compressing the Objective into shorter jargon.
+        for (const derivationRule of [
+          /not by shortening the Objective/u,
+          /benefit line just negates the cost line/u,
+          /spike that ships nothing says so/u,
+        ]) {
+          assert.match(examples, derivationRule, examplesPath);
+        }
         assert.doesNotMatch(
           examples,
           /How users will notice the difference|^\| Motivation \|/mu,
@@ -223,9 +235,11 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       .split(/\s+/u)
       .filter(Boolean).length;
 
+    // The obvious way to buy room here is cutting the restating Verification baseline and Maintenance notes subsections,
+    // but the "keeps goat-plan handoff artifacts drift-aware" contract pins them, so that trim costs a shipped check.
     assert.ok(
-      canonicalSurfaceWords <= 4650,
-      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 4650`,
+      canonicalSurfaceWords <= 4700,
+      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 4700`,
     );
   });
 

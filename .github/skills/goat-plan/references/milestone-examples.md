@@ -87,7 +87,7 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 
 Put each literal command in one Commands source. Proof, tasks, and exit criteria reference its purpose rather than repeating it. Add Mid-implementation proof only before switching modules or after a bounded edit batch.
 
-Both plain-language milestone sections take one concrete, jargon-free line a reader outside the project understands:
+Write from the incident in Context, not by shortening the Objective - that sentence is for the implementer. If the benefit line just negates the cost line, one is wasted. A spike that ships nothing says so. Both plain-language milestone sections take one concrete, jargon-free line a reader outside the project understands:
 
 - BAD: "Runtime proof executing target-controlled launchers needs a trusted-target choice."
 - GOOD: "Looking at a stranger's repo can't run their code on your machine."
@@ -118,8 +118,8 @@ High-risk detail has no safety-reducing hard cap; output above 1,200 words names
 | Field | Rule |
 |---|---|
 | Outcome | Name what becomes true; add Objective only when the title needs clarification. |
-| What we lose | One concrete line: what stays broken. Plain words, no hedging. |
-| Why this helps | One plain line a non-specialist gets. No jargon, no paths. |
+| What we lose | One concrete line: what stays broken. |
+| Why this helps | One plain line a non-specialist gets. |
 | Tasks | Order `[RISKY]`, `[CORE]`, `[SAFE]`; one action and one done condition per checkbox. |
 | Proof | State claim → evidence with relevant tags; human sign-off belongs to the blocking gate. |
 | Exit | State binary transition truth and reference proof claims without copying commands. |
