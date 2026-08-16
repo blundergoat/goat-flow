@@ -83,7 +83,7 @@ Use an instruction file for rules the agent should remember. Use GOAT Flow when 
 
 ## Getting started
 
-Requires Node.js 20+.
+Requires Node.js 20.11+.
 
 ### 1. Start with the menu
 
@@ -148,7 +148,7 @@ npx @blundergoat/goat-flow@latest install . --agent claude     # Copy/update sys
 npx @blundergoat/goat-flow@latest setup . --agent claude       # Generate setup prompt
 npx @blundergoat/goat-flow@latest quality . --agent claude     # Generate quality-assessment prompt
 npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md
-npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format markdown
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/<version> --format markdown
 npx @blundergoat/goat-flow@latest status .                     # Project state (bare/partial/v0.9/outdated/current/error)
 npx @blundergoat/goat-flow@latest manifest                     # Agent support matrix
 ```

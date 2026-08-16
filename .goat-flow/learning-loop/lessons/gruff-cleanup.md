@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, masking blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy it is [verification-gruff.md](verification-gruff.md).
@@ -42,6 +42,8 @@ last_reviewed: 2026-08-15
 **What happened:** During M01 gruff cleanup, extracting `src/cli/facts/fs.ts` cache helpers added comments that said "read errors cache and return null", "stat errors cache and return false", and "readdir errors cache and return []". Humans could infer the behavior, but `gruff-ts` still reported `docs.missing-error-behavior-doc` until the comments used the installed rule vocabulary: `swallows ... fallback`.
 
 **Recurrence update (2026-08-06):** New Windows Bash discovery comments said lookup errors returned no choices, but the rule stayed open until the text explicitly said the process errors `recover` to fallback discovery. The targeted report then cleared all three error-behavior findings.
+
+**Recurrence update (2026-08-16):** Two rewrites of the `readTargetConfigText` docblock in `src/cli/install-command.ts` failed the same way. "or null when no config can be read" carried no marker at all, and "returns null rather than throwing" failed because the vocabulary match is whole-word: `throwing` is not `throws`. The third wording used the bare `swallows` and cleared the finding.
 
 **Root cause:** I wrote comments that described the behavior semantically but did not satisfy the analyzer's marker vocabulary for error recovery.
 

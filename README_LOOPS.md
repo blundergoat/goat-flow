@@ -32,7 +32,7 @@ The loops map onto the five harness concerns (Context, Constraints, Verification
 The feedback loop is the one that makes the others compound. It has four stages, each with its own closure:
 
 1. **Capture** - when VERIFY catches a failure or course-corrects, the incident becomes an entry: behavioural mistakes in `.goat-flow/learning-loop/lessons/`, architectural traps in `.goat-flow/learning-loop/footguns/` (with semantic-anchor evidence per ADR-024), significant choices in `.goat-flow/learning-loop/decisions/` (ADRs), reusable approaches in `.goat-flow/learning-loop/patterns/`.
-2. **Retrieval** - generated per-bucket `INDEX.md` files (`goat-flow index`, ADR-035) are read at every skill Step 0, so entries are found by cold agents instead of rotting.
+2. **Retrieval** - generated per-bucket `INDEX.md` files (`goat-flow index`, ADR-033) are read at every skill Step 0, so entries are found by cold agents instead of rotting.
 3. **Hygiene** - `goat-flow stats --check` fails on stale evidence refs, stale generated indexes, oversized buckets, missing or outdated `last_reviewed` frontmatter, and malformed ADRs. It runs in the local preflight gate and in CI, so decay is caught structurally.
 4. **Graduation** - when a recorded mistake happens again, the entry gets a line-start `**Recurrence update` marker. `goat-flow stats` lists active entries with such markers as **graduation candidates**, with per-entry recurrence counts. The migration path for each candidate: promote the prevention to a structural gate (preflight check, CI step, deny pattern) or resolve the entry. Candidates are report-only - never a `--check` failure - so the signal cannot decay into ignorable warning noise.
 
@@ -51,4 +51,4 @@ Stage 4 is deliberately the only human-paced stage: the tooling names the candid
 
 - **No scheduled or cron jobs.** Every automated loop is event-triggered: a tool call, a turn ending, a pull request, an explicit gate run. At this repository's cadence, a nightly run would mostly produce unread reports - the diary failure mode with a timestamp.
 - **No effectiveness telemetry.** Hook-fire counters and retrieval-rate metrics were considered and deferred: a metrics surface with no consumer is noise, not a loop.
-- **Removed loop machinery stays removed.** The confusion log (ADR-001), the scanner/rubric system (ADR-013), and the plan checkbox guard (ADR-039) were each cut because nothing consumed their output. That is the bar a new loop must clear before it ships.
+- **Removed loop machinery stays removed.** The confusion log (ADR-033), the scanner/rubric system (ADR-013), and the plan checkbox guard (ADR-037) were each cut because nothing consumed their output. That is the bar a new loop must clear before it ships.

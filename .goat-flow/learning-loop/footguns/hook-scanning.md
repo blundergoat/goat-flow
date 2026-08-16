@@ -1,6 +1,6 @@
 ---
 category: hook-scanning
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** What a hook-driven scanner can and cannot see - changed-file enumeration, diff and rename detection, gitignore and gitattribute interactions, and language/block parsing. Hook registration, launcher runtime, and policy-module behavior live in `hooks.md`; installation and per-agent config live in `hook-installation.md`.
@@ -93,6 +93,25 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 **Why it happens:** `binary` is shorthand for `-text -diff`, and it is `-diff` - not `-text` - that makes numstat report a path as uncountable. A scanner reading numstat therefore cannot distinguish a real binary from a text file whose diff is merely suppressed.
 
 **Prevention:** To keep a generated file out of review noise without blinding scanners, use `text linguist-generated=true`, which collapses the diff in GitHub review while leaving numstat counts intact. Reserve `-diff` for genuinely unreadable content. After changing a lockfile attribute, confirm with `git diff --numstat -- <path>` that real counts appear.
+
+---
+
+## Footgun: Gruff `docs.*` rules prove a comment exists, not that it describes the symbol beneath it
+
+**Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Whether a clean or near-clean `gruff-ts analyse` result counts as evidence that a file's doc comments are attributed to the right symbol and factually true.
+**Trigger phase:** VERIFY
+
+**Trap:** The documentation rules answer "does a comment exist here" and "does this docblock's tag list match this signature". Neither question asks whether the prose describes the symbol it sits above. A docblock that drifts onto a neighbouring function, or a copy-pasted `@param` line that keeps describing its original donor, satisfies every enabled rule and reads as clean. Two coverage holes widen it: a docblock stacked directly above another docblock still satisfies the presence rule for the symbol below, and `docs.missing-param-tag` / `docs.stale-param-tag` fire only on an `export function` that already carries a `/** */`, so tag accuracy on internal functions is never inspected at all.
+
+**Evidence:** Measured 2026-08-16 against HEAD `4bed4404`. `gruff-ts analyse src --format json` over 224 TypeScript files returned 17 findings, none of which named an attribution or accuracy defect, while a direct scan of the same files found:
+
+- Three docblocks sitting above the wrong symbol. Only one produced any finding, and only as a side effect: the stranded block satisfied the presence rule for its neighbour, leaving `docs.missing-internal-function-doc` on the function it had been written for. The other two produced nothing, because presence was satisfied twice over.
+- Twelve copies of one `@param _warnings` line in `src/cli/config/reader-validators.ts`, seven of which named a parameter that does not exist and called a used accumulator unused. `docs.stale-param-tag` reported none of the seven, because every one of those validators is an internal `function`. The rule fired exactly once in `src/`, as a false positive on the exported `validateFindingLine`, whose six tags map one-to-one to its six parameters.
+
+All instances above were corrected in the same session; the trap is the rule surface, not an open defect list. Anchors: `src/cli/cli-parser.ts` (search: `Return whether a raw \`parseArgs\` boolean flag was explicitly set`), `src/cli/config/reader-validators.ts` (search: `accumulator this block's unrecognized nested keys are appended to`), `src/cli/review-validate-anchors.ts` (search: `export function validateFindingLine`), rule enablement in `.gruff-ts.yaml` (search: `docs.stale-param-tag`).
+
+**Prevention:** Read the symbol under each docblock you touch; a clean analyzer is not attribution evidence, and ADR-059 already treats a Gruff documentation finding as a candidate rather than a mandate. Two comment blocks with nothing between them means one is orphaned - find the symbol it was written for instead of deleting it. Treat `@param` and `@return` accuracy on non-exported functions as wholly unchecked, and confirm a repeated tag line still describes each site before trusting any copy of it. When `docs.stale-param-tag` does fire, count the tags against the signature before editing, because the reported symbol may already be correct.
 
 ## Resolved Entries
 
