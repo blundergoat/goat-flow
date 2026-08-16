@@ -51,11 +51,11 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 ## Objective
 <Binary outcome this milestone proves or delivers.>
 
-## How users will notice the difference
-<Observable change a user sees or does once this ships; if not user-visible, name the internal beneficiary.>
+## What we lose without this
+<One concrete line: what stays broken or gets worse if this never ships.>
 
-## Motivation
-<Problem or value driving this milestone; what stays broken without it.>
+## Why this helps
+<One plain line: the everyday benefit, in words a non-specialist uses.>
 
 ## Context
 - Read first: `<file>` (search: `<semantic anchor>`) — <non-obvious convention or reference>.
@@ -87,6 +87,11 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 
 Put each literal command in one Commands source. Proof, tasks, and exit criteria reference its purpose rather than repeating it. Add Mid-implementation proof only before switching modules or after a bounded edit batch.
 
+Both plain-language milestone sections take one concrete, jargon-free line a reader outside the project understands:
+
+- BAD: "Runtime proof executing target-controlled launchers needs a trusted-target choice."
+- GOOD: "Looking at a stranger's repo can't run their code on your machine."
+
 ## High-risk additions
 
 Add only sections that prevent a named failure:
@@ -113,8 +118,8 @@ High-risk detail has no safety-reducing hard cap; output above 1,200 words names
 | Field | Rule |
 |---|---|
 | Outcome | Name what becomes true; add Objective only when the title needs clarification. |
-| How users notice | Name the observable change from the user's seat; when nothing is user-visible, name the internal beneficiary instead. |
-| Motivation | State the problem or value the milestone answers; keep it distinct from the Objective's outcome. |
+| What we lose | One concrete line: what stays broken. Plain words, no hedging. |
+| Why this helps | One plain line a non-specialist gets. No jargon, no paths. |
 | Tasks | Order `[RISKY]`, `[CORE]`, `[SAFE]`; one action and one done condition per checkbox. |
 | Proof | State claim → evidence with relevant tags; human sign-off belongs to the blocking gate. |
 | Exit | State binary transition truth and reference proof claims without copying commands. |

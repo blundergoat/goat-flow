@@ -126,9 +126,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
               ? []
               : [
                   "    scan-roots:",
-                  ...rootCase.roots.map(
-                    (scanRoot) => `      - ${scanRoot}`,
-                  ),
+                  ...rootCase.roots.map((scanRoot) => `      - ${scanRoot}`),
                 ]),
             "",
           ].join("\n"),
@@ -140,7 +138,10 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         assert.deepEqual(state.scanRoots?.roots, rootCase.roots ?? []);
         assert.equal(state.agents.codex.installed, false);
         assert.equal(state.agents.codex.isRegistered, false);
-        assert.equal(state.agents.codex.effectiveState.status, "not-registered");
+        assert.equal(
+          state.agents.codex.effectiveState.status,
+          "not-registered",
+        );
         assert.equal(state.agents.codex.repairCommand, null);
         assert.match(
           state.agents.codex.repairSummary,

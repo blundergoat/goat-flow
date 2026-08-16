@@ -54,12 +54,23 @@ Put delivery decisions before background. Use the seven rows below and keep each
 | Next step | <first concrete action or current milestone> |
 ```
 
-## How users will notice the difference
+## What we lose without this
 
-Use two to six before-and-after bullets. Distinguish relevant reader groups, cite measured baselines when available, and avoid marketing claims.
+Name the problem and its cost in plain words, not the implementation. Use concise bullets grounded in observed evidence where available.
 
 ```markdown
-## How users will notice the difference
+## What we lose without this
+
+- <Current problem, and the concrete cost to affected users or maintainers.>
+- <Evidence showing the problem is material enough to address now.>
+```
+
+## Why this helps
+
+Use two to six before-and-after bullets in plain language. Distinguish relevant reader groups, cite measured baselines when available, and avoid marketing claims.
+
+```markdown
+## Why this helps
 
 - **Requesters see <difference>.** <Observable improvement compared with the current experience.>
 - **Reviewers find <decision> faster.** <Concrete change in review or approval work.>
@@ -67,17 +78,6 @@ Use two to six before-and-after bullets. Distinguish relevant reader groups, cit
 ```
 
 Mention unchanged safeguards or delayed payoff only when materially relevant; never invent either to fill the section.
-
-## Motivation
-
-Explain the problem and value, not the implementation. Use concise bullets grounded in observed evidence where available.
-
-```markdown
-## Motivation
-
-- <Current problem and why it matters to affected users or maintainers.>
-- <Evidence showing the problem is material enough to address now.>
-```
 
 ## What
 

@@ -65,7 +65,7 @@ Environment:
   COLUMNS=N      - override terminal width detection (default: tput cols, or 80)
   CI=true        - implies --no-color unless FORCE_COLOR is set
   GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=N
-                 - test command timeout in seconds (default: 600; 0 disables)
+                 - test command timeout in seconds (default: 28; 0 disables)
 HELP
             exit 0
             ;;
@@ -324,7 +324,6 @@ details_pipe() {
 }
 
 # Run one Tests command while retaining final diagnostics and showing bounded TTY liveness.
-# Use the same helper for first-run and retry paths so users receive one timeout contract.
 run_command_capture_with_timeout() {
     local __output_var="$1"
     local __status_var="$2"
@@ -421,7 +420,7 @@ collapsed_desc_for() {
         "Cross-Agent Consistency") printf 'execution loop · router table' ;;
         "Instruction Parity Contract") printf 'agent files share contract' ;;
         "Instruction File Quality") printf 'within line budget · no encyclopedia' ;;
-        "Tests") printf 'fast suite + coverage' ;;
+        "Tests") printf 'fast suite · bounded to 30s' ;;
         "Dependency Audit") printf 'npm audit' ;;
         "GOAT Flow Audit") printf 'all checks' ;;
         "Learning-Loop Schema") printf 'footguns + lessons valid' ;;
@@ -1764,29 +1763,26 @@ fi
 if [[ -f package.json ]] && grep -q '"test"' package.json; then
     section "Tests"
     test_reports_coverage=false
-    test_retryable=false
     coverage_output=""
-    if grep -q '"test:coverage"' package.json; then
+    if grep -q '"test:fast"' package.json; then
+        test_command=(npm run test:fast)
+        test_label="Fast suite"
+    elif grep -q '"test:coverage"' package.json; then
         test_command=(npm run test:coverage)
         test_label="Tests + coverage"
         test_reports_coverage=true
-        test_retryable=true
-    elif grep -q '"test:fast"' package.json; then
-        test_command=(npm run test:fast)
-        test_label="Fast suite"
-        test_retryable=true
     else
         test_command=(npm test)
         test_label="All"
     fi
     test_output=""
     test_exit=1
-    test_timeout_seconds="${GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-600}"
+    test_timeout_seconds="${GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-28}"
     if [[ "$test_timeout_seconds" =~ ^[0-9]+$ ]]; then
         :
     else
-        warn "Invalid GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=$test_timeout_seconds; using 600"
-        test_timeout_seconds=600
+        warn "Invalid GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=$test_timeout_seconds; using 28"
+        test_timeout_seconds=28
     fi
     run_command_capture_with_timeout \
         test_output test_exit "$test_timeout_seconds" "Tests" "${test_command[@]}"
@@ -1803,31 +1799,9 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     elif [[ "$test_exit" -eq 124 ]]; then
         fail "$test_label timed out after ${test_timeout_seconds}s"
         printf '%s\n' "$test_output" | tail -20 | details_pipe || true
-    elif [[ "$test_retryable" == true ]]; then
-        retry_output=""
-        retry_exit=1
-        run_command_capture_with_timeout \
-            retry_output retry_exit "$test_timeout_seconds" "Tests retry" "${test_command[@]}"
-        retry_test_count=$(echo "$retry_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
-        retry_pass_count=$(echo "$retry_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
-        retry_fail_count=$(echo "$retry_output" | grep '# fail' | grep -oE '[0-9]+' || echo "0")
-
-        if [[ "$retry_exit" -eq 0 ]] && [[ "$retry_test_count" != "0" ]] && [[ "$retry_test_count" != "?" ]]; then
-            warn "$test_label passed on retry after initial failure ($retry_pass_count/$retry_test_count); investigate transient test isolation"
-            coverage_output="$retry_output"
-            printf '%s\n' "$test_output" | grep 'not ok' | head -5 | sed 's/^/initial: /' | details_pipe || true
-        elif [[ "$retry_exit" -eq 124 ]]; then
-            fail "Tests timed out after retry (initial $fail_count/$test_count failures, retry timed out after ${test_timeout_seconds}s)"
-            printf '%s\n' "$test_output" | grep 'not ok' | head -5 | sed 's/^/initial: /' | details_pipe || true
-            printf '%s\n' "$retry_output" | tail -20 | sed 's/^/retry: /' | details_pipe || true
-        else
-            fail "Tests failed after retry (initial $fail_count/$test_count failures, retry $retry_fail_count/$retry_test_count failures)"
-            printf '%s\n' "$test_output" | grep 'not ok' | head -5 | sed 's/^/initial: /' | details_pipe || true
-            printf '%s\n' "$retry_output" | grep 'not ok' | head -5 | sed 's/^/retry: /' | details_pipe || true
-        fi
     else
         fail "Tests failed ($fail_count/$test_count failures)"
-        printf '%s\n' "$test_output" | grep 'not ok' | head -5 | details_pipe || true
+        grep -m 5 'not ok' <<< "$test_output" | details_pipe || true
     fi
 
     if [[ "$test_reports_coverage" == true && -n "$coverage_output" ]]; then

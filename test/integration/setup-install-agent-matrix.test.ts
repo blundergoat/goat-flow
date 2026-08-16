@@ -362,12 +362,12 @@ function assertInstalledAgentSurface(
     `${agentProfile.id} hook config must use the managed Bash resolver`,
   );
 
-  // Codex users receive only the provider lifecycles proven by the approved live matrix.
+  // This fixture is intentionally non-Git, so Codex receives policy but no unsafe Stop row.
   if (agentProfile.id === "codex") {
     assert.match(installedHookConfig, /"PreToolUse"/u);
-    assert.match(installedHookConfig, /"Stop"/u);
-    assert.match(installedHookConfig, /"timeout": 90/u);
-    assert.match(
+    assert.doesNotMatch(installedHookConfig, /"Stop"/u);
+    assert.doesNotMatch(installedHookConfig, /"timeout": 90/u);
+    assert.doesNotMatch(
       installedHookConfig,
       /codex:post-turn:goat-flow\.hook-result\.v1:turn-stop:1:75000/u,
     );
@@ -602,15 +602,19 @@ function verifyStandaloneInstallerHookSemantics(
     readFileSync(join(targetProjectPath, agentProfile.hookConfigFile), "utf-8"),
   ) as unknown;
 
-  // Every shipped hook must match the enabled state this agent can actually support.
+  // Every shipped hook must match provider support plus this non-Git root's eligibility.
   for (const hookSpec of listHookSpecs()) {
     const installedHookState = readAgentHookState(
       targetProjectPath,
       agentProfile,
       hookSpec,
     );
-    // No unsupported reason means this agent can install the hook for the user.
-    const shouldInstallHook = !hookSpec.unsupportedAgents?.[agentProfile.id];
+    // Post-turn stays unregistered until a Git root or complete explicit root list exists.
+    const doesRootContractAllowRegistration =
+      hookSpec.id !== "post-turn-safety";
+    const shouldInstallHook =
+      !hookSpec.unsupportedAgents?.[agentProfile.id] &&
+      doesRootContractAllowRegistration;
     assert.equal(
       installedHookState.installed,
       shouldInstallHook,

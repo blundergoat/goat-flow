@@ -119,17 +119,15 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("binds goat-security policy exceptions and scanners to trusted authorities", () => {
+    // Step 0 keeps the exception outcome rules inline and points at the reference for the
+    // field, approval, and status validation an agent runs only when an exception exists.
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assertMatchesAll(
         readMarkdownSection(skillPath, "Step 0 - Intake"),
         [
-          /exception.*identifier.*trusted[- ]policy[- ]source.*ref.*OID.*anchor.*named[- ]authorized[- ]approver.*independently[- ]trusted[- ]approval[- ]evidence.*owner.*rationale.*expiry.*verified[- ]scope[- ]match/iu,
-          /Validity:.*authorized.*in-scope.*unexpired.*independently trusted evidence.*authenticat.*named approver.*policy-authorized role.*approval.*bind.*identifier.*clause\/decision.*exact[- ]scope.*expiry.*review\/revocation[- ]trigger[- ]definition.*governing[- ]trusted[- ]policy[- ]source\/ref\/OID\/anchor/iu,
+          /Policy exception: validate every field, approval, and status per `project-policy-template\.md` \(search: `Validation during assessment`\) before honouring it/u,
           /mismatch.*unverifiable.*identity.*role.*binding.*retain.*`OPEN`/iu,
-          /current independently trusted status evidence.*bind.*identifier.*governing[- ]trusted[- ]policy[- ]source\/ref\/OID\/anchor.*approved[- ]review\/revocation[- ]trigger.*exact[- ]assessed[- ]authority\/snapshot\/deployment.*observation[- ]time.*prove.*active.*not.revoked.*no[- ]trigger[- ]fired.*unresolved.*mismatched.*status.*retains `OPEN`/isu,
-          /current independently trusted status evidence.*named[- ]status[- ]authority.*authenticat.*status authority.*governing policy.*authorized.*attest.*lifecycle\/revocation status.*observation[- ]time/isu,
-          /approval.*status.*governing trusted policy authority.*cross-record mismatch.*retains `OPEN`/isu,
         ],
         skillPath,
       );
@@ -191,9 +189,19 @@ describe("skill hardening contracts: security (1/2)", () => {
           [/accepted-risk disposition, not a false-positive classification/u],
           referencePath,
         );
+        // The assessment-time validation rules moved here from Step 0 (Validation during
+        // assessment); the section still owns the record shape a policy author fills in.
         assertMatchesAll(
           acceptedRiskRecords,
           [
+            /### Validation during assessment/u,
+            /exception.*identifier.*trusted[- ]policy[- ]source.*ref.*OID.*anchor.*named[- ]authorized[- ]approver.*independently[- ]trusted[- ]approval[- ]evidence.*owner.*rationale.*expiry.*verified[- ]scope[- ]match/iu,
+            /Validity:.*authorized.*in-scope.*unexpired.*independently trusted evidence.*authenticat.*named approver.*policy-authorized role.*approval.*bind.*identifier.*clause\/decision.*exact[- ]scope.*expiry.*review\/revocation[- ]trigger[- ]definition.*governing[- ]trusted[- ]policy[- ]source\/ref\/OID\/anchor/iu,
+            /mismatch.*unverifiable.*identity.*role.*binding.*retain.*`OPEN`/iu,
+            /current independently trusted status evidence.*bind.*identifier.*governing[- ]trusted[- ]policy[- ]source\/ref\/OID\/anchor.*approved[- ]review\/revocation[- ]trigger.*exact[- ]assessed[- ]authority\/snapshot\/deployment.*observation[- ]time.*prove.*active.*not.revoked.*no[- ]trigger[- ]fired.*unresolved.*mismatched.*status.*retains `OPEN`/isu,
+            /current independently trusted status evidence.*named[- ]status[- ]authority.*authenticat.*status authority.*governing policy.*authorized.*attest.*lifecycle\/revocation status.*observation[- ]time/isu,
+            /approval.*status.*governing trusted policy authority.*cross-record mismatch.*retains `OPEN`/isu,
+            /converts only `OPEN` to `ACCEPTED-RISK`.*MUST NOT replace `NEEDS-DECISION`.*accepted risk MUST NOT erase\/downgrade factual-finding.*evidence.*exploit-status.*severity/iu,
             /stable exception identifier/iu,
             /trusted policy source\/ref\/OID\/anchor/iu,
             /named authorized approver/iu,

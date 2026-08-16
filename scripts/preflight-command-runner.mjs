@@ -35,7 +35,7 @@ function applyRunnerOption(options, optionName, optionValue) {
     case "--heartbeat-seconds":
       options.heartbeatSeconds = Number(optionValue);
       return;
-    // The label tells the developer whether the first run or retry is active.
+    // The label names the bounded verification command shown in progress output.
     case "--label":
       options.progressLabel = optionValue;
       return;
@@ -190,7 +190,7 @@ function stopChildProcessGroup(childProcess, stopSignal) {
  * Use only with an inherited descriptor; null means CI receives no progress noise.
  *
  * @param {number | null} progressFileDescriptor - inherited operator channel; null hides progress
- * @param {string} progressLabel - Tests or Tests retry, matching the work the user is waiting on
+ * @param {string} progressLabel - label matching the verification work the user is waiting on
  * @param {number} elapsedMilliseconds - measured liveness duration; zero means the command just started
  * @param {number} heartbeatSeconds - production interval; sub-second values are for focused tests
  * @returns {boolean} true when the heartbeat was written; false when the channel is absent or closed

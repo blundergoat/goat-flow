@@ -133,7 +133,7 @@ type ReviewCheckId = "V1" | "V2" | "V3" | "V4" | "V5" | "V6" | "V7" | "V8";
  * V1-V8 are the public validator check IDs. Detail codes keep each result actionable.
  * Grammar anchors: SKILL.md (search: `Use prefix \`R-NNN [SEVERITY:ACTION]\``),
  * SKILL.md (search: `## Review Integrity (confidence signal)`), and
- * SKILL.md (search: `Render optional sections only with content`).
+ * SKILL.md (search: `Render only with content:`).
  */
 const CHECK_IDENTIFIER_BY_CODE = {
   "anchor-outside-project": "V1",

@@ -36,6 +36,19 @@ const WORKFLOW_VERB_RE =
   /\b(dispatches?|implements?(?:ing|ed)?|executes?(?:ing|ed)?|generates?|runs?|produces?|creates?|builds?|refactors?|writes?)\b/i;
 const WORKFLOW_CONNECTIVE_RE = /\b(then|between)\b/i;
 
+/** Boundary-command labels, tolerant of a mode qualifier. A skill may scope a
+ *  command to one of its modes - goat-debug ships `**ALWAYS in Diagnose mode:**`
+ *  so Investigate mode is not bound by a diagnosis-only rule - and the triplet
+ *  still earns exclusion credit because all three commands are present. The
+ *  in-tree contract accepts the same qualified form (`test/contract/skill-hardening-shared-1.test.ts`
+ *  (search: `keeps canonical skill boundaries explicit and route-focused`)), so
+ *  scoring the bare label only would report a false negative on a deliberately
+ *  scoped boundary. Matching stays line-local: the qualifier cannot cross a `*`
+ *  or a newline, so one command's label cannot absorb the next. */
+const BOUNDARY_NEVER_RE = /\*\*NEVER\b[^*\n]*:\*\*/i;
+const BOUNDARY_ALWAYS_RE = /\*\*ALWAYS\b[^*\n]*:\*\*/i;
+const BOUNDARY_DEFER_TO_RE = /\*\*DEFER TO\b[^*\n]*:\*\*/i;
+
 /**
  * Reads frontmatter descriptions to detect workflow summaries that make agents skip the skill body.
  */
@@ -66,9 +79,9 @@ const triggerClarity: MetricScorer = (input) => {
       hasSection(content, /##\s+When to Use/i) || /\bUse when\b/i.test(content);
     const hasBoundaryCommands =
       hasSection(content, /##\s+Boundary Commands/i) &&
-      /\*\*NEVER:\*\*/i.test(content) &&
-      /\*\*ALWAYS:\*\*/i.test(content) &&
-      /\*\*DEFER TO:\*\*/i.test(content);
+      BOUNDARY_NEVER_RE.test(content) &&
+      BOUNDARY_ALWAYS_RE.test(content) &&
+      BOUNDARY_DEFER_TO_RE.test(content);
     const hasExclusion =
       /NOT this skill/i.test(content) ||
       /If the user names a skill explicitly/i.test(content) ||

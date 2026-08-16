@@ -12,7 +12,6 @@ import { getAgentProfiles } from "../../src/cli/agents/registry.js";
 import { listHookSpecs } from "../../src/cli/server/hooks-registry.js";
 import {
   makeTempProject,
-  POST_TURN_SAFETY_TIMEOUT_SECONDS,
   readClaudePostTurnSafetyTimeout,
   runInstaller,
 } from "./setup-install.helpers.js";
@@ -106,12 +105,9 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.doesNotMatch(config, /plan-checkbox-guard|plan-guard/u);
     assert.doesNotMatch(gitignore, /plan-guard-state/u);
     assert.doesNotMatch(settings, /plan-checkbox-guard\.sh/u);
-    assert.match(settings, /post-turn-safety\.sh/u);
+    assert.doesNotMatch(settings, /post-turn-safety\.sh/u);
     assert.match(settings, /user-stop-hook\.js/u);
-    assert.equal(
-      readClaudePostTurnSafetyTimeout(root),
-      POST_TURN_SAFETY_TIMEOUT_SECONDS,
-    );
+    assert.equal(readClaudePostTurnSafetyTimeout(root), undefined);
   });
   // Covers the same prune on CRLF config a Windows user committed: writes it and expects a clean result.
   it("prunes retired plan guard config from CRLF config files", () => {

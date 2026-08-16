@@ -98,7 +98,7 @@ export interface HookState extends Record<"togglable" | "enabled", boolean> {
   agents: Record<AgentId, HookAgentState>;
 }
 /** Validated roots the post-turn scanner may inspect from one selected project. */
-export interface HookScanRootState {
+interface HookScanRootState {
   status: "implicit" | "configured" | "missing" | "invalid";
   roots: string[];
   issue: string | null;
@@ -218,6 +218,16 @@ function gitTopLevel(directoryPath: string): string | null {
   return physicalDirectory(result.stdout.trim());
 }
 
+/** Return whether a relative-path result escapes the root it was measured from. */
+function relativePathEscapesRoot(relativePath: string): boolean {
+  return (
+    relativePath === ".." ||
+    relativePath.startsWith(`..${String.fromCharCode(47)}`) ||
+    relativePath.startsWith(`..${String.fromCharCode(92)}`) ||
+    isAbsolute(relativePath)
+  );
+}
+
 /** Check lexical and physical containment beneath the selected project root. */
 function containedScanRoot(
   projectRoot: string,
@@ -233,25 +243,11 @@ function containedScanRoot(
   }
   const lexicalCandidate = resolve(projectRoot, configuredRoot);
   const lexicalRelative = relative(projectRoot, lexicalCandidate);
-  if (
-    lexicalRelative === ".." ||
-    lexicalRelative.startsWith(`..${String.fromCharCode(47)}`) ||
-    lexicalRelative.startsWith(`..${String.fromCharCode(92)}`) ||
-    isAbsolute(lexicalRelative)
-  ) {
-    return null;
-  }
+  if (relativePathEscapesRoot(lexicalRelative)) return null;
   const physicalCandidate = physicalDirectory(lexicalCandidate);
   if (physicalCandidate === null) return null;
   const physicalRelative = relative(projectRoot, physicalCandidate);
-  if (
-    physicalRelative === ".." ||
-    physicalRelative.startsWith(`..${String.fromCharCode(47)}`) ||
-    physicalRelative.startsWith(`..${String.fromCharCode(92)}`) ||
-    isAbsolute(physicalRelative)
-  ) {
-    return null;
-  }
+  if (relativePathEscapesRoot(physicalRelative)) return null;
   return physicalCandidate;
 }
 
@@ -658,6 +654,28 @@ function supportedHookLocalDetails(
   return { isTrusted, installationIssue, scriptPath, repairReason };
 }
 
+/** Replace generic sync guidance when an invalid scan-root contract owns registration. */
+function applyScanRootRepairGuidance(
+  effectivePresentation: ReturnType<typeof effectiveAgentState>,
+  isDesiredByUser: boolean,
+  doesRootContractAllowRegistration: boolean,
+): void {
+  if (!isDesiredByUser || doesRootContractAllowRegistration) return;
+  effectivePresentation.repairCommand = null;
+  effectivePresentation.repairSummary =
+    "Configure valid scan roots or disable this hook before registering it.";
+}
+
+/** Choose the root-contract issue before a generic installation repair reason. */
+function supportedHookReason(
+  isDesiredByUser: boolean,
+  scanRootState: HookScanRootState | null,
+  installationReason: string | null,
+): string | null {
+  if (isDesiredByUser && scanRootState?.issue) return scanRootState.issue;
+  return installationReason;
+}
+
 /**
  * Build one supported provider row for CLI, audit, and dashboard hook views.
  * Use when the manifest exposes registration surfaces for the selected agent.
@@ -675,10 +693,10 @@ function supportedAgentHookState(
     agent,
     spec,
   );
-  const rootContractAllowsRegistration =
+  const doesRootContractAllowRegistration =
     scanRootsPermitRegistration(scanRootState);
   const isRegistered =
-    registrationState.installed && rootContractAllowsRegistration;
+    registrationState.installed && doesRootContractAllowRegistration;
   const installed = isRegistered && installationFacts.hasAllRequiredFiles;
   const isCurrentVersionInstalled =
     installed && installationFacts.hasCurrentRequiredFiles;
@@ -700,11 +718,11 @@ function supportedAgentHookState(
     isCurrentVersionInstalled,
     localDetails.isTrusted,
   );
-  if (isDesiredByUser && !rootContractAllowsRegistration) {
-    effectivePresentation.repairCommand = null;
-    effectivePresentation.repairSummary =
-      "Configure valid scan roots or disable this hook before registering it.";
-  }
+  applyScanRootRepairGuidance(
+    effectivePresentation,
+    isDesiredByUser,
+    doesRootContractAllowRegistration,
+  );
   const hookState: HookAgentState = {
     supported: true,
     installed,
@@ -719,12 +737,13 @@ function supportedAgentHookState(
   };
   // Drift is omitted when the user's desired and installed states already agree.
   if (drift !== undefined) hookState.drift = drift;
+  const reason = supportedHookReason(
+    isDesiredByUser,
+    scanRootState,
+    localDetails.repairReason,
+  );
   // A null reason keeps healthy rows concise while preserving exact local repair context.
-  if (isDesiredByUser && scanRootState?.issue) {
-    hookState.reason = scanRootState.issue;
-  } else if (localDetails.repairReason !== null) {
-    hookState.reason = localDetails.repairReason;
-  }
+  if (reason !== null) hookState.reason = reason;
   return hookState;
 }
 
@@ -799,7 +818,7 @@ function reconcileHook(
 ): void {
   const profiles = getAgentProfiles();
   const scanRootState = postTurnScanRootState(projectPath, spec);
-  const rootContractAllowsRegistration =
+  const doesRootContractAllowRegistration =
     scanRootsPermitRegistration(scanRootState);
   for (const agent of profiles) {
     if (unsupportedReasonForSpec(spec, agent)) {
@@ -815,7 +834,7 @@ function reconcileHook(
     }
     const shouldRegisterHook =
       desiredState.registrationTargets.length > 0 &&
-      rootContractAllowsRegistration;
+      doesRootContractAllowRegistration;
     // A disabled hook removes managed rows from existing config but never scaffolds a missing config file.
     if (shouldRegisterHook || hookConfigExists(projectPath, agent)) {
       writeAgentHookState(projectPath, agent, spec, shouldRegisterHook);

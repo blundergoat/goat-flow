@@ -1205,7 +1205,9 @@ migrate_agent_hook_config() {
  * Use during standalone setup so enabled, disabled, duplicate, and retired rows match CLI and dashboard behavior.
  * Invalid user JSON is preserved; an invalid package contract stops installation before replacement.
  */
+const childProcess = require("node:child_process");
 const fs = require("node:fs");
+const pathModule = require("node:path");
 
 const [userHookConfigPath, desiredStateContractPath, agentId] =
   process.argv.slice(2);
@@ -1366,6 +1368,283 @@ function configuredHookEnabled(hookId, defaultEnabled) {
   return defaultEnabled === true;
 }
 
+const singleQuote = String.fromCharCode(39);
+
+/** Remove one YAML comment without treating quoted hash characters as comments. */
+function stripYamlComment(text) {
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      if (inSingle && text[index + 1] === singleQuote) {
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (
+      !inSingle &&
+      !inDouble &&
+      character === "#" &&
+      (index === 0 || /\s/u.test(text[index - 1]))
+    ) {
+      return text.slice(0, index).trimEnd();
+    }
+  }
+  return text.trimEnd();
+}
+
+/** Parse one YAML string scalar accepted by the post-turn runtime parser. */
+function yamlStringScalar(rawValue) {
+  const value = stripYamlComment(rawValue).trim();
+  if (value.length === 0) return null;
+  if (value.startsWith(singleQuote) && value.endsWith(singleQuote)) {
+    return value.slice(1, -1).split(singleQuote + singleQuote).join(singleQuote);
+  }
+  if (value.startsWith("\"") && value.endsWith("\"")) {
+    try {
+      const decoded = JSON.parse(value);
+      return typeof decoded === "string" ? decoded : null;
+    } catch {
+      return null;
+    }
+  }
+  if (
+    /^(?:null|~|true|false)$/iu.test(value) ||
+    /^[-+]?\d+(?:\.\d+)?$/u.test(value)
+  ) {
+    return null;
+  }
+  return value;
+}
+
+/** Parse one inline YAML string list without accepting mappings or scalar coercion. */
+function yamlFlowStringList(rawValue) {
+  const value = stripYamlComment(rawValue).trim();
+  if (!value.startsWith("[") || !value.endsWith("]")) return null;
+  const body = value.slice(1, -1);
+  if (body.trim().length === 0) return [];
+  const rawItems = [];
+  let item = "";
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index];
+    if (escaped) {
+      item += character;
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      item += character;
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      item += character;
+      if (inSingle && body[index + 1] === singleQuote) {
+        item += body[index + 1];
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      item += character;
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble && character === ",") {
+      rawItems.push(item);
+      item = "";
+      continue;
+    }
+    item += character;
+  }
+  if (inSingle || inDouble || escaped) return null;
+  rawItems.push(item);
+  const parsedItems = rawItems.map(yamlStringScalar);
+  return parsedItems.every((candidate) => typeof candidate === "string")
+    ? parsedItems
+    : null;
+}
+
+/** Count leading spaces and reject tab-indented config as ambiguous. */
+function lineIndent(line) {
+  if (line.includes("\t")) return -1;
+  return line.length - line.trimStart().length;
+}
+
+/** Read the explicit post-turn roots from the same YAML shapes the runtime accepts. */
+function configuredPostTurnScanRoots() {
+  let configText;
+  try {
+    configText = fs.readFileSync(".goat-flow/config.yaml", "utf8");
+  } catch {
+    return null;
+  }
+  const lines = configText.replace(/\r\n?/gu, "\n").split("\n");
+  const hooksIndex = lines.findIndex(
+    (line) =>
+      lineIndent(line) === 0 && stripYamlComment(line).trim() === "hooks:",
+  );
+  if (hooksIndex < 0) return null;
+  let hooksEnd = lines.length;
+  for (let index = hooksIndex + 1; index < lines.length; index += 1) {
+    const cleanLine = stripYamlComment(lines[index]);
+    if (cleanLine.trim().length > 0 && lineIndent(lines[index]) <= 0) {
+      hooksEnd = index;
+      break;
+    }
+  }
+  let hookIndex = -1;
+  let hookIndent = -1;
+  for (let index = hooksIndex + 1; index < hooksEnd; index += 1) {
+    const indent = lineIndent(lines[index]);
+    if (
+      indent > 0 &&
+      stripYamlComment(lines[index]).trim() === "post-turn-safety:"
+    ) {
+      hookIndex = index;
+      hookIndent = indent;
+      break;
+    }
+  }
+  if (hookIndex < 0) return null;
+  for (let index = hookIndex + 1; index < hooksEnd; index += 1) {
+    const cleanLine = stripYamlComment(lines[index]);
+    const trimmedLine = cleanLine.trim();
+    if (trimmedLine.length === 0) continue;
+    const indent = lineIndent(lines[index]);
+    if (indent <= hookIndent) break;
+    const fieldMatch = /^scan-roots:\s*(.*)$/u.exec(trimmedLine);
+    if (!fieldMatch) continue;
+    const inlineValue = fieldMatch[1].trim();
+    if (inlineValue.length > 0) return yamlFlowStringList(inlineValue);
+    const roots = [];
+    for (
+      let rootIndex = index + 1;
+      rootIndex < hooksEnd;
+      rootIndex += 1
+    ) {
+      const rootLine = stripYamlComment(lines[rootIndex]);
+      if (rootLine.trim().length === 0) continue;
+      if (lineIndent(lines[rootIndex]) <= indent) break;
+      const itemMatch = /^-\s+(.+)$/u.exec(rootLine.trim());
+      if (!itemMatch) return null;
+      const root = yamlStringScalar(itemMatch[1]);
+      if (root === null) return null;
+      roots.push(root);
+    }
+    return roots;
+  }
+  return null;
+}
+
+/** Resolve one existing directory physically, or return null on any lookup failure. */
+function physicalDirectory(directoryPath) {
+  try {
+    if (!fs.statSync(directoryPath).isDirectory()) return null;
+    return fs.realpathSync(directoryPath);
+  } catch {
+    return null;
+  }
+}
+
+/** Read one bounded physical Git top level without mutating the target. */
+function gitTopLevel(directoryPath) {
+  const result = childProcess.spawnSync(
+    "git",
+    ["-C", directoryPath, "rev-parse", "--show-toplevel"],
+    {
+      encoding: "utf8",
+      shell: false,
+      timeout: 5000,
+      maxBuffer: 16384,
+      windowsHide: true,
+    },
+  );
+  if (
+    result.error ||
+    result.status !== 0 ||
+    typeof result.stdout !== "string" ||
+    result.stdout.trim().length === 0
+  ) {
+    return null;
+  }
+  return physicalDirectory(result.stdout.trim());
+}
+
+/** Return whether a relative-path result escapes the root it was measured from. */
+function relativePathEscapesRoot(relativePath) {
+  return (
+    relativePath === ".." ||
+    relativePath.startsWith("../") ||
+    relativePath.startsWith("..\\") ||
+    pathModule.isAbsolute(relativePath)
+  );
+}
+
+/** Validate one configured root against lexical, physical, and exact Git ownership. */
+function isContainedGitScanRoot(projectRoot, configuredRoot) {
+  if (
+    typeof configuredRoot !== "string" ||
+    configuredRoot.length === 0 ||
+    pathModule.isAbsolute(configuredRoot) ||
+    /^[A-Za-z]:[\\/]/u.test(configuredRoot) ||
+    /^\\\\/u.test(configuredRoot)
+  ) {
+    return false;
+  }
+  const lexicalCandidate = pathModule.resolve(projectRoot, configuredRoot);
+  const lexicalRelative = pathModule.relative(projectRoot, lexicalCandidate);
+  if (relativePathEscapesRoot(lexicalRelative)) return false;
+  const physicalCandidate = physicalDirectory(lexicalCandidate);
+  if (physicalCandidate === null) return false;
+  const physicalRelative = pathModule.relative(projectRoot, physicalCandidate);
+  if (relativePathEscapesRoot(physicalRelative)) return false;
+  return gitTopLevel(physicalCandidate) === physicalCandidate;
+}
+
+/** Apply the registrar's implicit-Git or all-explicit-roots registration contract. */
+function postTurnRootContractAllowsRegistration() {
+  const projectRoot = physicalDirectory(process.cwd());
+  if (projectRoot === null) return false;
+  if (gitTopLevel(projectRoot) === projectRoot) return true;
+  const configuredRoots = configuredPostTurnScanRoots();
+  return (
+    Array.isArray(configuredRoots) &&
+    configuredRoots.length > 0 &&
+    configuredRoots.every((configuredRoot) =>
+      isContainedGitScanRoot(projectRoot, configuredRoot),
+    )
+  );
+}
+
+/** Combine the user's toggle with any hook-specific registration prerequisite. */
+function shouldRegisterManagedHook(hookId, hookContract) {
+  if (!configuredHookEnabled(hookId, hookContract.defaultEnabled)) return false;
+  if (hookId !== "post-turn-safety") return true;
+  return postTurnRootContractAllowsRegistration();
+}
+
 /** Validate the generated package contract before it can influence a user's config. */
 function readDesiredStateContract(path) {
   const contract = readJsonObject(path);
@@ -1478,7 +1757,7 @@ if (agentId === "antigravity") {
   // Enabled provider fragments restore exactly one current definition after stale ids are removed.
   for (const [hookId, hookContract] of hookEntries) {
     // A disabled user choice leaves the current files installed but no runnable registration.
-    if (!configuredHookEnabled(hookId, hookContract.defaultEnabled)) continue;
+    if (!shouldRegisterManagedHook(hookId, hookContract)) continue;
     Object.assign(currentConfig, hookContract.config);
   }
 } else {
@@ -1498,7 +1777,7 @@ if (agentId === "antigravity") {
   // Enabled hooks append one generated provider fragment; disabled hooks remain installed but inert.
   for (const [hookId, hookContract] of hookEntries) {
     // The config toggle is the user's authority over whether their agent runs this hook.
-    if (!configuredHookEnabled(hookId, hookContract.defaultEnabled)) continue;
+    if (!shouldRegisterManagedHook(hookId, hookContract)) continue;
     appendSharedHookFragment(currentConfig, hookContract.config);
   }
 }

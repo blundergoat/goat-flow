@@ -525,7 +525,7 @@ describe("managed setup preview", () => {
     assert.match(installedHookConfig, /node user-hook\.js/u);
     assert.match(installedHookConfig, /keep my status/u);
     assert.doesNotMatch(installedHookConfig, /deny-dangerous\.sh/u);
-    assert.match(installedHookConfig, /post-turn-safety\.sh/u);
+    assert.doesNotMatch(installedHookConfig, /post-turn-safety\.sh/u);
   });
 
   it("keeps dry-run state unchanged after a local managed edit", () => {

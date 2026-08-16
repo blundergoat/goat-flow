@@ -17,6 +17,7 @@ import {
 import { join } from "node:path";
 
 import {
+  git,
   makeTempProject,
   POST_TURN_SAFETY_TIMEOUT_SECONDS,
   PROJECT_ROOT,
@@ -70,6 +71,7 @@ describe("setup --apply installer", () => {
   // A fresh Claude user needs enough runner time to see the hook's own incomplete-scan warning.
   it("registers Claude post-turn safety with the registry timeout", () => {
     const root = makeTempProject();
+    git(root, ["init"]);
     const result = runInstaller(root, "--agent", "claude");
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -81,6 +83,7 @@ describe("setup --apply installer", () => {
 
   it("scaffolds config.yaml without an agents allowlist", () => {
     const root = makeTempProject();
+    git(root, ["init"]);
     const result = runInstaller(root, "--agent", "codex");
 
     assert.equal(result.status, 0, result.stderr || result.stdout);

@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.15.1"
 ---
 # Project Security Policy Template
 
-Setup template for goat-security policy overrides. This file is not a scan reference; load it only when creating or revising a project policy file.
+Setup template for goat-security policy overrides. Load the template sections only when creating or revising a project policy file. During an assessment, load only the two on-demand sections goat-security points at: `Validation during assessment` (when a policy exception exists at the trusted policy authority) and `Compliance Mode` (when Compliance Mode is selected).
 
 `.goat-flow/security-policy.md`
 
@@ -75,3 +75,21 @@ Each exception must record:
 - review/revocation trigger:
 
 Missing, expired, over-broad, unauthorized, role-unverified, mismatched, unverifiably bound, revoked, trigger-fired, or status-unverified records retain `OPEN`; approval/status policy-authority mismatch also retains `OPEN`. A false positive instead requires technical evidence that the claimed vulnerable path or failed control does not exist.
+
+### Validation during assessment
+
+goat-security loads this section when a policy exception exists at the trusted policy authority; validate every field, approval, and status here before honouring the exception. Exception: identifier|clause|trusted-policy-source/ref/OID/anchor|named-authorized-approver|independently-trusted-approval-evidence|owner|rationale|expiry|verified-scope-match|named-status-authority|current-status-evidence|review/revocation-trigger. Validity: authorized|in-scope|unexpired; independently trusted evidence authenticates named approver, proves policy-authorized role at approval, and binds identifier|clause/decision|exact-scope|expiry|review/revocation-trigger-definition|governing-trusted-policy-source/ref/OID/anchor. Mismatch/unverifiable identity|role|binding retains `OPEN`. Current independently trusted status evidence records a named status authority, authenticates that status authority, proves the governing policy authorized it to attest lifecycle/revocation status at observation-time, binds identifier|governing-trusted-policy-source/ref/OID/anchor|approved-review/revocation-trigger|exact-assessed-authority/snapshot/deployment|observation-time, and proves exception active/not-revoked/no-trigger-fired. Unresolved/mismatched status or approval/status governing trusted policy authority cross-record mismatch retains `OPEN`. A valid exception converts only `OPEN` to `ACCEPTED-RISK`; it MUST NOT replace `NEEDS-DECISION`, and accepted risk MUST NOT erase/downgrade factual-finding|evidence|exploit-status|severity.
+
+## Compliance Mode
+
+goat-security loads this section when Compliance Mode is selected. Compliance Mode is an overlay on a selected Quick Scan or Full Assessment; it does not replace the path or relax any gate. Map controls only after its Proof Gate.
+
+Require an authoritative clause or control source, framework name and version, jurisdiction, applicability, and effective date. If absent, ask for it and keep affected controls `not assessed`; do not browse/reconstruct clause text unless the user authorizes retrieval.
+
+The applicable-control inventory follows the skill's global completeness gate (Step 0); emit one row per applicable control.
+
+Map every supplied control—including those `not applicable`—to evidence and one disposition: `compliant`, `partially compliant`, `non-compliant`, `not assessed`, or `not applicable`, with rationale. Separate interpretation from evidence, cite the clause, and MUST NOT claim certification or legal compliance.
+
+Every disposition except `not assessed` requires current `OBSERVED` evidence at applicable control authority, bound to exact assessed authority/snapshot and affected scope/deployment; `partially compliant` needs observed satisfied portions and observed gap; `non-compliant` needs observed gap. Mismatched/unresolved/inferred satisfaction/gap/applicability/snapshot/scope is `not assessed`, `coverage-degraded`; MUST NOT recommend clearance.
+
+**Compliance output:** control identifier | authoritative source/version/clause | jurisdiction/effective date/applicability | status | evidence authority/snapshot/status/proof-class | scope/deployment | gap/rationale/remediation.

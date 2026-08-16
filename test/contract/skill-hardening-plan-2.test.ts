@@ -41,8 +41,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         const orderedHeadings = [
           "## Outcome",
           "## At a glance",
-          "## How users will notice the difference",
-          "## Motivation",
+          "## What we lose without this",
+          "## Why this helps",
           "## What",
           "## How",
           "## Out of scope",
@@ -98,6 +98,50 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
           issueGuidance,
           /above 1,200 words names the safety reason/u,
           issuePath,
+        );
+      },
+    );
+  });
+
+  /*
+   * The two plain-language sections are the only part of a milestone a reader outside the
+   * project can act on. An agent that renames them back to jargon, or drops the worked
+   * BAD/GOOD pair that shows the register, silently returns plans to internal vocabulary -
+   * so both the names and the demonstration are pinned, not just the names.
+   */
+  it("pins the plain-language milestone sections and the example that shows their register", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      assert.match(
+        readProjectFile(skillPath),
+        /`## What we lose without this` and `## Why this helps` between Objective and Context, one plain line each/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-plan", "references/milestone-examples.md"),
+      (examplesPath) => {
+        const examples = readProjectFile(examplesPath);
+        const templateLines = examples.split(/\r?\n/u);
+        const lossIndex = templateLines.indexOf("## What we lose without this");
+        const helpIndex = templateLines.indexOf("## Why this helps");
+
+        assert.ok(lossIndex >= 0, `${examplesPath}: missing loss section`);
+        assert.ok(
+          helpIndex > lossIndex,
+          `${examplesPath}: cost must precede benefit in the milestone template`,
+        );
+        assert.match(
+          examples,
+          /one concrete, jargon-free line a reader outside the project understands/u,
+          examplesPath,
+        );
+        assert.match(examples, /^- BAD: /mu, examplesPath);
+        assert.match(examples, /^- GOOD: /mu, examplesPath);
+        assert.doesNotMatch(
+          examples,
+          /How users will notice the difference|^\| Motivation \|/mu,
+          `${examplesPath}: superseded section names are still present`,
         );
       },
     );

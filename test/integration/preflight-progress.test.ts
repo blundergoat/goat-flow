@@ -1,6 +1,6 @@
 /**
  * Exercises the command runner that keeps preflight users informed during long Tests phases.
- * Use when changing timeout, capture, retry, or heartbeat behavior so interactive progress
+ * Use when changing timeout, capture, or heartbeat behavior so interactive progress
  * remains visible without contaminating the deterministic CI report.
  * The fixtures execute harmless child processes and never run the repository test suite.
  */
@@ -254,14 +254,13 @@ afterEach(() => {
 });
 
 describe("preflight Tests-phase progress", () => {
-  it("shows retry progress before close while keeping child output captured", async () => {
+  it("shows test progress before close while keeping child output captured", async () => {
     const progressTemporaryDirectory = mkdtempSync(
       join(tmpdir(), "goat-flow-preflight-progress-"),
     );
     fixtureTemporaryDirectories.add(progressTemporaryDirectory);
     const progressReadyFile = join(progressTemporaryDirectory, "ready");
     const runnerResult = await runPreflightRunnerFixture({
-      progressLabel: "Tests retry",
       heartbeatSeconds: 0.04,
       progressReadyFile,
       childSource: String.raw`
@@ -276,7 +275,7 @@ describe("preflight Tests-phase progress", () => {
     });
 
     assert.equal(runnerResult.status, 0);
-    assert.match(runnerResult.operatorProgress, /Tests retry still running/u);
+    assert.match(runnerResult.operatorProgress, /Tests still running/u);
     assert.ok(
       runnerResult.firstProgressAfterMs !== null,
       "expected a heartbeat timestamp",
@@ -492,19 +491,27 @@ describe("preflight Tests-phase progress", () => {
     assert.equal(await waitForFixtureProcessExit(workerProcessId), true);
   });
 
-  it("pins the production heartbeat to interactive Tests runs at ten seconds", () => {
+  it("pins one bounded fast-suite run to interactive ten-second heartbeats", () => {
     const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const fastSelectionIndex = preflightSource.indexOf('"test:fast"');
+    const coverageSelectionIndex = preflightSource.indexOf('"test:coverage"');
 
     assert.match(preflightSource, /preflight_test_heartbeat_seconds=10/u);
     assert.match(preflightSource, /\[\[ "\$_is_tty" -eq 1 \]\]/u);
     assert.match(preflightSource, /"Tests" "\$\{test_command\[@\]\}"/u);
-    assert.match(preflightSource, /"Tests retry"/u);
+    assert.match(
+      preflightSource,
+      /GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-28/u,
+    );
+    assert.ok(fastSelectionIndex >= 0);
+    assert.ok(coverageSelectionIndex > fastSelectionIndex);
+    assert.doesNotMatch(preflightSource, /Tests retry/u);
     assert.doesNotMatch(preflightSource, /GOAT_FLOW_PREFLIGHT_TEST_COMMAND/u);
     assert.equal(
       [...preflightSource.matchAll(/run_command_capture_with_timeout/gu)]
         .length,
-      3,
-      "expected one helper definition plus first-run and retry call sites",
+      2,
+      "expected one helper definition plus one bounded Tests call site",
     );
   });
 });

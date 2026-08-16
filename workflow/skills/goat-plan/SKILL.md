@@ -80,7 +80,7 @@ Never drop a spike, intake, or kill criteria for milestone count, deadline, or l
 
 ### For each milestone, produce:
 
-Choose a Small, Standard, or high-risk rendering from `references/milestone-examples.md`. Always include outcome, Status, agent-time estimate, scope, executable Tasks, binary Exit, claim-based Proof, and Stop/rescope. Standard+ renderings also include `## How users will notice the difference` and `## Motivation` between Objective and Context. Add Actual, dependencies, context, assumptions, Mid-implementation proof, boundaries, rollback, deferred work, or maintenance only when triggered.
+Choose a Small, Standard, or high-risk rendering from `references/milestone-examples.md`. Always include outcome, Status, agent-time estimate, scope, executable Tasks, binary Exit, claim-based Proof, and Stop/rescope. Standard+ renderings also include `## What we lose without this` and `## Why this helps` between Objective and Context, one plain line each under the reference's plain-language rule. Add Actual, dependencies, context, assumptions, Mid-implementation proof, boundaries, rollback, deferred work, or maintenance only when triggered.
 
 ### Risk-weighted task ordering
 

@@ -319,7 +319,10 @@ describe("effective hook state", () => {
       isTargetUntrusted: false,
     });
     assert.equal(matcherReport.status, "fail");
-    assert.equal(matcherReport.summary.notConfigured, matcherReport.scenarios.length);
+    assert.equal(
+      matcherReport.summary.notConfigured,
+      matcherReport.scenarios.length,
+    );
     assert.equal(
       matcherReport.scenarios.every(
         (scenario) => scenario.reasonCode === "matcher-mismatch",
@@ -356,7 +359,10 @@ describe("effective hook state", () => {
       isTargetUntrusted: false,
     });
     assert.equal(eventReport.status, "fail");
-    assert.equal(eventReport.summary.notConfigured, eventReport.scenarios.length);
+    assert.equal(
+      eventReport.summary.notConfigured,
+      eventReport.scenarios.length,
+    );
     assert.equal(
       eventReport.scenarios.every(
         (scenario) => scenario.reasonCode === "event-mismatch",

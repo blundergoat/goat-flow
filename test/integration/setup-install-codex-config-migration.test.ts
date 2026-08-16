@@ -87,9 +87,9 @@ describe("codex config migration", () => {
         /git repository root unavailable/u,
       );
       assert.match(installedHookConfig, /managed root unavailable/u);
-      assert.match(installedHookConfig, /"Stop"/u);
-      assert.match(installedHookConfig, /"timeout": 90/u);
-      assert.match(
+      assert.doesNotMatch(installedHookConfig, /"Stop"/u);
+      assert.doesNotMatch(installedHookConfig, /"timeout": 90/u);
+      assert.doesNotMatch(
         installedHookConfig,
         /codex:post-turn:goat-flow\.hook-result\.v1:turn-stop:1:75000/u,
       );

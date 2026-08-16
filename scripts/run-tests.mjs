@@ -40,9 +40,9 @@ function listTestFiles(dir = "test") {
 }
 
 /**
- * Predicate for the slow suite: integration/dashboard/audit-drift tests and a
- * few known-heavy units that are excluded from the default `fast` run and run
- * single-concurrency in `slow` mode.
+ * Predicate for the slow suite: integration/dashboard/audit-drift tests,
+ * subprocess-heavy installer tests, and a few known-heavy units that are
+ * excluded from the default `fast` run and run single-concurrency in `slow` mode.
  *
  * @param path - Posix-style test file path to classify.
  * @returns `true` when the file belongs to the slow suite.
@@ -56,6 +56,7 @@ function isSlowTest(path) {
     path === "test/integration/packaged-hook-install.test.ts" ||
     /^test\/integration\/dashboard[^/]*\.test\.ts$/u.test(path) ||
     path === "test/integration/quality-constraint-isolation.test.ts" ||
+    /^test\/integration\/setup-install[^/]*\.test\.ts$/u.test(path) ||
     path === "test/unit/audit-harness/check-evidence-before-claims.test.ts" ||
     /^test\/unit\/dashboard-terminal-launch\/[^/]*\.test\.ts$/u.test(path)
   );
@@ -113,7 +114,7 @@ const args = [
   "tsx",
   "--test",
   "--test-concurrency",
-  mode === "slow" ? "1" : "8",
+  mode === "slow" ? "1" : mode === "fast" ? "16" : "8",
 ];
 if (mode === "coverage") {
   args.push("--experimental-test-coverage");

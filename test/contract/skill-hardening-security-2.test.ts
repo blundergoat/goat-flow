@@ -47,32 +47,50 @@ describe("skill hardening contracts: security (2/2)", () => {
   });
 
   it("makes goat-security compliance source-bound with complete dispositions", () => {
+    // SKILL.md keeps the overlay contract and gate order; the on-demand rules an agent needs
+    // only when Compliance Mode is selected live in the policy reference it points at.
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       assertMatchesAll(
         readMarkdownSection(skillPath, "Compliance Mode"),
         [
           /overlay on a selected Quick Scan or Full Assessment.*does not replace/iu,
-          /map controls only after.*Proof Gate/iu,
-          /authoritative clause or control source/u,
-          /framework name and version/u,
-          /jurisdiction, applicability, and effective date/u,
-          /ask for it and keep affected controls `not assessed`/u,
-          /every supplied control.*including.*not applicable/iu,
-          /applicable-control inventory.*global completeness gate.*one row per applicable control/iu,
-          /compliant.*partially compliant.*non-compliant.*not assessed.*not applicable/u,
-          /every disposition except `not assessed`.*current `OBSERVED` evidence.*applicable control authority/iu,
-          /every disposition except `not assessed`.*exact assessed authority\/snapshot.*affected scope\/deployment.*mismatched.*unresolved.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/isu,
-          /`partially compliant`.*observed satisfied portions.*observed gap/iu,
-          /`non-compliant`.*observed gap/iu,
-          /mismatched.*unresolved.*inferred.*satisfaction.*gap.*applicability.*snapshot.*scope.*`not assessed`/iu,
-          /MUST NOT claim certification/u,
-          /Compliance output.*control identifier.*source.*status.*evidence.*gap/iu,
-          /Compliance output.*evidence authority\/snapshot\/status\/proof-class.*scope\/deployment/iu,
-          /Compliance output.*jurisdiction.*effective date/iu,
+          /map controls only after.*Proof Gate.*`project-policy-template\.md` \(search: `## Compliance Mode`\)/iu,
         ],
         skillPath,
       );
     });
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/project-policy-template.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readMarkdownSection(referencePath, "Compliance Mode"),
+          [
+            /overlay on a selected Quick Scan or Full Assessment.*does not replace/iu,
+            /map controls only after.*Proof Gate/iu,
+            /authoritative clause or control source/u,
+            /framework name and version/u,
+            /jurisdiction, applicability, and effective date/u,
+            /ask for it and keep affected controls `not assessed`/u,
+            /every supplied control.*including.*not applicable/iu,
+            /applicable-control inventory.*global completeness gate.*one row per applicable control/iu,
+            /compliant.*partially compliant.*non-compliant.*not assessed.*not applicable/u,
+            /every disposition except `not assessed`.*current `OBSERVED` evidence.*applicable control authority/iu,
+            /every disposition except `not assessed`.*exact assessed authority\/snapshot.*affected scope\/deployment.*mismatched.*unresolved.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/isu,
+            /`partially compliant`.*observed satisfied portions.*observed gap/iu,
+            /`non-compliant`.*observed gap/iu,
+            /mismatched.*unresolved.*inferred.*satisfaction.*gap.*applicability.*snapshot.*scope.*`not assessed`/iu,
+            /MUST NOT claim certification/u,
+            /Compliance output.*control identifier.*source.*status.*evidence.*gap/iu,
+            /Compliance output.*evidence authority\/snapshot\/status\/proof-class.*scope\/deployment/iu,
+            /Compliance output.*jurisdiction.*effective date/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
     assertMatchesAll(
       readMarkdownSection("docs/skills.md", "/goat-security"),
       [

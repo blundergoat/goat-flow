@@ -120,6 +120,20 @@ Restore pinned phrases verbatim after any compression, take compensating words f
 
 ---
 
+## Footgun: Dense functional skills satisfy the ADR-023 word cap yet lose skill-quality token points
+
+**Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A functional skill sits under the ADR-023 2,500-word cap and passes every contract, yet the dashboard's deterministic skill-quality score shows Token / Load Cost 7/10 (`~5127 tokens` / `~5750 tokens`), and relocating whole sections into a progressive reference recovers less than the section sizes suggest.
+
+**Why it happens:** The two budgets use different units. ADR-023 counts body words (`test/contract/skill-hardening.helpers.ts`, search: `countSkillBodyWords`); the rubric estimates tokens as `Math.ceil(content.length / 4)` over the raw SKILL.md including frontmatter and steps 10/10 down to 7/10 above 5,000 tokens (`src/cli/quality/skill-quality-metrics.ts`, search: `tokens > 5000`). At about 8 chars per word the two agree; goat-security's pipe-delimited compound tokens run about 10 chars per word, so 2,072 body words is 20,604 chars and 5,151 tokens, while goat-review at 2,413 words is 19,972 chars and 4,993 tokens with 28 chars of headroom. Relocation also pays pointer overhead and cannot add a sixth `references/` file without a separate 3-point deduction (search: `subRefs > 5`), so estimated savings from section sizes alone overstate the result.
+
+**Evidence:** 2026-08-16, moving goat-security's Step 0 exception-validity tuple (1,328 chars) and Compliance Mode body (1,546 chars) into `references/project-policy-template.md` netted 2,395 chars after pointers, leaving 20,604 chars and the same 7/10; a phrase-repeat scan found no remaining literal duplication, only contract-pinned procedure. The user chose to keep that 96% as a true density signal rather than move Full-only phases into `common-threats.md`, which the skill loads on every run anyway.
+
+**Prevention:** Before promising a token-tier change, measure `content.length` of the exact SKILL.md, subtract the moved sections, add the pointer text you will leave behind, and check `references/` stays at five files. Prefer moving content the skill loads only in a specific mode; a move into an always-loaded reference changes the metric without changing what the agent reads. When editing goat-review, re-measure: 28 chars of headroom means one added sentence drops it to 7/10.
+
+---
+
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.

@@ -215,6 +215,19 @@ function validateStringArray(
   }
 }
 
+/** Return whether one scan root stays lexically relative to its project. */
+function isContainedHookScanRoot(scanRoot: string): boolean {
+  const portablePath = scanRoot.replace(/\\/gu, "/");
+  const normalizedPath = posix.normalize(portablePath);
+  const isAbsolutePath =
+    portablePath.startsWith("/") || /^[A-Za-z]:/u.test(portablePath);
+  const escapesProject =
+    normalizedPath === ".." ||
+    normalizedPath.startsWith("../") ||
+    portablePath.includes("\0");
+  return !isAbsolutePath && !escapesProject;
+}
+
 /**
  * Validate explicit post-turn roots without consulting the selected filesystem.
  * Use here for exact config-key diagnostics; existence and Git ownership stay registrar facts.
@@ -243,15 +256,7 @@ function validateHookScanRoots(
       pushError(errors, itemPath, "must be a non-empty string");
       continue;
     }
-    const portablePath = scanRoot.replace(/\\/gu, "/");
-    const normalizedPath = posix.normalize(portablePath);
-    const isAbsolutePath =
-      portablePath.startsWith("/") || /^[A-Za-z]:/u.test(portablePath);
-    const escapesProject =
-      normalizedPath === ".." ||
-      normalizedPath.startsWith("../") ||
-      portablePath.includes("\0");
-    if (isAbsolutePath || escapesProject) {
+    if (!isContainedHookScanRoot(scanRoot)) {
       pushError(errors, itemPath, "must be a contained project-relative path");
     }
   }

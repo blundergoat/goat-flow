@@ -19,8 +19,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 
 > "Review [X]: diff (quick), PR review against a base branch (quick by default), or area audit + DoD cross-checks (full)?"
 
-- If user already says "quick", "PR", or "full", follow it unless material risk forces Full.
-- Dispatcher depth wins unless material risk forces Full; clarify vague scope.
+- If user already says "quick", "PR", or "full", or the dispatcher set depth, follow it unless material risk forces Full; clarify vague scope.
 - Use explicit input, then combined dirty worktree; otherwise measure diff. Over 20 files/3000 lines, stop before Pass 1; request PR/base/head, commit/range, worktree, or area; never guess commit windows.
 
 **PR/base, clean worktree:** without checkout, resolve explicit → configured (`.goat-flow/config.yaml` → `skills.goat-review.local_pr_base`) → remote HEAD → prompt → `main`; fetch only after network approval. Record URL/baseRefName/source/SHA/failures. Automated-review conclusions stay unread until both local passes finish.
@@ -31,7 +30,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 
 **State authority:** per `references/examples.md` (search: `State Authority Matrix`), bind the diff and Pass 2 files to one declared authority; drift stops. Raw content stays transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
 
-**Spec source (opt-in):** Full offers active-milestone criteria; Quick skips without degradation.
+**Spec source (opt-in):** Full offers active-milestone criteria; Quick skips.
 
 **Temporary artifacts:** random-suffixed `.txt`/`.json`/`.diff`/`.md` under `.goat-flow/logs/review/`.
 
@@ -99,7 +98,7 @@ Re-frame only Pass 0 result lines and Pass 2 reads already gathered; make no new
 
 ### Automated-Review Overlap (PR mode, after local findings)
 
-After local findings, fetch `gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=100'`; apply `references/automated-review.md` without suppressing overlap. Counters: `references/examples.md` (search: `Excuse/Reality Table`).
+Fetch `gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=100'`; apply `references/automated-review.md` without suppressing overlap. Counters: `references/examples.md` (search: `Excuse/Reality Table`).
 
 ### Severity + Action Tagging
 
@@ -172,7 +171,7 @@ Offer Pass 3 on user opt-in, `coverage-degraded`/`high-inference`, or a MUST-nee
 
 **Method:** After approval, use `references/refuter-spec.md` with an authenticated non-host; pass authority metadata plus the R-ID FINDINGS LIST, never the diff.
 
-**Synthesis:** Refuter output is advisory. Only host-reproduced evidence may change severity/action/disposition/Ship Verdict. After host proof, tag unverifiable citations `refuter-citation-unverified`, unresolved claims `cross-model-unresolved`, and return leads to Pass 2.
+**Synthesis:** Refuter output is advisory; only host-reproduced evidence changes findings (Finding authority). After host proof, tag unverifiable citations `refuter-citation-unverified`, unresolved claims `cross-model-unresolved`, and return leads to Pass 2.
 
 **Constraints:** Before approval, only reference-listed availability/auth checks may run; versions do not prove auth. Without an authenticated refuter, skip with `cross-model-refuter-failed`.
 
@@ -196,24 +195,15 @@ Always emit; minimum: "confident - no degradation flags".
 
 ## Constraints
 
-**Diff review (quick):**
-- MUST run Pass 1 (diff only) before opening any full files in Pass 2
-- MUST NOT surface Pass-1 suspicions that Pass 2 refuted
-- MUST NOT flag pre-existing issues as blocking the change
-
-**Area audit (full):**
-- MUST scan the declared area regardless of recent changes
-- Pre-existing issues ARE in scope
-
 **Both modes:**
-- MUST apply the Blast Radius Rule, severity/action tags, Footgun Cross-Check, systemic grouping, and Review Integrity in both modes
+- MUST apply the Blast Radius Rule, severity/action tags, Footgun Cross-Check, systemic grouping, and Review Integrity
+- MUST NOT surface suspicions that Pass 2 refuted
 - MUST order findings by severity, never file or discovery order
 - MUST chunk above 20 files, or 3000 changed lines
 - Cross-invocation chunks: after each accepted chunk, host-redact `.goat-flow/logs/review/goat-review-chunks.<random>.md` containing scope snapshot, bound authority, chunks completed, chunks remaining, findings with R-IDs, and refutation ledger. Resume only after re-binding the same authority and verify no drift; continue at the next chunk, then emit one consolidated verdict. Drift stops.
-- Emit Spec Drift only when opted in. If skipped, record `Spec drift: skipped` without a degradation flag
+- If skipped, record `Spec drift: skipped` without a degradation flag
 - MUST NOT edit files unless user separately says to apply, edit, update, fix, or implement; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.
-- Render optional sections with content. Emit Top 5 Risks above five findings; otherwise Findings is the risk surface.
 - **Ship Verdict rules (diff/PR or explicit release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. Refuter output changes Ship Verdict only after host reproduction. Downgrade ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` moves one rung.
 - **Zero-findings HALT:** Defend zero findings with checked surfaces and why none surfaced.
 - Universal constraints from `skill-preamble.md` apply.
