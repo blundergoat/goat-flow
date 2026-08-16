@@ -72,8 +72,8 @@ Provenance remains JSON-only. Terminal and Markdown output stays focused on stat
 
 ### The 18 checks by type
 
-- **integrity (10):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `settings-rules-matched`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
-- **advisory (6):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `deny-blocks-pipe-to-shell`, `commit-guidance`
+- **integrity (9):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
+- **advisory (7):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `deny-blocks-pipe-to-shell`, `settings-rules-matched`, `commit-guidance`
 - **metric (2):** `evidence-before-claims`, `post-turn-hook-integrity`
 
 ---
@@ -108,7 +108,7 @@ Constraints run before model judgment and can prevent covered failure classes wi
 - `deny-blocks-dangerous` - each agent's deny configuration blocks broad recursive deletion, all git push (ADR-025), and `chmod`
 - `deny-blocks-pipe-to-shell` - each agent's deny configuration blocks `curl | bash` / `wget | sh` pipe-to-shell patterns
 - `deny-hook-registered` - hook registrations and hook files are in sync (registered hooks exist on disk, existing hooks are registered)
-- `settings-rules-matched` - JSON permission-rule settings (`.claude/settings.json`) carry only rule forms the agent actually matches, across `deny`, `allow`, and `ask`. `MultiEdit(...)` rules (removed tool) and `Write`/`NotebookEdit`/`Glob` path rules (never matched - `Edit`/`Read` cover file access) warn at launch and enforce nothing, so they read as protection that does not exist. Re-running goat-flow setup/install for the agent repairs them: removed-tool rules are dropped and unmatched forms are rewritten to their matched `Edit`/`Read` equivalents.
+- `settings-rules-matched` - JSON permission-rule settings (`.claude/settings.json`) are checked across `deny`, `allow`, and `ask`. The [Claude Code permissions documentation](https://code.claude.com/docs/en/permissions) says file permissions consult `Edit(path)` and `Read(path)`, while path rules for `Write`, `NotebookEdit`, `Glob`, and legacy `MultiEdit` are accepted but not consulted and warn at startup. The audit reports these inert forms as a score-only advisory rather than a scope failure. They MAY remain as defense-in-depth markers or be removed deliberately after project-owner review; goat-flow does not rewrite them automatically.
 
 **Not checked here:** Ask First boundary counts, linter registration cross-reference, static-analysis tool detection. Those were earlier designs that were dropped as either low signal or out-of-scope for a structural audit.
 

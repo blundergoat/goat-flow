@@ -86,6 +86,12 @@ The project's established changelog shape and the release surface own entry leng
 
 Never generalise an exact public flag, config key, version, error, or measurement to meet the fallback. Breaking impact, migration commands, verified caveats, and distinct user actions may use a second sentence or sub-bullet. A cap is a scanning aid, not permission to remove facts.
 
+Locate candidates mechanically, then judge each against the exemptions in this section:
+
+```bash
+awk '/^- /{ if (length>150) print FILENAME":"NR" ("length")" }' CHANGELOG.md
+```
+
 ## Breaking Changes
 
 Every breaking change needs:
@@ -127,7 +133,7 @@ Before publishing:
 4. Collapse commit-shaped bullets into user-impact bullets.
 5. Keep non-breaking bullets to one sentence unless a second sentence carries a measurement or contract reason.
 
-If cutting 30-50% changes no facts, the original was too verbose.
+If cutting 30-50% changes no facts, the original was too verbose. That is a diagnosis after the cut, not a quota: the drafting agent is the only reader who can see the original, so the binding limits are one sentence per bullet and the Length Fallback.
 
 ## Antipatterns
 

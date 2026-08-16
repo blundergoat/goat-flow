@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-17
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, and [verification-gruff.md](verification-gruff.md) for the analyzer.
@@ -156,3 +156,18 @@ last_reviewed: 2026-08-16
 **Root cause:** The visible segment arithmetic was treated as the whole embedded receipt, then category minutes were rounded by intuition. The strict checker requires both canonical parsed summaries and its deterministic allocation; a complete-looking table alone is insufficient evidence for measured Actual.
 
 **Prevention:** Use `plans time stop <milestone> --finalize` for normal closure. If manual recovery is necessary, compare the receipt with the canonical rendered shape, derive rather than eyeball the largest-remainder split, and rerun strict validation after the terminal status change. Evidence anchors: `docs/cli.md` (search: `plans time stop .goat-flow/plans/<active>/M01-example.md --finalize`), `src/cli/plans-time-receipt.ts` (search: `Compare rounded total, category sum, and largest-remainder allocation`), and `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).
+
+---
+
+## Lesson: Proof gates must distinguish execution, mode, and semantic outcome
+
+**Status:** active | **Created:** 2026-08-17
+**Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-17
+
+**What happened:** M39 verification exposed three false-proof shapes in one pass. A negative regex for the unsafe rewrite instruction also rejected the safe sentence “does not rewrite them automatically.” A command that piped audit JSON into inline Node was blocked before either parallel check ran. The direct retry exited zero but omitted `--harness`; its JSON explicitly said `"harness": false` and carried no harness scope, so it had not exercised `settings-rules-matched`.
+
+**Root cause:** I treated a matched token and a zero exit as proof without first checking whether the assertion distinguished safe from unsafe prose, whether the hook allowed the command to execute, or whether the output identified the intended CLI mode.
+
+**Prevention:** Pin negative assertions to the complete unsafe instruction while positively requiring the safe replacement. Treat a hook block as no execution evidence and switch to an allowed data tool or file-redirection shape before rerunning. For mode-gated CLI proof, assert the mode sentinel and the target result row before accepting exit zero. Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (search: `offers deliberate review instead of an automatic rewrite`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`), `src/cli/cli.ts` (search: `--harness`), and `src/cli/audit/audit.ts` (search: `harness: options.harness`).

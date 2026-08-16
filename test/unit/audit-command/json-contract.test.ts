@@ -93,6 +93,20 @@ function assertHarnessAssuranceContract(report: AuditReport): void {
       ["structural", "limited"],
     ],
   );
+
+  const settingsRules = report.scopes.harness?.checks.find(
+    (check) => check.id === "settings-rules-matched",
+  );
+  assertExists(settingsRules);
+  assert.equal(settingsRules.type, "advisory");
+  assert.equal(settingsRules.provenance.normative_level, "BEST_PRACTICE");
+  assert.deepEqual(settingsRules.provenance.source_urls, [
+    "https://code.claude.com/docs/en/permissions",
+  ]);
+  assert.deepEqual(settingsRules.provenance.framework_evidence_paths, [
+    "docs/harness-audit.md",
+    "docs/audit-checks.md",
+  ]);
 }
 
 describe("audit JSON contract", () => {

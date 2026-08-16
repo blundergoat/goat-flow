@@ -155,7 +155,7 @@ Evidence anchors:
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 14 | **Latest occurrence:** 2026-08-16
+**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 15 | **Latest occurrence:** 2026-08-17
 
 **What happened:** Narrower checks repeatedly cleared before later static gates. On 2026-08-10, typecheck rejected dynamic membership against a literal-tuple union and ESLint found proof-reader and registrar complexity 13/11. Earlier recurrences included formatting drift, an undiscovered worker, and impossible fallback logic.
 
@@ -166,6 +166,8 @@ Evidence anchors:
 **Measured recurrences:** Static gates have found complexity, impossible conditions, internal-only exports, an undiscovered worker, and a measured Knip heap limit. The latest fix widened dynamic scenario ids through `Set<string>` and separated event matching from gate promotion. Evidence anchors: `src/cli/server/hook-runtime-proof.ts` (search: `requiredScenarioIds`) and (search: `hookSupportGateAfterLocalProof`).
 
 **Recurrence 2026-08-16 (registrar helper extraction):** Moving the provider-case matrix and recursive row counter into the existing helper removed the Gruff file-length error, but the changed multiline import in the original test failed the focused Prettier gate. Formatting the touched test before typecheck and Knip kept the failure local. Evidence anchors: `test/unit/hook-registrar.helpers.ts` (search: `SUPPORTED_PROVIDER_HOOK_CASES`) and `test/unit/hook-registrar.test.ts` (search: `countOwnedCommandRows`).
+
+**Recurrence 2026-08-17 (settings-rule collector):** The focused audit suites and typecheck passed, but full preflight found complexity 12 in the new settings-rule collector. Extracting its single-entry classification made the file-level ESLint gate pass without changing the collector contract. Evidence anchors: `src/cli/audit/harness/check-constraints.ts` (search: `collectStaleSettingsRules`) and (search: `staleRuleDetail`).
 
 **Release recurrence (2026-08-09):** Hook notes gained a dated release heading before its manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 

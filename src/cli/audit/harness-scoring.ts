@@ -28,12 +28,14 @@ import type {
  * @param type - the check's kind; metric checks only move the score, never the verdict
  * @param acknowledged - whether the user opted out of this advisory in their config;
  *   defaults to false, meaning an unacknowledged failure still blocks
+ * @param failureImpact - explicit score-only override for a non-blocking advisory
  * @returns the display status and impact used to render and score the row
  */
 export function classifyCheckImpact(
   status: CheckResult["status"],
   type: CheckResult["type"],
   acknowledged = false,
+  failureImpact?: HarnessCheck["failureImpact"],
 ): Pick<CheckResult, "displayStatus" | "impact"> {
   if (status === "skipped") return { displayStatus: "skipped", impact: "none" };
   if (status === "pass") {
@@ -42,7 +44,7 @@ export function classifyCheckImpact(
       impact: "none",
     };
   }
-  if (type === "metric" || acknowledged) {
+  if (type === "metric" || acknowledged || failureImpact === "score-only") {
     return { displayStatus: "warn", impact: "score-only" };
   }
   return { displayStatus: "fail", impact: "scope-fail" };
@@ -63,6 +65,14 @@ function explainHarnessFailure(
     };
   }
   if (check.type !== "advisory") return failure;
+  if (check.failureImpact === "score-only") {
+    return {
+      ...failure,
+      evidence: acknowledged
+        ? `Advisory (acknowledged via harness.acknowledge: [${check.id}]; score-only and does not fail audit status).`
+        : "Advisory (score-only; lowers the concern score but does not fail audit status).",
+    };
+  }
   return {
     ...failure,
     evidence: acknowledged
@@ -98,7 +108,12 @@ export function toCheckResult(
       : undefined;
 
   const failure = explainHarnessFailure(check, baseFailure, acknowledged);
-  const impact = classifyCheckImpact(result.status, check.type, acknowledged);
+  const impact = classifyCheckImpact(
+    result.status,
+    check.type,
+    acknowledged,
+    check.failureImpact,
+  );
 
   return {
     id: check.id,
@@ -267,10 +282,10 @@ export function applyCheckToConcern(
   } else {
     applyAdvisoryCheck(concern, result, acknowledged);
   }
-  // Unacknowledged failures stop a user from treating the concern as configured correctly.
+  // Unacknowledged failures keep their remediation visible even when they are score-only.
   if (result.status === "fail" && !acknowledged) {
-    concern.status = "fail";
     addRemediation(concern, result);
+    if (check.failureImpact !== "score-only") concern.status = "fail";
   }
 }
 

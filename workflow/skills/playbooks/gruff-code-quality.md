@@ -98,6 +98,8 @@ A documentation pass edits comments and doc blocks. Route every naming finding t
 
 The identity diff proves no new finding, not that the pass earned its review cost. Report compliant comments left untouched and any whitespace-only churn, and size the pass like any cluster: one subsystem a human can actually review, not the whole tree.
 
+Read the JSON from stdout alone. The wrapper writes progress lines to stderr, so merging the streams corrupts the document. Redirect to a file and read the file rather than piping into an inline interpreter, which a project deny policy may block.
+
 ## Triage Actions
 
 Classify high-volume rules before editing individual findings.

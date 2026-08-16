@@ -19,7 +19,7 @@ Find the smallest sentence edit that lowers a concrete reader cost while preserv
 
 ## Diagnostic Route
 
-Name the reader cost before editing: the sentence delays its claim, assigns action to the wrong actor, explains knowledge the reader already has, inflates significance, hides a regression, leaks drafting residue, or repeats a cadence that obscures priority.
+Name the reader cost before editing with one primary code: `DELAY` defers its claim, `ACTOR` wrong subject, `KNOWN` the reader already knows it, `INFLATE` unsupported significance, `HIDDEN-RISK` an obscured regression, `RESIDUE` drafting scaffolding, or `CADENCE` repetition that obscures priority.
 
 Use a component as the actor when the component performs the action. Name a person or team only when responsibility is relevant and evidenced. Do not turn a system behaviour into a claim about what people chose, believed, or intended. Passive voice is valid when the actor is unknown, irrelevant, or deliberately withheld.
 
@@ -34,7 +34,7 @@ Choose register from the artifact, actual reader, and supplied voice. Neutral an
 - Release and changelog prose follows its surface owner's audience and fact-selection gates.
 - Replies to people receive correctness and residue work only unless the user asks for tone changes.
 
-Ask what the reader already knows from the surrounding artifact, product surface, and request. If the reader already knows a term or premise, Do not define it again. If the knowledge is uncertain, preserve the explanation or verify the audience before cutting it.
+Ask what the reader already knows from the surrounding artifact, product surface, and request. If the reader already knows a term or premise, do not define it again. If the knowledge is uncertain, preserve the explanation or verify the audience before cutting it.
 
 ## Fix on Sight
 
@@ -51,6 +51,8 @@ These patterns diagnose reader cost, not authorship. A found phrase is only a ca
 **Uniform positivity.** State a visible regression, limitation, or unresolved risk plainly. Do not add reassurance merely to make every paragraph resolve upward.
 
 **Canonical terminology.** Use one noun per technical referent. Repeat it or use an unambiguous pronoun instead of rotating among near-synonyms.
+
+**Cadence.** The same opening three words across three or more sibling items locates a `CADENCE` candidate. Confirm the shape has become a template, then vary the repeats; identical grammar stays correct when the units are genuinely parallel.
 
 **Residue.** Remove leaked scaffolding, shipped placeholders, tracking parameters on pasted links, broken Markdown, and broken dash spacing. Re-read the repaired sentence so deletion does not weld neighbouring words together.
 

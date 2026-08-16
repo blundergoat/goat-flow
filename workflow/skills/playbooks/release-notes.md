@@ -119,7 +119,7 @@ Before publishing:
 4. Split long sentences; keep one idea per sentence.
 5. Keep non-breaking highlights to one sentence unless a second sentence carries measurement, migration note, or user-visible caveat.
 
-The default release body should be about half the first agent draft.
+A draft that loses half its words without losing a fact was too verbose. That is a diagnosis after the cut, not a target: the drafting agent is the only reader who can see the original, so the binding limits are the Surface Rules and the Length Fallback.
 
 ## Antipatterns
 

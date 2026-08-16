@@ -7,6 +7,7 @@ import type {
   AuditContext,
   HarnessCheck,
   HarnessCheckDetails,
+  HarnessPermissionRuleDetail,
 } from "../types.js";
 import type { CheckEvidence } from "../provenance-types.js";
 import { pass, fail } from "./helpers.js";
@@ -489,6 +490,24 @@ function staleRuleReason(entry: string): string | null {
   return (tool && STALE_RULE_FORMS.get(tool)) ?? null;
 }
 
+/** Convert one permission entry to structured stale evidence when applicable. */
+function staleRuleDetail(
+  arrayName: (typeof PERMISSION_RULE_ARRAYS)[number],
+  entry: unknown,
+): HarnessPermissionRuleDetail | null {
+  if (typeof entry !== "string") return null;
+  const tool = entry.match(/^([A-Za-z]+)\(/u)?.[1];
+  const reason = staleRuleReason(entry);
+  if (!reason || !tool) return null;
+  return {
+    array: arrayName,
+    rule: entry,
+    tool,
+    reason,
+    display: `${arrayName}: ${entry} (${reason})`,
+  };
+}
+
 /**
  * Collect permission rules whose tool prefix the agent will never match.
  *
@@ -496,20 +515,21 @@ function staleRuleReason(entry: string): string | null {
  * protective while the rule is dead config. Non-string entries are skipped.
  *
  * @param parsed - Parsed settings JSON from the agent settings facts.
- * @returns Human-readable `array: rule (reason)` strings for each stale rule.
+ * @returns Structured rule records with a display fallback for text renderers.
  */
-function collectStaleSettingsRules(parsed: unknown): string[] {
+function collectStaleSettingsRules(
+  parsed: unknown,
+): HarnessPermissionRuleDetail[] {
   if (!parsed || typeof parsed !== "object") return [];
   const perms = (parsed as Record<string, unknown>).permissions;
   if (!perms || typeof perms !== "object") return [];
-  const stale: string[] = [];
+  const stale: HarnessPermissionRuleDetail[] = [];
   for (const arrayName of PERMISSION_RULE_ARRAYS) {
     const rules = (perms as Record<string, unknown>)[arrayName];
     if (!Array.isArray(rules)) continue;
     for (const entry of rules) {
-      if (typeof entry !== "string") continue;
-      const reason = staleRuleReason(entry);
-      if (reason) stale.push(`${arrayName}: ${entry} (${reason})`);
+      const detail = staleRuleDetail(arrayName, entry);
+      if (detail) stale.push(detail);
     }
   }
   return stale;
@@ -519,20 +539,21 @@ const settingsRulesMatched: HarnessCheck = {
   id: "settings-rules-matched",
   name: "Permission rules use forms the agent matches",
   concern: "constraints",
-  type: "integrity",
-  provenance: constraintsProvenance(
-    "integrity",
-    [
-      "docs/harness-audit.md",
-      ".goat-flow/learning-loop/footguns/agent-settings.md",
-    ],
-    "incident",
-  ),
+  type: "advisory",
+  failureImpact: "score-only",
+  provenance: {
+    source_type: "vendor_docs",
+    source_urls: ["https://code.claude.com/docs/en/permissions"],
+    verified_on: "2026-08-16",
+    normative_level: "BEST_PRACTICE",
+    evidence_paths: ["docs/harness-audit.md", "docs/audit-checks.md"],
+  },
   /** Run the Permission rules use forms the agent matches check. */
   run: (ctx) => {
     const findings: string[] = [];
     const failures: string[] = [];
     const denyMatrix: NonNullable<HarnessCheckDetails["denyMatrix"]> = [];
+    const staleTools = new Set<string>();
     let eligible = 0;
     for (const agentFacts of ctx.agents) {
       const settingsFile = agentFacts.agent.settingsFile;
@@ -542,6 +563,7 @@ const settingsRulesMatched: HarnessCheck = {
       if (!agentFacts.settings.valid) continue;
       eligible += 1;
       const stale = collectStaleSettingsRules(agentFacts.settings.parsed);
+      for (const rule of stale) staleTools.add(rule.tool);
       denyMatrix.push({
         agent: agentFacts.agent.id,
         missingPatterns: [],
@@ -554,7 +576,7 @@ const settingsRulesMatched: HarnessCheck = {
         );
       } else {
         failures.push(
-          `${agentFacts.agent.id}: ${stale.length} permission rule(s) the agent never matches - ${stale.join("; ")}`,
+          `${agentFacts.agent.id}: ${stale.length} permission rule(s) the agent never matches - ${stale.map((rule) => rule.display).join("; ")}`,
         );
       }
     }
@@ -564,13 +586,15 @@ const settingsRulesMatched: HarnessCheck = {
       });
     }
     if (failures.length === 0) return pass(findings, { denyMatrix });
+    const staleForms = [...staleTools].map((tool) => `${tool}(...)`).join(", ");
+    const formLabel = staleTools.size === 1 ? "form" : "forms";
     return fail(
       failures,
       [
-        "Stale rules warn at launch and enforce nothing: MultiEdit was removed, and file permission checks only match Edit(path)/Read(path) rules.",
+        `Claude Code accepts but does not consult the ${staleForms} permission rule ${formLabel} reported here; treat them as inert configuration, not enforcement.`,
       ],
       [
-        "Re-run goat-flow setup/install for this agent - upgrades drop removed-tool rules and rewrite Write/NotebookEdit/Glob rules to their matched Edit/Read equivalents.",
+        "Review the reported inert rules with the project owner. They MAY remain as defense-in-depth markers or be removed deliberately; goat-flow does not rewrite them automatically.",
       ],
       { denyMatrix },
     );

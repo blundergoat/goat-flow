@@ -171,6 +171,48 @@ describe("Audit scoring model", () => {
 });
 
 describe("Audit scoring model", () => {
+  it("keeps the stale settings-rule advisory score-only without acknowledgement", () => {
+    const baseAgent = stubAgentFacts();
+    const ctx = makeCtx({
+      agents: [
+        stubAgentFacts({
+          settings: {
+            ...baseAgent.settings,
+            parsed: {
+              permissions: { deny: ["Write(**/.env)"] },
+            },
+          },
+          hooks: {
+            ...baseAgent.hooks,
+            denyBlocksPipeToShell: true,
+          },
+        }),
+      ],
+    });
+
+    const { scope, concerns } = computeHarness(ctx);
+    const settingsRules = scope.checks.find(
+      (check) => check.id === "settings-rules-matched",
+    );
+
+    assert.ok(settingsRules, "settings-rules-matched check should be present");
+    assert.equal(settingsRules.status, "fail");
+    assert.equal(settingsRules.type, "advisory");
+    assert.equal(settingsRules.displayStatus, "warn");
+    assert.equal(settingsRules.impact, "score-only");
+    assert.equal(settingsRules.provenance.normative_level, "BEST_PRACTICE");
+    assert.equal(concerns.constraints.status, "pass");
+    assert.ok(concerns.constraints.score < FULL_CONCERN_SCORE);
+    assert.equal(
+      scope.failures.some(
+        (failure) => failure.check === settingsRules.failure?.check,
+      ),
+      false,
+    );
+  });
+});
+
+describe("Audit scoring model", () => {
   it("audit details flag defaults on and can strip structured payloads", () => {
     const parsed = parseCLIArgs(["audit", ".", "--no-audit-details"]);
     assert.equal(parsed.auditDetails, false);

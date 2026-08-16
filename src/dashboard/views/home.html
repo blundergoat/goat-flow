@@ -1483,13 +1483,8 @@
         }
         // Blocking harness failures tell the repair agent what deterministic checks failed.
         for (const check of (agent.harness?.checks || [])) {
-          // Only unacknowledged non-metric failures should drive the repair prompt.
-          if (check.status === 'fail' && check.type !== 'metric' && !check.acknowledged) findings.push('harness/' + check.id + ': ' + (check.failure?.message || check.failure?.howToFix || 'check failed'));
-        }
-        // Failed concerns add user-facing quality context when check rows are not enough.
-        for (const [key, concern] of Object.entries(agent.concerns || {})) {
-          // Failed concern summaries give the repair agent the user-visible problem area.
-          if (concern.status === 'fail') findings.push(key + ': ' + ((concern.findings || []).slice(0, 2).join('; ') || 'check failed'));
+          // The canonical impact field excludes score-only advisories and passing concern evidence.
+          if (check.status === 'fail' && check.impact === 'scope-fail') findings.push('harness/' + check.id + ': ' + (check.failure?.message || check.failure?.howToFix || 'check failed'));
         }
       }
       return [

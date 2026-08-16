@@ -102,7 +102,9 @@ edit accounts for the byte transition. Protected units keep their baseline diges
 
 Immediately before every edit batch, revalidate repository and selector identity plus each affected
 unit's membership, path bytes, content digest, file type, surface class, and containment against the
-latest agent-accounted record. For a PR, also revalidate local HEAD and bound PR head. For uncommitted
+latest agent-accounted record. Revalidate repository HEAD in every selector, not only a PR: a
+concurrent commit moves the committed baseline under a file or folder run, which silently reattributes
+a failing check between inherited and introduced. For a PR, also revalidate the bound PR head. For uncommitted
 work, re-inventory staged, unstaged, untracked, deleted, and unmerged membership using the same
 byte-safe method. For a folder, repeat the bounded inventory. A file selector must still resolve to
 the same one file.
@@ -119,7 +121,8 @@ Snapshot v2; approval text is not a substitute for the freeze.
 ## Formatter Capability
 
 Formatter discovery is read-only. Inspect applicable instructions, checked-in scripts, manifests,
-configuration, and documented project commands. Never execute a package resolver, package manager,
+configuration, `.editorconfig`, and documented project commands. A formatter can be configured entirely
+by `.editorconfig` with no dedicated config file present, so its absence does not mean the tool is unowned. Never execute a package resolver, package manager,
 formatter, or project script merely to discover a command. Do not invent generic tool invocations or
 drop repository-owned flags.
 
@@ -134,6 +137,10 @@ Classify each formatter-owned writable path:
 
 Freeze the exact `READY` commands in the snapshot. Run the check before mutation. A failing baseline
 is evidence, not permission to rewrite existing user work; disposition it under project authority.
+Attribute it before deciding: run the committed content through the same check at the same path, so
+config resolution matches (`git show HEAD:<path> | <formatter check> <stdin-path flag> <path>`; the
+flag name varies, and a formatter without one needs a temporary copy inside the repository). A failure present at HEAD is
+inherited and stays the owner's; a failure absent there arrived with the working-tree change.
 After the bounded clarity edits, rerun the check before typecheck, tests, or Gruff. Run the frozen write
 command only on modified formatter-owned writable paths when project authority permits it, inspect the
 formatter diff, map its changed spans, and rerun the check.

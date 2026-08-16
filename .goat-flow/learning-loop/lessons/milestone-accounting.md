@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-17
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -63,8 +63,8 @@ last_reviewed: 2026-08-15
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** VERIFY
-**Incident count:** 5
-**Latest occurrence:** 2026-08-14
+**Incident count:** 6
+**Latest occurrence:** 2026-08-17
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
 
@@ -73,6 +73,8 @@ last_reviewed: 2026-08-15
 **Recurrence 2026-08-10:** During release-plan closeout, I passed a display identifier to `plans time stop` instead of the required milestone-file path. The CLI rejected the command and left the receipt open until the invocation used the exact `M*.md` path. Evidence anchor: `src/cli/plans-time.ts` (search: `requires an M*.md milestone file`).
 
 **Recurrence 2026-08-14:** M01 called `plans time start` while its single rendered status was still `not-started`; the CLI rejected the clock before writing a segment. Moving the milestone to `in-progress` before retrying preserved prospective timing. Evidence anchors: `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) and `test/unit/plans-export-parsing.test.ts` (search: `rejects Start with`).
+
+**Recurrence 2026-08-17:** M39 left its product span open across a human approval wait and resumed work. The status check could not separate waiting from agent time, so `plans time stop --discard-open` marked the receipt incomplete before a fresh proof segment began. Evidence anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
 
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
 

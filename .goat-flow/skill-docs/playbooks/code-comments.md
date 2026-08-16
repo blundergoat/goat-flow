@@ -68,6 +68,9 @@ not quotas; apply a rule only when its stated contract exists.
 Tighten without deleting `@param` / `@returns`; use verified rationale. Fix stale comments in scope;
 outside the authorized scope, report or defer it and do not delete it. The project or language
 formatter's enforced width governs. When neither defines a width, 150 characters is the fallback ceiling.
+Look for that width in `.editorconfig` `max_line_length`, then a linter rule such as `max-len`, then the
+formatter's configured width. A formatter's print width governs comments only if it reflows comment text;
+Prettier does not, so a project using it without `max_line_length` falls to the 150 ceiling.
 The shortest complete useful comment wins; never split one point across lines merely to stay short.
 Before a width sweep, measure the longest existing comment line; many violations can expose a wrong assumed limit.
 
@@ -256,6 +259,13 @@ Before claiming comment work is done, confirm the naming route is complete and c
 10. **[judge] Existing comments touched or noticed are still accurate.** Tightening an inherited claim transfers ownership.
 11. **[static] Comment lines meet the project or language formatter's enforced width, or the 150-character fallback ceiling when neither defines one.** Tags and description blocks meet their physical-line limits.
 12. **[static] Apply the em-dash rule above without rewriting exempt material.**
+
+The width and consecutive-prose-line checks are mechanical; run them rather than eyeballing, with `<width>` set to the ceiling resolved in The Comment Standard:
+
+```bash
+awk 'length><width> && /^[[:space:]]*(\/\/|\/\*|\*|#)/ {print FILENAME":"NR}' <files>
+awk '/^[[:space:]]*(\/\/|\*|#)/ && !/^[[:space:]]*(\*\/?|\/\/|#)[[:space:]]*$/{n++; if(n==4) print FILENAME":"NR; next} {n=0}' <files>
+```
 
 If a comment fails any check, fix it before merging.
 
