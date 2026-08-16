@@ -232,8 +232,12 @@ describe("effective hook state", () => {
     );
   });
 
-  // Fixture purpose: writes a temporary user customization; suite cleanup removes the project.
-  it("names installed byte drift as a stale installation", () => {
+  /**
+   * Fixture purpose: omit install state so status cannot guess whether changed bytes are old or local.
+   * Side effects: writes one local hook customization inside a disposable project.
+   * Invariant: unclassified drift stays command-free until a trusted baseline establishes direction.
+   */
+  it("keeps installed byte drift unclassified without a baseline", () => {
     const projectPath = createClaudeProject();
     initializeDisposableGitProject(projectPath);
     syncHookStates(projectPath);
@@ -251,12 +255,19 @@ describe("effective hook state", () => {
 
     assert.equal(postTurnState.isRegistered, true);
     assert.equal(postTurnState.isCurrentVersionInstalled, false);
-    assert.equal(postTurnState.installationIssue, "installed-version-mismatch");
+    assert.equal(
+      postTurnState.installationIssue,
+      "installed-version-unclassified",
+    );
     assert.deepEqual(postTurnState.effectiveState, {
       status: "installation-stale",
       severity: "warning",
     });
-    assert.match(postTurnState.repairCommand ?? "", /hooks sync/u);
+    assert.equal(postTurnState.repairCommand, null);
+    assert.match(
+      postTurnState.repairSummary,
+      /No matching previous-install baseline proves the drift direction/u,
+    );
   });
 
   // A hard-linked agent config can contain exact bytes while remaining unsafe to execute.

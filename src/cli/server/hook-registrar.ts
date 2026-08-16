@@ -65,7 +65,9 @@ type HookDrift = "desired-on-actual-off" | "desired-off-actual-on";
 /** Names the installed-file repair shown when registration exists but local coverage is stale. */
 type HookInstallationIssue =
   | "managed-files-missing"
-  | "installed-version-mismatch"
+  | "installed-version-behind"
+  | "installed-content-diverged"
+  | "installed-version-unclassified"
   | "managed-path-untrusted";
 
 /** Per-agent hook state shown by setup, audit, CLI, and dashboard views. */
@@ -512,9 +514,15 @@ function installedHookIssue(
   if (!installationFacts.hasAllRequiredFiles) {
     return "managed-files-missing";
   }
-  // Changed bytes mean setup no longer knows which hook version the user will run.
+  // M02's shared direction decides whether sync is safe, destructive, or unproven.
   if (!installationFacts.hasCurrentRequiredFiles) {
-    return "installed-version-mismatch";
+    if (installationFacts.changeDirection === "behind") {
+      return "installed-version-behind";
+    }
+    if (installationFacts.changeDirection === "diverged") {
+      return "installed-content-diverged";
+    }
+    return "installed-version-unclassified";
   }
   // Symlinks, hard links, or redirected config paths cannot establish local trust.
   if (!isTrusted) return "managed-path-untrusted";
@@ -550,8 +558,12 @@ function installationIssueReason(
   const issueReasons: Record<HookInstallationIssue, string> = {
     "managed-files-missing":
       "One or more managed hook or policy files are missing.",
-    "installed-version-mismatch":
-      "Installed hook bytes differ from the bundled registry version.",
+    "installed-version-behind":
+      "Installed hook bytes match the previous baseline and are behind the bundled registry version.",
+    "installed-content-diverged":
+      "Installed hook bytes carry local content that the bundled registry version does not contain.",
+    "installed-version-unclassified":
+      "Installed hook bytes differ, but no matching previous-install baseline proves whether they are older or locally changed.",
     "managed-path-untrusted":
       "A managed hook or config path is symlinked, hard-linked, or non-regular.",
   };
@@ -666,6 +678,32 @@ function applyScanRootRepairGuidance(
     "Configure valid scan roots or disable this hook before registering it.";
 }
 
+/**
+ * Replace generic stale-install guidance with the proven managed-file direction.
+ * Diverged and unclassified bytes stay command-free because status cannot promise a safe sync.
+ */
+function applyManagedFileRepairGuidance(
+  effectivePresentation: ReturnType<typeof effectiveAgentState>,
+  installationIssue: HookInstallationIssue | null,
+  installationFacts: ManagedHookInstallationFacts,
+): void {
+  const changedPaths = installationFacts.changedPaths.join(", ");
+  if (installationIssue === "installed-version-behind") {
+    effectivePresentation.repairSummary =
+      "Installed bytes still match the previous-install baseline, so sync safely advances the managed files to this registry version.";
+    return;
+  }
+  if (installationIssue === "installed-content-diverged") {
+    effectivePresentation.repairCommand = null;
+    effectivePresentation.repairSummary = `A sync would overwrite local content at ${changedPaths}; preserve or port those changes before any explicit replacement.`;
+    return;
+  }
+  if (installationIssue === "installed-version-unclassified") {
+    effectivePresentation.repairCommand = null;
+    effectivePresentation.repairSummary = `No matching previous-install baseline proves the drift direction at ${changedPaths}; compare those files before choosing sync, which replaces their current bytes.`;
+  }
+}
+
 /** Choose the root-contract issue before a generic installation repair reason. */
 function supportedHookReason(
   isDesiredByUser: boolean,
@@ -717,6 +755,11 @@ function supportedAgentHookState(
     isRegistered,
     isCurrentVersionInstalled,
     localDetails.isTrusted,
+  );
+  applyManagedFileRepairGuidance(
+    effectivePresentation,
+    localDetails.installationIssue,
+    installationFacts,
   );
   applyScanRootRepairGuidance(
     effectivePresentation,
@@ -843,6 +886,46 @@ function reconcileHook(
 }
 
 /**
+ * Refuse a registrar mutation when M02 proves that sync would erase local hook content.
+ * The preflight runs before any config, script, or tombstone write and names only project-relative paths.
+ * Invariant: every requested hook and installed agent is inspected before the first mutation.
+ *
+ * @param projectPath - selected project inspected before any registrar mutation
+ * @param specs - hook contracts the requested mutation would reconcile
+ * @returns nothing when every changed path is behind, current, missing, or unclassified
+ * @throws HookRegistrarError when any trusted baseline proves local divergence
+ */
+function assertNoKnownManagedHookDivergence(
+  projectPath: string,
+  specs: readonly HookSpec[],
+): void {
+  const profiles = getAgentProfiles();
+  const divergedPaths = new Set<string>();
+  for (const spec of specs) {
+    for (const agent of profiles) {
+      if (unsupportedReasonForSpec(spec, agent) || !isSupportedAgent(agent)) {
+        continue;
+      }
+      if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) continue;
+      const installationFacts = managedHookInstallationFacts(
+        projectPath,
+        agent,
+        spec,
+      );
+      if (installationFacts.changeDirection !== "diverged") continue;
+      for (const changedPath of installationFacts.changedPaths) {
+        divergedPaths.add(changedPath);
+      }
+    }
+  }
+  if (divergedPaths.size === 0) return;
+  throw new HookRegistrarError(
+    `Refusing to sync diverged managed hook files: ${[...divergedPaths].sort().join(", ")}. A sync would overwrite local content; preserve or port those changes before an explicit replacement.`,
+    409,
+  );
+}
+
+/**
  * Disable and remove one hook that used to exist in older installs.
  * Use during hook reconciliation so users do not keep stale controls for removed hooks.
  * @param projectPath - project being cleaned; empty means no project hook files can be found
@@ -912,6 +995,15 @@ export function readAllHookStates(projectPath: string): HookState[] {
   return listHookSpecs().map((spec) => readHookState(spec.id, projectPath));
 }
 
+/**
+ * Apply one enabled choice after proving the registrar will not erase known local hook content.
+ *
+ * @param hookId - registry hook selected by the caller; unknown or fixed hooks are rejected
+ * @param enabled - desired persisted state written after divergence preflight
+ * @param projectPath - selected project whose managed hook surface may change
+ * @returns refreshed public state for the selected hook
+ * @throws HookRegistrarError for unknown hooks, fixed hooks, unsafe paths, or proven divergence
+ */
 export function applyHookState(
   hookId: string,
   enabled: boolean,
@@ -922,18 +1014,25 @@ export function applyHookState(
   if (!spec.togglable) {
     throw new HookRegistrarError(`Hook is not togglable: ${hookId}`, 400);
   }
+  assertNoKnownManagedHookDivergence(projectPath, [spec]);
   setHookEnabled(projectPath, spec.id, enabled);
   reconcileHook(projectPath, spec, enabled);
   return readHookState(spec.id, projectPath);
 }
 
-// Side-effecting: rewrites each togglable hook's installed files to match its
-// persisted desired state, repairing drift (e.g. after a manual settings edit),
-// then returns the refreshed snapshot. Non-togglable hooks are left untouched.
+/**
+ * Reapply persisted hook choices after refusing any baseline-proven local divergence.
+ * Unclassified legacy bytes retain the existing explicit-sync upgrade path.
+ *
+ * @param projectPath - selected project whose togglable hook surfaces may be reconciled
+ * @returns refreshed state for every registered hook after successful reconciliation
+ * @throws HookRegistrarError when a managed path is unsafe, newer, or proven diverged
+ */
 export function syncHookStates(projectPath: string): HookState[] {
+  const togglableSpecs = listHookSpecs().filter((spec) => spec.togglable);
+  assertNoKnownManagedHookDivergence(projectPath, togglableSpecs);
   pruneRemovedHookTombstones(projectPath);
-  for (const spec of listHookSpecs()) {
-    if (!spec.togglable) continue;
+  for (const spec of togglableSpecs) {
     reconcileHook(projectPath, spec, readDesired(projectPath, spec));
   }
   return readAllHookStates(projectPath);

@@ -15,6 +15,13 @@ import {
 } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { AUDIT_VERSION } from "../constants.js";
+import {
+  classifyManagedSetupFile,
+  managedSetupChangeDirection,
+  type ManagedSetupChangeDirection,
+} from "../managed-setup-preview.js";
+import { readManagedInstallBaseline } from "../managed-setup-state.js";
+import { hashFile } from "../managed-setup-write-set.js";
 import { getTemplatePath } from "../paths.js";
 import type { AgentProfile } from "../types.js";
 import { projectIsAheadOfCli } from "../version-compare.js";
@@ -68,12 +75,64 @@ export interface ManagedHookInstallationFacts {
   hasAllRequiredFiles: boolean;
   hasCurrentRequiredFiles: boolean;
   hasTrustedRequiredFiles: boolean;
+  changeDirection: ManagedSetupChangeDirection;
+  changedPaths: string[];
 }
 
 /** One installed hook file and the bundled source users expect it to match. */
 interface ManagedHookFileContract {
   installedPath: string;
   templatePath: string;
+}
+
+/** Convert one managed destination into the portable path stored in install state. */
+function managedHookRelativePath(
+  projectPath: string,
+  managedHookFile: ManagedHookFileContract,
+): string {
+  return relative(projectPath, managedHookFile.installedPath).replaceAll(
+    "\\",
+    "/",
+  );
+}
+
+/**
+ * Derive one hook file's repair direction from M02's canonical classifier.
+ * Use after existence checks; unreadable evidence remains unclassified and never authorizes sync.
+ *
+ * @param projectPath - selected project used to derive the baseline's relative path
+ * @param managedHookFile - installed/template pair whose exact bytes are compared
+ * @param expectedHashes - trusted prior hashes; null keeps a differing file unclassified
+ * @returns shared repair direction; unreadable files return unclassified
+ * @throws Never; filesystem read failures are converted into unclassified evidence
+ */
+function managedHookFileDirection(
+  projectPath: string,
+  managedHookFile: ManagedHookFileContract,
+  expectedHashes: Map<string, string> | null,
+): ManagedSetupChangeDirection {
+  const managedPath = managedHookRelativePath(projectPath, managedHookFile);
+  try {
+    const state = classifyManagedSetupFile({
+      oldExpectedSha256: expectedHashes?.get(managedPath) ?? null,
+      currentSha256: hashFile(managedHookFile.installedPath),
+      newExpectedSha256: hashFile(managedHookFile.templatePath),
+    });
+    return managedSetupChangeDirection(state);
+  } catch {
+    // For example, permissions may change between the existence check and the byte read.
+    return "unclassified";
+  }
+}
+
+/** Collapse per-file direction without allowing one unknown or diverged path to look sync-safe. */
+function managedHookChangeDirection(
+  directions: readonly ManagedSetupChangeDirection[],
+): ManagedSetupChangeDirection {
+  if (directions.includes("diverged")) return "diverged";
+  if (directions.includes("unclassified")) return "unclassified";
+  if (directions.includes("behind")) return "behind";
+  return "current";
 }
 
 type AgentProfilePathKey =
@@ -302,6 +361,19 @@ export function managedHookInstallationFacts(
   const hasAllRequiredFiles = managedHookFiles.every((managedHookFile) =>
     existsSync(managedHookFile.installedPath),
   );
+  const baseline = readManagedInstallBaseline(projectPath, agent.id);
+  const expectedHashes =
+    baseline.status === "loaded" ? baseline.expectedHashes : null;
+  const fileDirections = managedHookFiles.map((managedHookFile) =>
+    existsSync(managedHookFile.installedPath)
+      ? managedHookFileDirection(projectPath, managedHookFile, expectedHashes)
+      : "unclassified",
+  );
+  const changedPaths = managedHookFiles.flatMap((managedHookFile, index) =>
+    fileDirections[index] === "current"
+      ? []
+      : [managedHookRelativePath(projectPath, managedHookFile)],
+  );
   // Current bytes matter only after every required file exists.
   const hasCurrentRequiredFiles =
     hasAllRequiredFiles &&
@@ -327,6 +399,8 @@ export function managedHookInstallationFacts(
     hasAllRequiredFiles,
     hasCurrentRequiredFiles,
     hasTrustedRequiredFiles,
+    changeDirection: managedHookChangeDirection(fileDirections),
+    changedPaths,
   };
 }
 

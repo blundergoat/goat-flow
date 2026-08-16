@@ -75,6 +75,10 @@ export type ManagedSetupFileState =
   | "user-migrated"
   | "regenerated";
 
+/** Repair-facing direction derived from M02's three-way managed-file state. */
+export type ManagedSetupChangeDirection =
+  "current" | "behind" | "diverged" | "unclassified";
+
 /** Action shown beside one path so users know what an approved install would do. */
 type ManagedSetupAction =
   | "none"
@@ -178,7 +182,7 @@ const STATE_PRESENTATION: Record<
   "local-preserved": {
     action: "none",
     reason:
-      "The target changed after the last install, but this goat-flow package did not change the file, so your content is kept.",
+      "The target changed after the last install, but this goat-flow package did not change the file. Install keeps your local content; an explicit full-file replacement would discard it.",
   },
   "template-changed": {
     action: "replace",
@@ -188,7 +192,7 @@ const STATE_PRESENTATION: Record<
   "both-changed": {
     action: "protect",
     reason:
-      "The target and goat-flow template both changed since the last install.",
+      "The target and goat-flow template both changed since the last install. Automatic replacement is blocked because it would discard current target content.",
   },
   added: {
     action: "create",
@@ -233,6 +237,25 @@ const STATE_PRESENTATION: Record<
     reason: "Install rewrites this generated file from current project state.",
   },
 };
+
+/**
+ * Convert one canonical managed-file state into the repair direction shared by
+ * install, audit, and hook status. This consumes M02's classifier result so
+ * downstream surfaces never invent their own old/current/new comparison.
+ *
+ * @param state - canonical three-way state; non-content states have no proven drift direction
+ * @returns current, safely behind, locally diverged, or unclassified repair evidence
+ */
+export function managedSetupChangeDirection(
+  state: ManagedSetupFileState,
+): ManagedSetupChangeDirection {
+  if (state === "unchanged") return "current";
+  if (state === "template-changed") return "behind";
+  if (state === "both-changed" || state === "local-preserved") {
+    return "diverged";
+  }
+  return "unclassified";
+}
 
 /**
  * Classify one path from old, current, and new hashes.

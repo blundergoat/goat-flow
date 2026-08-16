@@ -239,6 +239,17 @@ describe("skill doctor", () => {
     assert.equal(skill.staticEligibility, "eligible");
     assert.equal(skill.mirrorStatus, "drift");
     assert.match(skill.warnings.join("\n"), /differs from canonical source/i);
+    assert.ok(
+      skill.remediation.some((command) => command.includes("--dry-run")),
+      `drift remediation must preview replacement: ${skill.remediation.join("\n")}`,
+    );
+    assert.ok(
+      skill.remediation.every(
+        (command) =>
+          !/^goat-flow install <project-path> --agent [a-z]+$/u.test(command),
+      ),
+      `drift remediation must not silently replace the mirror: ${skill.remediation.join("\n")}`,
+    );
   });
 
   it("renders parseable JSON and an explicit static-only text limit", () => {
@@ -253,6 +264,7 @@ describe("skill doctor", () => {
       summary: {
         staticallyEligible: number;
         runtimeRegistration: string;
+        countScope: string;
       };
     };
     const text = renderSkillDoctorText(report);
@@ -260,10 +272,18 @@ describe("skill doctor", () => {
     assert.equal(json.status, "static-pass");
     assert.equal(json.summary.staticallyEligible, 1);
     assert.equal(json.summary.runtimeRegistration, "unverified");
+    assert.match(
+      json.summary.countScope,
+      /one SKILL\.md mirror is counted per agent-skill row/i,
+    );
     assert.match(text, /Static evidence only/i);
     assert.match(
       text,
-      /STATIC-PASS skill doctor: 1 checked · 1 statically eligible · runtime registration unverified · 0 blocked · 0 warnings/,
+      /Count scope: One SKILL\.md mirror is counted per agent-skill row/u,
+    );
+    assert.match(
+      text,
+      /STATIC-PASS skill doctor: 1 checked · 1 statically eligible · runtime registration unverified · 0 blocked · 0 mirror drift · 0 warnings/,
     );
   });
 });

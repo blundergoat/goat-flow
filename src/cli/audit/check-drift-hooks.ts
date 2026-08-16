@@ -4,8 +4,14 @@
  * It compares hook scripts, configured launchers, and supported host timeouts.
  * Explicitly disabled hooks remain the user's choice instead of appearing as drift.
  */
+import { createHash } from "node:crypto";
 import { posix as pathPosix } from "node:path";
 import { load } from "js-yaml";
+import {
+  classifyManagedSetupFile,
+  managedSetupChangeDirection,
+} from "../managed-setup-preview.js";
+import { readManagedInstallBaseline } from "../managed-setup-state.js";
 import type { ReadonlyFS } from "../types.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
@@ -258,6 +264,60 @@ function expectedHookConfig(
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
+/**
+ * Load the selected agent's prior managed hashes before audit describes repair safety.
+ * Use only as direction evidence; missing or invalid state cannot authorize sync.
+ * Invariant: hashes belong to the same selected agent and safe project-relative paths.
+ *
+ * @param projectPath - audited project whose local install state supplies prior hashes
+ * @param agentId - selected agent; null means aggregate audit has no single baseline owner
+ * @returns loaded path-to-hash evidence, or null when no trustworthy baseline is available
+ */
+function managedBaselineHashes(
+  projectPath: string,
+  agentId: string | null,
+): Map<string, string> | null {
+  if (agentId === null || !isAgentId(agentId)) return null;
+  const baseline = readManagedInstallBaseline(projectPath, agentId);
+  return baseline.status === "loaded" ? baseline.expectedHashes : null;
+}
+
+/** Hash in-memory expected or installed text with the install baseline's exact-byte contract. */
+function managedContentHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+/**
+ * Explain one content mismatch from M02's canonical three-way state.
+ * Behind files may name sync; diverged files instead name the local bytes sync would discard.
+ */
+function hookContentMismatchMessage(
+  templateRel: string,
+  installedRel: string,
+  expected: string,
+  installed: string,
+  baselineHashes: Map<string, string> | null,
+): string {
+  const state = classifyManagedSetupFile({
+    oldExpectedSha256: baselineHashes?.get(installedRel) ?? null,
+    currentSha256: managedContentHash(installed),
+    newExpectedSha256: managedContentHash(expected),
+  });
+  const direction = managedSetupChangeDirection(state);
+  if (direction === "behind") {
+    return `installed hook ${installedRel} is behind template ${templateRel}; its bytes still match the previous-install baseline, so run goat-flow hooks sync`;
+  }
+  if (direction === "diverged") {
+    return `installed hook ${installedRel} diverged from template ${templateRel}; sync would overwrite local content at ${installedRel}, so preserve or port that content before any explicit replacement`;
+  }
+  return `hook template (${templateRel}) and installed copy (${installedRel}) differ, but no matching previous-install baseline proves the direction; compare them before you run goat-flow hooks sync, which replaces current managed bytes at ${installedRel}`;
+}
+
+/**
+ * Compare one transformed template with its installed copy and append actionable drift evidence.
+ *
+ * @throws when the supplied filesystem or template reader cannot inspect its configured root
+ */
 function compareHookArtifact(
   fs: ReadonlyFS,
   templateRoot: string,
@@ -265,6 +325,7 @@ function compareHookArtifact(
   templateRel: string,
   installedRel: string,
   expectedFromTemplate: (template: string) => string,
+  baselineHashes: Map<string, string> | null,
 ): void {
   const template = readTemplateText(templateRoot, templateRel);
   if (template === null) {
@@ -290,7 +351,13 @@ function compareHookArtifact(
     findings.push({
       kind: "content",
       path: installedRel,
-      message: `hook template (${templateRel}) and installed copy (${installedRel}) differ; run goat-flow hooks sync`,
+      message: hookContentMismatchMessage(
+        templateRel,
+        installedRel,
+        expected,
+        installed,
+        baselineHashes,
+      ),
     });
   }
 }
@@ -310,6 +377,7 @@ function compareHookArtifact(
  */
 export function compareHooks(
   fs: ReadonlyFS,
+  projectPath: string,
   templateRoot: string,
   findings: DriftFinding[],
   checkedHookArtifacts: Set<string>,
@@ -325,6 +393,8 @@ export function compareHooks(
 
     // Hookless agents have no local artifacts for drift to compare.
     if (!agent.hooks_dir || !agent.hooks) continue;
+
+    const baselineHashes = managedBaselineHashes(projectPath, agentId);
 
     // An uninstalled hook root belongs to agent setup checks, not content drift.
     if (!fs.exists(agent.hooks_dir)) continue;
@@ -345,6 +415,7 @@ export function compareHooks(
           hookFile === agent.hook_config_file
             ? expectedHookConfig(fs, agentId, agent, template)
             : template,
+        baselineHashes,
       );
     }
 
@@ -360,6 +431,7 @@ export function compareHooks(
         templateRel,
         installedRel,
         (template) => expectedHookConfig(fs, agentId, agent, template),
+        baselineHashes,
       );
     }
   }
@@ -600,12 +672,17 @@ function shouldCompareRegistryHookScript(
  */
 export function compareRegistryHookScripts(
   fs: ReadonlyFS,
+  projectPath: string,
   templateRoot: string,
   findings: DriftFinding[],
   checkedHookArtifacts: Set<string>,
   agentFilter: AgentId | null | undefined,
 ): number {
   let checked = 0;
+  const baselineHashes = managedBaselineHashes(
+    projectPath,
+    agentFilter ?? null,
+  );
   for (const spec of listHookSpecs()) {
     // Agent-scoped drift must not report scripts the selected runner cannot execute.
     if (agentFilter && spec.unsupportedAgents?.[agentFilter]) continue;
@@ -623,6 +700,7 @@ export function compareRegistryHookScripts(
         `workflow/hooks/${script}`,
         installedRel,
         (template) => template,
+        baselineHashes,
       );
     }
   }

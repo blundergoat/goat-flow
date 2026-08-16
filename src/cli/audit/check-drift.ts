@@ -430,6 +430,7 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
   checked += compareSharedFiles(fs, templateRoot, findings);
   checked += compareHooks(
     fs,
+    options.projectPath,
     templateRoot,
     findings,
     checkedHookArtifacts,
@@ -438,6 +439,7 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
   checked += compareManagedHookRegistrations(fs, findings, agentFilter);
   checked += compareRegistryHookScripts(
     fs,
+    options.projectPath,
     templateRoot,
     findings,
     checkedHookArtifacts,

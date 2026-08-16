@@ -50,9 +50,11 @@ last_reviewed: 2026-08-16
 
 **What happened:** Adding a maintainer comment to `src/dashboard/app.ts` `_uploadTerminalImages` cleared a docs finding but exposed new `complexity.npath` and `design.god-function` warnings. The helper extraction then passed TypeScript but failed preflight ESLint on an unnecessary assertion.
 
+**Recurrence update (2026-08-17):** M47 added truthful exported-function documentation to the hook registrar, so Gruff correctly stopped reporting that accepted warning while the reviewed-warning manifest still claimed it existed. The same preflight run found an 11-branch audit helper after focused behavior and TypeScript checks had passed. Removing only the stale manifest row and moving agent-ID validation into the baseline helper cleared the two gates without weakening analyzer policy. Evidence anchors: `scripts/gruff-warning-ratchet-checks.mjs` (search: `stale accepted debt`), `src/cli/server/hook-registrar.ts` (search: `Apply one enabled choice after proving`), and `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineHashes`).
+
 **Root cause:** I checked only the targeted docs rule and assumed a comment-only patch could not change broader warning or lint counts.
 
-**Prevention:** After a large gruff docs batch, run `npx gruff-ts analyse --format json --fail-on none` and compare warning count, then run the lint/preflight gate for any helper extraction. Do not remove a useful comment just to hide a surfaced warning. Evidence anchors: `src/dashboard/app.ts` (search: `encodeTerminalUploadFiles`), `src/dashboard/app.ts` (search: `showTerminalUploadResult`).
+**Prevention:** After a large gruff docs batch, run `npx gruff-ts analyse --format json --fail-on none` and compare warning count, then run the lint/preflight gate for any helper extraction. When a documented function clears reviewed warning debt, remove that exact identity from the accepted-warning manifest in the same change. Do not remove a useful comment just to hide a surfaced warning. Evidence anchors: `src/dashboard/app.ts` (search: `encodeTerminalUploadFiles`), `src/dashboard/app.ts` (search: `showTerminalUploadResult`).
 
 ## Lesson: docs.missing-internal-function-doc must not be silenced; baseline the residue
 

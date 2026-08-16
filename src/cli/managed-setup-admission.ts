@@ -111,6 +111,6 @@ export function managedSetupAdmissionFailure(
     .join("\n");
   const nextAction = unsafeManagedTarget
     ? "Repair symlinked, non-regular, or unreadable target paths first; no authority bypasses path safety."
-    : "Authorize each conflict with --force-path <path>, or all of them with --force-managed.";
+    : "After reviewing the differences, authorize each named replacement with --force-path <path>, or every listed managed conflict with --force-managed. These flags may recreate missing paths or discard local content where present.";
   return `Managed setup blocked before changes:\n${conflicts}\nRun with --dry-run for the full report. ${nextAction}`;
 }

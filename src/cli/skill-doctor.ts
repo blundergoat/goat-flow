@@ -78,7 +78,9 @@ export interface SkillDoctorReport {
     staticallyEligible: number;
     runtimeRegistration: "unverified";
     blocked: number;
+    mirrorDrift: number;
     warnings: number;
+    countScope: string;
   };
   agents: AgentSkillDoctorResult[];
 }
@@ -389,13 +391,16 @@ function compareSkillMirror(
 function skillRemediation(
   agentProfile: AgentProfile,
   hasProblems: boolean,
+  mirrorStatus: SkillMirrorStatus,
 ): string[] {
   const commands: string[] = [];
 
-  // Installation is offered only when the report found something users may need to restore.
+  // A known mirror difference is previewed first because direct install may discard local guidance.
   if (hasProblems) {
     commands.push(
-      `goat-flow install <project-path> --agent ${agentProfile.id}`,
+      mirrorStatus === "drift"
+        ? `goat-flow install <project-path> --agent ${agentProfile.id} --dry-run`
+        : `goat-flow install <project-path> --agent ${agentProfile.id}`,
     );
   }
   commands.push(
@@ -438,6 +443,7 @@ function inspectSkill(
   const remediation = skillRemediation(
     agentProfile,
     blockingReasons.length > 0 || warnings.length > 0,
+    mirrorStatus,
   );
 
   return {
@@ -574,6 +580,9 @@ export function runSkillDoctor(options: SkillDoctorOptions): SkillDoctorReport {
     (warningCount, skill) => warningCount + skill.warnings.length,
     0,
   );
+  const mirrorDrift = allSkills.filter(
+    (skill) => skill.mirrorStatus === "drift",
+  ).length;
   const status: DoctorStatus =
     blocked > 0 ? "fail" : warnings > 0 ? "warn" : "static-pass";
 
@@ -589,7 +598,10 @@ export function runSkillDoctor(options: SkillDoctorOptions): SkillDoctorReport {
       staticallyEligible: allSkills.length - blocked,
       runtimeRegistration: "unverified",
       blocked,
+      mirrorDrift,
       warnings,
+      countScope:
+        "One SKILL.md mirror is counted per agent-skill row; warning totals count messages. Audit may select one agent and also checks declared reference files.",
     },
     agents,
   };
@@ -617,6 +629,7 @@ export function renderSkillDoctorText(report: SkillDoctorReport): string {
     "Skill doctor",
     `Target: ${report.target}`,
     `Evidence limit: ${report.evidenceLimit}`,
+    `Count scope: ${report.summary.countScope}`,
   ];
 
   // Each agent group explains the exact path and invocation syntax users selected.
@@ -663,7 +676,7 @@ export function renderSkillDoctorText(report: SkillDoctorReport): string {
   }
   lines.push("");
   lines.push(
-    `${report.status.toUpperCase()} skill doctor: ${report.summary.checked} checked · ${report.summary.staticallyEligible} statically eligible · runtime registration ${report.summary.runtimeRegistration} · ${report.summary.blocked} blocked · ${report.summary.warnings} warnings`,
+    `${report.status.toUpperCase()} skill doctor: ${report.summary.checked} checked · ${report.summary.staticallyEligible} statically eligible · runtime registration ${report.summary.runtimeRegistration} · ${report.summary.blocked} blocked · ${report.summary.mirrorDrift} mirror drift · ${report.summary.warnings} warnings`,
   );
   return lines.join("\n");
 }
@@ -682,6 +695,8 @@ function renderSkillDoctorMarkdown(report: SkillDoctorReport): string {
     `**Target:** \`${report.target}\``,
     "",
     `**Evidence limit:** ${report.evidenceLimit}`,
+    "",
+    `**Count scope:** ${report.summary.countScope}`,
   ];
 
   // Each agent table preserves user-facing invocation and exact filesystem evidence.
@@ -713,7 +728,7 @@ function renderSkillDoctorMarkdown(report: SkillDoctorReport): string {
   }
   lines.push("");
   lines.push(
-    `**${report.status.toUpperCase()} skill doctor:** ${report.summary.checked} checked · ${report.summary.staticallyEligible} statically eligible · runtime registration ${report.summary.runtimeRegistration} · ${report.summary.blocked} blocked · ${report.summary.warnings} warnings`,
+    `**${report.status.toUpperCase()} skill doctor:** ${report.summary.checked} checked · ${report.summary.staticallyEligible} statically eligible · runtime registration ${report.summary.runtimeRegistration} · ${report.summary.blocked} blocked · ${report.summary.mirrorDrift} mirror drift · ${report.summary.warnings} warnings`,
   );
   return lines.join("\n");
 }

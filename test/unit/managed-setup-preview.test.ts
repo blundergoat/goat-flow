@@ -23,6 +23,7 @@ import { buildInstallerInvocation } from "../../src/cli/install-invocation.js";
 import {
   buildManagedSetupPreview,
   classifyManagedSetupFile,
+  managedSetupChangeDirection,
   managedSetupPreviewForInstallerLaunch,
   managedInstallStatePath,
   writeManagedInstallState,
@@ -117,6 +118,14 @@ describe("managed setup classification", () => {
       );
     });
   }
+
+  it("maps M02 states to one behind-versus-diverged repair direction", () => {
+    assert.equal(managedSetupChangeDirection("template-changed"), "behind");
+    assert.equal(managedSetupChangeDirection("both-changed"), "diverged");
+    assert.equal(managedSetupChangeDirection("local-preserved"), "diverged");
+    assert.equal(managedSetupChangeDirection("unchanged"), "current");
+    assert.equal(managedSetupChangeDirection("adopted"), "unclassified");
+  });
 
   it("treats an already-converged target as unchanged without baseline state", () => {
     assert.equal(
