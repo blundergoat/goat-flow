@@ -580,7 +580,7 @@ const maximumMilliseconds = Number.isInteger(configuredSeconds) && configuredSec
 const allowedOutcomes = new Set(["pass", "block", "advisory", "incomplete", "unavailable"]);
 const allowedCoverage = new Set(["complete", "partial", "none"]);
 
-function syntheticResult(name, reasonCode, message) {
+function syntheticResult(reasonCode, message) {
   return {
     schema: resultSchema,
     hookId: "post-turn-safety",
@@ -590,7 +590,8 @@ function syntheticResult(name, reasonCode, message) {
       : "incomplete",
     coverage: { status: "none", attemptedUnits: 1, completedUnits: 0, skippedUnits: 1 },
     reasonCode,
-    findings: [{ code: reasonCode, message, target: name }],
+    // Whole-child scope uses the same target a real child reports, so aggregation prefixes it once.
+    findings: [{ code: reasonCode, message, target: "project" }],
     execution: {
       hookVersion,
       provider,
@@ -647,7 +648,7 @@ for (const entry of directoryEntries) {
     continue;
   }
   if (gitMarker.isSymbolicLink() || (!gitMarker.isDirectory() && !gitMarker.isFile())) {
-    scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child Git metadata is not a regular file or directory") });
+    scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child Git metadata is not a regular file or directory") });
     continue;
   }
 
@@ -655,7 +656,7 @@ for (const entry of directoryEntries) {
   try {
     childRealPath = realpathSync(childPath);
   } catch {
-    scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child repository directory could not be opened") });
+    scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child repository directory could not be opened") });
     continue;
   }
   const rootLookup = spawnSync("git", ["-C", childRealPath, "rev-parse", "--show-toplevel"], {
@@ -664,17 +665,17 @@ for (const entry of directoryEntries) {
     windowsHide: true,
   });
   if (rootLookup.error || rootLookup.status !== 0 || typeof rootLookup.stdout !== "string" || rootLookup.stdout.trim().length === 0) {
-    scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child Git repository root could not be opened") });
+    scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child Git repository root could not be opened") });
     continue;
   }
   try {
     const gitRoot = realpathSync(rootLookup.stdout.trim());
     if (gitRoot !== childRealPath) {
-      scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child Git top level does not match its controller directory") });
+      scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child Git top level does not match its controller directory") });
       continue;
     }
   } catch {
-    scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child Git top level could not be resolved") });
+    scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child Git top level could not be resolved") });
     continue;
   }
   scanUnits.push({ name: entry.name, root: childRealPath });
@@ -694,7 +695,7 @@ for (const scanUnit of scanUnits) {
   const elapsedMilliseconds = Date.now() - startedAt;
   const remainingMilliseconds = maximumMilliseconds - elapsedMilliseconds;
   if (remainingMilliseconds <= 0) {
-    childResults.push({ name: scanUnit.name, result: syntheticResult(scanUnit.name, "execution-timeout", "Controller safety-scan budget expired before this child ran") });
+    childResults.push({ name: scanUnit.name, result: syntheticResult("execution-timeout", "Controller safety-scan budget expired before this child ran") });
     continue;
   }
   const childEnvironment = {
@@ -721,7 +722,7 @@ for (const scanUnit of scanUnits) {
     const message = reasonCode === "execution-timeout"
       ? "Child safety scan exceeded the controller deadline"
       : "Child safety scan could not start";
-    childResults.push({ name: scanUnit.name, result: syntheticResult(scanUnit.name, reasonCode, message) });
+    childResults.push({ name: scanUnit.name, result: syntheticResult(reasonCode, message) });
     continue;
   }
   let childResult;
@@ -731,7 +732,7 @@ for (const scanUnit of scanUnits) {
     childResult = null;
   }
   if (childExecution.status !== 0 || !validChildResult(childResult)) {
-    childResults.push({ name: scanUnit.name, result: syntheticResult(scanUnit.name, "hook-unavailable", "Child safety scan did not return a valid result") });
+    childResults.push({ name: scanUnit.name, result: syntheticResult("hook-unavailable", "Child safety scan did not return a valid result") });
     continue;
   }
   childResults.push({ name: scanUnit.name, result: childResult });
@@ -757,7 +758,7 @@ if (childResults.some((child) => child.result.outcome === "block")) {
   outcome = "unavailable";
   reasonCode = "hook-unavailable";
 } else if (nonPassResults.length > 0) {
-  outcome = everyNonPassBounded || nonPassResults.some((child) => child.result.outcome === "incomplete")
+  outcome = nonPassResults.some((child) => child.result.outcome === "incomplete")
     ? "incomplete"
     : "advisory";
   reasonCode = everyNonPassBounded ? "bounded-reentry-ended" : outcome === "advisory" ? "findings-reported" : "coverage-incomplete";
@@ -793,6 +794,13 @@ if (outcome === "pass") process.exit(0);
 for (const finding of findings) {
   process.stderr.write(`post-turn-safety: ${finding.target}: ${finding.message}\n`);
 }
+// A legacy host has no adapter to read `bounded-reentry-ended`, so the controller must end the
+// exhausted cycle itself. Without this the turn can never stop: every later Stop repeats the same
+// unchanged child failure, while the single-project path ends that cycle after one replay.
+if (reasonCode === "bounded-reentry-ended") {
+  process.stderr.write("post-turn-safety: ending repeated Stop after unchanged infrastructure failure; no clean scan was recorded.\n");
+  process.exit(0);
+}
 if (outcome === "block") {
   process.stderr.write("post-turn-safety: fix or remove the flagged changed content before stopping.\n");
 } else {
@@ -812,6 +820,15 @@ process.exit(2);
   if [ -n "$controller_result" ]; then
     printf '%s\n' "$controller_result"
   fi
+  # Only the controller's own release and block decisions may reach the user's coding agent.
+  # A crashed or killed controller would otherwise exit non-blocking, silently skipping every child.
+  case "$controller_status" in
+    0 | 2) ;;
+    *)
+      printf 'post-turn-safety: controller scan could not complete.\n' >&2
+      controller_status=2
+      ;;
+  esac
   return "$controller_status"
 }
 

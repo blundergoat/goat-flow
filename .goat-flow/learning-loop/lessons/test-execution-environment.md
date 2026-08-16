@@ -5,6 +5,18 @@ last_reviewed: 2026-08-16
 
 **Scope:** Choosing and invoking the right runner - which binary and loader actually execute, why a file argument may not narrow the suite, and when proof needs the published invocation path rather than source mode. Shell and process behaviour is [test-shell-environment.md](test-shell-environment.md).
 
+## Lesson: An ad-hoc `node --test` run can execute stale checkout copies under `.goat-flow/scratchpad/`
+
+**Status:** active | **Created:** 2026-08-16
+
+**What happened:** A manual hook verification pass built its file list with `ls test/**/*hook*.test.ts`. This shell has no `globstar`, so `**` collapsed to `*` and six of the listed paths did not exist in the tracked tree. `node --import tsx --test` did not fail on the missing arguments; the run reported `# tests 365` across suites named `hook provider adapters`, `hook registrar: ...`, and `dashboard Hooks view`, none of which exist under `test/`. Those files survive only inside earlier goat-clarity validation worktrees beneath `.goat-flow/scratchpad/`. The corrected list of 18 real files reports `# tests 363`.
+
+**Root cause:** `.goat-flow/scratchpad/` holds complete checkout copies from previous validation runs, and Node's fallback discovery walks the repository rather than the tracked `test/` tree. `scripts/run-tests.mjs` is unaffected because its `listTestFiles` walk starts at `test/`, so `npm test` never sees the stale copies; the exposure is limited to ad-hoc `node --test` invocations whose arguments do not all resolve.
+
+**Prevention:** Quote gate numbers from `npm test`. For a targeted subset, generate the list with `find test -type f -name '<pattern>'` rather than a `**` glob, and confirm the reported top-level plan (`1..N`) matches the file count before citing a pass total. A suite name you cannot locate with `command grep -rl '<name>' test/` means the run reached outside the tracked tree. Evidence anchors: `scripts/run-tests.mjs` (search: `function listTestFiles`) and [`test-execution-environment.md`](test-execution-environment.md) (search: `Directory targets can break`).
+
+---
+
 ## Lesson: Directory targets can break Node's test runner
 
 **Status:** active | **Created:** 2026-06-11

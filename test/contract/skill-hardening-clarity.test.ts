@@ -83,6 +83,41 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("reports test-value dispositions without mutating test meaning", () => {
+    assertIncludesAll([
+      "test-value pass",
+      "For a PR or uncommitted selector, assess every added, removed, or materially changed test case",
+      "For a folder or file selector, assess every test case in selected test-source units",
+      "four-part value gate",
+      "plausible regression",
+      "user or business impact",
+      "current overlap",
+      "stable observable contract",
+      "KEEP",
+      "CONSOLIDATE",
+      "MOVE LEVEL",
+      "PRUNE CANDIDATE",
+      "UNRESOLVED",
+      "one row per assessed existing test",
+      "assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED",
+      "report-only",
+      "no replacement is required",
+      "keep the original until replacement coverage passes",
+    ]);
+
+    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
+      "test-case manifest checkpoint",
+      "Before broader clarity diagnosis, enumerate every in-scope test case",
+      "expected case count",
+      "no more than 20 cases",
+      "filter provider data before it reaches the evidence response",
+      "batch_expected = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED",
+      "every case must reconcile",
+      "reserve the final provider lookup for head-drift revalidation",
+    ]);
+  });
+
   it("freezes selector authority before any write", () => {
     assertIncludesAll([
       "Target Scope Snapshot",
@@ -98,7 +133,7 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
-  it("fails closed on unsupported repository and path state", () => {
+  it("fails closed on unsupported path state and keeps remote PR diagnosis read-only", () => {
     assertIncludesAll([
       "unmerged state",
       "direct symlink selector",
@@ -106,8 +141,19 @@ describe("skill hardening contracts: goat-clarity", () => {
       "zero eligible source files",
       "outside the repository",
       "binary or generated",
-      "local repository and head",
       "PR_FEEDBACK_NOT_CHECKED",
+    ]);
+
+    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
+      "remote report-only",
+      "local repository or head does not match",
+      "writable paths are empty",
+      "provider repository, base, and head identifiers",
+      "revalidate the PR head",
+      "formatter proof `NOT_CHECKED`",
+      "runtime verification `NOT_RUN`",
+      "matching local repository and head before mutation",
     ]);
   });
 
@@ -253,7 +299,8 @@ describe("skill hardening contracts: goat-clarity", () => {
     assertIncludesAll([
       "repository root resolved from the invocation working directory",
       "never search parent, child, sibling, scratchpad, or cached repositories",
-      "refuse before inspecting PR files or threads",
+      "matching local repository and head before mutation",
+      "remote report-only",
     ]);
   });
 
@@ -393,6 +440,8 @@ describe("skill hardening contracts: goat-clarity", () => {
       "most restrictive applicable class wins",
       "one public/exported identifier rename plus mechanical references",
       "selected-unit, changed-span, and command-evidence ledgers",
+      "remote report-only",
+      "test-selection record",
     ]);
   });
 

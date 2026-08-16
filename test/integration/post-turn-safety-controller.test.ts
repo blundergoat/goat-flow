@@ -180,6 +180,69 @@ describe("post-turn-safety hook: non-Git controller fan-out", () => {
     });
   });
 
+  it("ends an exhausted child re-entry on a legacy host with no provider adapter", () => {
+    withTempController(["gruff-go"], (controllerRoot) => {
+      withCommandShim(
+        "git",
+        'if [ "${1:-}" = diff ]; then exit 70; fi',
+        (shimEnvironment) => {
+          const sessionIdentifier = "controller-legacy-reentry";
+          const firstResult = runHook(
+            controllerRoot,
+            shimEnvironment,
+            buildStopPayload(sessionIdentifier, false),
+          );
+          assert.equal(firstResult.status, 2, firstResult.stderr);
+          assert.match(firstResult.stderr, /controller scan incomplete/u);
+
+          // Without the adapter the controller must end its own cycle, or the turn never stops.
+          const repeatedResult = runHook(
+            controllerRoot,
+            shimEnvironment,
+            buildStopPayload(sessionIdentifier, true),
+          );
+          assert.equal(repeatedResult.status, 0, repeatedResult.stderr);
+          assert.match(repeatedResult.stderr, /ending repeated Stop/u);
+          assert.doesNotMatch(
+            repeatedResult.stderr,
+            /controller scan incomplete/u,
+          );
+        },
+      );
+    });
+  });
+
+  it("names a synthetic child failure once in the aggregate target", () => {
+    withTempController([], (controllerRoot) => {
+      const childRoot = join(controllerRoot, "kid");
+      const detachedGitDirectory = join(controllerRoot, "detached-git");
+      mkdirSync(childRoot);
+      mkdirSync(detachedGitDirectory);
+      symlinkSync(detachedGitDirectory, join(childRoot, ".git"), "dir");
+
+      const result = runHook(
+        controllerRoot,
+        MANAGED_STOP_ENV,
+        buildStopPayload("controller-synthetic-target", false),
+      );
+      const envelope = assertManagedEnvelope(result);
+
+      assert.equal(envelope.outcome, "incomplete");
+      assert.equal(envelope.findings.length, 1);
+      assert.equal(envelope.findings[0].target, "kid");
+
+      // The same child must be named once in the direct-shell diagnostics users read.
+      const directResult = runHook(
+        controllerRoot,
+        {},
+        buildStopPayload("controller-synthetic-target-direct", false),
+      );
+      assert.equal(directResult.status, 2, directResult.stderr);
+      assert.match(directResult.stderr, /post-turn-safety: kid: /u);
+      assert.doesNotMatch(directResult.stderr, /kid\/kid/u);
+    });
+  });
+
   it("ignores nested and symlinked repositories outside the immediate-root contract", () => {
     withTempController(["gruff-go"], (controllerRoot, childRoots) => {
       const nestedRoot = join(controllerRoot, "group", "nested-repo");

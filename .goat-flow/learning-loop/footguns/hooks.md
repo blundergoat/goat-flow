@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-13
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. What a scanner can actually see - changed-file enumeration, diff/rename detection, gitignore and gitattribute blind spots - lives in [hook-scanning.md](hook-scanning.md). Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -57,6 +57,17 @@ Recurrence on 2026-08-10: Codex CLI 0.147.0 repeated the trust distinction. Igno
 A migrated child result used the provider adapter, but timeout and adapter-failure branches returned through the legacy unavailable reporter. The terminal showed human stderr while Codex received empty stdout, so a stopped analyzer looked silent to the active model.
 
 Route every migrated launcher-owned failure through the neutral unavailable envelope and provider adapter. Keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), and `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
+
+## Footgun: An aggregating hook must re-derive every terminal decision it aggregates
+
+**Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Prove every aggregate exit path on a legacy host as well as through the provider envelope whenever a hook fans out to child runs of itself.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-16
+
+The non-Git controller fan-out in `post-turn-safety.sh` collected child envelopes and computed `bounded-reentry-ended` correctly, but only the migrated branch acted on it. The provider adapter turns that reason code into a clean stop, while the legacy branch fell through to a blocking exit. Claude registers its Stop hook with response mode `post-turn`, which the launcher classifies as legacy, so a controller workspace whose children hit an unchanged infrastructure failure could never end the turn. Measured on 2026-08-16: a single-project repository went block, release, block; the identical controller went block, block, block, block.
+
+A child result that ends a bounded cycle is a release decision, not a finding. Aggregation may summarise findings, but it must re-derive every terminal decision the single-unit path owns - release, block, and fail-closed - for each host contract the hook actually ships under. Check the same way whenever an aggregate returns a child status verbatim: a status the aggregator never produces itself (a crash or a kill) must not reach the provider as a non-blocking result. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `bounded-reentry-ended`), `workflow/hooks/run-with-bash.mjs` (search: `LEGACY_HOOK_DEADLINES_MS`), `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptStopResult`), and `test/integration/post-turn-safety-controller.test.ts` (search: `ends an exhausted child re-entry on a legacy host`).
 
 ## Footgun: Rejecting invalid hook configuration instead of clamping it wedges every tool call
 
