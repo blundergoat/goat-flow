@@ -574,6 +574,8 @@ function previewVerdict(
  *
  * @param projectPath - selected target root; empty is invalid upstream and produces no useful files
  * @param agent - selected agent whose canonical skill mirror is included; never null after CLI validation
+ * @param authority - overwrite permissions the user granted by flag; the default grants none, so conflicts stay blocked
+ * @param pendingMigrations - path-to-summary rows naming in-place edits install will make; empty means none
  * @returns deterministic path-sorted preview; files is empty only when no managed templates exist
  */
 export function buildManagedSetupPreview(

@@ -100,7 +100,6 @@ function extractNodeCommands(
   "buildCommand" | "testCommand" | "lintCommand" | "formatCommand"
 > {
   /** Drop empty or intentionally placeholder script commands from detection output. */
-  /** Keep only real script commands that should survive stack detection. */
   const filterPlaceholder = (cmd: string | undefined): string | null => {
     if (!cmd || isPlaceholderScript(cmd)) return null;
     return cmd;

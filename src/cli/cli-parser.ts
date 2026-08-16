@@ -117,7 +117,6 @@ function rejectFlagOutsideCommand(
   );
 }
 
-/** Return whether a raw `parseArgs` boolean flag was explicitly set. */
 /** Read one repeatable string option as a list; an absent option yields an empty list. */
 function parsedStringList(
   values: ParsedArgValues,
@@ -130,6 +129,7 @@ function parsedStringList(
     : [];
 }
 
+/** Return whether a raw `parseArgs` boolean flag was explicitly set. */
 function parsedFlag(values: ParsedArgValues, name: string): boolean {
   return values[name] === true;
 }

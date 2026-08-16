@@ -96,8 +96,10 @@ export interface CandidacyInputArg {
   value: string;
 }
 
-/** Raw values returned by Node's `parseArgs`; keys intentionally mirror CLI flag names. */
-/** Raw `parseArgs` output; repeatable options such as `--force-path` arrive as string lists. */
+/**
+ * Raw values returned by Node's `parseArgs`; keys intentionally mirror CLI flag names.
+ * Repeatable options such as `--force-path` arrive as string lists.
+ */
 export type ParsedArgValues = Partial<
   Record<string, string | boolean | string[]>
 >;

@@ -267,7 +267,7 @@ function validateLegacyAgentsField(
  * Use so instruction-file budget checks show meaningful warning and failure thresholds.
  *
  * @param raw - parsed config object; missing line-limits uses defaults
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid fields append errors
  */
@@ -299,7 +299,7 @@ function validateLineLimitsField(
  * Use so generated prompts and setup guidance do not show malformed command entries.
  *
  * @param raw - parsed config object; missing toolchain leaves command lists empty
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid command lists append errors
  */
@@ -380,7 +380,7 @@ function validateUserRoleField(
  * Use so setup/install can trust the user's skill selection and review defaults.
  *
  * @param raw - parsed config object; missing skills block keeps install-all defaults
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid fields append errors
  */
@@ -434,7 +434,7 @@ function validateSkillsField(
  * Use so acknowledged audit gaps are explicit strings users can review.
  *
  * @param raw - parsed config object; missing harness block keeps no acknowledgements
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid acknowledge entries append errors
  */
@@ -455,7 +455,7 @@ function validateHarnessField(
  * Use so dashboard hook switches and hook scripts read explicit, well-shaped config.
  *
  * @param raw - parsed config object; missing hooks block keeps registry defaults
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid hook rows append errors
  */
@@ -557,7 +557,7 @@ function validateTelemetryField(
  * Use so future automatic writes only target known durable learning buckets.
  *
  * @param raw - parsed config object; missing learning-loop block keeps auto-capture disabled
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid auto-capture fields append errors
  */
@@ -658,7 +658,7 @@ function validateSkillOverridesField(
  * Use so the dashboard terminal idle timeout is explicit and safe.
  *
  * @param raw - parsed config object; missing terminal block keeps the default idle timeout
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid terminal fields append errors
  */

@@ -124,7 +124,7 @@ const SHIPPED_HOOK_TOGGLES = [
   "gruff-code-quality",
 ] as const;
 
-/** Read one target's config text, or null when the target has no config to migrate yet. */
+/** Read one target's config text; it swallows any read error as null, so a first install simply has none yet. */
 function readTargetConfigText(projectPath: string): string | null {
   try {
     return readFileSync(
