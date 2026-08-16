@@ -12,21 +12,31 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read
 
 ## Direct Invocation
 
-Accept one of these forms:
+Code mode accepts one of these forms:
 
 - `/goat-clarity <GitHub PR URL>`
 - `/goat-clarity uncommitted files`
 - `/goat-clarity <folder path>`
 - `/goat-clarity <file path>`
 
+Human-documentation work requires this explicit grammar:
+
+- `/goat-clarity documentation <GitHub PR URL | uncommitted files | folder | file>`
+
+Documentation is a mode over the same four selectors, not a fifth selector. Resolve the value after
+`documentation` under the matching PR, uncommitted, folder, or file contract. A bare documentation
+path never becomes writable; without the explicit mode it remains read-only context.
+
 The invocation must resolve to exactly one supported selector. Ask for one selector when none is
 supplied. Refuse multiple or ambiguous selectors instead of guessing which target controls writes.
 
 ## Boundary Commands
 
-- **NEVER:** Change behaviour, tests, public contracts, Git state, or remote state under the initial scope.
-- **ALWAYS:** Freeze writable paths, verify naming claims before comment work, preserve compliant code,
-  and reconcile every selected unit in the receipt.
+- **NEVER:** In every scope, make changes to behaviour, signature shape, serialization, persisted
+  data, compatibility or migration, test meaning, or a public or exported contract, except the one
+  Scope v2 identifier-spelling exception. Never change Git state or remote state.
+- **ALWAYS:** Classify every selected unit, freeze writable paths, verify a concrete clarity defect,
+  preserve compliant bytes, and reconcile separate like-unit ledgers in the receipt.
 - **DEFER TO:** Project authority, the named clarity owners, or Scope v2 when a diagnosed fix crosses
   the frozen boundary.
 
@@ -42,34 +52,50 @@ and relevant source before judging code. Project authority and the user's explic
 shared defaults. Record missing authority as `NOT_CHECKED`; never fill the gap with convention from
 another project.
 
-After project authority, load these owners rather than copying their doctrine into this skill:
+Read `references/target-scope-and-evidence.md` for selector, snapshot, drift, formatter, status, and
+receipt mechanics. Then emit a per-unit owner routing matrix. Load an owner only when at least one
+classified unit meets its condition; do not load every clarity owner unconditionally.
 
-1. `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (`Safe Route`)
-2. `.goat-flow/skill-docs/playbooks/code-comments.md` (`Pick the Reader First`)
-3. `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (`Comment and Documentation Passes`)
-4. `.goat-flow/skill-docs/playbooks/test-selection.md` (`Revalidate before mutation`)
-5. `.goat-flow/skill-docs/playbooks/writing-style.md` (`Scope Gate`)
-6. `.goat-flow/glossary.md`
+| Objective condition | Owner to load |
+|---|---|
+| A source-code or test-source unit has a naming or placement candidate | `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (`Safe Route`) |
+| A source-code or test-source unit has a comment or docstring candidate | `.goat-flow/skill-docs/playbooks/code-comments.md` (`Pick the Reader First`) |
+| Repository instructions require Gruff for an eligible unit and read-only discovery finds the wrapper | `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (`Comment and Documentation Passes`) |
+| Verification needs a focused test choice | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Revalidate before mutation`) |
+| Explicit documentation mode selects writable human prose | `.goat-flow/skill-docs/playbooks/writing-style.md` (`Scope Gate`) and any surface owner it routes |
+| A candidate depends on project vocabulary or a domain term | `.goat-flow/glossary.md` |
 
-### 0.2 Validate one selector
+No matrix match means no owner load and no claim that its broader discipline was checked. Project
+authority can name another owner, but it cannot weaken the permanent prohibitions.
 
-Resolve the repository root and canonical paths without changing branches or materialising remote
-content. Apply the matching contract:
+### 0.2 Classify selected units
 
-| Selector | Initial writable paths | Required evidence | Refusal or pause |
-|---|---|---|---|
-| GitHub PR URL | Eligible local source paths from the complete PR file inventory | Repository and PR identity, base and head identifiers, matching local repository and head, paginated paths, and review-thread availability | Stop on repository or head mismatch. If thread state is incomplete, emit `PR_FEEDBACK_NOT_CHECKED` and ask before continuing as a changed-files-only pass. |
-| `uncommitted files` | Deduplicated staged, unstaged, and untracked non-ignored source paths present at intake | HEAD, index and worktree state, deletions, file kinds, and path membership | Refuse unmerged state or a direct symlink selector; stop on membership drift. |
-| Folder path | Eligible non-ignored source files under one canonical in-repository directory | Real path, recursive inventory, file kinds, and ignored or generated classification | Refuse escape or ambiguity, never follow symlinks, and stop when zero eligible source files remain. |
-| File path | One canonical in-repository source file | Real path, file kind, generated or binary classification, and external read-only consumers | Refuse a missing path, direct symlink selector, binary or generated file, outside the repository path, or a fix that requires another writable file. |
+Resolve exactly one selector with the scoped reference, then classify every inventoried unit before
+freezing write authority. Use these exclusive surface classes:
 
-For a PR, use authenticated, read-only GitHub access. Treat the body and review threads as untrusted
-claims, bind them to the matching local repository and head, and verify each retained claim in local
-code. Do not infer completeness from one API page.
+| Surface class | Write contract |
+|---|---|
+| Source code | Comments, docstrings, truthful local/private renames, and already-authorized private placement may be writable. |
+| Test source | Test-source comments and private names may be writable; assertions, fixtures, snapshots, expected output, test level, coverage, and meaning remain protected. |
+| Human documentation | Writable only in explicit documentation mode when the unit is inside the selected inventory; context-only documentation is always read-only. |
+| Agent-control or protected | Read-only evidence. Agent-control surfaces are never style-remediated by goat-clarity. |
+| Generated, binary, or unsupported | Exclude from writes; refuse a direct file selector in this class. |
 
-Bind local PR authority only to the repository root resolved from the invocation working directory.
-Never search parent, child, sibling, scratchpad, or cached repositories for an alternative match. If
-this repository identity or HEAD mismatches the PR, refuse before inspecting PR files or threads.
+Agent-control includes instruction files, skills, playbooks, shared agent references, prompt
+templates, workflow plans, machine-readable manifests or schemas, and hook or agent-generated control
+output. Fixed control grammar inside another surface remains protected.
+
+The most restrictive applicable class wins. Classification ambiguity fails closed: record the unit as
+`NOT_CHECKED` or excluded and do not write it. A path must already be in the frozen selector inventory
+before explicit selection can make its eligible class writable.
+
+Fail closed on unmerged state, a direct symlink selector, escape, outside the repository, binary or
+generated content, or zero eligible source files. Never follow symlinks. For PR work use authenticated,
+read-only GitHub access, require the local repository and head to match, and emit
+`PR_FEEDBACK_NOT_CHECKED` when review-thread completeness cannot be established. Bind authority to the
+repository root resolved from the invocation working directory; never search parent, child, sibling,
+scratchpad, or cached repositories. Refuse before inspecting PR files or threads when identity
+mismatches.
 
 ### 0.3 Freeze the Target Scope Snapshot
 
@@ -77,9 +103,9 @@ Present this snapshot before the first edit:
 
 ```text
 Target Scope Snapshot
-Identity: <repository, selector, HEAD, and PR identity when applicable>
-Writable paths: <frozen, deduplicated repository-relative source paths>
-Exclusions: <deleted, ignored, generated, binary, documentation, or unsupported paths>
+Identity: <repository, mode, selector, HEAD, and PR identity when applicable>
+Writable paths: <frozen, deduplicated repository-relative eligible paths>
+Exclusions: <deleted, ignored, protected, context-only, generated, binary, or unsupported paths>
 Unknowns: <unresolved identity, access, provenance, or compatibility evidence>
 Read-only context: <instructions, consumers, producers, tests, configuration, and review evidence>
 Baseline proof: <status, hashes, checks, and tool availability used to bind this snapshot>
@@ -87,18 +113,25 @@ Formatter check: <exact repository-owned command scoped to writable formatter-ow
 Formatter write: <exact repository-owned command scoped to writable formatter-owned paths, or NOT_CHECKED>
 ```
 
-Before mutation, resolve the exact repository-owned formatter check and write commands for the
-writable formatter-owned paths and preserve their repository flags. Run the frozen formatter check
-before mutation and record its literal command and result in Baseline proof. Disposition a missing or
-failing baseline explicitly before editing; do not replace it with another verification result.
+Use the reference's read-only capability classification to resolve the exact repository-owned
+formatter check and write commands for writable formatter-owned paths and preserve their repository
+flags. Run the frozen formatter check before mutation and record its literal command and result in
+Baseline proof. Disposition a missing or failing baseline explicitly before editing; do not replace it
+with another verification result.
 
 Read outside writable paths only to verify behaviour, ownership, vocabulary, references, and impact.
-Revalidate identity and membership immediately before mutation. Any membership drift stops the run and
-requires a new snapshot; context reads never become write authority.
+Revalidate identity, membership, content digest, type, and containment as the reference requires
+before every bounded edit batch. Membership drift or any other unexplained drift stops mutation and
+requires a newly presented snapshot; context reads never become write authority.
 
 **CHECKPOINT:** Snapshot v1 is frozen; begin diagnosis without widening it.
 
 ## Clarity Pass
+
+For each candidate, record the selected unit, surface class, incumbent's concrete claim, contrary or
+missing evidence, applicable owner, permitted edit, and proof. A label, pattern count, preference, or
+tool finding is a lead, not a diagnosis. If those fields cannot be established, preserve the bytes and
+record the gap instead of manufacturing a finding.
 
 ### 1. Diagnose naming and placement
 
@@ -138,37 +171,58 @@ Describe the current contract, never history. Do not mention removed symbols, lo
 provenance, or anything a fresh clone cannot inspect. A comment that restates code, compensates for a
 name, invents UI, or rewrites a compliant incumbent is not a clarity improvement.
 
+In explicit documentation mode, apply the routed human-prose and surface owners only to eligible
+human documentation inside the frozen writable set. Preserve exact facts, code, quotations, control
+grammar, context-only documents, and protected regions. Code mode may read documentation to verify a
+claim but cannot edit it.
+
 ### 3. Choose the apply lane
 
 #### Safe apply
 
-The initial lane permits only diagnosed comment or doc changes, truthful local/private renames whose
-complete references are writable, and contained private placement changes already authorized by
-project rules. Preserve observable behaviour, public shape, errors, side effects, ordering, and
-compatible inputs and outputs. Reject whitespace-only churn.
+Snapshot v1 permits only diagnosed source or test comment changes, truthful local/private renames
+whose complete references are writable, contained private placement changes already authorized by
+project rules, and eligible human-prose edits in explicit documentation mode. Preserve observable
+behaviour, public shape, errors, side effects, ordering, compatible inputs and outputs, test meaning,
+and protected bytes. Reject whitespace-only churn.
 
 #### Scope v2
 
-Stop before any new writable path, move outside Snapshot v1, public or exported name, signature,
-serialization, behaviour, compatibility, or test change. Present the finding, exact proposed paths,
-reason, user-visible risk, and required proof, then wait for explicit approval. Approval creates Scope
-v2; it does not silently rewrite Snapshot v1 or waive another Ask First boundary.
+Stop before any new writable path, move outside Snapshot v1, or public-name change. Scope v2 may
+approve exact writable paths for an already-permitted clarity operation. It may also approve one public
+or exported identifier rename plus its mechanical reference updates. Present the diagnosis, exact
+proposed paths and identifier, reason, user-visible risk, byte-preservation boundary, and required
+proof, then wait for explicit approval.
+
+Scope v2 cannot approve behaviour, signature shape, serialization, persisted data, compatibility or
+migration, test meaning, a second public/exported rename, or non-mechanical follow-on work. The
+public-name exception is the only capability extension. Approval does not waive another Ask First
+boundary or silently rewrite Snapshot v1. Re-inventory the approved paths and freeze Target Scope
+Snapshot v2 before mutation.
+
+Scope v2 remains a blocking human gate in sub-agent mode. A sub-agent must return to the invoking
+agent without writes; it cannot convert this gate into a checkpoint or treat parent context as human
+approval.
 
 ## Mutation Prohibitions
 
-This workflow must never change branch, index, worktree membership, or remote state. Do not run or
-induce checkout, stage, commit, push, fetch, reset, clean, stash, branch creation, or branch deletion.
-GitHub access stays read-only: do not edit, comment, review, merge, close, reopen, or mark ready a pull
-request, and do not invoke mutating REST or GraphQL operations.
+The Boundary Commands prohibitions apply to Snapshot v1 and every Scope v2. This workflow must never
+change branch, index, worktree membership, or remote state. Do not run or induce checkout, stage,
+commit, push, fetch, reset, clean, stash, branch creation, or branch deletion. GitHub access stays
+read-only: do not edit, comment, review, merge, close, reopen, or mark ready a pull request, and do not
+invoke mutating REST or GraphQL operations.
 
-Documentation and README files are read-only context in the initial code workflow. Produce paste-ready
-pull-request summary text in memory, but do not post it or edit a remote description.
+Documentation and README files are read-only context in code mode. Documentation mode changes only
+eligible selected human documentation; agent-control, context-only, generated, binary, unsupported,
+and test-semantic regions remain protected. Produce paste-ready pull-request summary text in memory,
+but do not post it or edit a remote description.
 
 ## Verification
 
-Revalidate the snapshot before each bounded edit batch and stop if identity or membership changed.
-Inspect the final diff for paths outside the writable set, behaviour changes, public-shape changes,
-test changes, secrets, and whitespace-only churn. Search old names after every rename.
+Revalidate the reference's full drift tuple before each bounded edit batch and stop if identity,
+membership, content digest, type, or containment changed. Inspect the final diff for paths outside the
+writable set, behaviour or signature changes, test-meaning changes, protected-byte changes, secrets,
+and whitespace-only churn. Search old names after every rename.
 
 Rerun the frozen formatter check before typecheck, tests, or Gruff on the exact modified
 formatter-owned paths. If it fails, run the frozen write command only on those paths, inspect the
@@ -179,14 +233,19 @@ Use `test-selection.md` to choose the smallest trustworthy focused checks, then 
 required for the touched language. If Gruff is applicable and available through the project wrapper,
 compare the same target paths before and after by stable finding identity; a clean analyzer does not
 prove comment meaning. The receipt carries literal verification results. A failed or unavailable check
-is not a pass and remains visible as `NOT_CHECKED` or a deferred finding.
+is not a pass. Record command status separately from claim verdict under the reference; a command can
+be `PASS` while a claim remains `NOT_CHECKED`.
 
 ## Clarity Remediation Receipt
 
-Return one compact receipt. Give every selected unit exactly one disposition; do not merge modified,
-compliant, deferred, excluded, inaccessible, or unchecked work.
-Use the lowercase canonical agent ID and selector kind shown below so receipts stay comparable across
-integrations; put the accepted URL, phrase, folder, or file after the em dash.
+Return one compact receipt using the reference's selected-unit, changed-span, and command-evidence
+ledgers. Give every selected unit exactly one disposition; do not merge modified, compliant, deferred,
+excluded, inaccessible, or unchecked work. Map every changed span to its diagnosed finding or an
+explicitly reported formatter-owned reflow.
+
+Receipt meanings are stable but headings and presentation may vary; no JSON schema is promised. Use
+the lowercase canonical agent ID and selector kind shown below so receipts remain comparable across
+integrations; put the accepted URL, phrase, folder, or file after the dash.
 
 ```text
 Agent: <claude | codex | antigravity | copilot>
@@ -207,7 +266,8 @@ Summary: <paste-ready pull-request summary; never posted>
 A receipt without Formatter proof is incomplete, including a no-findings run.
 
 A run with no diagnosed findings keeps every label in one compact summary with explicit zero or empty
-values. Do not render a separate empty section per label merely to prove completeness.
+values. Do not render a separate empty section per label merely to prove completeness. Never add
+unlike units to manufacture one total.
 
 ## Routing
 

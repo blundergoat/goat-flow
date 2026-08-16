@@ -355,7 +355,7 @@ Before recommending an addition or a change to an existing test, goat-qa reads `
 
 ## /goat-clarity
 
-Bounded clarity remediation for comments, documentation, local/private names, and contained private placement. Release one uses direct invocation so the developer names exactly one write-authority selector:
+Bounded clarity remediation for comments, documentation, local/private names, and contained private placement. Code mode uses one of four direct selectors:
 
 ```text
 /goat-clarity https://github.com/OWNER/REPOSITORY/pull/123
@@ -364,11 +364,19 @@ Bounded clarity remediation for comments, documentation, local/private names, an
 /goat-clarity path/to/file.ext
 ```
 
-The skill freezes a Target Scope Snapshot before its first edit. A PR selector must match the local repository and head; `uncommitted files` freezes the staged, unstaged, and untracked non-ignored source paths present at intake; folder and file selectors must resolve inside the repository without symlink traversal. Ambiguous, unmerged, generated, binary, empty, or escaping targets stop rather than widen authority.
+Human-facing documentation becomes writable only with the explicit mode over those same selectors:
 
-Naming and placement diagnosis runs before comment work so prose does not compensate for a weak name. Safe apply permits only verified comment/doc changes, complete local/private renames, and contained private placement within the frozen paths. Public names, signatures, behaviour, compatibility, tests, or extra write paths require a proposed Scope v2 and explicit approval.
+```text
+/goat-clarity documentation <GitHub PR URL | uncommitted files | folder | file>
+```
 
-Every run ends with one Clarity Remediation Receipt that reconciles modified, compliant, deferred, excluded, inaccessible, and unchecked units. Git state and GitHub state remain read-only throughout the workflow.
+A bare documentation path stays read-only. The skill inventories the selected target, then classifies each unit as source code, test source, human documentation, agent-control or protected, or generated, binary, or unsupported. The most restrictive applicable class wins and ambiguity fails closed. Test comments and private names are eligible, while assertions, fixtures, snapshots, expected output, level, coverage, and test meaning remain protected.
+
+The skill freezes a Target Scope Snapshot before its first edit. A PR selector must match the local repository and head; `uncommitted files` uses byte-safe staged, unstaged, and untracked non-ignored path inventories; folder and file selectors must remain inside the repository without symlink traversal. The scoped `references/target-scope-and-evidence.md` reference owns inventory, content-digest drift, formatter capability, command status, claim verdict, and like-unit receipt mechanics.
+
+Naming and placement diagnosis runs before comment work so prose does not compensate for a weak name. Owners load only when a classified unit needs them. Safe apply permits only diagnosed clarity changes inside the frozen paths. Scope v2 may add exact paths for already-permitted work or approve one public/exported identifier rename plus mechanical references. It remains a blocking human gate for sub-agents and freezes Snapshot v2 after approval. It cannot approve behaviour, signature shape, serialization, persisted data, compatibility or migration, or test-meaning changes.
+
+Every run ends with separate selected-unit, changed-span, and command-evidence ledgers. Command status never substitutes for a claim verdict, and unlike units are not merged into one total. Git state and GitHub state remain read-only throughout the workflow.
 
 ---
 

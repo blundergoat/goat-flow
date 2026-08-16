@@ -34,6 +34,8 @@ const standalonePlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/playbooks/test-selection.md",
+  ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
+  ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-style.md",
 ] as const;
 
@@ -244,6 +246,20 @@ describe("standalone playbook audit contract", () => {
       ),
       "writing-style.md must be registered before users can discover it",
     );
+  });
+
+  it("registers both routed writing diagnostics for audit and discovery", () => {
+    for (const playbookFilename of [
+      "writing-sentence-diagnostics.md",
+      "writing-structure-diagnostics.md",
+    ]) {
+      assert.ok(
+        STANDALONE_PLAYBOOK_FILES.some((playbookPath) =>
+          playbookPath.endsWith(`/${playbookFilename}`),
+        ),
+        `${playbookFilename} must be registered before users can discover it`,
+      );
+    }
   });
 
   it("registers naming-and-placement.md for audit and consumer discovery", () => {

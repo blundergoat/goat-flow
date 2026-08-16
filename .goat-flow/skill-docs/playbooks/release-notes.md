@@ -28,7 +28,15 @@ A reader opens release notes to decide: should I upgrade, what matters to me, an
 
 Agents default verbose. Counter that deliberately: draft the accurate version, then cut about half the words. Preserve headline impact, breaking changes, upgrade steps, measurements, and links; remove launch-copy, duplicated changelog detail, and implementation trivia.
 
-## Source Chain
+## Audience Gate
+
+The primary reader is the person who uses, calls, operates, or upgrades the shipped product. Select the interface they actually touch: CLI, API, library, service, runtime, installer, configuration, or UI. Do not invent a UI or consumer workflow for a library, command, or operator surface.
+
+Include a change only when that reader receives or experiences it. Let them find the affected surface, consequence, risk, and required action in one scan. Internal-only work is excluded unless it changes user behaviour or release safety.
+
+Preserve exact public flags, config keys, versions, errors, measurements, and migration commands. Audience selection changes framing and depth, never the verified facts.
+
+## Output Provenance
 
 Release notes are derived, not invented:
 
@@ -43,6 +51,8 @@ Rules:
 - If a claim is internal-only, cut it.
 - If the release notes contradict the changelog, the changelog wins.
 - Do not summarize from memory.
+- Record the release version, evidence baseline, and requested output surface before drafting variants.
+- Derive shorter variants from the verified full notes so email, in-app, and social outputs share provenance.
 
 The useful signal order mirrors changelog work: PRs/issues, tests, changed product surfaces, diff, config/dependency changes, then commit messages last.
 
@@ -64,16 +74,22 @@ Theme names must help a user decide whether to read further. Good: "Windows inst
 ## Writing Rules
 
 - Write for users, not implementers.
-- Lead with effect, then add mechanism only when it helps trust or action.
+- For each selected change, lead with effect, then consequence, then required action when one exists. Add mechanism only when it helps trust or action.
 - Use plain English and short sentences.
 - Prefer bullets over paragraphs.
-- One physical line per bullet, 150 characters max; split or cut instead of hard-wrapping.
 - Say "Fixed duplicate search results", not "Refactored search reconciliation".
 - Say "Search results now load 3x faster", not "Improved performance".
+- Name a visible regression or limitation plainly; do not hide it behind a positive theme.
 - Do not use "excited to announce", "game-changing", "powerful", or other launch-copy.
 - Do not name internal classes, files, or subsystems for end-user surfaces.
 
 Bad: "Refactored auth middleware." Good: "**Single sign-on works across subdomains.** Users no longer get logged out between app subdomains."
+
+## Length Fallback
+
+The requested release surface and the project's established style own length. When the project or release surface owns no different shape, use one physical line and 150 characters as a fallback for an ordinary highlight. Short surfaces may reduce selection, but they may not distort a selected fact.
+
+Cut launch-copy, repeated changelog context, and internal mechanism first. Never generalise an exact public flag, config key, version, error, measurement, migration command, visible regression, or caveat to meet the fallback. Breaking impact and required action may use a second line or dedicated section.
 
 ## Breaking Changes
 
@@ -120,9 +136,9 @@ The default release body should be about half the first agent draft.
 
 Before publishing:
 
-1. Every claim traces to the changelog or verified diff evidence.
+1. Every claim traces to the changelog or verified diff evidence, and output provenance names the version and surface.
 2. Every breaking change appears clearly and early.
-3. The headline passes "would a stranger care?"
+3. The Audience Gate identifies the real product reader and interface; no internal-only item slipped through.
 4. No marketing without measurements.
 5. No internal jargon on end-user surfaces.
 6. Multi-surface variants do not contradict each other.
@@ -130,18 +146,19 @@ Before publishing:
 8. Version, date, and install/update location are present.
 9. A reader can decide whether to upgrade without reading commit history.
 10. The compression pass ran.
-11. Every bullet is one physical line within the 150-character cap.
+11. Selected changes lead with effect, consequence, and required action while preserving visible regressions and exact public detail.
+12. The Length Fallback was used only when no project or surface shape controlled.
 
 ## Troubleshooting
 
 - **Thin changelog:** fix it first; release notes from a weak changelog become guesswork.
-- **Too long or polished:** cut about half before changing facts.
+- **Too long or polished:** cut wrapper prose, duplicate context, and internal mechanism before changing facts.
 - **Different headline requested:** use user impact, not internal implementation framing.
 - **Missing changelog entry:** add it first, then write the release-note line.
 
 ## Related References
 
 - [`changelog.md`](./changelog.md) - source-of-truth release ledger.
-- [`writing-style.md`](./writing-style.md) - prose style for the narrative itself, once themes and structure are chosen.
+- [`writing-style.md`](./writing-style.md) - core correctness and diagnostic routing after audience and selection are settled.
 - Project's prior release announcements - match voice and structure before inventing a new one.
 - Project instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) may declare release-note policy.

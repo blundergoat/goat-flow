@@ -4,40 +4,82 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readProjectFile } from "./skill-hardening.helpers.js";
+import {
+  assertForEachTarget,
+  installedSkillPaths,
+  installedSkillReferencePaths,
+  readMarkdownSection,
+  readProjectFile,
+} from "./skill-hardening.helpers.js";
 
 const SKILL_PATH = "workflow/skills/goat-clarity/SKILL.md";
+const SCOPE_REFERENCE_PATH =
+  "workflow/skills/goat-clarity/references/target-scope-and-evidence.md";
 const clarityGuidance = readProjectFile(SKILL_PATH);
 
 /**
- * Match load-bearing phrases without coupling the contract to Markdown wrapping or capitalisation.
+ * Match load-bearing phrases without coupling contracts to Markdown wrapping or capitalisation.
  *
+ * @param guidance - user-facing guidance under contract
+ * @param sourcePath - repository-relative path used in assertion failures
  * @param requiredPhrases - phrases that the installed workflow must retain
  */
-function assertIncludesAll(requiredPhrases: readonly string[]): void {
-  const normalizedGuidance = clarityGuidance
-    .replace(/\s+/gu, " ")
-    .toLowerCase();
+function assertGuidanceIncludesAll(
+  guidance: string,
+  sourcePath: string,
+  requiredPhrases: readonly string[],
+): void {
+  const normalizedGuidance = guidance.replace(/\s+/gu, " ").toLowerCase();
 
   for (const requiredPhrase of requiredPhrases) {
     const normalizedPhrase = requiredPhrase.replace(/\s+/gu, " ").toLowerCase();
     assert.ok(
       normalizedGuidance.includes(normalizedPhrase),
-      `${SKILL_PATH}: missing ${requiredPhrase}`,
+      `${sourcePath}: missing ${requiredPhrase}`,
     );
   }
 }
 
+/** Match load-bearing phrases in the canonical goat-clarity skill. */
+function assertIncludesAll(requiredPhrases: readonly string[]): void {
+  assertGuidanceIncludesAll(clarityGuidance, SKILL_PATH, requiredPhrases);
+}
+
 describe("skill hardening contracts: goat-clarity", () => {
-  it("accepts exactly four direct selector forms", () => {
+  it("keeps four selectors and adds documentation as an explicit mode", () => {
     assertIncludesAll([
       "/goat-clarity <GitHub PR URL>",
       "/goat-clarity uncommitted files",
       "/goat-clarity <folder path>",
       "/goat-clarity <file path>",
+      "/goat-clarity documentation <GitHub PR URL | uncommitted files | folder | file>",
+      "documentation is a mode over the same four selectors, not a fifth selector",
+      "a bare documentation path never becomes writable",
       "exactly one supported selector",
       "ask for one selector when none is supplied",
       "refuse multiple or ambiguous selectors",
+    ]);
+  });
+
+  it("classifies every selected unit before freezing write authority", () => {
+    assertIncludesAll([
+      "source code",
+      "test source",
+      "human documentation",
+      "agent-control or protected",
+      "generated, binary, or unsupported",
+      "most restrictive applicable class wins",
+      "classification ambiguity fails closed",
+      "context-only documentation is always read-only",
+      "agent-control surfaces are never style-remediated",
+      "Agent-control includes instruction files, skills, playbooks, shared agent references, prompt templates, workflow plans, machine-readable manifests or schemas, and hook or agent-generated control output",
+    ]);
+  });
+
+  it("protects test meaning while allowing bounded clarity edits", () => {
+    assertIncludesAll([
+      "test-source comments and private names",
+      "assertions, fixtures, snapshots, expected output, test level, coverage, and meaning remain protected",
     ]);
   });
 
@@ -117,13 +159,84 @@ describe("skill hardening contracts: goat-clarity", () => {
     assertIncludesAll([
       "Safe apply",
       "Scope v2",
-      "new writable path",
-      "public or exported",
-      "signature, serialization, behaviour, compatibility, or test change",
+      "exact writable paths for an already-permitted clarity operation",
+      "one public or exported identifier rename",
+      "mechanical reference updates",
+      "signature shape",
+      "persisted data",
+      "compatibility or migration",
+      "test meaning",
+      "Target Scope Snapshot v2",
       "wait for explicit approval",
       "preserve observable behaviour",
       "whitespace-only churn",
     ]);
+  });
+
+  it("keeps permanent prohibitions global after Scope v2 approval", () => {
+    const boundaryCommands = readMarkdownSection(
+      SKILL_PATH,
+      "Boundary Commands",
+    );
+    assertGuidanceIncludesAll(boundaryCommands, SKILL_PATH, [
+      "in every scope",
+      "behaviour",
+      "signature shape",
+      "serialization",
+      "persisted data",
+      "compatibility or migration",
+      "test meaning",
+      "a public or exported contract",
+      "except the one Scope v2 identifier-spelling exception",
+      "Git state",
+      "remote state",
+    ]);
+    assert.doesNotMatch(
+      boundaryCommands,
+      /under the initial scope/iu,
+      `${SKILL_PATH}: permanent prohibitions cannot expire after Snapshot v1`,
+    );
+  });
+
+  it("keeps Scope v2 blocking for delegated runs", () => {
+    assertIncludesAll([
+      "Scope v2 remains a blocking human gate in sub-agent mode",
+      "return to the invoking agent without writes",
+      "freeze Target Scope Snapshot v2 before mutation",
+    ]);
+
+    for (const conventionsPath of [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ]) {
+      assertGuidanceIncludesAll(
+        readProjectFile(conventionsPath),
+        conventionsPath,
+        [
+          "goat-clarity Scope v2",
+          "MUST remain blocking even in sub-agent mode",
+        ],
+      );
+    }
+  });
+
+  it("routes owners from a closed per-unit matrix", () => {
+    assertIncludesAll([
+      "per-unit owner routing matrix",
+      "load an owner only when at least one classified unit meets its condition",
+      "do not load every clarity owner unconditionally",
+      "naming-and-placement.md",
+      "code-comments.md",
+      "gruff-code-quality.md",
+      "test-selection.md",
+      "writing-style.md",
+      ".goat-flow/glossary.md",
+    ]);
+    assert.doesNotMatch(
+      clarityGuidance,
+      /After project authority, load these owners/iu,
+      `${SKILL_PATH}: unconditional owner loading must not return`,
+    );
   });
 
   it("keeps pull-request evidence read-only and untrusted", () => {
@@ -159,6 +272,61 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("uses drift-safe selector inventories and content identity", () => {
+    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
+      "reconcile the complete paginated PR path count",
+      "NUL-delimited",
+      "never parse paths by newline",
+      "bound recursive folder inventory to the canonical selected directory",
+      "a file selector remains exactly one canonical file",
+      "content digest",
+      "file type",
+      "containment",
+      "before every edit batch",
+      "drift stops mutation",
+    ]);
+  });
+
+  it("discovers formatter capability without executing discovery candidates", () => {
+    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
+      "formatter discovery is read-only",
+      "never execute a package resolver, package manager, formatter, or project script merely to discover a command",
+      "READY",
+      "NOT_FOUND",
+      "AMBIGUOUS",
+      "preserve repository-owned flags",
+      "scope the command to formatter-owned writable paths",
+    ]);
+  });
+
+  it("separates command status from claim verdict", () => {
+    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
+      "Command status",
+      "PASS | FAIL | NOT_RUN | UNAVAILABLE",
+      "Claim verdict",
+      "VERIFIED | REFUTED | NOT_CHECKED",
+      "a passing command never makes an untested claim verified",
+      "Shared proof-class tag",
+      "OBSERVED | INFERRED | UNVERIFIED | HUMAN-PENDING",
+    ]);
+  });
+
+  it("reconciles separate like-unit ledgers without fixing presentation", () => {
+    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
+      "selected-unit ledger",
+      "changed-span ledger",
+      "command-evidence ledger",
+      "diagnosed finding or explicitly reported formatter-owned reflow",
+      "never add unlike units",
+      "receipt meanings are stable but headings and presentation may vary",
+      "no JSON schema is promised",
+    ]);
+  });
+
   it("returns a complete but proportional remediation receipt", () => {
     for (const receiptLabel of [
       "Agent:",
@@ -186,6 +354,45 @@ describe("skill hardening contracts: goat-clarity", () => {
       "receipt without Formatter proof is incomplete",
       "Agent: <claude | codex | antigravity | copilot>",
       "Selector: <github-pr | uncommitted | folder | file>",
+    ]);
+  });
+
+  it("keeps the skill, reference, manifest, and public documentation aligned", () => {
+    assertForEachTarget(installedSkillPaths("goat-clarity"), (skillPath) => {
+      assert.equal(readProjectFile(skillPath), clarityGuidance, skillPath);
+    });
+
+    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-clarity",
+        "references/target-scope-and-evidence.md",
+      ),
+      (referencePath) => {
+        assert.equal(
+          readProjectFile(referencePath),
+          targetEvidence,
+          referencePath,
+        );
+      },
+    );
+
+    const manifest = JSON.parse(readProjectFile("workflow/manifest.json")) as {
+      skills: { references: Record<string, string[]> };
+    };
+    assert.deepEqual(manifest.skills.references["goat-clarity"], [
+      "references/target-scope-and-evidence.md",
+    ]);
+
+    const publicGuidance = readMarkdownSection(
+      "docs/skills.md",
+      "/goat-clarity",
+    );
+    assertGuidanceIncludesAll(publicGuidance, "docs/skills.md", [
+      "/goat-clarity documentation <GitHub PR URL | uncommitted files | folder | file>",
+      "most restrictive applicable class wins",
+      "one public/exported identifier rename plus mechanical references",
+      "selected-unit, changed-span, and command-evidence ledgers",
     ]);
   });
 

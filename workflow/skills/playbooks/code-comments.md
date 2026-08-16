@@ -59,20 +59,25 @@ not quotas; apply a rule only when its stated contract exists.
 3. **Context for a reader-meaningful branch.** Give an `if`, loop, or null/empty path one local
    sentence when its consequence is not clear from the code. State the trigger plus consequence. A
    branch whose only honest line restates code gets none.
-4. **Null/empty meaning on every `@param` and `@returns` / `@return`.** Say what an absent, null, or empty value means for the reader - "no folder chosen yet", "the user sees the empty state, not an error" - since the signature cannot, however many layers sit below the screen.
-5. **A user-journey anchor at flow entry points and non-obvious triggers.** Add a concrete example of what the user did to arrive here; readers land mid-file and rarely read the class doc first.
+4. **Null/empty meaning only when admitted and semantically visible.** Explain an absent, null, or
+   empty value's reader consequence only when the interface can produce that state and the code does
+   not reveal its meaning. Never document a null, empty, or absent state the interface cannot produce.
+5. **Journey context only when useful.** Add verified arrival context only when it changes the
+   reader's interpretation and remains hidden from the code.
 
-Tighten verbose comments without deleting `@param` / `@returns`, use verified rationale only, and
-delete stale comments on sight. The 150-character limit is mechanical: 150 is a hard ceiling; the
-shortest complete useful comment wins. Keep one point together, but never split one point across lines merely to stay short.
-Before a width-based sweep, measure the longest existing comment line;
-a large over-width count is evidence the assumed limit may be wrong.
+Tighten without deleting `@param` / `@returns`; use verified rationale. Fix stale comments in scope;
+outside the authorized scope, report or defer it and do not delete it. The project or language
+formatter's enforced width governs. When neither defines a width, 150 characters is the fallback ceiling.
+The shortest complete useful comment wins; never split one point across lines merely to stay short.
+Before a width sweep, measure the longest existing comment line; many violations can expose a wrong assumed limit.
 
-Plain English replaces jargon and restated mechanics, never precision: keep exact verbs (`remove`, `compile`, `mask`) over chattier
-phrases (`pull out`, `turn into`), keep technical qualifiers (`case-insensitive`) plus a one-clause why when it fits (`longest first
-so full names match first`), and reuse the noun the code itself uses (`seed`, `sidecar`) rather than a synonym - never as an
-ordinary verb where the collision misreads. A comment that already meets this standard is left verbatim: rewriting needs a
-diagnosed defect, and a tie goes to the incumbent.
+Plain English removes jargon, not precision. Keep exact verbs (`remove`, `compile`, `mask`), technical
+qualifiers (`case-insensitive`) plus a short why, and the code's noun (`seed`, `sidecar`) unless it
+misreads as an ordinary verb. Leave a compliant comment verbatim: rewriting requires a diagnosed
+defect, and a tie goes to the incumbent.
+
+New or edited comments do not use em dashes as sentence punctuation. Preserve them only in exact
+quoted or code material; do not rewrite untouched legacy comments solely for punctuation.
 
 A rewrite needs a report-only diagnosis. Use `STALE`, `FALSE`, `RESTATES`, `TERM`, `METAPHOR`,
 `HISTORY`, `REMOTE`, `VERBOSE`, or `MISSING-CONSEQUENCE`.
@@ -113,7 +118,7 @@ excluded): what it does, when to use it, and where it fits the reader's flow.
 
 Reserve PHP file-level PHPDoc for classless scripts, bootstrap/config, or generated entry files; module-oriented languages use a file/module comment when that is the useful boundary.
 
-- **Real descriptions, not restated types**, in the language's structured form (JSDoc, PHPDoc, PEP 257, godoc, rustdoc). Every `@param` / `@returns` carries meaning **and** its null/empty/absent consequence for the user.
+- **Real descriptions, not restated types**, in the language's structured form (JSDoc, PHPDoc, PEP 257, godoc, rustdoc). Each tag adds meaning beyond its type. If an admitted null/empty/absent state changes the reader outcome and code hides it, state the consequence; never invent a state.
 - **Hyphen-separate each tag's subject from its description** (`@param value - parsed JSON ...`), with a **blank ` *` line between description and tags**. Use one physical line per tag. Only when the prefix passes column 100 and a meaningful description cannot fit may it use one aligned continuation line, for two physical lines maximum. Keep the complete tag subject on line one; never create a dash-only line or dangling name.
 - **Pure dependency-injection constructors** that require a doc comment may omit per-dependency tags for obvious non-null services. A scalar, optional, configured, or side-effectful input is not pure DI and keeps its tag.
 
@@ -123,7 +128,7 @@ When a doc comment is verbose, tighten the prose; a `@param` or `@returns` line 
 
 Description budgets remain 3-8 content lines for a class and 1-3 for a method; tags are separate. Bullets count as content, while blank separator lines do not. Including separators, allow at most 10 physical lines for a class and 4 physical lines for a method.
 
-- Put one complete point per line when it fits. The 150-character ceiling never rewards filler; cut a nonessential clause before compressing a sentence into a fragment.
+- Put one complete point per line when it fits. The applicable formatter or fallback ceiling never rewards filler; cut a nonessential clause before compressing a sentence into a fragment.
 - Never use more than three consecutive prose lines. Separate distinct prose groups with a blank line.
 - Use bullets only when points are genuinely enumerable. A longer block may use one or two lead lines, a blank, then one lead line and 3-5 bullets.
 - Shape serves meaning: never cut a qualifier, limitation, tenancy rule, or user consequence to meet the layout.
@@ -136,7 +141,7 @@ consequence. This applies to `if`, loops, chained transformations, null/empty fa
 code gets none. Route a naming or placement defect through [`naming-and-placement.md`](./naming-and-placement.md)
 and report or defer remedies outside the current authorization.
 
-The line must translate, not restate. `// check if invoice is paid` is banned; "Paid invoices are locked - the user gets a read-only view instead of the edit form" earns its place because that consequence is visible nowhere in the condition. Say what the user did to land here when that is reconstructable.
+The line must translate, not restate. `// check if invoice is paid` is banned; "Paid invoices are locked - the user gets a read-only view instead of the edit form" earns its place because that consequence is visible nowhere in the condition. Name the acting component only when ownership or sequence changes how the reader interprets the consequence; omit it when the code already makes the actor clear.
 
 The consequence is the requirement; the sentence shape is not. Vary the construction, and omit a
 line when a returned name already states the complete outcome.
@@ -163,7 +168,7 @@ before comment work begins. Comments cannot make an unverified claim true.
 
 ## Discretionary Inline Comments (tier 5)
 
-Extra inline comments are a last resort. Resolve or defer authorized naming and structural findings first. If intent remains hidden, one of four reasons earns a line above the code. Prefer user/business/domain/legal/vendor rationale and name the constraint, prevented failure, and removal trigger.
+Extra inline comments are a last resort after authorized naming and structural work. If intent remains hidden, one of four reasons earns a line. Name the constraint, prevented failure, and removal trigger.
 
 - **Hidden constraint** the code cannot encode - rate limit, vendor contract, regulation, hardware quirk.
   `# Vendor exports omit the timezone; treat as source-local by contract.`
@@ -178,9 +183,10 @@ Extra inline comments are a last resort. Resolve or defer authorized naming and 
 
 ## TODO / FIXME / HACK Markers
 
-Every marker carries an expiry (`YYYY-MM-DD` date or a concrete trigger). Add a tracking reference only when it is the durable owner, removal trigger, or verification path; otherwise write the current product/user reason.
+Every marker has a `YYYY-MM-DD` date or concrete trigger. Add a tracking reference only when it owns the contract, removal, or verification; otherwise state the current reason.
 
-Good: `// TODO: 2026-08-01 remove this fallback once the new auth flow ships.`
+**Illustrative marker shape (not incident evidence).**
+`// TODO: Remove this fallback once the legacy contract is retired.`
 
 ## Antipatterns
 
@@ -194,7 +200,7 @@ The next reader cannot use these; fix them when already editing the surrounding 
   is compensating prose, not a remedy. Make an already-authorised code change or report or defer the
   defect; the comment pass grants no structural authority.
 - **Unverified rationale.** `// for performance`, `// probably safe`. Verify the reason or omit it.
-- **Commented-out code, tombstones, archaeology.** Comments describe only the current contract - version deltas live in git. Never reference what a fresh clone cannot see: gitignored paths, local state, removed symbols.
+- **Tombstones and non-load-bearing history.** Version deltas live in git. Keep history only when it defines a current compatibility obligation or a checkable removal trigger. Never cite gitignored paths, local state, or removed symbols.
 - **Position or line-number references.** `// see function below`, `// line 142`. Refer by symbol name.
 - **Bare suppression markers.** `// eslint-disable-next-line` with no reason is noise.
 - **Non-load-bearing provenance.** PRs, issues, ADRs, task IDs, review notes - unless the reference is the durable contract, removal trigger, or verification path.
@@ -240,15 +246,16 @@ Before claiming comment work is done, confirm the naming route is complete and c
 
 1. **[static]+[judge] Required public/exported APIs and non-obvious file/module/class boundaries have useful doc comments.** Project or language canon decides any stronger requirement; PHP class files do not duplicate file and class PHPDoc.
 2. **[judge] Consequence-bearing branches have one local trigger-and-consequence sentence; self-evident branches have none.** No context line restates mechanics or repeats one sentence template through a file.
-3. **[judge] Every `@param` / `@returns` states what null/empty/absent means for the user**, and no tag was deleted while tightening a verbose comment.
+3. **[judge] An admitted and semantically visible null/empty/absent state has its reader consequence**, and no tag invents an impossible state or disappears during tightening.
 4. **[judge] Applicable naming and placement checks are complete** under `naming-and-placement.md`; comments do not compensate for a deferred defect.
-5. **[judge] Flow entry points carry a user-journey anchor.**
+5. **[judge] Verified arrival context appears only when it changes the reader's interpretation and remains hidden from code.**
 6. **[judge] Discretionary inline comments satisfy one valid reason**, sit at the decision, and prefer reader-relevant rationale.
 7. **[judge] Rationale and code-behaviour claims are verified**, including query scope, nullability, branches, counts, and inherited prose; they also pass the Half-Life Test.
 8. **[static] TODO / FIXME / HACK markers carry an expiry** and only load-bearing tracking references.
 9. **[static] No secrets, internal URLs, or production hostnames**; customer/patient identifiers may need **[judge]** review.
 10. **[judge] Existing comments touched or noticed are still accurate.** Tightening an inherited claim transfers ownership.
-11. **[static] Comment lines never exceed the hard maximum of 150 characters.** Shorter complete comments are preferred; tags and description blocks meet their physical-line limits.
+11. **[static] Comment lines meet the project or language formatter's enforced width, or the 150-character fallback ceiling when neither defines one.** Tags and description blocks meet their physical-line limits.
+12. **[static] Apply the em-dash rule above without rewriting exempt material.**
 
 If a comment fails any check, fix it before merging.
 

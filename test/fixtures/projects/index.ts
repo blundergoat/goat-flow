@@ -36,6 +36,8 @@ const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
   "release-notes.md",
   "skill-playbook-authoring-sync.md",
   "test-selection.md",
+  "writing-sentence-diagnostics.md",
+  "writing-structure-diagnostics.md",
   "writing-style.md",
 ] as const;
 

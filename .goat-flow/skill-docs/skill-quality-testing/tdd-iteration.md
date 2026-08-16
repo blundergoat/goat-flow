@@ -54,7 +54,15 @@ Skills to NOT pressure-test:
 
 ## Capability-aware evaluation fixtures
 
-Before RED, classify what the skill can do. Every adversarial fixture names at least one already-correct control and its expected no-op. A mutation-capable skill preserves that control byte-for-byte. A report-only or decision skill emits no false finding, recommendation, or action for it. Blanket rewriting and blanket reporting both fail.
+Before RED, classify what the skill can do. Every fixture names at least one already-correct control and its expected no-op. For mutation-capable skills, score all five:
+
+- **exact finding identity:** detection names the target, semantic anchor, and rule or defect code; a nonzero count is insufficient.
+- **clean-input preservation:** the correct control remains byte-for-byte identical.
+- **remediation fidelity:** output preserves non-target bytes and meaning while changing only the admitted target.
+- **overcorrection:** a near-miss triggers no finding or mutation.
+- **second-pass stability:** rerunning on remediated output leaves identical bytes and finding set.
+
+For report-only or decision skills, apply equivalent detection, clean-control, overcorrection, and second-pass checks without inventing a mutation. The clean control produces no false finding, recommendation, or action. Blanket rewriting and blanket reporting both fail.
 
 Build attractive wrong answers from observed RED or REFACTOR rationalisations, or from explicitly labelled fixture input. Invented pressure is never repository evidence. Combine plausible pressures only when the risk warrants it. Scale the exercise to capability and risk: a narrow transformation needs relevant evidence, not review-class ceremony.
 

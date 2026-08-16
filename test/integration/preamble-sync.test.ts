@@ -132,6 +132,14 @@ const INSTALLED_WRITING_STYLE = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/writing-style.md",
 );
+const ROUTED_WRITING_DIAGNOSTIC_PAIRS = [
+  "writing-sentence-diagnostics.md",
+  "writing-structure-diagnostics.md",
+].map((filename) => ({
+  filename,
+  template: resolve(PROJECT_ROOT, "workflow/skills/playbooks", filename),
+  installed: resolve(PROJECT_ROOT, ".goat-flow/skill-docs/playbooks", filename),
+}));
 const TEMPLATE_CHANGELOG = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/changelog.md",
@@ -374,6 +382,17 @@ describe("preamble/conventions sync: current state", () => {
       "writing-style.md: template and installed should match",
     );
   });
+
+  for (const pair of ROUTED_WRITING_DIAGNOSTIC_PAIRS) {
+    it(`template and installed ${pair.filename} match`, () => {
+      assertMirrorExists(pair.template, pair.installed, pair.filename);
+      assert.equal(
+        diffQuiet(pair.template, pair.installed),
+        0,
+        `${pair.filename}: template and installed should match`,
+      );
+    });
+  }
 
   it("template and installed changelog.md match", () => {
     assertMirrorExists(TEMPLATE_CHANGELOG, INSTALLED_CHANGELOG, "changelog.md");

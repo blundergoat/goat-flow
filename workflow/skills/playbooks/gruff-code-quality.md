@@ -13,6 +13,8 @@ Set `target` from the requested language; another gruff binary is not enough.
 
 Look for a project wrapper first in `bin/`, `scripts/`, or package scripts, inspect what it invokes, and prefer it when it targets the requested Gruff port. Wrappers often preserve the working directory, config discovery, or exit-code contract that a raw binary call would lose.
 
+Availability discovery only inspects wrappers and existing executable paths. It never invokes a package resolver, installer, init command, or dependency-fetching wrapper. Run a wrapper only after inspection proves it uses an already-present executable.
+
 ```bash
 target=gruff-ts  # gruff-go | gruff-rs | gruff-ts | gruff-php | gruff-py
 found=
@@ -25,7 +27,7 @@ test -n "$found"
 "$found" --help
 ```
 
-If no binary is found, try the ecosystem wrapper before declaring gruff unavailable: `npx gruff-ts --version`, `go tool gruff-go --version`, `uv run gruff-py --version`. If gruff cannot run, say so and use the project's normal lint/typecheck/tests; do not invent gruff findings.
+If no existing executable is found, say gruff is unavailable and use the project's normal lint/typecheck/tests; do not resolve tooling or invent gruff findings.
 
 ## Project Authority
 
@@ -111,6 +113,8 @@ Classify high-volume rules before editing individual findings.
 
 Hard rule: never set `enabled: false` and never baseline mid-cleanup. If the user asked to "fix", do not tune thresholds or baselines unless they explicitly approve that policy change.
 
+Before CONFIGURE or BASELINE, run one exact true positive and one known-good negative control with the same executable, command shape, and proposed config. The positive must emit the expected rule ID and target identity exposed by the installed port; the negative control emits no finding for that rule. Stop the policy change if either identity or disposition moves unexpectedly.
+
 ## Cluster Choice
 
 Fix one cluster small enough to verify:
@@ -140,7 +144,7 @@ For `docs.*`, load [`code-comments.md`](./code-comments.md) first. A missing-doc
 not proof that prose is required. Apply it when project or language canon requires documentation,
 when the symbol is a public/exported API, or when a file/module/class boundary has a non-obvious
 contract. Otherwise classify the finding against the project's deliberate no-doc convention. When a
-doc comment is required, meet the playbook's block shape and 150-character ceiling; do not add the
+doc comment is required, meet the playbook's block shape and the applicable formatter or fallback ceiling; do not add the
 shortest line that merely silences the analyzer.
 
 Write comments for caller-visible contract: obligations, edge values, side effects, error behavior, thresholds, determinism, compatibility, or non-obvious rationale. Do not restate syntax or add marker words just to satisfy the analyzer. If `@param`/`@returns` tags are used, each tag needs meaning beyond the type signature.
@@ -219,7 +223,8 @@ Before claiming gruff work is done:
 7. For separately authorized renames, follow `naming-and-placement.md` and grep the old identifier.
 8. For doc findings, confirm `code-comments.md` bar was followed.
 9. For a documentation pass, compare before/after identities and report any documentation-caused size finding, the untouched-compliant count, and every rename.
-10. Report remaining findings by action category, not as "fixed".
+10. For CONFIGURE or BASELINE, show the exact true-positive and known-good negative-control results.
+11. Report remaining findings by action category, not as "fixed".
 
 ## Troubleshooting
 

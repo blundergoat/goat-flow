@@ -1,6 +1,6 @@
 ---
 category: lockstep-surfaces
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Changes where adding or renaming one artifact obliges a matching edit on several other surfaces at once, and the partial-update failures that follow. Stale pointers, path validation, and evidence rot live in [docs-and-crossrefs.md](docs-and-crossrefs.md).
@@ -15,7 +15,9 @@ last_reviewed: 2026-08-15
 
 **Evidence:** After `code-comments.md` flipped from "default no comments" to mandatory doc comments on every unit (2026-05-29), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` still triaged `docs.missing-internal-function-doc` as "gold-plating the playbook forbids" per the old "no comment unless WHY" default, and attributed that default to `CLAUDE.md` - which contains no such stance (grep of `CLAUDE.md` / `AGENTS.md` / `.github/copilot-instructions.md` returned zero comment-policy hits). The 2026-05-29 reconciliation made that then-current mandatory-doc stance explicit. ADR-059 narrowed it on 2026-08-14. The first sibling rewrite accidentally let the "non-obvious contract" qualifier cover public/exported APIs as well as file/module/class boundaries; final review caught the mismatch. The corrected sibling separates those cases at `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `when the symbol is a public/exported API`).
 
-**Prevention:** When you flip a doctrine, grep sibling playbooks, instruction files, and reference docs for the OLD stance's phrasing AND for any doc that cites the changed file by name; reconcile them in the same change. Grep the ACTUAL old wording, not a guessed token - the first cross-ref pass missed "Default to writing no comments" by grepping for "default-no-comment". Verify cross-file quotes: a doc that says `X says "..."` must actually match X. When a rule uses a qualifier, pin its grammatical scope in a contract test; keyword presence cannot distinguish "A or B with Q" from "A, or B with Q".
+**Recurrence 2026-08-16:** M51 split `writing-style.md` into routed owners and replaced its whole-file digest with semantic contracts. The focused writing suite passed, but `npm test` then failed `test/contract/comment-playbook-doctrine.test.ts` (search: `keeps examples correct and links the code-comment owner`) because the compact router preserved the examples exemption in meaning while paraphrasing its grep-stable wording. Restoring `exempt from stylistic rewriting, not correctness, syntax, or security` in both mirrors fixed the reproduced failure. The same preflight exposed an earlier methodology mismatch: `skill-quality-testing/tdd-iteration.md` described clean report-only controls without the contract's explicit `no false finding, recommendation, or action` outcome. The corrected owner now names that no-op verbatim (search: `The clean control produces no false finding`).
+
+**Prevention:** When you flip or extract a doctrine, grep sibling playbooks, instruction files, reference docs, and the full test tree for the OLD stance's exact phrasing and for any file that cites the changed owner by name; reconcile them in the same change. Grep the ACTUAL old wording, not a guessed token - the first cross-ref pass missed "Default to writing no comments" by grepping for "default-no-comment". Before paraphrasing a semantic anchor, identify whether a broader contract outside the focused milestone suite pins it. Verify cross-file quotes: a doc that says `X says "..."` must actually match X. When a rule uses a qualifier, pin its grammatical scope in a contract test; keyword presence cannot distinguish "A or B with Q" from "A, or B with Q".
 
 ## Footgun: Adding an instruction-file section ripples across four section-list sources plus the line target
 

@@ -1,7 +1,6 @@
 /**
  * Locks bounded project-authority precedence across discipline playbooks.
  */
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -19,19 +18,29 @@ const AUTHORITY_PLAYBOOKS = [
   "gruff-code-quality.md",
   "naming-and-placement.md",
   "test-selection.md",
+  "writing-sentence-diagnostics.md",
+  "writing-structure-diagnostics.md",
+  "writing-style.md",
 ] as const;
 
-const WRITING_STYLE_SHA256 =
-  "9439a2d3bb7d0ef19dec6c7672c39e5badff26e258367e6e15451d2d1d51ef44";
+const WRITING_PLAYBOOKS = [
+  "writing-style.md",
+  "writing-sentence-diagnostics.md",
+  "writing-structure-diagnostics.md",
+] as const;
 
 /** Reads one playbook copy without normalizing bytes. */
 function readPlaybook(root: string, name: string): string {
   return readFileSync(`${root}/${name}`, "utf8");
 }
 
-/** Returns the bounded authority section used by the semantic assertions. */
-function readProjectAuthority(content: string, playbookPath: string): string {
-  const heading = "## Project Authority";
+/** Returns one top-level playbook section used by semantic assertions. */
+function readPlaybookSection(
+  content: string,
+  sectionName: string,
+  playbookPath: string,
+): string {
+  const heading = `## ${sectionName}`;
   const start = content.indexOf(heading);
   assert.notEqual(start, -1, `${playbookPath}: missing ${heading}`);
 
@@ -43,7 +52,11 @@ function assertBoundedProjectAuthority(
   content: string,
   playbookPath: string,
 ): void {
-  const authority = readProjectAuthority(content, playbookPath);
+  const authority = readPlaybookSection(
+    content,
+    "Project Authority",
+    playbookPath,
+  );
 
   assert.match(
     authority,
@@ -103,15 +116,12 @@ function assertBoundedProjectAuthority(
 }
 
 describe("playbook project-precedence doctrine", () => {
-  it("keeps the established writing-style authority control byte-identical", () => {
-    const copies = PLAYBOOK_ROOTS.map((root) =>
-      readPlaybook(root, "writing-style.md"),
-    );
-
-    assert.equal(copies[0], copies[1], "writing-style mirrors drifted");
-    for (const [index, content] of copies.entries()) {
-      const digest = createHash("sha256").update(content).digest("hex");
-      assert.equal(digest, WRITING_STYLE_SHA256, PLAYBOOK_ROOTS[index]);
+  it("keeps routed writing playbooks mirrored without whole-file digest pins", () => {
+    for (const playbookName of WRITING_PLAYBOOKS) {
+      const copies = PLAYBOOK_ROOTS.map((root) =>
+        readPlaybook(root, playbookName),
+      );
+      assert.equal(copies[0], copies[1], `${playbookName} mirrors drifted`);
     }
   });
 
@@ -125,5 +135,56 @@ describe("playbook project-precedence doctrine", () => {
         );
       });
     }
+  }
+});
+
+describe("Gruff availability and policy controls", () => {
+  for (const playbookRoot of PLAYBOOK_ROOTS) {
+    const playbookPath = `${playbookRoot}/gruff-code-quality.md`;
+
+    it(`${playbookPath} discovers existing tools without resolver execution`, () => {
+      const content = readPlaybook(playbookRoot, "gruff-code-quality.md");
+      const availability = readPlaybookSection(
+        content,
+        "Availability Check",
+        playbookPath,
+      );
+
+      assert.match(
+        availability,
+        /Availability discovery only inspects wrappers and existing executable paths/u,
+        playbookPath,
+      );
+      assert.match(
+        availability,
+        /never invokes a package resolver, installer, init command, or dependency-fetching wrapper/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        availability,
+        /\bnpx\b|\bbunx\b|\bpnpm dlx\b|\byarn dlx\b|\bgo tool\b|\buv run\b|\bpipx run\b/u,
+        playbookPath,
+      );
+    });
+
+    it(`${playbookPath} gates CONFIGURE and BASELINE with two exact controls`, () => {
+      const content = readPlaybook(playbookRoot, "gruff-code-quality.md");
+
+      assert.match(
+        content,
+        /Before CONFIGURE or BASELINE, run one exact true positive and one known-good negative control/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /expected rule ID and target identity exposed by the installed port/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /negative control emits no finding for that rule/u,
+        playbookPath,
+      );
+    });
   }
 });

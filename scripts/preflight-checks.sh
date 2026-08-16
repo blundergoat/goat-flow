@@ -1465,6 +1465,8 @@ const files = [
       "release-notes.md",
       "skill-playbook-authoring-sync.md",
       "test-selection.md",
+      "writing-sentence-diagnostics.md",
+      "writing-structure-diagnostics.md",
       "writing-style.md",
     ].flatMap((name) => [
       `workflow/skills/playbooks/${name}`,
@@ -2241,6 +2243,25 @@ if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill
     fi
 else
     skip "release-notes.md sync (one or both files missing)"
+fi
+# Routed writing diagnostics must match the installed copies users load on demand.
+if [[ -f workflow/skills/playbooks/writing-sentence-diagnostics.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-sentence-diagnostics.md .goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md >/dev/null 2>&1; then
+        pass "writing-sentence-diagnostics.md: template and installed copy match"
+    else
+        fail "writing-sentence-diagnostics.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-sentence-diagnostics.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/writing-structure-diagnostics.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-structure-diagnostics.md .goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md >/dev/null 2>&1; then
+        pass "writing-structure-diagnostics.md: template and installed copy match"
+    else
+        fail "writing-structure-diagnostics.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-structure-diagnostics.md sync (one or both files missing)"
 fi
 # Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
 if [[ -f workflow/skills/playbooks/writing-style.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-style.md ]]; then

@@ -16,6 +16,16 @@ import {
   INSTALLED_SKILL_ROOTS,
 } from "./skill-hardening.helpers.js";
 
+/** Assert stable semantic anchors inside one named Markdown section. */
+function assertSectionPatterns(
+  markdownPath: string,
+  sectionHeading: string,
+  patterns: readonly RegExp[],
+): void {
+  const section = readMarkdownSection(markdownPath, sectionHeading);
+  for (const pattern of patterns) assert.match(section, pattern, markdownPath);
+}
+
 describe("skill hardening contracts: shared surfaces (2/3)", () => {
   it("keeps glossary continuity terms aligned with the conditional session-log contract", () => {
     const glossary = readProjectFile(".goat-flow/glossary.md");
@@ -202,6 +212,39 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     );
   });
 
+  it("requires mutation-capable skill fixtures to prove fidelity and stability", () => {
+    const skillTddReferencePaths = [
+      "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
+      ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
+    ];
+
+    assertForEachTarget(skillTddReferencePaths, (referencePath) => {
+      const reference = readProjectFile(referencePath);
+
+      assert.match(
+        reference,
+        /exact finding identity[\s\S]+target, semantic anchor, and rule or defect code/u,
+        referencePath,
+      );
+      assert.match(
+        reference,
+        /clean-input preservation[\s\S]+byte-for-byte/u,
+        referencePath,
+      );
+      assert.match(
+        reference,
+        /remediation fidelity[\s\S]+non-target bytes and meaning/u,
+        referencePath,
+      );
+      assert.match(reference, /overcorrection[\s\S]+near-miss/u, referencePath);
+      assert.match(
+        reference,
+        /second-pass stability[\s\S]+identical bytes and finding set/u,
+        referencePath,
+      );
+    });
+  });
+
   it("ties resolved hook footguns to the regressions that prove each boundary", () => {
     const optionalMigration = readMarkdownSection(
       ".goat-flow/learning-loop/footguns/hooks.md",
@@ -329,184 +372,287 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     });
   });
 
-  it("keeps writing-style edits truth-preserving and source-aware", () => {
+  it("keeps writing-style edits truth-preserving and source-aware through the routed core", () => {
     for (const playbookPath of [
       "workflow/skills/playbooks/writing-style.md",
       ".goat-flow/skill-docs/playbooks/writing-style.md",
     ]) {
-      const availability = readMarkdownSection(
-        playbookPath,
-        "Availability Check",
-      );
-      assert.match(
-        availability,
+      assertSectionPatterns(playbookPath, "Availability Check", [
         /review authorizes diagnosis, not an unrequested rewrite/u,
-        playbookPath,
-      );
-
-      const scopeGate = readMarkdownSection(playbookPath, "Scope Gate");
-      assert.match(
-        scopeGate,
+      ]);
+      assertSectionPatterns(playbookPath, "Scope Gate", [
         /playbooks and other agent-read references/u,
-        playbookPath,
-      );
-      assert.match(
-        scopeGate,
         /Review comments and replies to a person\s*\|\s*Correctness and residue only/u,
-        playbookPath,
-      );
-      assert.match(
-        scopeGate,
         /Code comments and docstrings\s*\|\s*No - see `code-comments\.md`/u,
-        playbookPath,
-      );
-      assert.match(
-        scopeGate,
         /social-meaning guard and Colleague check/u,
-        playbookPath,
-      );
-      assert.match(scopeGate, /deliberate control repetition/u, playbookPath);
-      assert.match(
-        scopeGate,
+        /deliberate control repetition/u,
         /verified facts and safety[\s\S]+user's task, audience, and required meaning[\s\S]+project-documented style and supplied voice/u,
-        playbookPath,
-      );
-
-      const correctnessGate = readMarkdownSection(
-        playbookPath,
-        "Correctness and Meaning",
-      );
-      assert.match(
-        correctnessGate,
+      ]);
+      assertSectionPatterns(playbookPath, "Diagnostic Router", [
+        /writing-sentence-diagnostics\.md[\s\S]+sentence-level reader cost/u,
+        /writing-structure-diagnostics\.md[\s\S]+document-level assembly defect/u,
+        /Do not load either diagnostic playbook for a small edit that passes the minimum core checks/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Correctness and Meaning", [
         /names, numbers, units, versions, flags, options, and paths/u,
-        playbookPath,
-      );
-      assert.match(
-        correctnessGate,
         /proposal[^\n]+decision[^\n]+assumption[^\n]+fact/u,
-        playbookPath,
-      );
-      assert.match(
-        correctnessGate,
         /optional[^\n]+required[^\n]+planned or pending check[^\n]+passed check/u,
-        playbookPath,
-      );
-      assert.match(
-        correctnessGate,
         /claim strength and specificity to the evidence/u,
-        playbookPath,
-      );
-      assert.match(
-        correctnessGate,
         /named attribution to a specific inspectable point/u,
-        playbookPath,
-      );
-
-      const sourceGate = readMarkdownSection(
-        playbookPath,
-        "Before Editing Existing Prose",
-      );
-      assert.match(
-        sourceGate,
+      ]);
+      assertSectionPatterns(playbookPath, "Before Editing Existing Prose", [
         /human-authored, generated, mixed, or unknown/u,
-        playbookPath,
-      );
-      assert.match(sourceGate, /lightest effective edit/u, playbookPath);
-      assert.match(sourceGate, /Unknown provenance/u, playbookPath);
-      assert.match(sourceGate, /Protect strong human passages/u, playbookPath);
-      assert.match(
-        sourceGate,
+        /lightest effective edit/u,
+        /Unknown provenance/u,
+        /Protect strong human passages/u,
         /verified claims, not synonym substitutions/u,
-        playbookPath,
-      );
+      ]);
+      assertSectionPatterns(playbookPath, "Audience and Precision", [
+        /Precision is not a defect/u,
+        /Replies to people carry social meaning/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Integrity", [
+        /Never invent an incident/u,
+        /illustrative example must be labelled as illustrative/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Quick Tests", [
+        /Substitution test/u,
+        /raises suspicion, not proof/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Stop Rules", [
+        /If the minimum pass is clean, stop editing/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Verification Gate", [
+        /status, requirement level, uncertainty, and provenance/u,
+        /Scope Gate[\s\S]+source classification applied/u,
+        /claim strength, attribution, and cited claims/u,
+      ]);
+    }
+  });
 
-      const register = readMarkdownSection(playbookPath, "Register");
-      assert.match(
-        register,
+  it("owns sentence diagnostics without turning lexical signals into verdicts", () => {
+    for (const playbookPath of [
+      "workflow/skills/playbooks/writing-sentence-diagnostics.md",
+      ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
+    ]) {
+      assertSectionPatterns(playbookPath, "Register", [
         /Neutral and conventional are valid voices/u,
-        playbookPath,
-      );
-      assert.match(
-        register,
-        /Documentation and decisions[\s\S]+Reports and reviews[\s\S]+Release and changelog prose/u,
-        playbookPath,
-      );
-      assert.match(
-        register,
-        /correctness-and-residue-only surfaces whose social meaning must survive/u,
-        playbookPath,
-      );
-
-      const fixOnSight = readMarkdownSection(playbookPath, "Fix on Sight");
-      assert.match(fixOnSight, /verified meaning/u, playbookPath);
-      assert.match(
-        fixOnSight,
+        /reader already knows[\s\S]+Do not define it again/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Diagnostic Route", [
+        /component as the actor when the component performs the action/u,
+        /person or team only when responsibility is relevant and evidenced/u,
+      ]);
+      assertSectionPatterns(playbookPath, "Fix on Sight", [
+        /verified meaning/u,
         /diagnose reader cost, not authorship/u,
-        playbookPath,
-      );
-      assert.match(fixOnSight, /record the primary cost once/u, playbookPath);
-      assert.match(fixOnSight, /Canonical terminology/u, playbookPath);
-      assert.match(
-        fixOnSight,
-        /Manufactured engagement closers/u,
-        playbookPath,
-      );
-      assert.match(fixOnSight, /Report issues at the tracker/u, playbookPath);
-
-      const structure = readMarkdownSection(playbookPath, "Structure");
-      assert.match(structure, /Process bleed/u, playbookPath);
-      assert.match(structure, /Illustrative before/u, playbookPath);
-      assert.match(
-        structure,
-        /Catalogue-shaped repetition is exempt/u,
-        playbookPath,
-      );
-      assert.match(
-        structure,
-        /Reference-list labels remain valid/u,
-        playbookPath,
-      );
+        /Assistant voice/u,
+        /Residue/u,
+      ]);
 
       const guards = readMarkdownSection(
         playbookPath,
         "Guards Against Misapplication",
       );
-      assert.match(guards, /Plan uniformity is control grammar/u, playbookPath);
+      assert.match(guards, /Ordinary writing habits are not defects/u);
       assert.match(
         guards,
-        /Replies to people carry social meaning/u,
+        /AI-density, banned-word, and rhythm counts are suspicion signals only/u,
+        playbookPath,
+      );
+      assert.match(
+        guards,
+        /never diagnose a defect, authorize an edit, or produce a pass\/fail result/u,
+        playbookPath,
+      );
+      assert.match(
+        guards,
+        /Do not run a broad punctuation sweep/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        readProjectFile(playbookPath),
+        /\u2014/u,
+        `${playbookPath}: new prose must not introduce em dashes`,
+      );
+
+      assertSectionPatterns(playbookPath, "Quick Tests", [
+        /Read it aloud/u,
+        /Feelings check/u,
+      ]);
+
+      const workedExample = readMarkdownSection(playbookPath, "Worked Example");
+      assert.match(workedExample, /Illustrative example \(not evidence/u);
+    }
+  });
+
+  it("owns document-level structure diagnostics and protects parallel forms", () => {
+    for (const playbookPath of [
+      "workflow/skills/playbooks/writing-structure-diagnostics.md",
+      ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
+    ]) {
+      const structure = readMarkdownSection(playbookPath, "Structure");
+      for (const requiredAnchor of [
+        /Duplicate representation/u,
+        /Append seam/u,
+        /Compound entries/u,
+        /Parallel lists/u,
+        /Causal prose/u,
+        /Padded triads/u,
+        /Process bleed/u,
+      ]) {
+        assert.match(structure, requiredAnchor, playbookPath);
+      }
+      assert.match(structure, /chronology[\s\S]+cause or constraint/u);
+      assert.match(structure, /Catalogue-shaped repetition is exempt/u);
+      assert.match(structure, /Reference-list labels remain valid/u);
+
+      const guards = readMarkdownSection(
+        playbookPath,
+        "Guards Against Misapplication",
+      );
+      assert.match(guards, /Tables and code are intentionally parallel/u);
+      assert.match(guards, /Plan uniformity is control grammar/u);
+
+      const workedExamples = readMarkdownSection(
+        playbookPath,
+        "Worked Structural Examples",
+      );
+      assert.match(workedExamples, /Illustrative examples \(not evidence/u);
+      assert.doesNotMatch(
+        readProjectFile(playbookPath),
+        /\u2014/u,
+        playbookPath,
+      );
+    }
+  });
+
+  it("makes product users and fact-preserving release state explicit", () => {
+    for (const playbookPath of [
+      "workflow/skills/playbooks/changelog.md",
+      ".goat-flow/skill-docs/playbooks/changelog.md",
+    ]) {
+      const audienceGate = readMarkdownSection(playbookPath, "Audience Gate");
+      assert.match(
+        audienceGate,
+        /person who uses, calls, operates, or upgrades the shipped product/u,
+        playbookPath,
+      );
+      assert.match(audienceGate, /Do not invent a UI/u, playbookPath);
+      assert.match(
+        audienceGate,
+        /affected surface, consequence, risk, and required action/u,
+        playbookPath,
+      );
+      assert.match(
+        audienceGate,
+        /Internal tooling is omitted unless it changes user behaviour or release safety/u,
         playbookPath,
       );
 
-      const verification = readMarkdownSection(
+      const releaseState = readMarkdownSection(
         playbookPath,
-        "Verification Gate",
+        "Release State and Version Attribution",
+      );
+      assert.match(releaseState, /last published release/u, playbookPath);
+      assert.match(releaseState, /Unreleased[\s\S]+net state that will ship/u);
+      assert.match(releaseState, /one version and one category/u, playbookPath);
+
+      const historicalEditing = readMarkdownSection(
+        playbookPath,
+        "Historical Editing",
+      );
+      assert.match(historicalEditing, /fact-preserving cleanup/u);
+      assert.match(
+        historicalEditing,
+        /version attribution, public identifiers, measurements, regressions, chronology, and migration facts/u,
+        playbookPath,
+      );
+
+      const lengthFallback = readMarkdownSection(
+        playbookPath,
+        "Length Fallback",
       );
       assert.match(
-        verification,
-        /status, requirement level, uncertainty, and provenance/u,
+        lengthFallback,
+        /project or release surface owns no different shape/u,
+      );
+      assert.match(lengthFallback, /150 characters/u, playbookPath);
+      assert.match(
+        lengthFallback,
+        /Never generalise an exact public flag, config key, version, error, or measurement to meet the fallback/u,
         playbookPath,
       );
-      assert.match(
-        verification,
-        /Scope Gate, register,[^\n]+source classification applied/u,
-        playbookPath,
-      );
-      assert.match(
-        verification,
-        /claim strength, attribution, and cited claims/u,
+      assert.doesNotMatch(
+        readProjectFile(playbookPath),
+        /\u2014/u,
         playbookPath,
       );
     }
 
+    for (const playbookPath of [
+      "workflow/skills/playbooks/release-notes.md",
+      ".goat-flow/skill-docs/playbooks/release-notes.md",
+    ]) {
+      const audienceGate = readMarkdownSection(playbookPath, "Audience Gate");
+      assert.match(
+        audienceGate,
+        /person who uses, calls, operates, or upgrades the shipped product/u,
+        playbookPath,
+      );
+      assert.match(audienceGate, /Do not invent a UI/u, playbookPath);
+      assert.match(
+        audienceGate,
+        /Internal-only work is excluded unless it changes user behaviour or release safety/u,
+        playbookPath,
+      );
+
+      const outputProvenance = readMarkdownSection(
+        playbookPath,
+        "Output Provenance",
+      );
+      assert.match(outputProvenance, /diff -> changelog -> release notes/u);
+      assert.match(outputProvenance, /Do not summarize from memory/u);
+
+      const writingRules = readMarkdownSection(playbookPath, "Writing Rules");
+      assert.match(
+        writingRules,
+        /effect, then consequence, then required action/u,
+        playbookPath,
+      );
+      assert.match(writingRules, /visible regression/u, playbookPath);
+
+      const lengthFallback = readMarkdownSection(
+        playbookPath,
+        "Length Fallback",
+      );
+      assert.match(
+        lengthFallback,
+        /project or release surface owns no different shape/u,
+      );
+      assert.match(lengthFallback, /150 characters/u, playbookPath);
+      assert.doesNotMatch(
+        readProjectFile(playbookPath),
+        /\u2014/u,
+        playbookPath,
+      );
+    }
+  });
+
+  it("keeps all routed writing playbooks independently discoverable", () => {
     for (const readmePath of [
       "workflow/skills/playbooks/README.md",
       ".goat-flow/skill-docs/playbooks/README.md",
     ]) {
+      const readme = readProjectFile(readmePath);
+      assert.match(readme, /writing-style\.md[^\n]+correctness router/u);
       assert.match(
-        readProjectFile(readmePath),
-        /writing-style\.md[^\n]+correctness and meaning preservation[^\n]+register- and source-aware editing/u,
-        readmePath,
+        readme,
+        /writing-sentence-diagnostics\.md[^\n]+sentence-level reader cost/u,
+      );
+      assert.match(
+        readme,
+        /writing-structure-diagnostics\.md[^\n]+document-level assembly/u,
       );
     }
   });

@@ -30,6 +30,8 @@ describe("ADR-023 word budget tiers", () => {
     "release-notes.md",
     "skill-playbook-authoring-sync.md",
     "test-selection.md",
+    "writing-sentence-diagnostics.md",
+    "writing-structure-diagnostics.md",
     "writing-style.md",
   ] as const;
 
@@ -123,6 +125,10 @@ describe("ADR-023 word budget tiers", () => {
         "goat-debug",
         "references/diagnostic-techniques.md",
       ),
+      ...installedSkillReferencePaths(
+        "goat-clarity",
+        "references/target-scope-and-evidence.md",
+      ),
     ].map((referencePath) => ({
       referencePath,
       userFacingWordCount: countSkillBodyWords(referencePath),
@@ -170,6 +176,36 @@ describe("ADR-023 word budget tiers", () => {
         assert.ok(
           userFacingWordCount <= cap,
           `${playbookPath}: ${userFacingWordCount} words exceeds M02 cap ${cap}`,
+        );
+      }
+    }
+  });
+
+  it("M51 writing playbooks stay within their routed context budgets", () => {
+    const routedWritingBudgets = [
+      { filename: "writing-style.md", minimum: 1700, maximum: 2000 },
+      {
+        filename: "writing-sentence-diagnostics.md",
+        minimum: 900,
+        maximum: 1100,
+      },
+      {
+        filename: "writing-structure-diagnostics.md",
+        minimum: 650,
+        maximum: 900,
+      },
+    ] as const;
+
+    for (const { filename, minimum, maximum } of routedWritingBudgets) {
+      for (const playbookRoot of [
+        "workflow/skills/playbooks",
+        ".goat-flow/skill-docs/playbooks",
+      ]) {
+        const playbookPath = `${playbookRoot}/${filename}`;
+        const userFacingWordCount = countSkillBodyWords(playbookPath);
+        assert.ok(
+          userFacingWordCount >= minimum && userFacingWordCount <= maximum,
+          `${playbookPath}: ${userFacingWordCount} words falls outside M51 range ${minimum}-${maximum}`,
         );
       }
     }

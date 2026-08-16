@@ -358,6 +358,11 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
         /goat-debug D2→D3 "human decides before fixing"/,
         conventionsPath,
       );
+      assert.match(
+        conventions,
+        /goat-clarity Scope v2 approval gate MUST remain blocking even in sub-agent mode/u,
+        conventionsPath,
+      );
       assert.doesNotMatch(
         conventions,
         /goat-security final report/,

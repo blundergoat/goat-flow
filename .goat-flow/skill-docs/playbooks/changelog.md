@@ -22,11 +22,17 @@ Project-documented changelog style and policy govern categories, ordering, links
 
 ## Intent
 
-You are a coding agent producing or reviewing a release artifact. Your job is to read evidence, write the smallest accurate changelog entry, and verify it before claiming done.
-
-A future maintainer opens `CHANGELOG.md` to answer: what changed, what contract changed, and which version shipped it. They should not need commit history or PR context.
+Read release evidence, write the smallest accurate changelog entry for the product's actual reader, and preserve enough history to identify what changed and which version shipped it.
 
 Agents default verbose. Counter that deliberately: write the first accurate entry, then cut about half the words while preserving user-visible effect, breaking-change markers, measurements, and migration steps.
+
+## Audience Gate
+
+The primary reader is the person who uses, calls, operates, or upgrades the shipped product. Select the real interface: CLI, API, library, service, runtime, installer, configuration, or UI. Do not invent a UI or an end-user workflow for a library, command, or operator surface.
+
+An entry belongs only when that reader receives or experiences the change. In one scan, let them identify the affected surface, consequence, risk, and required action. Internal tooling is omitted unless it changes user behaviour or release safety.
+
+Preserve exact public flags, config keys, versions, errors, measurements, and migration commands. A future maintainer is a secondary reader who needs truthful version attribution; maintenance interest alone does not admit an internal implementation detail.
 
 ## Source Order
 
@@ -63,10 +69,9 @@ Themed-narrative changelogs are allowed when the repo already uses them; keep th
 ## Writing Rules
 
 - Lead with the user-visible change, not the implementation.
+- Put the affected surface and effect first, then the consequence, risk, or required action the reader needs.
 - Use active voice and plain English.
 - Default to one sentence per bullet.
-- One physical line per bullet, 150 characters max; never hard-wrap a bullet onto continuation lines.
-- Over the cap: cut words first. If a break's migration detail will not fit, move it to its own sub-bullet, also capped.
 - Name the affected product surface: command, endpoint, config key, UI view, runtime, package, API, installer.
 - Skip internal refactors, tests, CI, and style-only changes unless they alter user behavior or release safety.
 - Do not write "various fixes", "improvements", "cleanup", or "see git log".
@@ -74,6 +79,12 @@ Themed-narrative changelogs are allowed when the repo already uses them; keep th
 - Use measurements only when verified; otherwise avoid "faster", "better", "improved".
 
 Bad: "Improved dashboard internals." Good: "Plans view now loads task previews without timing out on large workspaces."
+
+## Length Fallback
+
+The project's established changelog shape and the release surface own entry length. When the project or release surface owns no different shape, use one physical line and 150 characters as a fallback for an ordinary non-breaking bullet. Cut wrapper prose and internal mechanism first.
+
+Never generalise an exact public flag, config key, version, error, or measurement to meet the fallback. Breaking impact, migration commands, verified caveats, and distinct user actions may use a second sentence or sub-bullet. A cap is a scanning aid, not permission to remove facts.
 
 ## Breaking Changes
 
@@ -90,13 +101,21 @@ Every breaking change needs:
 
 For deprecations before removal, name the target removal version. "Will be removed in a future release" is not enough.
 
-## Version Semantics
+## Release State and Version Attribution
 
-If the project uses SemVer: **MAJOR** breaks contracts, **MINOR** adds non-breaking behavior, **PATCH** fixes or safe internal work.
+Start the release comparison at the last published release, not an arbitrary commit or the last time the file was edited. Attribute each shipped behaviour to one version and one category. If one change has several reader effects, keep one owning entry and add detail there instead of duplicating it across categories.
 
-For `0.x.y` or calendar versioning, do not rely on the version number to communicate risk. Mark breaking changes in prose and provide migration steps.
+`Unreleased` describes the net state that will ship. Remove superseded intermediate behaviour, merge a fix into the feature it corrects when neither shipped separately, and keep a visible regression or migration step that remains true at release. After publishing, move those facts under the released version and leave `Unreleased` empty until new user-facing work appears.
 
-Every release bump should update all version surfaces: package metadata, changelog header, README install snippets, manifests/configs, and frozen snapshots if the project uses them.
+If the project uses SemVer: **MAJOR** breaks contracts, **MINOR** adds non-breaking behaviour, and **PATCH** fixes behaviour or ships safe internal work. For `0.x.y` or calendar versioning, mark risk in prose and provide migration steps rather than relying on the number.
+
+Every release bump updates the project's live version surfaces: package metadata, changelog header, install snippets, manifests, and configuration. Frozen historical snapshots change only when their owning release workflow explicitly regenerates them.
+
+## Historical Editing
+
+Historical entries may receive fact-preserving cleanup when the user asks or when a verified correction is necessary. Preserve version attribution, public identifiers, measurements, regressions, chronology, and migration facts. Do not rewrite every prior release to match a new house style, move an old fact into a version where it did not ship, or erase an obsolete constraint without recording when it changed.
+
+For a published section, evidence from that release controls. For `Unreleased`, current net shipped intent controls. If attribution cannot be verified from tags, release artifacts, the diff, or another source of truth, leave the entry unchanged and mark the uncertainty rather than guessing.
 
 ## Compression Pass
 
@@ -133,20 +152,21 @@ Before merging or tagging:
 6. Every deprecation names a target removal version.
 7. No marketing, hedging, or vague improvement claims.
 8. Version surfaces agree.
-9. Keep-a-Changelog `Unreleased` is empty after release.
+9. `Unreleased` reflects net state before release and is empty immediately after release.
 10. The compression pass ran.
-11. Every bullet is one physical line within the 150-character cap.
+11. Published history keeps its version attribution, public facts, and chronology.
+12. The Length Fallback was used only when no project or surface shape controlled, without generalising exact detail.
 
 ## Troubleshooting
 
 - **Huge diff:** start with `--stat` and `--name-status`; group by user-visible surface.
 - **Maybe breaking:** default changes, removed flags, response-shape changes, runtime drops, and changed error codes are breaking until proven otherwise.
-- **Too long:** assume the first agent draft is 50% too long; cut implementation detail and repeated context first.
+- **Too long:** cut wrapper prose, duplicated context, and internal mechanism first; preserve public facts and migration detail.
 
 ## Related References
 
 - [`release-notes.md`](./release-notes.md) - user-facing announcement derived from the changelog.
-- [`writing-style.md`](./writing-style.md) - prose style for the entry text itself, once the category and version are settled.
+- [`writing-style.md`](./writing-style.md) - core correctness and routing after audience, category, and version are settled.
 - [keepachangelog.com](https://keepachangelog.com)
 - [semver.org](https://semver.org)
 - Project instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) may declare project-specific changelog policy.

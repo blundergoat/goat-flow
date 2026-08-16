@@ -22,15 +22,28 @@ function assertForPlaybook(
 }
 
 describe("comment playbook verification doctrine", () => {
-  it("treats 150 as a ceiling instead of a width target", () => {
+  it("treats 150 as a ceiling instead of a width target, using formatter width first", () => {
     assertForPlaybook("code-comments.md", (content, playbookPath) => {
       assert.doesNotMatch(
         content,
         /~110|hard max 120|around 110|past 120/u,
         playbookPath,
       );
-      assert.match(content, /hard maximum of 150 characters/u, playbookPath);
-      assert.match(content, /150 is a hard ceiling/u, playbookPath);
+      assert.doesNotMatch(
+        content,
+        /The 150-character limit is mechanical|The 150-character ceiling|150 is a hard ceiling|hard maximum of 150 characters/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /project or language\s+formatter's enforced width governs/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /When neither defines a width, 150 characters is the fallback ceiling/u,
+        playbookPath,
+      );
       assert.match(
         content,
         /shortest complete useful comment wins/u,
@@ -49,6 +62,79 @@ describe("comment playbook verification doctrine", () => {
       assert.match(
         content,
         /measure the longest existing comment line/u,
+        playbookPath,
+      );
+    });
+  });
+
+  it("documents only admitted edge states and hidden arrival context", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.doesNotMatch(
+        content,
+        /Null\/empty meaning on every|Every `@param` \/ `@returns` carries[\s\S]+null\/empty\/absent consequence/u,
+        playbookPath,
+      );
+      assert.match(content, /admitted and semantically visible/u, playbookPath);
+      assert.match(
+        content,
+        /Never document a null, empty, or absent state the interface cannot produce/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        content,
+        /A user-journey anchor at flow entry points|Flow entry points carry a user-journey anchor/u,
+        playbookPath,
+      );
+      assert.match(content, /verified arrival context/u, playbookPath);
+      assert.match(
+        content,
+        /changes the\s+reader's interpretation[\s\S]+hidden from the code/u,
+        playbookPath,
+      );
+    });
+  });
+
+  it("defers out-of-scope staleness and keeps load-bearing history", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.doesNotMatch(
+        content,
+        /delete stale comments on sight/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /outside the authori[sz]ed scope[\s\S]+report or defer it[\s\S]+do not delete it/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /current compatibility obligation or a checkable removal trigger/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(content, /2026-08-01/u, playbookPath);
+      assert.match(
+        content,
+        /Illustrative marker shape \(not incident evidence\)/u,
+        playbookPath,
+      );
+    });
+  });
+
+  it("names acting components conditionally and governs em dashes", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.match(
+        content,
+        /Name the acting component only when ownership or sequence changes how the reader interprets the consequence/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /New or edited comments do not use em dashes as sentence punctuation/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /exact\s+quoted or code material[\s\S]+untouched legacy comments/u,
         playbookPath,
       );
     });
@@ -290,7 +376,7 @@ describe("Gruff documentation-pass doctrine", () => {
       );
       assert.match(
         content,
-        /block shape and 150-character ceiling/u,
+        /block shape and the applicable formatter or fallback ceiling/u,
         playbookPath,
       );
       assert.match(

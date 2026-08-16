@@ -388,6 +388,24 @@ describe("consumer setup to quality-report lifecycle", () => {
         "codex",
       ]);
       assertCliSucceeded(installResult, "consumer install");
+      for (const playbookFilename of [
+        "writing-sentence-diagnostics.md",
+        "writing-structure-diagnostics.md",
+      ]) {
+        assert.equal(
+          existsSync(
+            join(
+              consumerTargetPath,
+              ".goat-flow",
+              "skill-docs",
+              "playbooks",
+              playbookFilename,
+            ),
+          ),
+          true,
+          `${playbookFilename} must reach a fresh consumer install`,
+        );
+      }
 
       // Setup remains prompt-driven, so this verifies its target before the fixture supplies adapted outputs.
       const setupPromptResult = runPublicCli([
