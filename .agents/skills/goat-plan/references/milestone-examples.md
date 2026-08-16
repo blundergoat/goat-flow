@@ -51,11 +51,11 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 ## Objective
 <Binary outcome this milestone proves or delivers.>
 
-## What we lose without this
-<One sentence, 13-20 words: what stays broken.>
+## The problem
+<One sentence, 70-120 characters: what stays broken.>
 
-## Why this helps
-<One sentence, 13-20 words: what a person can now do.>
+## What you get
+<One sentence, 70-120 characters: what you can now do.>
 
 ## Context
 - Read first: `<file>` (search: `<semantic anchor>`) — <non-obvious convention or reference>.
@@ -87,7 +87,7 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 
 Put each literal command in one Commands source. Proof, tasks, and exit criteria reference its purpose rather than repeating it. Add Mid-implementation proof only before switching modules or after a bounded edit batch.
 
-Write from the incident in Context, not by shortening the Objective - that sentence is for the implementer. One sentence each, 13 to 20 words, naming no milestone, ADR, version, flag, or file. The benefit line says what a person can now do, never what ships. If it only negates the cost line, one is wasted. A spike that ships nothing says so.
+Write from the incident in Context, not by shortening the Objective - that sentence is for the implementer. One sentence each, 70 to 120 characters, naming no milestone, ADR, version, flag, file, or command without its tool name. The benefit line says what a person can now do, never what ships. If it only negates the cost line, one is wasted. A spike that ships nothing says so.
 
 - BAD: "Runtime proof executing target-controlled launchers needs a trusted-target choice."
 - GOOD: "Looking at a stranger's repo can't run their code on your machine."
@@ -120,8 +120,8 @@ High-risk detail has no safety-reducing hard cap; output above 1,200 words names
 | Field | Rule |
 |---|---|
 | Outcome | Name what becomes true; add Objective only when the title needs clarification. |
-| What we lose | What stays broken. |
-| Why this helps | What a person can now do. |
+| The problem | What stays broken. |
+| What you get | What you can now do. |
 | Tasks | Order `[RISKY]`, `[CORE]`, `[SAFE]`; one action and one done condition per checkbox. |
 | Proof | State claim → evidence with relevant tags; human sign-off belongs to the blocking gate. |
 | Exit | State binary transition truth and reference proof claims without copying commands. |

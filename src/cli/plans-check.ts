@@ -606,7 +606,7 @@ function collectLifecycleErrors(record: PlanExportRecord): string[] {
  * declared split, task-coverage errors need declared tasks - which is why a
  * legacy milestone falls through every check untouched.
  *
- * @param record - parsed milestone
+ * @param record - parsed milestone; one declaring nothing reaches no check and returns clean
  * @param strict - whether current-format authoring obligations are mandatory
  * @returns error lines naming the milestone; empty means its arithmetic holds up
  */

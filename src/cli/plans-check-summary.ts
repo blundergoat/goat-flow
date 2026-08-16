@@ -42,7 +42,7 @@ function renderSplit(split: PlanEffortSplit): string {
  * Build one stdout report line for a milestone that declared effort data.
  * Gives the plan author a per-milestone estimate/actual overview at a glance.
  *
- * @param record - parsed milestone
+ * @param record - parsed milestone; one without effort fields produces no line
  * @returns the line, or null when the milestone has no effort fields to show
  */
 export function renderMilestoneLine(record: PlanExportRecord): string | null {

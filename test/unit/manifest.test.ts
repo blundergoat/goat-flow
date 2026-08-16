@@ -68,6 +68,7 @@ function fixtureJson(
         "Artifact Routing",
         "Router Table",
       ],
+      parity_phrases: [],
       version_header_pattern: "# {FILE} - v{VERSION} ({DATE})",
     },
     facts: {
@@ -555,6 +556,25 @@ describe("manifest snapshot coverage (real repo)", () => {
 // getRequiredInstructionSections: manifest-sourced harness input (T1 pinning)
 // ---------------------------------------------------------------------------
 describe("getRequiredInstructionSections (real repo)", () => {
+  it("owns the existing shared instruction-parity phrase contract", () => {
+    resetManifestCache();
+    const rules = loadManifest().instruction_file.parity_phrases;
+
+    assert.equal(rules.length, 8);
+    assert.deepEqual(
+      rules.find((rule) => rule.label === "prose-surface READ routing"),
+      {
+        label: "prose-surface READ routing",
+        section: "Execution Loop",
+        phrases: [
+          "Prose surfaces route the same way before writing",
+          "need `writing-style.md`",
+          "the trigger is touching the surface, not the request naming it",
+        ],
+      },
+    );
+  });
+
   it("returns one entry per manifest required_sections label", () => {
     resetManifestCache();
     const sections = getRequiredInstructionSections();

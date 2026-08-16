@@ -121,7 +121,7 @@ excluded): what it does, when to use it, and where it fits the reader's flow.
 
 Reserve PHP file-level PHPDoc for classless scripts, bootstrap/config, or generated entry files; module-oriented languages use a file/module comment when that is the useful boundary.
 
-- **Real descriptions, not restated types**, in the language's structured form (JSDoc, PHPDoc, PEP 257, godoc, rustdoc). Each tag adds meaning beyond its type. If an admitted null/empty/absent state changes the reader outcome and code hides it, state the consequence; never invent a state.
+- **Real descriptions, not restated types**, in the language's structured form (JSDoc, PHPDoc, PEP 257, godoc, rustdoc). Each tag names at least one of: what an absent or empty value causes, where the value comes from, what this unit does with it, or the constraint it must satisfy. `@param record - parsed milestone` restates the type and names none. If an admitted null/empty/absent state changes the reader outcome and code hides it, state the consequence; never invent a state.
 - **Hyphen-separate each tag's subject from its description** (`@param value - parsed JSON ...`), with a **blank ` *` line between description and tags**. Use one physical line per tag. Only when the prefix passes column 100 and a meaningful description cannot fit may it use one aligned continuation line, for two physical lines maximum. Keep the complete tag subject on line one; never create a dash-only line or dangling name.
 - **Pure dependency-injection constructors** that require a doc comment may omit per-dependency tags for obvious non-null services. A scalar, optional, configured, or side-effectful input is not pure DI and keeps its tag.
 
@@ -263,8 +263,8 @@ Before claiming comment work is done, confirm the naming route is complete and c
 The width and consecutive-prose-line checks are mechanical; run them rather than eyeballing, with `<width>` set to the ceiling resolved in The Comment Standard:
 
 ```bash
-awk 'length><width> && /^[[:space:]]*(\/\/|\/\*|\*|#)/ {print FILENAME":"NR}' <files>
-awk '/^[[:space:]]*(\/\/|\*|#)/ && !/^[[:space:]]*(\*\/?|\/\/|#)[[:space:]]*$/{n++; if(n==4) print FILENAME":"NR; next} {n=0}' <files>
+awk 'length><width> && /^[[:space:]]*(\/\/|\/\*|\*|#)/ {print FILENAME":"FNR}' <files>
+awk 'FNR==1{n=0} /^[[:space:]]*(\/\/|\*|#)/ && !/^[[:space:]]*(\*\/?|\/\/|#)[[:space:]]*$/{n++; if(n==4) print FILENAME":"FNR; next} {n=0}' <files>
 ```
 
 If a comment fails any check, fix it before merging.

@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-17
 ---
 
 **Scope:** Adding, tuning, and trusting a repo-wide gate - dependency-audit baselines, count locks and provenance dates, what a PASS line does and does not prove, and the shell mechanics of the commands a gate runs. Formatter and lint debt is [verification-formatting.md](verification-formatting.md).
@@ -141,13 +141,15 @@ last_reviewed: 2026-08-16
 
 **Status:** active | **Created:** 2026-06-07
 **Decision changed:** Validate persisted anchors with the literal search shape a future agent will run.
-**Incident count:** 7 | **Latest occurrence:** 2026-08-16
+**Incident count:** 8 | **Latest occurrence:** 2026-08-17
 
 **What happened:** Shell commands copied Markdown-formatted anchors into executable arguments. Bash treated backticks as command substitution, mangled searches, and once ran embedded CLI names. Later PreToolUse checks blocked the same shape before execution, including a redaction draft sent through a generated shell command.
 
 **2026-08-11 recurrence:** Three plan Context references used remembered paths or symbols. A literal resolver caught them before handoff. Resolve every persisted path/anchor and mark future paths task-owned. Evidence: `src/cli/hooks-configured-runtime-evidence.ts` (search: `type HookRuntimeVerdict`).
 
 **2026-08-16 recurrence:** A read-only `rg` pattern copied the milestone's Markdown backticks into a double-quoted shell argument, so PreToolUse rejected the search as command substitution before execution. Removing the formatting punctuation preserved the intended query. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
+
+**2026-08-17 recurrence:** An M43 verification search again placed Markdown backticks inside a double-quoted `rg` argument. Policy blocked it before execution; a single-quoted plain search expressed the same read-only query safely. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Root cause:** Persisted search anchors were treated as prose or memory instead of executable future-agent contracts.
 

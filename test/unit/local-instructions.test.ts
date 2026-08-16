@@ -188,6 +188,7 @@ describe("instruction release metadata", () => {
     const fixtureFiles = [
       "package.json",
       "CHANGELOG.md",
+      "workflow/manifest.json",
       "CLAUDE.md",
       "AGENTS.md",
       ".github/copilot-instructions.md",

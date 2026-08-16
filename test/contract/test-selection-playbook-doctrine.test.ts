@@ -484,15 +484,21 @@ describe("ordinary implementation test-selection route", () => {
   }
 
   it("registers the exact route with instruction parity", () => {
-    const parityScript = readFileSync(
-      "scripts/check-instruction-parity.mjs",
-      "utf8",
+    const manifest = JSON.parse(
+      readFileSync("workflow/manifest.json", "utf8"),
+    ) as {
+      instruction_file: {
+        parity_phrases: Array<{ label: string; phrases: string[] }>;
+      };
+    };
+    const testSelectionRule = manifest.instruction_file.parity_phrases.find(
+      ({ label }) => label === "test-selection READ route",
     );
-    assert.match(parityScript, /test-selection\.md/u);
-    assert.match(
-      parityScript,
-      /creating, changing, reviewing, consolidating, moving, or pruning tests/u,
-    );
+
+    assert.deepEqual(testSelectionRule?.phrases, [
+      "Before creating, changing, reviewing, consolidating, moving, or pruning tests",
+      ".goat-flow/skill-docs/playbooks/test-selection.md",
+    ]);
   });
 });
 

@@ -2,13 +2,13 @@
 
 ## Unreleased
 
-- **Claude hooks now start on Windows** - Registrations use exec-form argv; `hooks sync` and the standalone installer migrate inline commands.
-- **Doubled managed hook rows converge on one** - Sync and standalone install repair duplicate and stale registrations while preserving user hooks.
-- **Hook launch failures block visibly** - Missing or corrupt managed files return Claude's deny or unavailable response; Node is a host prerequisite.
-- **Gruff checks follow edited symbols** - Partial edits surface symbol findings whose reported spans overlap the changed lines.
-- **Configured Gruff analyzers stay project-contained** - Repository config cannot execute a binary whose symlink resolves outside the project.
-- **Milestones state user impact and rationale** - Standard goat-plan milestones gain the user-impact and rationale sections ISSUE.md already carried.
-- **Rationale section is named Motivation** - The rationale section in goat-plan milestones and ISSUE.md briefs is `Motivation`, replacing `Why`.
+- **Claude hooks now start on Windows** - Existing setups need one `hooks sync`, or a reinstall, to convert their old hook entries.
+- **A hook that ran twice now runs once** - Sync and install remove the duplicate entries and leave hooks you added yourself alone.
+- **A guard that cannot start blocks instead of passing** - A missing or damaged hook file denies the action or flags it unverified. Node is required.
+- **Code checks now cover the whole function you edited** - Changing one part reports warnings from the rest of it, not just your lines.
+- **A project config cannot run a tool from outside the project** - An analyzer path that resolves out of the repository is refused.
+- **Plans say what breaks and what helps, in plain words** - Standard milestones and `ISSUE.md` answer both in one plain sentence each.
+- **Comment and writing rules ship with runnable checks** - Width and prose-run limits are commands you can run, not advice you have to judge.
 
 ## v1.15.1 - 2026-08-10
 

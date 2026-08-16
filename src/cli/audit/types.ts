@@ -121,7 +121,7 @@ export interface AuditReport extends AuditHarnessJsonField {
   enforcement: AgentEnforcementCapability[];
   /** Effective hook chain; its own status stays non-green while required links are missing. */
   hookCoverage: AuditHookCoverageReport;
-  /** Drift section, populated when --check-drift is set. */
+  /** Managed-artifact and peer-instruction drift, populated explicitly or for multi-agent targets. */
   drift: DriftReport | null;
   /** Content-lint section, populated when --check-content is set. */
   content: ContentReport | null;
@@ -146,14 +146,14 @@ export type CheckAssurance = "full" | "limited";
 
 type DriftFindingKind = "content" | "missing" | "orphan" | "deprecated";
 
-/** One installed-vs-template skill drift finding. */
+/** One managed-artifact or peer-instruction drift finding. */
 export interface DriftFinding {
   kind: DriftFindingKind;
   path: string;
   message: string;
 }
 
-/** Optional drift section populated only when `--check-drift` runs. */
+/** Drift section populated explicitly or automatically for multi-agent targets. */
 export interface DriftReport {
   status: "pass" | "fail";
   findings: DriftFinding[];

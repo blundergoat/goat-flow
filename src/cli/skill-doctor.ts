@@ -18,7 +18,7 @@ import { createFS } from "./facts/fs.js";
 import { getTemplatePath } from "./paths.js";
 import type { AgentProfile, ReadonlyFS } from "./types.js";
 
-type DoctorStatus = "pass" | "warn" | "fail";
+type DoctorStatus = "static-pass" | "warn" | "fail";
 type SkillFileState = "readable" | "missing" | "unreadable";
 type SkillMirrorStatus = "match" | "drift" | "unavailable";
 type FrontmatterStatus =
@@ -75,7 +75,8 @@ export interface SkillDoctorReport {
   summary: {
     agents: number;
     checked: number;
-    eligible: number;
+    staticallyEligible: number;
+    runtimeRegistration: "unverified";
     blocked: number;
     warnings: number;
   };
@@ -574,7 +575,7 @@ export function runSkillDoctor(options: SkillDoctorOptions): SkillDoctorReport {
     0,
   );
   const status: DoctorStatus =
-    blocked > 0 ? "fail" : warnings > 0 ? "warn" : "pass";
+    blocked > 0 ? "fail" : warnings > 0 ? "warn" : "static-pass";
 
   return {
     reportKind: "goat-flow-skill-doctor",
@@ -585,7 +586,8 @@ export function runSkillDoctor(options: SkillDoctorOptions): SkillDoctorReport {
     summary: {
       agents: agents.length,
       checked: allSkills.length,
-      eligible: allSkills.length - blocked,
+      staticallyEligible: allSkills.length - blocked,
+      runtimeRegistration: "unverified",
       blocked,
       warnings,
     },
@@ -661,7 +663,7 @@ export function renderSkillDoctorText(report: SkillDoctorReport): string {
   }
   lines.push("");
   lines.push(
-    `${report.status.toUpperCase()} skill doctor: ${report.summary.checked} checked · ${report.summary.eligible} eligible · ${report.summary.blocked} blocked · ${report.summary.warnings} warnings`,
+    `${report.status.toUpperCase()} skill doctor: ${report.summary.checked} checked · ${report.summary.staticallyEligible} statically eligible · runtime registration ${report.summary.runtimeRegistration} · ${report.summary.blocked} blocked · ${report.summary.warnings} warnings`,
   );
   return lines.join("\n");
 }
@@ -711,7 +713,7 @@ function renderSkillDoctorMarkdown(report: SkillDoctorReport): string {
   }
   lines.push("");
   lines.push(
-    `**${report.status.toUpperCase()} skill doctor:** ${report.summary.checked} checked · ${report.summary.eligible} eligible · ${report.summary.blocked} blocked · ${report.summary.warnings} warnings`,
+    `**${report.status.toUpperCase()} skill doctor:** ${report.summary.checked} checked · ${report.summary.staticallyEligible} statically eligible · runtime registration ${report.summary.runtimeRegistration} · ${report.summary.blocked} blocked · ${report.summary.warnings} warnings`,
   );
   return lines.join("\n");
 }

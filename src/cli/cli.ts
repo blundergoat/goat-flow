@@ -70,7 +70,7 @@ Flags:
   --all             Quality history: lift the default 20-run limit
   --limit <n>       Events tail: number of newest envelopes to read (default: 20, max: 500)
   --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
-  --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
+  --check-drift     Audit: detect managed-artifact and peer-instruction drift
   --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
   --trusted-target  Audit/setup/quality/hooks verify: execute selected target hook code for runtime proof
   --untrusted-target Deprecated through v1.16.x: explicit alias for the static, non-executing default

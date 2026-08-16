@@ -81,7 +81,7 @@ describe("main-module guard via symlink", () => {
       agents: Array<{ skills: Array<{ invocation: string }> }>;
     };
 
-    assert.equal(doctorReport.status, "pass");
+    assert.equal(doctorReport.status, "static-pass");
     assert.equal(doctorReport.summary.checked, 1);
     assert.equal(doctorReport.agents[0]?.skills[0]?.invocation, "$goat");
   });

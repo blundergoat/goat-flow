@@ -106,8 +106,10 @@ describe("skill doctor", () => {
     const skill = report.agents[0]?.skills[0];
 
     assert.ok(skill);
-    assert.equal(report.status, "pass");
-    assert.equal(report.summary.eligible, 1);
+    assert.equal(report.status, "static-pass");
+    assert.equal(report.summary.staticallyEligible, 1);
+    assert.equal(report.summary.runtimeRegistration, "unverified");
+    assert.equal("eligible" in report.summary, false);
     assert.equal(skill.invocation, "$goat");
     assert.equal(skill.installedPath, ".agents/skills/goat/SKILL.md");
     assert.equal(skill.mirrorStatus, "match");
@@ -248,14 +250,20 @@ describe("skill doctor", () => {
     );
     const json = JSON.parse(renderSkillDoctorJson(report)) as {
       status: string;
+      summary: {
+        staticallyEligible: number;
+        runtimeRegistration: string;
+      };
     };
     const text = renderSkillDoctorText(report);
 
-    assert.equal(json.status, "pass");
+    assert.equal(json.status, "static-pass");
+    assert.equal(json.summary.staticallyEligible, 1);
+    assert.equal(json.summary.runtimeRegistration, "unverified");
     assert.match(text, /Static evidence only/i);
     assert.match(
       text,
-      /PASS skill doctor: 1 checked · 1 eligible · 0 blocked · 0 warnings/,
+      /STATIC-PASS skill doctor: 1 checked · 1 statically eligible · runtime registration unverified · 0 blocked · 0 warnings/,
     );
   });
 });

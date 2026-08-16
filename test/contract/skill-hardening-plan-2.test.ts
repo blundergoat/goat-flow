@@ -41,8 +41,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         const orderedHeadings = [
           "## Outcome",
           "## At a glance",
-          "## What we lose without this",
-          "## Why this helps",
+          "## The problem",
+          "## What you get",
           "## What",
           "## How",
           "## Out of scope",
@@ -112,7 +112,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       assert.match(
         readProjectFile(skillPath),
-        /`## What we lose without this` and `## Why this helps` between Objective and Context, one plain line each/u,
+        /`## The problem` and `## What you get` between Objective and Context, one plain line each/u,
         skillPath,
       );
     });
@@ -125,8 +125,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       (examplesPath) => {
         const examples = readProjectFile(examplesPath);
         const templateLines = examples.split(/\r?\n/u);
-        const lossIndex = templateLines.indexOf("## What we lose without this");
-        const helpIndex = templateLines.indexOf("## Why this helps");
+        const lossIndex = templateLines.indexOf("## The problem");
+        const helpIndex = templateLines.indexOf("## What you get");
 
         assert.ok(lossIndex >= 0, `${examplesPath}: missing loss section`);
         assert.ok(
@@ -146,7 +146,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         // rule. An author trimming for the word cap deletes them first, and every other check here still passes without them.
         for (const derivationRule of [
           /not by shortening the Objective/u,
-          /13 to 20 words, naming no milestone, ADR, version, flag, or file/u,
+          /70 to 120 characters, naming no milestone, ADR, version, flag, file, or command without its tool name/u,
           /says what a person can now do, never what ships/u,
           /only negates the cost line/u,
           /spike that ships nothing says so/u,
@@ -155,7 +155,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         }
         assert.doesNotMatch(
           examples,
-          /How users will notice the difference|^\| Motivation \|/mu,
+          /How users will notice the difference|^\| Motivation \||What we lose without this|Why this helps/mu,
           `${examplesPath}: superseded section names are still present`,
         );
       },

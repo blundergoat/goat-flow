@@ -54,23 +54,23 @@ Put delivery decisions before background. Use the seven rows below and keep each
 | Next step | <first concrete action or current milestone> |
 ```
 
-## What we lose without this
+## The problem
 
 Name the problem and its cost in plain words, not the implementation. Use concise bullets grounded in observed evidence where available.
 
 ```markdown
-## What we lose without this
+## The problem
 
 - <Current problem, and the concrete cost to affected users or maintainers.>
 - <Evidence showing the problem is material enough to address now.>
 ```
 
-## Why this helps
+## What you get
 
 Use two to six before-and-after bullets in plain language. Distinguish relevant reader groups, cite measured baselines when available, and avoid marketing claims.
 
 ```markdown
-## Why this helps
+## What you get
 
 - **Requesters see <difference>.** <Observable improvement compared with the current experience.>
 - **Reviewers find <decision> faster.** <Concrete change in review or approval work.>

@@ -155,7 +155,7 @@ On request, add an advisory opportunity output with repo-grounded evidence; it d
 
 ## Spec Drift (opt-in)
 
-Only emitted when Step 0 prompt was accepted and a live milestone was found. Reads the milestone's **Exit Criteria** and **Assumptions**, splits by direction:
+On opt-in, emit `Spec drift: checked M[NN]` for a live milestone, otherwise `unavailable`; emit this section only for a live milestone. Read its **Exit Criteria** and **Assumptions**, split by direction:
 
 - **Exit-criteria drift** `[advisory]` under `## Spec Drift` -- criterion marked done but diff doesn't support it. No severity tag.
 - **Assumption invalidation** `[MUST:needs-decision]` under `## Findings` -- diff makes an assumption false.
@@ -177,21 +177,22 @@ Offer Pass 3 on user opt-in, `coverage-degraded`/`high-inference`, or a MUST-nee
 
 ## Review Integrity (confidence signal)
 
-- **Files opened in Pass 2:** count / total; diff mode also lists paths.
-- **Evidence tags:** N OBSERVED / M INFERRED.
-- **Verdicts:** `<c>/<a>/<r>/<u>` (confirmed/adjusted/refuted/unresolved).
-- **Size/scope:** lines/files/clusters; signals; authority/drift; coverage/receipt; source/base/head/uncommitted/chunking; PR SHA.
-- **Gates:** `run` | `skipped (<reason>)` | `unavailable`.
-- **Gate evidence:** pass/changed-code/pre-existing/infrastructure/unresolved counts.
+**Always emit:** Scope snapshot (diff mode also lists paths); Files opened in Pass 2; Evidence; Verdicts: confirmed/adjusted/refuted/unresolved; Gates; Size. Use Output Format.
+
 - **Refutations logged:** `<N>` or `<N> (persist-skipped)` when redaction is unavailable.
-- **Refutation ledger:** `n/a` at zero; exact `.goat-flow/logs/review/goat-review-refutations.<random>.txt` when persisted; `persist-skipped` unavailable. Count matches records.
 - **Review validator:** `validated` | `validator-unavailable`.
-- **Spec drift:** `checked M[NN]` | `skipped` | `unavailable`. Optional skip is not degradation.
-- **Extensions:** PR: `overlap-confirmed`, `local-only`, `bot-only-locally-verified`, `disputed-match` counts plus missed lists, or `no-automated-review-present`; Pass 3: the `Refuter pass` line.
+- **Gate evidence:** pass/changed-code/pre-existing/infrastructure/unresolved counts.
 - **Degradation flags:** `persist-skipped: redactor-unavailable`, `chunked-partial`, `large-diff-unchunked`, `large-area-unchunked`, `gates-not-run`, `gate-evidence-incomplete`, `risk-depth-declined`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `callsite-completeness-grep-only`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`, `refuter-citation-unverified`.
 - **Conclusion:** `confident` | `coverage-degraded` | `high-inference` | `partial`.
 
-Always emit; minimum: "confident - no degradation flags".
+**Emit when resolved:**
+
+- **Refutation ledger:** only when Refutations logged is nonzero; use the exact path or `persist-skipped`. Count matches.
+- **Automated-review provenance:** for PRs; emit `overlap-confirmed`, `local-only`, `bot-only-locally-verified`, and `disputed-match` counts plus missed lists, or `no-automated-review-present`.
+- **Refuter pass:** when Pass 3 was offered or run; emit outcome, counts, and model.
+- **Spec drift:** `checked M[NN]` | `skipped` | `unavailable`. Optional skip is not degradation.
+
+Never emit a whole field for `n/a` alone; applicable rows may contain `n/a` subvalues. Degradation flags, Conclusion, and the compact zero-finding receipt always emit.
 
 ## Constraints
 
@@ -201,7 +202,7 @@ Always emit; minimum: "confident - no degradation flags".
 - MUST order findings by severity, never file or discovery order
 - MUST chunk above 20 files, or 3000 changed lines
 - Cross-invocation chunks: after each accepted chunk, host-redact `.goat-flow/logs/review/goat-review-chunks.<random>.md` containing scope snapshot, bound authority, chunks completed, chunks remaining, findings with R-IDs, and refutation ledger. Resume only after re-binding the same authority and verify no drift; continue at the next chunk, then emit one consolidated verdict. Drift stops.
-- If skipped, record `Spec drift: skipped` without a degradation flag
+- If skipped, record `Spec drift: skipped` without a degradation flag only when the opt-in was selected; otherwise omit the row
 - MUST NOT edit files unless user separately says to apply, edit, update, fix, or implement; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.
 - **Ship Verdict rules (diff/PR or explicit release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. Refuter output changes Ship Verdict only after host reproduction. Downgrade ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` moves one rung.
@@ -223,13 +224,17 @@ Machine-valid anchors use repo-relative paths such as `<repo-relative-path>` (se
 - Evidence: <N> OBSERVED / <M> INFERRED
 - Verdicts: <c>/<a>/<r>/<u>
 - Refutations logged: <N> | <N> (persist-skipped)
-- Refutation ledger: n/a | persist-skipped | .goat-flow/logs/review/goat-review-refutations.<random>.txt
 - Review validator: validated | validator-unavailable
 - Gates: run | skipped (<reason>) | unavailable
 - Gate evidence: pass=<N>, changed-code=<N>, pre-existing=<N>, infrastructure=<N>, unresolved=<N>
 - Size: <files> files, <changed lines | clusters>  (source coverage: <k>/<n> exactly once | no)
-- Automated-review provenance: overlap-confirmed=<K>, local-only=<L>, bot-only-locally-verified=<B>, disputed-match=<D>; automated findings the local review missed: <IDs|none>; local findings every bot missed: <R-IDs|none> | no-automated-review-present | n/a
+<!-- When count > 0. -->
+- Refutation ledger: persist-skipped | .goat-flow/logs/review/goat-review-refutations.<random>.txt
+<!-- PR only. -->
+- Automated-review provenance: overlap-confirmed=<K>, local-only=<L>, bot-only-locally-verified=<B>, disputed-match=<D>; automated findings the local review missed: <IDs|none>; local findings every bot missed: <R-IDs|none> | no-automated-review-present
+<!-- Pass 3 only. -->
 - Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<id|n/a>
+<!-- Spec Drift only. -->
 - Spec drift: <checked M[NN] | skipped | unavailable>
 - Degradation flags: <list or "none"; redactor unavailable => persist-skipped: redactor-unavailable; gates not run => gates-not-run; grep-only coverage => callsite-completeness-grep-only>
 - Conclusion: <confident | coverage-degraded | high-inference | partial>

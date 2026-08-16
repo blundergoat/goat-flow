@@ -124,6 +124,12 @@ interface CheckDriftOptions {
   agentFilter?: AgentId | null;
 }
 
+/** One readable peer instruction file plus its H2-keyed bodies. */
+interface InstructionParityDocument {
+  path: string;
+  sections: Map<string, string>;
+}
+
 /** Read the configured list of deprecated skill names from the validated manifest. */
 function getStaleSkillNames(): Set<string> {
   return new Set(loadManifest().facts.skills.stale_names);
@@ -146,6 +152,103 @@ function selectedInstalledSkillRoots(
   return candidateSkillRoots.filter(
     (skillRoot): skillRoot is string =>
       skillRoot !== undefined && fs.exists(skillRoot),
+  );
+}
+
+/** Normalize the one canonical H2 whose visible heading carries a suffix. */
+function normalizeInstructionHeading(heading: string): string {
+  const trimmed = heading.trim().replace(/\s+#+$/u, "");
+  return /^Execution Loop\b/iu.test(trimmed) ? "Execution Loop" : trimmed;
+}
+
+/** Split instruction Markdown into H2 bodies while retaining nested headings. */
+function instructionSections(content: string): Map<string, string> {
+  const lines = content.split("\n");
+  const sections = new Map<string, string>();
+  let currentHeading: string | null = null;
+  let currentLines: string[] = [];
+
+  for (const line of lines) {
+    const heading = line.match(/^##\s+(.+)$/u)?.[1];
+    if (heading === undefined) {
+      if (currentHeading !== null) currentLines.push(line);
+      continue;
+    }
+    if (currentHeading !== null) {
+      sections.set(currentHeading, currentLines.join("\n"));
+    }
+    currentHeading = normalizeInstructionHeading(heading);
+    currentLines = [];
+  }
+  if (currentHeading !== null) {
+    sections.set(currentHeading, currentLines.join("\n"));
+  }
+  return sections;
+}
+
+/** Read each distinct present peer instruction path declared by the manifest. */
+function readInstructionParityDocuments(
+  fs: ReadonlyFS,
+): InstructionParityDocument[] {
+  const paths = [
+    ...new Set(
+      Object.values(loadManifest().agents).map(
+        (agent) => agent.instruction_file,
+      ),
+    ),
+  ];
+
+  return paths.flatMap((path) => {
+    const content = fs.readFile(path);
+    return content === null
+      ? []
+      : [{ path, sections: instructionSections(content) }];
+  });
+}
+
+/**
+ * Report manifest-declared phrases that some present peer instructions carry and others omit.
+ * A selected-agent audit still reads siblings because parity is evidence about their relationship.
+ *
+ * @param fs - target-project filesystem used for sibling instruction reads
+ * @param findings - consolidated drift findings extended with parity differences
+ * @returns number of phrase/file comparisons represented in the drift receipt
+ * @throws when the canonical manifest cannot be loaded; filesystem adapter failures propagate
+ */
+function compareInstructionParity(
+  fs: ReadonlyFS,
+  findings: DriftFinding[],
+): number {
+  const documents = readInstructionParityDocuments(fs);
+  if (documents.length < 2) return 0;
+
+  const rules = loadManifest().instruction_file.parity_phrases;
+  for (const rule of rules) {
+    for (const phrase of rule.phrases) {
+      const presentPaths = documents
+        .filter((document) =>
+          document.sections.get(rule.section)?.includes(phrase),
+        )
+        .map((document) => document.path);
+      if (
+        presentPaths.length === 0 ||
+        presentPaths.length === documents.length
+      ) {
+        continue;
+      }
+      for (const document of documents) {
+        if (presentPaths.includes(document.path)) continue;
+        findings.push({
+          kind: "content",
+          path: document.path,
+          message: `instruction parity: ${rule.label} differs in ${rule.section}; missing ${JSON.stringify(phrase)} while present in ${presentPaths.join(", ")}`,
+        });
+      }
+    }
+  }
+
+  return (
+    documents.length * rules.reduce((sum, rule) => sum + rule.phrases.length, 0)
   );
 }
 
@@ -341,6 +444,7 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
     agentFilter,
   );
   checked += findDeprecatedHookFiles(fs, findings);
+  checked += compareInstructionParity(fs, findings);
   findOrphans(fs, findings, agentFilter);
 
   // Identity, resource, and complete-set checks catch packaging failures that byte parity cannot see.

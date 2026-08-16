@@ -69,6 +69,7 @@ Themed-narrative changelogs are allowed when the repo already uses them; keep th
 ## Writing Rules
 
 - Lead with the user-visible change, not the implementation.
+- Apply that to the detail clause too, not just the bold headline. A reader who stops after the headline should lose detail, never meaning, so the clause after it carries the consequence or the action to take, not the mechanism that delivered it.
 - Put the affected surface and effect first, then the consequence, risk, or required action the reader needs.
 - Use active voice and plain English.
 - Default to one sentence per bullet.
@@ -79,6 +80,8 @@ Themed-narrative changelogs are allowed when the repo already uses them; keep th
 - Use measurements only when verified; otherwise avoid "faster", "better", "improved".
 
 Bad: "Improved dashboard internals." Good: "Plans view now loads task previews without timing out on large workspaces."
+
+The more common failure is a right headline followed by a mechanism detail, which reads as informative and tells the user nothing. Bad: "**A hook that ran twice now runs once** - Sync repairs duplicate and stale registrations through exec-form argv migration." Good: same headline, then "Sync and install remove the duplicate entries and leave hooks you added yourself alone."
 
 ## Length Fallback
 

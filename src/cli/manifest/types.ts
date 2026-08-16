@@ -86,10 +86,17 @@ interface ManifestFileOwnershipSpec {
  *  the canonical list of hot-path headings each agent instruction file must
  *  carry; harness checks build their regex patterns from these labels so the
  *  harness cannot drift from the manifest. */
+interface ManifestInstructionParityRule {
+  label: string;
+  section: string;
+  phrases: string[];
+}
+
 interface ManifestInstructionFile {
   line_target: number;
   line_limit: number;
   required_sections: string[];
+  parity_phrases: ManifestInstructionParityRule[];
   version_header_pattern: string;
 }
 

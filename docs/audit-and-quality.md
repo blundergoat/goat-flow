@@ -91,9 +91,9 @@ AI Harness Completeness:  PASS
 Result: FAIL (Constraints)
 ```
 
-### Skill-template drift (`--check-drift` and multi-agent auto-run)
+### Managed-artifact and instruction drift (`--check-drift` and multi-agent auto-run)
 
-The `--check-drift` flag compares workflow skill templates against their installed copies and reports `content | missing | orphan | deprecated` findings. Any finding makes the drift scope fail, which fails the overall audit.
+The `--check-drift` flag compares workflow-managed artifacts against their installed copies and reports `content | missing | orphan | deprecated` findings. It also compares manifest-declared shared phrases across every distinct sibling instruction file present in the target. A peer mismatch reports the affected file, section, and phrase without choosing a canonical winner or proposing a rewrite. The sibling comparison still runs with `--agent <id>` because parity requires evidence from the other present instruction files. Any finding makes the drift scope fail, which fails the overall audit.
 
 For single-agent projects the check is opt-in via the flag. For multi-agent projects (more than one agent instruction file - CLAUDE.md, AGENTS.md, or `.github/copilot-instructions.md` - present on disk) it runs automatically without the flag. Rationale: when a single-agent migration completes, the satellite agents' skill dirs (`.agents/skills/`, `.github/skills/`, etc.) are left with pre-v1.2 skill names flagged as `deprecated`. The auto-run surfaces this so `audit` doesn't exit "pass" while the satellite agents are stale. When deprecated findings are present the renderer also emits a one-line hint to run `goat-flow install . --agent <agent>` for each stale agent.
 

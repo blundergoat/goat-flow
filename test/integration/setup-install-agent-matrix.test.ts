@@ -439,7 +439,7 @@ function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
   const doctorReport = runSkillDoctor(targetProjectPath, agentProfile.id);
   const expectedInvocation =
     agentProfile.promptInvocationStyle === "dollar" ? "$goat" : "/goat";
-  assert.equal(doctorReport.status, "pass");
+  assert.equal(doctorReport.status, "static-pass");
   assert.equal(doctorReport.target, targetProjectPath);
   assert.equal(doctorReport.agents[0]?.agent.id, agentProfile.id);
   assert.equal(

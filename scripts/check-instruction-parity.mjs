@@ -41,87 +41,9 @@ const CANONICAL_SECTIONS = [
 
 const H3_LOOP_SECTIONS = ["READ", "SCOPE", "ACT", "VERIFY"];
 
-const SHARED_PHRASES = [
-  {
-    label: "learning-loop Key Resources",
-    section: "Key Resources",
-    phrases: [
-      ".goat-flow/learning-loop/footguns/",
-      ".goat-flow/learning-loop/lessons/",
-      ".goat-flow/learning-loop/patterns/",
-      ".goat-flow/learning-loop/decisions/",
-    ],
-  },
-  {
-    label: "tool-playbook Key Resources",
-    section: "Key Resources",
-    phrases: [
-      ".goat-flow/skill-docs/playbooks/browser-use.md",
-      ".goat-flow/skill-docs/playbooks/page-capture.md",
-      "read BEFORE declaring a tool unavailable",
-    ],
-  },
-  {
-    label: "tool availability READ rule",
-    section: "Execution Loop",
-    phrases: [
-      "Before declaring any tool or capability unavailable",
-      ".goat-flow/skill-docs/playbooks/",
-      "Availability Check",
-    ],
-  },
-  {
-    label: "test-selection READ route",
-    section: "Execution Loop",
-    phrases: [
-      "Before creating, changing, reviewing, consolidating, moving, or pruning tests",
-      ".goat-flow/skill-docs/playbooks/test-selection.md",
-    ],
-  },
-  {
-    label: "hallucination red flags",
-    section: "Execution Loop",
-    phrases: [
-      "Hallucination red-flags",
-      "Checks passed.",
-      "Completion.",
-      "Fix verification.",
-      "Hedged claims.",
-      "Stop-the-line",
-    ],
-  },
-  {
-    label: "artifact routing destinations",
-    section: "Artifact Routing",
-    phrases: [
-      ".goat-flow/learning-loop/footguns/",
-      ".goat-flow/learning-loop/lessons/",
-      ".goat-flow/learning-loop/decisions/",
-      ".goat-flow/learning-loop/patterns/",
-    ],
-  },
-  {
-    label: "router table cold-path resources",
-    section: "Router Table",
-    phrases: [
-      ".goat-flow/skill-docs/",
-      ".goat-flow/skill-docs/playbooks/",
-      ".goat-flow/learning-loop/footguns/",
-      ".goat-flow/learning-loop/lessons/",
-      ".goat-flow/learning-loop/patterns/",
-      ".goat-flow/learning-loop/decisions/",
-    ],
-  },
-  {
-    label: "prose-surface READ routing",
-    section: "Execution Loop",
-    phrases: [
-      "Prose surfaces route the same way before writing",
-      "need `writing-style.md`",
-      "the trigger is touching the surface, not the request naming it",
-    ],
-  },
-];
+const SHARED_PHRASES = JSON.parse(
+  readFileSync(resolve(ROOT, "workflow/manifest.json"), "utf8"),
+).instruction_file.parity_phrases;
 
 /** Render a repository-relative path for deterministic failure messages. */
 function pathLabel(path) {

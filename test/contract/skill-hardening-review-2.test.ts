@@ -142,6 +142,74 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
     );
   });
 
+  it("emits only resolved goat-review integrity fields", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const integrity = readMarkdownSection(
+        skillPath,
+        "Review Integrity (confidence signal)",
+      );
+      const output = readMarkdownSection(skillPath, "Output Format");
+
+      assert.match(integrity, /\*\*Always emit:\*\*/u, skillPath);
+      for (const mandatoryField of [
+        "Scope snapshot",
+        "Files opened in Pass 2",
+        "Evidence",
+        "Verdicts",
+        "Refutations logged",
+        "Review validator",
+        "Gates",
+        "Gate evidence",
+        "Size",
+        "Degradation flags",
+        "Conclusion",
+      ]) {
+        assert.match(
+          integrity,
+          new RegExp(`\\*\\*Always emit:\\*\\*[\\s\\S]*${mandatoryField}`, "u"),
+          `${skillPath}: missing mandatory field ${mandatoryField}`,
+        );
+      }
+      assert.match(integrity, /\*\*Emit when resolved:\*\*/u, skillPath);
+      for (const conditionalField of [
+        "Refutation ledger",
+        "Automated-review provenance",
+        "Refuter pass",
+        "Spec drift",
+      ]) {
+        assert.match(
+          integrity,
+          new RegExp(
+            `\\*\\*Emit when resolved:\\*\\*[\\s\\S]*${conditionalField}`,
+            "u",
+          ),
+          `${skillPath}: missing conditional field ${conditionalField}`,
+        );
+      }
+      assert.match(integrity, /Never emit.*whole field.*`n\/a`/u, skillPath);
+      assert.match(
+        output,
+        /<!-- When count > 0\. -->\n- Refutation ledger:/u,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /<!-- PR only\. -->\n- Automated-review provenance:/u,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /<!-- Pass 3 only\. -->\n- Refuter pass:/u,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /<!-- Spec Drift only\. -->\n- Spec drift:/u,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-review bound to the universal skill constraints", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       assert.match(
@@ -504,14 +572,15 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       );
       assert.match(
         integrity,
-        /Refutation ledger:[^\n]+`n\/a`[^\n]+exact `\.goat-flow\/logs\/review\/goat-review-refutations\.<random>\.txt`[^\n]+`persist-skipped`/u,
+        /Refutation ledger:[^\n]+only when Refutations logged is nonzero[^\n]+exact path[^\n]+`persist-skipped`/u,
         skillPath,
       );
       assert.match(
         output,
-        /Refutation ledger: n\/a \| persist-skipped \| \.goat-flow\/logs\/review\/goat-review-refutations\.<random>\.txt/u,
+        /Refutation ledger: persist-skipped \| \.goat-flow\/logs\/review\/goat-review-refutations\.<random>\.txt/u,
         skillPath,
       );
+      assert.doesNotMatch(output, /Refutation ledger: n\/a/u, skillPath);
       assert.match(
         integrity,
         /Degradation flags:[^\n]+persist-skipped: redactor-unavailable/u,

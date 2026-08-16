@@ -437,9 +437,8 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     ]) {
       assertSectionPatterns(playbookPath, "Register", [
         /Neutral and conventional are valid voices/u,
-        // Case-insensitive on the verb: the playbook shipped a mid-sentence capital "Do" that this
-        // assertion pinned verbatim, so correcting the typo failed a contract meant to guarantee the
-        // rule exists, not its capitalisation.
+        // Case-insensitive on the verb: the playbook shipped a mid-sentence capital "Do" that this assertion pinned verbatim, so correcting the
+        // typo failed a contract meant to guarantee the rule exists, not its capitalisation.
         /reader already knows[\s\S]+do not define it again/iu,
       ]);
       assertSectionPatterns(playbookPath, "Diagnostic Route", [

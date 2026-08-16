@@ -20,7 +20,7 @@ Validate setup correctness. The base audit runs two deterministic scopes (all pa
 |------|-------------|
 | `--agent <id>` | Filter to one manifest-backed agent id. Run `npx @blundergoat/goat-flow@latest manifest` to inspect the current registry. |
 | `--harness` | Add AI Harness Completeness scope (18 checks, installed/not-installed per concern) |
-| `--check-drift` | Add skill template-vs-installed drift detection (orphan directories, byte-level divergence) |
+| `--check-drift` | Add managed-artifact and peer-instruction drift detection |
 | `--check-content` | Add cold-path content lint (vague terms, generic instructions, factual-claim drift) |
 | `--trusted-target` | Execute the selected checkout's configured deny-hook handler and managed script for runtime proof. Omit this flag for static inspection. |
 | `--untrusted-target` | Deprecated compatibility alias for the static, non-executing default. It remains accepted throughout v1.16.x and will not be removed before v1.17.0. It cannot be combined with `--trusted-target`. |
@@ -41,6 +41,8 @@ npx @blundergoat/goat-flow@latest audit . --output report.json # Write to file
 The enforcement matrix is deliberately conservative. It reports local facts such as deny-hook registration, secret-path file-read coverage, secret shell-read blocking, deny-hook self-test evidence, and runtime-shaped blocked-payload smoke evidence. General file read/write restriction capability remains `unknown` unless goat-flow has explicit evidence; it is not inferred from setup success or from a perfect constraints score.
 
 Audit, setup-prompt generation, and quality-prompt generation inspect target hook configuration statically by default. `--trusted-target` opts the selected-agent audit inside those commands into target-controlled runtime execution. The dashboard remains static and has no target-execution flag.
+
+When drift checking is active, the audit compares managed workflow artifacts with their installed copies and checks manifest-declared shared phrases across every distinct sibling instruction file present in the target. The sibling comparison still runs with `--agent <id>` because parity is a relationship between instruction files, not a property of one selected agent. A mismatch names the affected file, section, and phrase without choosing a canonical winner or proposing a rewrite. Multi-agent targets enable drift checking automatically; single-agent targets require `--check-drift`.
 
 `--format sarif` exports the same deterministic audit findings as SARIF 2.1.0. It is an interchange format for CI and SARIF-aware tools; goat-flow is still reporting harness/setup integrity findings, not source-code vulnerabilities. Failing setup, agent, and harness checks become SARIF results. `--check-drift` and `--check-content` findings are included when those audit sections are enabled. Checks without target-file evidence are emitted without fabricated locations; GitHub code scanning accepts SARIF without annotations, but it only displays code annotations for results that include `locations[]`.
 
@@ -117,7 +119,7 @@ For each selected agent and skill, the report shows:
 - Static blockers for missing/unreadable files, malformed or empty discovery frontmatter, canonical-name mismatch, and duplicate installed names.
 - Existing `install` and `audit --check-drift` commands that can repair or verify the artifact.
 
-The status is `pass` when all selected skills are statically eligible and current, `warn` when eligibility remains but source/version/mirror evidence is incomplete or stale, and `fail` when at least one installed contract has a static blocker. `fail` exits 1; invalid agent or skill filters exit 2. JSON exposes `reportKind`, `status`, `target`, `evidenceLimit`, `summary`, and per-agent `skills` arrays.
+The status is `static-pass` when all selected skills are statically eligible and current, `warn` when eligibility remains but source/version/mirror evidence is incomplete or stale, and `fail` when at least one installed contract has a static blocker. `fail` exits 1; invalid agent or skill filters exit 2. JSON exposes `reportKind`, `status`, `target`, `evidenceLimit`, `summary`, and per-agent `skills` arrays. The summary reports `staticallyEligible` and `runtimeRegistration: "unverified"`; it never turns file eligibility into a runtime-availability verdict.
 
 **Evidence limit:** this command checks files and manifest metadata. It cannot prove that a model will auto-trigger a skill, and it does not claim host behavior for unfamiliar invocation-control fields. Use the displayed explicit invocation when you want the skill deliberately.
 

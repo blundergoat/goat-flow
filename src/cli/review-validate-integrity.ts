@@ -2,7 +2,7 @@
  * Checks the Review Integrity block - the part of a report that states how thorough it was.
  * Scope, files opened, evidence counts, verdict tallies, degradation flags and conclusion are
  * the reviewer's own claims about their coverage, and they are the fields most likely to be
- * quietly overstated. This pass makes each one either verifiable or a violation.
+ * quietly overstated. This pass makes each applicable claim either verifiable or a violation.
  *
  * Counts are cross-checked against the findings actually present rather than taken at face
  * value, because a report claiming more evidence than it shows is worse than one admitting it
@@ -33,6 +33,11 @@ import {
   type IntegrityFieldMap,
 } from "./review-validate-common.js";
 import { validateDegradationConclusion } from "./review-validate-verdict.js";
+
+const OMIT_WHEN_INAPPLICABLE_INTEGRITY_FIELDS = new Set([
+  "Refutation ledger",
+  "Spec drift",
+]);
 
 /**
  * Extract colon-delimited integrity fields and fail repeated authority claims.
@@ -68,14 +73,15 @@ function collectIntegrityFields(
   return fields;
 }
 
-/** Validate all mandatory integrity fields against their bounded value grammar. */
-function validateRequiredIntegrityFields(
+/** Validate mandatory rows and the grammar of every conditional row that was emitted. */
+function validateIntegrityFieldGrammar(
   fields: IntegrityFieldMap,
   section: MarkdownSection,
   violations: ReviewValidationViolation[],
 ): void {
   for (const [label, valuePattern] of REQUIRED_INTEGRITY_FIELDS) {
     const field = fields.get(label);
+    if (!field && OMIT_WHEN_INAPPLICABLE_INTEGRITY_FIELDS.has(label)) continue;
     if (field && valuePattern.test(field.value)) continue;
     addViolation(
       violations,
@@ -86,6 +92,22 @@ function validateRequiredIntegrityFields(
         : `Review Integrity is missing ${label}`,
     );
   }
+}
+
+/** Require one conditional row after the rest of the report proves it applies. */
+function requireIntegrityField(
+  fields: IntegrityFieldMap,
+  section: MarkdownSection,
+  label: string,
+  violations: ReviewValidationViolation[],
+): void {
+  if (fields.has(label)) return;
+  addViolation(
+    violations,
+    "integrity-format",
+    section.headingLine,
+    `Review Integrity is missing ${label}`,
+  );
 }
 
 /** Reject a Pass 2 file count that claims more opened files than the reviewed scope contains. */
@@ -203,11 +225,54 @@ function readRefutationClaim(
   | "refutationLedgerLine"
 > {
   const ledger = fields.get("Refutation ledger");
+  const refutationCount = readRefutationCount(
+    fields.get("Refutations logged"),
+    violations,
+  );
   return {
-    ...readRefutationCount(fields.get("Refutations logged"), violations),
-    refutationLedger: ledger?.value ?? null,
+    ...refutationCount,
+    refutationLedger:
+      ledger?.value ?? (refutationCount.refutationsLogged === 0 ? "n/a" : null),
     refutationLedgerLine: ledger?.line ?? null,
   };
+}
+
+/** Detect PR mode from the validated scope field. */
+function reportUsesPrScope(fields: IntegrityFieldMap): boolean {
+  const source = fields.get("Scope snapshot")?.value.match(SCOPE_SNAPSHOT)?.[1];
+  return /^PR(?:\s|$)/iu.test(source ?? "");
+}
+
+/** Detect visible evidence that a cross-model refuter affected the review. */
+function reportShowsRefuterActivity(lines: string[]): boolean {
+  return lines.some((line) =>
+    /\[CONFIRMED-CROSS-MODEL\]|cross-model-refuter-failed|cross-model-unresolved|refuter-citation-unverified/u.test(
+      line,
+    ),
+  );
+}
+
+/** Require conditional rows whose triggers are visible elsewhere in the report. */
+function validateResolvedIntegrityFields(
+  fields: IntegrityFieldMap,
+  section: MarkdownSection,
+  lines: string[],
+  violations: ReviewValidationViolation[],
+): void {
+  if (reportUsesPrScope(fields)) {
+    requireIntegrityField(
+      fields,
+      section,
+      "Automated-review provenance",
+      violations,
+    );
+  }
+  if (reportShowsRefuterActivity(lines)) {
+    requireIntegrityField(fields, section, "Refuter pass", violations);
+  }
+  if (readSections(lines, "Spec Drift").length > 0) {
+    requireIntegrityField(fields, section, "Spec drift", violations);
+  }
 }
 
 /** Warn once per degradation flag that is not documented by goat-review. */
@@ -558,11 +623,12 @@ function readScopeAuthority(
 /** Validate the full Review Integrity field set and return its ledger claim. */
 function validateFullIntegrity(
   section: MarkdownSection,
+  lines: string[],
   violations: ReviewValidationViolation[],
   warnings: ReviewValidationViolation[],
 ): IntegrityResult {
   const fields = collectIntegrityFields(section, violations);
-  validateRequiredIntegrityFields(fields, section, violations);
+  validateIntegrityFieldGrammar(fields, section, violations);
   validateOpenedFileCoverage(fields, violations);
   validateOptionalIntegrityField(
     fields,
@@ -581,6 +647,7 @@ function validateFullIntegrity(
     violations,
     warnings,
   );
+  validateResolvedIntegrityFields(fields, section, lines, violations);
   const scope = readScopeAuthority(fields, violations);
   return {
     ...scope,
@@ -743,7 +810,7 @@ export function validateIntegrity(
         `Review Integrity duplicates the section at line ${fullSection.headingLine}`,
       );
     }
-    return validateFullIntegrity(fullSection, violations, warnings);
+    return validateFullIntegrity(fullSection, lines, violations, warnings);
   }
   return validateCompactIntegrity(lines, findingCandidateCount, violations);
 }

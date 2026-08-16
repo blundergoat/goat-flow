@@ -163,10 +163,9 @@ describe("ADR-023 word budget tiers", () => {
   it("M02 playbooks stay within their rollout budgets", () => {
     const rolloutBudgets = [
       { filename: "naming-and-placement.md", cap: 2200 },
-      // Raised 2880 -> 2980 on 2026-08-17 for width-resolution guidance and the two mechanical
-      // gate commands. An agent had to derive the governing width from three config sources by
-      // hand, and the [static] gate items shipped as prose no one could run.
-      { filename: "code-comments.md", cap: 2980 },
+      // Raised 2880 -> 2980 -> 3000 on 2026-08-17: first for width-resolution guidance and the two mechanical gate commands, then to swap
+      // "each tag adds meaning beyond its type" for the closed list of admissible contents, after a sweep found @param lines restating the signature.
+      { filename: "code-comments.md", cap: 3000 },
     ] as const;
 
     for (const { filename, cap } of rolloutBudgets) {
@@ -190,9 +189,8 @@ describe("ADR-023 word budget tiers", () => {
       {
         filename: "writing-sentence-diagnostics.md",
         minimum: 900,
-        // Raised 1100 -> 1150 on 2026-08-17 for the reader-cost code vocabulary and the cadence
-        // threshold. "Name the reader cost" had no codes to name it with, and the cadence rule
-        // had no count, so nine sibling items opening with the same three words passed it.
+        // Raised 1100 -> 1150 on 2026-08-17 for the reader-cost code vocabulary and the cadence threshold: "name the reader cost" had no codes
+        // to name it with, and the cadence rule had no count, so nine sibling items opening with the same three words passed it.
         maximum: 1150,
       },
       {

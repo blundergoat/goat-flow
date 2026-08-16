@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-17
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -70,13 +70,14 @@ last_reviewed: 2026-08-15
 
 **Root cause:** I optimized for low-drift prose before reading the validators that require direct filenames and phrases.
 
-**Prevention:** Before replacing explicit inventories or required phrases with index pointers, grep content-quality, factual-drift, parity, and preflight checks. If a validator checks direct filename or phrase inclusion, keep the explicit text and add the index pointer around it. Evidence anchors: `src/cli/audit/check-factual-semantic-drift.ts` (search: `driftSkillPlaybookInventory`), `scripts/check-instruction-parity.mjs` (search: `tool-playbook Key Resources`).
+**Prevention:** Before replacing explicit inventories or required phrases with index pointers, grep content-quality, factual-drift, parity, and preflight checks. If a validator checks direct filename or phrase inclusion, keep the explicit text and add the index pointer around it. Evidence anchors: `src/cli/audit/check-factual-semantic-drift.ts` (search: `driftSkillPlaybookInventory`), `workflow/manifest.json` (search: `"label": "tool-playbook Key Resources"`).
 
 ---
 
 ## Lesson: Behavior-scope changes need assertion updates before the first focused run
 
 **Status:** active | **Created:** 2026-05-04
+**Incident count:** 7 | **Latest occurrence:** 2026-08-17
 
 **What happened:** Behavior changes left adjacent assertions pinned to old flags, phrases, counts, routes, or errors, so focused checks failed only after implementation.
 
@@ -93,6 +94,10 @@ last_reviewed: 2026-08-15
 **Latest recurrence (2026-08-03):** The active Timing Receipt regression correctly failed strict validation, but its new assertion guessed `duplicate segment id M01-S01` instead of copying the parser's emitted `timing receipt segment ids must be unique`. The focused run stopped at 62/63 despite correct product behaviour. Run the reproduction once or inspect the parser warning before pinning diagnostic text; do not invent a more specific contract than the implementation emits.
 
 **Latest recurrence (2026-08-06):** Replacing Copilot's `Get-Command bash` fallback with the shared Node launcher cleared the focused registrar and drift suites, but the full installer matrix still required the retired PowerShell marker in two cases. The corrected assertion now requires `run-with-bash.mjs` and rejects `Get-Command bash`. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `must use the managed Bash resolver`) and `src/cli/server/agent-hook-writer.ts` (search: `powershell: crossPlatformCommand`).
+
+**Recurrence (2026-08-17):** Moving instruction-parity phrases from the parity script into `workflow/manifest.json` passed the new focused tests, but the fast suite still had a contract test pinned to the old owner and a copied-repository fixture without the manifest. The live stats check also found a lesson anchor pointing at the removed script-owned phrase. When ownership moves, grep the old semantic anchors and fixture copy lists before declaring the focused slice complete. Evidence anchors: `workflow/manifest.json` (search: `"label": "test-selection READ route"`), `test/contract/test-selection-playbook-doctrine.test.ts` (search: `registers the exact route with instruction parity`), and `test/unit/local-instructions.test.ts` (search: `workflow/manifest.json`).
+
+A relocation also destroys its own evidence: once the inline list was deleted, the reader and its tests both resolved to the manifest, so a phrase dropped in transit would have vanished from the rule and the assertion in the same commit and still gone green. Green tests cannot show that a move preserved membership; only the pre-move copy can. Diff it structurally - parse the old literal out of `git show HEAD:<file>` and compare label, section, and phrase content rather than eyeballing labels, because a label survives a shortened phrase list. Verified for this move on 2026-08-17: 8 rules before and after, zero content differences.
 
 ---
 
@@ -152,4 +157,3 @@ last_reviewed: 2026-08-15
 **Prevention:** When a shell helper uses nonzero statuses as data, wrap each call in `set +e`, capture `$?` immediately, restore `set -e`, and test the top-level script exit as well as its message. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `range_status=$?`) and `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not print whole-file findings when no changed range is available`).
 
 ---
-
