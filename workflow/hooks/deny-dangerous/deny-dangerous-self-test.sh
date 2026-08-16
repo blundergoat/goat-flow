@@ -594,6 +594,7 @@ run_common_dependency_checks() {
 
 run_smoke() {
   local report_json='{"detail":"Use `quality save`; literal $(rm -rf /) and git push are evidence."}'
+  local review_markdown='## Review Integrity - evidence: `src/example.ts + sample anchor`'
   expect_block shell "rm -rf /" "rm -rf"
   expect_block paths "cat .env" ".env read"
   expect_block writes "git push origin main" "git push"
@@ -609,6 +610,8 @@ run_smoke() {
   expect_allow writes "git status" "git status"
   expect_allow shell "goat-flow quality save '/tmp/project' <<'JSON'"$'\n'"${report_json}"$'\n'"JSON" "bounded quality saver treats Markdown report JSON as data"
   expect_block writes "goat-flow quality save '/tmp/project' <<'JSON'"$'\n'"${report_json}"$'\n'"JSON"$'\n'"git push origin main" "bounded quality saver still scans commands after the delimiter"
+  expect_allow shell "goat-flow review validate <<'REVIEW'"$'\n'"${review_markdown}"$'\n'"REVIEW" "review validator treats Markdown report text as data"
+  expect_block writes "goat-flow review validate <<'REVIEW'"$'\n'"${review_markdown}"$'\n'"REVIEW"$'\n'"git push origin main" "review validator still scans commands after the delimiter"
   expect_copilot_payload_allow paths '{"toolName":"view","toolArgs":"{\"path\":\"README.md\"}"}' "stringified non-bash file read"
   expect_allow shell 'echo $(date; whoami)' "read-only subst with command chain"
   expect_allow shell 'echo $((1 + 2))' "arithmetic expansion"

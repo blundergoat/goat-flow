@@ -84,10 +84,44 @@ export const TEST_DOCUMENTED_SLACK_PLACEHOLDER = `xoxb-${"test-1234567890-123456
 export function withTempRepo(fn: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-safety-"));
   try {
-    runGit(root, ["init", "-q"]);
-    writeFile(root, "README.md", "# fixture\n");
-    commitAll(root, "initial");
+    createCommittedRepo(root);
     fn(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+/** Create one committed fixture repository at an already selected directory.
+ *
+ * @param root - non-empty directory that becomes an independent Git top level
+ * @returns nothing; the caller owns fixture cleanup
+ */
+export function createCommittedRepo(root: string): void {
+  mkdirSync(root, { recursive: true });
+  runGit(root, ["init", "-q"]);
+  writeFile(root, "README.md", "# fixture\n");
+  commitAll(root, "initial");
+}
+
+/** Run one non-Git controller scenario with named immediate child repositories.
+ *
+ * @param childNames - immediate directory names; an empty list proves the no-child boundary
+ * @param fn - required callback given the controller and child roots
+ * @returns nothing; every controller and child path is removed after the scenario
+ */
+export function withTempController(
+  childNames: string[],
+  fn: (root: string, childRoots: Record<string, string>) => void,
+): void {
+  const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-controller-"));
+  const childRoots: Record<string, string> = {};
+  try {
+    for (const childName of childNames) {
+      const childRoot = join(root, childName);
+      createCommittedRepo(childRoot);
+      childRoots[childName] = childRoot;
+    }
+    fn(root, childRoots);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,6 +1,6 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Choosing and invoking the right runner - which binary and loader actually execute, why a file argument may not narrow the suite, and when proof needs the published invocation path rather than source mode. Shell and process behaviour is [test-shell-environment.md](test-shell-environment.md).
@@ -65,7 +65,7 @@ last_reviewed: 2026-08-15
 
 ## Lesson: Focused TypeScript tests need verified paths and the `tsx` loader
 
-**Status:** active | **Created:** 2026-04-29 | **Incident count:** 2 | **Latest occurrence:** 2026-08-01
+**Status:** active | **Created:** 2026-04-29 | **Incident count:** 4 | **Latest occurrence:** 2026-08-16
 
 **What happened:** `node --test test/smoke/dashboard-endpoints.test.ts` failed resolving source `.js` specifiers because the focused command omitted this repo's `tsx` loader.
 
@@ -73,7 +73,11 @@ last_reviewed: 2026-08-15
 
 **Recurrence 2026-08-01:** I derived nonexistent `test/unit/preflight-command-runner.test.mjs` from the source name. `rg --files | rg 'preflight|command-runner'` found `test/integration/preflight-progress.test.ts`; the corrected command passed all nine cases.
 
-**Prevention:** Resolve focused paths with `rg --files`, then use `node --import tsx --test <specific-file.test.ts>` as declared by `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`). A missing target or plain-Node source-resolution error is invocation failure until that resolved command also fails.
+**Recurrence 2026-08-16:** I ran the documented focused command under WSL against a checkout whose `node_modules` had been installed by Windows. The `tsx` loader stopped before test discovery because `@esbuild/win32-x64` was present while Linux required `@esbuild/linux-x64`. A native Windows retry was not equivalent because the suite spawns `/bin/bash` with POSIX paths. Keeping the Linux runtime and setting `ESBUILD_BINARY_PATH` to the Linux binary from a same-version clone with the same lockfile hash made the exact local `tsx` command pass all 24 tests.
+
+**Recurrence 2026-08-16 (ignored build output):** A direct `npm test` run reached all 2,043 tests but failed only `dashboard preset source/dist parity`. The source preset named all eight skills while the ignored local `dist/` artifact still named seven; neither parity input had a tracked working-tree change. Running the canonical preflight path rebuilds `dist/` with `tsc` before its test phase, so a direct fast-suite result from an old build is not source-regression evidence until the build output is refreshed.
+
+**Prevention:** Resolve focused paths with `rg --files`, then use `node --import tsx --test <specific-file.test.ts>` as declared by `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`). Before using it across Windows and WSL, verify that the runtime platform matches both the installed native dependencies and any subprocess paths in the suite. For WSL tests that require POSIX shell paths, keep the Linux runtime and use `ESBUILD_BINARY_PATH` only with a platform-correct binary from a same-version, same-lockfile dependency tree. Before treating a source/dist parity failure as a code regression, run the repository gate that rebuilds ignored `dist/` output (`scripts/preflight-checks.sh`, search: `Typecheck + build (dist/ produced)`) and rerun the test. A missing target, source-resolution error, native-package mismatch, stale ignored build artifact, or cross-platform subprocess failure is an invocation failure until the resolved command also fails.
 
 ---
 
@@ -104,4 +108,3 @@ last_reviewed: 2026-08-15
 **Prevention:** Use `node scripts/run-tests.mjs fast` (or `npm test`) for suite runs and `node --import tsx --test <specific-file.test.ts>` for focused files. Do not use `npx vitest` here. Read `No test suite found` originating from a `_temp/stryker-tmp/sandbox-*` path as a wrong-runner signal, not a product failure. Evidence anchors: `scripts/run-tests.mjs` (search: `listTestFiles`), `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), and `.gitignore` (search: `_temp`).
 
 ---
-

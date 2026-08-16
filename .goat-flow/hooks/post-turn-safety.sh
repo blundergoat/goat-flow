@@ -337,6 +337,29 @@ try {
   return 0
 }
 
+# Resolve the verified managed installation root when Git cannot provide a scan root.
+# The launcher starts Bash from this directory, and the installed hook shape prevents a
+# direct invocation in an arbitrary non-Git directory from creating continuation state.
+resolve_stop_reentry_root_without_git() {
+  local managed_root=""
+
+  # Only a validated provider Stop can participate in a bounded continuation cycle.
+  if [ "$stop_payload_present" -eq 0 ] || [ -z "$stop_session_fingerprint" ]; then
+    return 1
+  fi
+  if ! managed_root="$(pwd -P 2>/dev/null)" || [ -z "$managed_root" ]; then
+    return 1
+  fi
+  # State ownership requires a complete, non-symlinked managed hook installation.
+  if [ -L "$managed_root/.goat-flow" ] || [ ! -d "$managed_root/.goat-flow/hooks" ] || \
+    [ -L "$managed_root/.goat-flow/hooks" ] || \
+    [ ! -f "$managed_root/.goat-flow/hooks/post-turn-safety.sh" ] || \
+    [ -L "$managed_root/.goat-flow/hooks/post-turn-safety.sh" ]; then
+    return 1
+  fi
+  printf '%s\n' "$managed_root"
+}
+
 # Resolve the ignored owner-local state file used to bound a repeated Stop failure.
 # The path contains hashes only, so it never stores the user's session ID or changed content.
 # The record is session-specific, so the filename must be too: two sessions working in one
@@ -496,6 +519,300 @@ finish_infrastructure_failure() {
     printf 'post-turn-safety: repeated-Stop state unavailable; keeping the turn blocked.\n' >&2
   fi
   return 2
+}
+
+# Bound an early Git-root failure using the managed installation rather than a Git root.
+# If the launch boundary cannot be re-established, keep the user's turn blocked.
+finish_repository_root_failure() {
+  local failure_identity="$1"
+  local managed_root=""
+
+  if ! managed_root="$(resolve_stop_reentry_root_without_git)"; then
+    return 2
+  fi
+  finish_infrastructure_failure "$managed_root" "$failure_identity"
+}
+
+# Scan immediate independent Git repositories when the managed project is a non-Git controller.
+# Each child emits the existing provider-neutral envelope, so aggregation never parses human stderr
+# or reimplements detector decisions. Exit 3 means no eligible child existed and preserves the
+# established single-project root failure below.
+run_controller_child_scans() {
+  local controller_root=""
+  local controller_result=""
+  local controller_status=0
+  local hook_script="${BASH_SOURCE[0]}"
+
+  # A child whose Git commands fail must report that failure instead of recursively widening scope.
+  if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then
+    return 3
+  fi
+  if ! command -v node >/dev/null 2>&1 || \
+    ! controller_root="$(pwd -P 2>/dev/null)" || [ -z "$controller_root" ]; then
+    return 3
+  fi
+
+  # shellcheck disable=SC2016 # Literal JavaScript must not expand shell or provider text.
+  controller_result="$(
+    GOAT_FLOW_CONTROLLER_PARENT_MIGRATED="$post_turn_migrated_result_mode" \
+      GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT="$stop_session_fingerprint" \
+      GOAT_FLOW_CONTROLLER_STOP_ACTIVE="$stop_hook_active" \
+      POST_TURN_HOOK_VERSION="$post_turn_hook_version" \
+      node -e '
+const { lstatSync, readdirSync, realpathSync } = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const path = require("node:path");
+
+const hookScript = path.resolve(process.argv[1], process.argv[2]);
+const controllerRoot = realpathSync(process.argv[1]);
+const startedAt = Date.now();
+const resultSchema = "goat-flow.hook-result.v1";
+const provider = process.env.GOAT_FLOW_HOOK_PROVIDER || "claude";
+const hookVersion = process.env.POST_TURN_HOOK_VERSION || "unknown";
+const adapterVersion = process.env.GOAT_FLOW_HOOK_ADAPTER_VERSION || "1";
+const parentMigrated = process.env.GOAT_FLOW_CONTROLLER_PARENT_MIGRATED === "1";
+const sessionFingerprint = process.env.GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT || "";
+const stopHookActive = process.env.GOAT_FLOW_CONTROLLER_STOP_ACTIVE === "1";
+const configuredSeconds = Number(process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS || "60");
+const maximumMilliseconds = Number.isInteger(configuredSeconds) && configuredSeconds > 0
+  ? configuredSeconds * 1000
+  : 60_000;
+const allowedOutcomes = new Set(["pass", "block", "advisory", "incomplete", "unavailable"]);
+const allowedCoverage = new Set(["complete", "partial", "none"]);
+
+function syntheticResult(name, reasonCode, message) {
+  return {
+    schema: resultSchema,
+    hookId: "post-turn-safety",
+    event: "turn-stop",
+    outcome: reasonCode === "hook-unavailable" || reasonCode === "execution-timeout"
+      ? "unavailable"
+      : "incomplete",
+    coverage: { status: "none", attemptedUnits: 1, completedUnits: 0, skippedUnits: 1 },
+    reasonCode,
+    findings: [{ code: reasonCode, message, target: name }],
+    execution: {
+      hookVersion,
+      provider,
+      providerMode: "controller-child",
+      adapterName: `${provider}-turn-stop`,
+      adapterVersion,
+      durationMs: 0,
+    },
+  };
+}
+
+function validChildResult(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  if (value.schema !== resultSchema || value.hookId !== "post-turn-safety" || value.event !== "turn-stop") return false;
+  if (!allowedOutcomes.has(value.outcome) || typeof value.reasonCode !== "string") return false;
+  const coverage = value.coverage;
+  if (coverage === null || typeof coverage !== "object" || Array.isArray(coverage)) return false;
+  if (!allowedCoverage.has(coverage.status)) return false;
+  if (![coverage.attemptedUnits, coverage.completedUnits, coverage.skippedUnits].every(Number.isInteger)) return false;
+  if (coverage.attemptedUnits !== 1 || coverage.completedUnits < 0 || coverage.skippedUnits < 0) return false;
+  if (coverage.completedUnits + coverage.skippedUnits > coverage.attemptedUnits) return false;
+  if (!Array.isArray(value.findings) || value.findings.length > 20) return false;
+  if (!value.findings.every((finding) => finding !== null && typeof finding === "object" && !Array.isArray(finding) &&
+    typeof finding.code === "string" && finding.code.trim().length > 0 &&
+    typeof finding.message === "string" && finding.message.trim().length > 0 &&
+    (finding.target === undefined || (typeof finding.target === "string" && finding.target.trim().length > 0)))) return false;
+  const execution = value.execution;
+  return execution !== null && typeof execution === "object" && !Array.isArray(execution) &&
+    execution.provider === provider && execution.hookVersion === hookVersion;
+}
+
+function prefixTarget(childName, target) {
+  if (typeof target !== "string" || target === "project") return childName;
+  return `${childName}/${target}`;
+}
+
+let directoryEntries;
+try {
+  directoryEntries = readdirSync(controllerRoot, { withFileTypes: true })
+    .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+} catch {
+  process.exit(3);
+}
+
+const scanUnits = [];
+for (const entry of directoryEntries) {
+  // Symlinked directories and ordinary grouping folders are outside the immediate-root contract.
+  if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+  const childPath = path.join(controllerRoot, entry.name);
+  let gitMarker;
+  try {
+    gitMarker = lstatSync(path.join(childPath, ".git"));
+  } catch {
+    continue;
+  }
+  if (gitMarker.isSymbolicLink() || (!gitMarker.isDirectory() && !gitMarker.isFile())) {
+    scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child Git metadata is not a regular file or directory") });
+    continue;
+  }
+
+  let childRealPath;
+  try {
+    childRealPath = realpathSync(childPath);
+  } catch {
+    scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child repository directory could not be opened") });
+    continue;
+  }
+  const rootLookup = spawnSync("git", ["-C", childRealPath, "rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+    timeout: Math.min(maximumMilliseconds, 5000),
+    windowsHide: true,
+  });
+  if (rootLookup.error || rootLookup.status !== 0 || typeof rootLookup.stdout !== "string" || rootLookup.stdout.trim().length === 0) {
+    scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child Git repository root could not be opened") });
+    continue;
+  }
+  try {
+    const gitRoot = realpathSync(rootLookup.stdout.trim());
+    if (gitRoot !== childRealPath) {
+      scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child Git top level does not match its controller directory") });
+      continue;
+    }
+  } catch {
+    scanUnits.push({ name: entry.name, failure: syntheticResult(entry.name, "coverage-incomplete", "Child Git top level could not be resolved") });
+    continue;
+  }
+  scanUnits.push({ name: entry.name, root: childRealPath });
+}
+
+if (scanUnits.length === 0) process.exit(3);
+
+const childPayload = sessionFingerprint.length > 0
+  ? JSON.stringify({ session_id: sessionFingerprint, hook_event_name: "Stop", stop_hook_active: stopHookActive })
+  : "";
+const childResults = [];
+for (const scanUnit of scanUnits) {
+  if (scanUnit.failure) {
+    childResults.push({ name: scanUnit.name, result: scanUnit.failure });
+    continue;
+  }
+  const elapsedMilliseconds = Date.now() - startedAt;
+  const remainingMilliseconds = maximumMilliseconds - elapsedMilliseconds;
+  if (remainingMilliseconds <= 0) {
+    childResults.push({ name: scanUnit.name, result: syntheticResult(scanUnit.name, "execution-timeout", "Controller safety-scan budget expired before this child ran") });
+    continue;
+  }
+  const childEnvironment = {
+    ...process.env,
+    GOAT_FLOW_HOOK_PROVIDER: provider,
+    GOAT_FLOW_HOOK_EVENT: "turn-stop",
+    GOAT_FLOW_HOOK_PROVIDER_MODE: "controller-child",
+    GOAT_FLOW_HOOK_ADAPTER_VERSION: adapterVersion,
+    GOAT_FLOW_HOOK_RESULT_PROTOCOL: resultSchema,
+    GOAT_FLOW_POST_TURN_CONTROLLER_CHILD: "1",
+    GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: String(Math.max(1, Math.ceil(remainingMilliseconds / 1000))),
+  };
+  const childExecution = spawnSync("bash", [hookScript], {
+    cwd: scanUnit.root,
+    encoding: "utf8",
+    input: childPayload,
+    env: childEnvironment,
+    timeout: remainingMilliseconds,
+    windowsHide: true,
+    maxBuffer: 20_000,
+  });
+  if (childExecution.error) {
+    const reasonCode = childExecution.error.code === "ETIMEDOUT" ? "execution-timeout" : "hook-unavailable";
+    const message = reasonCode === "execution-timeout"
+      ? "Child safety scan exceeded the controller deadline"
+      : "Child safety scan could not start";
+    childResults.push({ name: scanUnit.name, result: syntheticResult(scanUnit.name, reasonCode, message) });
+    continue;
+  }
+  let childResult;
+  try {
+    childResult = JSON.parse((childExecution.stdout || "").trim());
+  } catch {
+    childResult = null;
+  }
+  if (childExecution.status !== 0 || !validChildResult(childResult)) {
+    childResults.push({ name: scanUnit.name, result: syntheticResult(scanUnit.name, "hook-unavailable", "Child safety scan did not return a valid result") });
+    continue;
+  }
+  childResults.push({ name: scanUnit.name, result: childResult });
+}
+
+const coverage = childResults.reduce((total, child) => ({
+  attemptedUnits: total.attemptedUnits + child.result.coverage.attemptedUnits,
+  completedUnits: total.completedUnits + child.result.coverage.completedUnits,
+  skippedUnits: total.skippedUnits + child.result.coverage.skippedUnits,
+}), { attemptedUnits: 0, completedUnits: 0, skippedUnits: 0 });
+const coverageStatus = coverage.completedUnits === coverage.attemptedUnits && coverage.skippedUnits === 0
+  ? "complete"
+  : coverage.completedUnits === 0 ? "none" : "partial";
+const nonPassResults = childResults.filter((child) => child.result.outcome !== "pass");
+const everyNonPassBounded = nonPassResults.length > 0 && nonPassResults.every((child) =>
+  child.result.outcome === "incomplete" && child.result.reasonCode === "bounded-reentry-ended");
+let outcome = "pass";
+let reasonCode = "completed-clean";
+if (childResults.some((child) => child.result.outcome === "block")) {
+  outcome = "block";
+  reasonCode = "policy-blocked";
+} else if (childResults.some((child) => child.result.outcome === "unavailable")) {
+  outcome = "unavailable";
+  reasonCode = "hook-unavailable";
+} else if (nonPassResults.length > 0) {
+  outcome = everyNonPassBounded || nonPassResults.some((child) => child.result.outcome === "incomplete")
+    ? "incomplete"
+    : "advisory";
+  reasonCode = everyNonPassBounded ? "bounded-reentry-ended" : outcome === "advisory" ? "findings-reported" : "coverage-incomplete";
+}
+const findings = childResults.flatMap((child) => child.result.findings.map((finding) => ({
+  code: finding.code,
+  message: finding.message,
+  target: prefixTarget(child.name, finding.target),
+}))).slice(0, 20);
+const aggregateResult = {
+  schema: resultSchema,
+  hookId: "post-turn-safety",
+  event: "turn-stop",
+  outcome,
+  coverage: { status: coverageStatus, ...coverage },
+  reasonCode,
+  findings,
+  execution: {
+    hookVersion,
+    provider,
+    providerMode: "managed-controller",
+    adapterName: `${provider}-turn-stop`,
+    adapterVersion,
+    durationMs: Date.now() - startedAt,
+  },
+};
+
+if (parentMigrated) {
+  process.stdout.write(`${JSON.stringify(aggregateResult)}\n`);
+  process.exit(0);
+}
+if (outcome === "pass") process.exit(0);
+for (const finding of findings) {
+  process.stderr.write(`post-turn-safety: ${finding.target}: ${finding.message}\n`);
+}
+if (outcome === "block") {
+  process.stderr.write("post-turn-safety: fix or remove the flagged changed content before stopping.\n");
+} else {
+  process.stderr.write("post-turn-safety: controller scan incomplete.\n");
+}
+process.exit(2);
+' "$controller_root" "$hook_script"
+  )"
+  controller_status=$?
+
+  # No immediate repository leaves the existing fail-closed Git-root path authoritative.
+  if [ "$controller_status" -eq 3 ]; then
+    return 3
+  fi
+  # Once child scope is established, stale single-root failure state cannot affect this topology.
+  clear_stop_reentry_state "$controller_root" >/dev/null 2>&1
+  if [ -n "$controller_result" ]; then
+    printf '%s\n' "$controller_result"
+  fi
+  return "$controller_status"
 }
 
 # Detector shapes are shared by the Bash 3 compatibility and optimized paths.
@@ -1327,14 +1644,16 @@ fallback_main() {
   if ! root=$(git rev-parse --show-toplevel 2>/dev/null) || [ -z "$root" ]; then
     post_turn_result_detail="The selected Git repository root could not be opened"
     printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
-    return 2
+    finish_repository_root_failure "fallback:git repository root unavailable"
+    return $?
   fi
 
   # A root the process cannot enter cannot be scanned on the user's behalf.
   if ! cd "$root" 2>/dev/null; then
     post_turn_result_detail="The selected Git repository root could not be entered"
     printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
-    return 2
+    finish_repository_root_failure "fallback:repository root cannot be entered"
+    return $?
   fi
 
   # Temporary scan output is required before Git content can be inspected safely.
@@ -1447,6 +1766,17 @@ if ! read_stop_context; then
     exit $?
   fi
   exit 2
+fi
+
+# A managed non-Git controller scans only immediate directories that are independent Git roots.
+# Status 3 means none were eligible, so the existing scanner reports the original root failure.
+if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" != 1 ] && \
+  ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+  run_controller_child_scans
+  controller_scan_status=$?
+  if [ "$controller_scan_status" -ne 3 ]; then
+    exit "$controller_scan_status"
+  fi
 fi
 
 # Stock macOS Bash uses the compatibility implementation with the same Stop context.
@@ -2527,14 +2857,16 @@ main() {
   if ! root="$(repo_root)" || [ -z "$root" ]; then
     post_turn_result_detail="The selected Git repository root could not be opened"
     printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
-    return 2
+    finish_repository_root_failure "native:git repository root unavailable"
+    return $?
   fi
 
-  cd "$root" 2>/dev/null || {
+  if ! cd "$root" 2>/dev/null; then
     post_turn_result_detail="The selected Git repository root could not be entered"
     printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
-    return 2
-  }
+    finish_repository_root_failure "native:repository root cannot be entered"
+    return $?
+  fi
 
   WORKDIR="$(mktemp -d 2>/dev/null)" || WORKDIR=""
   # Temporary scan output is required before Git content can be inspected safely.

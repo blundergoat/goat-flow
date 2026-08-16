@@ -406,10 +406,11 @@ goat_flow_cli_consumes_heredoc_as_data() {
   arguments="${command#"$word"}"
   arguments="${arguments#"${arguments%%[![:space:]]*}"}"
 
-  # These two CLI surfaces parse stdin as report/prose data. Keep the match
+  # These three CLI surfaces parse stdin as report/prose data. Keep the match
   # command-shaped: other goat-flow subcommands may mutate projects or launch
   # runtimes, so the executable itself must never enter the broad inert list.
   [[ "$arguments" =~ ^quality[[:space:]]+save([[:space:]]|$) ]] && return 0
+  [[ "$arguments" =~ ^review[[:space:]]+validate([[:space:]]|$) ]] && return 0
   [[ "$arguments" =~ ^redact([[:space:]]|$) ]] && return 0
   return 1
 }

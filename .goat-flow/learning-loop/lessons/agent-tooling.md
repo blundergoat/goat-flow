@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, shell quoting under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -8,26 +8,28 @@ last_reviewed: 2026-08-15
 ## Lesson: Confused install-copy path pair for a directory move
 
 **Created:** 2026-04-18
-**Updated:** 2026-07-19
-**Decision changed:** Resolve the exact workflow source from `workflow/manifest.json` or `rg --files` before putting a managed source/install pair into a plan or command.
+**Updated:** 2026-08-16
+**Decision changed:** Resolve the exact workflow source from `workflow/manifest.json` or `rg --files`, then set and verify the installed executable mode explicitly when a copy crosses filesystems.
 **Trigger phase:** READ
-**Incident count:** 4
-**Latest occurrence:** 2026-07-19
+**Incident count:** 5
+**Latest occurrence:** 2026-08-16
 
 **What happened:** Four pre-edit reads or commands inferred paths: the agent misread a workflow source/install pair as a move, pluralized a managed source directory, guessed an ADR-016 filename, then guessed an M06 milestone filename. Each failed. `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-033-goat-flow-directory-restructure.md`), and `rg --files --hidden --no-ignore` supplied the exact paths.
 
-**Root cause:** It inferred concept-shaped names instead of resolving the manifest, generated index, or ignored-plan inventory; the install cases also collapsed workflow sources into installed copies.
+**Recurrence 2026-08-16:** Copying `workflow/hooks/post-turn-safety.sh` from the NTFS-backed source checkout into a Linux controller with `cp --preserve=mode` propagated mode `0777` over the controller's intended `0755`. The content was correct, but the installation metadata was not. An immediate `chmod 0755` plus `stat` and byte-parity checks restored the expected installation.
 
-**Why it matters:** A wrong move can remove consumer templates, while an invented source path makes planning and verification fail before useful work begins.
+**Root cause:** It inferred concept-shaped names instead of resolving the manifest, generated index, or ignored-plan inventory; the install cases also collapsed workflow sources into installed copies or assumed source filesystem metadata was portable.
 
-**Prevention:** Resolve managed paths from `workflow/manifest.json`, learning entries from `INDEX.md`, and ignored milestones with `rg --files --hidden --no-ignore`. Never infer directory or document names.
+**Why it matters:** A wrong move can remove consumer templates, an invented source path makes planning fail before useful work begins, and copied mode bits can silently broaden permissions on an otherwise correct installed hook.
+
+**Prevention:** Resolve managed paths from `workflow/manifest.json`, learning entries from `INDEX.md`, and ignored milestones with `rg --files --hidden --no-ignore`. Never infer directory or document names. When distributing executables across WSL, NTFS, or Linux filesystems, copy content, set the destination to the intended mode explicitly, and verify both `stat` and byte parity.
 
 ---
 
 ## Lesson: When deny hook blocks a command, use the unblocked equivalent
 
 **Created:** 2026-03-28
-**Updated:** 2026-07-19
+**Updated:** 2026-08-16
 
 **What happened:** Agent needed to delete `.github/skills/goat-onboard/` and `.github/skills/goat-reflect/`. Used `rm -rf`, blocked by the destructive-shell guard. Instead of `rm file && rmdir dir` (not blocked), it asked the user to delete manually - wasting a round trip on something trivially solvable.
 
@@ -40,6 +42,8 @@ last_reviewed: 2026-08-15
 **Recurrence update 2026-07-16:** A read-only source search embedded a destructive-command literal in the search expression, so the deny hook rejected the entire command before `rg` ran. The corrected search used semantic terms such as `destructive` and `truncate` instead of replaying an executable-looking command. Evidence: `.goat-flow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the matching guard; `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: `When deny hook blocks a command, use the unblocked equivalent`) records the recovery.
 
 **Recurrence 2026-07-19:** A `node -e` dry-run summarizer embedded `child_process`, so the hook blocked it before execution. Piping the direct CLI output to `jq` produced the same assertion without a shell-execution wrapper. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+
+**Recurrence 2026-08-16:** A final controller smoke piped a known JSON Stop payload into `bash .goat-flow/hooks/post-turn-safety.sh`, so the deny hook correctly blocked the pipe-to-shell shape before any checks ran. The corrected smoke created an inspected temporary payload with `apply_patch` and redirected that local file into the hook. Preserve this distinction in hook testing: the payload may be trusted, but a shell pipe is still the prohibited execution shape. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`).
 
 **Root cause:** Agent defaulted to `rm -rf` out of habit and treated the block as a dead end instead of considering alternatives.
 **Fix:** When a command is blocked, find the unblocked equivalent. `rm -rf dir/` → `rm dir/file && rmdir dir/`. `mv old new` → `mv -n old new`. The deny hook blocks dangerous patterns, not all file ops.
