@@ -409,6 +409,62 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
     );
   });
 
+  it("documents validator-ready anchors, REFUTED-only ledgers, and resumable chunks", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const skill = readProjectFile(skillPath);
+      const diffReview = readMarkdownSection(
+        skillPath,
+        "Diff Review (Quick) - Two-Pass Discipline",
+      );
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+      const output = readMarkdownSection(skillPath, "Output Format");
+
+      assert.doesNotMatch(skill, /<target-project>\/path/u, skillPath);
+      assert.match(
+        output,
+        /Machine-valid anchors use repo-relative paths/u,
+        skillPath,
+      );
+      assert.match(
+        diffReview,
+        /Refutation Ledger:[^\n]+REFUTED suspicions only/iu,
+        skillPath,
+      );
+      assert.match(
+        diffReview,
+        /CONFIRMED\/ADJUSTED[^\n]+Findings[^\n]+UNRESOLVED[^\n]+verdict counts/iu,
+        skillPath,
+      );
+      assert.match(
+        diffReview,
+        /`Refutations logged`[^\n]+ledger record count/iu,
+        skillPath,
+      );
+      assert.match(
+        constraints,
+        /\.goat-flow\/logs\/review\/goat-review-chunks\.<random>\.md/u,
+        skillPath,
+      );
+      for (const requiredState of [
+        "scope snapshot",
+        "bound authority",
+        "chunks completed",
+        "chunks remaining",
+        "findings with R-IDs",
+        "refutation ledger",
+        "verify no drift",
+        "next chunk",
+        "one consolidated verdict",
+      ]) {
+        assert.match(
+          constraints,
+          new RegExp(requiredState, "iu"),
+          `${skillPath}: missing resumable chunk state ${requiredState}`,
+        );
+      }
+    });
+  });
+
   it("aligns goat-review persistence and validator status across output surfaces", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const scope = readMarkdownSection(

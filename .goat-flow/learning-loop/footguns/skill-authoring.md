@@ -1,6 +1,6 @@
 ---
 category: skill-authoring
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Authoring and editing skill, playbook, and slash-command bodies - candidacy, word-budget and contract-phrase caps, tool-isolation constraints on prescribed commands, and pressure to reword load-bearing language. Keeping workflow templates and installed copies in sync lives in [skills.md](skills.md).
@@ -85,6 +85,9 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 ## Footgun: Playbook content edits collide with the ADR-023 word cap and exact-phrase contract assertions
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Measure the body budget and inventory phrase-pinning contracts before adding or compressing any shipped skill or playbook guidance.
+**Trigger phase:** ACT
+**Incident count:** 2 | **Latest occurrence:** 2026-08-16
 
 **Symptoms:** An approved content addition to a shipped playbook passes typecheck, content lint, and the playbook contract test, then fails preflight twice. First on the ADR-023 progressive-pack word cap. Then, after the compression pass that makes room, on skill-hardening assertions pinning exact sentences the compression reworded.
 
@@ -92,14 +95,16 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 
 **Evidence:** 2026-08-10, `writing-style.md`. Eight approved additions took the body from 2998 to 3672 words; `test/contract/skill-hardening-contracts.test.ts` (search: `ADR-023 word budget tiers`) reported `3672 words meets or exceeds progressive cap 3000`. Compressing back to 2997 broke eight assertions in `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps writing-style edits truth-preserving and source-aware`), among them `claim strength and specificity to the evidence`, `Reference-list labels remain valid`, `Illustrative before`, and a capitalisation-only change from `status,` to `Status,` at the head of a Verification Gate item.
 
+**Recurrence 2026-08-16:** Adding validator-anchor, refutation-ledger, and resumable-chunk guidance raised `workflow/skills/goat-review/SKILL.md` from 2499 to 2593 body words. The first compression returned it to 2499 but changed pinned phrases and failed 14 focused skill contracts. The next focused set passed 45/45 but omitted two shared-surface contracts, which the full suite caught. An all-file skill-hardening run then caught a case-sensitive prefix mismatch and a contract regressed while reclaiming words. Inventorying every direct reader before the final correction produced a 2499-word body with all 181 skill-hardening contracts passing. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap`), `test/contract/skill-hardening-review-1.test.ts` (search: `forbids goat-review setup mutation and branch checkout`), `test/contract/skill-hardening-review-2.test.ts` (search: `calibrates goat-review severity from evidence before labels`), `test/contract/skill-hardening-review-2.test.ts` (search: `documents validator-ready anchors, REFUTED-only ledgers, and resumable chunks`), `test/contract/skill-hardening-shared-1.test.ts` (search: `defines two evidence-producing area audit passes`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps direction audits advisory, grounded, and separate from defect verdicts`).
+
 **Prevention:** Before editing a playbook, measure its body word count and grep the contract tests for its filename to list the pinned phrases:
 
 ```bash
 node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8").replace(/^---\n[\s\S]*?\n---\n?/,"");console.log(t.split(/\s+/).filter(Boolean).length)' .goat-flow/skill-docs/playbooks/<name>.md
-grep -n "<name>" test/contract/skill-hardening-*.test.ts
+rg -n "<name>|<distinctive heading or phrase>" test/contract/skill-hardening-*.test.ts
 ```
 
-Restore pinned phrases verbatim after any compression, take the compensating words from prose no assertion covers, and run both skill-hardening contract tests before preflight. Mirror the result to `workflow/skills/playbooks/` in the same turn; preflight diffs the pair.
+Restore pinned phrases verbatim after any compression, take compensating words from prose no assertion covers, and run the relevant skill-hardening contract tests before preflight. Mirror the result to every installed skill or playbook copy in the same turn; preflight diffs them.
 
 ## Footgun: goat-plan surface additions collide with near-full word-budget contract caps
 

@@ -24,6 +24,47 @@ import { checkHookRuntimeSmoke } from "../../../src/cli/audit/check-agent-deny-r
 import { applyHookState } from "../../../src/cli/server/hook-registrar.js";
 import { withTempProject } from "../hook-registrar.helpers.js";
 
+/** Extract one Claude permission tool's path operands; sorted output makes set parity deterministic. */
+function permissionDenyPaths(denyRules: string[], tool: "Read" | "Edit") {
+  const prefix = `${tool}(`;
+  return denyRules
+    .filter((rule) => rule.startsWith(prefix) && rule.endsWith(")"))
+    .map((rule) => rule.slice(prefix.length, -1))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+/** Assert that every denied read path has the Edit counterpart needed for NotebookEdit parity. */
+function assertClaudeReadEditParity(denyRules: string[]): void {
+  assert.deepEqual(
+    permissionDenyPaths(denyRules, "Edit"),
+    permissionDenyPaths(denyRules, "Read"),
+  );
+}
+
+describe("Claude agent-config deny parity", () => {
+  it("keeps Read and Edit path sets identical and detects a removed Edit rule", () => {
+    const config = JSON.parse(
+      readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/agent-config/claude.json"),
+        "utf-8",
+      ),
+    ) as { permissions: { deny: string[] } };
+    assertClaudeReadEditParity(config.permissions.deny);
+
+    const firstEditRule = config.permissions.deny.find((rule) =>
+      rule.startsWith("Edit("),
+    );
+    assert.ok(firstEditRule, "fixture requires at least one Edit deny rule");
+    assert.throws(
+      () =>
+        assertClaudeReadEditParity(
+          config.permissions.deny.filter((rule) => rule !== firstEditRule),
+        ),
+      /Expected values to be strictly deep-equal/u,
+    );
+  });
+});
+
 /**
  * Build a real non-Git Codex install and pass it to one runtime-audit assertion.
  * Use when the configured launcher itself, rather than a direct script substitute, matters.

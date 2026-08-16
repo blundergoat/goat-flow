@@ -23,7 +23,7 @@ last_reviewed: 2026-08-10
 
 **Root cause:** `naming.short-variable` is intentionally syntax-local. It cannot distinguish a throwaway `r` from a conventional `ws` WebSocket handle or `md` Markdown renderer without project vocabulary.
 
-**Prevention:** Keep `.gruff-ts.yaml` `acceptedAbbreviations` limited to domain-standard two-letter terms, and rename concentrated one-letter locals where a clearer name is obvious. Do not add broad one-letter names such as `r`, `a`, `b`, or `m` to the allowlist. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`).
+**Prevention:** Keep `.gruff-ts.yaml` `acceptedAbbreviations` limited to domain-standard two-letter terms, and rename concentrated one-letter locals where a clearer name is obvious. Do not add broad one-letter names such as `r`, `a`, `b`, or `m` to the allowlist. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedAbbreviations:`).
 
 ---
 
@@ -47,7 +47,7 @@ last_reviewed: 2026-08-10
 
 **Root cause:** `naming.boolean-prefix` enforces an `is/has/can`-style grammar, but goat-flow has two other boolean naming grammars: UI state (`show*`, `loading*`, `selected*`, `terminal*`) and CLI/API flag names that intentionally match query params, JSON fields, or argv switches. Renaming those mechanically would make boundary code less traceable.
 
-**Prevention:** Keep `.gruff-ts.yaml` `booleanPrefixes` extended for camelCase state and protocol prefixes used across dashboard and CLI surfaces. Do not use the prefix list to hide exact lowercase flag names; those remain fix-or-baseline candidates because gruff's prefix matcher requires an uppercase boundary after the prefix. Evidence anchors: `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`).
+**Prevention:** Use `.gruff-ts.yaml` `acceptedBooleanNames` for exact boundary flags and reserve `booleanPrefixes` for genuine project-wide prefix grammar. Do not use the prefix list to hide exact lowercase flag names because gruff requires an uppercase boundary after a prefix. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedBooleanNames:`), `.gruff-ts.yaml` (search: `booleanPrefixes:`).
 
 ---
 

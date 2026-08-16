@@ -616,4 +616,75 @@ describe("hook launcher script validation", () => {
       }
     });
   });
+
+  /*
+   * Fixture purpose: invokes the launcher and an in-project hook through symlinked root spellings,
+   * then writes an outside control target to prove physical normalization does not widen trust.
+   * Side effects: creates and removes symlink hosts plus child Node and Bash processes.
+   */
+  it("executes through a symlinked project root while rejecting a physical escape", () => {
+    withTempProject((root) => {
+      const linkedHookExitStatus = 7;
+      const linkHost = mkdtempSync(join(tmpdir(), "goat-flow-linked-root-"));
+      const outsideHooks = mkdtempSync(join(tmpdir(), "goat-flow-outside-"));
+      try {
+        const hookDir = createManagedHookDirectory(root);
+        const hookPath = join(hookDir, "exit-seven.sh");
+        writeFileSync(
+          hookPath,
+          `#!/usr/bin/env bash\nprintf 'linked launch ran\\n'\nexit ${linkedHookExitStatus}\n`,
+        );
+        const linkedProjectRoot = join(linkHost, "project");
+        const linkedLauncherPath = join(linkHost, "run-with-bash.mjs");
+        symlinkSync(root, linkedProjectRoot, "dir");
+        symlinkSync(HOOK_LAUNCHER_PATH, linkedLauncherPath);
+
+        const linkedResult = spawnSync(
+          process.execPath,
+          [
+            linkedLauncherPath,
+            join(linkedProjectRoot, ".goat-flow", "hooks", "exit-seven.sh"),
+            "gruff",
+          ],
+          {
+            cwd: linkedProjectRoot,
+            encoding: "utf8",
+          },
+        );
+        assert.equal(
+          linkedResult.status,
+          linkedHookExitStatus,
+          launcherDiagnostics(linkedResult),
+        );
+        assert.equal(linkedResult.stdout, "linked launch ran\n");
+
+        writeFileSync(
+          join(outsideHooks, "outside.sh"),
+          "#!/usr/bin/env bash\nexit 0\n",
+        );
+        symlinkSync(outsideHooks, join(root, "outside-hooks"), "dir");
+        const escapingResult = spawnSync(
+          process.execPath,
+          [
+            linkedLauncherPath,
+            join(linkedProjectRoot, "outside-hooks", "outside.sh"),
+            "policy",
+          ],
+          {
+            cwd: linkedProjectRoot,
+            encoding: "utf8",
+          },
+        );
+        assert.equal(
+          escapingResult.status,
+          2,
+          launcherDiagnostics(escapingResult),
+        );
+        assert.match(escapingResult.stderr, /escaped the project root/u);
+      } finally {
+        rmSync(linkHost, { recursive: true, force: true });
+        rmSync(outsideHooks, { recursive: true, force: true });
+      }
+    });
+  });
 });

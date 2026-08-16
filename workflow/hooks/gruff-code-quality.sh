@@ -32,6 +32,7 @@ GRUFF_CODE_QUALITY_MAX_FINDINGS="${GRUFF_CODE_QUALITY_MAX_FINDINGS:-20}"
 GRUFF_CODE_QUALITY_MIN_SEVERITY="${GRUFF_CODE_QUALITY_MIN_SEVERITY:-advisory}"
 # Per-binary cache of gruff.hook.v1 capabilities JSON ("" = analyzer is pre-contract).
 declare -A HOOK_CAPS_CACHE
+HOOK_CAPS_RESULT=""
 
 FILE_RESULT_PRIORITY=0
 FILE_RESULT_OUTCOME="pass"
@@ -561,6 +562,37 @@ resolve_config_binary() {
   printf '%s/%s' "$root" "$value"
 }
 
+# Resolve one existing file to a physical path without relying on GNU-only `realpath -f`.
+# Final-component symlinks are followed explicitly; `pwd -P` resolves parent-directory links.
+physical_existing_path() {
+  local candidate="$1" target physical_directory
+  local hops=0
+  while [[ -L "$candidate" ]]; do
+    hops=$((hops + 1))
+    [[ "$hops" -le 40 ]] || return 1
+    target="$(readlink "$candidate" 2>/dev/null)" || return 1
+    case "$target" in
+      /*) candidate="$target" ;;
+      *) candidate="$(dirname "$candidate")/$target" ;;
+    esac
+  done
+  physical_directory="$(cd "$(dirname "$candidate")" 2>/dev/null && pwd -P)" || return 1
+  printf '%s/%s' "${physical_directory%/}" "$(basename "$candidate")"
+}
+
+# Configured analyzers are trusted only when both the selected root and executable resolve to the
+# same physical repository. Environment overrides intentionally retain their machine-local scope.
+configured_binary_is_contained() {
+  local root="$1" resolved_binary="$2"
+  local physical_root physical_binary
+  physical_root="$(cd "$root" 2>/dev/null && pwd -P)" || return 1
+  physical_binary="$(physical_existing_path "$resolved_binary")" || return 1
+  case "$physical_binary" in
+    "$physical_root"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Discovery covers each ecosystem's standard install location - package-manager
 # bin dirs (vendor/bin for composer, node_modules/.bin for npm), an in-repo bin/,
 # the root virtualenv (.venv/bin), user-local installs (~/.local/bin), and finally
@@ -590,7 +622,8 @@ discover_binary() {
   config_override="$(config_binary_override "$root" "$binary")"
   if [[ -n "$config_override" ]]; then
     resolved="$(resolve_config_binary "$root" "$config_override")"
-    if [[ -n "$resolved" && -f "$resolved" && -x "$resolved" ]]; then
+    if [[ -n "$resolved" && -f "$resolved" && -x "$resolved" ]] && \
+      configured_binary_is_contained "$root" "$resolved"; then
       printf '%s' "$resolved"
     fi
     return 0
@@ -1117,9 +1150,8 @@ self_test() {
     return 1
   }
 
-  # Contract render: hook_v1_report surfaces every finding the analyzer returned
-  # (it already scoped them), nulls the line for file/project scope, and
-  # severity-sorts.
+  # Contract render: hook_v1_report preserves file/project findings, filters attributable
+  # line/symbol spans against the edit, nulls synthetic file/project lines, and severity-sorts.
   report_output='{"findings":[{"severity":"warning","scope":"file","line":1,"file":"x.ts","ruleId":"size.file-length","message":"too long","remediation":"split"},{"severity":"advisory","scope":"line","line":12,"file":"x.ts","ruleId":"naming.x","message":"rename"}]}'
   report_json="$(hook_v1_report "$report_output" 1 20)"
   [[ "$(printf '%s' "$report_json" | jq -r '[.total,.surfaced] | @tsv')" == $'2\t2' ]] || {
@@ -1502,7 +1534,7 @@ hook_capabilities() {
   local binary_path="$1"
   local binary="${2:-}"
   if [[ -n "${HOOK_CAPS_CACHE[$binary_path]+x}" ]]; then
-    printf '%s' "${HOOK_CAPS_CACHE[$binary_path]}"
+    HOOK_CAPS_RESULT="${HOOK_CAPS_CACHE[$binary_path]}"
     return 0
   fi
   local caps="" probe
@@ -1517,15 +1549,15 @@ hook_capabilities() {
     fi
   fi
   HOOK_CAPS_CACHE["$binary_path"]="$caps"
-  printf '%s' "$caps"
+  HOOK_CAPS_RESULT="$caps"
 }
 
 # Project a gruff.hook.v1 envelope into the same control object
 # changed_findings_report emits ({ total, e, w, a, surfaced, floored, more,
 # lines }), so process_file_contract reuses the existing print block. The
-# analyzer has already scoped the findings (B1), so EVERY returned finding is
-# surfaced - no re-filtering by line. file/project-scope findings render without
-# a `:line` because their line is a synthetic anchor, not a code location.
+# analyzer owns scope classification; this projection preserves file/project findings and
+# rechecks attributable line/symbol spans against the current edit. file/project-scope
+# findings render without a `:line` because their line is a synthetic anchor, not a code location.
 hook_v1_report() {
   local output="$1" floor_rank="$2" max="$3" ranges="${4:-}"
   printf '%s' "$output" | jq -c --argjson floor_rank "$floor_rank" --argjson max "$max" --arg ranges "$ranges" '
@@ -1536,18 +1568,27 @@ hook_v1_report() {
       $ranges
       | split(",")
       | map(select(length > 0) | split("-") | {start: (.[0] | tonumber), end: (.[1] | tonumber)});
-    def in_changed_ranges($line):
+    def overlaps_changed_ranges($start; $end):
       parsed_ranges as $parsed
-      | ($parsed | length) == 0 or any($parsed[]; $line >= .start and $line <= .end);
+      | ($parsed | length) == 0 or any($parsed[]; $start <= .end and $end >= .start);
+    def attributable_line_or_span:
+      (.line // null) as $start
+      | if $start == null then false
+        else (.endLine // $start) as $reported_end
+        | (if $reported_end >= $start then $reported_end else $start end) as $end
+        | overlaps_changed_ranges($start; $end)
+        end;
     # A file-scope finding describes the file the agent is editing right now - it is too long,
     # it has no overview, it sits in an import cycle. Those never overlap a changed line, so
     # range filtering would hide them forever and let a file grow unbounded while every edit
-    # reports clean. They always surface. Line and symbol findings stay range-filtered so the
-    # agent is not handed pre-existing debt from parts of the file it did not touch.
+    # reports clean. They always surface. Line findings use their anchor; symbol findings use the
+    # producer endLine span when present. A partial edit can therefore resurface pre-existing
+    # findings elsewhere in that symbol, matching native symbol scoping. Unanchored line/symbol
+    # findings are omitted explicitly because the hook cannot attribute them to the current edit.
     [ (.findings // [])[]
       | select(
           ((.scope // "line") == "file" or (.scope // "line") == "project")
-          or in_changed_ranges(.line // 0)
+          or attributable_line_or_span
         )
       | { sev: ((.severity // "advisory") | tostring | ascii_downcase),
           rank: sev_rank(.severity // ""),
@@ -1747,6 +1788,8 @@ process_file() {
         printf 'gruff-code-quality: %s must be a repo-relative path inside the repo, got %s; use %s for machine-specific paths; skipped\n' "$config_key" "$config_binary" "$binary_env" >&2
       elif [[ ! -e "$resolved_binary" ]]; then
         printf 'gruff-code-quality: %s points at %s which does not exist; skipped\n' "$config_key" "${resolved_binary#"$root"/}" >&2
+      elif ! configured_binary_is_contained "$root" "$resolved_binary"; then
+        printf 'gruff-code-quality: %s resolves outside the repository: %s; skipped\n' "$config_key" "${resolved_binary#"$root"/}" >&2
       else
         printf 'gruff-code-quality: %s points at %s which is not an executable file; skipped\n' "$config_key" "${resolved_binary#"$root"/}" >&2
       fi
@@ -1776,7 +1819,8 @@ process_file() {
   # scoping, scope tagging, metadata, remediation and new-only - the hook only
   # renders. Pre-contract analyzers fall through to the legacy analyse path below.
   local hook_caps
-  hook_caps="$(hook_capabilities "$binary_path" "$binary")"
+  hook_capabilities "$binary_path" "$binary"
+  hook_caps="$HOOK_CAPS_RESULT"
   if [[ -n "$hook_caps" ]]; then
     process_file_contract "$binary_path" "$binary" "$rel_path" "$root" "$rel_path" "$ranges"
     return 0
@@ -1906,6 +1950,7 @@ process_file_result() {
   local target_root target_rel_path config_file binary_path ranges range_status
   local hook_caps help output status uses_native_regions changed_scope
   local config_error ignored_desc report_json floor_rank max_findings
+  local config_binary config_key resolved_binary
 
   reset_file_result
 
@@ -1954,8 +1999,17 @@ process_file_result() {
   binary_path="$(discover_binary "$root" "$binary" "$target_root")"
   # A configured file without an executable analyzer is an unavailable check.
   if [[ -z "$binary_path" ]]; then
-    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-binary-missing" \
-      "$binary could not be resolved for ${config_file#"$root"/}" "$rel_path" 0 0
+    config_binary="$(config_binary_override "$root" "$binary")"
+    config_key="hooks.gruff-code-quality.binaries.${binary#gruff-}"
+    resolved_binary="$(resolve_config_binary "$root" "$config_binary")"
+    if [[ -n "$config_binary" && -n "$resolved_binary" && -e "$resolved_binary" ]] && \
+      ! configured_binary_is_contained "$root" "$resolved_binary"; then
+      record_file_result 80 "unavailable" "hook-unavailable" "analyzer-binary-outside-project" \
+        "$config_key resolves outside the repository" "$rel_path" 0 0
+    else
+      record_file_result 80 "unavailable" "hook-unavailable" "analyzer-binary-missing" \
+        "$binary could not be resolved for ${config_file#"$root"/}" "$rel_path" 0 0
+    fi
     return 0
   fi
   # jq validates analyzer responses before any clean or finding state reaches the UI.
@@ -1988,7 +2042,8 @@ process_file_result() {
     return 0
   fi
 
-  hook_caps="$(hook_capabilities "$binary_path" "$binary")"
+  hook_capabilities "$binary_path" "$binary"
+  hook_caps="$HOOK_CAPS_RESULT"
   # Capability-aware analyzers preserve clean, finding, invalid, failed, and timeout states.
   if [[ -n "$hook_caps" ]]; then
     process_file_contract "$binary_path" "$binary" "$rel_path" "$target_root" "$target_rel_path" "$ranges"
@@ -2084,7 +2139,7 @@ payload_session_identifier() {
   '
 }
 
-# Announce analyzer health once per provider session, project, hook version, and day.
+# Announce analyzer health once per provider session, project, analyzer, hook version, and day.
 # Use only after schema-valid work; malformed markers are replaced and findings are
 # never deduplicated, so a user sees every actionable result from later edits.
 announce_verified_health() {
@@ -2103,7 +2158,7 @@ announce_verified_health() {
     printf 'gruff-code-quality: verified analyzer exchange (%s); health marker could not be stored.\n' "$binary" >&2
     return 0
   fi
-  identity="${session_identifier}|${root}|${HOOK_VERSION}|${health_day}"
+  identity="${session_identifier}|${root}|${binary}|${HOOK_VERSION}|${health_day}"
   checksum="$(printf '%s' "$identity" | cksum | awk '{print $1}')"
   marker="$marker_directory/.gruff-hook-health.$checksum"
   printf -v expected 'schema=gruff-hook-health.v1\nsession=%s\nproject=%s\nhookVersion=%s\nday=%s\nbinary=%s\n' \

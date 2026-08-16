@@ -68,15 +68,13 @@ const STANDALONE_EVIDENCE_VALUE_PATTERN =
 /** Count `## Lesson:` or `## Pattern:` bucket entries in one markdown file. */
 function countLessonEntries(content: string): number {
   const { body } = parseMarkdownFrontmatter(content);
-  const bucketCount = countMatches(body, /^##\s+(?:Lesson|Pattern):\s+/gm);
-  return bucketCount > 0 ? bucketCount : 1;
+  return countMatches(body, /^##\s+(?:Lesson|Pattern):\s+/gm);
 }
 
-/** Count active footgun sections, preserving legacy single-entry files as one entry. */
+/** Count only explicit footgun sections that generated INDEX-first retrieval can reach. */
 function countFootgunEntries(content: string): number {
   const { body } = parseMarkdownFrontmatter(content);
-  const bucketCount = countMatches(body, /^##\s+Footgun:\s+/gm);
-  return bucketCount > 0 ? bucketCount : 1;
+  return countMatches(body, /^##\s+Footgun:\s+/gm);
 }
 
 /** Count footgun evidence labels so stats can compare labels to entry count. */
@@ -86,7 +84,7 @@ function countFootgunLabels(content: string): number {
   if (sections.length > 0)
     return sections.filter((section) => hasEvidenceLabel(section.content))
       .length;
-  return hasEvidenceLabel(content) ? 1 : 0;
+  return 0;
 }
 
 /** Explain a bucket whose entries do not each carry one canonical evidence label. */

@@ -225,8 +225,8 @@ export const TIMING_OBLIGATION_CHECKS = [
  * Use when a skill points a reader at another document: a citation that no longer matches
  * sends the agent to text that is not there, which reads as a missing instruction.
  *
- * Anchors naming `<target-project>` are consumer-project placeholders, not files in this
- * checkout, so they are counted and skipped rather than resolved.
+ * Anchors whose path starts with an angle-bracket token are consumer-project placeholders,
+ * not files in this checkout, so they are counted and skipped rather than resolved.
  *
  * @param reviewRoot - bundle root used to resolve `SKILL.md` and `references/` citations
  * @param bundlePaths - files to scan; an empty list returns zero counts and proves nothing,
@@ -247,7 +247,7 @@ export function verifyNamedAnchorsResolve(
       const citedPath = anchorMatch[1];
       const anchor = anchorMatch[2];
       // A consumer-project placeholder cannot resolve here, so it is exempted, not failed.
-      if (citedPath.includes("<target-project>")) {
+      if (/^<[^>]+>(?:\/.*)?$/u.test(citedPath)) {
         placeholderAnchors += 1;
         continue;
       }

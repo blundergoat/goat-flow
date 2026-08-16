@@ -535,14 +535,30 @@ export async function runHookWithBash(
   // A normal hook starts in the selected project; tests can provide a fixture root.
   const projectRoot = launchOptions.root ?? process.cwd();
   const hookScriptPath = resolve(projectRoot, hookScriptArgument);
-  const projectRelativeHookPath = relative(projectRoot, hookScriptPath);
+  let containmentProjectRoot = projectRoot;
+  let containmentHookScriptPath = hookScriptPath;
+  // Existing paths are compared by physical identity so a symlinked spelling of the selected
+  // project stays inside it. A path that cannot resolve retains the lexical fail-closed check.
+  try {
+    containmentProjectRoot = realpathSync(projectRoot);
+    containmentHookScriptPath = realpathSync(hookScriptPath);
+  } catch {
+    // The existence and shape checks below retain their more specific unavailable reason.
+    containmentProjectRoot = resolve(projectRoot);
+    containmentHookScriptPath = resolve(hookScriptPath);
+  }
+  const projectRelativeHookPath = relative(
+    containmentProjectRoot,
+    containmentHookScriptPath,
+  );
   // An empty or escaping path could make an agent execute outside the user's project.
   if (
     projectRelativeHookPath.length === 0 ||
     projectRelativeHookPath === ".." ||
     projectRelativeHookPath.startsWith(`..${win32.sep}`) ||
     projectRelativeHookPath.startsWith("../") ||
-    projectRelativeHookPath.startsWith("..\\")
+    projectRelativeHookPath.startsWith("..\\") ||
+    isAbsolute(projectRelativeHookPath)
   ) {
     return reportUnavailable(
       hookResponseMode,
@@ -724,9 +740,14 @@ const launchedModuleArgument = process.argv[1];
 let launchedModulePath = "";
 // Import-only tests omit an invoked path; direct hook execution supplies one.
 if (launchedModuleArgument) {
-  launchedModulePath = resolve(launchedModuleArgument);
+  const resolvedLaunchPath = resolve(launchedModuleArgument);
+  try {
+    launchedModulePath = realpathSync(resolvedLaunchPath);
+  } catch {
+    launchedModulePath = resolvedLaunchPath;
+  }
 }
-const currentModulePath = fileURLToPath(import.meta.url);
+const currentModulePath = realpathSync(fileURLToPath(import.meta.url));
 let launchedAsProgram = launchedModulePath === currentModulePath;
 // Windows paths are case-insensitive from the user's shell even when strings differ.
 if (process.platform === "win32") {

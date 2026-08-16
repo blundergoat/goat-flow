@@ -518,6 +518,7 @@ export function writeContractGruffBinary(
     bin,
     `#!/usr/bin/env bash
 if [[ "$1" == "hook" && " $* " == *" --capabilities "* ]]; then
+  printf 'capabilities\n' >> "$PWD/gruff-capabilities.log"
   cat <<'JSON'
 {"contractVersion":"gruff.hook.v1","analyzer":{"name":"gruff-ts","version":"9.9.9"},"supports":{"changedRanges":true,"diff":true,"baseline":true,"scopeField":true,"metadata":true,"stableIdentity":true,"ignoreReport":true,"newOnly":true},"flags":{"changedRanges":"--changed-ranges","diff":"--diff","baseline":"--baseline"},"flagOrder":"any"}
 JSON

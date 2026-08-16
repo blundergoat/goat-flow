@@ -1219,13 +1219,13 @@ fallback_scan_literal_assignment() {
 fallback_scan_assignment() {
   local path="$1"
   local line="$2"
-  local assignment_re='^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=][[:space:]]*(.+)$'
+  local assignment_re='^[[:space:]]*((export|EXPORT)[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=][[:space:]]*(.+)$'
 
   case "$line" in
     [Ee][Nn][Vv]\ * | [Aa][Rr][Gg]\ *) line="${line#* }" ;;
   esac
   [[ "$line" =~ $assignment_re ]] || return 0
-  fallback_scan_literal_assignment "$path" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+  fallback_scan_literal_assignment "$path" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}"
 }
 
 # Scan Docker ARG and ENV forms so container users receive the same secret warning.
@@ -1579,6 +1579,7 @@ post_turn_self_test() (
   local self_test_root
   local self_test_script="${BASH_SOURCE[0]}"
   local synthetic_aws_token="AKIA${POST_TURN_SELF_TEST_TOKEN_SUFFIX:-1234567890ABCDEF}"
+  local synthetic_assignment_secret="Abcdef1234567890"
 
   # A relative invocation must remain callable after the fixture changes working directory.
   case "$self_test_script" in
@@ -1627,6 +1628,16 @@ post_turn_self_test() (
     # A high-confidence changed token should block the user's turn.
     if [ "$hook_result" -ne 2 ]; then
       printf 'post-turn-safety self-test: finding case failed on scanner %s\n' "$scanner_setting" >&2
+      return 2
+    fi
+
+    printf 'EXPORT TOKEN=%s\n' "$synthetic_assignment_secret" >"$self_test_root/settings.env"
+    GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK="$scanner_setting" \
+      bash "$self_test_script" </dev/null >/dev/null 2>&1
+    hook_result=$?
+    # Uppercase shell export syntax must block identically in native and Bash 3 scanners.
+    if [ "$hook_result" -ne 2 ]; then
+      printf 'post-turn-safety self-test: EXPORT finding case failed on scanner %s\n' "$scanner_setting" >&2
       return 2
     fi
 
@@ -2893,8 +2904,7 @@ main() {
     finish_infrastructure_failure "$root" "native:scan workspace unavailable"
     return $?
   fi
-  # shellcheck disable=SC2064
-  trap "rm -rf '$WORKDIR'" EXIT
+  trap 'rm -rf "$WORKDIR"' EXIT
   post_turn_result_records_path="$WORKDIR/hook-result-records"
 
   local head_present=0

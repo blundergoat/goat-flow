@@ -269,6 +269,34 @@ describe("extractLessonsFacts freshness + placeholder filtering", () => {
   const fixtureDir = ".goat-flow/learning-loop/lessons/";
   const pinnedNow = new Date("2026-04-18T12:00:00Z");
 
+  // Fixture purpose: models legacy prose in both heading-indexed bucket types so stats cannot
+  // claim entries that the generated INDEX omits.
+  it("does not count prose-only bucket files that INDEX-first retrieval cannot reach", () => {
+    const lessonPath = `${fixtureDir}legacy.md`;
+    const lessonContent =
+      "---\ncategory: legacy\nlast_reviewed: 2026-04-18\n---\n\nLegacy prose without an indexed heading.\n";
+    const lessonFacts = extractLessonsFacts(
+      stubFS({ [lessonPath]: lessonContent }, { [fixtureDir]: ["legacy.md"] }),
+      stubConfig(),
+      pinnedNow,
+    );
+    const footgunDir = ".goat-flow/learning-loop/footguns/";
+    const footgunPath = `${footgunDir}legacy.md`;
+    const footgunContent = `${lessonContent}\n**Status:** active | **Created:** 2026-04-18 | **Evidence:** OBSERVED\n`;
+    const footgunFacts = extractFootgunFacts(
+      stubFS(
+        { [footgunPath]: footgunContent },
+        { [footgunDir]: ["legacy.md"] },
+      ),
+      stubConfig(),
+      pinnedNow,
+    );
+
+    assert.equal(lessonFacts.entryCount, 0);
+    assert.equal(footgunFacts.entryCount, 0);
+    assert.equal(footgunFacts.labelCount, 0);
+  });
+
   it("does not treat placeholder paths as stale refs", () => {
     const fs = stubFS(
       {

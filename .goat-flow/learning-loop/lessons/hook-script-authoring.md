@@ -1,6 +1,6 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
@@ -38,6 +38,8 @@ last_reviewed: 2026-08-15
 ## Lesson: Keep generated Bash regexes out of inline conditionals
 
 **Status:** active | **Created:** 2026-05-27
+**Decision changed:** Treat every shell-quoted embedded program and its comments as part of the outer shell grammar; run syntax proof before mirror fanout.
+**Incident count:** 3 | **Latest occurrence:** 2026-08-16
 
 **What happened:** While regenerating the self-contained split hooks, inline Bash EREs lost escaping for `>`, `|`, `<<<`, and quote classes. `bash -n` caught parse failures, and the full deny-dangerous self-test caught `bash -c "echo ok; rm -rf /"` returning exit 0 because the inline quote regex captured only `r` instead of the inner command.
 
@@ -48,6 +50,8 @@ last_reviewed: 2026-08-15
 **Updated 2026-08-10:** An apostrophe in embedded Node broke Bash parsing; a template literal then raised SC2016. Keep embedded comments quote-neutral and run `bash -n` plus ShellCheck before mirror fanout. Structural audits must recognize embedded `//` comments before reporting a missing Bash comment. Evidence: `workflow/hooks/post-turn-safety.sh` (search: `read_stop_context`).
 
 **Second update 2026-08-10:** Release ShellCheck flagged the provider-result Node program because its single quotes deliberately prevent shell expansion. A narrow SC2016 directive now records that invariant beside the command in both byte-identical mirrors. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `Literal JavaScript prevents shell expansion of user feedback`) and `.goat-flow/hooks/post-turn-safety.sh` (search: `Literal JavaScript prevents shell expansion of user feedback`).
+
+**Third update 2026-08-16:** While making the Gruff contract filter span-aware, comments inside its Bash-single-quoted jq program used apostrophes. The edit hook immediately failed with `adapter-delivery-failed`, and `bash -n` located the prematurely terminated jq string before `.findings`. Rewriting those comments without single quotes restored syntax, after which the focused span regression passed. Embedded-program comments must remain neutral to the outer quote delimiter, and `bash -n` must run before treating a mirror edit as executable. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `def attributable_line_or_span`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `surfaces a symbol finding when its span overlaps`).
 
 ## Lesson: Dynamic hook helpers need explicit ShellCheck handling
 

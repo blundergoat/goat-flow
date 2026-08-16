@@ -13,7 +13,21 @@ import type {
 import { getSkillFiles, loadManifest } from "../manifest/manifest.js";
 import { BUCKET_SIZE_WARN_BYTES } from "../stats/stats.js";
 
+/**
+ * Divisor behind every `estimatedTokens` figure this report emits.
+ * Four bytes per token is the conventional upper-bound approximation for UTF-8 prose, so the report
+ * over-states pressure rather than letting a surface look safe when it is not.
+ */
 const ESTIMATED_BYTES_PER_TOKEN = 4;
+/**
+ * Human-readable statement of the estimate, published in the report's `measurement` block so a
+ * reader can reproduce the arithmetic without opening this file.
+ * Invariant: this literal is the single source of truth for both the declared schema type and the
+ * emitted value, so the documented formula cannot drift from `ESTIMATED_BYTES_PER_TOKEN`.
+ */
+const TOKEN_ESTIMATE_FORMULA = "ceil(utf8_bytes / 4)" as const;
+/** Literal type of the published formula, derived so the schema tracks the constant above. */
+type TokenEstimateFormula = typeof TOKEN_ESTIMATE_FORMULA;
 /** ADR-023 keeps the dispatcher small because users load it only to choose another workflow. */
 const DISPATCHER_WORD_LIMIT = 555;
 /** ADR-023 gives functional workflows room for gates without turning them into handbooks. */
@@ -69,7 +83,7 @@ export interface ContextReport {
   projectPath: string;
   measurement: {
     source: "static-local-files";
-    estimatedTokens: "ceil(utf8_bytes / 4)";
+    estimatedTokens: TokenEstimateFormula;
     telemetryRequired: false;
   };
   summary: {
@@ -428,7 +442,11 @@ function rememberLearningLoopBucket(
   bucketsByPath.set(bucket.path, bucket);
 }
 
-/** Collect bucket measurements from shared facts without walking learning-loop directories again. */
+/**
+ * Collect bucket measurements from shared facts without walking learning-loop directories again.
+ * Invariant: one surface per bucket path - the first complete fact wins - and the returned list is
+ * sorted by path, so two runs over the same facts stay deterministic.
+ */
 function collectLearningLoopSurfaces(
   projectFiles: ReadonlyFS,
   facts: ProjectFacts,
@@ -561,7 +579,7 @@ export function buildContextReport(
     projectPath: input.facts.root,
     measurement: {
       source: "static-local-files",
-      estimatedTokens: "ceil(utf8_bytes / 4)",
+      estimatedTokens: TOKEN_ESTIMATE_FORMULA,
       telemetryRequired: false,
     },
     summary: {

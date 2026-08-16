@@ -10,6 +10,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFS } from "../../src/cli/facts/fs.js";
+import { generateIndexes } from "../../src/cli/learning-loop-index/generate.js";
 import { parseBucket } from "../../src/cli/learning-loop-index/parse-bucket.js";
 import type { IndexBucket } from "../../src/cli/learning-loop-index/parse-bucket.js";
 import { formatIndex } from "../../src/cli/learning-loop-index/format-index.js";
@@ -248,6 +249,36 @@ describe("parseBucket", () => {
       parseBucket(fs, ".goat-flow/learning-loop/nope/", "lessons"),
       [],
     );
+  });
+
+  // Fixture purpose: writes a prose-only learning file and regenerates its bucket so content
+  // that INDEX-first retrieval cannot reach produces a stable, machine-readable diagnostic.
+  it("diagnoses body content that produces no index rows", () => {
+    const diagnosticRoot = mkdtempSync(join(tmpdir(), "goatflow-llgap-"));
+    try {
+      mkdirSync(join(diagnosticRoot, LESSONS_DIR), { recursive: true });
+      writeFileSync(
+        join(diagnosticRoot, LESSONS_DIR, "legacy.md"),
+        "---\ncategory: legacy\nlast_reviewed: 2026-06-01\n---\n\nThis prose has no indexed lesson heading.\n",
+      );
+      const results = generateIndexes(
+        diagnosticRoot,
+        createFS(diagnosticRoot),
+        {
+          footguns: FOOTGUNS_DIR,
+          lessons: LESSONS_DIR,
+          patterns: PATTERNS_DIR,
+          decisions: DECISIONS_DIR,
+        },
+      );
+      const lessons = results.find((result) => result.bucket === "lessons");
+
+      assert.deepEqual(lessons?.diagnostics, [
+        "[unindexed-bucket-content] .goat-flow/learning-loop/lessons/legacy.md has body content but no ## Lesson: entry",
+      ]);
+    } finally {
+      rmSync(diagnosticRoot, { recursive: true, force: true });
+    }
   });
 });
 

@@ -9,15 +9,11 @@ goat-flow-skill-version: "1.15.1"
 
 Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-flow/skill-docs/skill-conventions.md`.
 
-## When to Use
-
-Use for diff/PR review or codebase-area quality audits.
-
 ## Boundary Commands
 
-- **NEVER:** Auto-edit, perform security review, run an unapproved refuter, or mutate setup with `git stash`, `git checkout <branch>`, `git clean`, `gh pr checkout`, or relocation of untracked work.
-- **ALWAYS:** Reconstruct intent; run both passes; disprove suspicions; emit the verdict with Review Integrity.
-- **DEFER TO:** Named security, debug, QA, planning, or dispatcher work.
+- **NEVER:** Auto-edit, security-review, run an unapproved refuter, or mutate setup via `git stash`, `git checkout <branch>`, `git clean`, `gh pr checkout`, or relocation of untracked work.
+- **ALWAYS:** Reconstruct intent; run both passes; disprove suspicions; emit Review Integrity and verdict.
+- **DEFER TO:** Named security, debug, QA, planning, or dispatcher tasks.
 
 ## Step 0 - Scope, Size, Spec
 
@@ -35,9 +31,9 @@ Use for diff/PR review or codebase-area quality audits.
 
 **State authority:** per `references/examples.md` (search: `State Authority Matrix`), bind the diff and Pass 2 files to one declared authority; drift stops. Raw content stays transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
 
-**Spec source (opt-in):** full offers active-milestone criteria; quick skips by default; status is non-degrading.
+**Spec source (opt-in):** Full offers active-milestone criteria; Quick skips without degradation.
 
-**Temporary artifacts:** random-suffixed `.txt`/`.json`/`.diff` under `.goat-flow/logs/review/`.
+**Temporary artifacts:** random-suffixed `.txt`/`.json`/`.diff`/`.md` under `.goat-flow/logs/review/`.
 
 **Footgun check:** preamble INDEX-first; report matches or miss.
 
@@ -56,7 +52,7 @@ Use for diff/PR review or codebase-area quality audits.
 
 For `worktree`, bind the combined tracked diff plus untracked membership; do not merge independently captured states.
 
-Required `n/a` is resolved, not degraded; other unknowns degrade.
+Required `n/a` is resolved, not degraded. Unknowns degrade.
 
 ### Step 0.5 - Intent Reconstruction (mandatory)
 
@@ -81,9 +77,9 @@ Anchor both passes to diff and stated intent, or the declared area and audit int
 
 Read only the diff; open no full files.
 
-Scan auth/secrets, SQL/shell/API calls, mutation/state, boundaries/defaults, concurrency/errors, contracts, and observability. Opaque async/retry/state flows without human-visible success become `needs-signal` per risk.
+Scan auth/secrets, SQL/shell/API, mutation/state, boundaries/defaults, concurrency/errors, contracts, observability. Opaque async/retry/state without visible success is `needs-signal`.
 
-Capture diff-grounded `file + semantic anchor` suspicions; do not verify or dismiss them.
+Capture unresolved diff-grounded `file + semantic anchor` suspicions.
 
 **CHECKPOINT:** Pass 1 captured [N] unresolved suspicions; start Pass 2.
 
@@ -94,8 +90,8 @@ Open full files from the declared authority, never unqualified checkout paths. F
 - **Try to DISPROVE it** using the anchor, guards, upstream checks, framework mitigation, and contracts.
 - **CONFIRMED** needs positive reachability; failed disproof → **UNRESOLVED**. **ADJUSTED** is real but narrower and restates severity; **REFUTED** cites a removing guard/contract. Forbid "confirmed with caveat", "matches prior behaviour", and "sloppy but not exploitable".
 - **Blast Radius Rule:** search consumers symbol-aware (LSP/MCP) → AST (`ast-grep`) → text (`rg`/`grep`); text-only adds `callsite-completeness-grep-only`. Include dynamic dispatch, reflection, DI, string keys, generated code, and external consumers. Verify one consumer or mark UNRESOLVED with `coverage-degraded`.
-- **Refutation Ledger:** draft one record per line in memory with R-ID: `- R-NNN | Suspicion: ... | Evidence: ... | Rationale: ...`; host: `goat-flow redact --output .goat-flow/logs/review/goat-review-refutations.<random>.txt`; report exact path. If redactor is unavailable, do not persist; emit `Refutations logged: <N> (persist-skipped)` and ledger `persist-skipped`.
-- Add verified contextual integration/call-site/sibling-regression findings; re-verify output anchors.
+- **Refutation Ledger:** draft REFUTED suspicions only in memory, one record per line with R-ID: `- R-NNN | Suspicion: ... | Evidence: ... | Rationale: ...`; host: `goat-flow redact --output .goat-flow/logs/review/goat-review-refutations.<random>.txt`; report exact path. CONFIRMED/ADJUSTED → Findings; UNRESOLVED → verdict counts, never ledger; `Refutations logged` equals ledger record count. If redactor is unavailable, do not persist; emit `Refutations logged: <N> (persist-skipped)` and ledger `persist-skipped`.
+- Add verified context; re-verify output anchors.
 
 ### Pass 2.5 - Inline Re-framings
 
@@ -103,7 +99,7 @@ Re-frame only Pass 0 result lines and Pass 2 reads already gathered; make no new
 
 ### Automated-Review Overlap (PR mode, after local findings)
 
-After local findings, fetch `gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=100'`; apply `references/automated-review.md` without suppressing overlap. Pressure counters: `references/examples.md` (search: `Excuse/Reality Table`).
+After local findings, fetch `gh api --paginate 'repos/<owner>/<repo>/pulls/<number>/comments?per_page=100'`; apply `references/automated-review.md` without suppressing overlap. Counters: `references/examples.md` (search: `Excuse/Reality Table`).
 
 ### Severity + Action Tagging
 
@@ -123,16 +119,16 @@ Group 3+ findings with one root under `## Systemic Patterns` at the highest seve
 
 ### Pre-existing Separation
 
-- **Pre-existing Nearby:** same function/tightly coupled call-site; one untagged, non-blocking pointer.
-- **Pre-existing Issues:** outside the diff surface; untagged and non-blocking.
+- **Pre-existing Nearby:** same function/coupled call-site; non-blocking pointer.
+- **Pre-existing Issues:** outside diff; untagged/non-blocking.
 
 ### Footgun Cross-Check
 
-Check each finding against INDEX-first footguns and `references/review-traps.md`. Include matches; reword once before omitting. A confirmed review-reasoning miss follows learning-loop VERIFY rules.
+Check findings against INDEX-first footguns and `references/review-traps.md`; include matches, reword once before omitting. A confirmed review-reasoning miss follows learning-loop VERIFY.
 
-**BLOCKING GATE:** Present Findings, conditional risks, and Review Integrity, then pause. Pending Pass 3 requires `PENDING REFUTER/HUMAN`; afterward, present the final verdict.
+**BLOCKING GATE:** Present Findings, risks, and Review Integrity; pause. Pending Pass 3 requires `PENDING REFUTER/HUMAN`; afterward, give the final verdict.
 
-**Review DoD gate:** reporting-only review verifies findings, cross-references, and scope; run implementation tests only when a finding requires them. “Implement” switches to instruction-file DoD.
+**Review DoD gate:** reporting-only review verifies findings, references, and scope; run implementation tests only when needed. “Implement” invokes instruction-file DoD.
 
 **Convergence guard:** after two review→fix cycles without the finding count dropping, stop, re-derive whether the original defect was real, and re-scope with the human.
 
@@ -140,23 +136,23 @@ Check each finding against INDEX-first footguns and `references/review-traps.md`
 
 ## Area Audit (Full)
 
-Audit the declared area; pre-existing issues are in scope.
+Audit declared area; pre-existing issues included.
 
 ### Area Pass 1 - Inventory and Risk Hypotheses
 
-For each cluster, inventory responsibilities, interfaces, trust/state boundaries, and critical paths without using recent diff as scope. Record raw suspicions with `file + semantic anchor`; do not resolve them.
+Per cluster, inventory responsibilities, interfaces, trust/state boundaries, and critical paths without using recent diff as scope. Record raw suspicions with `file + semantic anchor`; do not resolve them.
 
 ### Area Pass 2 - Implementation and Consumer Verification
 
-Open implementation, tests, and consumers. Apply the Blast Radius Rule; disprove with guards/call-sites. Mark each suspicion `CONFIRMED`, `ADJUSTED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger; area findings may use `[SEVERITY:pre-existing]`.
+Open implementation, tests, and consumers. Apply Blast Radius; disprove via guards/call-sites. Mark each suspicion `CONFIRMED`, `ADJUSTED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger. Area findings may use `[SEVERITY:pre-existing]`.
 
 Without a release/merge question, emit `N/A - AREA AUDIT ONLY`.
 
-**BLOCKING GATE:** Present findings and pause. If calibration is uncertain, consider `/goat-critique`.
+**BLOCKING GATE:** Present findings and pause. If uncertain, consider `/goat-critique`.
 
 ### Direction / Opportunity Audit
 
-On explicit request, add an advisory opportunity output with repo-grounded evidence; it does not affect Ship Verdict. Details: `references/examples.md`. Defects remain findings.
+On request, add an advisory opportunity output with repo-grounded evidence; it does not affect Ship Verdict. Details: `references/examples.md`; defects remain findings.
 
 ## Spec Drift (opt-in)
 
@@ -166,19 +162,19 @@ Only emitted when Step 0 prompt was accepted and a live milestone was found. Rea
 - **Assumption invalidation** `[MUST:needs-decision]` under `## Findings` -- diff makes an assumption false.
 - **Open criterion satisfied** `[ready-to-tick]` under `## Spec Drift` -- advisory, human ticks milestone.
 
-If none detected, emit "No drift detected against M[NN]" so the reader knows the check ran.
+If none, emit "No drift detected against M[NN]" to prove the check ran.
 
 ## Pass 3 - Cross-Model Refuter (explicit approval only)
 
-Offer Pass 3 when the user opts in, Review Integrity is `coverage-degraded`/`high-inference`, or a MUST-needs-decision/INTENT-MISMATCH exists.
+Offer Pass 3 on user opt-in, `coverage-degraded`/`high-inference`, or a MUST-needs-decision/INTENT-MISMATCH.
 
 **Approval gate:** A trigger is not approval. Before explicit current-session approval, disclose runtime and model, authentication state, findings-only payload, one refuter inference call, cost or rate-limit impact, why a second model, and local-only fallback. “Keep going”/urgency do not count. If declined or unanswered, complete the local review; record `Refuter pass: skipped`; do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined.
 
 **Method:** After approval, use `references/refuter-spec.md` with an authenticated non-host; pass authority metadata plus the R-ID FINDINGS LIST, never the diff.
 
-**Synthesis:** Refuter output is advisory. Only host-reproduced evidence may change severity/action/disposition/Ship Verdict. Apply reference tags after host proof; unverifiable citations add `refuter-citation-unverified`, unresolved claims add `cross-model-unresolved`, and leads return to Pass 2.
+**Synthesis:** Refuter output is advisory. Only host-reproduced evidence may change severity/action/disposition/Ship Verdict. After host proof, tag unverifiable citations `refuter-citation-unverified`, unresolved claims `cross-model-unresolved`, and return leads to Pass 2.
 
-**Constraints:** Before approval, only reference-listed availability/auth checks may run; versions do not prove auth. No authenticated refuter means skip and `cross-model-refuter-failed`.
+**Constraints:** Before approval, only reference-listed availability/auth checks may run; versions do not prove auth. Without an authenticated refuter, skip with `cross-model-refuter-failed`.
 
 ## Review Integrity (confidence signal)
 
@@ -213,6 +209,7 @@ Always emit; minimum: "confident - no degradation flags".
 - MUST apply the Blast Radius Rule, severity/action tags, Footgun Cross-Check, systemic grouping, and Review Integrity in both modes
 - MUST order findings by severity, never file or discovery order
 - MUST chunk above 20 files, or 3000 changed lines
+- Cross-invocation chunks: after each accepted chunk, host-redact `.goat-flow/logs/review/goat-review-chunks.<random>.md` containing scope snapshot, bound authority, chunks completed, chunks remaining, findings with R-IDs, and refutation ledger. Resume only after re-binding the same authority and verify no drift; continue at the next chunk, then emit one consolidated verdict. Drift stops.
 - Emit Spec Drift only when opted in. If skipped, record `Spec drift: skipped` without a degradation flag
 - MUST NOT edit files unless user separately says to apply, edit, update, fix, or implement; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST and SHOULD finding MUST state concrete harm (what breaks, leaks, regresses, silently fails, corrupts data, or blocks a workflow). If the reviewer cannot name harm, downgrade to MAY.
@@ -225,7 +222,7 @@ Always emit; minimum: "confident - no degradation flags".
 
 Emit `## Top 5 Risks` only when there are more than five surfaced findings; otherwise Findings is the risk surface. Render only with content: `Systemic Patterns`, `Spec Drift`, `Pre-existing Nearby`, `Pre-existing Issues`, `Breaking Changes`. `What's Good` needs substantive evidence, never generic praise. Clean PR: scope line, verdict, defended zero-findings statement, one-line integrity summary, one-line unexamined surface.
 
-Machine-valid anchors use `<target-project>/path` (search: `literal`) in Findings, Systemic Patterns, and Top 5 Risks; resolve them against the reviewed project.
+Machine-valid anchors use repo-relative paths such as `<repo-relative-path>` (search: `literal`) in Findings, Systemic Patterns, and Top 5 Risks; resolve them against the reviewed project.
 
 ```markdown
 ## TL;DR
@@ -250,10 +247,10 @@ Machine-valid anchors use `<target-project>/path` (search: `literal`) in Finding
 ## Findings
 
 ### MUST / SHOULD / MAY
-- R-001 [SEVERITY:ACTION] **[title]** `<target-project>/path` (search: `literal`) - [desc] | Harm: [concrete consequence for MUST/SHOULD] | Footgun: [entry or none] | Evidence: OBSERVED/INFERRED | Proof: RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED
+- R-001 [SEVERITY:ACTION] **[title]** `<repo-relative-path>` (search: `literal`) - [desc] | Harm: [concrete consequence for MUST/SHOULD] | Footgun: [entry or none] | Evidence: OBSERVED/INFERRED | Proof: RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED
 
 ## Systemic Patterns
-- R-001 [SEVERITY:ACTION] **[pattern title]** - affected anchors: `<target-project>/path` (search: `literal`), `<target-project>/path` (search: `literal`); repeated failure: <one sentence> | Harm: <one sentence> | Evidence: OBSERVED/INFERRED | Proof: RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED
+- R-001 [SEVERITY:ACTION] **[pattern title]** - affected anchors: `<repo-relative-first-path>` (search: `literal`), `<repo-relative-second-path>` (search: `literal`); repeated failure: <one sentence> | Harm: <one sentence> | Evidence: OBSERVED/INFERRED | Proof: RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED
 
 ## Spec Drift
 - [advisory] **[criterion title]** - claimed done in M[NN] but not supported by diff
@@ -266,7 +263,7 @@ Machine-valid anchors use `<target-project>/path` (search: `literal`) in Finding
 ## Breaking Changes
 
 ## Top 5 Risks (cross-tier)
-1. R-001 [SEVERITY:ACTION] **[title]** `<target-project>/path` (search: `literal`) - one-sentence why
+1. R-001 [SEVERITY:ACTION] **[title]** `<repo-relative-path>` (search: `literal`) - one-sentence why
 
 ## Ship Verdict
 Decision: **YES** | **YES WITH CONDITIONS** | **NO** | **PARTIAL** | **PENDING REFUTER/HUMAN** | **N/A - AREA AUDIT ONLY**

@@ -585,6 +585,83 @@ describe("gruff-code-quality hook", () => {
     assert.deepEqual(readInvocations(root), ["src/sample.py"]);
   });
 
+  // Fixture purpose: writes contained and escaping analyzer symlinks so config trust is proved
+  // against physical targets; both disposable roots are removed by the shared cleanup hook.
+  it("accepts a contained configured analyzer symlink and rejects an escaping one", () => {
+    const containedRoot = makeRoot();
+    const containedBinDir = writeMockGruffBinary(
+      containedRoot,
+      "trusted/bin",
+      "gruff-py",
+      "contained.rule",
+    );
+    mkdirSync(join(containedRoot, "configured"), { recursive: true });
+    symlinkSync(
+      join(containedBinDir, "gruff-py"),
+      join(containedRoot, "configured", "gruff-py"),
+    );
+    writeFileSync(join(containedRoot, ".gruff-py.yaml"), "rules: {}\n");
+    mkdirSync(join(containedRoot, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(containedRoot, ".goat-flow", "config.yaml"),
+      "hooks:\n  gruff-code-quality:\n    binaries:\n      py: configured/gruff-py\n",
+    );
+    mkdirSync(join(containedRoot, "src"), { recursive: true });
+    writeFileSync(join(containedRoot, "src", "sample.py"), "a\nb\nc\n");
+
+    const containedResult = runHook(
+      containedRoot,
+      {
+        tool_name: "Edit",
+        tool_input: {
+          file_path: "src/sample.py",
+          changed_ranges: [{ startLine: 3, endLine: 3 }],
+        },
+      },
+      "/usr/bin:/bin",
+    );
+    assert.equal(containedResult.status, 0, containedResult.stderr);
+    assert.match(containedResult.stdout, /contained\.rule/u);
+
+    const escapingRoot = makeRoot();
+    const outsideRoot = makeRoot();
+    const outsideBinDir = writeMockGruffBinary(
+      outsideRoot,
+      "outside/bin",
+      "gruff-py",
+      "escaped.rule",
+    );
+    mkdirSync(join(escapingRoot, "configured"), { recursive: true });
+    symlinkSync(
+      join(outsideBinDir, "gruff-py"),
+      join(escapingRoot, "configured", "gruff-py"),
+    );
+    writeFileSync(join(escapingRoot, ".gruff-py.yaml"), "rules: {}\n");
+    mkdirSync(join(escapingRoot, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(escapingRoot, ".goat-flow", "config.yaml"),
+      "hooks:\n  gruff-code-quality:\n    binaries:\n      py: configured/gruff-py\n",
+    );
+    mkdirSync(join(escapingRoot, "src"), { recursive: true });
+    writeFileSync(join(escapingRoot, "src", "sample.py"), "a\nb\nc\n");
+
+    const escapingResult = runHook(
+      escapingRoot,
+      {
+        tool_name: "Edit",
+        tool_input: {
+          file_path: "src/sample.py",
+          changed_ranges: [{ startLine: 3, endLine: 3 }],
+        },
+      },
+      "/usr/bin:/bin",
+    );
+    assert.equal(escapingResult.status, 0, escapingResult.stderr);
+    assert.equal(escapingResult.stdout, "");
+    assert.match(escapingResult.stderr, /resolves outside the repository/u);
+    assert.deepEqual(readInvocations(escapingRoot), []);
+  });
+
   // Covers both override spellings a maintainer writes, because compact and commented forms must both work.
   it("uses compact and commented config binary override forms", () => {
     const fixtures = [

@@ -10,6 +10,14 @@ permissions:
   contents: read
 
 jobs:
+  # The complete policy corpus is a release gate, not only a local preflight check.
+  deny-corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Full deny-dangerous corpus
+        run: bash workflow/hooks/deny-dangerous.sh --self-test=full
+
   build-test-lint:
     runs-on: ubuntu-latest
     steps:

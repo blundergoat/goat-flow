@@ -59,7 +59,7 @@ last_reviewed: 2026-08-16
 
 **Root cause:** I treated `init --force` as a harmless command run instead of a policy rewrite. In goat-flow, `.gruff-ts.yaml` carries durable tuning plus semantic anchors referenced by lessons, so a generated-default reset can break verification even when the hook implementation is correct.
 
-**Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, merge current generated defaults with the still-supported project tuning before broad verification; do not revive rules removed by the installed version. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`), `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
+**Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, merge current generated defaults with the still-supported project tuning before broad verification; do not revive rules removed by the installed version. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedAbbreviations:`), `.gruff-ts.yaml` (search: `acceptedBooleanNames:`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
 
 ## Lesson: Verify a gruff path-ignore by directory scan, not by naming the file
 
