@@ -98,10 +98,27 @@ function runHookSelfTest(
   hookPath: string,
   pathPrefix: string,
 ): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", [hookPath, "--self-test"], {
+  return runHookArguments(hookPath, ["--self-test"], pathPrefix);
+}
+
+/** Run one explicit Gruff hook argument vector without supplying an edit payload.
+ * Side effects: starts the selected hook copy inside a disposable project fixture.
+ *
+ * @param hookPath - exact workflow or installed hook copy under test
+ * @param args - user-selected arguments; empty exercises normal stdin dispatch
+ * @param pathPrefix - controlled executable search path used by self-test fixtures
+ * @returns the completed hook process; a null status means Bash did not start
+ */
+function runHookArguments(
+  hookPath: string,
+  args: string[],
+  pathPrefix: string,
+): ReturnType<typeof spawnSync> {
+  return spawnSync("bash", [hookPath, ...args], {
     cwd: makeRoot(),
     encoding: "utf-8",
     env: { ...process.env, PATH: pathPrefix },
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -127,6 +144,31 @@ describe("gruff-code-quality hook", () => {
         hook.label,
         runHookSelfTest(hook.path, process.env.PATH ?? "/usr/bin:/bin"),
       );
+    });
+
+    it(`accepts smoke and rejects invalid self-test values for the ${hook.label} hook copy`, () => {
+      assertSelfTestOk(
+        `${hook.label} smoke`,
+        runHookArguments(
+          hook.path,
+          ["--self-test=smoke"],
+          process.env.PATH ?? "/usr/bin:/bin",
+        ),
+      );
+      for (const invalidArguments of [
+        ["--self-test=full"],
+        ["--self-test=bogus"],
+        ["--self-test", "extra"],
+        ["--unknown"],
+      ]) {
+        const result = runHookArguments(
+          hook.path,
+          invalidArguments,
+          process.env.PATH ?? "/usr/bin:/bin",
+        );
+        assert.equal(result.status, 2, result.stderr);
+        assert.match(result.stderr, /Usage:/u);
+      }
     });
   }
 

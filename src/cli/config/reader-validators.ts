@@ -10,6 +10,7 @@
  * top-level keys are warnings on purpose - a config written for a newer goat-flow should not
  * stop an older one from working.
  */
+import { posix } from "node:path";
 import { isReleaseVersion } from "../version-compare.js";
 import type { ValidationIssue, ValidationResult } from "./types.js";
 import {
@@ -210,6 +211,48 @@ function validateStringArray(
     // Blank strings would show as empty commands or acknowledgements.
     if (typeof item !== "string" || item.trim().length === 0) {
       pushError(errors, `${path}[${index}]`, "must be a non-empty string");
+    }
+  }
+}
+
+/**
+ * Validate explicit post-turn roots without consulting the selected filesystem.
+ * Use here for exact config-key diagnostics; existence and Git ownership stay registrar facts.
+ *
+ * @param rawScanRoots - raw `scan-roots` field; absent fields are handled by the owning hook validator
+ * @param path - exact hook config key shown beside every malformed list item
+ * @param errors - blocking validation issues accumulated for the config result
+ * @returns nothing; invalid shape or lexical escapes append exact-key errors
+ */
+function validateHookScanRoots(
+  rawScanRoots: unknown,
+  path: string,
+  errors: ValidationIssue[],
+): void {
+  if (!Array.isArray(rawScanRoots)) {
+    pushError(errors, path, "must be an array");
+    return;
+  }
+  if (rawScanRoots.length === 0) {
+    pushError(errors, path, "must contain at least one project-relative path");
+    return;
+  }
+  for (const [index, scanRoot] of rawScanRoots.entries()) {
+    const itemPath = `${path}[${index}]`;
+    if (typeof scanRoot !== "string" || scanRoot.trim().length === 0) {
+      pushError(errors, itemPath, "must be a non-empty string");
+      continue;
+    }
+    const portablePath = scanRoot.replace(/\\/gu, "/");
+    const normalizedPath = posix.normalize(portablePath);
+    const isAbsolutePath =
+      portablePath.startsWith("/") || /^[A-Za-z]:/u.test(portablePath);
+    const escapesProject =
+      normalizedPath === ".." ||
+      normalizedPath.startsWith("../") ||
+      portablePath.includes("\0");
+    if (isAbsolutePath || escapesProject) {
+      pushError(errors, itemPath, "must be a contained project-relative path");
     }
   }
 }
@@ -495,6 +538,18 @@ function validateHooksField(
           `hooks.${hookId}.binaries`,
           errors,
         );
+      }
+      if ("scan-roots" in hookValue) {
+        const scanRootsPath = `hooks.${hookId}.scan-roots`;
+        if (hookId !== "post-turn-safety") {
+          pushError(
+            errors,
+            scanRootsPath,
+            "is only supported for post-turn-safety",
+          );
+        } else {
+          validateHookScanRoots(hookValue["scan-roots"], scanRootsPath, errors);
+        }
       }
     }
   });

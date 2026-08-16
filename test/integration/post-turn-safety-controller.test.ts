@@ -15,6 +15,7 @@ import {
   withCommandShim,
   withTempController,
   writeFile,
+  writePostTurnScanRoots,
   runHook,
 } from "./post-turn-safety-hook.helpers.js";
 
@@ -37,9 +38,9 @@ function assertManagedEnvelope(result: ReturnType<typeof runHook>) {
   return JSON.parse(result.stdout);
 }
 
-describe("post-turn-safety hook: non-Git controller fan-out", () => {
+describe("post-turn-safety hook: explicit non-Git controller roots", () => {
   for (const scannerVariant of POST_TURN_SCANNER_VARIANTS) {
-    it(`aggregates clean immediate repositories with the ${scannerVariant.displayName}`, () => {
+    it(`aggregates clean configured repositories with the ${scannerVariant.displayName}`, () => {
       withTempController(["gruff-go", "gruff-php"], (controllerRoot) => {
         const result = runHook(
           controllerRoot,
@@ -212,13 +213,9 @@ describe("post-turn-safety hook: non-Git controller fan-out", () => {
     });
   });
 
-  it("names a synthetic child failure once in the aggregate target", () => {
+  it("keeps an invalid configured root failure at project scope", () => {
     withTempController([], (controllerRoot) => {
-      const childRoot = join(controllerRoot, "kid");
-      const detachedGitDirectory = join(controllerRoot, "detached-git");
-      mkdirSync(childRoot);
-      mkdirSync(detachedGitDirectory);
-      symlinkSync(detachedGitDirectory, join(childRoot, ".git"), "dir");
+      writePostTurnScanRoots(controllerRoot, ["kid"]);
 
       const result = runHook(
         controllerRoot,
@@ -229,25 +226,62 @@ describe("post-turn-safety hook: non-Git controller fan-out", () => {
 
       assert.equal(envelope.outcome, "incomplete");
       assert.equal(envelope.findings.length, 1);
-      assert.equal(envelope.findings[0].target, "kid");
+      assert.equal(envelope.findings[0].target, "project");
 
-      // The same child must be named once in the direct-shell diagnostics users read.
+      // The direct-shell path must name the root failure without inventing a child scan.
       const directResult = runHook(
         controllerRoot,
         {},
         buildStopPayload("controller-synthetic-target-direct", false),
       );
       assert.equal(directResult.status, 2, directResult.stderr);
-      assert.match(directResult.stderr, /post-turn-safety: kid: /u);
-      assert.doesNotMatch(directResult.stderr, /kid\/kid/u);
+      assert.match(directResult.stderr, /git repository root unavailable/u);
+      assert.doesNotMatch(directResult.stderr, /post-turn-safety: kid:/u);
     });
   });
 
-  it("ignores nested and symlinked repositories outside the immediate-root contract", () => {
+  it("keeps an escaping configured root fail closed", () => {
+    withTempController([], (controllerRoot) => {
+      writePostTurnScanRoots(controllerRoot, ["../outside"]);
+
+      const result = runHook(
+        controllerRoot,
+        MANAGED_STOP_ENV,
+        buildStopPayload("controller-escaping-root", false),
+      );
+      const envelope = assertManagedEnvelope(result);
+
+      assert.equal(envelope.outcome, "incomplete");
+      assert.equal(envelope.reasonCode, "coverage-incomplete");
+      assert.equal(envelope.findings[0].target, "project");
+    });
+  });
+
+  it("keeps a configured non-Git directory fail closed", () => {
+    withTempController([], (controllerRoot) => {
+      mkdirSync(join(controllerRoot, "notes"));
+      writeFile(controllerRoot, "notes/readme.txt", "not a repository\n");
+      writePostTurnScanRoots(controllerRoot, ["notes"]);
+
+      const result = runHook(
+        controllerRoot,
+        MANAGED_STOP_ENV,
+        buildStopPayload("controller-non-git-root", false),
+      );
+      const envelope = assertManagedEnvelope(result);
+
+      assert.equal(envelope.outcome, "incomplete");
+      assert.equal(envelope.reasonCode, "coverage-incomplete");
+      assert.equal(envelope.findings[0].target, "project");
+    });
+  });
+
+  it("does not discover unlisted nested or symlinked repositories", () => {
     withTempController(["gruff-go"], (controllerRoot, childRoots) => {
       const nestedRoot = join(controllerRoot, "group", "nested-repo");
       mkdirSync(nestedRoot, { recursive: true });
       createCommittedRepo(nestedRoot);
+      writeFile(nestedRoot, ".env", `API_KEY=${TEST_API_TOKEN}\n`);
       symlinkSync(
         childRoots["gruff-go"],
         join(controllerRoot, "linked-repo"),
@@ -271,7 +305,61 @@ describe("post-turn-safety hook: non-Git controller fan-out", () => {
     });
   });
 
-  it("retains the fail-closed root result when no immediate child is eligible", () => {
+  it("scans a configured nested repository without discovering its siblings", () => {
+    withTempController([], (controllerRoot) => {
+      const nestedRoot = join(controllerRoot, "group", "nested-repo");
+      const siblingRoot = join(controllerRoot, "sibling-repo");
+      createCommittedRepo(nestedRoot);
+      createCommittedRepo(siblingRoot);
+      writeFile(nestedRoot, ".env", `API_KEY=${TEST_API_TOKEN}\n`);
+      writeFile(siblingRoot, ".env", `API_KEY=${TEST_API_TOKEN}\n`);
+      writePostTurnScanRoots(controllerRoot, ["group/nested-repo"]);
+
+      const result = runHook(
+        controllerRoot,
+        MANAGED_STOP_ENV,
+        buildStopPayload("controller-explicit-nested", false),
+      );
+      const envelope = assertManagedEnvelope(result);
+
+      assert.equal(envelope.outcome, "block");
+      assert.deepEqual(envelope.coverage, {
+        status: "complete",
+        attemptedUnits: 1,
+        completedUnits: 1,
+        skippedUnits: 0,
+      });
+      assert.equal(envelope.findings[0].target, "group/nested-repo/.env");
+      assert.doesNotMatch(result.stdout, /sibling-repo/u);
+    });
+  });
+
+  it("does not partially scan a mixed valid and non-Git root list", () => {
+    withTempController(["gruff-go"], (controllerRoot, childRoots) => {
+      mkdirSync(join(controllerRoot, "notes"));
+      writeFile(controllerRoot, "notes/readme.txt", "not a repository\n");
+      writeFile(childRoots["gruff-go"], ".env", `API_KEY=${TEST_API_TOKEN}\n`);
+      writePostTurnScanRoots(controllerRoot, ["gruff-go", "notes"]);
+
+      const result = runHook(
+        controllerRoot,
+        MANAGED_STOP_ENV,
+        buildStopPayload("controller-mixed-invalid", false),
+      );
+      const envelope = assertManagedEnvelope(result);
+
+      assert.equal(envelope.outcome, "incomplete");
+      assert.deepEqual(envelope.coverage, {
+        status: "none",
+        attemptedUnits: 1,
+        completedUnits: 0,
+        skippedUnits: 1,
+      });
+      assert.doesNotMatch(result.stdout, /gruff-go\/\.env/u);
+    });
+  });
+
+  it("retains the fail-closed root result when scan roots are absent", () => {
     withTempController([], (controllerRoot) => {
       const ordinaryDirectory = join(controllerRoot, "notes");
       mkdirSync(ordinaryDirectory);

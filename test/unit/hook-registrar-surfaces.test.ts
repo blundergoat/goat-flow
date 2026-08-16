@@ -5,7 +5,16 @@
  * Every case builds a real project and reads back what the registrar actually wrote.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -29,12 +38,155 @@ import {
   readAntigravitySafetyCommand,
   writePostTurnCapableSurfaces,
   verifyAgentHookRegistrationMatrix,
+  runGit,
   installCodexDenyHook,
   MANAGED_SHAPE_MUTATIONS,
   runCodexLauncher,
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: surface detection, toggles, and sync", () => {
+  it("uses the selected Git project as the implicit post-turn scan root", () => {
+    withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "");
+
+      const state = applyHookState("post-turn-safety", true, root);
+
+      assert.deepEqual(state.scanRoots, {
+        status: "implicit",
+        roots: ["."],
+        issue: null,
+      });
+      assert.equal(state.agents.codex.installed, true);
+    });
+  });
+
+  // Fixture purpose: creates two child Git repositories, writes config, and registers them atomically.
+  it("registers every valid explicit child repository as one post-turn contract", () => {
+    withTempProject((root) => {
+      const configuredRoots = ["services/api", "packages/web"];
+      for (const configuredRoot of configuredRoots) {
+        const childRoot = join(root, configuredRoot);
+        mkdirSync(childRoot, { recursive: true });
+        runGit(childRoot, ["init", "-q"]);
+      }
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      mkdirSync(join(root, ".goat-flow"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "");
+      writeFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        [
+          "hooks:",
+          "  post-turn-safety:",
+          "    enabled: true",
+          "    scan-roots:",
+          ...configuredRoots.map((scanRoot) => `      - ${scanRoot}`),
+          "",
+        ].join("\n"),
+      );
+
+      const state = applyHookState("post-turn-safety", true, root);
+
+      assert.deepEqual(state.scanRoots, {
+        status: "configured",
+        roots: configuredRoots,
+        issue: null,
+      });
+      assert.equal(state.agents.codex.installed, true);
+    });
+  });
+
+  for (const rootCase of [
+    { name: "absent", roots: null, expectedStatus: "missing" },
+    { name: "escaping", roots: ["../outside"], expectedStatus: "invalid" },
+    { name: "missing", roots: ["missing"], expectedStatus: "invalid" },
+    { name: "non-Git", roots: ["not-git"], expectedStatus: "invalid" },
+    {
+      name: "mixed valid and invalid",
+      roots: ["valid-repo", "not-git"],
+      expectedStatus: "invalid",
+    },
+  ] as const) {
+    it(`keeps ${rootCase.name} non-Git root state wholly unregistered`, () => {
+      withTempProject((root) => {
+        mkdirSync(join(root, ".codex"), { recursive: true });
+        mkdirSync(join(root, ".goat-flow"), { recursive: true });
+        mkdirSync(join(root, "not-git"), { recursive: true });
+        mkdirSync(join(root, "valid-repo"), { recursive: true });
+        runGit(join(root, "valid-repo"), ["init", "-q"]);
+        writeFileSync(join(root, ".codex", "config.toml"), "");
+        writeFileSync(
+          join(root, ".goat-flow", "config.yaml"),
+          [
+            "hooks:",
+            "  post-turn-safety:",
+            "    enabled: true",
+            ...(rootCase.roots === null
+              ? []
+              : [
+                  "    scan-roots:",
+                  ...rootCase.roots.map(
+                    (scanRoot) => `      - ${scanRoot}`,
+                  ),
+                ]),
+            "",
+          ].join("\n"),
+        );
+
+        const state = applyHookState("post-turn-safety", true, root);
+
+        assert.equal(state.scanRoots?.status, rootCase.expectedStatus);
+        assert.deepEqual(state.scanRoots?.roots, rootCase.roots ?? []);
+        assert.equal(state.agents.codex.installed, false);
+        assert.equal(state.agents.codex.isRegistered, false);
+        assert.equal(state.agents.codex.effectiveState.status, "not-registered");
+        assert.equal(state.agents.codex.repairCommand, null);
+        assert.match(
+          state.agents.codex.repairSummary,
+          /configure valid scan roots or disable this hook/iu,
+        );
+        assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+      });
+    });
+  }
+
+  // Fixture purpose: creates and later removes an external Git repo, symlinks it, writes config, and attempts registration.
+  it("rejects a scan root that escapes through a symlink", () => {
+    const externalRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-external-scan-root-"),
+    );
+    try {
+      runGit(externalRoot, ["init", "-q"]);
+      withTempProject((root) => {
+        symlinkSync(externalRoot, join(root, "linked-repo"), "dir");
+        mkdirSync(join(root, ".codex"), { recursive: true });
+        mkdirSync(join(root, ".goat-flow"), { recursive: true });
+        writeFileSync(join(root, ".codex", "config.toml"), "");
+        writeFileSync(
+          join(root, ".goat-flow", "config.yaml"),
+          [
+            "hooks:",
+            "  post-turn-safety:",
+            "    enabled: true",
+            "    scan-roots:",
+            "      - linked-repo",
+            "",
+          ].join("\n"),
+        );
+
+        const state = applyHookState("post-turn-safety", true, root);
+
+        assert.equal(state.scanRoots?.status, "invalid");
+        assert.match(state.scanRoots?.issue ?? "", /escapes/iu);
+        assert.equal(state.agents.codex.installed, false);
+        assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+      });
+    } finally {
+      rmSync(externalRoot, { force: true, recursive: true });
+    }
+  });
+
   it("does not scaffold uninstalled agent surfaces on clean target toggles", () => {
     withTempProject((root) => {
       applyHookState(HOOK_IDENTIFIER, false, root);
@@ -146,6 +298,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
 
   it("generates only the approved Codex lifecycle hooks", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       mkdirSync(join(root, ".codex"), { recursive: true });
       writeFileSync(join(root, ".codex", "config.toml"), "");
 
@@ -178,6 +331,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
   // Covers a project with stale managed Codex entries: writes them because upgrade must replace only Goat Flow-owned fields.
   it("migrates stale managed Codex post-tool and Stop entries", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       mkdirSync(join(root, ".codex"), { recursive: true });
       mkdirSync(join(root, ".goat-flow"), { recursive: true });
       writeFileSync(join(root, ".codex", "config.toml"), "");
@@ -310,8 +464,9 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   });
 
-  it("sync installs the remaining post-turn safety hook without project validation", () => {
+  it("sync installs the remaining post-turn safety hook at an implicit Git root", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       writePostTurnCapableSurfaces(root);
 
       const states = syncHookStates(root);
@@ -376,6 +531,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
   // Covers sync pruning removed plan-checkbox-guard entries: writes stale config, because sync must clear it.
   it("sync prunes stale removed plan-checkbox-guard entries and config", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       writePostTurnCapableSurfaces(root);
       mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
       writeFileSync(
@@ -530,6 +686,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
   // Covers the same prune driven by a direct toggle: writes stale config, because a toggle must clear it too.
   it("direct hook toggles prune stale removed plan-checkbox-guard entries and config", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       writePostTurnCapableSurfaces(root);
       mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
       writeFileSync(

@@ -1,11 +1,13 @@
 /**
  * Reconciles hook settings with agents detected in the user's selected project.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { getAgentProfiles } from "../agents/registry.js";
 import {
   readHookEnabled,
+  readHookScanRoots,
   removeHookConfig,
   removeTopLevelConfigBlock,
   setHookEnabled,
@@ -92,7 +94,14 @@ export interface HookState extends Record<"togglable" | "enabled", boolean> {
   description: string;
   defaultEnabled: boolean;
   requiresConfirmDialog: boolean;
+  scanRoots: HookScanRootState | null;
   agents: Record<AgentId, HookAgentState>;
+}
+/** Validated roots the post-turn scanner may inspect from one selected project. */
+export interface HookScanRootState {
+  status: "implicit" | "configured" | "missing" | "invalid";
+  roots: string[];
+  issue: string | null;
 }
 export { HookRegistrarError };
 type HookEffectiveStatus = HookEffectiveState["status"];
@@ -166,6 +175,143 @@ function unsupportedReasonForSpec(
   agent: AgentProfile,
 ): string | null {
   return spec.unsupportedAgents?.[agent.id] ?? null;
+}
+
+/**
+ * Resolve an existing directory to its physical path.
+ * Missing, non-directory, and filesystem-error inputs return `null` instead of throwing.
+ *
+ * @param directoryPath - candidate directory; missing or unreadable paths are invalid facts
+ * @returns physical directory path, or `null` after any filesystem lookup failure
+ * @throws Never; filesystem lookup errors are converted to `null`
+ */
+function physicalDirectory(directoryPath: string): string | null {
+  try {
+    if (!statSync(directoryPath).isDirectory()) return null;
+    return realpathSync(directoryPath);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Return the physical Git top-level for one directory.
+ * Spawns one bounded read-only Git process; startup, timeout, and non-work-tree failures return `null`.
+ *
+ * @param directoryPath - existing directory Git should classify without modifying it
+ * @returns physical work-tree root, or `null` when the bounded child process cannot prove one
+ */
+function gitTopLevel(directoryPath: string): string | null {
+  const result = spawnSync(
+    "git",
+    ["-C", directoryPath, "rev-parse", "--show-toplevel"],
+    {
+      encoding: "utf-8",
+      shell: false,
+      timeout: 5_000,
+      maxBuffer: 16_384,
+    },
+  );
+  if (result.error || result.status !== 0 || result.stdout.trim() === "") {
+    return null;
+  }
+  return physicalDirectory(result.stdout.trim());
+}
+
+/** Check lexical and physical containment beneath the selected project root. */
+function containedScanRoot(
+  projectRoot: string,
+  configuredRoot: string,
+): string | null {
+  // Drive, UNC, and host-absolute forms are never relative to the selected workspace.
+  if (
+    isAbsolute(configuredRoot) ||
+    /^[A-Za-z]:[\\/]/u.test(configuredRoot) ||
+    /^\\\\/u.test(configuredRoot)
+  ) {
+    return null;
+  }
+  const lexicalCandidate = resolve(projectRoot, configuredRoot);
+  const lexicalRelative = relative(projectRoot, lexicalCandidate);
+  if (
+    lexicalRelative === ".." ||
+    lexicalRelative.startsWith(`..${String.fromCharCode(47)}`) ||
+    lexicalRelative.startsWith(`..${String.fromCharCode(92)}`) ||
+    isAbsolute(lexicalRelative)
+  ) {
+    return null;
+  }
+  const physicalCandidate = physicalDirectory(lexicalCandidate);
+  if (physicalCandidate === null) return null;
+  const physicalRelative = relative(projectRoot, physicalCandidate);
+  if (
+    physicalRelative === ".." ||
+    physicalRelative.startsWith(`..${String.fromCharCode(47)}`) ||
+    physicalRelative.startsWith(`..${String.fromCharCode(92)}`) ||
+    isAbsolute(physicalRelative)
+  ) {
+    return null;
+  }
+  return physicalCandidate;
+}
+
+/**
+ * Resolve the complete post-turn root contract before registration or status reads.
+ * A Git project owns implicit `.`; a non-Git workspace must name only contained child Git roots.
+ */
+function postTurnScanRootState(
+  projectPath: string,
+  spec: HookSpec,
+): HookScanRootState | null {
+  if (spec.id !== "post-turn-safety") return null;
+  const projectRoot = physicalDirectory(resolve(projectPath));
+  if (projectRoot === null) {
+    return {
+      status: "invalid",
+      roots: [],
+      issue: "Selected project is not an existing directory.",
+    };
+  }
+  if (gitTopLevel(projectRoot) === projectRoot) {
+    return { status: "implicit", roots: ["."], issue: null };
+  }
+  const configuredRoots = readHookScanRoots(projectPath, spec.id);
+  if (configuredRoots === null) {
+    return {
+      status: "missing",
+      roots: [],
+      issue: "A non-Git workspace requires explicit post-turn scan roots.",
+    };
+  }
+  for (const configuredRoot of configuredRoots) {
+    const physicalRoot = containedScanRoot(projectRoot, configuredRoot);
+    if (physicalRoot === null) {
+      return {
+        status: "invalid",
+        roots: configuredRoots,
+        issue: `Configured scan root is missing or escapes the selected project: ${configuredRoot}`,
+      };
+    }
+    if (gitTopLevel(physicalRoot) !== physicalRoot) {
+      return {
+        status: "invalid",
+        roots: configuredRoots,
+        issue: `Configured scan root is not a Git repository: ${configuredRoot}`,
+      };
+    }
+  }
+  return { status: "configured", roots: configuredRoots, issue: null };
+}
+
+/** Return whether a hook's selected roots permit one complete registration. */
+function scanRootsPermitRegistration(
+  scanRootState: HookScanRootState | null,
+): boolean {
+  return (
+    scanRootState === null ||
+    scanRootState.status === "implicit" ||
+    scanRootState.status === "configured"
+  );
 }
 
 /**
@@ -521,6 +667,7 @@ function supportedAgentHookState(
   agent: AgentProfile,
   spec: HookSpec,
   isDesiredByUser: boolean,
+  scanRootState: HookScanRootState | null,
 ): HookAgentState {
   const registrationState = readAgentHookState(projectPath, agent, spec);
   const installationFacts = managedHookInstallationFacts(
@@ -528,7 +675,10 @@ function supportedAgentHookState(
     agent,
     spec,
   );
-  const isRegistered = registrationState.installed;
+  const rootContractAllowsRegistration =
+    scanRootsPermitRegistration(scanRootState);
+  const isRegistered =
+    registrationState.installed && rootContractAllowsRegistration;
   const installed = isRegistered && installationFacts.hasAllRequiredFiles;
   const isCurrentVersionInstalled =
     installed && installationFacts.hasCurrentRequiredFiles;
@@ -550,6 +700,11 @@ function supportedAgentHookState(
     isCurrentVersionInstalled,
     localDetails.isTrusted,
   );
+  if (isDesiredByUser && !rootContractAllowsRegistration) {
+    effectivePresentation.repairCommand = null;
+    effectivePresentation.repairSummary =
+      "Configure valid scan roots or disable this hook before registering it.";
+  }
   const hookState: HookAgentState = {
     supported: true,
     installed,
@@ -565,17 +720,21 @@ function supportedAgentHookState(
   // Drift is omitted when the user's desired and installed states already agree.
   if (drift !== undefined) hookState.drift = drift;
   // A null reason keeps healthy rows concise while preserving exact local repair context.
-  if (localDetails.repairReason !== null) {
+  if (isDesiredByUser && scanRootState?.issue) {
+    hookState.reason = scanRootState.issue;
+  } else if (localDetails.repairReason !== null) {
     hookState.reason = localDetails.repairReason;
   }
   return hookState;
 }
 
+/** Build one provider row while applying the shared post-turn root eligibility gate. */
 function agentHookState(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
   desired: boolean,
+  scanRootState: HookScanRootState | null,
 ): HookAgentState {
   const unsupportedReason = unsupportedReasonForSpec(spec, agent);
   // A provider exclusion stays visible even when shared script files exist on disk.
@@ -599,7 +758,13 @@ function agentHookState(
       "Agent manifest has no hook directory or hook config file.",
     );
   }
-  return supportedAgentHookState(projectPath, agent, spec, desired);
+  return supportedAgentHookState(
+    projectPath,
+    agent,
+    spec,
+    desired,
+    scanRootState,
+  );
 }
 
 /** Read persisted desired hook state, falling back to the registry default. */
@@ -626,12 +791,16 @@ function pruneUnsupportedAgentHookEntries(
   writeAgentHookState(projectPath, agent, spec, false);
 }
 
+/** Converge one hook without registering a post-turn command against incomplete root coverage. */
 function reconcileHook(
   projectPath: string,
   spec: HookSpec,
   enabled: boolean,
 ): void {
   const profiles = getAgentProfiles();
+  const scanRootState = postTurnScanRootState(projectPath, spec);
+  const rootContractAllowsRegistration =
+    scanRootsPermitRegistration(scanRootState);
   for (const agent of profiles) {
     if (unsupportedReasonForSpec(spec, agent)) {
       pruneUnsupportedAgentHookEntries(projectPath, agent, spec);
@@ -644,7 +813,9 @@ function reconcileHook(
     if (desiredState.managedScriptFiles.length > 0) {
       copyHookScripts(projectPath, agent, spec);
     }
-    const shouldRegisterHook = desiredState.registrationTargets.length > 0;
+    const shouldRegisterHook =
+      desiredState.registrationTargets.length > 0 &&
+      rootContractAllowsRegistration;
     // A disabled hook removes managed rows from existing config but never scaffolds a missing config file.
     if (shouldRegisterHook || hookConfigExists(projectPath, agent)) {
       writeAgentHookState(projectPath, agent, spec, shouldRegisterHook);
@@ -695,10 +866,11 @@ function pruneRemovedHookTombstones(projectPath: string): void {
 function readHookState(hookId: string, projectPath: string): HookState {
   const spec = resolveSpec(hookId);
   const enabled = readDesired(projectPath, spec);
+  const scanRoots = postTurnScanRootState(projectPath, spec);
   const agents = Object.fromEntries(
     getAgentProfiles().map((agent) => [
       agent.id,
-      agentHookState(projectPath, agent, spec, enabled),
+      agentHookState(projectPath, agent, spec, enabled, scanRoots),
     ]),
   ) as Record<AgentId, HookAgentState>;
   return {
@@ -709,6 +881,7 @@ function readHookState(hookId: string, projectPath: string): HookState {
     enabled,
     defaultEnabled: spec.defaultEnabled,
     requiresConfirmDialog: spec.requiresConfirmDialog,
+    scanRoots,
     agents,
   };
 }

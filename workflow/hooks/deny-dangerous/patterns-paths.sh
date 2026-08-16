@@ -60,6 +60,63 @@ strip_shell_quotes_for_path_scan() {
   printf '%s' "$out"
 }
 
+# Build a second path-only view for absolute Windows operands while preserving shell escapes elsewhere.
+windows_path_scan_view() {
+  local input="$1"
+  local out=""
+  local word=""
+  local character=""
+  local candidate=""
+  local normalized=""
+  local in_single=0
+  local in_double=0
+  local escaped=0
+  local i=0
+  local -a words=()
+
+  for ((i = 0; i < ${#input}; i++)); do
+    character="${input:i:1}"
+    if [[ "$escaped" -eq 1 ]]; then
+      word+="$character"
+      escaped=0
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$character" == "\\" ]]; then
+      word+="\\"
+      # Outside quotes, an escaped space belongs to this token and must not create a Windows path.
+      if [[ "$in_double" -eq 0 ]]; then escaped=1; fi
+      continue
+    fi
+    if [[ "$in_double" -eq 0 && "$character" == "'" ]]; then
+      if [[ "$in_single" -eq 1 ]]; then in_single=0; else in_single=1; fi
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$character" == '"' ]]; then
+      if [[ "$in_double" -eq 1 ]]; then in_double=0; else in_double=1; fi
+      continue
+    fi
+    if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$character" =~ [[:space:]] ]]; then
+      if [[ -n "$word" ]]; then words+=("$word"); word=""; fi
+      continue
+    fi
+    word+="$character"
+  done
+  [[ -n "$word" ]] && words+=("$word")
+
+  for word in "${words[@]}"; do
+    candidate="${word##*=}"
+    candidate="${candidate#@}"
+    candidate="${candidate#<}"
+    case "$candidate" in
+      [A-Za-z]:\\* | \\\\*)
+        normalized="${word//\\//}"
+        out+="$normalized "
+        ;;
+    esac
+  done
+  printf '%s' "${out% }"
+}
+
 key_material_path_touch() {
   local input="$1"
   local -a words=()
@@ -83,15 +140,19 @@ key_material_path_touch() {
 # Decide whether text names a protected credential file or directory.
 # Use for direct operands after command-specific parsers reveal their file meaning.
 is_secret_path_touch() {
-  local c
+  local c windows_path_view
   c=$(strip_shell_quotes_for_path_scan "$1")
+  windows_path_view=$(windows_path_scan_view "$1")
+  if [[ -n "$windows_path_view" ]]; then
+    c+=" $windows_path_view"
+  fi
   # Fast path: only spawn sed if .env.example is even mentioned. The sed below
   # masks .env.example so the subsequent .env regex doesn't false-match.
   local env_scan="$c"
-  if [[ "$c" == *.env.example* ]]; then
+  if [[ "$c" == *.env* ]]; then
     # shellcheck disable=SC2001  # multi-pattern ERE with capture groups
     env_scan=$(sed -E \
-      "s#(^|[[:space:]=:/'\"])\\.env\\.example([[:space:]]|$|['\"])#\\1__goat_env_example__\\2#g; s#(>|>>|>\\|)[[:space:]]*(['\"]?)\\.env\\.example([[:space:]]|$|['\"])#\\1\\2__goat_env_example__\\3#g" \
+      "s#(^|[[:space:]=:/'\"])\\.env\\.example([[:space:]]|$|['\"])#\\1__goat_env_example__\\2#g; s#(>|>>|>\\|)[[:space:]]*(['\"]?)\\.env\\.example([[:space:]]|$|['\"])#\\1\\2__goat_env_example__\\3#g; s#(^|[[:space:]=/'\"])([A-Za-z]):\\.env[a-zA-Z0-9_.-]*([[:space:]]|$|['\"])#\\1\\2:__goat_drive_relative_env__\\3#g" \
       <<<"$c")
   fi
   if [[ "$env_scan" =~ (^|[[:space:]]|=|:|/|[\'\"])\.env[a-zA-Z0-9_.-]*([[:space:]]|$|[\'\"]) ]]; then return 0; fi
@@ -249,6 +310,24 @@ is_search_command_verb() {
   esac
 }
 
+# Reveal a direct search command or Git grep without treating its pattern as a secret path.
+secret_search_command_candidate() {
+  local developer_command
+  developer_command=$(normalize_command_candidate "$1")
+  local direct_verb="${developer_command%%[[:space:]]*}"
+  direct_verb="${direct_verb##*/}"
+  if is_search_command_verb "$direct_verb"; then
+    printf '%s' "$developer_command"
+    return 0
+  fi
+  if [[ "$direct_verb" == "git" ]] && __goat_git_strip_globals "$developer_command" && \
+    [[ "$__goat_git_rest" =~ ^grep([[:space:]]|$) ]]; then
+    printf '%s' "$__goat_git_rest"
+    return 0
+  fi
+  return 1
+}
+
 search_option_consumes_value() {
   local opt="$1"
   case "$opt" in
@@ -376,11 +455,12 @@ check_secret_segment() {
   fi
 
   local touches_secret=0
+  local search_candidate=""
   # Curl needs option-aware file parsing before the generic path scanner runs.
   if [[ "$CMD_VERB" == "curl" ]] && curl_file_operands_touch_secret "$cmd"; then
     touches_secret=1
-  elif is_search_command_verb "$CMD_VERB"; then
-    if search_file_operands_touch_secret "$cmd"; then
+  elif search_candidate=$(secret_search_command_candidate "$cmd"); then
+    if search_file_operands_touch_secret "$search_candidate"; then
       touches_secret=1
     fi
   else

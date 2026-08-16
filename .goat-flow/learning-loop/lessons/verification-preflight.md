@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-14
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Adding, tuning, and trusting a repo-wide gate - dependency-audit baselines, count locks and provenance dates, what a PASS line does and does not prove, and the shell mechanics of the commands a gate runs. Formatter and lint debt is [verification-formatting.md](verification-formatting.md).
@@ -49,13 +49,19 @@ last_reviewed: 2026-08-14
 
 ## Lesson: Shared hook refactors need both hook-local proof and repo-wide preflight
 
-**Created:** 2026-04-21
+**Status:** active | **Created:** 2026-04-21
+**Decision changed:** Update fixture assumptions and exact diagnostics with a hook contract, then use the edit tool's native patch grammar before mirror fanout. | **Trigger phase:** VERIFY
+**Incident count:** 4 | **Latest occurrence:** 2026-08-16
 
 **What happened:** A guardrail-hook hardening pass looked correct after the first edit, but the canonical self-test immediately failed because `BASH_REMATCH` was reused after a recursive command-check helper. After fixing that, the hook copies all passed their own `--self-test`, yet full `bash scripts/preflight-checks.sh` still failed because the repo-wide shellcheck profile was stricter than the hook-local path. The installer round-trip fixture failed for the same reason because it clones the current checkout before running temp-repo preflight.
 
+**2026-08-16 recurrences:** The explicit post-turn root contract made a synthetic non-Git fixture ineligible for registration until the fixture created the Git boundary it asserted. The deny corpus then caught one exact diagnostic still expecting the retired `git push` wording after publication policy expanded to `send-pack`. During mirror fanout, the first patch used conventional unified-diff coordinate headers that `apply_patch` rejected before changing the mirror; its native bare `@@` form applied cleanly. INDEX-first retrieval found no patch-tool candidate after one reworded search, so that edit-tool recurrence is consolidated here with the hook fanout that exposed it. Evidence anchors: `test/integration/hook-effective-state.test.ts` (search: `initializeDisposableGitProject(projectPath)`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `Git publication is not allowed`), and `workflow/hooks/gruff-code-quality.sh` (search: `Usage:`).
+
 **Prevention:**
 1. In Bash regex helpers, copy `BASH_REMATCH[n]` into local variables before any recursive call or nested regex operation that can overwrite it.
-2. For shared hook templates, do not stop at `bash workflow/hooks/deny-dangerous.sh --self-test=full`; also rerun the repo-wide `shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh` and full `bash scripts/preflight-checks.sh`, because fixture clones exercise stricter paths than isolated hook runs.
+2. When a hook contract changes root eligibility or user-visible wording, grep adjacent fixtures and exact-message assertions before the first focused run.
+3. Apply mirror edits with the current edit tool's accepted patch grammar, then prove each source/mirror pair with `diff -u`.
+4. Do not stop at `bash workflow/hooks/deny-dangerous.sh --self-test=full`; also rerun the repo-wide `shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh` and full `bash scripts/preflight-checks.sh`, because fixture clones exercise stricter paths than isolated hook runs.
 
 ---
 
@@ -127,11 +133,13 @@ last_reviewed: 2026-08-14
 
 **Status:** active | **Created:** 2026-06-07
 **Decision changed:** Validate persisted anchors with the literal search shape a future agent will run.
-**Incident count:** 6 | **Latest occurrence:** 2026-08-11
+**Incident count:** 7 | **Latest occurrence:** 2026-08-16
 
 **What happened:** Shell commands copied Markdown-formatted anchors into executable arguments. Bash treated backticks as command substitution, mangled searches, and once ran embedded CLI names. Later PreToolUse checks blocked the same shape before execution, including a redaction draft sent through a generated shell command.
 
 **2026-08-11 recurrence:** Three plan Context references used remembered paths or symbols. A literal resolver caught them before handoff. Resolve every persisted path/anchor and mark future paths task-owned. Evidence: `src/cli/hooks-configured-runtime-evidence.ts` (search: `type HookRuntimeVerdict`).
+
+**2026-08-16 recurrence:** A read-only `rg` pattern copied the milestone's Markdown backticks into a double-quoted shell argument, so PreToolUse rejected the search as command substitution before execution. Removing the formatting punctuation preserved the intended query. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Root cause:** Persisted search anchors were treated as prose or memory instead of executable future-agent contracts.
 

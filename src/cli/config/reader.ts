@@ -320,11 +320,36 @@ function mergeHooks(value: unknown, merged: GoatFlowConfig): void {
     // Enabled must be explicit so strings like "false" do not flip guardrails.
     if (typeof hookValue.enabled !== "boolean") continue;
     const binaries = readHookBinaries(hookValue.binaries);
-    hooks[hookId] = binaries
-      ? { enabled: hookValue.enabled, binaries }
-      : { enabled: hookValue.enabled };
+    const scanRoots = readHookScanRootList(hookValue["scan-roots"]);
+    hooks[hookId] = {
+      enabled: hookValue.enabled,
+      ...(binaries ? { binaries } : {}),
+      ...(scanRoots ? { scanRoots } : {}),
+    };
   }
   merged.hooks = hooks;
+}
+
+/**
+ * Narrow a raw post-turn `scan-roots` field to one non-empty string list.
+ * Use in both config normalization and toggle writes so the YAML key round-trips unchanged.
+ *
+ * @param rawScanRoots - raw `hooks.post-turn-safety.scan-roots` value; absent or malformed input has no usable roots
+ * @returns copied path list, or `null` when the field cannot define a complete root contract
+ */
+export function readHookScanRootList(rawScanRoots: unknown): string[] | null {
+  // An empty or partial list cannot safely opt a non-Git workspace into post-turn scanning.
+  if (
+    !Array.isArray(rawScanRoots) ||
+    rawScanRoots.length === 0 ||
+    rawScanRoots.some(
+      (scanRoot) =>
+        typeof scanRoot !== "string" || scanRoot.trim().length === 0,
+    )
+  ) {
+    return null;
+  }
+  return [...rawScanRoots] as string[];
 }
 
 /**

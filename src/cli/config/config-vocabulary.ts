@@ -39,6 +39,7 @@ export const KNOWN_NESTED_KEYS = new Map<string, ReadonlySet<string>>([
 export const HOOK_ROW_KEYS: ReadonlySet<string> = new Set([
   "enabled",
   "binaries",
+  "scan-roots",
 ]);
 
 /** Top-level config keys recognized by the validator (others trigger warnings). */

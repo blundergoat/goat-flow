@@ -9,11 +9,34 @@
 __goat_git_rest=""
 __goat_git_aliased_push=0
 
+# Decide whether a direct subcommand or alias expansion publishes Git objects.
+# Use for both visible Git commands and alias config so their deny set cannot drift.
+is_git_publication_target() {
+  local candidate="$1"
+  candidate="${candidate#"${candidate%%[![:space:]]*}"}"
+  case "$candidate" in
+    push | push\ * | send-pack | send-pack\ * | \!*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Decide whether one Git config operand defines an alias that can publish.
+is_git_publication_alias_config() {
+  local config_operand="$1"
+  local alias_expansion=""
+  if [[ "$config_operand" =~ ^alias\.[a-zA-Z0-9_-]+=(.*)$ ]]; then
+    alias_expansion="${BASH_REMATCH[1]}"
+    is_git_publication_target "$alias_expansion"
+    return $?
+  fi
+  return 1
+}
+
 # Decide whether a proposed Git command would publish work to a remote.
 # Use after shared wrapper normalization so the user sees one push policy everywhere.
 is_git_push() {
   __goat_git_strip_globals "$1" || return 1
-  [[ "$__goat_git_rest" =~ ^(push|send-pack)([[:space:]]|$) ]] && return 0
+  is_git_publication_target "$__goat_git_rest" && return 0
   # A configured Git alias can publish even when the visible subcommand is different.
   if [[ "$__goat_git_aliased_push" -eq 1 ]]; then
     return 0
@@ -269,7 +292,7 @@ check_repository_segment() {
 
     # Remote publication is always left to the developer, regardless of wrappers or pipeline position.
     if is_git_push "$repository_write_candidate"; then
-      block "git push is not allowed. Ask the user to push manually." || return $?
+      block "Git publication is not allowed. Ask the user to push manually." || return $?
     fi
 
     # History creation is always left to the developer, even when an agent was asked to prepare it.

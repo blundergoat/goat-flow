@@ -120,6 +120,75 @@ hooks:
   });
 });
 
+describe("config merges post-turn scan roots", () => {
+  it("normalizes scan-roots into the typed hook config", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+hooks:
+  post-turn-safety:
+    enabled: true
+    scan-roots:
+      - services/api
+      - packages/web
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.equal(result.valid, true);
+    assert.deepStrictEqual(result.config.hooks["post-turn-safety"], {
+      enabled: true,
+      scanRoots: ["services/api", "packages/web"],
+    });
+  });
+
+  for (const invalidCase of [
+    {
+      name: "non-array value",
+      yaml: "    scan-roots: services/api",
+      path: "hooks.post-turn-safety.scan-roots",
+    },
+    {
+      name: "empty list",
+      yaml: "    scan-roots: []",
+      path: "hooks.post-turn-safety.scan-roots",
+    },
+    {
+      name: "non-string item",
+      yaml: "    scan-roots:\n      - 7",
+      path: "hooks.post-turn-safety.scan-roots[0]",
+    },
+    {
+      name: "absolute path",
+      yaml: "    scan-roots:\n      - /tmp/repo",
+      path: "hooks.post-turn-safety.scan-roots[0]",
+    },
+    {
+      name: "parent escape",
+      yaml: "    scan-roots:\n      - ../repo",
+      path: "hooks.post-turn-safety.scan-roots[0]",
+    },
+    {
+      name: "normalized parent escape",
+      yaml: "    scan-roots:\n      - services/../../repo",
+      path: "hooks.post-turn-safety.scan-roots[0]",
+    },
+  ]) {
+    it(`rejects ${invalidCase.name} at its exact config key`, () => {
+      const yaml = `
+version: "${AUDIT_VERSION}"
+hooks:
+  post-turn-safety:
+    enabled: true
+${invalidCase.yaml}
+`;
+      const result = loadConfig("/tmp", configFS(yaml));
+      assert.equal(result.valid, false);
+      assert.ok(
+        result.errors.some((error) => error.path === invalidCase.path),
+        JSON.stringify(result.errors),
+      );
+    });
+  }
+});
+
 describe("config ignores removed plan-checkbox guard settings", () => {
   it("treats legacy plan-guard config as an unknown top-level key", () => {
     const yaml = `

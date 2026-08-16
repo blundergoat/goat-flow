@@ -8,11 +8,15 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { dump, load } from "js-yaml";
 import { writeFileAtomic } from "../server/safe-exec.js";
-import { readHookBinaries } from "./reader.js";
+import { readHookBinaries, readHookScanRootList } from "./reader.js";
 
 type HookConfigMap = Record<
   string,
-  { enabled: boolean; binaries?: Record<string, string> }
+  {
+    enabled: boolean;
+    binaries?: Record<string, string>;
+    "scan-roots"?: string[];
+  }
 >;
 
 const HOOK_IDENTIFIER_ALIASES = new Map([
@@ -80,11 +84,14 @@ function readHookEntry(
   // Entry without a boolean `enabled` is malformed -> ignore it entirely.
   if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
   const binaries = readHookBinaries(value.binaries);
+  const scanRoots = readHookScanRootList(value["scan-roots"]);
   return {
     id: normalizeHookIdentifier(hookId),
-    state: binaries
-      ? { enabled: value.enabled, binaries }
-      : { enabled: value.enabled },
+    state: {
+      enabled: value.enabled,
+      ...(binaries ? { binaries } : {}),
+      ...(scanRoots ? { "scan-roots": scanRoots } : {}),
+    },
   };
 }
 
@@ -238,6 +245,21 @@ export function readHookEnabled(
   defaultEnabled: boolean,
 ): boolean {
   return readHookConfig(projectPath)[hookId]?.enabled ?? defaultEnabled;
+}
+
+/**
+ * Return one hook's explicit project-relative post-turn roots.
+ *
+ * @param projectPath - selected project whose goat-flow config owns the hook row
+ * @param hookId - canonical hook id; hooks without `scan-roots` return no list
+ * @returns copied configured roots, or `null` when the hook has no valid explicit list
+ */
+export function readHookScanRoots(
+  projectPath: string,
+  hookId: string,
+): string[] | null {
+  const scanRoots = readHookConfig(projectPath)[hookId]?.["scan-roots"];
+  return scanRoots ? [...scanRoots] : null;
 }
 
 /**

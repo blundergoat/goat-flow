@@ -20,6 +20,7 @@ import {
   buildAgentHookDescriptor,
   type AgentHookHandlerDescriptor,
 } from "./server/agent-hook-command.js";
+import type { AgentHookRegistrationIssue } from "./server/agent-hook-writer.js";
 import { readAllHookStates } from "./server/hook-registrar.js";
 import { getHookSpec } from "./server/hooks-registry.js";
 import type { AgentId } from "./types.js";
@@ -47,6 +48,8 @@ export type HookRuntimeReasonCode =
   | "agent-hook-unsupported"
   | "hook-disabled"
   | "hook-not-installed"
+  | "event-mismatch"
+  | "matcher-mismatch"
   | "target-marked-untrusted"
   | "hook-registry-missing"
   | "probe-timed-out"
@@ -137,6 +140,23 @@ export function managedHookReasonCode(
   if (!enabled) return "hook-disabled";
   // Missing registration, script, or policy files means no checkout proof can run.
   if (!installed || scriptPath === null) return "hook-not-installed";
+  return null;
+}
+
+/** Preserve exact configured registration drift when it prevents a replay. */
+function configuredRegistrationReasonCode(
+  isSupported: boolean,
+  isEnabled: boolean,
+  registrationIssue: AgentHookRegistrationIssue | null,
+): HookRuntimeReasonCode | null {
+  // Provider support and user intent take precedence over stale registration detail.
+  if (!isSupported || !isEnabled) return null;
+  if (
+    registrationIssue === "event-mismatch" ||
+    registrationIssue === "matcher-mismatch"
+  ) {
+    return registrationIssue;
+  }
   return null;
 }
 
@@ -361,12 +381,18 @@ function readManagedConfiguredHookState(
       hookSpec.timeoutSec === undefined
         ? PROBE_TIMEOUT_MS
         : hookSpec.timeoutSec * 1000,
-    reasonCode: managedHookReasonCode(
-      agentHookState.supported,
-      hookState.enabled,
-      agentHookState.installed,
-      agentHookState.scriptPath,
-    ),
+    reasonCode:
+      configuredRegistrationReasonCode(
+        agentHookState.supported,
+        hookState.enabled,
+        agentHookState.registrationIssue,
+      ) ??
+      managedHookReasonCode(
+        agentHookState.supported,
+        hookState.enabled,
+        agentHookState.installed,
+        agentHookState.scriptPath,
+      ),
   };
 }
 

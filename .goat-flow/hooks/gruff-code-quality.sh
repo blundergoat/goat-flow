@@ -2244,9 +2244,14 @@ main() {
   local diagnostic_path
   local -a file_paths
   # Bare and explicit smoke forms give users the same safe installation check.
-  if [[ "${1:-}" == "--self-test" || "${1:-}" == "--self-test=smoke" ]]; then
+  if [[ "$#" -eq 1 && ( "$1" == "--self-test" || "$1" == "--self-test=smoke" ) ]]; then
     self_test
     exit $?
+  fi
+  # Any other argument is a caller error; payload execution is stdin-only.
+  if [[ "$#" -ne 0 ]]; then
+    printf 'Usage: %s [--self-test|--self-test=smoke]\n' "${0##*/}" >&2
+    exit 2
   fi
 
   started_seconds="$SECONDS"

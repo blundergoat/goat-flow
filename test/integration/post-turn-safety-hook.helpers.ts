@@ -103,9 +103,37 @@ export function createCommittedRepo(root: string): void {
   commitAll(root, "initial");
 }
 
-/** Run one non-Git controller scenario with named immediate child repositories.
+/** Write the explicit post-turn roots a non-Git controller is allowed to scan.
+ * Side effects: writes the disposable controller's Goat Flow config.
  *
- * @param childNames - immediate directory names; an empty list proves the no-child boundary
+ * @param root - non-empty controller directory that owns `.goat-flow/config.yaml`
+ * @param scanRoots - project-relative roots; an empty list removes the explicit contract
+ * @returns nothing; the caller owns the disposable controller fixture
+ */
+export function writePostTurnScanRoots(
+  root: string,
+  scanRoots: string[],
+): void {
+  if (scanRoots.length === 0) return;
+  writeFile(
+    root,
+    ".goat-flow/config.yaml",
+    [
+      "version: 1",
+      "hooks:",
+      "  post-turn-safety:",
+      "    enabled: true",
+      "    scan-roots:",
+      ...scanRoots.map((scanRoot) => `      - ${scanRoot}`),
+      "",
+    ].join("\n"),
+  );
+}
+
+/** Run one non-Git controller scenario with explicitly configured child repositories.
+ * Side effects: writes repositories and controller config, then deletes the fixture tree.
+ *
+ * @param childNames - repository names also written as the controller's explicit scan roots
  * @param fn - required callback given the controller and child roots
  * @returns nothing; every controller and child path is removed after the scenario
  */
@@ -121,6 +149,7 @@ export function withTempController(
       createCommittedRepo(childRoot);
       childRoots[childName] = childRoot;
     }
+    writePostTurnScanRoots(root, childNames);
     fn(root, childRoots);
   } finally {
     rmSync(root, { recursive: true, force: true });

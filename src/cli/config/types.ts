@@ -37,6 +37,8 @@ interface LearningLoopConfig {
 /** One togglable goat-flow hook entry from `.goat-flow/config.yaml`. */
 interface GoatFlowHookConfig {
   enabled: boolean;
+  /** Explicit project-relative Git roots scanned by the post-turn safety hook. */
+  scanRoots?: string[];
   /**
    * Repo-relative analyzer binary overrides keyed by language suffix (e.g.
    * `py: strands_agents/.venv/bin/gruff-py`). Consumed at runtime by the hook

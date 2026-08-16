@@ -316,6 +316,7 @@ describe("hook registrar: launchers and installation", () => {
 
   it("converges duplicate and mixed stale and current rows across three CLI syncs", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       const denySpec = getHookSpec("deny-dangerous");
       const postTurnSpec = getHookSpec("post-turn-safety");
       assert.ok(denySpec);
@@ -535,15 +536,14 @@ describe("hook registrar: launchers and installation", () => {
       const denyDangerousSpec = getHookSpec(HOOK_IDENTIFIER);
       assert.ok(denyDangerousSpec);
       assert.equal(existsSync(managedHookPath), true);
-      assert.equal(
-        readAgentHookState(root, PROFILES.codex, denyDangerousSpec)
-          .registrationIssue,
-        "registration-missing",
+      const disabledState = readAgentHookState(
+        root,
+        PROFILES.codex,
+        denyDangerousSpec,
       );
-      assert.doesNotMatch(
-        readFileSync(join(root, ".codex", "hooks.json"), "utf-8"),
-        /deny-dangerous\.sh/u,
-      );
+      assert.equal(disabledState.registrationIssue, undefined);
+      assert.equal(disabledState.configMissing, true);
+      assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
     });
   });
 

@@ -27,6 +27,16 @@ function renderHooksText(hooks: HookState[]): string {
     lines.push(
       `${hook.id}  ${hook.enabled ? "enabled" : "disabled"}  ${agentBits.join(", ")}`,
     );
+    if (hook.scanRoots !== null) {
+      const roots =
+        hook.scanRoots.roots.length === 0
+          ? "none"
+          : hook.scanRoots.roots.join(", ");
+      lines.push(`  scan roots: ${roots} [${hook.scanRoots.status}]`);
+      if (hook.scanRoots.issue !== null) {
+        lines.push(`  ${hook.scanRoots.issue}`);
+      }
+    }
   }
   return lines.join("\n");
 }

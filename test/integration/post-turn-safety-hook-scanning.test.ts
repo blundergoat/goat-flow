@@ -541,6 +541,20 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
       });
     });
 
+    it("blocks a leading-plus token assignment on both paths and allows its placeholder control", () => {
+      withTempRepo((root) => {
+        writeFile(root, "leading-plus.env", "+API_KEY=your_api_key_here\n");
+        commitAll(root, "add leading plus placeholder");
+        writeFile(
+          root,
+          "leading-plus.env",
+          `+API_KEY=${TEST_API_TOKEN}\n+API_KEY=your_api_key_here\n`,
+        );
+
+        assertScannerParity(root, 2, /API token/u);
+      });
+    });
+
     it("allows source assignments on both paths", () => {
       withTempRepo((root) => {
         writeFile(root, "app.py", `API_TOKEN = "${TEST_CLIENT_SECRET}"\n`);

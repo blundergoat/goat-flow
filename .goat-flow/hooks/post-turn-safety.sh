@@ -533,10 +533,10 @@ finish_repository_root_failure() {
   finish_infrastructure_failure "$managed_root" "$failure_identity"
 }
 
-# Scan immediate independent Git repositories when the managed project is a non-Git controller.
+# Scan only the explicit Git roots configured for a managed non-Git controller.
 # Each child emits the existing provider-neutral envelope, so aggregation never parses human stderr
-# or reimplements detector decisions. Exit 3 means no eligible child existed and preserves the
-# established single-project root failure below.
+# or reimplements detector decisions. Exit 3 means the complete configured root contract could not
+# be established and preserves the bounded single-project root failure below.
 run_controller_child_scans() {
   local controller_root=""
   local controller_result=""
@@ -559,7 +559,7 @@ run_controller_child_scans() {
       GOAT_FLOW_CONTROLLER_STOP_ACTIVE="$stop_hook_active" \
       POST_TURN_HOOK_VERSION="$post_turn_hook_version" \
       node -e '
-const { lstatSync, readdirSync, realpathSync } = require("node:fs");
+const { readFileSync, realpathSync, statSync } = require("node:fs");
 const { spawnSync } = require("node:child_process");
 const path = require("node:path");
 
@@ -628,36 +628,199 @@ function prefixTarget(childName, target) {
   return `${childName}/${target}`;
 }
 
-let directoryEntries;
-try {
-  directoryEntries = readdirSync(controllerRoot, { withFileTypes: true })
-    .sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
-} catch {
-  process.exit(3);
+const singleQuote = String.fromCharCode(39);
+
+function stripYamlComment(text) {
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      if (inSingle && text[index + 1] === singleQuote) {
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble && character === "#" &&
+      (index === 0 || /\s/u.test(text[index - 1]))) {
+      return text.slice(0, index).trimEnd();
+    }
+  }
+  return text.trimEnd();
 }
 
-const scanUnits = [];
-for (const entry of directoryEntries) {
-  // Symlinked directories and ordinary grouping folders are outside the immediate-root contract.
-  if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
-  const childPath = path.join(controllerRoot, entry.name);
-  let gitMarker;
-  try {
-    gitMarker = lstatSync(path.join(childPath, ".git"));
-  } catch {
-    continue;
+function yamlStringScalar(rawValue) {
+  const value = stripYamlComment(rawValue).trim();
+  if (value.length === 0) return null;
+  if (value.startsWith(singleQuote) && value.endsWith(singleQuote)) {
+    return value.slice(1, -1).split(singleQuote + singleQuote).join(singleQuote);
   }
-  if (gitMarker.isSymbolicLink() || (!gitMarker.isDirectory() && !gitMarker.isFile())) {
-    scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child Git metadata is not a regular file or directory") });
-    continue;
+  if (value.startsWith("\"") && value.endsWith("\"")) {
+    try {
+      const decoded = JSON.parse(value);
+      return typeof decoded === "string" ? decoded : null;
+    } catch {
+      return null;
+    }
   }
+  if (/^(?:null|~|true|false)$/iu.test(value) || /^[-+]?\d+(?:\.\d+)?$/u.test(value)) {
+    return null;
+  }
+  return value;
+}
 
+function yamlFlowStringList(rawValue) {
+  const value = stripYamlComment(rawValue).trim();
+  if (!value.startsWith("[") || !value.endsWith("]")) return null;
+  const body = value.slice(1, -1);
+  if (body.trim().length === 0) return [];
+  const rawItems = [];
+  let item = "";
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index];
+    if (escaped) {
+      item += character;
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      item += character;
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      item += character;
+      if (inSingle && body[index + 1] === singleQuote) {
+        item += body[index + 1];
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      item += character;
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble && character === ",") {
+      rawItems.push(item);
+      item = "";
+      continue;
+    }
+    item += character;
+  }
+  if (inSingle || inDouble || escaped) return null;
+  rawItems.push(item);
+  const parsedItems = rawItems.map(yamlStringScalar);
+  return parsedItems.every((candidate) => typeof candidate === "string")
+    ? parsedItems
+    : null;
+}
+
+function lineIndent(line) {
+  if (line.includes("\t")) return -1;
+  return line.length - line.trimStart().length;
+}
+
+function configuredScanRoots() {
+  let configText;
+  try {
+    configText = readFileSync(path.join(controllerRoot, ".goat-flow", "config.yaml"), "utf8");
+  } catch {
+    return null;
+  }
+  const lines = configText.replace(/\r\n?/gu, "\n").split("\n");
+  const hooksIndex = lines.findIndex((line) =>
+    lineIndent(line) === 0 && stripYamlComment(line).trim() === "hooks:");
+  if (hooksIndex < 0) return null;
+  let hooksEnd = lines.length;
+  for (let index = hooksIndex + 1; index < lines.length; index += 1) {
+    const cleanLine = stripYamlComment(lines[index]);
+    if (cleanLine.trim().length > 0 && lineIndent(lines[index]) <= 0) {
+      hooksEnd = index;
+      break;
+    }
+  }
+  let hookIndex = -1;
+  let hookIndent = -1;
+  for (let index = hooksIndex + 1; index < hooksEnd; index += 1) {
+    const indent = lineIndent(lines[index]);
+    if (indent > 0 && stripYamlComment(lines[index]).trim() === "post-turn-safety:") {
+      hookIndex = index;
+      hookIndent = indent;
+      break;
+    }
+  }
+  if (hookIndex < 0) return null;
+  for (let index = hookIndex + 1; index < hooksEnd; index += 1) {
+    const cleanLine = stripYamlComment(lines[index]);
+    const trimmedLine = cleanLine.trim();
+    if (trimmedLine.length === 0) continue;
+    const indent = lineIndent(lines[index]);
+    if (indent <= hookIndent) break;
+    const fieldMatch = /^scan-roots:\s*(.*)$/u.exec(trimmedLine);
+    if (!fieldMatch) continue;
+    const inlineValue = fieldMatch[1].trim();
+    if (inlineValue.length > 0) return yamlFlowStringList(inlineValue);
+    const roots = [];
+    for (let rootIndex = index + 1; rootIndex < hooksEnd; rootIndex += 1) {
+      const rootLine = stripYamlComment(lines[rootIndex]);
+      if (rootLine.trim().length === 0) continue;
+      if (lineIndent(lines[rootIndex]) <= indent) break;
+      const itemMatch = /^-\s+(.+)$/u.exec(rootLine.trim());
+      if (!itemMatch) return null;
+      const root = yamlStringScalar(itemMatch[1]);
+      if (root === null) return null;
+      roots.push(root);
+    }
+    return roots;
+  }
+  return null;
+}
+
+const configuredRoots = configuredScanRoots();
+if (!Array.isArray(configuredRoots) || configuredRoots.length === 0) process.exit(3);
+
+const scanUnits = [];
+for (const configuredRoot of configuredRoots) {
+  if (configuredRoot.length === 0 || path.isAbsolute(configuredRoot) ||
+    /^[A-Za-z]:[\\/]/u.test(configuredRoot) || /^\\\\/u.test(configuredRoot)) {
+    process.exit(3);
+  }
+  const childPath = path.resolve(controllerRoot, configuredRoot);
+  const lexicalRelative = path.relative(controllerRoot, childPath);
+  if (lexicalRelative === ".." || lexicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(lexicalRelative)) {
+    process.exit(3);
+  }
   let childRealPath;
   try {
     childRealPath = realpathSync(childPath);
+    if (!statSync(childRealPath).isDirectory()) process.exit(3);
   } catch {
-    scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child repository directory could not be opened") });
-    continue;
+    process.exit(3);
+  }
+  const physicalRelative = path.relative(controllerRoot, childRealPath);
+  if (physicalRelative === ".." || physicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(physicalRelative)) {
+    process.exit(3);
   }
   const rootLookup = spawnSync("git", ["-C", childRealPath, "rev-parse", "--show-toplevel"], {
     encoding: "utf8",
@@ -665,23 +828,20 @@ for (const entry of directoryEntries) {
     windowsHide: true,
   });
   if (rootLookup.error || rootLookup.status !== 0 || typeof rootLookup.stdout !== "string" || rootLookup.stdout.trim().length === 0) {
-    scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child Git repository root could not be opened") });
-    continue;
+    process.exit(3);
   }
+  let gitRoot;
   try {
-    const gitRoot = realpathSync(rootLookup.stdout.trim());
-    if (gitRoot !== childRealPath) {
-      scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child Git top level does not match its controller directory") });
-      continue;
-    }
+    gitRoot = realpathSync(rootLookup.stdout.trim());
   } catch {
-    scanUnits.push({ name: entry.name, failure: syntheticResult("coverage-incomplete", "Child Git top level could not be resolved") });
-    continue;
+    process.exit(3);
   }
-  scanUnits.push({ name: entry.name, root: childRealPath });
+  if (gitRoot !== childRealPath) process.exit(3);
+  scanUnits.push({
+    name: physicalRelative.split(path.sep).join("/"),
+    root: childRealPath,
+  });
 }
-
-if (scanUnits.length === 0) process.exit(3);
 
 const childPayload = sessionFingerprint.length > 0
   ? JSON.stringify({ session_id: sessionFingerprint, hook_event_name: "Stop", stop_hook_active: stopHookActive })
@@ -811,7 +971,7 @@ process.exit(2);
   )"
   controller_status=$?
 
-  # No immediate repository leaves the existing fail-closed Git-root path authoritative.
+  # An absent or invalid explicit list leaves the bounded fail-closed Git-root path authoritative.
   if [ "$controller_status" -eq 3 ]; then
     return 3
   fi
@@ -1796,8 +1956,8 @@ if ! read_stop_context; then
   exit 2
 fi
 
-# A managed non-Git controller scans only immediate directories that are independent Git roots.
-# Status 3 means none were eligible, so the existing scanner reports the original root failure.
+# A managed non-Git controller scans only its explicit, wholly valid Git-root list.
+# Status 3 means the list was absent or invalid, so bounded root-failure recovery remains authoritative.
 if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" != 1 ] && \
   ! git rev-parse --show-toplevel >/dev/null 2>&1; then
   run_controller_child_scans

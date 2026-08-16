@@ -84,15 +84,17 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 ## Lesson: Absence claims need untruncated searches
 
-**Created:** 2026-07-03
+**Status:** active | **Created:** 2026-07-03 | **Incident count:** 3 | **Latest occurrence:** 2026-08-16
 
 **What happened:** While assessing loop coverage, `grep -n "stats\|quality\|audit\|index" scripts/preflight-checks.sh | head -20` showed no `stats` hit, and the analysis claimed `stats --check` ran in no local gate. The `head -20` had truncated the match list; preflight's Learning-Loop Schema section already ran `node dist/cli/cli.js stats . --check`. The user's "double check" instruction exposed the false absence claim before it shaped the fix.
 
 **Root cause:** A multi-pattern grep piped through `head` answers "what appears early", not "does X appear at all". The absence conclusion was drawn from a presence-oriented, truncated probe.
 
-**Prevention:** Before claiming a pattern is absent from a file or repo, rerun the exact single pattern with no `head`/`tail` truncation (or `grep -c`). Treat any `| head` output as a sample, never as evidence of absence. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
+**Prevention:** Before claiming a pattern is absent from a file or repo, rerun the exact single pattern with no `head`/`tail` truncation (or `grep -c`). For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Treat any truncated or indirect filter output as presence-oriented evidence, never evidence of absence. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
 
 **Recurrence (2026-08-12):** A `5-call` contract-surface census scoped to six hand-picked directories returned seven paths, and the count was about to ship as an exact-count expectation inside a milestone stop condition. `git grep -ln "5-call"` over the tracked tree returned eight: `.goat-flow/learning-loop/decisions/ADR-042-cross-harness-invocation-ask-first.md` (search: `5-call`) sat outside every scanned directory, so the honest wider census would have false-fired the stop rule on its first run. Exact-count claims follow the same rule as absence claims: derive them from the widest search the claim implies - `git grep` over the tracked tree, not a hand-picked directory list - before pinning the count into a stop condition or expected-result cell.
+
+**Recurrence (2026-08-16):** An M04 path audit filtered filenames with a pattern containing contiguous `hooks-runtime`, then incorrectly reported that `hooks-configured-runtime-evidence.ts` did not exist. An exact `test -e` immediately disproved the claim: the filter was built for a neighbouring filename and never searched the configured-runtime spelling. Evidence anchor: `src/cli/hooks-configured-runtime-evidence.ts` (search: `readManagedConfiguredHookState`).
 
 ---
 

@@ -48,6 +48,8 @@ Registration shapes differ by provider (ADR-053). Claude registers an exec-form 
 
 Direct `.sh` use keeps each hook's existing stdout, stderr, exit status, `--check`, and self-test interface. Registered Gruff commands for Claude, Codex, and Copilot, plus the Codex Stop command, use the namespaced provider-result contract. Deny commands and other registered Stop commands retain their legacy result mode. A namespaced command records the provider, response kind, result protocol, lifecycle event, adapter version, and launcher deadline.
 
+Self-test arguments are exact. Deny accepts `--self-test`, `--self-test=smoke`, and `--self-test=full`; Gruff accepts `--self-test` and `--self-test=smoke`; post-turn safety accepts only `--self-test`. Unsupported values and extra self-test arguments exit non-zero instead of starting normal hook execution.
+
 The `goat-flow.hook-result.v1` path captures at most 10,000 combined stdout/stderr bytes, accepts one JSON object, caps findings at 20, and requires complete declared coverage before `pass`. Malformed, empty, partial, timed-out, or mismatched results become explicit unavailable outcomes. Provider adapters preserve blocking semantics; a host/event pair that cannot deliver the result remains unsupported instead of receiving weaker advice.
 
 ## Failure Modes / Runtime Contracts
@@ -58,15 +60,28 @@ The `goat-flow.hook-result.v1` path captures at most 10,000 combined stdout/stde
 - Audit and preflight run the exact configured handlers from `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, and `.github/hooks/hooks.json` - Claude's exec-form argv directly, command strings through Bash; this catches stale paths, missing executable bits, and handler-shape failures before an agent session sees them.
 - Use `goat-flow hooks verify . --agent <id> --scenario <deny-hook|post-turn-hook|gruff-hook>` to replay fixed offline inputs through one agent's exact configured command. A passing report proves only that local boundary; it does not prove the external provider fired the hook or showed the result to the model.
 - Claude, Codex, and Antigravity support nested cwd inside a complete managed project with or without Git. Git remains first for worktree correctness; Claude and Antigravity may fall back to `$CLAUDE_PROJECT_DIR`, while Codex must find a complete managed ancestor. `gruff-code-quality.sh` fails soft.
-- Policy evaluation works from a complete non-Git installation. At a non-Git controller, post-turn safety scans each immediate non-symlinked child whose `.git` metadata is regular and whose Git top level is that child directory, then aggregates repository coverage and prefixes finding targets with the child name. With no eligible child, it retains the incomplete root result; one exact active infrastructure replay may end without recording a pass.
+- Policy evaluation works from a complete non-Git installation. At a non-Git controller, post-turn safety scans only the project-relative repositories named by `hooks.post-turn-safety.scan-roots`, in configured order. Registration requires every root to exist, remain physically contained, and equal its Git top level. Missing, invalid, or mixed root configuration leaves Stop unregistered; a stale registration retains bounded incomplete recovery. The hook never discovers child repositories automatically.
 - Copilot uses direct project-local paths and therefore requires a repo-root working directory for the configured command. Nested-cwd execution is outside the current Copilot contract unless that runtime adds a portable project-root variable or root-resolving command support.
 - Directly invoked `.sh` hooks must keep executable bits. Missing `bash` is a hard runtime prerequisite for all shipped guardrails.
 - Every namespaced result command installs `hook-provider-adapters.mjs` and `hook-launch-runtime.mjs`. Missing or malformed pieces produce visible unavailable feedback.
-- `post-turn-safety.sh` uses an optimized Bash 4+ scanner and a bounded compatibility scanner on stock macOS Bash 3.2. Both enforce the same findings and shared wall-clock limit. Tracked and staged text streams as added hunks regardless of full file size; binary changed paths and whole untracked text above `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES` report incomplete and block. Non-Git controller fan-out invokes the same scanner once per eligible immediate repository and validates each provider-neutral result instead of parsing terminal text. A valid Stop payload can end one exact repeated infrastructure failure loudly, including an unavailable Git root from a complete managed installation, while findings, coverage gaps, budget exhaustion, malformed payloads, and unverified launch roots keep blocking. The default scan budget is 60 seconds and the registered Stop timeout is 90 seconds, so the hook can print its own diagnostic before the runner intervenes. Run `bash .goat-flow/hooks/post-turn-safety.sh --self-test` after install or upgrade.
+- `post-turn-safety.sh` uses an optimized Bash 4+ scanner and a bounded compatibility scanner on stock macOS Bash 3.2. Both enforce the same findings and shared wall-clock limit. Tracked and staged text streams as added hunks regardless of full file size; binary changed paths and whole untracked text above `GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES` report incomplete and block. Non-Git controller fan-out invokes the same scanner once per validated configured repository, preserves configured order, prefixes finding targets with the root path, and validates each provider-neutral result instead of parsing terminal text. A valid Stop payload can end one exact repeated infrastructure failure loudly, including an unavailable Git root from a complete managed installation, while findings, coverage gaps, budget exhaustion, malformed payloads, and unverified launch roots keep blocking. The default scan budget is 60 seconds and the registered Stop timeout is 90 seconds, so the hook can print its own diagnostic before the runner intervenes. Run `bash .goat-flow/hooks/post-turn-safety.sh --self-test` after install or upgrade.
 
 ## Post-Turn Safety
 
 goat-flow configures `post-turn-safety.sh` by default for Claude and Codex. Only the exact Codex project-hook combination above has fresh live-provider delivery evidence for this release. Antigravity remains disabled because Stop execution was not captured past its trust gate, and Copilot remains disabled because `agentStop` delivery and a Goat Flow registration adapter are unverified. The hook scans changed text content for built-in safety hazards. It does not run builds, tests, linters, typecheckers, or formatters, and must not be treated as project validation.
+
+A Git project uses its implicit `.` scan root. A non-Git controller must declare every repository explicitly:
+
+```yaml
+hooks:
+  post-turn-safety:
+    enabled: true
+    scan-roots:
+      - api
+      - web
+```
+
+Every listed path must be a contained Git top level. One invalid sibling invalidates the whole list; unlisted and nested repositories are not discovered.
 
 Tracked and staged text is scanned from added hunks, including files above the whole-file cap. Non-ignored untracked text above the cap and binary changed paths return explicit incomplete results. New content cannot authorize its own suppression: inline allow markers on a new finding still block. Move intentional scanner fixtures to split synthetic values, or leave a reviewed committed fixture unchanged.
 

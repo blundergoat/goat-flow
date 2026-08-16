@@ -942,13 +942,13 @@ strip_xargs_payload_command() {
         xargs_word_index=$((xargs_word_index + 1))
         break
         ;;
-      -0|--null|-r|--no-run-if-empty|-t|--verbose|-p|--interactive|-x|--exit|--show-limits)
+      -0|--null|-r|--no-run-if-empty|-t|--verbose|-p|--interactive|-x|--exit|--show-limits|-e|-i|-l|--eof|--replace|--max-lines)
         xargs_word_index=$((xargs_word_index + 1))
         continue
         ;;
       # A separated value must be skipped with its option; otherwise the value itself looks like
       # the payload and hides the real command, as `--process-slot-var VAR git push` once did.
-      -a|--arg-file|-I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter|--process-slot-var)
+      -a|--arg-file|-I|-L|-n|-P|-s|-E|-d|--max-args|--max-procs|--max-chars|--delimiter|--process-slot-var)
         xargs_word_index=$((xargs_word_index + 2))
         continue
         ;;
@@ -1086,7 +1086,7 @@ __goat_git_strip_globals() {
         ;;
       -c|-C|--git-dir|--work-tree|--namespace|--exec-path|--config-env)
         val="${words[$((i + 1))]:-}"
-        if [[ "$opt" == "-c" && "$val" =~ ^alias\.[a-zA-Z0-9_-]+=[\'\"]?(push|!) ]]; then
+        if [[ "$opt" == "-c" ]] && is_git_publication_alias_config "$val"; then
           __goat_git_aliased_push=1
         fi
         i=$((i + 2))
@@ -1094,7 +1094,7 @@ __goat_git_strip_globals() {
         ;;
       -c?*)
         val="${opt#-c}"
-        if [[ "$val" =~ ^alias\.[a-zA-Z0-9_-]+=[\'\"]?(push|!) ]]; then
+        if is_git_publication_alias_config "$val"; then
           __goat_git_aliased_push=1
         fi
         i=$((i + 1))
@@ -2169,6 +2169,7 @@ main() {
   OUTPUT_MODE="stderr-exit"
   SELF_TEST_MODE=""
   CHECK_COMMAND=""
+  local check_command_source=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -2180,14 +2181,17 @@ main() {
         ;;
       --check=*)
         CHECK_COMMAND="${1#--check=}"
+        check_command_source="check-flag"
         ;;
       --check)
         shift
         CHECK_COMMAND="${1:-}"
+        check_command_source="check-flag"
         ;;
       *)
         if [[ -z "$CHECK_COMMAND" ]]; then
           CHECK_COMMAND="$1"
+          check_command_source="positional"
         fi
         ;;
     esac
@@ -2201,6 +2205,15 @@ main() {
   fi
 
   local payload structured_input payload_trimmed tool_name command command_policy extraction_status
+  if [[ "$check_command_source" == "positional" && ! -t 0 ]]; then
+    local competing_payload competing_payload_trimmed
+    competing_payload="$(cat || true)"
+    competing_payload_trimmed="${competing_payload#"${competing_payload%%[![:space:]]*}"}"
+    if [[ -n "$competing_payload_trimmed" ]]; then
+      OUTPUT_MODE="$(detect_output_mode "$competing_payload")"
+      block "Hook received both positional command and stdin payload. Submit exactly one command source."
+    fi
+  fi
   JSON_EXTRACTION_UNSAFE=0
   payload="$(read_payload)"
   structured_input=0

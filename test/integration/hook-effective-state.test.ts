@@ -235,6 +235,7 @@ describe("effective hook state", () => {
   // Fixture purpose: writes a temporary user customization; suite cleanup removes the project.
   it("names installed byte drift as a stale installation", () => {
     const projectPath = createClaudeProject();
+    initializeDisposableGitProject(projectPath);
     syncHookStates(projectPath);
     const hookScriptPath = join(
       projectPath,
@@ -287,6 +288,8 @@ describe("effective hook state", () => {
   // Setup diagnostics tell the user whether event, matcher, response command, or timeout owns drift.
   it("names exact registration drift without rewriting user configuration", () => {
     const projectPath = createClaudeProject();
+    initializeDisposableGitProject(projectPath);
+    enableGruffForProject(projectPath);
     syncHookStates(projectPath);
 
     const matcherSettings = readClaudeHookSettings(projectPath);
@@ -295,10 +298,33 @@ describe("effective hook state", () => {
     );
     assert.ok(denyEventEntry);
     denyEventEntry.matcher = "Read";
+    const gruffEventEntry = matcherSettings.hooks.PostToolUse?.find(
+      (eventEntry) => eventEntry.matcher === "Edit",
+    );
+    assert.ok(gruffEventEntry);
+    gruffEventEntry.matcher = "Read";
     writeClaudeHookSettings(projectPath, matcherSettings);
     assert.equal(
       claudeHookState(projectPath, "deny-dangerous").registrationIssue,
       "matcher-mismatch",
+    );
+    assert.equal(
+      claudeHookState(projectPath, "gruff-code-quality").registrationIssue,
+      "matcher-mismatch",
+    );
+    const matcherReport = verifyManagedConfiguredHook({
+      projectPath,
+      agent: "claude",
+      scenarioGroup: "gruff-hook",
+      isTargetUntrusted: false,
+    });
+    assert.equal(matcherReport.status, "fail");
+    assert.equal(matcherReport.summary.notConfigured, matcherReport.scenarios.length);
+    assert.equal(
+      matcherReport.scenarios.every(
+        (scenario) => scenario.reasonCode === "matcher-mismatch",
+      ),
+      true,
     );
 
     syncHookStates(projectPath);
@@ -322,6 +348,20 @@ describe("effective hook state", () => {
     assert.equal(
       claudeHookState(projectPath, "post-turn-safety").registrationIssue,
       "event-mismatch",
+    );
+    const eventReport = verifyManagedConfiguredHook({
+      projectPath,
+      agent: "claude",
+      scenarioGroup: "post-turn-hook",
+      isTargetUntrusted: false,
+    });
+    assert.equal(eventReport.status, "fail");
+    assert.equal(eventReport.summary.notConfigured, eventReport.scenarios.length);
+    assert.equal(
+      eventReport.scenarios.every(
+        (scenario) => scenario.reasonCode === "event-mismatch",
+      ),
+      true,
     );
 
     syncHookStates(projectPath);
