@@ -224,7 +224,7 @@ describe("effective hook state", () => {
     });
     assert.match(
       denyHookState.repairCommand ?? "",
-      /hooks verify .* --agent claude --scenario deny-hook/u,
+      /hooks verify .* --agent claude --scenario deny-hook --trusted-target/u,
     );
     assert.equal(
       denyHookState.evidenceIdentity,
@@ -434,7 +434,10 @@ describe("effective hook state", () => {
     assert.match(terminalReport, /Effective Hook Coverage:/u);
     assert.match(terminalReport, /deny-dangerous\/claude:/u);
     assert.match(terminalReport, /scenario unverified/u);
-    assert.match(terminalReport, /hooks verify .*--scenario deny-hook/u);
+    assert.match(
+      terminalReport,
+      /hooks verify .*--scenario deny-hook --trusted-target/u,
+    );
     assert.equal(readFileSync(settingsPath, "utf-8"), settingsBeforeAudit);
   });
 

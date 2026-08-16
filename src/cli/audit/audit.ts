@@ -107,7 +107,7 @@ type AuditHarnessOption = Record<"harness", boolean>;
  * Caller-supplied switches for a single `runAudit` invocation. Every field beyond `agentFilter` and
  * the inherited `harness` flag is optional and off by default, so the common audit path stays the
  * deterministic build checks; the optional fields turn on the more expensive diagnostics (drift,
- * content lint, full deny-hook runtime validation) or trade fact depth for dashboard speed.
+ * content lint, explicit full deny-hook runtime validation) or trade fact depth for dashboard speed.
  */
 interface AuditOptions extends AuditHarnessOption {
   agentFilter: AgentId | null;
@@ -115,7 +115,7 @@ interface AuditOptions extends AuditHarnessOption {
   checkDrift?: boolean;
   /** Optional cold-path content lint. Defaults to false when omitted. */
   checkContent?: boolean;
-  /** Optional summary-mode downgrade for expensive deny-hook runtime validation. */
+  /** Deny-hook evidence depth. Omission is static; full explicitly executes target hook code. */
   denyMechanismEvidenceLevel?: "full" | "static" | "present-only";
   /** Optional fact profile. Dashboard summary omits stack facts by contract. */
   factProfile?: AuditFactProfile;
@@ -151,6 +151,17 @@ function factsIncludeStack(options: AuditOptions): boolean {
   return factProfile(options) !== "dashboard-summary";
 }
 
+/** Resolve omission to the non-executing evidence level at the public audit boundary. */
+function denyMechanismEvidenceLevel(
+  options: AuditOptions,
+): NonNullable<AuditOptions["denyMechanismEvidenceLevel"]> {
+  return options.denyMechanismEvidenceLevel ?? "static";
+}
+
+/**
+ * Reject a stack-dependent check before a dashboard-summary context can misreport it.
+ * @throws Error when a check requires stack facts excluded from the current context.
+ */
 function assertCheckCanRunWithoutStack(
   ctx: AuditContext,
   check: Pick<BuildCheck | HarnessCheck, "id" | "name" | "requiresStack">,
@@ -373,7 +384,7 @@ function buildAuditContext(
     agents: facts.agents,
     agentFilter: options.agentFilter,
     factProfile: factProfile(options),
-    denyMechanismEvidenceLevel: options.denyMechanismEvidenceLevel,
+    denyMechanismEvidenceLevel: denyMechanismEvidenceLevel(options),
   };
 }
 
@@ -411,6 +422,7 @@ export function runAudit(
   return runAuditFromContext(ctx, fs, projectPath, options);
 }
 
+/** Run every selected audit layer against one already-extracted, evidence-level-normalized context. */
 function runAuditFromContext(
   ctx: AuditContext,
   fs: ReadonlyFS,
@@ -436,7 +448,7 @@ function runAuditFromContext(
   const status = overallStatus(setupScope, agentScope, harness, drift, content);
   const enforcement = buildEnforcementMatrix(ctx.agents, {
     agentScope: agentScope,
-    denyMechanismEvidenceLevel: options.denyMechanismEvidenceLevel,
+    denyMechanismEvidenceLevel: denyMechanismEvidenceLevel(options),
   });
   addNonGatingEvidenceLimits(
     agentScope,
@@ -602,7 +614,7 @@ export function runAuditBatch(
     agents: aggregateFacts.agents,
     agentFilter: options.agentFilter,
     factProfile: currentFactProfile,
-    denyMechanismEvidenceLevel: options.denyMechanismEvidenceLevel,
+    denyMechanismEvidenceLevel: denyMechanismEvidenceLevel(options),
   };
   const aggregate = runAuditFromContext(aggregateCtx, fs, projectPath, {
     ...options,
@@ -623,7 +635,7 @@ export function runAuditBatch(
         agents: agentFacts.agents,
         agentFilter: agentId,
         factProfile: currentFactProfile,
-        denyMechanismEvidenceLevel: options.denyMechanismEvidenceLevel,
+        denyMechanismEvidenceLevel: denyMechanismEvidenceLevel(options),
       };
       perAgent.push({
         id: agentId,

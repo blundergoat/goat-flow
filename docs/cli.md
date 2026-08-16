@@ -22,7 +22,8 @@ Validate setup correctness. The base audit runs two deterministic scopes (all pa
 | `--harness` | Add AI Harness Completeness scope (18 checks, installed/not-installed per concern) |
 | `--check-drift` | Add skill template-vs-installed drift detection (orphan directories, byte-level divergence) |
 | `--check-content` | Add cold-path content lint (vague terms, generic instructions, factual-claim drift) |
-| `--untrusted-target` | Skip executing the target's deny-hook code (its configured handler and managed script). By default the audit runs that code for runtime proof; pass this when auditing a checkout you don't trust so the deny-mechanism check stays static (no execution). |
+| `--trusted-target` | Execute the selected checkout's configured deny-hook handler and managed script for runtime proof. Omit this flag for static inspection. |
+| `--untrusted-target` | Deprecated compatibility alias for the static, non-executing default. It remains accepted throughout v1.16.x and will not be removed before v1.17.0. It cannot be combined with `--trusted-target`. |
 | `--format <type>` | Output: json, text, markdown, sarif (default: auto) |
 | `--verbose` | Show per-check details |
 | `--output <file>` | Write to file instead of stdout |
@@ -31,12 +32,15 @@ Validate setup correctness. The base audit runs two deterministic scopes (all pa
 npx @blundergoat/goat-flow@latest audit .                      # Audit current directory
 npx @blundergoat/goat-flow@latest audit . --harness            # Include AI harness completeness checks
 npx @blundergoat/goat-flow@latest audit . --agent claude       # Audit scoped to Claude
+npx @blundergoat/goat-flow@latest audit . --agent claude --trusted-target # Add trusted checkout runtime proof
 npx @blundergoat/goat-flow@latest audit . --format json        # JSON output for CI
 npx @blundergoat/goat-flow@latest audit . --format sarif       # SARIF output for CI/code scanning upload
 npx @blundergoat/goat-flow@latest audit . --output report.json # Write to file
 ```
 
 The enforcement matrix is deliberately conservative. It reports local facts such as deny-hook registration, secret-path file-read coverage, secret shell-read blocking, deny-hook self-test evidence, and runtime-shaped blocked-payload smoke evidence. General file read/write restriction capability remains `unknown` unless goat-flow has explicit evidence; it is not inferred from setup success or from a perfect constraints score.
+
+Audit, setup-prompt generation, and quality-prompt generation inspect target hook configuration statically by default. `--trusted-target` opts the selected-agent audit inside those commands into target-controlled runtime execution. The dashboard remains static and has no target-execution flag.
 
 `--format sarif` exports the same deterministic audit findings as SARIF 2.1.0. It is an interchange format for CI and SARIF-aware tools; goat-flow is still reporting harness/setup integrity findings, not source-code vulnerabilities. Failing setup, agent, and harness checks become SARIF results. `--check-drift` and `--check-content` findings are included when those audit sections are enabled. Checks without target-file evidence are emitted without fabricated locations; GitHub code scanning accepts SARIF without annotations, but it only displays code annotations for results that include `locations[]`.
 
@@ -52,7 +56,7 @@ npx @blundergoat/goat-flow@latest quality . --agent codex          # Quality pro
 
 The saver derives the date/time and a random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
 
-The CLI command composes the prompt with fresh audit context. The dashboard
+The CLI command composes the prompt with fresh, static audit context by default; add `--trusted-target` only after confirming the selected checkout may execute local hook code. The dashboard
 Quality page may use cached audit enrichment for passive page loads, but its
 Regenerate action follows the same fresh-audit path.
 
@@ -343,6 +347,8 @@ npx @blundergoat/goat-flow@latest events tail . --limit 50 --format json
 
 Generate a setup prompt adapted to the project's current state. An existing goat-flow installation routes to the upgrade path instead.
 
+Setup's selected-agent audit is static by default. Add `--trusted-target` only when the setup prompt should include runtime deny-hook proof from a checkout whose hook configuration you have inspected and trust.
+
 Supported agent ids are read from `workflow/manifest.json` via `src/cli/agents/registry.ts`, so the CLI help and validation stay aligned with the machine-readable support matrix.
 
 ```bash
@@ -422,16 +428,16 @@ npx @blundergoat/goat-flow@latest hooks list --json                 # Machine-re
 npx @blundergoat/goat-flow@latest hooks enable gruff-code-quality   # Enable one hook and sync agent configs
 npx @blundergoat/goat-flow@latest hooks disable gruff-code-quality  # Disable one hook and sync agent configs
 npx @blundergoat/goat-flow@latest hooks sync                         # Re-apply config.yaml hook state to agent configs
-npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario deny-hook
-npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-turn-hook
-npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario deny-hook --trusted-target
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-turn-hook --trusted-target
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook --trusted-target
 ```
 
 Goat Flow 1.15.1 registers Codex project hooks for `PostToolUse` on `apply_patch` and for `Stop`, with a 75-second launcher deadline inside Codex's 90-second host timeout. Live delivery was captured on Codex CLI 0.147.0 in interactive and exec modes with a trusted project layer. That evidence expires at 2026-09-09T00:00:00Z, or sooner after a relevant provider, mode, trust, event, adapter, or registration change; `hooks list` then reports stale evidence. Project-layer trust and handler trust remain separate. App-server, remote execution, and other provider combinations are unclaimed. See the [hook runtime matrix](../workflow/hooks/README.md#agent-event-name-mapping) for registered and disabled combinations.
 
 `enable` and `disable` require a `<hook-id>` (exit 2 if omitted). `sync` re-applies the `.goat-flow/config.yaml` hook state to every agent's hook config without changing which hooks are enabled.
 
-`hooks verify` requires `--agent <id>` and one explicit scenario group: `deny-hook`, `post-turn-hook`, or `gruff-hook`. It sends fixed provider-shaped inputs through the exact command generated for the selected agent, with a five-second timeout and bounded output capture. The deny group checks three blocked commands and one read-only control. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. Because the selected checkout's hook code does execute, use this only for a checkout you trust or pass `--untrusted-target` to return explicit `unsupported` results without starting it.
+`hooks verify` requires `--agent <id>` and one explicit scenario group: `deny-hook`, `post-turn-hook`, or `gruff-hook`. Without `--trusted-target`, it returns explicit `unsupported` results and does not start the selected checkout's hook code. After you confirm the checkout is trusted, `--trusted-target` sends fixed provider-shaped inputs through the exact command generated for the selected agent, with a five-second timeout and bounded output capture. The deny group checks three blocked commands and one read-only control. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. The deprecated `--untrusted-target` flag remains an explicit alias for the safe default during the v1.16.x compatibility window.
 
 Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an accepted expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. Reports and `hook.verify` events carry hook and scenario ids, verdict metadata, evidence level, duration, and reason codes - never input payloads, command operands, findings, stdout, or stderr.
 

@@ -435,6 +435,15 @@ function validateFlagCombinations(
   plansSubcommand: PlansSubcommand | null,
   plansTimeAction: PlansTimeAction | null,
 ): void {
+  if (
+    parsedFlag(values, "trusted-target") &&
+    parsedFlag(values, "untrusted-target")
+  ) {
+    throw new CLIError(
+      "--trusted-target and --untrusted-target cannot be used together.",
+      2,
+    );
+  }
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
   validateQualityFlags(command, values, qualitySubcommand);
@@ -496,6 +505,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       harness: { type: "boolean", default: false },
       "check-drift": { type: "boolean", default: false },
       "check-content": { type: "boolean", default: false },
+      "trusted-target": { type: "boolean", default: false },
       "untrusted-target": { type: "boolean", default: false },
       "no-audit-details": { type: "boolean", default: false },
       check: { type: "boolean", default: false },
@@ -618,6 +628,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     includeHarness: parsedFlag(parsedValues, "harness"),
     checkDrift: parsedFlag(parsedValues, "check-drift"),
     checkContent: parsedFlag(parsedValues, "check-content"),
+    isTargetTrusted: parsedFlag(parsedValues, "trusted-target"),
     isTargetUntrusted: parsedFlag(parsedValues, "untrusted-target"),
     auditDetails: !parsedFlag(parsedValues, "no-audit-details"),
     shouldCheck: parsedFlag(parsedValues, "check"),

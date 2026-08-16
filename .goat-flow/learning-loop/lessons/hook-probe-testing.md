@@ -1,6 +1,6 @@
 ---
 category: hook-probe-testing
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md).
@@ -45,7 +45,7 @@ last_reviewed: 2026-08-15
 
 ## Lesson: Configured hook smoke must verify the registered guard path
 
-**Status:** active | **Created:** 2026-05-27 | **Incident count:** 8 | **Latest occurrence:** 2026-08-10
+**Status:** active | **Created:** 2026-05-27 | **Incident count:** 10 | **Latest occurrence:** 2026-08-16
 
 **Decision changed:** Treat configured replay as a safe-and-dangerous semantic matrix, and make mocks identify the command boundary rather than infer it from call order.
 
@@ -70,6 +70,10 @@ last_reviewed: 2026-08-15
 **Recurrence 2026-08-09 (partial hook propagation):** A dormant adapter changed legacy commands and file lists before installer propagation, so the cross-agent matrix passed only 1 of 13 cases. Protocol-gating adapter loads and namespaced modes restored 12; deferring a separate Antigravity support removal restored 13 of 13. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `legacyHookLaunchMode`), `workflow/hooks/run-with-bash.mjs` (search: `LEGACY_HOOK_DEADLINES_MS`), and `test/integration/setup-install-agent-matrix.test.ts` (search: `diverged between installer and writer`).
 
 **Recurrence 2026-08-10 (standalone protocol precedence):** The TypeScript writer chose Gruff before provider policy, while the standalone installer checked Copilot first. The matrix passed 43 of 44 cases until precedence matched. The generated contract now removes that second decision. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `responseKind === "gruff"`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `diverged between installer and writer`).
+
+**Recurrence 2026-08-16 (overbroad execution sentinel):** The first static-audit regression test counted every `spawnSync` call as target hook execution. A fixed read-only `git rev-parse --show-toplevel` from hook-state inspection made the safe implementation fail `1 !== 0`. Narrowing the sentinel to calls carrying a provider-shaped hook payload separated configured-launcher probes from unrelated bounded subprocesses. Evidence anchor: `test/unit/audit-deny-runtime-flag.test.ts` (search: `GOAT_HOOK_SMOKE_PAYLOAD`).
+
+**Recurrence 2026-08-16 (implicit runtime fixture):** After audit omission became static, the full suite found three configured-launcher drift cases that still expected runtime evidence from a context with no evidence level. The production guard correctly returned no runtime finding; the runtime-focused fixtures now opt into `full` explicitly through `makeRuntimeCtx`, while later template-only fixtures retain the static default. Evidence anchor: `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `makeRuntimeCtx`).
 
 **Prevention:** Verify configured guard replay as well as direct self-tests. Run safe and dangerous payloads from each audited cwd, require policy-specific denial text, reject hidden script paths, and fail on exit 126/127. Test doubles branch on payload and command shape, never spawn order. Build single-axis drift fixtures from the canonical command, then grep renamed outcomes and rerun their message assertions. A non-empty `unsupportedAgents` reason means unsupported. Protocol seams keep legacy commands and files unchanged; support changes update writer and installer atomically. Test both launcher decoding and startup output when a generated mode changes. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`), `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
 
@@ -106,4 +110,3 @@ last_reviewed: 2026-08-15
 **Prevention:** For hook rules that classify write-capable CLI commands, build the regression set as a grammar matrix before mirror fanout: direct incident form, global flags before topic, inherited flags after topic, short flag forms, shell wrappers, pipeline consumers such as `xargs`, write-method API forms, and read-only allow controls. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment`).
 
 **Note (2026-06-02):** ADR-028 was amended to allow `gh issue comment` and `gh pr comment` through the hook (other `gh` writes still blocked). The specific block this lesson originally described no longer applies to comments, but the methodological lesson - test the CLI grammar matrix, not only the incident command - stands. The grammar matrix in the self-test now covers both blocked (`gh pr review`, `gh workflow run`, `gh api ... -X POST -f body=...`) and allowed (`gh issue comment`, `gh pr comment`) cases, so the prevention rule still has live coverage.
-

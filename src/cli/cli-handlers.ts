@@ -317,7 +317,9 @@ async function handleSetupCommand(
 
   const parts: string[] = [];
   for (const agentId of agentIds) {
-    const output = composeSetup(auditReport, facts, agentId);
+    const output = composeSetup(auditReport, facts, agentId, {
+      denyMechanismEvidenceLevel: options.isTargetTrusted ? "full" : "static",
+    });
     if (output) parts.push(output);
   }
   if (parts.length > 0) {
@@ -361,15 +363,9 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
     harness: options.includeHarness,
     checkDrift: options.checkDrift,
     checkContent: options.checkContent,
-    // The deny-mechanism runtime smoke executes the target checkout's own hook
-    // code (configured launcher string and managed script) and runs by default.
-    // `--untrusted-target` keeps the deny check static for a checkout you do not
-    // trust; otherwise the property is omitted, leaving the default unchanged.
-    // This trusted CLI audit is the only runtime-proof path: passive dashboard
-    // audit and quality routes stay at "static" or weaker evidence.
-    ...(options.isTargetUntrusted
-      ? { denyMechanismEvidenceLevel: "static" as const }
-      : {}),
+    // Runtime proof executes the target checkout's configured launcher and
+    // managed script, so only an affirmative trust choice may enable it.
+    denyMechanismEvidenceLevel: options.isTargetTrusted ? "full" : "static",
   });
 
   const reportForRender = options.auditDetails
@@ -477,6 +473,7 @@ async function runSetupPipeline(options: ParsedCLI): Promise<void> {
   const auditReport = runAudit(fs, options.projectPath, {
     agentFilter: options.agent ?? null,
     harness: false,
+    denyMechanismEvidenceLevel: options.isTargetTrusted ? "full" : "static",
   });
   await handleSetupCommand(options, auditReport, facts);
 }

@@ -146,6 +146,7 @@ export interface ParsedCLI extends CLIOptions {
   includeHarness: boolean;
   checkDrift: boolean;
   checkContent: boolean;
+  isTargetTrusted: boolean;
   isTargetUntrusted: boolean;
   auditDetails: boolean;
   shouldCheck: boolean;

@@ -202,7 +202,7 @@ describe("bounded hook verification guidance", () => {
 
       assert.ok(
         content.includes(
-          "goat-flow hooks verify . --agent <id> --scenario deny-hook",
+          "goat-flow hooks verify . --agent <id> --scenario deny-hook --trusted-target",
         ),
         `${relativePath} must show the bounded managed-hook proof command`,
       );

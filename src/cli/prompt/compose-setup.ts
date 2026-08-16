@@ -74,12 +74,13 @@ function usesLimitedDenyEvidence(
   return evidenceLevel === "static" || evidenceLevel === "present-only";
 }
 
+/** Summarize a passing audit without overstating evidence the selected mode did not collect. */
 function auditPassHeadline(
   evidenceLevel: DenyMechanismEvidenceLevel | undefined,
 ): string {
-  return usesLimitedDenyEvidence(evidenceLevel)
-    ? "Dashboard setup checks pass."
-    : "All audit checks pass.";
+  if (!usesLimitedDenyEvidence(evidenceLevel)) return "All audit checks pass.";
+  const label = evidenceLevel === "present-only" ? "Presence-only" : "Static";
+  return `${label} audit checks pass; runtime deny-hook probes were not run.`;
 }
 
 function auditPassInstallLine(

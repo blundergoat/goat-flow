@@ -430,9 +430,9 @@ function effectiveStateRepair(
   // Missing runtime proof has one bounded offline verification command for the user.
   if (HOOK_VERIFY_REPAIR_STATES.has(effectiveState.status)) {
     return {
-      command: `goat-flow hooks verify ${quotedProjectPath} --agent ${agent.id} --scenario ${hookScenarioForHookId(spec.id)}`,
+      command: `goat-flow hooks verify ${quotedProjectPath} --agent ${agent.id} --scenario ${hookScenarioForHookId(spec.id)} --trusted-target`,
       summary:
-        "Run the explicit configured-command scenarios; normal audit does not execute project hooks.",
+        "After confirming the checkout is trusted, run the explicit configured-command scenarios; normal audit does not execute project hooks.",
     };
   }
   return {

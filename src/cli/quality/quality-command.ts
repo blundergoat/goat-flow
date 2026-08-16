@@ -599,6 +599,10 @@ function handleQualitySaveSubcommand(
   deps.writeOutput(options, `OK ${reportPath}`);
 }
 
+/**
+ * Compose one quality prompt from a fresh audit whose target-execution level follows the CLI trust choice.
+ * @throws CLIError when the request omits the required agent selection.
+ */
 async function handleQualityPromptSubcommand(
   options: ParsedCLI,
   deps: QualityCommandDeps,
@@ -623,6 +627,7 @@ async function handleQualityPromptSubcommand(
     auditReport = runAudit(fs, options.projectPath, {
       agentFilter: options.agent,
       harness: true,
+      denyMechanismEvidenceLevel: options.isTargetTrusted ? "full" : "static",
     });
   } catch {
     // Audit infrastructure failure degrades prompt evidence, so tell the user without inventing a code finding.

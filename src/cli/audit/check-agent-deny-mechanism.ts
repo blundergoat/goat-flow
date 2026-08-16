@@ -349,7 +349,9 @@ export const agentDenyMechanism: BuildCheck = {
       checkDenyPatterns(ctx) ??
       checkHookVersion(ctx);
 
-    if (ctx.denyMechanismEvidenceLevel === "static") {
+    // Omitted evidence is static by contract. Only an explicit full level may
+    // execute a managed self-test or configured launcher from the target.
+    if (ctx.denyMechanismEvidenceLevel !== "full") {
       return staticFailure;
     }
 

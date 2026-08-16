@@ -111,13 +111,16 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
           projectPath: options.projectPath,
           agent: options.agent,
           scenarioGroup: options.hookScenario,
-          isTargetUntrusted: options.isTargetUntrusted,
+          // The runtime-evidence layer uses this field as its no-execution gate.
+          // Omission and the deprecated alias both stay static; only explicit
+          // trusted-target selection releases the gate.
+          isTargetUntrusted: !options.isTargetTrusted,
         })
       : verifyManagedConfiguredHook({
           projectPath: options.projectPath,
           agent: options.agent,
           scenarioGroup: options.hookScenario,
-          isTargetUntrusted: options.isTargetUntrusted,
+          isTargetUntrusted: !options.isTargetTrusted,
         });
   writeOutput(
     options,

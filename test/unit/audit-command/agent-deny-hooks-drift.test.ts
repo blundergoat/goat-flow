@@ -24,6 +24,16 @@ import { checkHookRuntimeSmoke } from "../../../src/cli/audit/check-agent-deny-r
 import { applyHookState } from "../../../src/cli/server/hook-registrar.js";
 import { withTempProject } from "../hook-registrar.helpers.js";
 
+/** Build a context that deliberately crosses the trusted runtime-evidence boundary. */
+function makeRuntimeCtx(
+  overrides: Parameters<typeof makeCtx>[0],
+): ReturnType<typeof makeCtx> {
+  return makeCtx({
+    ...overrides,
+    denyMechanismEvidenceLevel: "full",
+  });
+}
+
 /** Extract one Claude permission tool's path operands; sorted output makes set parity deterministic. */
 function permissionDenyPaths(denyRules: string[], tool: "Read" | "Edit") {
   const prefix = `${tool}(`;
@@ -79,7 +89,7 @@ function withRealCodexAudit(
     mkdirSync(join(targetProjectPath, ".codex"), { recursive: true });
     writeFileSync(join(targetProjectPath, ".codex", "config.toml"), "");
     applyHookState("deny-dangerous", true, targetProjectPath);
-    const auditContext = makeCtx({
+    const auditContext = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: targetProjectPath,
       agents: [
@@ -244,7 +254,7 @@ describe("agent deny hook template comparison", () => {
   it("fails when an exact configured hook command points at a stale path", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    const ctx = makeCtx({
+    const ctx = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
       agents: [
@@ -293,7 +303,7 @@ describe("agent deny hook template comparison", () => {
   it("runs the configured launcher string instead of bypassing it with bash script path", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    const ctx = makeCtx({
+    const ctx = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
       agents: [
@@ -346,7 +356,7 @@ describe("agent deny hook template comparison", () => {
   it("ignores unrelated hooks whose names merely contain a managed script name", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    const ctx = makeCtx({
+    const ctx = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
       agents: [
@@ -400,7 +410,7 @@ describe("agent deny hook template comparison", () => {
   it("fails when a configured hook command points at a legacy per-agent mirror", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    const ctx = makeCtx({
+    const ctx = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
       agents: [

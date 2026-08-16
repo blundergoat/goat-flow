@@ -52,10 +52,10 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 <Binary outcome this milestone proves or delivers.>
 
 ## What we lose without this
-<One concrete line: what stays broken or gets worse if this never ships.>
+<One sentence, 13-20 words: what stays broken.>
 
 ## Why this helps
-<One plain line: the everyday benefit, in words a non-specialist uses.>
+<One sentence, 13-20 words: what a person can now do.>
 
 ## Context
 - Read first: `<file>` (search: `<semantic anchor>`) — <non-obvious convention or reference>.
@@ -87,10 +87,12 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 
 Put each literal command in one Commands source. Proof, tasks, and exit criteria reference its purpose rather than repeating it. Add Mid-implementation proof only before switching modules or after a bounded edit batch.
 
-Write from the incident in Context, not by shortening the Objective - that sentence is for the implementer. If the benefit line just negates the cost line, one is wasted. A spike that ships nothing says so. Both plain-language milestone sections take one concrete, jargon-free line a reader outside the project understands:
+Write from the incident in Context, not by shortening the Objective - that sentence is for the implementer. One sentence each, 13 to 20 words, naming no milestone, ADR, version, flag, or file. The benefit line says what a person can now do, never what ships. If it only negates the cost line, one is wasted. A spike that ships nothing says so.
 
 - BAD: "Runtime proof executing target-controlled launchers needs a trusted-target choice."
 - GOOD: "Looking at a stranger's repo can't run their code on your machine."
+- BAD: "Ships as a registered hook, default-on for verified agents, gated elsewhere."
+- GOOD: "Your agent starts a session already knowing the project's rules."
 
 ## High-risk additions
 
@@ -118,8 +120,8 @@ High-risk detail has no safety-reducing hard cap; output above 1,200 words names
 | Field | Rule |
 |---|---|
 | Outcome | Name what becomes true; add Objective only when the title needs clarification. |
-| What we lose | One concrete line: what stays broken. |
-| Why this helps | One plain line a non-specialist gets. |
+| What we lose | What stays broken. |
+| Why this helps | What a person can now do. |
 | Tasks | Order `[RISKY]`, `[CORE]`, `[SAFE]`; one action and one done condition per checkbox. |
 | Proof | State claim → evidence with relevant tags; human sign-off belongs to the blocking gate. |
 | Exit | State binary transition truth and reference proof claims without copying commands. |

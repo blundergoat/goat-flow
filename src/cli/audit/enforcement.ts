@@ -414,11 +414,8 @@ function hookSelfTestCapability(
       ["agent-guardrails"],
     );
   }
-  // Full evidence mode executes the managed self-test and earns runtime-local assurance.
-  if (
-    options.denyMechanismEvidenceLevel === "full" ||
-    options.denyMechanismEvidenceLevel === undefined
-  ) {
+  // Only explicit full evidence executes the managed self-test and earns runtime-local assurance.
+  if (options.denyMechanismEvidenceLevel === "full") {
     return capability(
       "hook-self-test",
       "hard",
@@ -431,7 +428,7 @@ function hookSelfTestCapability(
     "hook-self-test",
     "limited",
     ["local-hook"],
-    `Deny hook static checks passed, but runtime self-test was skipped in ${options.denyMechanismEvidenceLevel} evidence mode`,
+    `Deny hook static checks passed, but runtime self-test was skipped in ${options.denyMechanismEvidenceLevel ?? "static"} evidence mode`,
     ["agent-guardrails"],
   );
 }

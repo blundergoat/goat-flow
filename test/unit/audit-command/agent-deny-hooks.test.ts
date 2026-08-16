@@ -11,7 +11,7 @@ import {
   assert,
   describe,
   it,
-  makeCtx,
+  makeCtx as makeAuditContext,
   readFileSync,
   resolve,
   stubAgentFacts,
@@ -25,6 +25,16 @@ const childProcess =
   require("node:child_process") as typeof import("node:child_process");
 const originalExecFileSync = childProcess.execFileSync;
 const originalSpawnSync = childProcess.spawnSync;
+
+/** Build this runtime-focused suite's contexts with the explicit full-evidence choice. */
+function makeCtx(
+  overrides: Parameters<typeof makeAuditContext>[0],
+): ReturnType<typeof makeAuditContext> {
+  return makeAuditContext({
+    ...overrides,
+    denyMechanismEvidenceLevel: "full",
+  });
+}
 
 afterEach(() => {
   childProcess.execFileSync = originalExecFileSync;

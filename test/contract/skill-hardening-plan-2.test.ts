@@ -133,19 +133,22 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
           helpIndex > lossIndex,
           `${examplesPath}: cost must precede benefit in the milestone template`,
         );
-        assert.match(
-          examples,
-          /one concrete, jargon-free line a reader outside the project understands/u,
-          examplesPath,
+        // Two worked pairs, not one: an external agent given a single security-flavoured pair on 2026-08-16 read it as a
+        // special case and wrote fourteen benefit lines describing what ships. The second pair is that corrected failure.
+        assert.ok(
+          examples.match(/^- BAD: /gmu)?.length >= 2 &&
+            examples.match(/^- GOOD: /gmu)?.length >= 2,
+          `${examplesPath}: needs both worked BAD/GOOD pairs`,
         );
-        assert.match(examples, /^- BAD: /mu, examplesPath);
-        assert.match(examples, /^- GOOD: /mu, examplesPath);
 
-        // An author trimming for the word cap deletes these three rules first, and every other check here still passes without
-        // them: correct headings, correct order, one line each, written by compressing the Objective into shorter jargon.
+        // These rules are checkable on purpose. The same run satisfied "concrete, jargon-free line" while averaging 33 words
+        // and naming milestones and ADRs, so adjectives were replaced by a word count, a banned-referent list, and a subject
+        // rule. An author trimming for the word cap deletes them first, and every other check here still passes without them.
         for (const derivationRule of [
           /not by shortening the Objective/u,
-          /benefit line just negates the cost line/u,
+          /13 to 20 words, naming no milestone, ADR, version, flag, or file/u,
+          /says what a person can now do, never what ships/u,
+          /only negates the cost line/u,
           /spike that ships nothing says so/u,
         ]) {
           assert.match(examples, derivationRule, examplesPath);

@@ -630,7 +630,7 @@ function selectConfiguredScenarioResults(
   hookState: ManagedConfiguredHookState,
   scenarios: readonly ConfiguredHookScenario[],
 ): HookRuntimeScenarioResult[] {
-  // An untrusted checkout never executes its hook command or writes target-local evidence.
+  // Without explicit trusted-target approval, the checkout command and evidence writes stay blocked.
   if (request.isTargetUntrusted) {
     return skippedConfiguredScenarioResults(
       scenarios,
@@ -687,7 +687,7 @@ function selectConfiguredScenarioResults(
  * @param hookId - registry hook id; empty text would produce unusable evidence
  * @param scriptPath - managed script path; null records proof without a target-file anchor
  * @param scenarioResults - completed or skipped rows; empty input writes no events
- * @returns rows with durable-evidence flags; unchanged when the target is untrusted
+ * @returns rows with durable-evidence flags; unchanged when runtime approval is withheld
  */
 function recordConfiguredScenarioResults(
   request: ConfiguredHookRuntimeRequest,
@@ -695,7 +695,7 @@ function recordConfiguredScenarioResults(
   scriptPath: string | null,
   scenarioResults: HookRuntimeScenarioResult[],
 ): HookRuntimeScenarioResult[] {
-  // An untrusted target suppresses every target-local write, including evidence events.
+  // With runtime approval withheld, suppress every target-local write, including evidence events.
   if (request.isTargetUntrusted) return scenarioResults;
   return scenarioResults.map((scenarioResult) =>
     recordConfiguredScenarioEvidence(

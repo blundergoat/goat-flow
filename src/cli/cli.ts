@@ -58,7 +58,7 @@ Commands:
   hooks enable      Enable one registered hook and sync agent configs
   hooks disable     Disable one registered hook and sync agent configs
   hooks sync        Re-apply config.yaml hook truth to agent configs
-  hooks verify      Run bounded configured-command proof for one agent
+  hooks verify      Request bounded configured-command proof for one agent
 Arguments:
   project-path    Target project directory (default: .)
   report-file     Saved goat-review Markdown for review validate (omit to read stdin)
@@ -72,7 +72,8 @@ Flags:
   --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
   --check-drift     Audit: detect skill template-vs-installed drift and orphan directories
   --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
-  --untrusted-target Audit/hooks verify: skip executing target managed-hook code; use for a checkout you don't trust
+  --trusted-target  Audit/setup/quality/hooks verify: execute selected target hook code for runtime proof
+  --untrusted-target Deprecated through v1.16.x: explicit alias for the static, non-executing default
   --no-audit-details Audit JSON: omit structured harness detail payloads
   --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
   --json            Emit machine-readable JSON (alias for --format json)
@@ -102,6 +103,7 @@ Examples:
   goat-flow .                          Audit current directory
   goat-flow audit . --harness          Audit with AI harness completeness checks
   goat-flow audit . --agent claude     Audit scoped to Claude
+  goat-flow audit . --agent claude --trusted-target  Include trusted checkout runtime proof
   goat-flow audit . --format json      JSON output for CI
   goat-flow audit . --format sarif     SARIF output for CI/code scanning upload
   goat-flow install . --agent claude   Copy/update goat-flow system files
@@ -120,9 +122,9 @@ Examples:
   goat-flow hooks list --json          Print hook state as JSON
   goat-flow hooks enable gruff-code-quality
   goat-flow hooks sync                 Re-apply hook toggles from config.yaml
-  goat-flow hooks verify . --agent codex --scenario deny-hook
-  goat-flow hooks verify . --agent claude --scenario post-turn-hook
-  goat-flow hooks verify . --agent claude --scenario gruff-hook
+  goat-flow hooks verify . --agent codex --scenario deny-hook --trusted-target
+  goat-flow hooks verify . --agent claude --scenario post-turn-hook --trusted-target
+  goat-flow hooks verify . --agent claude --scenario gruff-hook --trusted-target
   goat-flow stats                      Learning-loop health report
   goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
   goat-flow diagnostics context . --agent codex

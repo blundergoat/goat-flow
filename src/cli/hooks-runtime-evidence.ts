@@ -479,7 +479,7 @@ function selectHookScenarioResults(
   hookState: ManagedDenyHookState,
   dependencies: HookRuntimeDependencies,
 ): HookRuntimeScenarioResult[] {
-  // Users can explicitly suppress execution when they do not trust checkout-owned hook code.
+  // Without explicit trusted-target approval, checkout-owned hook code cannot run.
   if (request.isTargetUntrusted) {
     return DENY_HOOK_SCENARIOS.map((scenario) =>
       skippedScenarioResult(scenario, "unsupported", "target-marked-untrusted"),
@@ -556,7 +556,7 @@ export function verifyManagedDenyHook(
     dependencies,
   );
 
-  // An untrusted-target choice suppresses every target-local side effect, including event writes.
+  // With runtime approval withheld, suppress every target-local side effect, including event writes.
   const recordedScenarios = request.isTargetUntrusted
     ? scenarioResults
     : scenarioResults.map((scenario) =>
