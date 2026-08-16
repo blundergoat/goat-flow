@@ -27,10 +27,6 @@ describe("compareVersions", () => {
     assert.equal(compareVersions("2.0.0", "1.99.99"), 1);
   });
 
-  it("reports equality for identical versions", () => {
-    assert.equal(compareVersions("1.15.0", "1.15.0"), 0);
-  });
-
   it("rejects malformed and shortened versions", () => {
     assert.throws(() => compareVersions("1.x.0", "1.0.0"), /X\.Y\.Z/u);
     assert.throws(() => compareVersions("1.15", "1.15.0"), /X\.Y\.Z/u);

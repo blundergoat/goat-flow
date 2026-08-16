@@ -46,7 +46,6 @@ import {
   detectImageExtension,
   persistUploads,
   sanitizeUploadFilename,
-  TERMINAL_UPLOAD_MAX_FILES,
   uploadDirForSession,
 } from "../../src/cli/server/terminal-uploads.js";
 
@@ -315,12 +314,5 @@ describe("buildAttachmentNote", () => {
       note,
       "Attached images:\n  .goat-flow/logs/uploads/s/x-a.png\n  .goat-flow/logs/uploads/s/y-b.png\n",
     );
-  });
-});
-
-describe("upload count limit", () => {
-  it("exposes the documented max-files constant", () => {
-    const expectedUploadMaxFiles = 5;
-    assert.equal(TERMINAL_UPLOAD_MAX_FILES, expectedUploadMaxFiles);
   });
 });

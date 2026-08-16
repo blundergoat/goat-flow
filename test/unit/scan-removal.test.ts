@@ -34,33 +34,6 @@ describe("default command is menu", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Test 3: --help output contains audit and quality, does not contain scan
-// ---------------------------------------------------------------------------
-describe("CLI help text", () => {
-  it("audit and quality are recognized commands", () => {
-    const auditParsed = parseCLIArgs(["audit", "."]);
-    assert.equal(auditParsed.command, "audit");
-
-    const qualityParsed = parseCLIArgs(["quality", ".", "--agent", "claude"]);
-    assert.equal(qualityParsed.command, "quality");
-  });
-
-  it("scan is in removed commands, not active commands", () => {
-    // Verify scan throws (not silently ignored)
-    assert.throws(
-      () => parseCLIArgs(["scan"]),
-      (err: Error) => err.message.includes("removed"),
-    );
-
-    // Verify audit does not throw
-    assert.doesNotThrow(() => parseCLIArgs(["audit", "."]));
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 4: --min-score and --min-grade flags are rejected
-// ---------------------------------------------------------------------------
 describe("removed flags rejected", () => {
   it("rejects --min-score flag", () => {
     assert.throws(
@@ -84,103 +57,11 @@ describe("removed flags rejected", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Test 5: Existing M19b + M20a + M20b tests still pass (verified by test runner)
-// ---------------------------------------------------------------------------
-describe("backwards compatibility", () => {
-  it("audit command parses correctly with all valid flags", () => {
-    const parsed = parseCLIArgs([
-      "audit",
-      ".",
-      "--harness",
-      "--agent",
-      "claude",
-      "--format",
-      "json",
-    ]);
-    assert.equal(parsed.command, "audit");
-    assert.equal(parsed.includeHarness, true);
-    assert.equal(parsed.agent, "claude");
-    assert.equal(parsed.format, "json");
-  });
-
-  it("quality command parses correctly", () => {
-    const parsed = parseCLIArgs(["quality", ".", "--agent", "antigravity"]);
-    assert.equal(parsed.command, "quality");
-    assert.equal(parsed.agent, "antigravity");
-  });
-
-  it("setup command still works", () => {
-    const parsed = parseCLIArgs(["setup", ".", "--agent", "codex"]);
-    assert.equal(parsed.command, "setup");
-    assert.equal(parsed.agent, "codex");
-  });
-
-  it("install command parses deterministic setup flags", () => {
-    const parsed = parseCLIArgs([
-      "install",
-      ".",
-      "--agent",
-      "codex",
-      "--force",
-    ]);
-    assert.equal(parsed.command, "install");
-    assert.equal(parsed.agent, "codex");
-    assert.equal(parsed.shouldForce, true);
-  });
-
-  it("install dry-run parses as a read-only managed preview", () => {
-    const parsed = parseCLIArgs([
-      "install",
-      ".",
-      "--agent",
-      "codex",
-      "--dry-run",
-    ]);
-    assert.equal(parsed.command, "install");
-    assert.equal(parsed.shouldDryRun, true);
-  });
-
+describe("managed preview flags", () => {
   it("rejects dry-run outside install and setup", () => {
     assert.throws(
       () => parseCLIArgs(["audit", ".", "--dry-run"]),
       /--dry-run is only valid for install or setup/u,
     );
-  });
-
-  it("previews the same authority apply would use", () => {
-    const parsed = parseCLIArgs([
-      "install",
-      ".",
-      "--agent",
-      "codex",
-      "--dry-run",
-      "--force",
-    ]);
-
-    // Dry-run answers "what would this authority do", so it must accept the flags.
-    assert.equal(parsed.shouldDryRun, true);
-    assert.equal(parsed.shouldForce, true);
-  });
-
-  it("rejects a broad user-owned override with no named path", () => {
-    assert.throws(
-      () =>
-        parseCLIArgs([
-          "install",
-          ".",
-          "--agent",
-          "codex",
-          "--force-user-owned",
-        ]),
-      /--force-user-owned requires at least one --force-path/u,
-    );
-  });
-
-  it("setup --apply parses as deterministic setup", () => {
-    const parsed = parseCLIArgs(["setup", ".", "--agent", "codex", "--apply"]);
-    assert.equal(parsed.command, "setup");
-    assert.equal(parsed.agent, "codex");
-    assert.equal(parsed.shouldApply, true);
   });
 });

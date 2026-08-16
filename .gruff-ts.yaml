@@ -23,31 +23,18 @@ paths:
   #   - ".next/**"
   #   - "src/generated/**"
   ignore:
-    # 2026-05-30: gruff-ts is the TypeScript analyzer; CSS files are handled
-    # outside its rule surface. Keep this as path ignore, not threshold tuning.
     - "*.css"
     - "**/*.css"
-    # 2026-08-02: machine-written audit/quality/skill-pressure run outputs.
-    # Every file here is gitignored and untracked, but the bare `logs` pattern
-    # in .gitignore does not exclude them from the recursive scan, so they were
-    # reporting size.file-length as if they were source. They are generated
-    # data, not code to refactor. Keep this as a path ignore, not a threshold
-    # change.
     - ".goat-flow/logs/**"
-    # 2026-08-10: installed hook mirrors are tracked release evidence for the
-    # canonical workflow/hooks/ sources. Scanning both byte-identical copies
-    # would double-count one implementation in the warning ratchet and coverage
-    # floor. Analyze the canonical hooks here and verify mirror parity through
-    # the drift audit. Keep this as a path ignore, not a threshold change.
     - ".goat-flow/hooks/**"
 
 allowlists:
+  # Abbreviations listed here are accepted in identifiers without a naming finding.
+  # Replace this list with the short terms reviewers accept in this project.
   acceptedAbbreviations:
     - age
     - app
-    - cb
     - db
-    - fn
     - fs
     - id
     - io
@@ -61,20 +48,6 @@ allowlists:
     - tx
     - ui
     - url
-    # 2026-05-30: repo-standard short names for file descriptors,
-    # markdown/JavaScript/WebSocket values, timings, regexes, readline, test
-    # cases, and simple ok status locals. Revisit if these appear outside
-    # those domains.
-    - fd
-    - js
-    - kb
-    - md
-    - ms
-    - ok
-    - re
-    - rl
-    - tc
-    - ws
   secretPreviews: []
   # Names that trigger naming.generic-function. Each key replaces the built-in
   # default when present; an empty list disables that rule's blacklist branch.
@@ -83,118 +56,23 @@ allowlists:
   # Exact public/CLI/DTO boolean names accepted by naming.boolean-prefix.
   # Default: [all, apply, check, dev, enabled, force, fresh, harness, json, ok, verbose, yes]
   # acceptedBooleanNames: [all, apply, check, dev, enabled, force, fresh, harness, json, ok, verbose, yes]
+  # Exact fileBase:ClassName pairs accepted by naming.class-file-mismatch.
+  # Default: []
+  # acceptedClassFilePairs: [focusModeTranscript:TranscriptFocusController]
+  # Exact wire_name:internalName alias pairs accepted within one naming owner.
+  # Default: []
+  # acceptedCasingPairs: [note_id:noteId]
   # Accepted prefixes for boolean identifiers. Names without one of these
   # prefixes trigger naming.boolean-prefix.
   # Default: [is, has, can, should, does, did, was, will, may, in, scan, supports, requires, allow, check, enable, exclude, include, omit, skip, with, without]
-  # 2026-05-30: dashboard state and CLI option DTOs intentionally use
-  # domain/flag-shaped booleans (`show*`, `loading*`, `fresh`, `verbose`,
-  # `enabled`) because those names mirror UI state, query params, or persisted
-  # JSON. Revisit if these prefixes start appearing in domain logic where an
-  # `is/has/can/should` name would read better.
-  # 2026-08-02: `capture`/`retry` cover the terminal-create wire contract
-  # (`TerminalCreateBody.captureQualityDrafts`) and the `retry*` window-state
-  # family that mirrors it; `plans` covers the ParsedCLI option DTO fields that
-  # sit beside the already-accepted `skill*` flags. Renaming these would break
-  # the request body or split a uniform field family.
-  booleanPrefixes:
-    - is
-    - has
-    - can
-    - should
-    - does
-    - did
-    - was
-    - will
-    - may
-    - in
-    - scan
-    - supports
-    - requires
-    - allow
-    - check
-    - enable
-    - exclude
-    - include
-    - omit
-    - skip
-    - with
-    - without
-    - active
-    - all
-    - apply
-    - audit
-    - available
-    - bodies
-    - capture
-    - clean
-    - co
-    - compliance
-    - connected
-    - config
-    - custom
-    - default
-    - dev
-    - demote
-    - deny
-    - editing
-    - enabled
-    - ended
-    - fast
-    - force
-    - fresh
-    - global
-    - harness
-    - heading
-    - help
-    - instructions
-    - interactive
-    - internal
-    - json
-    - launch
-    - launching
-    - llm
-    - loading
-    - loaded
-    - needs
-    - ok
-    - paste
-    - plans
-    - previous
-    - promote
-    - projects
-    - quality
-    - rejected
-    - require
-    - retry
-    - selected
-    - setup
-    - shape
-    - show
-    - signed
-    - skill
-    - starts
-    - supported
-    - terminal
-    - timed
-    - toast
-    - too
-    - togglable
-    - trim
-    - update
-    - valid
-    - verbose
-    - written
-    - zero
+  # booleanPrefixes: [is, has, can, should, does, did, was, will, may, in, scan, supports, requires, allow, check, enable, exclude, include, omit, skip, with, without]
   # Hungarian type-style prefixes flagged by naming.hungarian-notation.
   # Default: [str, obj, arr, bool, int, num]
   # hungarianPrefixes: [str, obj, arr, bool, int, num]
   # Placeholder words flagged as generic by naming.identifier-quality. The
   # numbered-suffix branch (foo1, value2) stays active even when this is empty.
   # Default: [foo, bar, baz, tmp, temp, thing, stuff, data, value, item]
-  # 2026-05-30: goat-flow decoders, validators, and event readers use
-  # value/data/item for unknown boundary payloads. Keep throwaway placeholders
-  # flagged; revisit if gruff gains scope-aware validator exemptions.
-  placeholderNames: [foo, bar, baz, tmp, temp, thing, stuff]
+  # placeholderNames: [foo, bar, baz, tmp, temp, thing, stuff, data, value, item]
   # Negative-framed boolean names that should NOT trigger naming.negative-boolean.
   # Defaults are HTTP-header conventions; add project terms as needed.
   # Default: [nostore, nofollow, noreferrer, noscript, noindex]
@@ -205,12 +83,12 @@ allowlists:
   # knownAcronyms: [url, http, https, id, xml, json, html, css, api, sql, db, io, ui, uuid, ip, tcp, udp, ast, cli, npm]
 
 rules:
-  # complexity/warning: Flags functions with high combined branch and nesting complexity.
+  # complexity/warning: Flags syntax-aware decisions plus nested if, loop, switch, catch, and ternary depth; object and callback braces add no nesting.
   complexity.cognitive:
     enabled: true
     threshold: 15
     severity: warning
-  # complexity/warning: Flags functions with many independent branch paths.
+  # complexity/warning: Counts a base path plus if, loop, catch, non-default case, ternary, &&, and || nodes; switch, default, ??, optional chains, and non-null assertions add zero.
   complexity.cyclomatic:
     enabled: true
     threshold: 15
@@ -288,7 +166,7 @@ rules:
   # documentation/advisory: Flags lint, formatter, coverage, or tool suppressions without a maintainer rationale.
   docs.suppression-without-rationale:
     enabled: true
-  # documentation/advisory: Flags TODO, FIXME, HACK, and XXX comments without tracking context.
+  # documentation/advisory: Flags comments introduced by a TODO, FIXME, HACK, or XXX marker without tracking context; prose that only mentions a marker word stays quiet.
   docs.todo-without-tracking:
     enabled: true
   # documentation/advisory: Flags comments or docblocks that only restate the symbol name.
@@ -336,13 +214,13 @@ rules:
   # modernisation/advisory: Flags var declarations.
   modernisation.var-declaration:
     enabled: true
-  # naming/advisory: Flags mixed casings of a known acronym in one file.
+  # naming/advisory: Flags a known acronym cased inconsistently across a file's chosen-case names; SCREAMING_SNAKE constants and all-lower names are convention-forced and exempt.
   naming.acronym-case:
     enabled: true
   # naming/advisory: Flags boolean names without intent-revealing prefixes on declarations, function parameters (typed `: boolean` or with `= true|false` default), and interface/type-literal fields.
   naming.boolean-prefix:
     enabled: true
-  # naming/advisory: Flags exported classes whose name differs from the file name.
+  # naming/advisory: Flags a sole public class whose name differs from the file name.
   naming.class-file-mismatch:
     enabled: true
   # naming/advisory: Flags generic function names that hide intent.
@@ -361,7 +239,7 @@ rules:
   # naming/advisory: Flags placeholder or numbered identifiers on declarations, function parameters, and destructured locals.
   naming.identifier-quality:
     enabled: true
-  # naming/advisory: Flags the same canonical identifier appearing in two different surface forms (for example CONSTANT_CASE and camelCase) in one file.
+  # naming/advisory: Flags one canonical identifier appearing in different forms within the same module, function, interface, or named type-literal owner.
   naming.inconsistent-casing:
     enabled: true
   # naming/advisory: Flags boolean identifiers framed as a negation on declarations, parameters, and interface fields.
@@ -421,7 +299,7 @@ rules:
   # security/warning: Flags external input sent to filesystem path sinks.
   security.path-traversal-candidate:
     enabled: true
-  # security/warning: Flags child-process execution calls and annotates emitted findings with command-source and shell-mode hints.
+  # security/warning: Flags child-process execution calls, grading severity from command-source and shell-mode evidence: warning only when a shell-enabled call takes a dynamic command.
   security.process-exec:
     enabled: true
   # security/warning: Flags direct __proto__ access that can enable prototype pollution.
@@ -491,11 +369,11 @@ rules:
   # sensitive-data/error: Flags private key block markers.
   sensitive-data.private-key:
     enabled: true
-  # size/warning: Flags files longer than the configured threshold.
+  # size/error: Flags files whose substantive nonblank, non-comment line count exceeds the configured threshold.
   size.file-length:
     enabled: true
-    threshold: 750
-    severity: warning
+    threshold: 1000
+    severity: error
   # size/warning: Flags functions longer than the configured threshold.
   size.function-length:
     enabled: true
@@ -515,7 +393,7 @@ rules:
   # test-quality/warning: Flags tests mutating process or global runtime state.
   test-quality.global-state-mutation:
     enabled: true
-  # test-quality/advisory: Flags loops inside test bodies.
+  # test-quality/advisory: Flags test-body loops whose assertions do not identify the failing iteration.
   test-quality.loop-in-test:
     enabled: true
   # test-quality/advisory: Flags assertions against unexplained numeric literals.

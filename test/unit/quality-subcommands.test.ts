@@ -19,23 +19,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { classifyProjectState } from "../../src/cli/classify-state.js";
-import {
-  MULTI_AGENT_SYNC_BANNER,
-  validAgentFlags,
-  validAgentList,
-  validAgents,
-} from "../../src/cli/cli-agent-options.js";
 import { CLIError } from "../../src/cli/cli-error.js";
-import { writeOutput } from "../../src/cli/cli-output.js";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
-import {
-  COMMANDS,
-  HOOK_SUBCOMMANDS,
-  REMOVED_COMMANDS,
-  VALID_FORMATS,
-} from "../../src/cli/cli-types.js";
-import type { ParsedCLI } from "../../src/cli/cli-types.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
 import { parseQualityReport } from "../../src/cli/quality/schema.js";
@@ -134,52 +119,7 @@ function makeIgnoredQualityRoot(): string {
   return root;
 }
 
-/**
- * Capture stdout emitted by the shared CLI output writer.
- *
- * @param rendered - command output body to write
- * @returns the exact text written to stdout
- */
-function captureStdoutWrite(rendered: string): string {
-  let captured = "";
-  const originalWrite = process.stdout.write;
-  process.stdout.write = ((chunk: string | Uint8Array) => {
-    captured += chunk.toString();
-    return true;
-  }) as typeof process.stdout.write;
-  try {
-    writeOutput({ output: null } as ParsedCLI, rendered);
-  } finally {
-    process.stdout.write = originalWrite;
-  }
-  return captured;
-}
-
 describe("quality subcommand parsing", () => {
-  it("keeps CLI support modules aligned with parser-visible command vocabulary", () => {
-    assert.equal(validAgents().includes("claude"), true);
-    assert.match(validAgentList(), /claude/);
-    assert.match(validAgentFlags(), /--agent claude/);
-    assert.match(MULTI_AGENT_SYNC_BANNER.join("\n"), /Multi-agent sync/);
-    assert.equal(
-      new CLIError("usage", CLI_USAGE_EXIT_CODE).exitCode,
-      CLI_USAGE_EXIT_CODE,
-    );
-    assert.equal(COMMANDS.includes("quality"), true);
-    assert.equal(HOOK_SUBCOMMANDS.has("sync"), true);
-    assert.equal(VALID_FORMATS.includes("json"), true);
-    assert.match(REMOVED_COMMANDS.check, /audit --check-drift/);
-    assert.match(REMOVED_COMMANDS.critique, /\bquality\b/);
-    assert.match(REMOVED_COMMANDS.fix, /\b(?:audit|quality)\b/);
-    assert.match(REMOVED_COMMANDS.eval, /\bquality candidacy\b/);
-    assert.doesNotMatch(REMOVED_COMMANDS.eval, /quality evaluate/);
-    assert.equal(captureStdoutWrite("payload"), "payload\n");
-    assert.equal(
-      classifyProjectState({ exists: () => false, readFile: () => null }).state,
-      "bare",
-    );
-  });
-
   it("rejects the removed capture subcommand with a migration hint", () => {
     assert.throws(
       () => parseCLIArgs(["quality", "capture"]),

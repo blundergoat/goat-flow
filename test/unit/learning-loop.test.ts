@@ -7,10 +7,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { assertExists } from "../helpers/assert-exists.ts";
 import {
-  computeFreshness as computeFreshnessFromLearningLoop,
   extractFootgunFacts,
   extractLessonsFacts,
-  parseFrontmatterFields as parseFrontmatterFieldsFromLearningLoop,
 } from "../../src/cli/facts/shared/learning-loop.js";
 import { extractSharedFacts } from "../../src/cli/facts/shared/index.js";
 import {
@@ -101,13 +99,6 @@ function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
 }
 
 describe("parseFrontmatterFields", () => {
-  it("keeps the learning-loop facade parser export aligned with the implementation", () => {
-    assert.equal(
-      parseFrontmatterFieldsFromLearningLoop,
-      parseFrontmatterFields,
-    );
-  });
-
   it("returns an empty object for an empty block", () => {
     assert.deepEqual(parseFrontmatterFields(""), {});
   });
@@ -168,10 +159,6 @@ describe("splitFootgunSections", () => {
 
 describe("computeFreshness", () => {
   const today = new Date("2026-04-18T12:00:00Z");
-
-  it("keeps the learning-loop facade freshness export aligned with the implementation", () => {
-    assert.equal(computeFreshnessFromLearningLoop, computeFreshness);
-  });
 
   it("returns unknown when last_reviewed is null", () => {
     assert.deepEqual(computeFreshness(null, today), {

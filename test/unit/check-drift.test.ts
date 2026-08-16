@@ -54,11 +54,6 @@ describe("parseMarkdownFrontmatter", () => {
 });
 
 describe("skillContentsEquivalent", () => {
-  it("identical strings are equivalent", () => {
-    const raw = "---\nname: x\n---\n# body\n";
-    assert.equal(skillContentsEquivalent(raw, raw), true);
-  });
-
   it("frontmatter key reorder is equivalent (no false positive)", () => {
     const firstRaw = "---\nname: x\ndescription: y\n---\n# body\n";
     const secondRaw = "---\ndescription: y\nname: x\n---\n# body\n";

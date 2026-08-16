@@ -16,10 +16,8 @@ import {
   loadManifest,
   checkManifest,
   getSkillFiles,
-  getRequiredInstructionSections as getRequiredInstructionSectionsFromManifest,
   renderManifestMarkdown,
   resetManifestCache,
-  validateSkillReferenceSchema as validateSkillReferenceSchemaFromManifest,
 } from "../../src/cli/manifest/manifest.js";
 import {
   getRequiredInstructionSections,
@@ -290,13 +288,6 @@ describe("validateManifest (agent capability metadata)", () => {
 });
 
 describe("validateSkillReferenceSchema", () => {
-  it("keeps the manifest facade validator export aligned with manifest-json", () => {
-    assert.equal(
-      validateSkillReferenceSchemaFromManifest,
-      validateSkillReferenceSchema,
-    );
-  });
-
   it("accepts an omitted references map", () => {
     const json = fixtureJson();
     const validationResult = validateSkillReferenceSchema(json);
@@ -564,13 +555,6 @@ describe("manifest snapshot coverage (real repo)", () => {
 // getRequiredInstructionSections: manifest-sourced harness input (T1 pinning)
 // ---------------------------------------------------------------------------
 describe("getRequiredInstructionSections (real repo)", () => {
-  it("keeps the manifest facade section export aligned with manifest-json", () => {
-    assert.equal(
-      getRequiredInstructionSectionsFromManifest,
-      getRequiredInstructionSections,
-    );
-  });
-
   it("returns one entry per manifest required_sections label", () => {
     resetManifestCache();
     const sections = getRequiredInstructionSections();
