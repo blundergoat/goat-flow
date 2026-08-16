@@ -29,10 +29,6 @@ import {
 } from "./learning-loop-sections.js";
 import { isFileRef } from "./reference-paths.js";
 
-export {
-  computeFreshness,
-  parseFrontmatterFields,
-} from "./learning-loop-common.js";
 export { extractLearningLoopEntries } from "./learning-loop-entries.js";
 
 /** Known filesystem locations where footgun artifacts may appear. */

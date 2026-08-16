@@ -520,7 +520,164 @@ function runHookProcessUntilDeadline(
 }
 
 /**
+ * Resolve one legacy deadline or load the migrated provider launch contract.
+ * Side effect: dynamically loads the provider adapter only for namespaced modes.
+ * Error behavior: never throws for contract or adapter failures; returns a failure reason instead.
+ *
+ * @param {string} hookResponseMode - Registered response mode; empty text is invalid policy input.
+ * @param {NodeJS.ProcessEnv} initialHookEnvironment - Host environment passed to the managed hook.
+ * @returns {Promise<object>} Prepared runtime fields, or a failure reason with no runnable contract.
+ */
+async function prepareHookLaunchRuntime(
+  hookResponseMode,
+  initialHookEnvironment,
+) {
+  const legacyHookDeadline =
+    LEGACY_HOOK_DEADLINES_MS.get(hookResponseMode) ?? null;
+  // Legacy hooks keep direct streams and do not load the migrated provider adapter.
+  if (legacyHookDeadline !== null) {
+    const launchTimeout = resolveHookLaunchTimeoutMs(
+      legacyHookDeadline,
+      initialHookEnvironment,
+    );
+    // Invalid or empty timeout configuration cannot safely bound the user's wait.
+    if (launchTimeout === null) {
+      return { failureReason: "hook timeout configuration is invalid" };
+    }
+    return {
+      failureReason: null,
+      hookEnvironment: initialHookEnvironment,
+      launchContract: null,
+      providerAdapterRuntime: null,
+      launchTimeout,
+    };
+  }
+  // A non-empty namespaced mode distinguishes a migrated contract from an unknown legacy value.
+  if (!hookResponseMode.includes(":")) {
+    return { failureReason: "hook launch contract is invalid" };
+  }
+  let providerAdapterRuntime;
+  let launchContract;
+  try {
+    providerAdapterRuntime = await import("./hook-provider-adapters.mjs");
+    launchContract =
+      providerAdapterRuntime.decodeHookLaunchContract(hookResponseMode);
+  } catch {
+    // For example, setup may register a migrated hook before its adapter file finishes syncing.
+    return { failureReason: "hook provider adapter could not load" };
+  }
+  // Missing or malformed fields cannot identify a safe provider response or deadline.
+  if (launchContract === null) {
+    return { failureReason: "hook launch contract is invalid" };
+  }
+  // Migrated hooks receive the decoded identity they must echo in their neutral result.
+  const hookEnvironment = {
+    ...initialHookEnvironment,
+    GOAT_FLOW_HOOK_PROVIDER: launchContract.providerIdentifier,
+    GOAT_FLOW_HOOK_EVENT: launchContract.hookEvent,
+    GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+    GOAT_FLOW_HOOK_ADAPTER_VERSION: launchContract.adapterVersion,
+    GOAT_FLOW_HOOK_RESULT_PROTOCOL: launchContract.resultProtocol,
+  };
+  const launchTimeout = resolveHookLaunchTimeoutMs(
+    launchContract.launcherDeadlineMs,
+    hookEnvironment,
+  );
+  // Invalid or empty timeout configuration cannot safely bound the user's wait.
+  if (launchTimeout === null) {
+    return { failureReason: "hook timeout configuration is invalid" };
+  }
+  return {
+    failureReason: null,
+    hookEnvironment,
+    launchContract,
+    providerAdapterRuntime,
+    launchTimeout,
+  };
+}
+
+/**
+ * Render one completed hook execution through its legacy or migrated host contract.
+ * Side effects: writes bounded provider output to stdout/stderr when delivery succeeds or fails.
+ *
+ * @param {string} hookResponseMode - Registered host response mode for unavailable fallbacks.
+ * @param {object | null} providerAdapterRuntime - Loaded adapter, or null for legacy hooks.
+ * @param {object | null} launchContract - Decoded provider contract, or null for legacy hooks.
+ * @param {object} hookExecution - Completed process result with bounded output and status.
+ * @param {number} launchTimeout - Applied deadline in milliseconds for timeout evidence.
+ * @returns {number} Exit status the registered host treats as handled, blocked, or advisory.
+ */
+function renderHookExecutionResult(
+  hookResponseMode,
+  providerAdapterRuntime,
+  launchContract,
+  hookExecution,
+  launchTimeout,
+) {
+  // A deadline means the hook tree was stopped before the user-facing response is rendered.
+  if (hookExecution.timedOut) {
+    return reportLauncherUnavailable(
+      hookResponseMode,
+      providerAdapterRuntime,
+      launchContract,
+      "execution-timeout",
+      "hook exceeded its deadline and was killed",
+      hookExecution.stderr,
+      launchTimeout,
+    );
+  }
+  // For example, endpoint protection may stop Git Bash before the user's hook starts.
+  if (hookExecution.launchError) {
+    return reportLauncherUnavailable(
+      hookResponseMode,
+      providerAdapterRuntime,
+      launchContract,
+      "hook-unavailable",
+      "Bash could not start",
+      hookExecution.stderr,
+    );
+  }
+  // Migrated hooks use the bounded neutral result and final provider adapter path.
+  if (providerAdapterRuntime !== null) {
+    const providerHookDelivery =
+      providerAdapterRuntime.prepareProviderHookResultDelivery(
+        hookExecution,
+        launchContract,
+      );
+    // An unavailable translation uses the registered fail-open or fail-closed policy.
+    if (providerHookDelivery.state !== "delivered") {
+      return reportLauncherUnavailable(
+        hookResponseMode,
+        providerAdapterRuntime,
+        launchContract,
+        "adapter-delivery-failed",
+        providerHookDelivery.reason,
+        providerHookDelivery.stderr,
+      );
+    }
+    // Empty stderr means neither the child nor adapter has a human-only diagnostic.
+    if (providerHookDelivery.stderr.length > 0) {
+      process.stderr.write(providerHookDelivery.stderr);
+    }
+    // Empty stdout is the documented clean response for several host/event combinations.
+    if (providerHookDelivery.stdout.length > 0) {
+      process.stdout.write(providerHookDelivery.stdout);
+    }
+    return providerHookDelivery.exitCode;
+  }
+  // A numeric status is the hook's real allow, deny, or advisory result for the user.
+  if (Number.isInteger(hookExecution.status)) {
+    return hookExecution.status;
+  }
+  return reportUnavailable(
+    hookResponseMode,
+    "Bash ended without an exit status",
+  );
+}
+
+/**
  * Run a managed project hook through Bash while preserving its host-facing result.
+ * Error behavior: expected validation, adapter, launch, and delivery failures return host-specific status.
  *
  * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
  * @param {string} hookResponseMode - Agent response protocol; empty uses policy behavior.
@@ -607,62 +764,16 @@ export async function runHookWithBash(
       PATH: `${dirname(bashExecutable)}${delimiter}${existingPath}`,
     };
   }
-  const legacyHookDeadline =
-    LEGACY_HOOK_DEADLINES_MS.get(hookResponseMode) ?? null;
-  let launchContract = null;
-  let providerAdapterRuntime = null;
-  // Only migrated hooks load the adapter; current legacy installs keep their existing dependency set.
-  if (legacyHookDeadline === null) {
-    // A non-empty namespaced mode distinguishes a migrated contract from an unknown legacy value.
-    if (!hookResponseMode.includes(":")) {
-      return reportUnavailable(
-        hookResponseMode,
-        "hook launch contract is invalid",
-      );
-    }
-    try {
-      providerAdapterRuntime = await import("./hook-provider-adapters.mjs");
-      launchContract =
-        providerAdapterRuntime.decodeHookLaunchContract(hookResponseMode);
-    } catch {
-      // For example, setup may register a migrated hook before its adapter file finishes syncing.
-      return reportUnavailable(
-        hookResponseMode,
-        "hook provider adapter could not load",
-      );
-    }
-    // Missing or malformed fields cannot identify a safe provider response or deadline.
-    if (launchContract === null) {
-      return reportUnavailable(
-        hookResponseMode,
-        "hook launch contract is invalid",
-      );
-    }
-  }
-  // Migrated hooks receive the decoded identity they must echo in their neutral result.
-  if (launchContract !== null) {
-    hookEnvironment = {
-      ...hookEnvironment,
-      GOAT_FLOW_HOOK_PROVIDER: launchContract.providerIdentifier,
-      GOAT_FLOW_HOOK_EVENT: launchContract.hookEvent,
-      GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
-      GOAT_FLOW_HOOK_ADAPTER_VERSION: launchContract.adapterVersion,
-      GOAT_FLOW_HOOK_RESULT_PROTOCOL: launchContract.resultProtocol,
-    };
-  }
-  const timeoutCeiling =
-    launchContract?.launcherDeadlineMs ?? legacyHookDeadline;
-  const launchTimeout = resolveHookLaunchTimeoutMs(
-    timeoutCeiling,
+  const launchRuntime = await prepareHookLaunchRuntime(
+    hookResponseMode,
     hookEnvironment,
   );
-  // Invalid or empty timeout configuration cannot safely bound the user's wait.
-  if (launchTimeout === null) {
-    return reportUnavailable(
-      hookResponseMode,
-      "hook timeout configuration is invalid",
-    );
+  if (launchRuntime.failureReason !== null) {
+    return reportUnavailable(hookResponseMode, launchRuntime.failureReason);
   }
+  hookEnvironment = launchRuntime.hookEnvironment;
+  const { launchContract, providerAdapterRuntime, launchTimeout } =
+    launchRuntime;
   // A null writer preserves direct legacy streams; migrated hooks capture bounded output.
   const appendCapturedHookOutput =
     providerAdapterRuntime?.appendBoundedHookOutput ?? null;
@@ -675,64 +786,12 @@ export async function runHookWithBash(
     hostPlatform,
     appendCapturedHookOutput,
   );
-  // A deadline means the hook tree was stopped before the user-facing response is rendered.
-  if (hookExecution.timedOut) {
-    return reportLauncherUnavailable(
-      hookResponseMode,
-      providerAdapterRuntime,
-      launchContract,
-      "execution-timeout",
-      "hook exceeded its deadline and was killed",
-      hookExecution.stderr,
-      launchTimeout,
-    );
-  }
-  // For example, endpoint protection may stop Git Bash before the user's hook starts.
-  if (hookExecution.launchError) {
-    return reportLauncherUnavailable(
-      hookResponseMode,
-      providerAdapterRuntime,
-      launchContract,
-      "hook-unavailable",
-      "Bash could not start",
-      hookExecution.stderr,
-    );
-  }
-  // Migrated hooks use the bounded neutral result and final provider adapter path.
-  if (providerAdapterRuntime !== null) {
-    const providerHookDelivery =
-      providerAdapterRuntime.prepareProviderHookResultDelivery(
-        hookExecution,
-        launchContract,
-      );
-    // An unavailable translation uses the registered fail-open or fail-closed policy.
-    if (providerHookDelivery.state !== "delivered") {
-      return reportLauncherUnavailable(
-        hookResponseMode,
-        providerAdapterRuntime,
-        launchContract,
-        "adapter-delivery-failed",
-        providerHookDelivery.reason,
-        providerHookDelivery.stderr,
-      );
-    }
-    // Empty stderr means neither the child nor adapter has a human-only diagnostic.
-    if (providerHookDelivery.stderr.length > 0) {
-      process.stderr.write(providerHookDelivery.stderr);
-    }
-    // Empty stdout is the documented clean response for several host/event combinations.
-    if (providerHookDelivery.stdout.length > 0) {
-      process.stdout.write(providerHookDelivery.stdout);
-    }
-    return providerHookDelivery.exitCode;
-  }
-  // A numeric status is the hook's real allow, deny, or advisory result for the user.
-  if (Number.isInteger(hookExecution.status)) {
-    return hookExecution.status;
-  }
-  return reportUnavailable(
+  return renderHookExecutionResult(
     hookResponseMode,
-    "Bash ended without an exit status",
+    providerAdapterRuntime,
+    launchContract,
+    hookExecution,
+    launchTimeout,
   );
 }
 

@@ -24,10 +24,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PROFILES } from "../../src/cli/detect/agents.js";
 import { applyHookState } from "../../src/cli/server/hook-registrar.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import {
   buildAgentHookDescriptor,
+  commandEntryReferencesSpec,
   type AgentHookHandlerDescriptor,
 } from "../../src/cli/server/agent-hook-command.js";
 import {
@@ -41,6 +43,100 @@ export const CLAUDE_SAFE_PAYLOAD =
   '{"tool_name":"Bash","tool_input":{"command":"echo safe"}}';
 export const CLAUDE_DANGEROUS_PAYLOAD =
   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}';
+
+/** Exact enabled targets for every provider/hook pair the registry currently supports. */
+export const SUPPORTED_PROVIDER_HOOK_CASES = [
+  {
+    agent: PROFILES.claude,
+    hookId: "deny-dangerous",
+    registrationTargets: [{ event: "PreToolUse", matcher: "Bash" }],
+  },
+  {
+    agent: PROFILES.claude,
+    hookId: "gruff-code-quality",
+    registrationTargets: [
+      { event: "PostToolUse", matcher: "Edit" },
+      { event: "PostToolUse", matcher: "Write" },
+      { event: "PostToolUse", matcher: "Bash" },
+    ],
+  },
+  {
+    agent: PROFILES.claude,
+    hookId: "post-turn-safety",
+    registrationTargets: [{ event: "Stop", matcher: null }],
+  },
+  {
+    agent: PROFILES.codex,
+    hookId: "deny-dangerous",
+    registrationTargets: [{ event: "PreToolUse", matcher: "Bash" }],
+  },
+  {
+    agent: PROFILES.codex,
+    hookId: "gruff-code-quality",
+    registrationTargets: [{ event: "PostToolUse", matcher: "^apply_patch$" }],
+  },
+  {
+    agent: PROFILES.codex,
+    hookId: "post-turn-safety",
+    registrationTargets: [{ event: "Stop", matcher: null }],
+  },
+  {
+    agent: PROFILES.antigravity,
+    hookId: "deny-dangerous",
+    registrationTargets: [
+      {
+        event: "PreToolUse",
+        matcher:
+          "run_command|view_file|write_to_file|replace_file_content|multi_replace_file_content",
+      },
+    ],
+  },
+  {
+    agent: PROFILES.copilot,
+    hookId: "deny-dangerous",
+    registrationTargets: [{ event: "preToolUse", matcher: null }],
+  },
+  {
+    agent: PROFILES.copilot,
+    hookId: "gruff-code-quality",
+    registrationTargets: [{ event: "postToolUse", matcher: null }],
+  },
+] as const;
+
+/**
+ * Count the physical command rows one hook owns anywhere in a provider config.
+ * Use so convergence proof counts rows instead of trusting installed state alone.
+ *
+ * @param configValue - parsed config value; null and primitives contain no rows
+ * @param hookSpec - managed hook whose owned rows are counted
+ * @returns owned direct command rows; zero means the hook is not registered
+ */
+export function countOwnedCommandRows(
+  configValue: unknown,
+  hookSpec: HookSpec,
+): number {
+  // Arrays represent event groups or nested command lists in agent settings.
+  if (Array.isArray(configValue)) {
+    return configValue.reduce<number>(
+      (rowCount, nestedValue) =>
+        rowCount + countOwnedCommandRows(nestedValue, hookSpec),
+      0,
+    );
+  }
+  // Null and primitive values cannot contain a runnable command.
+  if (configValue === null || typeof configValue !== "object") return 0;
+  const directOwnedRow = commandEntryReferencesSpec(configValue, hookSpec)
+    ? 1
+    : 0;
+  return (
+    directOwnedRow +
+    Object.values(configValue).reduce<number>(
+      (rowCount, nestedValue) =>
+        rowCount + countOwnedCommandRows(nestedValue, hookSpec),
+      0,
+    )
+  );
+}
 
 export const HOOK_TIMEOUT_MODES = [
   { mode: "policy", status: 2, stream: "stderr", pattern: /BLOCKED:/u },

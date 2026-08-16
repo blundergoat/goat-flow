@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-08-14
+last_reviewed: 2026-08-16
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates are [verification-preflight.md](verification-preflight.md).
@@ -8,7 +8,7 @@ last_reviewed: 2026-08-14
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
 **Status:** active | **Created:** 2026-05-25
-**Incident count:** 8 | **Latest occurrence:** 2026-08-10
+**Incident count:** 9 | **Latest occurrence:** 2026-08-16
 **Decision changed:** Treat a human-readable comment, boolean, compact test, or typed contract as unfinished until targeted and repository-wide analyzers accept the exact source shape.
 **Trigger phase:** VERIFY
 
@@ -20,13 +20,15 @@ last_reviewed: 2026-08-14
 
 **Third recurrence (2026-08-09):** The first runtime-adapter scan found eight documentation-shape advisories after all 16 focused contract tests passed: two threshold comments were not in the analyzer's recognized same-line form, two functions omitted explicit error or invariant wording, and three large provider fixture clusters lacked nearby purpose comments. Adding concise contract wording at each exact source shape cleared the findings without changing behavior. Evidence anchors: `workflow/hooks/hook-provider-adapters.mjs` (search: `Error behavior: returns one bounded invalid reason`) and `test/unit/hook-provider-adapters.test.ts` (search: `Fixture covers feedback-bearing host shapes`).
 
-**Fourth recurrence (2026-08-09):** The broader launcher and registry scan found fourteen issues after focused behavior passed: two files crossed the length threshold, public contracts lacked invariant wording, and fixture comments could not express purpose and side effects as separate adjacent comments. Moving launch decoding and result preparation into the provider adapter kept the runtime files below 750 lines, splitting the registry assertions reduced fixture complexity, and one concise fixture comment now carries both required meanings. The remaining three launcher process-execution warnings match the tracked warning baseline. Evidence anchors: `workflow/hooks/hook-provider-adapters.mjs` (search: `prepareProviderHookResultDelivery`), `workflow/hooks/run-with-bash.mjs` (search: `reportProviderPolicyUnavailable`), `test/unit/hook-launcher.test.ts` (search: `Fixture purpose: prove direct output parity`), and `scripts/gruff-warning-baseline.json` (search: `946e85ebc33abfc1`).
+**Fourth recurrence (2026-08-09):** The broader launcher and registry scan found fourteen issues after focused behavior passed: two files crossed the length threshold, public contracts lacked invariant wording, and fixture comments could not express purpose and side effects as separate adjacent comments. Moving launch decoding and result preparation into the provider adapter kept the runtime files below 750 lines, splitting the registry assertions reduced fixture complexity, and one concise fixture comment now carries both required meanings. The remaining three launcher process-execution findings matched the then-current Gruff 0.4 warning baseline; Gruff 0.5 later reclassified that argv-only shape as advisory. Evidence anchors: `workflow/hooks/hook-provider-adapters.mjs` (search: `prepareProviderHookResultDelivery`), `workflow/hooks/run-with-bash.mjs` (search: `function runHookProcessUntilDeadline`), `test/unit/hook-launcher.test.ts` (search: `Fixture purpose: prove direct output parity`), and `.gruff-ts.yaml` (search: `security.process-exec:`).
 
 **Fifth recurrence (2026-08-09):** A follow-up launcher refactor stopped at exactly 750 lines according to `wc`, but gruff-ts counted 751 and still emitted `size.file-length`. Removing one non-semantic blank line created a one-line buffer and returned the scan to only the three tracked process-execution warnings. Evidence anchor: `workflow/hooks/hook-launch-runtime.mjs` (search: `hookProcess.once("error"`).
 
 **Sixth recurrence (2026-08-09):** Typed delivery assertions grew a registrar fixture to 752 lines, and only full preflight caught the new file-length warning. Remove optional separators in touched long files, then run targeted Gruff before preflight. Evidence: `test/integration/hook-effective-state.test.ts` (search: `keeps deterministic delivery evidence below live support`).
 
 **Seventh recurrence (2026-08-10):** Formatting a Gruff contract test exposed five fixture-purpose and test-loop advisories. Moving looped assertions into named cases cleared that cluster, but separate adjacent purpose and side-effect or invariant comments produced six follow-up advisories because only the nearest source shape carried each contract. Combining both meanings in one concise comment reduced the working-tree scan to zero findings. Evidence anchors: `test/integration/hook-provider-contracts.test.ts` (search: `Fixture purpose: creates an edit and runs Gruff`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `Fixture purpose: proves helper bypass`).
+
+**Eighth recurrence (2026-08-16):** Upgrading Gruff from 0.4.0 to 0.5.0 changed the warning rule set while one error-severity file-length finding caused the ratchet to stop before comparing warning debt. Removing that error exposed 120 unmatched warnings and 27 stale accepted identities. After clearing the three warnings in the active M03 launcher, the first approved 117-entry manifest was pretty-printed past the same 1,000-line error threshold and blocked itself. Recording one reviewed entry per JSON line preserved every identity, occurrence, and rationale in 125 lines. Run the ratchet immediately after an analyzer/config upgrade, even while errors exist, and measure the reviewed manifest as part of its own scan. Evidence anchors: `package.json` (search: `@blundergoat/gruff-ts`), `scripts/check-gruff-warning-ratchet.mjs` (search: `splitFindingsBySeverity`), and `scripts/gruff-warning-baseline.json` (search: `reviewedAt`).
 
 **Root cause:** I treated human-readable comments, compact boolean names, a local rename, and focused contract checks as complete before checking analyzer vocabulary, branch budgets, public type use, test structure, and parallel type surfaces.
 
@@ -105,4 +107,3 @@ last_reviewed: 2026-08-14
 **Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, include the side effect in plain maintainer language (`Write`, `Run`, `filesystem`) instead of a generic purpose sentence. After large docs batches, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
 
 ---
-
