@@ -1,11 +1,34 @@
 ---
 category: deny-secrets
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-17
 ---
 
 Secret-path read traps: what counts as a secret path, and which read channels the deny surface actually binds.
 
 Sibling buckets: `deny-shell.md`, `deny-writes.md`.
+
+## Footgun: Secret-path matching must distinguish search data from file operands
+
+**Status:** active | **Created:** 2026-08-17 | **Evidence:** ACTUAL_MEASURED
+
+**Decision changed:** Exempt protected text only after a command-specific parser proves that it is search data, and keep every remaining file operand under the secret-path matcher.
+
+**Symptoms:** The hook blocked `git log -S`, `-G`, and `--grep` searches for a permission-rule string containing `.ssh`, even when the command's only pathspec was an ordinary settings file. The first exemption then allowed protected Git-global paths such as `git -C ~/.ssh log -S token` and misparsed a quoted search value containing spaces.
+
+**Why it happens:** The generic secret matcher sees a protected substring anywhere in the command and cannot tell a Git history search value from a path operand. Git-global options may carry paths before the `log` subcommand, while Git's `--` delimiter makes every following token a pathspec even if it resembles an option; only the recognised search values between those boundaries are data.
+
+**Evidence:**
+- Before the exemption, the focused deny corpus failed only the three Git history allow cases with `FAIL: paths should allow git log ... secret-rule search literal`; after the parser change, the original `git log --oneline -S 'Write(**/.ssh/**)' -- .claude/settings.json` reproduction exited 0.
+- Final diff review added a focused RED where a spaced search value failed closed correctly but `git -C ~/.ssh` and `git --git-dir=~/.ssh/repo` incorrectly exited 0; preserving the original word boundaries and Git-global operands made all 92 path assertions pass.
+- `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `git_log_candidate_without_search_values`) removes only recognised Git log search values before `--` and retains all path operands for secret scanning.
+- `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git log protected separated global path`) pairs separated and attached search-value allows with protected global-path, pathspec, write, and upload blocks.
+
+**Prevention:**
+1. Limit data exemptions to the documented grammar of `git log -S`, `-G`, and `--grep`; malformed or unrecognised forms must fall back to the generic fail-closed scan.
+2. Retain Git-global options and their operands before `log`, then stop option parsing at `--` and retain every later token as a path operand.
+3. Pair every harmless-search allow case with direct protected pathspec, read/write, and upload block cases for the same secret family.
+
+---
 
 ## Footgun: Extension-based secret checks can confuse filenames with query syntax
 

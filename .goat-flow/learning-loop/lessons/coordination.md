@@ -70,9 +70,13 @@ last_reviewed: 2026-08-17
 
 ## Lesson: Verification phases must cross-reference between artifacts, not just check each internally
 
-**Created:** 2026-05-01
+**Status:** active | **Created:** 2026-05-01 | **Incident count:** 2 | **Latest occurrence:** 2026-08-17
+
 **What happened:** Phase 3 verification checked word counts, parity, rubric citations, npm test - all internal to individual files. It did not cross-reference programme document claims against plan content. Result: four residual inconsistencies survived Phase 3 and were caught by editorial review instead. Specifics: (1) qa score missing from programme cumulative table, (2) critique target "~95+" in programme vs 91 in plan, (3) OP-10/OP-12 Appendix A statuses stale, (4) review plan still used v1.4.0/v1.5.0/v1.6.0 labels that programme claimed were renamed to M1/M2/M3.
-**Prevention:** Add "programme document claims match per-plan deliverables" as a verification check in future cycles. Cross-document consistency is the gap between internal-file verification and audit completeness.
+
+**Recurrence (2026-08-17):** Rerouting M45's secret-parser footgun from `hooks.md` to the owning `deny-secrets.md` bucket updated its read-first and task text but left Boundary Notes saying "hooks footgun." A targeted old-owner grep caught the stale wording after the internal plan and learning-loop checks were already green. Durable evidence anchors: `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `git_log_candidate_without_search_values`) and `.goat-flow/learning-loop/footguns/deny-secrets.md` (search: `Secret-path matching must distinguish search data from file operands`).
+
+**Prevention:** Add "programme document claims match per-plan deliverables" as a verification check in future cycles. When an artifact changes owner, grep both the old path and its old prose label across every touched artifact; cross-document consistency is the gap between internal-file verification and audit completeness.
 
 ## Lesson: Phase totals must be derivable from phase breakdowns
 

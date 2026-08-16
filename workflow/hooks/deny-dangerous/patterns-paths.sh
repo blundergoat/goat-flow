@@ -328,6 +328,73 @@ secret_search_command_candidate() {
   return 1
 }
 
+# Remove only Git log search data while retaining every option and path operand for secret scanning.
+git_log_candidate_without_search_values() {
+  local developer_command
+  developer_command=$(normalize_command_candidate "$1")
+  __goat_git_strip_globals "$developer_command" || return 1
+
+  local -a words=()
+  split_shell_words_into words "$developer_command"
+
+  # Locate the subcommand through the shared Git-global parser's exact suffix,
+  # but retain the original words so global path operands remain protected.
+  local subcommand_index=-1
+  local suffix=""
+  local i=1
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    suffix=$(join_shell_words_from words "$i")
+    if [[ "$suffix" == "$__goat_git_rest" ]]; then
+      subcommand_index="$i"
+      break
+    fi
+    i=$((i + 1))
+  done
+  [[ "$subcommand_index" -ge 1 && "${words[$subcommand_index]}" == "log" ]] || return 1
+
+  local search_value_seen=0
+  local after_options=0
+  local candidate=""
+  for ((i = 0; i <= subcommand_index; i++)); do
+    candidate+=" ${words[$i]}"
+  done
+  candidate="${candidate# }"
+  i=$((subcommand_index + 1))
+  local word=""
+  while [[ "$i" -lt "${#words[@]}" ]]; do
+    word="${words[$i]}"
+    if [[ "$after_options" -eq 1 ]]; then
+      candidate+=" $word"
+      i=$((i + 1))
+      continue
+    fi
+    case "$word" in
+      --)
+        after_options=1
+        candidate+=" $word"
+        i=$((i + 1))
+        ;;
+      -S|-G|--grep)
+        # Missing option data is malformed Git grammar, so keep the generic fail-closed scan.
+        [[ "$((i + 1))" -lt "${#words[@]}" ]] || return 1
+        search_value_seen=1
+        i=$((i + 2))
+        ;;
+      -S?*|-G?*|--grep=*)
+        search_value_seen=1
+        i=$((i + 1))
+        ;;
+      *)
+        candidate+=" $word"
+        i=$((i + 1))
+        ;;
+    esac
+  done
+
+  [[ "$search_value_seen" -eq 1 ]] || return 1
+  printf '%s' "$candidate"
+}
+
 search_option_consumes_value() {
   local opt="$1"
   case "$opt" in
@@ -456,11 +523,16 @@ check_secret_segment() {
 
   local touches_secret=0
   local search_candidate=""
+  local git_log_candidate=""
   # Curl needs option-aware file parsing before the generic path scanner runs.
   if [[ "$CMD_VERB" == "curl" ]] && curl_file_operands_touch_secret "$cmd"; then
     touches_secret=1
   elif search_candidate=$(secret_search_command_candidate "$cmd"); then
     if search_file_operands_touch_secret "$search_candidate"; then
+      touches_secret=1
+    fi
+  elif [[ "$CMD_VERB" == "git" ]] && git_log_candidate=$(git_log_candidate_without_search_values "$cmd"); then
+    if is_secret_path_touch "$git_log_candidate"; then
       touches_secret=1
     fi
   else

@@ -1782,6 +1782,28 @@ post_turn_self_test() (
     fi
 
     printf 'AWS_ACCESS_KEY_ID=%s\n' "$synthetic_aws_token" >"$self_test_root/settings.env"
+    GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=invalid \
+      GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK="$scanner_setting" \
+      bash "$self_test_script" </dev/null >/dev/null 2>&1
+    hook_result=$?
+    # Invalid byte-limit text must fall back without suppressing a real finding.
+    if [ "$hook_result" -ne 2 ]; then
+      printf 'post-turn-safety self-test: invalid byte limit failed on scanner %s\n' "$scanner_setting" >&2
+      return 2
+    fi
+
+    printf 'API_KEY=your_api_key_here\n' >"$self_test_root/settings.env"
+    GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=0001 \
+      GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK="$scanner_setting" \
+      bash "$self_test_script" </dev/null >/dev/null 2>&1
+    hook_result=$?
+    # A leading-zero limit is invalid and must not turn safe changed text into a coverage failure.
+    if [ "$hook_result" -ne 0 ]; then
+      printf 'post-turn-safety self-test: leading-zero byte limit failed on scanner %s\n' "$scanner_setting" >&2
+      return 2
+    fi
+
+    printf 'AWS_ACCESS_KEY_ID=%s\n' "$synthetic_aws_token" >"$self_test_root/settings.env"
     GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK="$scanner_setting" \
       bash "$self_test_script" </dev/null >/dev/null 2>&1
     hook_result=$?
@@ -1825,7 +1847,7 @@ fallback_main() {
   local head_status
 
   case "$fallback_max_seconds" in '' | *[!0-9]*) fallback_max_seconds=60 ;; esac
-  case "$fallback_max_bytes" in '' | *[!0-9]*) fallback_max_bytes=1048576 ;; esac
+  case "$fallback_max_bytes" in '' | *[!0-9]* | 0[0-9]*) fallback_max_bytes=1048576 ;; esac
   case "$fallback_max_findings" in '' | *[!0-9]*) fallback_max_findings=20 ;; esac
 
   # Without a Git root, the hook cannot identify the project changes for this turn.
@@ -1979,6 +2001,9 @@ shopt -s extglob
 
 MAX_FILE_BYTES="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 MAX_FINDINGS="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
+case "$MAX_FILE_BYTES" in
+  '' | *[!0-9]* | 0[0-9]*) MAX_FILE_BYTES=1048576 ;;
+esac
 # Wall-clock budget for the whole scan. The registered agent-side hook timeout
 # must stay above this so the incomplete-scan diagnostic below prints before
 # the runner kills the process (same layering as gruff-code-quality.sh).

@@ -146,9 +146,9 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         // rule. An author trimming for the word cap deletes them first, and every other check here still passes without them.
         for (const derivationRule of [
           /not by shortening the Objective/u,
-          /70 to 120 characters, naming no milestone, ADR, version, flag, file, or command without its tool name/u,
-          /says what a person can now do, never what ships/u,
-          /only negates the cost line/u,
+          /70 to 120 characters, naming no milestone, ADR, version, flag, internal file, or command without its tool name/u,
+          /names what they can now do, never what ships/u,
+          /Neither restates the other/u,
           /spike that ships nothing says so/u,
         ]) {
           assert.match(examples, derivationRule, examplesPath);
