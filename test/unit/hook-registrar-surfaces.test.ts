@@ -63,10 +63,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       installerSource,
       /function filesystemPathsAreEquivalent[\s\S]*pathModule\.relative\(leftDirectory, rightDirectory\)[\s\S]*pathModule\.relative\(rightDirectory, leftDirectory\)/u,
     );
-    assert.doesNotMatch(
-      installerSource,
-      /gitTopLevel\([^\n]+\) === [^\n]+/u,
-    );
+    assert.doesNotMatch(installerSource, /gitTopLevel\([^\n]+\) === [^\n]+/u);
   });
 
   it("publishes cleanup metadata for hooks unsupported by one provider", () => {

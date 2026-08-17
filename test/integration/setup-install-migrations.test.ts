@@ -36,17 +36,12 @@ describe("setup --apply installer upgrade migrations", () => {
       ),
     );
     const packageVersion = (
-      JSON.parse(
-        readFileSync(join(PROJECT_ROOT, "package.json"), "utf-8"),
-      ) as { version: string }
+      JSON.parse(readFileSync(join(PROJECT_ROOT, "package.json"), "utf-8")) as {
+        version: string;
+      }
     ).version;
 
-    const forcedUpgrade = runCliInstaller(
-      root,
-      "--agent",
-      "codex",
-      "--force",
-    );
+    const forcedUpgrade = runCliInstaller(root, "--agent", "codex", "--force");
 
     assert.equal(
       forcedUpgrade.status,

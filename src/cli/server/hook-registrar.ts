@@ -294,7 +294,9 @@ function postTurnScanRootState(
       issue: "Selected project is not an existing directory.",
     };
   }
-  if (filesystemPathsAreEquivalent(gitTopLevel(projectRoot) ?? "", projectRoot)) {
+  if (
+    filesystemPathsAreEquivalent(gitTopLevel(projectRoot) ?? "", projectRoot)
+  ) {
     return { status: "implicit", roots: ["."], issue: null };
   }
   const configuredRoots = readHookScanRoots(projectPath, spec.id);
@@ -882,6 +884,44 @@ function pruneUnsupportedAgentHookEntries(
   writeAgentHookState(projectPath, agent, spec, false);
 }
 
+/**
+ * Reconcile one supported provider's scripts and registration without changing the desired toggle.
+ * Side effects: may write managed scripts and the provider's existing hook configuration.
+ * @throws HookRegistrarError when managed files cannot be replaced safely
+ */
+function reconcileSupportedAgentHook(
+  projectPath: string,
+  agent: AgentProfile,
+  spec: HookSpec,
+  isEnabled: boolean,
+  doesRootContractAllowRegistration: boolean,
+  profiles: AgentProfile[],
+): void {
+  if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) return;
+  const desiredState = deriveManagedHookDesiredState(agent, spec, isEnabled);
+  const shouldRegisterHook =
+    desiredState.registrationTargets.length > 0 &&
+    doesRootContractAllowRegistration;
+  // Disabling fills missing managed files but never refreshes existing inert bytes.
+  if (!isEnabled) {
+    if (desiredState.managedScriptFiles.length > 0) {
+      copyHookScripts(projectPath, agent, spec, false);
+    }
+    if (hookConfigExists(projectPath, agent)) {
+      writeAgentHookState(projectPath, agent, spec, false);
+    }
+    return;
+  }
+  // Current inert files let install and sync repair drift without changing the user's disabled choice.
+  if (desiredState.managedScriptFiles.length > 0) {
+    copyHookScripts(projectPath, agent, spec);
+  }
+  // A disabled hook removes managed rows from existing config but never scaffolds a missing config file.
+  if (shouldRegisterHook || hookConfigExists(projectPath, agent)) {
+    writeAgentHookState(projectPath, agent, spec, shouldRegisterHook);
+  }
+}
+
 /** Converge one hook without registering a post-turn command against incomplete root coverage. */
 function reconcileHook(
   projectPath: string,
@@ -898,29 +938,14 @@ function reconcileHook(
       continue;
     }
     if (!isSupportedAgent(agent)) continue;
-    if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) continue;
-    const desiredState = deriveManagedHookDesiredState(agent, spec, enabled);
-    const shouldRegisterHook =
-      desiredState.registrationTargets.length > 0 &&
-      doesRootContractAllowRegistration;
-    // Disabling fills missing managed files but never refreshes existing inert bytes.
-    if (!enabled) {
-      if (desiredState.managedScriptFiles.length > 0) {
-        copyHookScripts(projectPath, agent, spec, false);
-      }
-      if (hookConfigExists(projectPath, agent)) {
-        writeAgentHookState(projectPath, agent, spec, false);
-      }
-      continue;
-    }
-    // Current inert files let install and sync repair drift without changing the user's disabled choice.
-    if (desiredState.managedScriptFiles.length > 0) {
-      copyHookScripts(projectPath, agent, spec);
-    }
-    // A disabled hook removes managed rows from existing config but never scaffolds a missing config file.
-    if (shouldRegisterHook || hookConfigExists(projectPath, agent)) {
-      writeAgentHookState(projectPath, agent, spec, shouldRegisterHook);
-    }
+    reconcileSupportedAgentHook(
+      projectPath,
+      agent,
+      spec,
+      enabled,
+      doesRootContractAllowRegistration,
+      profiles,
+    );
   }
 }
 

@@ -44,9 +44,7 @@ import {
 } from "../../src/cli/server/hooks-registry.js";
 import { verifyManagedDenyHook } from "../../src/cli/hooks-runtime-evidence.js";
 import { verifyManagedConfiguredHook } from "../../src/cli/hooks-configured-runtime-evidence.js";
-import {
-  countOwnedCommandRows,
-} from "../unit/hook-registrar.helpers.js";
+import { countOwnedCommandRows } from "../unit/hook-registrar.helpers.js";
 
 const disposableProjects: string[] = [];
 
@@ -317,7 +315,10 @@ describe("effective hook state", () => {
     syncHookStates(projectPath);
     const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
     const hookScriptPath = join(projectPath, managedPath);
-    writeFileSync(hookScriptPath, "#!/usr/bin/env bash\n# previous package bytes\n");
+    writeFileSync(
+      hookScriptPath,
+      "#!/usr/bin/env bash\n# previous package bytes\n",
+    );
     recordManagedHookBaseline(projectPath, "codex", [managedPath]);
 
     const denyState = claudeHookState(projectPath, "deny-dangerous");

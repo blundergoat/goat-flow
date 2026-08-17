@@ -398,6 +398,34 @@ function validateInstallFlags(command: Command, values: ParsedArgValues): void {
   }
 }
 
+/** Return the one target-trust choice supplied by the user, if any. */
+function suppliedTargetTrustFlag(values: ParsedArgValues): string | null {
+  if (parsedFlag(values, "trusted-target")) return "--trusted-target";
+  if (parsedFlag(values, "untrusted-target")) return "--untrusted-target";
+  return null;
+}
+
+/** Return whether this route can execute code from the selected target. */
+function routeCanExecuteTarget(
+  command: Command,
+  values: ParsedArgValues,
+  qualitySubcommand: QualitySubcommand,
+  hookSubcommand: HookSubcommand | null,
+): boolean {
+  if (
+    command === "audit" ||
+    (command === "quality" && qualitySubcommand === "prompt") ||
+    (command === "hooks" && hookSubcommand === "verify")
+  ) {
+    return true;
+  }
+  return (
+    command === "setup" &&
+    !parsedFlag(values, "apply") &&
+    !parsedFlag(values, "dry-run")
+  );
+}
+
 /** Restrict target-code trust choices to executing routes; throws CLIError for every inert route. */
 function validateTargetTrustFlags(
   command: Command,
@@ -405,23 +433,12 @@ function validateTargetTrustFlags(
   qualitySubcommand: QualitySubcommand,
   hookSubcommand: HookSubcommand | null,
 ): void {
-  const suppliedFlag = parsedFlag(values, "trusted-target")
-    ? "--trusted-target"
-    : parsedFlag(values, "untrusted-target")
-      ? "--untrusted-target"
-      : null;
+  const suppliedFlag = suppliedTargetTrustFlag(values);
   if (suppliedFlag === null) return;
 
-  const isSetupPrompt =
-    command === "setup" &&
-    !parsedFlag(values, "apply") &&
-    !parsedFlag(values, "dry-run");
-  const canExecuteTarget =
-    command === "audit" ||
-    isSetupPrompt ||
-    (command === "quality" && qualitySubcommand === "prompt") ||
-    (command === "hooks" && hookSubcommand === "verify");
-  if (!canExecuteTarget) {
+  if (
+    !routeCanExecuteTarget(command, values, qualitySubcommand, hookSubcommand)
+  ) {
     throw new CLIError(
       `${suppliedFlag} is only valid for audit, setup prompt, quality prompt, or hooks verify.`,
       2,

@@ -113,6 +113,7 @@ describe("checkDrift: installer round-trip fixture", () => {
             requiredHookProof.agentId,
             "--scenario",
             requiredHookProof.scenario,
+            "--trusted-target",
           ],
           60000,
         );

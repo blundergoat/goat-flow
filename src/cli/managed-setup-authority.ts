@@ -42,6 +42,17 @@ export const NO_MANAGED_SETUP_AUTHORITY: ManagedSetupAuthority = {
   shouldReplaceNamedUserOwned: false,
 };
 
+/** Resolve the two-part authority required to replace one user-owned destination. */
+function resolveUserOwnedAuthorityDecision(
+  row: AuthorityInput,
+  authority: ManagedSetupAuthority,
+  isNamed: boolean,
+): ManagedSetupAuthorityDecision {
+  if (!authority.shouldReplaceNamedUserOwned || !isNamed) return "not-required";
+  if (!row.isReplaceable) return "refused-replaceability";
+  return row.isPathUnsafe ? "refused-path-safety" : "granted-user-owned";
+}
+
 /**
  * Decide what the supplied authority permits for one destination.
  * Use while building each preview row so the report and the admission gate cannot disagree.
@@ -58,10 +69,7 @@ export function resolveAuthorityDecision(
 
   // A user-owned destination is replaced only when both flags name it together.
   if (row.ownership === "user-owned") {
-    if (!authority.shouldReplaceNamedUserOwned || !isNamed)
-      return "not-required";
-    if (!row.isReplaceable) return "refused-replaceability";
-    return row.isPathUnsafe ? "refused-path-safety" : "granted-user-owned";
+    return resolveUserOwnedAuthorityDecision(row, authority, isNamed);
   }
 
   // Generated files are rewritten from project state, so they need no authority at all.

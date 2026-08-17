@@ -620,8 +620,8 @@ describe("managed setup preview", () => {
       action: "migrate",
     });
     assert.match(
-      report.files.find((file) => file.path === ".codex/config.toml")
-        ?.reason ?? "",
+      report.files.find((file) => file.path === ".codex/config.toml")?.reason ??
+        "",
       /deprecated codex_hooks/u,
     );
     assertPreviewLists(report.files, {

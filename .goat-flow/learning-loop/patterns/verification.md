@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-17
 ---
 
 ## Pattern: Cross-runner quality-report triage by convergence
@@ -118,6 +118,7 @@ else:
 ## Pattern: Refactors need typecheck before preflight
 **Context:** After a large extraction or restructuring pass.
 **Approach:** Run `npx tsc --noEmit` before relying on preflight. Complexity-only verification can miss callback type drift, helper return narrowing, and small unused-parameter regressions that only show up once TypeScript checks the whole tree.
+**Evidence:** During M53, the extracted `reconcileSupportedAgentHook` helper declared its profile list `readonly` while the existing callee required a mutable array. File-level ESLint passed, then `npm run typecheck` rejected the mismatch before behavioral tests or preflight. Evidence anchor: `src/cli/server/hook-registrar.ts` (search: `function reconcileSupportedAgentHook`).
 
 ## Pattern: Non-gating audit gaps belong in explicit limits
 **Context:** A deterministic audit check passes by design, but review evidence shows a reader could over-interpret the PASS as complete assurance.

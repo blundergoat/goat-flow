@@ -587,10 +587,7 @@ function verifyStandaloneInstallerHookSemantics(
   // A previous Antigravity install may have registered a hook whose delivery is no longer supported.
   if (agentProfile.id === "antigravity") {
     assert.ok(agentProfile.hookConfigFile);
-    const hookConfigPath = join(
-      targetProjectPath,
-      agentProfile.hookConfigFile,
-    );
+    const hookConfigPath = join(targetProjectPath, agentProfile.hookConfigFile);
     mkdirSync(dirname(hookConfigPath), { recursive: true });
     writeFileSync(
       hookConfigPath,
@@ -616,7 +613,9 @@ function verifyStandaloneInstallerHookSemantics(
             PreToolUse: [
               {
                 matcher: "run_command",
-                hooks: [{ type: "command", command: "./scripts/team-audit.sh" }],
+                hooks: [
+                  { type: "command", command: "./scripts/team-audit.sh" },
+                ],
               },
             ],
           },
@@ -648,10 +647,7 @@ function verifyStandaloneInstallerHookSemantics(
   if (agentProfile.id === "antigravity") {
     const antigravityConfig = installedHookConfig as Record<string, unknown>;
     assert.equal(
-      countManagedHookRegistrations(
-        antigravityConfig,
-        "gruff-code-quality.sh",
-      ),
+      countManagedHookRegistrations(antigravityConfig, "gruff-code-quality.sh"),
       0,
       "standalone install must remove registrations unsupported by Antigravity",
     );

@@ -170,12 +170,7 @@ describe("test-selection standalone doctrine", () => {
       );
       assert.deepEqual(
         dispositionSet(content, "Removed-test dispositions", playbookPath),
-        [
-          "REMOVAL SUPPORTED",
-          "RESTORE",
-          "REPLACE",
-          "REMOVAL UNRESOLVED",
-        ],
+        ["REMOVAL SUPPORTED", "RESTORE", "REPLACE", "REMOVAL UNRESOLVED"],
         playbookPath,
       );
       for (const equation of [
@@ -185,7 +180,10 @@ describe("test-selection standalone doctrine", () => {
         "assessed_relocated = RELOCATED",
         "assessed_pr_or_uncommitted = assessed_added + assessed_removed + assessed_materially_changed + assessed_relocated",
       ]) {
-        assert.ok(content.includes(equation), `${playbookPath}: missing ${equation}`);
+        assert.ok(
+          content.includes(equation),
+          `${playbookPath}: missing ${equation}`,
+        );
       }
       assert.match(
         content,

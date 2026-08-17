@@ -121,7 +121,9 @@ function managedHookFileDirection(
     });
     // Shared files are safe to advance when any installed agent baseline exactly names current bytes.
     const oldExpectedSha256 =
-      oldExpectedHashes.find((expectedHash) => expectedHash === currentSha256) ??
+      oldExpectedHashes.find(
+        (expectedHash) => expectedHash === currentSha256,
+      ) ??
       oldExpectedHashes[0] ??
       null;
     const state = classifyManagedSetupFile({
@@ -378,11 +380,7 @@ export function managedHookInstallationFacts(
   });
   const fileDirections = managedHookFiles.map((managedHookFile) =>
     existsSync(managedHookFile.installedPath)
-      ? managedHookFileDirection(
-          projectPath,
-          managedHookFile,
-          expectedHashSets,
-        )
+      ? managedHookFileDirection(projectPath, managedHookFile, expectedHashSets)
       : "unclassified",
   );
   const changedPaths = managedHookFiles.flatMap((managedHookFile, index) =>
@@ -736,33 +734,22 @@ function removeScriptIfPresent(
 }
 
 /**
- * Install current managed bytes and prune obsolete per-agent copies.
- * Use whenever sync reconciles an installed agent, including intentionally disabled hooks.
- * @param projectPath - selected project; empty text cannot own safe destinations
- * @param agent - selected agent; a null hook directory leaves setup unchanged
- * @param hookSpec - hook files to install; an empty list writes no runnable hook
- * @param overwriteExisting - false fills missing inert files without refreshing existing bytes
- * @returns nothing; missing files are filled, while default mode also refreshes existing files
+ * Copy and chmod declared scripts while preserving inert files during disabled reconciliation.
+ * @throws HookManagedInstallationError when an installed script comes from a newer Goat Flow release
  */
-export function copyHookScripts(
+function copyDeclaredHookScripts(
   projectPath: string,
   agent: AgentProfile,
   hookSpec: HookSpec,
-  overwriteExisting = true,
+  shouldOverwriteExisting: boolean,
 ): void {
-  // An agent without a hook directory has no install destination for the user.
-  if (!agent.hooksDir) return;
-
-  mkdirSync(join(projectPath, agent.hooksDir), { recursive: true });
-  // Every declared script receives the exact bytes from this Goat Flow release.
   for (const hookScriptName of hookSpec.scriptFiles) {
     const installedHookPath = installedHookTarget(
       projectPath,
       agent,
       hookScriptName,
     );
-    // Disabled reconciliation restores missing files but leaves every existing inert byte untouched.
-    if (!overwriteExisting && existsSync(installedHookPath)) continue;
+    if (!shouldOverwriteExisting && existsSync(installedHookPath)) continue;
     // A newer installed guard must not be silently downgraded by an older CLI.
     if (installedHookIsNewer(installedHookPath)) {
       throw new HookManagedInstallationError(
@@ -777,39 +764,74 @@ export function copyHookScripts(
     );
     chmodSync(installedHookPath, 0o755);
   }
+}
+
+/**
+ * Install and chmod current deny-policy modules, then remove their exact retired script names.
+ * Side effects: creates the policy directory and mutates only Goat Flow-owned hook files.
+ */
+function copyDenyDangerousSupportFiles(
+  projectPath: string,
+  agent: AgentProfile,
+  shouldOverwriteExisting: boolean,
+): void {
+  const installedPolicyDirectory = join(
+    projectPath,
+    ".goat-flow",
+    "hooks",
+    "deny-dangerous",
+  );
+  mkdirSync(installedPolicyDirectory, { recursive: true });
+  for (const policyFileName of DENY_DANGEROUS_POLICY_FILES) {
+    const policyTemplatePath = getTemplatePath(
+      `workflow/hooks/deny-dangerous/${policyFileName}`,
+    );
+    const installedPolicyPath = join(installedPolicyDirectory, policyFileName);
+    assertWithinProject(projectPath, installedPolicyPath);
+    if (!shouldOverwriteExisting && existsSync(installedPolicyPath)) continue;
+    writeFileAtomic(
+      installedPolicyPath,
+      readFileSync(policyTemplatePath, "utf-8"),
+      projectPath,
+    );
+    chmodSync(installedPolicyPath, 0o755);
+  }
+  for (const legacyDenyScriptName of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
+    removeScriptIfPresent(projectPath, agent, legacyDenyScriptName);
+  }
+}
+
+/**
+ * Install current managed bytes and prune obsolete per-agent copies.
+ * Use whenever sync reconciles an installed agent, including intentionally disabled hooks.
+ * @param projectPath - selected project; empty text cannot own safe destinations
+ * @param agent - selected agent; a null hook directory leaves setup unchanged
+ * @param hookSpec - hook files to install; an empty list writes no runnable hook
+ * @param shouldOverwriteExisting - false fills missing inert files without refreshing existing bytes
+ * @returns nothing; missing files are filled, while default mode also refreshes existing files
+ */
+export function copyHookScripts(
+  projectPath: string,
+  agent: AgentProfile,
+  hookSpec: HookSpec,
+  shouldOverwriteExisting = true,
+): void {
+  // An agent without a hook directory has no install destination for the user.
+  if (!agent.hooksDir) return;
+
+  mkdirSync(join(projectPath, agent.hooksDir), { recursive: true });
+  // Every declared script receives the exact bytes from this Goat Flow release.
+  copyDeclaredHookScripts(
+    projectPath,
+    agent,
+    hookSpec,
+    shouldOverwriteExisting,
+  );
 
   ensureHookGitignoreEntries(projectPath);
   // The deny dispatcher needs its separately owned policy modules after a fresh clone.
   if (hookSpec.id === "deny-dangerous") {
-    const installedPolicyDirectory = join(
-      projectPath,
-      ".goat-flow",
-      "hooks",
-      "deny-dangerous",
-    );
-    mkdirSync(installedPolicyDirectory, { recursive: true });
-    // Copy each policy module from the same release as the dispatcher.
-    for (const policyFileName of DENY_DANGEROUS_POLICY_FILES) {
-      const policyTemplatePath = getTemplatePath(
-        `workflow/hooks/deny-dangerous/${policyFileName}`,
-      );
-      const installedPolicyPath = join(
-        installedPolicyDirectory,
-        policyFileName,
-      );
-      assertWithinProject(projectPath, installedPolicyPath);
-      if (!overwriteExisting && existsSync(installedPolicyPath)) continue;
-      writeFileAtomic(
-        installedPolicyPath,
-        readFileSync(policyTemplatePath, "utf-8"),
-        projectPath,
-      );
-      chmodSync(installedPolicyPath, 0o755);
-    }
-    // Exact retired deny filenames are managed residue, not user scripts.
-    for (const legacyDenyScriptName of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
-      removeScriptIfPresent(projectPath, agent, legacyDenyScriptName);
-    }
+    copyDenyDangerousSupportFiles(projectPath, agent, shouldOverwriteExisting);
   }
 
   removeLegacyAgentHookScripts(projectPath, hookSpec);
