@@ -290,11 +290,11 @@ function validateLiveInstructionFile(
   }
   if (
     !content.includes(
-      "except explicitly labelled placeholder scenarios in shipped skill references",
+      "except explicitly labelled placeholder scenarios in shipped skills, skill references, and playbooks",
     )
   ) {
     failures.push(
-      `${label}: real-evidence rule must carry the architecture-approved shipped-skill example exception`,
+      `${label}: real-evidence rule must carry the architecture-approved placeholder-scenario exception for shipped skills, skill references, and playbooks`,
     );
   }
 }

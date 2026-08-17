@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. What a scanner can actually see - changed-file enumeration, diff/rename detection, gitignore and gitattribute blind spots - lives in [hook-scanning.md](hook-scanning.md). Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -77,7 +77,7 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 
 **Symptoms:** Every Bash tool call is denied with `Policy hook unavailable: hook timeout configuration is invalid`, and the turn cannot stop either, because the Stop hook fails the same way. The message names neither the variable that caused it nor the value that would be accepted, so the user cannot recover without reading the launcher source.
 
-**Why it happens:** `workflow/hooks/hook-launch-runtime.mjs` (search: `resolveHookLaunchTimeoutMs`) returns `null` for any `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` that is not a plain decimal at or below the mode ceiling, and `workflow/hooks/run-with-bash.mjs` (search: `hook timeout configuration is invalid`) turns `null` into a fail-closed unavailable result. Three ordinary values reach that branch. An exported-but-empty variable arrives as `""` rather than `undefined`, so it fails the digit test instead of falling back to the ceiling. A value above the ceiling is rejected rather than clamped. The ceilings differ per mode, so one value can be accepted for the feedback hooks and rejected for the policy hook in the same session, which reads as an intermittent fault rather than a configuration error.
+**Why it happens:** `workflow/hooks/hook-launch-runtime.mjs` (search: `resolveHookLaunchTimeoutMs`) returns `null` for any `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` that is not a plain decimal at or below the mode ceiling, and `workflow/hooks/run-with-bash.mjs` (search: `describeInvalidHookLaunchTimeout`) turns `null` into a fail-closed unavailable result. Three ordinary values reach that branch. An exported-but-empty variable arrives as `""` rather than `undefined`, so it fails the digit test instead of falling back to the ceiling. A value above the ceiling is rejected rather than clamped. The ceilings differ per mode, so one value can be accepted for the feedback hooks and rejected for the policy hook in the same session, which reads as an intermittent fault rather than a configuration error.
 
 **Evidence:** Measured on branch `dev` at `9adf06be` by running the launcher directly. `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` unset and `=1000` both exit 0; `=30000` (above the 25s policy ceiling), `=abc`, `=0`, and the empty string all exit 2 with the same message. The post-turn hook fails the same way at exit 2, so one variable blocks both command execution and turn completion.
 
@@ -86,6 +86,8 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 2. Clamp a value that exceeds a ceiling rather than rejecting it, or reject it with a message naming the variable, the supplied value, and the accepted maximum.
 3. Decide the failure mode per hook class. Fail-closed is right for a policy hook and defensible for a Stop hook, but a configuration error that blocks both leaves no path back to a working session.
 4. Pair each validator branch with a launcher-level test that asserts the resulting exit status, not just the resolver's return value; the harm lives in the caller's translation of `null`, not in the resolver.
+
+**Applied 2026-08-18:** the launcher now follows rules 1, 2, and 4 for this variable. `workflow/hooks/hook-launch-runtime.mjs` (search: `resolveHookLaunchTimeoutMs`) treats `""` as unset and clamps an oversized value to the mode ceiling; only a value that cannot bound the wait at all (`0`, non-decimal) is rejected, and `describeInvalidHookLaunchTimeout` names the variable, the supplied value, and the accepted range in the failure line. Launcher-level proof: `test/unit/hook-launcher.test.ts` (search: `without blocking the command` and `clamps values above the`). Rule 3 still applies to every future validator: the same probe set (`""`, over-ceiling, `abc`, `0`) must be run against each hook class before a new configuration check ships.
 
 ## Footgun: Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash
 

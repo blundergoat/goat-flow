@@ -166,6 +166,7 @@ Compliance Mode is an overlay on a selected Quick Scan or Full Assessment; it do
 ## Constraints
 
 - MUST NOT let accepted risk, unavailable scanners, or unavailable specialists imply factual clearance
+- Universal constraints from `skill-preamble.md` apply.
 
 ## Output Format
 

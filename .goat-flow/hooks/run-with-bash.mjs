@@ -17,6 +17,7 @@ import {
 import { fileURLToPath } from "node:url";
 import {
   captureHookProcessUntilDeadline,
+  describeInvalidHookLaunchTimeout,
   prepareProviderLauncherUnavailableDelivery,
   resolveHookLaunchTimeoutMs,
 } from "./hook-launch-runtime.mjs";
@@ -540,9 +541,14 @@ async function prepareHookLaunchRuntime(
       legacyHookDeadline,
       initialHookEnvironment,
     );
-    // Invalid or empty timeout configuration cannot safely bound the user's wait.
+    // A malformed override cannot bound the user's wait; name it so one setting can be repaired.
     if (launchTimeout === null) {
-      return { failureReason: "hook timeout configuration is invalid" };
+      return {
+        failureReason: describeInvalidHookLaunchTimeout(
+          legacyHookDeadline,
+          initialHookEnvironment,
+        ),
+      };
     }
     return {
       failureReason: null,
@@ -583,9 +589,14 @@ async function prepareHookLaunchRuntime(
     launchContract.launcherDeadlineMs,
     hookEnvironment,
   );
-  // Invalid or empty timeout configuration cannot safely bound the user's wait.
+  // A malformed override cannot bound the user's wait; name it so one setting can be repaired.
   if (launchTimeout === null) {
-    return { failureReason: "hook timeout configuration is invalid" };
+    return {
+      failureReason: describeInvalidHookLaunchTimeout(
+        launchContract.launcherDeadlineMs,
+        hookEnvironment,
+      ),
+    };
   }
   return {
     failureReason: null,

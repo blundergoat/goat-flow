@@ -210,7 +210,12 @@ describe("agent deny hook template comparison", () => {
       0,
       quotedEvidenceResult.stderr || "quoted evidence should be allowed",
     );
-    assert.equal(quotedEvidenceResult.stderr, "");
+    // This case has flaked under a loaded coverage run; keep the observed streams so a rerun can name the cause.
+    assert.equal(
+      quotedEvidenceResult.stderr,
+      "",
+      `quoted evidence produced stderr; stdout=${JSON.stringify(quotedEvidenceResult.stdout)} stderr=${JSON.stringify(quotedEvidenceResult.stderr)}`,
+    );
 
     const blockedRepositoryWritePayload = JSON.stringify({
       tool_name: "Bash",
@@ -225,7 +230,11 @@ describe("agent deny hook template comparison", () => {
         encoding: "utf-8",
       },
     );
-    assert.equal(blockedRepositoryWriteResult.status, 2);
+    assert.equal(
+      blockedRepositoryWriteResult.status,
+      2,
+      `repository write was not blocked; stdout=${JSON.stringify(blockedRepositoryWriteResult.stdout)} stderr=${JSON.stringify(blockedRepositoryWriteResult.stderr)}`,
+    );
     assert.match(blockedRepositoryWriteResult.stderr, /Policy repository/);
   });
 

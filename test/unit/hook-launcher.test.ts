@@ -20,6 +20,10 @@ import { join, resolve } from "node:path";
 import { describe, it } from "node:test";
 import { windowsTaskkillExecutablePath } from "../../workflow/hooks/run-with-bash.mjs";
 import {
+  describeInvalidHookLaunchTimeout,
+  resolveHookLaunchTimeoutMs,
+} from "../../workflow/hooks/hook-launch-runtime.mjs";
+import {
   HOOK_RESULT_OUTPUT_LIMIT_BYTES,
   HOOK_RESULT_SCHEMA,
 } from "../../workflow/hooks/hook-provider-adapters.mjs";
@@ -436,17 +440,10 @@ describe("hook launcher script validation", () => {
     });
   });
 
-  const invalidPolicyTimeoutValues = [
-    "0",
-    "25001",
-    "1.5",
-    "+1",
-    " 1",
-    "invalid",
-  ];
+  const invalidPolicyTimeoutValues = ["0", "1.5", "+1", " 1", "invalid"];
   // Separate names show exactly which mistyped user setting stopped being rejected.
   for (const invalidTimeoutMilliseconds of invalidPolicyTimeoutValues) {
-    /** Starts a disposable quick hook because invalid settings must fail before user work begins. */
+    /** Starts a disposable quick hook because malformed settings must fail before user work begins. */
     it(`rejects invalid policy timeout ${JSON.stringify(invalidTimeoutMilliseconds)}`, () => {
       withTempProject((fixtureProjectPath) => {
         const hookScriptRelativePath = writeQuickHook(fixtureProjectPath);
@@ -465,13 +462,93 @@ describe("hook launcher script validation", () => {
           2,
           launcherDiagnostics(launcherResult),
         );
+        // The message must let the user repair the one setting without reading launcher source.
         assert.match(
           launcherResult.stderr,
-          /timeout configuration is invalid/u,
+          /timeout configuration is invalid: GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS=.+ must be a whole number of milliseconds from 1 to 25000/u,
+        );
+        assert.ok(
+          launcherResult.stderr.includes(
+            JSON.stringify(invalidTimeoutMilliseconds),
+          ),
+          `stderr should quote the rejected value: ${launcherResult.stderr}`,
         );
       });
     });
   }
+
+  // `export VAR=` and an oversized value are ordinary shell states; either one used to wedge every tool call.
+  const usableNonLoweringTimeoutValues = ["", "25001", "99999999999999999999"];
+  for (const usableTimeoutMilliseconds of usableNonLoweringTimeoutValues) {
+    /** Starts a disposable quick hook to prove an empty or oversized override still runs the policy hook. */
+    it(`accepts policy timeout override ${JSON.stringify(usableTimeoutMilliseconds)} without blocking the command`, () => {
+      withTempProject((fixtureProjectPath) => {
+        const hookScriptRelativePath = writeQuickHook(fixtureProjectPath);
+        const launcherResult = runLauncherProcess(
+          fixtureProjectPath,
+          hookScriptRelativePath,
+          "policy",
+          {
+            ...process.env,
+            GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: usableTimeoutMilliseconds,
+          },
+        );
+
+        assert.equal(
+          launcherResult.status,
+          0,
+          launcherDiagnostics(launcherResult),
+        );
+        assert.equal(launcherResult.stderr, "");
+      });
+    });
+  }
+
+  it("resolves missing, empty, lower, and oversized overrides against the policy ceiling", () => {
+    const policyCeiling = 25_000;
+    // Missing and empty are the same shell state and both mean "use the ceiling".
+    assert.equal(resolveHookLaunchTimeoutMs(policyCeiling, {}), policyCeiling);
+    assert.equal(
+      resolveHookLaunchTimeoutMs(policyCeiling, {
+        GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "",
+      }),
+      policyCeiling,
+    );
+    // A lower value is honoured; a higher one is clamped rather than turned into an outage.
+    assert.equal(
+      resolveHookLaunchTimeoutMs(policyCeiling, {
+        GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "5000",
+      }),
+      5_000,
+    );
+    assert.equal(
+      resolveHookLaunchTimeoutMs(policyCeiling, {
+        GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "25001",
+      }),
+      policyCeiling,
+    );
+  });
+
+  // Separate names show which malformed shape stopped being rejected by the resolver itself.
+  for (const malformedTimeoutValue of ["0", "abc", "1.5", "+1", " 1"]) {
+    it(`resolver rejects malformed override ${JSON.stringify(malformedTimeoutValue)}`, () => {
+      assert.equal(
+        resolveHookLaunchTimeoutMs(25_000, {
+          GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: malformedTimeoutValue,
+        }),
+        null,
+      );
+    });
+  }
+
+  it("names the variable, value, and accepted range when an override is rejected", () => {
+    assert.equal(
+      describeInvalidHookLaunchTimeout(25_000, {
+        GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "abc",
+      }),
+      'hook timeout configuration is invalid: GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS="abc" must be a whole number of milliseconds from 1 to 25000',
+    );
+  });
 
   /** Starts a disposable quick hook to prove the user's policy ceiling remains accepted. */
   it("accepts the policy timeout ceiling", () => {
@@ -519,8 +596,8 @@ describe("hook launcher script validation", () => {
       });
     });
 
-    /** Starts a disposable quick hook because values above the feedback ceiling must be rejected. */
-    it(`rejects values above the ${feedbackResponseMode} timeout ceiling`, () => {
+    /** Starts a disposable quick hook because a value above the feedback ceiling must clamp, not stop the turn. */
+    it(`clamps values above the ${feedbackResponseMode} timeout ceiling instead of failing closed`, () => {
       withTempProject((fixtureProjectPath) => {
         const hookScriptRelativePath = writeQuickHook(fixtureProjectPath);
         const launcherResult = runLauncherProcess(
@@ -533,7 +610,12 @@ describe("hook launcher script validation", () => {
           },
         );
 
-        assert.match(
+        assert.equal(
+          launcherResult.status,
+          0,
+          launcherDiagnostics(launcherResult),
+        );
+        assert.doesNotMatch(
           `${launcherResult.stdout}${launcherResult.stderr}`,
           /timeout configuration is invalid/u,
         );

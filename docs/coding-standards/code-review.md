@@ -21,7 +21,7 @@ All must pass before approving:
 
 ## Anti-Patterns to Flag
 
-- **Hypothetical examples in docs**: CLAUDE.md requires real incidents, never hypothetical. The one exception is an explicitly labelled placeholder scenario in a shipped skill reference, which defines consumer input/output shape and is never evidence
+- **Hypothetical examples in docs**: CLAUDE.md requires real incidents, never hypothetical. The one exception is an explicitly labelled placeholder scenario in a shipped skill, skill reference, or playbook, which defines consumer input/output shape and is never evidence
 - **Duplicated content**: same instructions in both CLAUDE.md and a doc file (causes drift)
 - **Generic Ask First boundaries**: template text like "auth, routing, deployment, API, DB" instead of actual project paths
 - **Removed patterns**: references to removed ADR concepts (see `scripts/preflight-checks.sh` for the enforced list)

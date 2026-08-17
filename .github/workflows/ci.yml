@@ -70,11 +70,13 @@ jobs:
       - name: Learning-loop stats check
         run: node dist/cli/cli.js stats . --check
 
-      # Shell surfaces mirror scripts/preflight-checks.sh. Installed hook
-      # mirrors under .goat-flow/hooks/ are gitignored local state and do not
-      # exist in a fresh checkout, so CI validates the committed workflow/
-      # sources instead (same exclusions as preflight: SC2016 only for hook
-      # modules whose sed patterns intentionally use single quotes).
+      # Shell surfaces mirror scripts/preflight-checks.sh. The installed hook
+      # mirrors under .goat-flow/hooks/ are tracked copies of workflow/hooks/;
+      # the "GOAT Flow Audit" step above auto-runs drift for this multi-agent
+      # checkout and fails when a mirror diverges from its source, so CI
+      # shellchecks the sources once instead of both copies (same exclusions as
+      # preflight: SC2016 only for hook modules whose sed patterns intentionally
+      # use single quotes).
       - name: Shellcheck
         run: |
           sudo apt-get install -y shellcheck

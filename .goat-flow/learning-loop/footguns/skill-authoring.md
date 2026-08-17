@@ -1,6 +1,6 @@
 ---
 category: skill-authoring
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** Authoring and editing skill, playbook, and slash-command bodies - candidacy, word-budget and contract-phrase caps, tool-isolation constraints on prescribed commands, and pressure to reword load-bearing language. Keeping workflow templates and installed copies in sync lives in [skills.md](skills.md).
@@ -142,6 +142,8 @@ Restore pinned phrases verbatim after any compression, take compensating words f
 
 **Evidence:** 2026-08-15, adding `## How users will notice the difference` and `## Why` (renamed to `## Motivation` later the same day) to the Standard milestone template plus one SKILL.md sentence (97 words total) tipped both caps: 2117/2100 and 4596/4500. `test/contract/skill-hardening-plan-2.test.ts` (search: `redesign target of 2150 words`) holds the SKILL.md body cap; the same file (search: `canonical goat-plan surface has`) holds the combined cap; `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) excludes frontmatter from the body count. Resolved by raising the caps to 2150/4650 with user approval. Recurred 2026-08-16 renaming those two sections to `## What we lose without this` / `## Why this helps` and adding the derivation rules: the obvious trim - the `### Verification baseline` and `### Maintenance notes` subsections, which restate bullets six lines above them - is itself pinned by `keeps goat-plan handoff artifacts drift-aware without burdening small plans` in the same file, so the only trim on offer cost a shipped contract. Combined cap raised 4650 -> 4700 (4671 used); body cap unchanged.
 
+**Recurrence 2026-08-18:** a 27-token rewrite of goat-plan's Shared Conventions line (defining which modes read `skill-conventions.md`) passed every phrase pin and mirror check, then failed the combined cap at 4717/4700 - the surface had 3 words of headroom. Resolved by compacting to a 7-token line (`Modes R/1/3/4 also read`), the same length as the sentence it replaced.
+
 **Prevention:** Before adding content to goat-plan's SKILL.md or references, measure both counts against the caps in `test/contract/skill-hardening-plan-2.test.ts`. On overflow, present condense-versus-raise to the user instead of silently trimming pinned prose. Enumerate what the contract suite pins in the target file *before* choosing a trim - grep the test file for regexes read against that path - because the most redundant-looking prose here is disproportionately likely to be pinned, and discovering that after the edit turns a trim into a choice between reverting and weakening someone else's check. Edit all four skill mirrors (`workflow/skills/`, `.claude/skills/`, `.agents/skills/`, `.github/skills/`) in the same batch and rerun the fast contract suite. After raising a cap, grep gitignored plan files and docs for the old numbers and the old assertion-message text: a milestone that budgeted against the old cap keeps citing it, and its `(search:)` anchor into the assertion message stops resolving the moment the message changes. That happened the same day to `.goat-flow/plans/1.16.0/M38-goat-plan-dispatchable-tasks.md`, which cited `redesign target of 2100 words` in a Read-first line plus the old caps in its Commands table and stop condition.
 
 ---
@@ -157,6 +159,22 @@ Restore pinned phrases verbatim after any compression, take compensating words f
 **Evidence:** 2026-08-16, moving goat-security's Step 0 exception-validity tuple (1,328 chars) and Compliance Mode body (1,546 chars) into `references/project-policy-template.md` netted 2,395 chars after pointers, leaving 20,604 chars and the same 7/10; a phrase-repeat scan found no remaining literal duplication, only contract-pinned procedure. The user chose to keep that 96% as a true density signal rather than move Full-only phases into `common-threats.md`, which the skill loads on every run anyway.
 
 **Prevention:** Before promising a token-tier change, measure `content.length` of the exact SKILL.md, subtract the moved sections, add the pointer text you will leave behind, and check `references/` stays at five files. Prefer moving content the skill loads only in a specific mode; a move into an always-loaded reference changes the metric without changing what the agent reads. When editing goat-review, re-measure: 28 chars of headroom means one added sentence drops it to 7/10.
+
+---
+
+## Footgun: Routing a shared reference into a reference-heavy skill overflows the skill-quality composition cap
+
+**Status:** active | **Created:** 2026-08-18 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Before adding a `skill-conventions.md` (or any always-loaded) route to a skill, measure the composed bundle the skill-quality scorer builds; a route is a load, not a sentence.
+**Trigger phase:** VERIFY
+
+**Symptoms:** A one-line "on Full also read `.goat-flow/skill-docs/skill-conventions.md`" addition to goat-security passes the ADR-023 word cap, every phrase pin, and the mirror check, then fails `keeps goat-security quality composition complete` in the contract suite with `composition truncated at 32KB`.
+
+**Why it happens:** The deterministic skill-quality scorer composes SKILL.md + `skill-preamble.md` + `skill-conventions.md` (only when the skill text mentions it) + every linked `references/*.md`, then caps the bundle at 32 KB and appends a truncation note (`src/cli/quality/skill-quality-content.ts`, search: `appendSharedGuidance` and `capComposedContent`; `src/cli/quality/quality-config.ts`, search: `maxComposedBytes`). goat-security already links five reference packs, so its bundle sits just under the cap; mentioning conventions pulls another ~10 KB in and truncates the composition. The word-count gates never see this because they measure SKILL.md alone.
+
+**Evidence:** 2026-08-18, a quality report flagged goat-security as the only functional skill without a conventions route. Adding the route made `test/contract/skill-hardening-security-1.test.ts` (search: `goat-security quality composition must include its full configured context`) fail; reverting only that clause and keeping the `Universal constraints from \`skill-preamble.md\` apply.` line passed. The omission is therefore a load-budget decision, not an oversight - the same class as the density footgun above (search: "Dense functional skills satisfy the ADR-023 word cap").
+
+**Prevention:** Treat "route X into skill Y" as a composition change: run `node --import tsx --test test/contract/skill-hardening-<skill>-1.test.ts` (the composition-complete assertion) before the phrase contracts, and read the fit notes from `scoreArtifact`. For a skill at the cap, put shared doctrine the skill needs into a reference it already loads, or cite the specific preamble section, instead of adding a whole-file route. Record the deliberate omission in the skill's own text only if a word-budget check shows room.
 
 ---
 

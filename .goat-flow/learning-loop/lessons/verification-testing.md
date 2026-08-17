@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-14
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, deadlines independent of the thing under test, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -83,7 +83,9 @@ last_reviewed: 2026-08-14
 
 **Root cause:** I initially treated the preflight failure as a likely task regression because it appeared inside the final gate. The changing failed test names and the direct fast-suite pass showed the correct split: the task-local ESLint/preflight regression was fixed, while the preflight wrapper still surfaced intermittent fast-suite failures that need separate investigation.
 
-**Prevention:** When preflight fails in the test phase after unrelated gate fixes, rerun the named failing test area and then the exact fast-suite command directly before changing task files again. The preflight wrapper now reruns `test:fast` once when the first test-phase attempt fails; a retry pass records a warning with the initial `not ok` lines instead of failing the whole gate. Report the split explicitly: which original gate was fixed, which direct test summary passed, and whether preflight isolated a transient first-run failure.
+**Prevention:** When preflight fails in the test phase after unrelated gate fixes, rerun the named failing test area and then the exact suite command directly before changing task files again. Preflight runs the coverage suite exactly once and fails the gate on any `not ok`; there is no retry or warning downgrade to wait for (`scripts/preflight-checks.sh`, search: `test_reports_coverage=true`; `test/integration/preflight-progress.test.ts`, search: `pins one bounded coverage run`). Report the split explicitly: which original gate was fixed, which direct test summary passed, and whether the preflight failure reproduced on a direct rerun.
+
+**Updated 2026-08-18:** an earlier version of this Prevention described a one-shot `test:fast` retry that recorded a warning. That retry was removed on 2026-08-16 (`refactor(core): consolidate setup preflight checks`) and the removal is now test-pinned, so the retry sentence was corrected rather than the behaviour restored. Two same-day quality reports had already flagged the stale claim.
 
 **Recurrence 2026-08-17 (concurrent mirror save):** After the M39 ESLint fix cleared preflight's TypeScript stage, the fast suite observed a changelog mirror mismatch while playbook edits were in progress. The immediate isolated sync suite passed `26/26`, and a direct diff between the two changelog paths was empty, so no task file was changed in response. Rerun the full gate only after the mirrored writes are quiescent. Evidence anchors: `test/integration/preamble-sync.test.ts` (search: `template and installed changelog.md match`), `.goat-flow/skill-docs/playbooks/changelog.md`, and `workflow/skills/playbooks/changelog.md`.
 ---

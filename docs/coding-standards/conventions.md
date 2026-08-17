@@ -100,7 +100,7 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 - Don't add unnecessary runtime dependencies (keep the dependency footprint minimal)
 - Don't turn `src/cli/types.ts` into a catch-all; colocate domain types with their owning module and reserve the shared file for cross-cutting contracts
 - Don't hardcode version strings (derive from package.json via constants.ts)
-- Don't use hypothetical examples in docs - real incidents only, except explicitly labelled placeholder scenarios in shipped skill references
+- Don't use hypothetical examples in docs - real incidents only, except explicitly labelled placeholder scenarios in shipped skills, skill references, and playbooks
 - Don't reference removed ADR patterns (see `scripts/preflight-checks.sh` for the enforced list)
 - Don't create `_modified`, `_new`, `_backup`, `_v2` file variants - modify files in-place
 

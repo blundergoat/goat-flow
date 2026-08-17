@@ -23,12 +23,12 @@ All three violated the rule on disk. The violation surfaced as a MAJOR finding i
 
 **Why the single-budget model was wrong:** "Reference pack" conflates two distinct load patterns:
 
-1. **Always-loaded shared content** - read on *every* invocation of the owning skills. `skill-preamble.md` is loaded by all 7 SKILL.md files; `skill-conventions.md` is loaded on full-depth invocations. Their size is effectively part of the skill-loading overhead.
+1. **Always-loaded shared content** - read on *every* invocation of the owning skills. `skill-preamble.md` is loaded by every SKILL.md file (7 at the time, 8 since goat-clarity was enrolled); `skill-conventions.md` is loaded on full-depth invocations. Their size is effectively part of the skill-loading overhead.
 2. **Progressive reference pack** - loaded on-demand from within a skill when that skill enters a specific mode (authoring, hardening, review-class work). `skill-quality-testing.md` is only read during skill authoring - not on every goat-* invocation.
 
-A single 400-word cap is defensible for progressive packs (small, pick-one-of-many). It is unrealistic for always-loaded shared content that must carry enough context to be useful across all 7 skills.
+A single 400-word cap is defensible for progressive packs (small, pick-one-of-many). It is unrealistic for always-loaded shared content that must carry enough context to be useful across every skill.
 
-The same scarcity governs the hot path. Instruction files are read on every session regardless of task, so a rule that applies to only some sessions costs every session. And content duplicated inline across seven skills pays its cost seven times while drifting seven ways.
+The same scarcity governs the hot path. Instruction files are read on every session regardless of task, so a rule that applies to only some sessions costs every session. And content duplicated inline across the skills pays its cost once per skill and drifts one way per skill.
 
 ## Decision
 

@@ -7,7 +7,7 @@ goat-flow-skill-version: "1.15.1"
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-flow/skill-docs/skill-conventions.md`.
+Read `.goat-flow/skill-docs/skill-preamble.md`; Modes R/1/3/4 also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## When to Use
 

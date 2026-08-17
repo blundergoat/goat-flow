@@ -197,4 +197,4 @@ boundaries. If the proposed change crosses an Ask First boundary, flag it:
 
 ## Authoring a Skill
 
-For new or materially hardened goat-* skills, load `.goat-flow/skill-docs/skill-quality-testing/README.md`, then its topical files: `tdd-iteration.md` first, `adversarial-framing.md` for review-class skills, and `deployment.md` before release. Run the pressure tests and verify skill/reference versions match `AUDIT_VERSION` before publishing.
+For new or materially hardened goat-* skills, load `.goat-flow/skill-docs/skill-quality-testing/README.md`, then its topical files: `tdd-iteration.md` first, `adversarial-framing.md` for review-class skills, and `deployment.md` before release. Run the pressure tests and verify skill/reference version stamps match `goat-flow --version` before publishing.

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.16.0 - 2026-08-18
+
 - **BREAKING: target audits no longer execute project hooks by default** - Audit, setup, and quality stay static; `hooks verify` returns unsupported unless you explicitly pass `--trusted-target`. The deprecated `--untrusted-target` static alias remains accepted through v1.16.x.
 - **Claude hooks now start on Windows** - Existing setups need one `hooks sync`, or a reinstall, to convert their old hook entries.
 - **A hook that ran twice now runs once** - Sync and install remove the duplicate entries and leave hooks you added yourself alone.
@@ -11,6 +13,7 @@
 - **Hook protection covers non-Git projects and more command forms** - Scans use explicit roots, while Git aliases, `send-pack`, and Windows-style secret paths remain blocked.
 - **Read-only searches can name protected paths** - `git log -S`, `-G`, and `--grep`, plus `grep -e`, treat their query as data while real secret access stays denied.
 - **Invalid post-turn byte limits fail safely** - A bad `MAX_FILE_BYTES` value falls back to the default instead of scanning nothing and reporting clean.
+- **An empty or oversized hook timeout override no longer blocks every command** - `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS=` uses the registered ceiling, a larger value is clamped to it, and a malformed value is refused with the variable, the value, and the accepted range named.
 - **Audits no longer recommend deleting inert security rules** - `settings-rules-matched` cites verified active forms and leaves ambiguous rules for human review.
 - **Static skill readiness is no longer labelled as runtime success** - `skill doctor` reports static eligibility and unverified runtime registration, while audits flag drift across agent instruction files.
 - **Code checks now cover the whole function you edited** - Changing one part reports warnings from the rest of it, not just your lines.

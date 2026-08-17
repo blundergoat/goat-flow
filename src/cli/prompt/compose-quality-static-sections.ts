@@ -72,6 +72,9 @@ export function appendDesignNotes(lines: string[]): void {
   lines.push(
     "- Goat-flow coding agents are prohibited from running `git commit` or `git push`; shipped deny hooks enforce that workflow. A commit that breaks an instruction-file drafting convention is not, by itself, a `framework_flaw` or self-violation. Establish agent authorship or an agent-facing mechanism that caused the violation before reporting it.",
   );
+  lines.push(
+    '- The deterministic audit checks hook installation, registration, and (only with `--trusted-target`) launcher execution; it cannot observe provider-side hook delivery during live agent tool use, and its `limits` say so. That boundary is a documented, accepted design limit. Do NOT report "audit cannot prove end-to-end runtime enforcement" as a `framework_flaw` or MAJOR finding; report only a concrete case where the audit claims more than it verified.',
+  );
   lines.push("");
 }
 

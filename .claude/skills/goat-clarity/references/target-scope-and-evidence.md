@@ -130,9 +130,9 @@ An edit batch is a maximal sequence of write operations with no intervening huma
 selector-or-authority reread, or verification command. The next write after any such boundary starts
 a new batch and requires revalidation.
 
-Immediately before every edit batch, revalidate repository and selector identity plus each affected
-unit's membership, path bytes, content digest, file type, surface class, and containment against the
-latest agent-accounted record. Revalidate repository HEAD in every selector, not only a PR: a
+The drift tuple is repository identity, selector identity, and, for each affected unit, its membership,
+path bytes, content digest, file type, surface class, and containment. Immediately before every edit
+batch, revalidate that tuple against the latest agent-accounted record. Revalidate repository HEAD in every selector, not only a PR: a
 concurrent commit moves the committed baseline under a file or folder run, which silently reattributes
 a failing check between inherited and introduced. For a PR, also revalidate the bound PR head. For uncommitted
 work, re-inventory staged, unstaged, untracked, deleted, and unmerged membership using the same
