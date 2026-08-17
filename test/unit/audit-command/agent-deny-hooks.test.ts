@@ -161,6 +161,35 @@ describe("agent deny hook template comparison", () => {
   }
 
   /**
+   * The aggregate audit (the form CI and preflight run) pins the dispatcher and launchers to their templates through drift,
+   * but the deny-dangerous/ policy modules are compared only in selected-agent mode, so a module mirror that drifted from
+   * workflow/hooks/ would pass CI while this checkout's agents ran a different policy than the one that ships.
+   */
+  it("keeps the installed deny-hook mirrors byte-identical to their workflow templates", () => {
+    const templates = guardrailTemplates();
+    const mirrorsByTemplate: Record<string, string> = {
+      ".goat-flow/hooks/deny-dangerous.sh": templates.dispatcher,
+      ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
+      ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
+      ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
+      ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh":
+        templates.selfTest,
+    };
+    const driftedMirrors = Object.entries(mirrorsByTemplate)
+      .filter(
+        ([mirrorPath, templateContent]) =>
+          readFileSync(resolve(PROJECT_ROOT, mirrorPath), "utf-8") !==
+          templateContent,
+      )
+      .map(([mirrorPath]) => mirrorPath);
+    assert.deepEqual(
+      driftedMirrors,
+      [],
+      `installed deny-hook mirrors differ from workflow/hooks/ templates; copy the template over each listed mirror: ${driftedMirrors.join(", ")}`,
+    );
+  });
+
+  /**
    * Exercise the configured Codex launcher with quoted evidence and a real
    * write-shaped payload. Both halves run in one case because the deny hook
    * only earns its keep if it separates quoting repository content from

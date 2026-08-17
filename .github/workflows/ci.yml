@@ -70,21 +70,19 @@ jobs:
       - name: Learning-loop stats check
         run: node dist/cli/cli.js stats . --check
 
-      # Shell surfaces mirror scripts/preflight-checks.sh. The installed hook
-      # mirrors under .goat-flow/hooks/ are tracked copies of workflow/hooks/;
-      # the "GOAT Flow Audit" step above auto-runs drift for this multi-agent
-      # checkout and fails when a mirror diverges from its source, so CI
-      # shellchecks the sources once instead of both copies (same exclusions as
-      # preflight: SC2016 only for hook modules whose sed patterns intentionally
-      # use single quotes).
+      # Shell surfaces mirror scripts/preflight-checks.sh and CLAUDE.md Essential Commands. The installed hook mirrors under
+      # .goat-flow/hooks/ are tracked copies of workflow/hooks/ and exist in a fresh checkout, so they are checked alongside the sources:
+      # the aggregate audit step above pins the dispatcher and launcher mirrors to their templates but not the deny-dangerous/ policy
+      # modules, and the full corpus step exercises the installed modules behaviourally, not byte-for-byte. Same exclusions as preflight:
+      # SC2016 only for hook modules whose sed patterns intentionally use single quotes.
       - name: Shellcheck
         run: |
           sudo apt-get install -y shellcheck
           shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
-          shellcheck --exclude=SC2001,SC2016 workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh
+          shellcheck --exclude=SC2001,SC2016 workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 
       - name: Shell syntax
-        run: bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh
+        run: bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 
       - name: Instruction parity
         run: node scripts/check-instruction-parity.mjs

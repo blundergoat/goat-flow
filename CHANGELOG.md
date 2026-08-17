@@ -4,27 +4,35 @@
 
 ## v1.16.0 - 2026-08-18
 
-- **BREAKING: target audits no longer execute project hooks by default** - Audit, setup, and quality stay static; `hooks verify` returns unsupported unless you explicitly pass `--trusted-target`. The deprecated `--untrusted-target` static alias remains accepted through v1.16.x.
+- **New `/goat-clarity` skill tidies comments, docs, and private names** - Runs on a PR, uncommitted files, a folder, or file; behaviour is untouched.
+- **`/goat-clarity documentation <selector>` edits human documentation** - Only selected prose changes; agent files and test meaning stay untouched.
+- **Clarity passes never document a bug as intent** - A comment that is false because the code is broken stays put and goes to `goat-debug`.
+- **Clarity never renames a compatibility surface** - Named-argument parameters and serialized or returned keys route to `goat-plan` instead.
+- **Clarity reviews label low-value changed tests without deleting them** - Existing or materially changed tests get `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`; added tests get `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, or `ADDED UNRESOLVED`; removed tests get `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, or `REMOVAL UNRESOLVED`; proven path or namespace-only moves get `RELOCATED`. Every label is report-only.
+- **`goat-clarity` evidence stays attributable in a dirty worktree** - Its snapshot names pre-existing dirty paths and reconciles unit counts.
+- **BREAKING: target audits no longer execute project hooks by default** - Audit, setup, and quality stay static; `hooks verify` needs `--trusted-target`. The deprecated `--untrusted-target` static alias stays accepted through v1.16.x.
 - **Claude hooks now start on Windows** - Existing setups need one `hooks sync`, or a reinstall, to convert their old hook entries.
 - **A hook that ran twice now runs once** - Sync and install remove the duplicate entries and leave hooks you added yourself alone.
-- **Unrelated upgrades preserve local managed-file repairs** - Sync leaves a locally changed file alone when its package template is unchanged, and `--force` applies only to the selected conflict.
-- **Managed-file drift says whether a project is behind or diverged** - Diverged files receive non-destructive guidance instead of a repair command that discards local work.
+- **A locally edited managed file no longer blocks an upgrade** - Install keeps your edit when the package template is unchanged and applies the rest.
+- **`--force` replaces only inspected template conflicts** - It never touches user-owned files; those need a separately named authority.
+- **Drift reports tell behind from diverged managed files** - Behind files get `hooks sync`; diverged files get guidance that keeps your local change.
 - **A guard that cannot start blocks instead of passing** - A missing or damaged hook file denies the action or flags it unverified. Node is required.
-- **Hook protection covers non-Git projects and more command forms** - Scans use explicit roots, while Git aliases, `send-pack`, and Windows-style secret paths remain blocked.
-- **Read-only searches can name protected paths** - `git log -S`, `-G`, and `--grep`, plus `grep -e`, treat their query as data while real secret access stays denied.
-- **Invalid post-turn byte limits fail safely** - A bad `MAX_FILE_BYTES` value falls back to the default instead of scanning nothing and reporting clean.
-- **An empty or oversized hook timeout override no longer blocks every command** - `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS=` uses the registered ceiling, a larger value is clamped to it, and a malformed value is refused with the variable, the value, and the accepted range named.
-- **Audits no longer recommend deleting inert security rules** - `settings-rules-matched` cites verified active forms and leaves ambiguous rules for human review.
-- **Static skill readiness is no longer labelled as runtime success** - `skill doctor` reports static eligibility and unverified runtime registration, while audits flag drift across agent instruction files.
 - **Code checks now cover the whole function you edited** - Changing one part reports warnings from the rest of it, not just your lines.
-- **A project config cannot run a tool from outside the project** - An analyzer path that resolves out of the repository is refused.
-- **`goat-clarity` can remediate selected documentation without widening code authority** - Documentation mode protects control grammar, context-only files, behaviour, and test meaning.
-- **Clarity passes no longer document bugs as intent** - False comments stay byte-stable and route to debugging; named-argument parameters and serialized or returned keys remain outside automatic renames.
-- **Clarity evidence stays attributable in dirty worktrees** - Snapshots expose authority drift, reconciled counts, selected-path dirt, formatter absence, and scoped change totals.
-- **Clarity reviews identify low-value changed tests without silently deleting them** - Existing and materially changed findings use `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`; added findings use `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, or `ADDED UNRESOLVED`; removed findings use `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, or `REMOVAL UNRESOLVED`; proven path or namespace-only moves use `RELOCATED`. Every disposition is report-only, and mutation still needs authority.
-- **QA and review expose their evidence boundaries** - QA applies the four-part test-selection gate and dispositions; review records refutations and resolved-only integrity.
-- **Plans and release prose lead with user impact and runnable proof** - Milestones say what breaks and what helps, while comment and writing rules provide executable checks.
-- **Gruff guidance works from consumer checkouts** - Availability checks honor configured paths, prefer inspected wrappers, find checkout, Composer, npm, virtual-environment, Cargo-local, and user-local binaries, derive failure flags from help, and avoid controller-only ADR paths.
+- **Audits stop recommending deletion of working security rules** - `settings-rules-matched` cites what it verified and leaves ambiguous rules to you.
+- **Post-turn scans work in non-Git workspaces** - Name the repositories to scan in `hooks.post-turn-safety.scan-roots`.
+- **The deny hook catches more command forms** - Git push aliases, `send-pack`, and Windows-style secret paths are blocked.
+- **Read-only searches can name protected paths** - `git log -S`, `-G`, `--grep`, and `grep -e` treat their query as data; secret access stays denied.
+- **A project config cannot run a tool from outside the project** - An analyzer path that resolves outside the repository is refused.
+- **Hook timeout overrides no longer block commands** - Empty `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` uses the ceiling, larger clamps, invalid is refused.
+- **Invalid post-turn byte limits fail safely** - A bad `MAX_FILE_BYTES` value falls back to the default instead of scanning nothing and passing.
+- **`skill doctor` no longer calls a skill ready when only its files check out** - It reports static eligibility and runtime registration separately.
+- **`audit --check-drift` flags instruction files that drift apart across agents** - Sibling `CLAUDE.md`, `AGENTS.md`, and Copilot files must agree.
+- **`goat-qa` gates every recommendation** - Each passes the four-part test-selection gate and gets a disposition; thin evidence is `UNRESOLVED`.
+- **`goat-review` emits only resolved Review Integrity fields** - Small reviews stop drowning in `n/a` rows; degradation flags stay mandatory.
+- **`goat-plan` milestones say what breaks and what helps** - Standard milestones and `ISSUE.md` answer both in one plain sentence each.
+- **Comment and changelog rules ship with runnable checks** - Comment width, prose-run, and bullet-length limits are commands you can run.
+- **Gruff guidance stops declaring the tool missing in consumer projects** - It checks configured paths, wrappers, and package-local installs first.
+- **The quality prompt cites framework ADRs by name** - A path citation no longer resolves to a consumer project's own ADRs.
 
 ## v1.15.1 - 2026-08-10
 
