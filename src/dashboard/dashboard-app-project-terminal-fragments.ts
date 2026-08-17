@@ -1,11 +1,12 @@
 /**
  * Project, terminal, and skill-evaluator action fragments for the dashboard Alpine app.
- * dashboardMergeAppFragments stitches these into one app object. These fragments own the standalone
- * skill evaluator (drop/upload/paste markdown, then POST for a quality verdict), project-list
- * management methods, clipboard + toast utilities, the full terminal-session method surface, and the
- * small time-formatting helpers. As elsewhere, most methods are thin `this`-bound shims over shared
- * `dashboard*` helpers; the few with logic inline (clipboard fallback, scrollback export, time
- * formatting) are self-contained and noted on their own doc comments.
+ *
+ * dashboardMergeAppFragments stitches these into one app object.
+ * These fragments own the standalone skill evaluator (drop/upload/paste markdown, then POST for a quality verdict), project-list management methods,
+ * clipboard + toast utilities, the full terminal-session method surface, and the small time-formatting helpers.
+ *
+ * As elsewhere, most methods are thin `this`-bound shims over shared `dashboard*` helpers; the few with logic inline (clipboard fallback, scrollback
+ * export, time formatting) are self-contained and noted on their own doc comments.
  */
 
 /** Reset per-run evaluator state and cancel any stale copied-report label timer. */
@@ -57,10 +58,9 @@ async function dashboardRunSkillEvaluator(
     return;
   }
   ctx.skillEvaluatorLoading = true;
-  // Verdicts depend on the project's quality profile, so a project switch
-  // while the request is in flight must not surface the old project's verdict
-  // or error. Loading still clears in finally; leaving it set would keep the
-  // Evaluate button disabled in the new project.
+  // Verdicts depend on the project's quality profile, so a project switch while the request is in flight must not surface the old project's verdict
+  // or error.
+  // Loading still clears in finally; leaving it set would keep the Evaluate button disabled in the new project.
   const requestProjectPath = ctx.projectPath;
   try {
     const url = `/api/quality/evaluate?path=${encodeURIComponent(requestProjectPath)}`;
@@ -147,9 +147,10 @@ function dashboardExportSessionScrollback(
 
 /**
  * Build the skill-evaluator fragment: drop/remove/run methods for the ad-hoc markdown evaluator.
- * runSkillEvaluator owns its fetch inline because it has a one-off request/response shape, and it
- * catches a failure into the evaluator's error field and reports it in-view rather than throwing, so
- * a bad evaluate request never breaks the app. Merged by dashboardMergeAppFragments.
+ *
+ * runSkillEvaluator owns its fetch inline because it has a one-off request/response shape, and it catches a failure into the evaluator's error field
+ * and reports it in-view rather than throwing, so a bad evaluate request never breaks the app.
+ * Merged by dashboardMergeAppFragments.
  */
 function dashboardSkillEvaluatorInputFragment(): DashboardAppFragment {
   return {
@@ -171,10 +172,12 @@ function dashboardSkillEvaluatorInputFragment(): DashboardAppFragment {
 
     /**
      * POST the dropped/pasted markdown to the quality evaluate endpoint and store the verdict.
+     *
      * Returns early (no request) when neither files nor content are present, setting a prompt.
-     * On a fetch/parse failure it does not propagate the error; instead it recovers by writing the
-     * message into skillEvaluatorError and reports it in-view, so a bad request never breaks the
-     * app. Loading state is always cleared in finally.
+     * On a fetch/parse failure it does not propagate the error; instead it recovers by writing the message into skillEvaluatorError and reports it
+     * in-view, so a bad request never breaks the app.
+     *
+     * Loading state is always cleared in finally.
      */
     async runSkillEvaluator() {
       await dashboardRunSkillEvaluator(this);
@@ -258,10 +261,11 @@ function dashboardUtilityActionsFragment(): DashboardAppFragment {
   return {
     // -- Clipboard + Toast --
     /**
-     * Copy text to the clipboard, preferring the async Clipboard API. When that throws (the API is
-     * undefined in insecure contexts, or the promise rejects) it recovers via a hidden-textarea
-     * `execCommand("copy")` fallback instead of surfacing the error. Returns whether the copy
-     * succeeded by either path; false means both the modern API and the legacy fallback failed.
+     * Copy text to the clipboard, preferring the async Clipboard API.
+     * When that throws (the API is undefined in insecure contexts, or the promise rejects) it recovers via a hidden-textarea `execCommand("copy")`
+     * fallback instead of surfacing the error.
+     *
+     * Returns whether the copy succeeded by either path; false means both the modern API and the legacy fallback failed.
      */
     async copyTextToClipboard(text: string): Promise<boolean> {
       try {
@@ -323,9 +327,8 @@ interface DashboardTerminalLaunchOptions {
 /**
  * Build terminal launch and reconnect method shims.
  *
- * These methods intentionally delegate to shared `dashboard*` terminal helpers because the
- * WebSocket and xterm mechanics are shared with the non-fragmented code paths and must stay in one
- * place; the fragment is just the named Alpine entry point surface.
+ * These methods intentionally delegate to shared `dashboard*` terminal helpers because the WebSocket and xterm mechanics are shared with the
+ * non-fragmented code paths and must stay in one place; the fragment is just the named Alpine entry point surface.
  */
 function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
   return {
@@ -419,9 +422,8 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
 /**
  * Build terminal binding, export, and session-selection methods.
  *
- * These methods complete the terminal app surface after the launch/reconnect methods in
- * dashboardTerminalLaunchActionsFragment. exportSession delegates to the scrollback helper because
- * the xterm buffer walk is browser-only but easier to verify outside the Alpine fragment literal.
+ * These methods complete the terminal app surface after the launch/reconnect methods in dashboardTerminalLaunchActionsFragment. exportSession
+ * delegates to the scrollback helper because the xterm buffer walk is browser-only but easier to verify outside the Alpine fragment literal.
  */
 function dashboardTerminalSessionActionsFragment(): DashboardAppFragment {
   return {
@@ -436,10 +438,11 @@ function dashboardTerminalSessionActionsFragment(): DashboardAppFragment {
     },
 
     /**
-     * Download one terminal tab's scrollback as a .txt file built from its xterm buffer. Dumps the
-     * normal buffer and, when a TUI has switched to the alternate screen, appends that view under a
-     * divider so the export captures what the user currently sees. Returns early (no download) when
-     * the session has no live xterm instance; trailing blank lines are trimmed from the normal buffer.
+     * Download one terminal tab's scrollback as a .txt file built from its xterm buffer.
+     * Dumps the normal buffer and, when a TUI has switched to the alternate screen, appends that view under a divider so the export captures what the
+     * user currently sees.
+     *
+     * Returns early (no download) when the session has no live xterm instance; trailing blank lines are trimmed from the normal buffer.
      */
     exportSession(sessionId: string) {
       dashboardExportSessionScrollback(this, sessionId);
@@ -472,8 +475,10 @@ function dashboardTerminalSessionActionsFragment(): DashboardAppFragment {
 
 /**
  * Build the time-formatting helper fragment: pure relative-time formatters the templates bind to.
- * No state or I/O - they turn a date into a short "Xm/h/d ago" label. The two differ only in their
- * null/zero handling, called out on each method. Merged into the app by dashboardMergeAppFragments.
+ * No state or I/O - they turn a date into a short "Xm/h/d ago" label.
+ * The two differ only in their null/zero handling, called out on each method.
+ *
+ * Merged into the app by dashboardMergeAppFragments.
  */
 function dashboardTimeFormattingFragment(): DashboardAppFragment {
   return {
@@ -496,10 +501,9 @@ function dashboardTimeFormattingFragment(): DashboardAppFragment {
     },
 
     /**
-     * Format an audit's age like formatTimeAgo, but tuned for "freshness" copy. A null date reads
-     * "just now" (treat a never-stamped audit as current, not blank), the elapsed time is clamped at
-     * zero so clock skew never shows a negative age, and hours are shown up to 72h before switching
-     * to days so a recent multi-day audit still reads in hours.
+     * Format an audit's age like formatTimeAgo, but tuned for "freshness" copy.
+     * A null date reads "just now" (treat a never-stamped audit as current, not blank), the elapsed time is clamped at zero so clock skew never shows
+     * a negative age, and hours are shown up to 72h before switching to days so a recent multi-day audit still reads in hours.
      */
     formatAuditAge(date: string | Date | null): string {
       if (!date) return "just now";

@@ -1,8 +1,9 @@
 /**
  * Builds the install write-set preview users see before installing goat-flow updates.
- * For managed templates it compares the last installed hash, the selected target file,
- * and the current package template without exposing file contents or absolute project paths;
- * for user-owned and generated destinations it reports the seed-or-preserve action instead.
+ *
+ * For managed templates it compares the last installed hash, the selected target file, and the current package template without exposing file
+ * contents or absolute project paths; for user-owned and generated destinations it reports the seed-or-preserve action instead.
+ *
  * Install handlers use the same result to block ambiguous overwrites and record recovery state.
  */
 import { posix } from "node:path";
@@ -53,12 +54,12 @@ const PREVIEW_LIMITS = [
 
 /**
  * User-visible outcome for one destination.
- * The first nine values are the three-way template comparison; the last three
- * describe destinations with no exact-copy template, where install seeds, preserves,
- * or regenerates rather than matching bytes.
- * `local-preserved` replaced the former `local-edited`: divergent local bytes under a
- * template this package did not change are kept rather than blocked, so no state now
- * describes "the user edited a managed file" without also saying what the package wants.
+ *
+ * The first nine values are the three-way template comparison; the last three describe destinations with no exact-copy template, where install seeds,
+ * preserves, or regenerates rather than matching bytes.
+ *
+ * `local-preserved` replaced the former `local-edited`: divergent local bytes under a template this package did not change are kept rather than
+ * blocked, so no state now describes "the user edited a managed file" without also saying what the package wants.
  */
 export type ManagedSetupFileState =
   | "unchanged"
@@ -239,9 +240,8 @@ const STATE_PRESENTATION: Record<
 };
 
 /**
- * Convert one canonical managed-file state into the repair direction shared by
- * install, audit, and hook status. This consumes M02's classifier result so
- * downstream surfaces never invent their own old/current/new comparison.
+ * Convert one canonical managed-file state into the repair direction shared by install, audit, and hook status.
+ * This consumes M02's classifier result so downstream surfaces never invent their own old/current/new comparison.
  *
  * @param state - canonical three-way state; non-content states have no proven drift direction
  * @returns current, safely behind, locally diverged, or unclassified repair evidence
@@ -273,10 +273,10 @@ export function classifyManagedSetupFile(
   // Matching current and new bytes require no write, even when old state is unavailable.
   if (input.currentSha256 === input.newExpectedSha256) return "unchanged";
 
-  // Without an old baseline, a missing destination is created and an existing
-  // differing regular file is adopted: pre-install-state targets legitimately
-  // hold older-package bytes, and the managed refresh matches what the
-  // installer always did for system-owned templates before baselines existed.
+  // Without an old baseline, a missing destination is created and an existing differing regular file is adopted: pre-install-state targets
+  // legitimately hold older-package bytes, and the managed refresh matches what the installer always did for system-owned templates before baselines
+  // existed.
+  //
   // The verdict stays "warning" so users see every adopted path before Bash runs.
   if (input.oldExpectedSha256 === null) {
     return input.currentSha256 === null ? "added" : "adopted";
@@ -461,8 +461,8 @@ function buildPreviewFile(
 
 /**
  * Turn one non-template destination into the row users read beside managed templates.
- * Use for user-owned and generated paths, where install seeds, preserves, or rewrites
- * from project state and there is no package template to compare bytes against.
+ * Use for user-owned and generated paths, where install seeds, preserves, or rewrites from project state and there is no package template to compare
+ * bytes against.
  */
 function buildProjectWriteFile(
   definition: ProjectWriteDefinition,
@@ -511,8 +511,8 @@ function buildProjectWriteFile(
 
 /**
  * Choose the sentence one non-template row shows.
- * A migration row names the exact edits install will make, because "this file may change"
- * is not something a user can check afterwards, while a named list is.
+ * A migration row names the exact edits install will make, because "this file may change" is not something a user can check afterwards, while a named
+ * list is.
  */
 function migrationRowReason(
   definition: ProjectWriteDefinition,
@@ -552,8 +552,7 @@ function projectWriteState(
 
 /**
  * Report whether one row must stop the installer before any mutation.
- * Only exact-copy templates qualify, so a user-owned or generated path never
- * withholds an unrelated managed refresh.
+ * Only exact-copy templates qualify, so a user-owned or generated path never withholds an unrelated managed refresh.
  *
  * @param file - one previewed destination with its ownership and classified state
  * @returns true when this row needs explicit authority before any install may run
@@ -718,10 +717,11 @@ export function recordManagedInstallAfterVerification(
   agent: AgentId,
 ): string[] {
   const installedPreview = buildManagedSetupPreview(projectPath, agent);
-  // Only current package templates are verified; retired paths are preserved and
-  // excluded, and user-owned or generated rows legitimately differ from any template.
-  // A preserved row is intentionally divergent - the package delivered nothing for it -
-  // so demanding a template match there would fail an install that behaved correctly.
+  // Only current package templates are verified; retired paths are preserved and excluded, and user-owned or generated rows legitimately differ from
+  // any template.
+  //
+  // A preserved row is intentionally divergent - the package delivered nothing for it - so demanding a template match there would fail an install
+  // that behaved correctly.
   const installationMismatches = installedPreview.files.filter(
     (file) =>
       file.ownership === "system-owned" &&

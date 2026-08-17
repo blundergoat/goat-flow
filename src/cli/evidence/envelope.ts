@@ -1,10 +1,9 @@
 /**
  * Shared evidence envelope for local runtime producers.
  *
- * The envelope adapts the existing CheckEvidence provenance contract instead
- * of inventing a parallel event schema. Producers add the small runtime field
- * set needed to answer "what happened locally?" while payloads stay redacted by
- * default and writes remain non-fatal.
+ * The envelope adapts the existing CheckEvidence provenance contract instead of inventing a parallel event schema.
+ * Producers add the small runtime field set needed to answer "what happened locally?" while payloads stay redacted by default and writes remain
+ * non-fatal.
  */
 import {
   appendFileSync,
@@ -419,8 +418,8 @@ function parseEnvelopeLine(line: string): EvidenceEnvelope | null {
 /**
  * Read the newest local event envelopes, preserving chronological order.
  *
- * Pass `eventKind` whenever a caller needs the newest events *of one kind*: the window is applied
- * after the filter, so unrelated activity can never push the caller's own events out of the tail.
+ * Pass `eventKind` whenever a caller needs the newest events *of one kind*: the window is applied after the filter, so unrelated activity can never
+ * push the caller's own events out of the tail.
  * Reading a global window and filtering afterwards silently discards still-valid records.
  *
  * @param projectRoot - Project root whose gitignored event logs should be tailed.

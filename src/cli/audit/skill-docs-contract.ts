@@ -1,7 +1,8 @@
 /**
  * Validates the skill-doc discovery contract used by `goat-flow audit`.
- * Use it when an operator needs instruction routing and installed playbooks
- * checked without mixing Markdown parsing into the main setup-check registry.
+ *
+ * Use it when an operator needs instruction routing and installed playbooks checked without mixing Markdown parsing into the main setup-check
+ * registry.
  * It reads project files only and returns user-facing failures without writes.
  */
 import { AUDIT_VERSION } from "../constants.js";

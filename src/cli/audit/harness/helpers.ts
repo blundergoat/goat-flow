@@ -1,5 +1,9 @@
 /**
- * Shared helpers for harness completeness checks (deterministic pass/fail).
+ * Shared helpers every harness check uses to report a deterministic pass or fail.
+ *
+ * Keeping the result shape in one place is what lets the dashboard and CLI render any check the same way, however it was written.
+ *
+ * Harness checks are pass/fail rather than scored, so a user reading the output can tell what to fix instead of chasing a number.
  */
 import type { HarnessCheckDetails, HarnessCheckResult } from "../types.js";
 import type { ReadonlyFS } from "../../types.js";
@@ -47,9 +51,8 @@ export function fail(
 /**
  * Classify backtick tokens that are technical prose, not local repo paths.
  *
- * The harness only verifies path existence, so this filter is intentionally
- * conservative because package names, URLs, globs, and home paths would create
- * noisy false positives rather than useful cross-reference failures.
+ * The harness only verifies path existence, so this filter is intentionally conservative because package names, URLs, globs, and home paths would
+ * create noisy false positives rather than useful cross-reference failures.
  */
 function isNonRepoPathToken(path: string): boolean {
   const hasSyntax =

@@ -1,7 +1,7 @@
 /**
  * Parses the shared diagnostics namespace before a readout reaches its handler.
- * Use this module when an operator selects one diagnostics view and optional
- * project path; invalid names or extra paths return concise CLI usage evidence.
+ * Use this module when an operator selects one diagnostics view and optional project path; invalid names or extra paths return concise CLI usage
+ * evidence.
  */
 import { resolve } from "node:path";
 

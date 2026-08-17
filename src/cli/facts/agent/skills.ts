@@ -1,5 +1,9 @@
 /**
- * Skill fact extraction - inventories installed skills, measures quality signals, and detects unadapted content.
+ * Inventories the skills a user has installed for one agent, and checks whether they were adapted to this project or left as shipped templates.
+ *
+ * A skill copied in and never customised still scores as present, so this module measures similarity against the shipped text to catch it.
+ *
+ * These facts drive the audit's skill checks, which is where a user finds out their skills exist but were never made project-specific.
  */
 import { readFileSync } from "node:fs";
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";

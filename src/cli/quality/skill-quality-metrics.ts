@@ -1,14 +1,13 @@
 /**
- * The rubric: one MetricScorer per scoring dimension (trigger clarity, workflow completeness, gate
- * quality, evidence/testability, cold-start executability, token cost, tool dependencies, write
- * risk, and skill-vs-reference fit), plus the `ALL_METRICS` list the scorer runs in order.
+ * The rubric: one MetricScorer per scoring dimension (trigger clarity, workflow completeness, gate quality, evidence/testability, cold-start
+ * executability, token cost, tool dependencies, write risk, and skill-vs-reference fit), plus the `ALL_METRICS` list the scorer runs in order.
  *
- * Each scorer is a pure function of its MetricInput, runs the artifact text through regex/heading
- * heuristics, and routes its raw score through `finalizeMetric` for subtype-specific capping - so a
- * dimension that does not apply to a subtype reports `n/a`, not a low score. Some scorers attach
- * promote/demote/meta signals that feed recommendations without changing the numeric total. The
- * heuristics are deliberately conservative (calibrated against the in-tree `.claude/skills` corpus)
- * to keep false positives low; they are advisory tips, not hard deductions, where noted.
+ * Each scorer is a pure function of its MetricInput, runs the artifact text through regex/heading heuristics, and routes its raw score through
+ * `finalizeMetric` for subtype-specific capping - so a dimension that does not apply to a subtype reports `n/a`, not a low score.
+ * Some scorers attach promote/demote/meta signals that feed recommendations without changing the numeric total.
+ *
+ * The heuristics are deliberately conservative (calibrated against the in-tree `.claude/skills` corpus) to keep false positives low; they are
+ * advisory tips, not hard deductions, where noted.
  */
 import { compilePatternList } from "./quality-config.js";
 import {
@@ -199,6 +198,14 @@ const workflowCompleteness: MetricScorer = (input) => {
   );
 };
 
+/**
+ * Scores whether the artifact tells a reader how work is checked and where a human must intervene.
+ * The three signals are additive and drawn from configured vocabulary rather than fixed wording, so a project can rename its gates without losing the
+ * score.
+ *
+ * @param input - composed artifact content plus the quality config supplying gate vocabulary
+ * @returns the scored metric; a perfect score notes "strong gates" instead of listing gaps
+ */
 const gateQuality: MetricScorer = (input) => {
   const { composedContent: content, config } = input;
   let score = 0;
@@ -225,6 +232,13 @@ const gateQuality: MetricScorer = (input) => {
   );
 };
 
+/**
+ * Scores whether claims in the artifact can be checked: tagged evidence, a gate, and stable anchors.
+ * Semantic anchors count rather than line numbers, because a line reference goes stale on the next edit and cannot be re-verified later.
+ *
+ * @param input - composed artifact content
+ * @returns the scored metric; a perfect score notes "strong evidence contract" instead of gaps
+ */
 const evidenceTestability: MetricScorer = (input) => {
   const content = input.composedContent;
   let score = 0;
@@ -307,6 +321,15 @@ const coldStartExecutability: MetricScorer = (input) => {
   );
 };
 
+/**
+ * Scores the context cost of loading the artifact, from its own size and its sub-references.
+ *
+ * Size is banded rather than scaled, so an artifact only loses points when it crosses a threshold a reader would actually feel.
+ * More than five sub-references costs an extra penalty, because each one is a separate load the consumer pays for.
+ *
+ * @param input - raw artifact content, project root, and artifact record used to count references
+ * @returns the scored metric; the note always states the estimated token count
+ */
 const tokenCost: MetricScorer = (input) => {
   const tokens = estimateTokens(input.rawContent);
   const subRefs = countSubReferences(input.projectRoot, input.artifact);
@@ -341,6 +364,14 @@ const tokenCost: MetricScorer = (input) => {
   );
 };
 
+/**
+ * Scores how safely the artifact depends on external tools.
+ * An artifact that references no tool scores full marks rather than being penalised for a contract it does not need; only one that names a tool must
+ * also show an availability check and a fallback.
+ *
+ * @param input - composed artifact content plus the config supplying the tool-keyword pattern
+ * @returns the scored metric; artifacts with no tool reference note "no tool dependencies"
+ */
 const toolDependencyHandling: MetricScorer = (input) => {
   const { composedContent, config } = input;
   const content = stripYamlFrontmatter(composedContent);
@@ -374,6 +405,14 @@ const toolDependencyHandling: MetricScorer = (input) => {
   );
 };
 
+/**
+ * Scores how well the artifact bounds its own write authority, starting from a clean 10.
+ * Skills and references are judged differently on purpose: a skill is expected to declare modes and an escalation gate, while a reference is only
+ * penalised for implying writes it should never make.
+ *
+ * @param input - artifact record and composed content
+ * @returns the scored metric; the score is floored by `finalizeMetric` rather than here
+ */
 const writeRisk: MetricScorer = (input) => {
   const { artifact, composedContent: content } = input;
   let score = 10;

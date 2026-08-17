@@ -1,8 +1,9 @@
 /**
  * Serialize dashboard quality-draft processing across independent server processes.
- * Owners acquire one `wx` marker before reading report text. A second marker fences
- * stale-claim rejection against an owner refreshing immediately before persistence,
- * so crash recovery rejects ambiguous work instead of replaying it.
+ *
+ * Owners acquire one `wx` marker before reading report text.
+ * A second marker fences stale-claim rejection against an owner refreshing immediately before persistence, so crash recovery rejects ambiguous work
+ * instead of replaying it.
  */
 import { randomBytes } from "node:crypto";
 import {
@@ -240,8 +241,8 @@ function rejectIfClaimIsStale(
 
 /**
  * Acquire the project-wide claim required before reading one stable draft.
- * A live owner or reaper returns null. A stale owner invokes the supplied
- * terminal-rejection callback while the reaper fence blocks persistence.
+ * A live owner or reaper returns null.
+ * A stale owner invokes the supplied terminal-rejection callback while the reaper fence blocks persistence.
  *
  * @param options - staging paths, lease, draft identity, and bounded stale-rejection action
  * @returns owned claim, or null when this process must skip the draft
@@ -296,9 +297,9 @@ export function qualityDraftNameFromOwnershipMarker(
 
 /**
  * Inspect an existing owner/reaper pair without ever acquiring a new claim.
- * This recovers the crash window where the former owner deleted its draft but
- * died before writing a receipt: fresh owners remain untouched, while stale or
- * abandoned ownership invokes the same fenced terminal-rejection path.
+ *
+ * This recovers the crash window where the former owner deleted its draft but died before writing a receipt: fresh owners remain untouched, while
+ * stale or abandoned ownership invokes the same fenced terminal-rejection path.
  *
  * @param options - staging paths, lease, draft identity, and bounded rejection action
  */

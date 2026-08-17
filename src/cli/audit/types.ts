@@ -1,7 +1,6 @@
 /**
  * Types for the `goat-flow audit` command.
- * Audit validates setup correctness (build checks) and optionally checks
- * AI harness completeness (--harness) grouped by harness concerns.
+ * Audit validates setup correctness (build checks) and optionally checks AI harness completeness (--harness) grouped by harness concerns.
  *
  * Wording: audit = deterministic integrity/completeness. Never "quality" or "score".
  */

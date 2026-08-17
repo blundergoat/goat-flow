@@ -1,12 +1,11 @@
 /**
  * Reads the words a user typed after a goat-flow command and turns them into a subcommand.
- * Everything here answers one question: given `goat-flow quality save draft`, which action did
- * they mean, and did they supply the right number of arguments for it?
+ * Everything here answers one question: given `goat-flow quality save draft`, which action did they mean, and did they supply the right number of
+ * arguments for it?
  *
- * Mistakes are rejected loudly rather than guessed at. An unknown subcommand or a missing
- * argument raises a CLIError naming the accepted forms, because silently picking a default
- * would run something the user did not ask for - and for commands that write files, that is
- * the difference between a helpful message and an unwanted change to their project.
+ * Mistakes are rejected loudly rather than guessed at.
+ * An unknown subcommand or a missing argument raises a CLIError naming the accepted forms, because silently picking a default would run something the
+ * user did not ask for - and for commands that write files, that is the difference between a helpful message and an unwanted change to their project.
  */
 import { join, resolve } from "node:path";
 import { CLIError } from "./cli-error.js";
@@ -46,8 +45,7 @@ export function parseQualityModeArg(
 
 /**
  * Work out where `--output` should write, relative to the project the user is targeting.
- * A bare filename lands under `.goat-flow/` so a report does not clutter their repo root,
- * while an explicit path is honoured exactly as typed.
+ * A bare filename lands under `.goat-flow/` so a report does not clutter their repo root, while an explicit path is honoured exactly as typed.
  *
  * @param output - the `--output` value; omitted means the user wants terminal output only
  * @param projectRoot - project the command is running against, used as the base for bare names
@@ -68,8 +66,8 @@ export function resolveOutputPath(
 
 /**
  * Work out which quality action the user asked for and where it should run.
- * Covers everything after `goat-flow quality` - save, history, diff, validate, candidacy, or
- * the default prompt - so each one gets the arguments it needs before anything executes.
+ * Covers everything after `goat-flow quality` - save, history, diff, validate, candidacy, or the default prompt - so each one gets the arguments it
+ * needs before anything executes.
  *
  * @param positionals - words typed after `quality`; empty means the default prompt for the
  *   current directory

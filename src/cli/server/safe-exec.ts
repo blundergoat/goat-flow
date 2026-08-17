@@ -1,11 +1,9 @@
 /**
  * Shared, consent-checked, allow-listed, timeout-bounded command executor.
  *
- * Every dashboard route that needs to spawn a local process must go through
- * this helper. Callers declare an explicit per-call-site allow-list; commands
- * not in that list are rejected synchronously without a spawn. Arguments are
- * passed positionally to `child_process.spawn` with `shell: false` so shell
- * metacharacters in `args` cannot be interpreted.
+ * Every dashboard route that needs to spawn a local process must go through this helper.
+ * Callers declare an explicit per-call-site allow-list; commands not in that list are rejected synchronously without a spawn.
+ * Arguments are passed positionally to `child_process.spawn` with `shell: false` so shell metacharacters in `args` cannot be interpreted.
  *
  * Pitfalls:
  *   - Do NOT pass `shell: true`. Ever.
@@ -47,10 +45,9 @@ const DEFAULT_ENV_KEYS = [
 ];
 
 /**
- * Shell metacharacters rejected in args. Because we always spawn with
- * `shell: false`, redirection / glob characters like `>` `<` `*` are inert at
- * execve time. We still reject the four genuinely-dangerous tokens because
- * any hostile callee shelling out internally would re-interpret them.
+ * Shell metacharacters rejected in args.
+ * Because we always spawn with `shell: false`, redirection / glob characters like `>` `<` `*` are inert at execve time.
+ * We still reject the four genuinely-dangerous tokens because any hostile callee shelling out internally would re-interpret them.
  */
 const SHELL_METACHARACTER = /[;|\n\r\0]/u;
 const COMMAND_SUBSTITUTION = /\$\(|`/u;
@@ -172,9 +169,8 @@ function isWithinProject(projectRoot: string, targetPath: string): boolean {
 /**
  * Write one file atomically inside a project root.
  *
- * The temp file lives beside the destination so `rename` stays atomic on the
- * same filesystem. Existing destination content is replaced only after the
- * temp file is flushed and closed.
+ * The temp file lives beside the destination so `rename` stays atomic on the same filesystem.
+ * Existing destination content is replaced only after the temp file is flushed and closed.
  *
  * @param targetPath - destination path to replace atomically
  * @param content - complete file contents to write
@@ -401,9 +397,8 @@ function recordExecEvidence(opts: ExecOptions, result: ExecResult): void {
 /**
  * Spawns one allow-listed command without a shell and reports bounded output.
  *
- * The control flow stays explicit because each branch owns a different safety
- * invariant: pre-spawn rejection, timeout cleanup, output capping, spawn-error
- * recovery, and optional evidence writes.
+ * The control flow stays explicit because each branch owns a different safety invariant: pre-spawn rejection, timeout cleanup, output capping,
+ * spawn-error recovery, and optional evidence writes.
  *
  * @param opts Spawn request plus allow-list, cwd, caps, and optional evidence settings.
  * @returns A promise that resolves with the process result or rejects with `SafeExecRejection`.
@@ -472,9 +467,8 @@ export function execSafely(opts: ExecOptions): Promise<ExecResult> {
 /**
  * Spawn request accepted by `spawnInheritedSync` for interactive CLI children.
  *
- * Contract: `allowedBasenames` matches the command's lowercased basename rather
- * than the full path, because interactive callers pass resolved absolute
- * binaries (for example a discovered Windows Git Bash path).
+ * Contract: `allowedBasenames` matches the command's lowercased basename rather than the full path, because interactive callers pass resolved
+ * absolute binaries (for example a discovered Windows Git Bash path).
  */
 export interface InheritedSpawnOptions {
   /** Resolved binary to spawn; its basename must appear in `allowedBasenames`. */
@@ -490,12 +484,11 @@ export interface InheritedSpawnOptions {
 /**
  * Spawn an allow-listed command with inherited stdio for interactive CLI flows.
  *
- * Unlike `execSafely`, output is not captured or capped: stdin/stdout/stderr stay
- * attached to the caller's terminal, which suits long-running interactive children
- * such as the bundled installer. The same pre-spawn gates apply - basename
- * allow-list, metacharacter-free string args - and the child always runs with
- * `shell: false`. Throws `SafeExecRejection` before any process is spawned when a
- * gate fails.
+ * Unlike `execSafely`, output is not captured or capped: stdin/stdout/stderr stay attached to the caller's terminal, which suits long-running
+ * interactive children such as the bundled installer.
+ * The same pre-spawn gates apply - basename allow-list, metacharacter-free string args - and the child always runs with `shell: false`.
+ *
+ * Throws `SafeExecRejection` before any process is spawned when a gate fails.
  *
  * @param opts - command, argv, allowed basenames, and optional child environment
  * @returns the raw `spawnSync` result; callers read `status`, `signal`, and `error`
@@ -504,10 +497,8 @@ export function spawnInheritedSync(
   opts: InheritedSpawnOptions,
 ): SpawnSyncReturns<Buffer> {
   const commandBasename = pathBasename(opts.command).toLowerCase();
-  // Normalise the allow-list to lowercase too, matching the documented
-  // "lowercase basenames" contract: the command side is already lowercased, so
-  // comparing against verbatim entries would silently reject a correct command
-  // whenever a caller passed a mixed-case allow-list entry.
+  // Normalise the allow-list to lowercase too, matching the documented "lowercase basenames" contract: the command side is already lowercased, so
+  // comparing against verbatim entries would silently reject a correct command whenever a caller passed a mixed-case allow-list entry.
   const allowedBasenames = opts.allowedBasenames.map((name) =>
     name.toLowerCase(),
   );

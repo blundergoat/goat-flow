@@ -1,8 +1,9 @@
 /**
  * Hook-focused Alpine fragments: agent/plan/hook loaders and the Hooks/Setup view actions.
- * Use when the user opens the Hooks view, flips a hook switch, or launches setup repairs -
- * every method here either loads the hook state a view renders or applies a toggle the user
- * just confirmed. Split from the data-loading fragments so each file stays reviewable.
+ *
+ * Use when the user opens the Hooks view, flips a hook switch, or launches setup repairs - every method here either loads the hook state a view
+ * renders or applies a toggle the user just confirmed.
+ * Split from the data-loading fragments so each file stays reviewable.
  *
  * Toggling a guarded safety hook always confirms with the user first, and a failed toggle
  * recovers into a toast plus a reload of true server state rather than a half-applied switch.
@@ -102,8 +103,8 @@ async function dashboardToggleHookState(
 
 /**
  * Build the agent-detection / plans / hooks fragment of the app's async data-loading methods.
- * One input to dashboardMergeAppFragments; the methods delegate to shared helpers that own the
- * fetch and its recover-on-failure handling, so this fragment only wires names to those helpers.
+ * One input to dashboardMergeAppFragments; the methods delegate to shared helpers that own the fetch and its recover-on-failure handling, so this
+ * fragment only wires names to those helpers.
  *
  * @param supportedAgents - agents the server can launch, used to scope installed-agent detection
  * @returns the fragment object of agent/plans/hooks loader methods merged into the Alpine app

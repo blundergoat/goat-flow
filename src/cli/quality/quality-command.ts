@@ -1,8 +1,10 @@
 /**
  * Route `goat-flow quality` requests from the CLI or dashboard to focused handlers.
+ *
  * Use when a user builds, compares, validates, or saves a quality report for one project.
  * Heavy features load on demand so simple commands stay quick and focused.
  * The shared save path validates, scrubs, revalidates, and exclusively writes local reports.
+ *
  * Injected output, errors, and directory creation keep user-visible edge cases testable.
  */
 import { randomBytes } from "node:crypto";
@@ -26,12 +28,13 @@ import { parseQualityReport } from "./schema.js";
 type CLIErrorConstructor = new (message: string, exitCode: number) => Error;
 
 /**
- * Injected collaborators the quality handlers depend on, kept as an interface so the command can
- * be exercised in tests without touching the real CLI error type or stdout. Supplied by the CLI
- * wiring layer; handlers never construct these themselves.
+ * Injected collaborators the quality handlers depend on, kept as an interface so the command can be exercised in tests without touching the real CLI
+ * error type or stdout.
+ * Supplied by the CLI wiring layer; handlers never construct these themselves.
  */
 export interface QualityCommandDeps {
   CLIError: CLIErrorConstructor;
+  /** Renders one recommended artifact kind as the label the candidacy output shows the user. */
   formatCandidacyArtifact(
     recommendation: CandidacyResult["recommendedArtifact"],
   ): string;
@@ -49,6 +52,14 @@ interface QualityPersistenceDeps extends Pick<QualityCommandDeps, "CLIError"> {
   createReportDirectory?: (directoryPath: string) => void;
 }
 
+/**
+ * Render saved quality-history rows for the selected project and agent.
+ * Load warnings go to stderr so the rendered rows stay machine-readable on stdout.
+ *
+ * @param options - parsed CLI options selecting project, agent, mode, and output format
+ * @param deps - injected CLI error type and output writer
+ * @returns nothing; the rendered history is written through `deps.writeOutput`
+ */
 async function handleQualityHistorySubcommand(
   options: ParsedCLI,
   deps: QualityCommandDeps,
@@ -107,6 +118,15 @@ async function handleQualityHistorySubcommand(
   );
 }
 
+/**
+ * Compare two saved quality reports and render the difference.
+ * Error behavior: throws CLIError with exit code 2 when the requested pair cannot be resolved, so an ambiguous or empty selection never renders as an
+ * empty diff the user could misread as "no change".
+ *
+ * @param options - parsed CLI options selecting the report pair, agent, and mode
+ * @param deps - injected CLI error type and output writer
+ * @returns nothing; the diff is written through `deps.writeOutput`
+ */
 async function handleQualityDiffSubcommand(
   options: ParsedCLI,
   deps: QualityCommandDeps,
@@ -135,6 +155,14 @@ async function handleQualityDiffSubcommand(
   deps.writeOutput(options, renderQualityDiffText(diff.diff));
 }
 
+/**
+ * Assess a draft artifact and report which artifact kind it should become.
+ * Error behavior: throws CLIError with exit code 2 when no draft or description was supplied.
+ *
+ * @param options - parsed CLI options carrying the draft path or description text
+ * @param deps - injected CLI error type, artifact formatter, and output writer
+ * @returns nothing; the recommendation is written through `deps.writeOutput`
+ */
 async function handleQualityCandidacySubcommand(
   options: ParsedCLI,
   deps: QualityCommandDeps,
@@ -191,6 +219,15 @@ async function handleQualityCandidacySubcommand(
   deps.writeOutput(options, lines.join("\n"));
 }
 
+/**
+ * Validate one saved report file against the quality report schema.
+ * Error behavior: throws CLIError with exit code 2 for a missing path, an unreadable file, invalid JSON, or a schema violation, each naming the file
+ * so the user can fix the right report.
+ *
+ * @param options - parsed CLI options carrying the report path to validate
+ * @param deps - injected CLI error type and output writer
+ * @returns nothing; a valid report writes `OK <path>` through `deps.writeOutput`
+ */
 async function handleQualityValidateSubcommand(
   options: ParsedCLI,
   deps: QualityCommandDeps,
@@ -227,6 +264,7 @@ async function handleQualityValidateSubcommand(
 
 /**
  * Ask Git whether one exact prospective local report path is ignored.
+ * Side effect: spawns `git check-ignore` in the repository root.
  *
  * @param projectRoot - Repository root the `git check-ignore` query runs in.
  * @param relativePath - Prospective report path, relative to `projectRoot`.
@@ -262,7 +300,15 @@ function qualitySaveTimestamp(date: Date = new Date()): string {
 
 /**
  * Inspect one prospective report directory without following a redirecting final component.
+ *
  * A null result means the user's first save still needs to create this directory.
+ * Error behavior: throws CLIError with exit code 2 for any failure other than a missing path, so an unreadable or redirected component blocks the
+ * save instead of being treated as absent.
+ *
+ * @param path - absolute prospective directory to inspect
+ * @param displayPath - project-relative label used in the error, so no absolute path is echoed
+ * @param deps - injected CLI error type
+ * @returns the stat result, or null when the directory does not exist yet
  */
 function qualitySaveDirectoryStats(
   path: string,
@@ -282,7 +328,14 @@ function qualitySaveDirectoryStats(
 
 /**
  * Create one missing report directory and accept EEXIST only when another save made a real folder.
+ *
  * Use during first save so concurrent users can continue without accepting files or symlinks.
+ * Error behavior: throws CLIError with exit code 2 unless the collision resolved to a real directory, because a racing writer that left a file or
+ * symlink must not be accepted.
+ *
+ * @param component - absolute path plus the project-relative label used in errors
+ * @param deps - injected CLI error type and optional directory creator used by tests
+ * @returns nothing; returning means the directory now exists
  */
 function createMissingQualitySaveDirectory(
   component: { path: string; display: string },
@@ -310,7 +363,15 @@ function createMissingQualitySaveDirectory(
   }
 }
 
-/** Revalidate every report-directory component after concurrent creation finishes. */
+/**
+ * Revalidate every report-directory component after concurrent creation finishes.
+ * Error behavior: throws CLIError with exit code 2 when any component is missing or is no longer a real directory, so a component swapped mid-save
+ * cannot receive the user's report.
+ *
+ * @param components - directory chain to recheck, outermost first
+ * @param deps - injected CLI error type
+ * @returns nothing; returning means every component is a real directory
+ */
 function assertCurrentQualitySaveDirectories(
   components: Array<{ path: string; display: string }>,
   deps: QualityPersistenceDeps,
@@ -331,7 +392,15 @@ function assertCurrentQualitySaveDirectories(
 
 /**
  * Validate the ignored report destination, then create and recheck its directory chain.
+ *
  * Use immediately before a user's accepted report is written.
+ * Error behavior: throws CLIError with exit code 2 when the destination is not Git-ignored or any component cannot be created as a real directory, so
+ * quality state never lands in version control.
+ *
+ * @param projectRoot - realpath-resolved repository root that owns the report
+ * @param relativeReportPath - prospective report path relative to `projectRoot`
+ * @param deps - injected CLI error type and optional directory creator used by tests
+ * @returns the absolute directory the report may be written into
  */
 function ensureQualitySaveDirectory(
   projectRoot: string,
@@ -387,7 +456,21 @@ function ensureQualitySaveDirectory(
   );
 }
 
-/** Write one validated report with exclusive-create semantics and return its path. */
+/**
+ * Write one validated report with exclusive-create semantics and return its path.
+ *
+ * Exclusive create plus a random suffix means two concurrent saves never overwrite one another; the bounded retry exists so a collision reports as an
+ * error rather than looping forever.
+ * Side effect: writes the report file into the project's gitignored quality log directory.
+ *
+ * Error behavior: throws CLIError with exit code 2 when no unique filename could be allocated.
+ *
+ * @param projectRoot - realpath-resolved repository root that owns the report
+ * @param agent - agent id embedded in the generated filename
+ * @param serializedReport - validated report JSON written verbatim
+ * @param deps - injected CLI error type and optional directory creator used by tests
+ * @returns the absolute path of the written report
+ */
 function writeQualityReport(
   projectRoot: string,
   agent: AgentId,
@@ -433,7 +516,15 @@ function writeQualityReport(
   );
 }
 
-/** Resolve the selected project to a real directory, or reject with the save contract's message. */
+/**
+ * Resolve the selected project to a real directory, or reject with the save contract's message.
+ * Error behavior: throws CLIError with exit code 2 for a missing path, a non-directory, or an unresolvable symlink, so a report can only ever be
+ * attributed to a real project root.
+ *
+ * @param projectPath - project path as the user supplied it
+ * @param deps - injected CLI error type
+ * @returns the realpath-resolved project root; never empty
+ */
 function resolveSelectedProjectRoot(
   projectPath: string,
   deps: Pick<QualityCommandDeps, "CLIError">,
@@ -452,10 +543,8 @@ function resolveSelectedProjectRoot(
 /**
  * Reject a report that belongs to another project or another goat-flow version.
  *
- * Ownership is checked against the realpath of both sides so a symlinked or
- * relative `project_path` cannot smuggle a report into a different project's
- * history; version equality keeps saved reports comparable across `quality
- * history` and `quality diff`.
+ * Ownership is checked against the realpath of both sides so a symlinked or relative `project_path` cannot smuggle a report into a different
+ * project's history; version equality keeps saved reports comparable across `quality history` and `quality diff`.
  *
  * @param report - the report's own project path and version fields
  * @param projectRoot - realpath of the selected project the caller named
@@ -509,12 +598,13 @@ export interface PersistQualityReportOptions {
 }
 
 /** Recursively scrub every accepted report string while preserving its shape. */
-function scrubQualityReportStrings(value: unknown): unknown {
-  if (typeof value === "string") return scrubDurableText(value);
-  if (Array.isArray(value)) return value.map(scrubQualityReportStrings);
-  if (value === null || typeof value !== "object") return value;
+function scrubQualityReportStrings(reportNode: unknown): unknown {
+  if (typeof reportNode === "string") return scrubDurableText(reportNode);
+  if (Array.isArray(reportNode))
+    return reportNode.map(scrubQualityReportStrings);
+  if (reportNode === null || typeof reportNode !== "object") return reportNode;
   return Object.fromEntries(
-    Object.entries(value).map(([key, child]) => [
+    Object.entries(reportNode).map(([key, child]) => [
       key,
       scrubQualityReportStrings(child),
     ]),
@@ -663,7 +753,13 @@ async function handleQualityPromptSubcommand(
   }
 }
 
-/** Dispatch quality subcommands through focused branch handlers. */
+/**
+ * Dispatch quality subcommands through focused branch handlers.
+ *
+ * @param options - parsed CLI options; `qualitySubcommand` selects the handler
+ * @param deps - injected CLI error type, artifact formatter, agent list, and output writer
+ * @returns nothing; the selected handler owns all output
+ */
 export async function handleQualityCommand(
   options: ParsedCLI,
   deps: QualityCommandDeps,

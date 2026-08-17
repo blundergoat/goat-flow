@@ -1,6 +1,12 @@
 /**
- * Setup and quality controller helpers for the dashboard Alpine app.
- * These functions are classic-script globals called by thin methods in app.ts.
+ * Powers the dashboard's Setup and Quality tabs: detecting a project's stack, generating the setup prompt, and running quality reports.
+ *
+ * A user lands here after picking a project on Home, then either opens Setup to get install guidance or opens Quality to assess what is installed.
+ *
+ * Everything in this file is a classic-script global called by thin Alpine methods in app.ts, so:
+ * - state lives on the Alpine component and is mutated in place, never returned
+ * - every network path is best-effort, because a failed fetch must leave the visible tab usable
+ * - stale replies are discarded, since the user can switch project, agent, or mode mid-request
  */
 
 const DEFAULT_SETUP_COMMANDS: SetupCommands = {
@@ -69,11 +75,11 @@ type DashboardQualityGenerateOptions = Partial<
 >;
 
 /**
- * Resolve an agent's human-readable name for setup and quality labels.
+ * Turns an agent id into the name the user actually sees on Setup and Quality buttons and labels.
  *
- * @param ctx - dashboard state holding the supported-agent list
- * @param agentId - agent to name; ids absent from the list are still rendered rather than dropped
- * @returns the agent's display name, or `agentId` itself when the list has no entry for it
+ * @param ctx - dashboard state holding the supported-agent list the server sent
+ * @param agentId - agent to name; an id the server did not list still renders as itself rather than vanishing from the button
+ * @returns the display name, or the bare id when the list has no entry, so a label is never blank
  */
 function dashboardAgentDisplayName(
   ctx: DashboardSetupQualityContext,
@@ -85,10 +91,10 @@ function dashboardAgentDisplayName(
 }
 
 /**
- * List the instruction files the selected agent installs, for the Setup view's explanatory line.
+ * Lists which instruction files the selected agent will write, shown as the Setup tab's "this will touch" line.
  *
- * @param ctx - dashboard state; `setupSelectedAgent` chooses whose surfaces are listed
- * @returns comma-separated surface list, or the bare agent id when that agent is not in the list
+ * @param ctx - dashboard state; the agent chosen in the Setup dropdown decides which surfaces are listed
+ * @returns a comma-separated list, or the bare agent id when the agent is unknown, so the line still names something
  */
 function dashboardSetupInstructionSurfaces(
   ctx: DashboardSetupQualityContext,
@@ -100,11 +106,11 @@ function dashboardSetupInstructionSurfaces(
 }
 
 /**
- * Look up one configured quality preset by id.
+ * Finds one configured quality preset so a Quality card can show the prompt the user set up.
  *
- * @param ctx - dashboard state holding the loaded presets
- * @param presetId - preset to find; an unknown id is a normal miss, not an error
- * @returns the matching preset, or null when presets have not loaded yet or the id is unknown
+ * @param ctx - dashboard state holding presets fetched when the dashboard started
+ * @param presetId - preset to find; an unknown id is a normal miss while presets are still loading
+ * @returns the preset, or null when presets have not arrived yet, which the caller shows as a card without prompt text
  */
 function dashboardQualityModePreset(
   ctx: DashboardSetupQualityContext,
@@ -140,13 +146,12 @@ function dashboardHarnessQualityPrompt(): string {
 }
 
 /**
- * Build the Quality view's mode cards in display order.
- * Preset-backed cards render before their preset resolves, so a card can exist with no prompt text
- * yet; callers must treat a missing prompt as "not ready" rather than "empty prompt".
+ * Builds the cards the user picks from on the Quality tab, in the order they appear on screen.
  *
- * @param ctx - dashboard state supplying the loaded presets and the selected project
- * @returns the mode cards in display order; `prompt` is undefined on a preset-backed card whose
- *   preset has not loaded
+ * Cards render before their presets arrive, so a card can exist with no prompt yet; treat a missing prompt as "not ready", not "empty".
+ *
+ * @param ctx - dashboard state supplying loaded presets and the selected project
+ * @returns the cards in display order; `prompt` is undefined on a preset-backed card whose preset has not loaded yet
  */
 function dashboardQualityModes(
   ctx: DashboardSetupQualityContext,
@@ -197,10 +202,10 @@ function dashboardQualityModes(
 }
 
 /**
- * Resolve the Quality mode card the user currently has selected.
+ * Resolves which Quality card the user currently has highlighted, so the launch button and prompt match their choice.
  *
- * @param ctx - dashboard state; `selectedQualityModeId` chooses the card
- * @returns the selected card, or null before a choice is made or when the stored id matches no card
+ * @param ctx - dashboard state; the card the user clicked is remembered as `selectedQualityModeId`
+ * @returns the selected card, or null before the user picks one, which leaves the launch button on its neutral label
  */
 function dashboardSelectedQualityModeMeta(
   ctx: DashboardSetupQualityContext,
@@ -218,11 +223,10 @@ function dashboardQualityControllingWorkspace(): string {
 }
 
 /**
- * Single-quote text for the shell snippets embedded in generated quality-report prompts.
+ * Quotes text for the shell commands embedded in a generated quality prompt, so a project path with spaces still pastes and runs.
  *
- * @param unquotedText - raw text such as a project path; embedded single quotes are escaped, so any
- *   path the user can select stays one shell word
- * @returns the quoted text including its surrounding quotes; never empty
+ * @param unquotedText - raw text, usually a project path the user picked; embedded quotes are escaped so it stays one shell word
+ * @returns the quoted text including its surrounding quotes; never empty, so the command never loses an argument
  */
 function dashboardQualityShellQuote(unquotedText: string): string {
   return `'${unquotedText.replace(/'/g, "'\\''")}'`;
@@ -249,12 +253,12 @@ function dashboardQualityReportProjectPath(
 }
 
 /**
- * Build the label shown on the Quality launch button.
- * Prefers the preset's own name so the button matches what the user configured, falling back to the
- * mode label and finally to the target agent id when no mode is selected.
+ * Builds the text on the Quality launch button so the user can see exactly what is about to run, and against which agent.
+ *
+ * The preset's own name wins so the button echoes what the user configured, then the mode label, then the target agent id.
  *
  * @param ctx - dashboard state supplying the selected mode, target agent, and active runner
- * @returns the launch label; never empty
+ * @returns the button label; never empty, because an unlabelled launch button gives the user nothing to check before clicking
  */
 function dashboardQualityLaunchLabel(
   ctx: DashboardSetupQualityContext,
@@ -269,13 +273,13 @@ function dashboardQualityLaunchLabel(
 }
 
 /**
- * Build the report-logging contract appended to every generated quality prompt.
- * This half of the prompt tells the agent where the report must be saved and what schema it must
- * satisfy, so a saved report stays loadable by `quality history`.
+ * Builds the "where to save the report" half of a quality prompt, so the run a user launches lands in their history rather than a transcript.
+ *
+ * It tells the agent the owning project, the exact filename rules, and the schema the report must satisfy to stay loadable by `quality history`.
  *
  * @param ctx - dashboard state supplying the target agent and selected project
- * @param mode - selected mode; decides the owning project and the mode name written into the contract
- * @returns the contract block as newline-joined Markdown; never empty
+ * @param mode - the Quality card the user picked; decides which project owns the saved report
+ * @returns the contract block as newline-joined Markdown; never empty, since a prompt without it produces a report nobody can find again
  */
 function dashboardQualityReportLogPrompt(
   ctx: DashboardSetupQualityContext,
@@ -347,11 +351,11 @@ function dashboardQualityReportLogPrompt(
 }
 
 /**
- * Assemble one mode's full prompt: the preset text, the scope block, then the report-log contract.
+ * Assembles the full prompt the user copies or launches: the preset text, the scope block, then the report-log contract.
  *
- * @param ctx - dashboard state supplying the controlling workspace and the selected target project
- * @param mode - selected mode; one whose preset has not loaded carries no prompt text yet
- * @returns the complete prompt, or an empty string when the mode has no prompt text to build on
+ * @param ctx - dashboard state supplying the controlling workspace and the project the user selected
+ * @param mode - the Quality card the user picked; one whose preset has not loaded yet carries no prompt text
+ * @returns the complete prompt, or an empty string when there is nothing to build on, which the Quality tab shows as a card that cannot launch yet
  */
 function dashboardBuildQualityModePrompt(
   ctx: DashboardSetupQualityContext,
@@ -378,13 +382,13 @@ function dashboardBuildQualityModePrompt(
 }
 
 /**
- * Detect the selected project's stack and existing GOAT Flow setup state.
- * Every payload field is read through a typed fallback because the response is untrusted JSON, so a
- * partial or malformed reply still leaves the Setup form usable instead of half-populated.
- * Error behavior: never throws; transport failures and error payloads surface as a toast.
+ * Fills the Setup tab's form by asking the server what languages, commands, agents, and goat-flow artifacts the selected project already has.
  *
- * @param ctx - dashboard state mutated in place with the detected stack, agents, and existing artifacts
- * @returns nothing; callers read `ctx.setupData` after awaiting
+ * Runs when the user picks a project or hits Re-detect, and is the step that decides what the generated setup prompt will claim.
+ *
+ * Every field is read through a typed fallback because the reply is untrusted JSON, so:
+ * - a partial response still leaves a usable form instead of half-filled inputs
+ * - Error behavior: never throws; a dead endpoint or an error payload surfaces as a toast and keeps the previous values
  */
 async function dashboardDetectStack(
   ctx: DashboardSetupQualityContext,
@@ -396,6 +400,7 @@ async function dashboardDetectStack(
     );
     const payload = readRecord(await res.json(), "Setup detection response");
     const error = readErrorMessage(payload);
+    // The server refused the path itself, so the user sees why instead of an empty form that looks like a clean project.
     if (error) {
       ctx.showToast(error, true);
       ctx.setupDetecting = false;
@@ -422,6 +427,7 @@ async function dashboardDetectStack(
         readBoolean(agents[agentId], defaultAgents[agentId] ?? false),
       ]),
     );
+    // No agent came back ticked, so the one the user already selected stays ticked and the Setup form never renders with nothing chosen.
     if (!Object.values(ctx.setupData.agents).some((v) => v)) {
       ctx.setupData.agents[ctx.setupSelectedAgent] = true;
     }
@@ -447,6 +453,7 @@ async function dashboardDetectStack(
     };
     ctx.setupData.nonGoatFlow = readStringArray(payload.nonGoatFlow);
   } catch (err) {
+    // For example, the user stopped the dashboard server, or picked a path on a network drive that went offline mid-detect.
     const msg = err instanceof Error ? err.message : String(err);
     ctx.showToast(msg || "Detection failed", true);
   }
@@ -454,15 +461,15 @@ async function dashboardDetectStack(
 }
 
 /**
- * Decide whether this agent's cached setup output can be returned without another request.
- * Switching project empties the whole cache because every cached output describes one project's
- * detected state, so a stale entry would misdescribe the newly selected target.
+ * Decides whether the Setup tab can show cached output instantly instead of making the user wait for another round trip.
+ *
+ * Switching project empties the whole cache, because every cached prompt describes one project's detected state.
  *
  * @param ctx - dashboard state whose cache is emptied in place when the project changed
  * @param agent - agent whose cached output is wanted
- * @param requestProjectPath - project this request targets; a mismatch clears every cached agent
- * @param shouldForce - true skips the cache so the caller always refetches
- * @returns the output to return immediately, or null when the caller must fetch
+ * @param requestProjectPath - project this request targets; a mismatch clears every cached agent rather than showing the old project's prompt
+ * @param shouldForce - true when the user clicked Regenerate, which skips the cache entirely
+ * @returns the output to show immediately, or null when the caller must fetch
  */
 function dashboardReusableSetupOutput(
   ctx: DashboardSetupQualityContext,
@@ -470,24 +477,27 @@ function dashboardReusableSetupOutput(
   requestProjectPath: string,
   shouldForce: boolean,
 ): string | null {
+  // The user switched projects, so every cached prompt now describes the wrong one and must go.
   if (ctx._setupOutputProjectPath !== requestProjectPath) {
     ctx.setupOutputs = {};
     ctx._setupOutputProjectPath = requestProjectPath;
   }
+  // The user asked for a fresh generation, so the cache is skipped even when it holds a usable prompt.
   if (shouldForce) return null;
   return ctx.setupOutputs[agent] || null;
 }
 
 /**
- * Generate setup output for a specific target agent and selected project.
- * Three staleness guards exist because the user can switch project or agent mid-request; only the
- * newest request may overwrite cached output or raise a toast.
- * Error behavior: never throws; an error payload or transport failure reports as a toast, returns null.
+ * Generates the setup prompt the user copies into their agent, for one target agent and the selected project.
  *
- * @param ctx - dashboard state whose `setupOutputs` cache is populated on success
+ * Guards exist because the user can switch project or agent while a request is in flight, so only the newest reply may land on screen.
+ *
+ * Error behavior: never throws; a failed generation reports as a toast and returns null, leaving whatever the pane already showed.
+ *
+ * @param ctx - dashboard state whose prompt cache is populated on success
  * @param targetAgent - agent to generate for; supplies both the request and the cache key
- * @param options - `force` true regenerates even when this agent already has cached output
- * @returns the generated output, or null when the request went stale or the server reported an error
+ * @param options - `force` true when the user clicked Regenerate, which bypasses cached output
+ * @returns the generated prompt, or null when the request went stale or the server reported an error, both of which leave the pane unchanged
  */
 async function dashboardGenerateSetupPromptForAgent(
   ctx: DashboardSetupQualityContext,
@@ -523,6 +533,7 @@ async function dashboardGenerateSetupPromptForAgent(
     const payload = readRecord(await res.json(), "Setup response");
     if (!isCurrentProject()) return null;
     const error = readErrorMessage(payload);
+    // The server could not compose a prompt for this agent, so the user is told which agent failed rather than seeing a silent no-op.
     if (error) {
       if (shouldApplyResult()) ctx.showToast(`${agent}: ${error}`, true);
       return null;
@@ -531,6 +542,7 @@ async function dashboardGenerateSetupPromptForAgent(
     if (shouldApplyResult()) ctx.setupOutputs[agent] = output;
     return output;
   } catch (err) {
+    // For example, the user closed the laptop mid-request and the fetch aborted, or they switched projects while the server was still composing.
     if (!isCurrentProject()) return null;
     const msg = err instanceof Error ? err.message : String(err);
     if (shouldApplyResult()) ctx.showToast(msg || "Generation failed", true);
@@ -565,13 +577,13 @@ function dashboardScheduleSetupPrompt(ctx: DashboardSetupQualityContext): void {
 }
 
 /**
- * Generate a quality prompt for the selected project and agent.
- * Error behavior: never throws; an error payload or transport failure reports as a toast and leaves
- * `qualityResult` null so the view keeps its empty state rather than showing a stale report.
+ * Generates the quality prompt or report for whichever Quality card the user selected, and drops the result into the Quality pane.
+ *
+ * Error behavior: never throws; a failure toasts and leaves the pane empty rather than showing a stale report the user might read as current.
  *
  * @param ctx - dashboard state mutated in place with the generated result and loading flag
- * @param options - `fast` allows a cached answer, `fresh` forces regenerated evidence
- * @returns nothing; callers read `ctx.qualityResult` after awaiting
+ * @param options - `fast` accepts a cached answer, `fresh` forces the server to regather evidence
+ * @returns nothing; the Quality pane reads `ctx.qualityResult` once this resolves
  */
 async function dashboardGenerateQuality(
   ctx: DashboardSetupQualityContext,
@@ -604,12 +616,14 @@ async function dashboardGenerateQuality(
     const payload = readRecord(await res.json(), "Quality response");
     if (!isCurrentRequest()) return;
     const error = readErrorMessage(payload);
+    // The server rejected this mode or project, so the user sees the reason instead of an empty Quality pane.
     if (error) {
       ctx.showToast(error, true);
     } else {
       ctx.qualityResult = readQualityResult(payload);
     }
   } catch (err) {
+    // For example, the user picked a project that was deleted from disk after the dashboard listed it.
     if (!isCurrentRequest()) return;
     const msg = err instanceof Error ? err.message : String(err);
     ctx.showToast(msg || "Quality prompt generation failed", true);
@@ -618,13 +632,14 @@ async function dashboardGenerateQuality(
 }
 
 /**
- * Load persisted quality-history rows for the selected project and agent.
- * Rows that fail to parse are dropped rather than rejecting the batch, so one corrupt saved report
- * cannot hide the rest of the user's history.
- * Error behavior: never throws; an error payload or transport failure reports as a toast.
+ * Loads the saved quality runs shown in the Quality tab's history table for the selected project and agent.
+ *
+ * Unparseable rows are dropped rather than failing the batch, so one corrupt saved report cannot hide the rest of the user's history.
+ *
+ * Error behavior: never throws; an unreachable endpoint reports as a toast and leaves the history table empty rather than stale.
  *
  * @param ctx - dashboard state mutated in place with rows, the latest entry, and any warnings
- * @returns nothing; callers read `ctx.qualityHistoryRows` after awaiting
+ * @returns nothing; the history table reads `ctx.qualityHistoryRows` once this resolves
  */
 async function dashboardGenerateQualityHistory(
   ctx: DashboardSetupQualityContext,

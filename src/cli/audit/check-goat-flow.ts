@@ -1,7 +1,8 @@
 /**
  * Defines the 16 setup-scope checks shown by `goat-flow audit`.
- * Use them to tell a project owner whether required learning-loop, workspace,
- * skill, config, and hook surfaces are structurally usable and version-current.
+ *
+ * Use them to tell a project owner whether required learning-loop, workspace, skill, config, and hook surfaces are structurally usable and
+ * version-current.
  * These checks inspect the selected project but never execute its application.
  */
 import type { BuildCheck } from "./types.js";
@@ -89,13 +90,11 @@ const REQUIRED_SKILL_DOC_FILES = [
   ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
 ];
 
-// Effective (non-comment) lines the goat-flow-gitignore template installs
-// into `.goat-flow/.gitignore`: the ignore-everything default, every
+// Effective (non-comment) lines the goat-flow-gitignore template installs into `.goat-flow/.gitignore`: the ignore-everything default, every
 // re-include of a committed surface, and the local-log content ignores.
-// Stale installs silently hide committed docs, hook policy, top-level guides,
-// or workspace anchors from git even though the files exist on disk.
-// Keep in sync with workflow/setup/reference/goat-flow-gitignore - a parity
-// test derives the expected list from that template, so drift fails CI.
+// Stale installs silently hide committed docs, hook policy, top-level guides, or workspace anchors from git even though the files exist on disk.
+//
+// Keep in sync with workflow/setup/reference/goat-flow-gitignore - a parity test derives the expected list from that template, so drift fails CI.
 export const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "*",
   "!.gitignore",

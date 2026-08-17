@@ -1,6 +1,9 @@
 /**
- * Resolves goat-flow package-root paths that need to work from source and packaged builds.
- * Template lookup and CLI self-reference should go through this module instead of hardcoding dist-relative paths.
+ * Resolves where goat-flow's own files live, so the same code works whether the user ran it from a clone or from an npx install.
+ *
+ * Every template lookup and CLI self-reference goes through here, because a hardcoded dist-relative path breaks in one of those two cases.
+ *
+ * A user hits this on their very first command: it is what lets `npx @blundergoat/goat-flow setup` find the templates it is about to install.
  */
 import { dirname, join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
@@ -72,8 +75,8 @@ export function resolveFirstExistingPackagePath(
 
 /**
  * Build the absolute CLI command used to run goat-flow from any project.
- * Returns a forward-slash path so it renders cleanly in user-visible setup
- * prompts and is identically callable from PowerShell, CMD, and Bash on
+ *
+ * Returns a forward-slash path so it renders cleanly in user-visible setup prompts and is identically callable from PowerShell, CMD, and Bash on
  * Windows, where Node accepts forward slashes everywhere argv-style.
  *
  * @returns shell-safe `node .../dist/cli/cli.js` command string
@@ -83,12 +86,12 @@ export function getCliCommand(): string {
 }
 
 /**
- * Detect whether goat-flow is running from a packaged install rather than a source
- * checkout. `package.json` `files` ships only `dist/` + `workflow/` plus a small
- * set of runtime helpers, so consumer environments do not have `src/` or
- * `.goat-flow/*` present. Code that reads source files at runtime, or validates
- * evidence_paths that point at framework-repo docs, must gate on this to avoid
- * spurious failures on consumer installs.
+ * Detect whether goat-flow is running from a packaged install rather than a source checkout.
+ * `package.json` `files` ships only `dist/` + `workflow/` plus a small set of runtime helpers, so consumer environments do not have `src/` or
+ * `.goat-flow/*` present.
+ *
+ * Code that reads source files at runtime, or validates evidence_paths that point at framework-repo docs, must gate on this to avoid spurious
+ * failures on consumer installs.
  *
  * @returns true - when packaged-mode override is set or source dashboard files are absent
  */

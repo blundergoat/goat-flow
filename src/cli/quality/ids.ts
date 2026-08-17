@@ -1,5 +1,11 @@
 /**
- * Positional finding-id generation for persisted quality reports.
+ * Generates the stable ids that let a saved quality finding be recognised again in a later run.
+ *
+ * These ids are what `quality diff` compares, so a user can ask "is this the same problem I saw last week, or a new one?".
+ *
+ * Ids are derived from the finding's own file, line, and text rather than its position in the list, so:
+ * - reordering findings does not make every one look new
+ * - a finding with no file or line still gets a usable id instead of colliding with its neighbours
  */
 import type {
   QualityFinding,

@@ -1,11 +1,12 @@
 /**
  * Project-management HTTP route handlers for the dashboard server.
  *
- * Backs `/api/plans` (read/write the active milestone plan), `/api/projects/list` (load and persist
- * the recent-projects list to disk), and `/api/projects/status` (classify adoption for one or many
- * paths). Mutating routes validate every incoming path through the route context before any write and
- * report failures as JSON status bodies rather than throwing. Persistence and identity normalisation
- * live in dashboard-project-state.ts; task-plan parsing in dashboard-task-state.ts.
+ * Backs `/api/plans` (read/write the active milestone plan), `/api/projects/list` (load and persist the recent-projects list to disk), and
+ * `/api/projects/status` (classify adoption for one or many paths).
+ *
+ * Mutating routes validate every incoming path through the route context before any write and report failures as JSON status bodies rather than
+ * throwing.
+ * Persistence and identity normalisation live in dashboard-project-state.ts; task-plan parsing in dashboard-task-state.ts.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname } from "node:path";
@@ -25,9 +26,8 @@ import {
 import { validateLocalPath } from "./local-paths.js";
 
 /**
- * Load the persisted recent-projects state, preferring the current state file and falling back to the
- * legacy projects-only file. Delegates to loadDashboardState, which swallows missing or malformed
- * files and returns empty state, so callers always receive a usable object.
+ * Load the persisted recent-projects state, preferring the current state file and falling back to the legacy projects-only file.
+ * Delegates to loadDashboardState, which swallows missing or malformed files and returns empty state, so callers always receive a usable object.
  */
 function readDashboardState(ctx: DashboardRouteContext) {
   return loadDashboardState(ctx.dashboardStateFile, ctx.legacyProjectsListFile);

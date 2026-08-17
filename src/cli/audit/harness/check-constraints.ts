@@ -1,7 +1,6 @@
 /**
- * Constraints concern: Do deterministic rules catch failures before the LLM runs?
- * 5 checks: deny-covers-secrets, deny-blocks-dangerous, deny-blocks-pipe-to-shell,
- * deny-hook-registered, settings-rules-matched.
+ * Constraints concern: Do deterministic rules catch failures before the LLM runs? 5 checks: deny-covers-secrets, deny-blocks-dangerous,
+ * deny-blocks-pipe-to-shell, deny-hook-registered, settings-rules-matched.
  */
 import type {
   AuditContext,
@@ -346,9 +345,8 @@ function findAgent(
 /**
  * Group deny-hook registration states for remediation.
  *
- * A missing hook, an unregistered hook, and a registered-but-wrong path all need
- * different fix text; keeping these buckets separate avoids telling users to
- * register a hook that does not exist or to recreate one that is only miswired.
+ * A missing hook, an unregistered hook, and a registered-but-wrong path all need different fix text; keeping these buckets separate avoids telling
+ * users to register a hook that does not exist or to recreate one that is only miswired.
  */
 function classifyDenyRegistration(agents: AuditContext["agents"]): {
   registered: string[];

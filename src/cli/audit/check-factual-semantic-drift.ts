@@ -1,7 +1,8 @@
 /**
- * Semantic-drift scanners for high-trust cold-path docs (code-map, glossary, ADRs). Where the
- * factual-claims checks compare exact strings, these read live source - classifier state unions,
- * server constants, the manifest - and flag the curated docs that quietly fall out of sync with it.
+ * Semantic-drift scanners for high-trust cold-path docs (code-map, glossary, ADRs).
+ * Where the factual-claims checks compare exact strings, these read live source - classifier state unions, server constants, the manifest - and flag
+ * the curated docs that quietly fall out of sync with it.
+ *
  * Runs only under `--check-content` because reading source on every audit would be too expensive.
  */
 import { AUDIT_VERSION } from "../constants.js";
@@ -384,10 +385,9 @@ function driftSkillsDoc(skillsDoc: string): ContentFinding[] {
 /**
  * Drift: glossary.md contains agent-specific or stale canonical pointers.
  *
- * Returns an empty finding list when no stale phrase is present; stale prose
- * reports as content findings rather than treated as a parser error.
- * The caller supplies already-read text, so this helper performs no IO and has
- * no recover path beyond returning every matched stale phrase as a finding.
+ * Returns an empty finding list when no stale phrase is present; stale prose reports as content findings rather than treated as a parser error.
+ * The caller supplies already-read text, so this helper performs no IO and has no recover path beyond returning every matched stale phrase as a
+ * finding.
  */
 function driftGlossary(glossary: string): ContentFinding[] {
   const findings: ContentFinding[] = [];
@@ -418,10 +418,11 @@ function driftGlossary(glossary: string): ContentFinding[] {
 /**
  * Drift: setup/01-system-overview.md oversells session logs as durable memory.
  *
- * Returns an empty finding list when neither retired phrase is present; matches
- * report warnings because setup prose is the source of future install behavior.
- * The caller supplies already-read text, so this helper performs no IO and has
- * no recover path beyond returning every matched stale phrase as a finding.
+ * Returns an empty finding list when neither retired phrase is present; matches report warnings because setup prose is the source of future install
+ * behavior.
+ *
+ * The caller supplies already-read text, so this helper performs no IO and has no recover path beyond returning every matched stale phrase as a
+ * finding.
  */
 function driftSetupOverview(setupOverview: string): ContentFinding[] {
   const findings: ContentFinding[] = [];

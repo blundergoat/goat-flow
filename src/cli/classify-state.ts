@@ -2,11 +2,9 @@
  * Classify a project's goat-flow adoption state by probing for config files,
  * skill directories, and AI instruction markers.
  *
- * This is what decides the status badge a user sees next to each project in
- * the dashboard project list, and the state printed by `goat-flow status` -
- * e.g. a user opens the dashboard and asks "which of my repos still need
- * setup or an upgrade?". Used by the dashboard `/api/projects/status`
- * endpoint and the `goat-flow status` CLI command.
+ * This is what decides the status badge a user sees next to each project in the dashboard project list, and the state printed by `goat-flow status` -
+ * e.g. a user opens the dashboard and asks "which of my repos still need setup or an upgrade?".
+ * Used by the dashboard `/api/projects/status` endpoint and the `goat-flow status` CLI command.
  */
 import {
   AUDIT_VERSION,
@@ -46,10 +44,9 @@ const CURRENT_VERSION_FAMILY = AUDIT_VERSION.split(".").slice(0, 2).join(".");
 let cachedAgentProfiles: AgentProfile[] | undefined;
 
 /**
- * Agent profiles, read lazily so merely importing this module never touches
- * the manifest. This module sits on the CLI's hot import path: if it read the
- * manifest at import time, a drifted install would crash `goat-flow --help`
- * before the user could see any guidance (the bug M03/1.13.0 fixed).
+ * Agent profiles, read lazily so merely importing this module never touches the manifest.
+ * This module sits on the CLI's hot import path: if it read the manifest at import time, a drifted install would crash `goat-flow --help` before the
+ * user could see any guidance (the bug M03/1.13.0 fixed).
  */
 function agentProfiles(): AgentProfile[] {
   // First call in this process -> load profiles from the manifest now.

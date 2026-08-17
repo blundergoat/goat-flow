@@ -1,8 +1,11 @@
 /**
  * Raw manifest reader and skill-artifact schema guard.
- * Use before setup, audit, or harness code consumes workflow metadata so users
- * get precise duplicate/path errors instead of incomplete installed skills.
- * This leaf module stays outside the harness import cycle. (search: "design.circular-import")
+ *
+ * Use before setup, audit, or harness code consumes workflow metadata so users get precise duplicate/path errors instead of incomplete installed
+ * skills.
+ * This leaf module stays outside the harness import cycle.
+ *
+ * (search: "design.circular-import")
  */
 import { readFileSync } from "node:fs";
 
@@ -465,10 +468,9 @@ function instructionSectionRegex(label: string): RegExp {
  * Resolved (label, pattern) pairs built from the manifest's required_sections.
  * Harness checks import this instead of hand-rolling their own section list.
  *
- * Reads the raw manifest JSON rather than the validated/cached `loadManifest`
- * result: `required_sections` is a straight passthrough field, so the value is
- * identical, and reading it here keeps this module free of the harness-check
- * import that would re-form the cycle described in the file header.
+ * Reads the raw manifest JSON rather than the validated/cached `loadManifest` result: `required_sections` is a straight passthrough field, so the
+ * value is identical, and reading it here keeps this module free of the harness-check import that would re-form the cycle described in the file
+ * header.
  *
  * @returns One entry per required section - its manifest label and the
  *   case-insensitive heading regex used to detect it in instruction files.

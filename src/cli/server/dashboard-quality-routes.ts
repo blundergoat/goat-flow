@@ -1,11 +1,12 @@
 /**
  * Quality-prompt and quality-history HTTP route handlers for the dashboard server.
  *
- * Backs `/api/quality` (compose a quality review prompt for one agent, optionally reusing a short-TTL
- * in-memory audit cache) and `/api/quality/history` (return persisted history rows plus the latest
- * trend summary). Query parameters are validated up front, with invalid agent/mode/limit values
- * answered as 400 JSON; downstream audit or filesystem failures are reported as JSON status bodies
- * rather than thrown. Report shaping lives in dashboard-reporting.ts; history loading in quality/history.ts.
+ * Backs `/api/quality` (compose a quality review prompt for one agent, optionally reusing a short-TTL in-memory audit cache) and
+ * `/api/quality/history` (return persisted history rows plus the latest trend summary).
+ *
+ * Query parameters are validated up front, with invalid agent/mode/limit values answered as 400 JSON; downstream audit or filesystem failures are
+ * reported as JSON status bodies rather than thrown.
+ * Report shaping lives in dashboard-reporting.ts; history loading in quality/history.ts.
  */
 import type { ServerResponse } from "node:http";
 import { runAudit } from "../audit/audit.js";
@@ -57,9 +58,9 @@ function qualityHistoryEntryMatchesFilters(
 }
 
 /**
- * Validated `/api/quality/history` query filters. A null `agent` or `qualityMode` means "no filter"
- * (return all), while `limit` is always a clamped positive count so callers cannot request an unbounded
- * or zero-row window.
+ * Validated `/api/quality/history` query filters.
+ * A null `agent` or `qualityMode` means "no filter" (return all), while `limit` is always a clamped positive count so callers cannot request an
+ * unbounded or zero-row window.
  */
 interface QualityHistoryFilters {
   agent: AgentId | null;
@@ -179,11 +180,11 @@ function getOrRunQualityAudit(
     const report = runAudit(fs, projectPath, {
       agentFilter: agent,
       harness: true,
-      // Generating a quality prompt is a read, whether the user is assessing goat-flow itself or a
-      // project they selected, so it stops at static evidence and never runs the project's own hook
-      // command. Every path that fills qualityAuditCache must keep this one static contract, because
-      // the cache key does not record the evidence level and a full report could otherwise be served
-      // to a passive request later.
+      // Generating a quality prompt is a read, whether the user is assessing goat-flow itself or a project they selected, so it stops at static
+      // evidence and never runs the project's own hook command.
+      //
+      // Every path that fills qualityAuditCache must keep this one static contract, because the cache key does not record the evidence level and a
+      // full report could otherwise be served to a passive request later.
       denyMechanismEvidenceLevel: "static",
     });
     writeQualityAuditCache(ctx, projectPath, agent, report);
@@ -239,10 +240,8 @@ function handleQualityRequest(
       sharedFacts,
     };
     const result = composeQuality(composeInput);
-    // Enforced Claude reporting launches cannot run the Bash saver (ADR-044),
-    // and the runner is chosen client-side after this response, so both
-    // persistence variants ship: `prompt` for copy/manual runs, `launchPrompt`
-    // for staged-draft dashboard sessions.
+    // Enforced Claude reporting launches cannot run the Bash saver (ADR-044), and the runner is chosen client-side after this response, so both
+    // persistence variants ship: `prompt` for copy/manual runs, `launchPrompt` for staged-draft dashboard sessions.
     const launchResult = composeQuality({
       ...composeInput,
       persistence: "staged-draft",

@@ -1,9 +1,9 @@
 /**
  * Terminal image upload validation and storage.
  *
- * Pure helpers used by the dashboard upload handler. Kept out of the HTTP
- * handler module so file-level constants, MIME tables, sanitization, and
- * containment checks can be unit-tested without spinning up an HTTP server.
+ * Pure helpers used by the dashboard upload handler.
+ * Kept out of the HTTP handler module so file-level constants, MIME tables, sanitization, and containment checks can be unit-tested without spinning
+ * up an HTTP server.
  */
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -116,8 +116,8 @@ export function detectImageExtension(bytes: Uint8Array): string | null {
 
 /**
  * Compose the upload directory path for one terminal session.
- * Always under `<targetPath>/.goat-flow/logs/uploads/<sessionId>/` and asserted to remain inside
- * `targetPath` to prevent path traversal via the session id.
+ * Always under `<targetPath>/.goat-flow/logs/uploads/<sessionId>/` and asserted to remain inside `targetPath` to prevent path traversal via the
+ * session id.
  *
  * @param targetPath Selected target project path that owns upload evidence.
  * @param sessionId Terminal session id used as the upload subdirectory.

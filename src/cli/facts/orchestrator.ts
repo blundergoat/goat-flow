@@ -1,8 +1,8 @@
 /**
  * Coordinates fact extraction for a project.
- * Full extraction combines stack detection, shared project facts, and per-agent
- * facts. Dashboard summary extraction can skip stack detection because that
- * shared report contract does not expose stack-derived fields.
+ *
+ * Full extraction combines stack detection, shared project facts, and per-agent facts.
+ * Dashboard summary extraction can skip stack detection because that shared report contract does not expose stack-derived fields.
  */
 import type { ProjectFacts, ReadonlyFS, AgentId, StackInfo } from "../types.js";
 import type { LoadedConfig } from "../config/types.js";

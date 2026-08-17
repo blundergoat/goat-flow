@@ -1,5 +1,9 @@
 /**
- * Router fact extraction - collects referenced paths from instruction file sections.
+ * Collects the file paths a user's instruction file points at, which is how the audit checks the Router Table actually resolves.
+ *
+ * A path listed in the Router Table gets disproportionately more agent usage, so a broken one quietly costs the user every session.
+ *
+ * Glob and template markers are recognised and left alone, since those are patterns rather than paths that must exist on disk.
  */
 import type { AgentFacts, ReadonlyFS } from "../../types.js";
 import { extractSection } from "./instruction.js";

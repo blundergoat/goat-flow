@@ -1,13 +1,12 @@
 /**
  * Turns parsed milestones into the files a user gets from `plans export`.
- * This is the write half of the command: it redacts anything that should not leave the
- * author's machine, renders each milestone as readable Markdown, and refuses to write when a
- * destination would clobber something or cannot be created.
  *
- * Redaction runs before rendering rather than after, so a value that should never be shared
- * cannot reach a rendered string in the first place. Destination checks all happen up front
- * too: a partial export that wrote three files and then failed would leave the user with a
- * directory they have to reason about, so nothing is written until every path is proven safe.
+ * This is the write half of the command: it redacts anything that should not leave the author's machine, renders each milestone as readable Markdown,
+ * and refuses to write when a destination would clobber something or cannot be created.
+ *
+ * Redaction runs before rendering rather than after, so a value that should never be shared cannot reach a rendered string in the first place.
+ * Destination checks all happen up front too: a partial export that wrote three files and then failed would leave the user with a directory they have
+ * to reason about, so nothing is written until every path is proven safe.
  */
 import {
   existsSync,
@@ -243,8 +242,9 @@ function assertOutputPathsAvailable(
 
 /**
  * Require every export destination to be a single-link regular file or absent before writing.
- * Runs even under force: replacement authorizes new content, never writing
- * through a symlink, hardlink, or directory that shadows a generated filename.
+ *
+ * Runs even under force: replacement authorizes new content, never writing through a symlink, hardlink, or directory that shadows a generated
+ * filename.
  * Throws a usage-safe error naming the first unsafe destination so nothing is written.
  */
 function assertWritableDestinations(outputPaths: string[]): void {

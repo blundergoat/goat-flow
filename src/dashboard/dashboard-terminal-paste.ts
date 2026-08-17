@@ -380,10 +380,9 @@ function dashboardHandlePasteSubmitOutput(
     refs.pasteSubmitAwaitingCommit = false;
     if (alreadySubmitted) return;
     refs.pasteSubmitFallbackSubmitted = false;
-    // A "[Pasted text]" marker echoed back when nothing is awaiting submit
-    // means the paste was already submitted (e.g. immediate-submit path for
-    // single-line pastes) or originated outside the dashboard. Don't fire a
-    // spurious extra Enter.
+    // A "[Pasted text]" marker echoed back when nothing is awaiting submit means the paste was already submitted (e.g. immediate-submit path for
+    // single-line pastes) or originated outside the dashboard.
+    // Don't fire a spurious extra Enter.
     if (!hasPendingPaste) return;
     if (target?.runner === "claude" || target?.runner === "antigravity") {
       dashboardArmPasteSubmitTimer(ctx, sessionId, {
@@ -492,16 +491,15 @@ function dashboardSendToTerminalSession(
   const prepared = dashboardPreparePasteBody(
     adapt ? ctx.adaptPrompt(text, target.runner) : text,
   );
-  // Bracketed paste prevents shells and REPLs from treating multi-line prompts as
-  // a stream of independent keystrokes. Claude Code commits long pastes
-  // asynchronously, so submit on its pasted-text echo or fall back after a short
-  // bounded delay for CLIs that do not echo that state.
+  // Bracketed paste prevents shells and REPLs from treating multi-line prompts as a stream of independent keystrokes.
+  // Claude Code commits long pastes asynchronously, so submit on its pasted-text echo or fall back after a short bounded delay for CLIs that do not
+  // echo that state.
   const pasteData = "\x1b[200~" + prepared + "\x1b[201~";
-  // Claude/Antigravity only compress MULTI-LINE pastes into the "[Pasted text]"
-  // marker we detect to submit fast. Single-line pastes render inline with no
-  // marker, so waiting hits the 15s fallback. Submit those immediately to
-  // match the existing single-line/non-Claude semantics. Verify this
-  // assumption against captured `agy` PTY output before changing it.
+  // Claude/Antigravity only compress MULTI-LINE pastes into the "[Pasted text]" marker we detect to submit fast.
+  // Single-line pastes render inline with no marker, so waiting hits the 15s fallback.
+  // Submit those immediately to match the existing single-line/non-Claude semantics.
+  //
+  // Verify this assumption against captured `agy` PTY output before changing it.
   const isMultiLinePaste = prepared.includes("\n");
   const delayedSubmit =
     (target.runner === "claude" || target.runner === "antigravity") &&
@@ -632,12 +630,12 @@ function dashboardArmLaunchPromptNoOutputFallback(
 }
 
 /**
- * Arm a short cap once runner output proves the PTY stream is live. The cap
- * is unconditional by design: it exists for runners that emit output but never
- * surface a known readiness marker (custom prompts, alternate CLIs). Gating
- * the force-send on a readiness check would stall those sessions forever; the
- * sibling quiet-window path covers the more common "output settles then send"
- * case.
+ * Arm a short cap once runner output proves the PTY stream is live.
+ * The cap is unconditional by design: it exists for runners that emit output but never surface a known readiness marker (custom prompts, alternate
+ * CLIs).
+ *
+ * Gating the force-send on a readiness check would stall those sessions forever; the sibling quiet-window path covers the more common "output settles
+ * then send" case.
  */
 function dashboardArmLaunchPromptAfterOutputFallback(
   ctx: DashboardTerminalContext,

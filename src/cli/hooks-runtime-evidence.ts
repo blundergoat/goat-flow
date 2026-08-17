@@ -1,7 +1,7 @@
 /**
  * Runs explicit, bounded deny-hook classifier probes for one selected checkout.
- * Use this module when a user asks whether the managed local hook blocks fixed
- * scenarios; reports and events omit command operands and captured process text.
+ * Use this module when a user asks whether the managed local hook blocks fixed scenarios; reports and events omit command operands and captured
+ * process text.
  */
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";

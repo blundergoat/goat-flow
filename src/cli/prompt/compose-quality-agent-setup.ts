@@ -1,11 +1,10 @@
 /**
  * Composer for the agent-setup quality-assessment prompt.
  *
- * Builds the long reporting-only prompt that asks an agent to judge how well
- * goat-flow was installed for one project + agent pairing. It gathers the prompt
- * context once (`buildAgentSetupContext`), then appends each Markdown section -
- * rules, audit summary, Step 0 grounding, pre-check, setup quality, skill testing,
- * system assessment, output format, and the JSON-report contract - as line blocks.
+ * Builds the long reporting-only prompt that asks an agent to judge how well goat-flow was installed for one project + agent pairing.
+ * It gathers the prompt context once (`buildAgentSetupContext`), then appends each Markdown section - rules, audit summary, Step 0 grounding,
+ * pre-check, setup quality, skill testing, system assessment, output format, and the JSON-report contract - as line blocks.
+ *
  * Pure string assembly; inputs are the manifest, agent profile, and QualityInput.
  */
 import { getAgentProfile } from "../agents/registry.js";
@@ -37,11 +36,11 @@ import {
 type SkillFacts = ReturnType<typeof loadManifest>["facts"]["skills"];
 
 /**
- * Precomputed values every `append*` section needs, resolved once by
- * `buildAgentSetupContext` so the section helpers stay pure string assembly and
- * never re-read the manifest or agent profile. Agent-relative paths are already
- * resolved here (skills dir, settings/hook config, instruction file) and may be
- * null when the agent profile has no such surface.
+ * Precomputed values every `append*` section needs, resolved once by `buildAgentSetupContext` so the section helpers stay pure string assembly and
+ * never re-read the manifest or agent profile.
+ *
+ * Agent-relative paths are already resolved here (skills dir, settings/hook config, instruction file) and may be null when the agent profile has no
+ * such surface.
  */
 interface AgentSetupPromptContext {
   input: QualityInput;
@@ -286,9 +285,8 @@ function appendGroundingAndReadNext(
 }
 
 /**
- * Append the "Read next" reading list - instruction file, config, skill
- * references, architecture, skills - plus the INDEX-first learning-loop retrieval
- * protocol that forbids broad-loading durable learning buckets.
+ * Append the "Read next" reading list - instruction file, config, skill references, architecture, skills - plus the INDEX-first learning-loop
+ * retrieval protocol that forbids broad-loading durable learning buckets.
  *
  * @param lines - prompt line buffer; appended to in place
  * @param ctx - resolved prompt context supplying instruction/skills/hook paths

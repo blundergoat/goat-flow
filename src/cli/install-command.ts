@@ -1,7 +1,8 @@
 /**
  * Runs the deterministic install command: preview, admission, Bash, then post-install writes.
- * Kept apart from the command router because install is the only command that shows a user a
- * decision, spawns the bundled installer, and then verifies what that installer produced.
+ *
+ * Kept apart from the command router because install is the only command that shows a user a decision, spawns the bundled installer, and then
+ * verifies what that installer produced.
  * The preview built here is the single authority both admission and apply consume.
  */
 import { readFileSync } from "node:fs";
@@ -67,8 +68,8 @@ function deriveInstallFlags(
 
 /**
  * Build the installer flag list from user choices plus the preview's own decisions.
- * The preview is the single authority on which managed paths this package leaves alone,
- * so apply receives that decision instead of re-deriving it in Bash.
+ * The preview is the single authority on which managed paths this package leaves alone, so apply receives that decision instead of re-deriving it in
+ * Bash.
  *
  * @param options - parsed user choices carrying the target and any explicit authority
  * @param agent - selected agent whose managed mirror is installed
@@ -519,8 +520,8 @@ function pendingConfigMigrationEdits(
 
 /**
  * Name every in-place edit this run will make to the user's config, keyed by path.
- * Users cannot verify "this file may change" after the fact, so the row names each edit
- * install will perform: the requested version bump plus any retired block or missing toggle.
+ * Users cannot verify "this file may change" after the fact, so the row names each edit install will perform: the requested version bump plus any
+ * retired block or missing toggle.
  *
  * @param options - parsed user choices carrying the target and any explicit migration flag
  * @param agent - selected agent whose adoption state can derive a version migration

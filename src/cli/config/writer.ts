@@ -70,8 +70,7 @@ function normalizeHookIdentifier(hookIdentifier: string): string {
 
 /**
  * Parse one raw `hooks.<id>` YAML entry into its canonical id and state.
- * Returns null for malformed entries (no boolean `enabled`) so the caller
- * can skip them - a user's hand-edited config never crashes a toggle write.
+ * Returns null for malformed entries (no boolean `enabled`) so the caller can skip them - a user's hand-edited config never crashes a toggle write.
  *
  * @param hookId - raw hook key as written in config.yaml (may be a legacy alias)
  * @param value - raw YAML value under that key

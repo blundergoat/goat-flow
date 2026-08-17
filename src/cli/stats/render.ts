@@ -1,6 +1,9 @@
 /**
- * Output renderers for `goat-flow stats` - text, JSON, markdown.
- * Text is the default for terminals; JSON/markdown are for CI and PR comments.
+ * Renders `goat-flow stats` output in whichever form the user asked for: text, JSON, or markdown.
+ *
+ * Text is the default a person reads in a terminal; JSON and markdown exist for CI jobs and pasting into a pull request.
+ *
+ * The same report object feeds all three, so a number shown in the terminal and one posted to a PR can never disagree.
  */
 import type {
   BucketSection,
@@ -249,9 +252,8 @@ function renderStatsCheckPass(check: StatsCheckReport): string {
 /**
  * Render a failing check with actionable findings first and advisory warnings second.
  *
- * Contract: when frontmatter metadata is the reason for failure, append the
- * stats maintenance command because reviewers cannot infer the remediation from
- * the raw rule names alone.
+ * Contract: when frontmatter metadata is the reason for failure, append the stats maintenance command because reviewers cannot infer the remediation
+ * from the raw rule names alone.
  */
 function renderStatsCheckFailure(check: StatsCheckReport): string {
   const lines = [

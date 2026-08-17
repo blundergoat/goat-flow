@@ -1,7 +1,8 @@
 /**
  * Builds the static agent/tool threat artifact shown in terminals, JSON, PRs, and releases.
- * Use this report when a reviewer needs one evidence-backed view of local shell, network,
- * file-write, push, secret-path, and audit-log posture before trusting an agent setup.
+ *
+ * Use this report when a reviewer needs one evidence-backed view of local shell, network, file-write, push, secret-path, and audit-log posture before
+ * trusting an agent setup.
  * Collection reuses local facts and present-only audit evidence; it never executes target code.
  */
 import type {

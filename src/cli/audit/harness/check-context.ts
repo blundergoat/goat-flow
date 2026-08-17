@@ -1,8 +1,8 @@
 /**
  * Context concern: Is the agent's map accurate and structurally complete?
- * 5 deterministic checks (instruction size, execution loop, doc paths,
- * instruction sections, boundary guidance). Content-quality judgments (e.g. footgun evidence
- * currency) live in the `quality` assessment prompt, not here.
+ *
+ * 5 deterministic checks (instruction size, execution loop, doc paths, instruction sections, boundary guidance).
+ * Content-quality judgments (e.g. footgun evidence currency) live in the `quality` assessment prompt, not here.
  */
 import type {
   AuditContext,
@@ -57,9 +57,8 @@ interface DocPathResolution {
 /**
  * Mutable aggregate carried across router, architecture, and core-doc checks.
  *
- * Contract: counts and finding lists only accumulate as doc sources are scanned -
- * nothing resets between checks - and `hasHardFailure` latches true to force a
- * failing result even when every counted path resolves.
+ * Contract: counts and finding lists only accumulate as doc sources are scanned - nothing resets between checks - and `hasHardFailure` latches true
+ * to force a failing result even when every counted path resolves.
  */
 interface DocPathAccumulator {
   totalPaths: number;
@@ -446,11 +445,11 @@ function collectCoreDocPaths(
 /**
  * Consolidate router, architecture, and core-doc path validation.
  *
- * This reads only the audited project's filesystem and reports diagnostics
- * instead of throwing because context integrity should return every stale path
- * in one pass. The shape is branch-heavy to preserve the old check boundaries:
- * router-table paths, architecture presence, architecture refs, and curated
- * docs all feed one dashboard detail payload.
+ * This reads only the audited project's filesystem and reports diagnostics instead of throwing because context integrity should return every stale
+ * path in one pass.
+ *
+ * The shape is branch-heavy to preserve the old check boundaries: router-table paths, architecture presence, architecture refs, and curated docs all
+ * feed one dashboard detail payload.
  */
 function checkAllDocPaths(ctx: AuditContext) {
   const accumulator: DocPathAccumulator = {

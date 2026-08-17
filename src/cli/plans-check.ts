@@ -1,8 +1,11 @@
 /**
- * Local contract checker behind `plans check`. Default mode preserves legacy
- * effort arithmetic; strict mode additionally validates current-plan structure,
- * local dependencies, and lifecycle snapshots. Plan-level 70/20/10 mix drift
- * stays advisory. User-invoked only - never part of audit or quality gates.
+ * Local contract checker behind `plans check`.
+ * Default mode preserves legacy effort arithmetic; strict mode additionally validates current-plan structure, local dependencies, and lifecycle
+ * snapshots.
+ *
+ * Plan-level 70/20/10 mix drift stays advisory.
+ *
+ * User-invoked only - never part of audit or quality gates.
  */
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
@@ -58,8 +61,7 @@ const STRICT_STRUCTURAL_WARNINGS = new Set([
 
 /**
  * Render `(18 product / 5 proof / 2 other)`-style split text for report lines.
- * Use wherever the report echoes a split back in the same notation the plan
- * author wrote, so the fix is a copy-edit away.
+ * Use wherever the report echoes a split back in the same notation the plan author wrote, so the fix is a copy-edit away.
  *
  * @param split - minutes per category; zeros render literally so gaps stay visible
  * @returns the parenthesised split text
@@ -71,11 +73,11 @@ function renderSplit(split: PlanEffortSplit): string {
 /**
  * Decide which warnings are fatal once strict mode is already established.
  *
- * Split out of {@link isValidationWarning} so each function stays inside the
- * project complexity budget; callers should reach the strict rules through
- * that entry point rather than calling this directly. Receipt-shape warnings
- * stay advisory unless a claim or a live clock depends on the receipt, so a
- * hand-written historical receipt beside a retrospective Actual passes here.
+ * Split out of {@link isValidationWarning} so each function stays inside the project complexity budget; callers should reach the strict rules through
+ * that entry point rather than calling this directly.
+ *
+ * Receipt-shape warnings stay advisory unless a claim or a live clock depends on the receipt, so a hand-written historical receipt beside a
+ * retrospective Actual passes here.
  *
  * @param warning - one parser warning from the milestone record
  * @param receiptIsClaimed - whether an Actual derives its authority from the receipt
@@ -128,12 +130,11 @@ function isValidationWarning(
 /**
  * Convert fatal parser warnings into source-labelled check errors.
  *
- * A receipt is evidence for a claim or a live clock, so its shape is fatal when
- * an Actual claims authority from it or its state is active. Hand-written
- * historical receipts beside retrospective Actuals remain advisory because
- * neither a measurement claim nor executing workflow depends on them.
- * `measured` Actuals still fail twice over - here and in the reconciliation
- * check that compares their minutes against the receipt allocation.
+ * A receipt is evidence for a claim or a live clock, so its shape is fatal when an Actual claims authority from it or its state is active.
+ * Hand-written historical receipts beside retrospective Actuals remain advisory because neither a measurement claim nor executing workflow depends on
+ * them.
+ *
+ * `measured` Actuals still fail twice over - here and in the reconciliation check that compares their minutes against the receipt allocation.
  *
  * @param record - one parsed milestone
  * @param strict - whether strict current-plan validation is selected
@@ -219,8 +220,7 @@ function collectSplitErrors(
 /**
  * Check an optional forecast band against its own ordering and the headline.
  *
- * Validation exists only when the band does: a milestone that forecasts one
- * point stays valid, so this returns nothing rather than demanding notation
+ * Validation exists only when the band does: a milestone that forecasts one point stays valid, so this returns nothing rather than demanding notation
  * legacy and in-flight plans were never written with.
  */
 function collectForecastRangeErrors(record: PlanExportRecord): string[] {
@@ -601,10 +601,9 @@ function collectLifecycleErrors(record: PlanExportRecord): string[] {
 
 /**
  * Collect deterministic structure, lifecycle, and arithmetic errors for one milestone.
- * Branches gate on what the author declared because each declaration creates
- * its own obligation: notation errors always apply, split-sum errors need a
- * declared split, task-coverage errors need declared tasks - which is why a
- * legacy milestone falls through every check untouched.
+ *
+ * Branches gate on what the author declared because each declaration creates its own obligation: notation errors always apply, split-sum errors need
+ * a declared split, task-coverage errors need declared tasks - which is why a legacy milestone falls through every check untouched.
  *
  * @param record - parsed milestone; one declaring nothing reaches no check and returns clean
  * @param strict - whether current-format authoring obligations are mandatory
@@ -641,9 +640,9 @@ function collectMilestoneErrors(
 
 /**
  * Reject flags that have no meaning for the read-only check report.
- * `--format` is deliberately ignored rather than rejected: its default value is
- * TTY-dependent, so rejecting it would break piped invocations that never
- * passed the flag.
+ *
+ * `--format` is deliberately ignored rather than rejected: its default value is TTY-dependent, so rejecting it would break piped invocations that
+ * never passed the flag.
  *
  * @param options - parsed CLI options
  * @throws CLIError when a write-oriented flag reaches the check
@@ -668,8 +667,8 @@ function assertCheckUsage(options: ParsedCLI): void {
 
 /**
  * Check one plan directory and report to stdout.
- * Exit code 1 signals deterministic contract or arithmetic errors; mix drift
- * and default-mode legacy absence never fail. Records are redacted before use.
+ * Exit code 1 signals deterministic contract or arithmetic errors; mix drift and default-mode legacy absence never fail.
+ * Records are redacted before use.
  *
  * @param options - parsed plan path plus global flags
  * @returns nothing; the report goes to stdout and the exit code carries the verdict
@@ -728,8 +727,7 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
 
 /**
  * Route local plan subcommands between the export bundler and the effort check.
- * The single `plans` dispatch entry - every `goat-flow plans ...` invocation
- * lands here first.
+ * The single `plans` dispatch entry - every `goat-flow plans ...` invocation lands here first.
  *
  * @param options - parsed CLI options carrying the chosen subcommand
  * @returns nothing; the chosen subcommand owns all output and exit codes

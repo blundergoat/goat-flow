@@ -1,8 +1,8 @@
 /**
  * Own the private terminal receipts paired with dashboard quality drafts.
- * Receipts use exclusive creation, reject linked destinations, and preserve a
- * completed outcome from an earlier process. Only unsafe pre-existing entries
- * are replaced with a bounded rejection.
+ *
+ * Receipts use exclusive creation, reject linked destinations, and preserve a completed outcome from an earlier process.
+ * Only unsafe pre-existing entries are replaced with a bounded rejection.
  */
 import { lstatSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

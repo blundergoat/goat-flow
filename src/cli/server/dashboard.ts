@@ -1,6 +1,12 @@
 /**
- * HTTP server for the local goat-flow dashboard.
- * It serves the frontend shell, exposes audit, quality, setup, and terminal endpoints.
+ * The local HTTP server behind the goat-flow dashboard: it serves the UI shell and every audit, quality, setup, and terminal endpoint.
+ *
+ * This is what starts when a user runs `goat-flow dashboard` and their browser opens on a loopback URL carrying a one-run token.
+ *
+ * The server is deliberately locked to the machine it runs on, so:
+ * - it binds loopback only, and rejects API requests whose Host or Origin header does not match its own address
+ * - the token is regenerated per run, so a stale bookmark cannot reach a later session
+ * - terminal sessions are torn down on SIGTERM and SIGINT rather than left holding a PTY
  */
 import {
   createServer,
@@ -105,9 +111,8 @@ interface DashboardServer {
 /**
  * Side-effectful API route registry.
  *
- * Every POST/DELETE handler that mutates local state, executes a command, or
- * could be CSRF-bait MUST appear in this set. The Origin/CSRF check fires via
- * `isSideEffectfulApiRoute → SIDE_EFFECTFUL_EXACT_API_ROUTES.has(routeKey)`.
+ * Every POST/DELETE handler that mutates local state, executes a command, or could be CSRF-bait MUST appear in this set.
+ * The Origin/CSRF check fires via `isSideEffectfulApiRoute → SIDE_EFFECTFUL_EXACT_API_ROUTES.has(routeKey)`.
  *
  * Convention: register the exact route key `"<METHOD> <path>"` here whenever
  * you add a side-effectful endpoint.
@@ -144,13 +149,13 @@ function tokenMatches(expected: string, actual: string | null): boolean {
 
 /**
  * Start the local dashboard server and expose its API endpoints.
- * The whole server lives in one closure because every route shares the same per-run token, live
- * reload set, and terminal state; hoisting the routes out would mean threading that mutable state
- * through each one, so the length here is deliberate rather than accidental.
- * Side effect: binds a loopback TCP port, starts a filesystem watcher in dev mode, and registers
- * SIGTERM and SIGINT handlers that exit the process.
- * Error behavior: throws nothing out of this call; the promise resolves once the port is listening,
- * and each per-request failure reports as an HTTP response instead of escaping the server.
+ *
+ * The whole server lives in one closure because every route shares the same per-run token, live reload set, and terminal state; hoisting the routes
+ * out would mean threading that mutable state through each one, so the length here is deliberate rather than accidental.
+ *
+ * Side effect: binds a loopback TCP port, starts a filesystem watcher in dev mode, and registers SIGTERM and SIGINT handlers that exit the process.
+ * Error behavior: throws nothing out of this call; the promise resolves once the port is listening, and each per-request failure reports as an HTTP
+ * response instead of escaping the server.
  *
  * @param options - selected project path plus optional dev-mode/dashboard configuration
  * @returns running dashboard handle with URL, token, and close method
@@ -298,11 +303,11 @@ export function serveDashboard(
     }
 
     /**
-     * Check the browser Host header against this server's own loopback address
-     * for WebSocket upgrades. A page on another origin can script an upgrade but
-     * cannot forge the Host the browser sends, so a mismatched Host is the
-     * DNS-rebinding shape we refuse. When the address isn't known yet we don't
-     * block on Host grounds - the token/Origin checks still apply.
+     * Check the browser Host header against this server's own loopback address for WebSocket upgrades.
+     * A page on another origin can script an upgrade but cannot forge the Host the browser sends, so a mismatched Host is the DNS-rebinding shape we
+     * refuse.
+     *
+     * When the address isn't known yet we don't block on Host grounds - the token/Origin checks still apply.
      *
      * @param req - incoming upgrade request whose Host header is validated
      * @returns true when Host is loopback for this port, or the address is unknown
@@ -428,8 +433,7 @@ export function serveDashboard(
       const dashDir = dirname(shellPath);
       /**
        * Notify live-reload clients that dashboard assets changed.
-       * Error behavior: throws nothing; a send to a closed socket is swallowed so one dead client
-       * cannot stop the others from reloading.
+       * Error behavior: throws nothing; a send to a closed socket is swallowed so one dead client cannot stop the others from reloading.
        */
       const notifyReload = (): void => {
         for (const client of liveReloadClients) {
@@ -540,8 +544,7 @@ export function serveDashboard(
 
     /**
      * Shut down the dashboard server's live terminal state before exiting the process.
-     * Error behavior: exits the process regardless of whether the shutdown succeeded, so a stuck
-     * terminal cannot leave the signal unhandled.
+     * Error behavior: exits the process regardless of whether the shutdown succeeded, so a stuck terminal cannot leave the signal unhandled.
      */
     const doShutdown = (): void => {
       void closeServer().finally(() => {

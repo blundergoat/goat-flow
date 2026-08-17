@@ -1,8 +1,7 @@
 /**
  * Curates a bounded slice of learning-loop memory for generated prompts.
  *
- * Full learning-loop validation belongs to `goat-flow stats --check`; this
- * module only selects enough recent evidence to steer the next agent without
+ * Full learning-loop validation belongs to `goat-flow stats --check`; this module only selects enough recent evidence to steer the next agent without
  * broad-loading footgun, lesson, pattern, or decision buckets.
  */
 import type {

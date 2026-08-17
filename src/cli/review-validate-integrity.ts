@@ -1,12 +1,12 @@
 /**
  * Checks the Review Integrity block - the part of a report that states how thorough it was.
- * Scope, files opened, evidence counts, verdict tallies, degradation flags and conclusion are
- * the reviewer's own claims about their coverage, and they are the fields most likely to be
- * quietly overstated. This pass makes each applicable claim either verifiable or a violation.
  *
- * Counts are cross-checked against the findings actually present rather than taken at face
- * value, because a report claiming more evidence than it shows is worse than one admitting it
- * was partial - a reader trusts the number and stops looking.
+ * Scope, files opened, evidence counts, verdict tallies, degradation flags and conclusion are the reviewer's own claims about their coverage, and
+ * they are the fields most likely to be quietly overstated.
+ * This pass makes each applicable claim either verifiable or a violation.
+ *
+ * Counts are cross-checked against the findings actually present rather than taken at face value, because a report claiming more evidence than it
+ * shows is worse than one admitting it was partial - a reader trusts the number and stops looking.
  */
 import {
   REVIEW_BUNDLE_PATH,

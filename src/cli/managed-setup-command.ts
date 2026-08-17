@@ -1,5 +1,6 @@
 /**
  * Writes the managed setup dry-run report at the CLI command boundary.
+ *
  * Users invoke this path to inspect exact managed actions without starting Bash.
  * It keeps format validation, report output, and blocked exit status together.
  * The install handler remains focused on admission and execution after preview.

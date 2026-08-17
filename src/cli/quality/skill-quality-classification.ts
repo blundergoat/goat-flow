@@ -1,12 +1,12 @@
 /**
- * Subtype classification for skill-quality scoring: given an artifact and its content, score it
- * against every candidate subtype (name patterns, heading patterns, must-not-have vetoes) and pick
- * the dominant match, with a confidence figure that signals how clearly it won.
+ * Subtype classification for skill-quality scoring: given an artifact and its content, score it against every candidate subtype (name patterns,
+ * heading patterns, must-not-have vetoes) and pick the dominant match, with a confidence figure that signals how clearly it won.
  *
- * Two independent passes live here. The scoring pass (`classifyArtifact`) selects the profile that
- * drives the rubric; a separate semantic shape pass exists to catch misfiled artifacts whose
- * content does not match the profile they were scored under. Detection order is fixed per kind so
- * higher-priority subtypes win ties deterministically.
+ * Two independent passes live here.
+ * The scoring pass (`classifyArtifact`) selects the profile that drives the rubric; a separate semantic shape pass exists to catch misfiled artifacts
+ * whose content does not match the profile they were scored under.
+ *
+ * Detection order is fixed per kind so higher-priority subtypes win ties deterministically.
  */
 import type {
   ArtifactSubtype,
@@ -126,9 +126,8 @@ const SKILL_DETECTION_ORDER: ArtifactSubtype[] = [
 ];
 
 /**
- * Classify an artifact across all candidate subtypes. The detected subtype
- * is the highest-scoring match; confidence is `top / (top + second)` to
- * communicate how dominant the leading subtype is.
+ * Classify an artifact across all candidate subtypes.
+ * The detected subtype is the highest-scoring match; confidence is `top / (top + second)` to communicate how dominant the leading subtype is.
  *
  * @param artifact - inventory record; its `kind` selects the fixed subtype detection order.
  * @param content - raw artifact text matched against name/heading patterns and must-not-have vetoes.

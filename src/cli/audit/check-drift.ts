@@ -1,7 +1,8 @@
 /**
  * Canonical-template versus installed-artifact drift detection.
- * Use during setup audits so operators learn which skill, shared document,
- * hook, or agent mirror differs from the workflow package they intended to run.
+ *
+ * Use during setup audits so operators learn which skill, shared document, hook, or agent mirror differs from the workflow package they intended to
+ * run.
  * Semantic Markdown comparison ignores harmless YAML order and trailing-space changes.
  */
 import { load } from "js-yaml";
@@ -54,8 +55,8 @@ function stripNullish(frontmatterValue: unknown): unknown {
 
 /**
  * Parse YAML frontmatter and body text from a markdown file.
- * The parser swallows malformed YAML into a sentinel object and never throws so
- * drift checks can report content mismatch without aborting the whole audit.
+ * The parser swallows malformed YAML into a sentinel object and never throws so drift checks can report content mismatch without aborting the whole
+ * audit.
  * @param raw - Full markdown file contents, including optional YAML frontmatter.
  * @returns Parsed frontmatter plus body text after the closing marker.
  */

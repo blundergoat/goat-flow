@@ -1,8 +1,7 @@
 /**
- * Write-side wrapper around the learning-loop index generator: parses every bucket and writes the
- * rendered INDEX.md files to disk. Shared by the `goat-flow index` command and the post-install
- * step so both produce identical files. Buckets whose directory is absent are skipped (never
- * created) so projects that adopted only part of the learning loop stay untouched.
+ * Write-side wrapper around the learning-loop index generator: parses every bucket and writes the rendered INDEX.md files to disk.
+ * Shared by the `goat-flow index` command and the post-install step so both produce identical files.
+ * Buckets whose directory is absent are skipped (never created) so projects that adopted only part of the learning loop stay untouched.
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";

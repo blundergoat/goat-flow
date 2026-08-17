@@ -1,12 +1,11 @@
 /**
  * Checks that a plan's milestones fit together as a set, not just individually.
- * A milestone can be perfectly written on its own and still be wrong in context: depending on
- * a milestone that does not exist, forming a dependency cycle nothing can start, reusing an
- * id another file already claims, or leaving two milestones active at once.
  *
- * These are the mistakes that cost an author real time, because the plan looks fine until
- * they try to work it and find there is no valid order. Each finding names the milestone file
- * so the author can go straight to the line they need to change.
+ * A milestone can be perfectly written on its own and still be wrong in context: depending on a milestone that does not exist, forming a dependency
+ * cycle nothing can start, reusing an id another file already claims, or leaving two milestones active at once.
+ *
+ * These are the mistakes that cost an author real time, because the plan looks fine until they try to work it and find there is no valid order.
+ * Each finding names the milestone file so the author can go straight to the line they need to change.
  */
 import type { PlanExportRecord } from "./plans-export.js";
 
@@ -238,8 +237,8 @@ function collectActiveStateErrors(identities: MilestoneIdentity[]): string[] {
 
 /**
  * Check that a plan's milestones form a workable set, not just valid files.
- * Use in strict mode after each milestone passes on its own, so the author learns about
- * duplicate ids, missing or circular dependencies, and two milestones being active at once.
+ * Use in strict mode after each milestone passes on its own, so the author learns about duplicate ids, missing or circular dependencies, and two
+ * milestones being active at once.
  *
  * @param records - every milestone parsed from the plan directory; an empty list means there
  *   is no plan to cross-check and nothing is reported

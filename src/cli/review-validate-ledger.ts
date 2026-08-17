@@ -1,8 +1,8 @@
 /**
  * Checks the refutation ledger a review cites when it says suspicions were disproved.
- * "I considered this and ruled it out" is only meaningful if the reasoning was written down,
- * so a report claiming refutations must point at a real local ledger with records in the
- * expected grammar - not just assert a number.
+ *
+ * "I considered this and ruled it out" is only meaningful if the reasoning was written down, so a report claiming refutations must point at a real
+ * local ledger with records in the expected grammar - not just assert a number.
  *
  * An empty or skipped ledger is legitimate and handled explicitly; what is refused is a report
  * that claims refutations while pointing at nothing a reader could go and check.

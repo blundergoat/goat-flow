@@ -1,16 +1,12 @@
 /**
  * Manifest schema for goat-flow's single source of truth (M06a).
  *
- * `workflow/manifest.json` is the on-disk form. `loadManifest()` returns a
- * resolved `Manifest` where every `facts` field has been computed against
- * canonical code sources (SETUP_CHECKS, AGENT_CHECKS, HARNESS_CHECKS,
- * getSkillNames(), preset catalog JSON) or validated against observed on-disk
- * state (dashboard views).
+ * `workflow/manifest.json` is the on-disk form.
+ * `loadManifest()` returns a resolved `Manifest` where every `facts` field has been computed against canonical code sources (SETUP_CHECKS,
+ * AGENT_CHECKS, HARNESS_CHECKS, getSkillNames(), preset catalog JSON) or validated against observed on-disk state (dashboard views).
  *
- * Derived values are never written into the JSON - they are computed at load
- * time so `facts` cannot drift from code. Static values are written into the
- * JSON and validated against observed reality on load; a mismatch raises a
- * `ManifestValidationError`.
+ * Derived values are never written into the JSON - they are computed at load time so `facts` cannot drift from code.
+ * Static values are written into the JSON and validated against observed reality on load; a mismatch raises a `ManifestValidationError`.
  */
 
 /** Manifest hook event names for one runtime. */

@@ -1,14 +1,11 @@
 /**
  * Canonical cross-module constants for skills and version-aligned aliases.
  *
- * Everything the CLI knows about "which skills exist" funnels through this
- * module so detection, prompts, and audit checks stay in sync. The skill
- * lists come from `workflow/manifest.json` and are read LAZILY on first use:
- * a user whose install has drifted (say, a stray folder under
- * `workflow/skills/`) must still be able to run `goat-flow --help` or
- * `goat-flow --version` to orient themselves - only the commands that
- * actually need the skill list (audit, setup, manifest checks) should
- * surface the drift error.
+ * Everything the CLI knows about "which skills exist" funnels through this module so detection, prompts, and audit checks stay in sync.
+ *
+ * The skill lists come from `workflow/manifest.json` and are read LAZILY on first use: a user whose install has drifted (say, a stray folder under
+ * `workflow/skills/`) must still be able to run `goat-flow --help` or `goat-flow --version` to orient themselves - only the commands that actually
+ * need the skill list (audit, setup, manifest checks) should surface the drift error.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -102,10 +99,9 @@ let cachedStaleSkillNames: readonly string[] | undefined;
  * Canonical list of all GOAT Flow skill names - what `goat-flow audit` and
  * setup expect to find installed (e.g. under `.claude/skills/`).
  *
- * Lazy + cached: the first caller pays the manifest read and drift
- * validation. Diagnostic commands that never ask for the list keep working
- * when the manifest has drifted - a user typing `goat-flow --help` after a
- * botched upgrade still gets help instead of a crash.
+ * Lazy + cached: the first caller pays the manifest read and drift validation.
+ * Diagnostic commands that never ask for the list keep working when the manifest has drifted - a user typing `goat-flow --help` after a botched
+ * upgrade still gets help instead of a crash.
  *
  * @returns canonical skill names in manifest order
  * @throws Error when `workflow/manifest.json` is invalid or drifts from `workflow/skills/`
@@ -117,8 +113,7 @@ export function getSkillNames(): readonly string[] {
 }
 
 /**
- * Deprecated skill names retained so audit/setup can flag leftovers from
- * older installs (e.g. a `.claude/skills/goat-test/` dir from a version the
+ * Deprecated skill names retained so audit/setup can flag leftovers from older installs (e.g. a `.claude/skills/goat-test/` dir from a version the
  * user upgraded away from) instead of treating them as unknown files.
  *
  * Lazy + cached for the same reason as {@link getSkillNames}: reading the
@@ -135,8 +130,8 @@ export function getStaleSkillNames(): readonly string[] {
 
 /**
  * Current audit version - derived from package.json so it stays in sync automatically.
+ *
  * Skills embed this as `goat-flow-skill-version: X` in their YAML frontmatter.
- * (Reads the CLI's own package.json, which always ships with the package -
- * unlike the skills manifest this is not a drift surface, so eager is safe.)
+ * (Reads the CLI's own package.json, which always ships with the package - unlike the skills manifest this is not a drift surface, so eager is safe.)
  */
 export const AUDIT_VERSION = getPackageVersion();

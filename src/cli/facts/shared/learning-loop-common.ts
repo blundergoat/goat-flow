@@ -1,17 +1,14 @@
 /**
- * Shared parsing and reference-validation primitives for the learning-loop fact
- * extractors (footguns, lessons, patterns, decisions). Owns the markdown reading,
- * frontmatter parsing, freshness computation, and the evidence-reference checks
- * that flag stale paths, out-of-bounds line numbers, and broken `(search: ...)`
- * anchors.
+ * Shared parsing and reference-validation primitives for the learning-loop fact extractors (footguns, lessons, patterns, decisions).
+ * Owns the markdown reading, frontmatter parsing, freshness computation, and the evidence-reference checks that flag stale paths, out-of-bounds line
+ * numbers, and broken `(search: ...)` anchors.
  *
- * Reference validation is intentionally conservative: ambiguous shorthand (bare
- * source filenames, gitignored task paths, URLs/hostnames) is skipped rather than
- * reported, because a false "stale" finding on a clean checkout erodes trust in the
- * whole audit. The regexes here are the canonical evidence grammar - footgun and
- * lesson extractors must reuse them so the same string is judged identically
- * everywhere. ADR-024 governs the line-number-versus-semantic-anchor policy these
- * checks enforce.
+ * Reference validation is intentionally conservative: ambiguous shorthand (bare source filenames, gitignored task paths, URLs/hostnames) is skipped
+ * rather than reported, because a false "stale" finding on a clean checkout erodes trust in the whole audit.
+ *
+ * The regexes here are the canonical evidence grammar - footgun and lesson extractors must reuse them so the same string is judged identically
+ * everywhere.
+ * ADR-024 governs the line-number-versus-semantic-anchor policy these checks enforce.
  */
 import type { BucketFreshness, ReadonlyFS } from "../../types.js";
 import {
@@ -72,11 +69,11 @@ function normalizeSurfacePath(path: string): string {
 }
 
 /**
- * Find learning-loop artifact surfaces that exist on disk but sit outside the
- * configured canonical location - the signal that a project is splitting one
- * concern across two directories. Returns nothing unless a canonical path is
- * actually present, so a project that simply hasn't adopted the surface yet is
- * not flagged. Trailing slashes are normalized before comparison.
+ * Find learning-loop artifact surfaces that exist on disk but sit outside the configured canonical location - the signal that a project is splitting
+ * one concern across two directories.
+ * Returns nothing unless a canonical path is actually present, so a project that simply hasn't adopted the surface yet is not flagged.
+ *
+ * Trailing slashes are normalized before comparison.
  *
  * @param fs - read-only filesystem adapter for the target project
  * @param canonicalPaths - the configured/blessed locations; at least one must exist or the result is empty
@@ -99,13 +96,15 @@ export function findCompetingArtifactSurfaces(
 
 /**
  * Read a learning-loop location into a stable, sorted set of markdown entries.
- * Handles both config shapes uniformly: a directory (every `.md` except the
- * README.md/INDEX.md metadata files, sorted lexicographically) and a single flat
- * `.md` file (one entry). INDEX.md is generated bucket metadata (`goat-flow index`),
- * not entry content - including it would count phantom legacy entries and force
- * entry frontmatter onto a generated file. The sort is load-bearing - downstream
- * entry ordering and report output must be deterministic across machines, so
- * directory listing order is never trusted.
+ *
+ * Handles both config shapes uniformly: a directory (every `.md` except the README.md/INDEX.md metadata files, sorted lexicographically) and a single
+ * flat `.md` file (one entry).
+ *
+ * INDEX.md is generated bucket metadata (`goat-flow index`), not entry content - including it would count phantom legacy entries and force entry
+ * frontmatter onto a generated file.
+ *
+ * The sort is load-bearing - downstream entry ordering and report output must be deterministic across machines, so directory listing order is never
+ * trusted.
  *
  * @param fs - read-only filesystem adapter for the target project
  * @param dir - directory path, or a single `.md` file path for flat-file config mode
@@ -141,8 +140,7 @@ export function listMarkdownEntries(fs: ReadonlyFS, dir: string): EntryDir {
 
 /**
  * Separate a leading `---`-delimited YAML frontmatter block from the markdown body.
- * Recognizes frontmatter only at the very start of the content; a `---` later in
- * the document is left in the body untouched.
+ * Recognizes frontmatter only at the very start of the content; a `---` later in the document is left in the body untouched.
  *
  * @param content - raw markdown file content
  * @returns the frontmatter text without its `---` fences (null when there is none) and the remaining body
@@ -158,8 +156,8 @@ export function parseMarkdownFrontmatter(content: string): {
 
 /**
  * Parse simple `key: value` pairs from a YAML frontmatter block.
- * Only handles flat scalar fields (sufficient for goat-flow's single-level frontmatter);
- * nested structures, arrays, and multi-line scalars are intentionally unsupported.
+ * Only handles flat scalar fields (sufficient for goat-flow's single-level frontmatter); nested structures, arrays, and multi-line scalars are
+ * intentionally unsupported.
  *
  * @param frontmatter - YAML frontmatter body without the surrounding `---` markers
  * @returns flat key/value fields parsed from the frontmatter block
@@ -205,9 +203,8 @@ export function computeFreshness(
 }
 
 /**
- * Count how many times a pattern matches across a string. Pass a global (`/g`)
- * regex - `matchAll` requires it, and without the flag the match count is not what
- * a caller expects.
+ * Count how many times a pattern matches across a string.
+ * Pass a global (`/g`) regex - `matchAll` requires it, and without the flag the match count is not what a caller expects.
  *
  * @param content - text to scan
  * @param pattern - global regular expression; non-global patterns will throw under matchAll
@@ -218,10 +215,9 @@ export function countMatches(content: string, pattern: RegExp): number {
 }
 
 /**
- * Remove `~~...~~` strikethrough spans before evidence is scanned, so a reference
- * an author has struck through (marked as historical) is not counted as live
- * evidence. Run this first in every reference check; otherwise retired anchors
- * resurface as findings.
+ * Remove `~~...~~` strikethrough spans before evidence is scanned, so a reference an author has struck through (marked as historical) is not counted
+ * as live evidence.
+ * Run this first in every reference check; otherwise retired anchors resurface as findings.
  *
  * @param content - markdown that may contain strikethrough spans, including multi-line ones
  * @returns the content with all strikethrough spans removed
@@ -258,10 +254,10 @@ function getLineRefDiagnostic(
 
 /**
  * Validate every file reference in one footgun section and tally the result.
- * Reports a path as stale when the file no longer exists, and flags a `file:line`
- * reference when the line is out of bounds, lacks a semantic anchor, or carries a
- * line number made redundant by an anchor (the ADR-024 anchor-over-line-number
- * contract). Strikethrough is stripped first so struck evidence is ignored.
+ *
+ * Reports a path as stale when the file no longer exists, and flags a `file:line` reference when the line is out of bounds, lacks a semantic anchor,
+ * or carries a line number made redundant by an anchor (the ADR-024 anchor-over-line-number contract).
+ * Strikethrough is stripped first so struck evidence is ignored.
  *
  * @param fs - read-only filesystem adapter used to resolve and line-count referenced files
  * @param content - the footgun section's markdown
@@ -406,11 +402,9 @@ function scanSearchAnchors(
 }
 
 /**
- * Validate the file references in one lesson or pattern section, sharing the same
- * staleness and ADR-024 line-reference rules as footguns. Lessons cite full
- * project-rooted paths (src/, lib/, docs/, .goat-flow/, ...), so this matches that
- * prefix grammar and skips glob-like or `...`-elided tokens that cannot be resolved
- * to a single file.
+ * Validate the file references in one lesson or pattern section, sharing the same staleness and ADR-024 line-reference rules as footguns.
+ * Lessons cite full project-rooted paths (src/, lib/, docs/, .goat-flow/, ...), so this matches that prefix grammar and skips glob-like or
+ * `...`-elided tokens that cannot be resolved to a single file.
  *
  * @param fs - read-only filesystem adapter used to resolve and line-count referenced files
  * @param content - the lesson or pattern section's markdown; a section with no references

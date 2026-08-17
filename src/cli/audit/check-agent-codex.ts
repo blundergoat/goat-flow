@@ -1,13 +1,14 @@
 /**
  * Validates the Codex-specific settings a project needs for goat-flow to run safely.
- * Codex configures hooks and filesystem access differently from the other agents, so its
- * settings get their own checks: a retired feature flag left enabled, hooks silently switched
- * off, and workspace-root globs that do not mean what the person who typed them expected.
  *
- * The workspace-root checks matter most in practice. A pattern that looks like it grants
- * access to one directory can quietly grant far more, or nothing at all, and the user has no
- * way to see that from their config file. These turn that into a message naming the exact
- * pattern and what it actually does.
+ * Codex configures hooks and filesystem access differently from the other agents, so its settings get their own checks: a retired feature flag left
+ * enabled, hooks silently switched off, and workspace-root globs that do not mean what the person who typed them expected.
+ *
+ * The workspace-root checks matter most in practice.
+ * A pattern that looks like it grants access to one directory can quietly grant far more, or nothing at all, and the user has no way to see that from
+ * their config file.
+ *
+ * These turn that into a message naming the exact pattern and what it actually does.
  */
 import type { AuditContext, AuditFailure, BuildCheck } from "./types.js";
 import { collectCodexWorkspaceRootEntries } from "../facts/agent/settings.js";

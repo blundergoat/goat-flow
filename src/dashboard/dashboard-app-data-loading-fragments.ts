@@ -1,8 +1,9 @@
 /**
  * Load server-backed quality and skill-inventory state into Alpine fragments.
- * Use when the user changes project, generates setup or quality prompts, or opens the Skills
- * views - these loaders guard against stale responses overwriting the screen after a context
- * switch, and recover failures into visible empty states or toasts instead of a broken page.
+ *
+ * Use when the user changes project, generates setup or quality prompts, or opens the Skills views - these loaders guard against stale responses
+ * overwriting the screen after a context switch, and recover failures into visible empty states or toasts instead of a broken page.
+ *
  * Hook loaders and Hooks-view actions live in dashboard-app-hook-setup-fragments.ts.
  */
 
@@ -315,8 +316,9 @@ async function dashboardPrefetchSkillReports(
 
 /**
  * Build setup scheduling and quality loading methods.
- * Use when composing the dashboard app so setup prompts, quality generation, history, and Home
- * summaries can share stale-response protection and toast-based failure recovery.
+ *
+ * Use when composing the dashboard app so setup prompts, quality generation, history, and Home summaries can share stale-response protection and
+ * toast-based failure recovery.
  * Empty quality history leaves the view blank rather than failing the page.
  */
 function dashboardSetupQualityLoadersFragment(): DashboardAppFragment {
@@ -389,10 +391,9 @@ function dashboardSetupQualityLoadersFragment(): DashboardAppFragment {
 /**
  * Build skill-quality inventory loaders.
  *
- * Inventory and prefetch live together because both share the same project/runner generation guard:
- * stale responses must not overwrite the Skills tab after the user switches workspace or runner.
- * Prefetch swallows per-artifact failures as a best-effort fallback so one bad report does not hide
- * the rest of the inventory.
+ * Inventory and prefetch live together because both share the same project/runner generation guard: stale responses must not overwrite the Skills tab
+ * after the user switches workspace or runner.
+ * Prefetch swallows per-artifact failures as a best-effort fallback so one bad report does not hide the rest of the inventory.
  *
  * @returns dashboard fragment; empty methods are never returned because the Skills tab needs both loaders
  */

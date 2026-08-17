@@ -381,21 +381,43 @@ describe("comment playbook verification doctrine", () => {
 });
 
 describe("Gruff documentation-pass doctrine", () => {
-  it("discovers checkout-local binaries before package candidates", () => {
+  it("discovers declared, wrapped, checkout, and installed tools in order", () => {
     assertForPlaybook("gruff-code-quality.md", (content, playbookPath) => {
-      const wrapperOffset = content.indexOf("Look for a project wrapper first");
-      const releaseCandidateOffset = content.indexOf(
-        '"target/release/$target"',
+      const configOffset = content.indexOf(
+        "hooks.gruff-code-quality.binaries.<go|rs|ts|php|py>",
       );
-      const binCandidateOffset = content.indexOf('"bin/$target"');
-      const packageCandidateOffset = content.indexOf('"vendor/bin/$target"');
-      assert.ok(wrapperOffset >= 0, playbookPath);
-      assert.ok(releaseCandidateOffset >= 0, playbookPath);
-      assert.ok(binCandidateOffset >= 0, playbookPath);
-      assert.ok(packageCandidateOffset >= 0, playbookPath);
-      assert.ok(wrapperOffset < releaseCandidateOffset, playbookPath);
-      assert.ok(releaseCandidateOffset < binCandidateOffset, playbookPath);
-      assert.ok(binCandidateOffset < packageCandidateOffset, playbookPath);
+      const wrapperOffset = content.indexOf('"bin/test/$target-analyse.sh"');
+      const releaseOffset = content.indexOf('"target/release/$target"');
+      const checkoutBinOffset = content.indexOf('"bin/$target"');
+      const composerShimOffset = content.indexOf('"vendor/bin/$target"');
+      const composerPackageOffset = content.indexOf(
+        '"vendor/blundergoat/$target/bin/$target"',
+      );
+      const npmShimOffset = content.indexOf('"node_modules/.bin/$target"');
+      const npmPackageOffset = content.indexOf(
+        '"node_modules/@blundergoat/$target/bin/$target"',
+      );
+      const virtualenvOffset = content.indexOf('".venv/bin/$target"');
+      const cargoOffset = content.indexOf('".cargo-tools/bin/$target"');
+      const userLocalOffset = content.indexOf('"$HOME/.local/bin/$target"');
+      const pathOffset = content.indexOf('"$target"');
+      assert.ok(configOffset >= 0, playbookPath);
+      assert.ok(configOffset < wrapperOffset, playbookPath);
+      assert.ok(wrapperOffset < releaseOffset, playbookPath);
+      assert.ok(releaseOffset < checkoutBinOffset, playbookPath);
+      assert.ok(checkoutBinOffset < composerShimOffset, playbookPath);
+      assert.ok(composerShimOffset < composerPackageOffset, playbookPath);
+      assert.ok(composerPackageOffset < npmShimOffset, playbookPath);
+      assert.ok(npmShimOffset < npmPackageOffset, playbookPath);
+      assert.ok(npmPackageOffset < virtualenvOffset, playbookPath);
+      assert.ok(virtualenvOffset < cargoOffset, playbookPath);
+      assert.ok(cargoOffset < userLocalOffset, playbookPath);
+      assert.ok(userLocalOffset < pathOffset, playbookPath);
+      assert.match(
+        content,
+        /Do not recursively execute name-matched binaries/u,
+        playbookPath,
+      );
     });
   });
 

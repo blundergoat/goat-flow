@@ -1,5 +1,9 @@
 /**
- * Terminal renderers for quality history and diff output.
+ * Renders the tables a user sees from `goat-flow quality history` and `quality diff`.
+ *
+ * History answers "how has this project's quality moved over time"; diff answers "what actually changed between these two runs".
+ *
+ * First-run cells stay blank rather than showing a zero delta, because a fabricated "no change" reads as a real measurement.
  */
 import type { AgentId } from "../types.js";
 import type { QualityMode } from "./schema.js";
@@ -73,13 +77,12 @@ export function renderQualityHistoryText(
  * Render a quality diff for CLI text output.
  * Use when a user compares two saved quality reports and needs lifecycle buckets in terminal output.
  *
- * The four fixed sections mirror the lifecycle buckets because saved-report
- * diffs are scanned by humans and shell output, not just JSON clients.
+ * The four fixed sections mirror the lifecycle buckets because saved-report diffs are scanned by humans and shell output, not just JSON clients.
  * Invariant: section order must match absent, new, persisted, then stuck findings.
  *
- * The absent section carries an inline caveat whenever it has rows. Readers
- * previously took that bucket as a fixed-issue list and closed remediation on the
- * count, so the warning belongs next to the rows rather than in documentation.
+ * The absent section carries an inline caveat whenever it has rows.
+ * Readers previously took that bucket as a fixed-issue list and closed remediation on the count, so the warning belongs next to the rows rather than
+ * in documentation.
  *
  * @param diff - diff returned by `buildQualityDiff`; empty buckets render as `(none)` so users see no hidden rows
  * @returns human-readable diff grouped by finding lifecycle for CLI review

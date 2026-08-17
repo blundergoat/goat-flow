@@ -1,7 +1,6 @@
 /**
  * Composes setup prompts from audit results and project facts.
- * Routes by project state: bare/partial → full setup guide,
- * v0.9/outdated → upgrade redirect, current → audit-driven pass/fail.
+ * Routes by project state: bare/partial → full setup guide, v0.9/outdated → upgrade redirect, current → audit-driven pass/fail.
  */
 import type { AuditReport, CheckResult } from "../audit/types.js";
 import type { AgentId, ProjectFacts } from "../types.js";
@@ -10,10 +9,9 @@ import { PROFILES } from "../detect/agents.js";
 import { getTemplatePath, getCliCommand } from "../paths.js";
 
 /**
- * Forward-slash version of a packaged template path, suitable for embedding
- * in user-visible setup prompts. `getTemplatePath` returns OS-native paths
- * (backslashes on Windows); they render as ugly backslash strings to the
- * agent and break test assertions that compare against POSIX shapes.
+ * Forward-slash version of a packaged template path, suitable for embedding in user-visible setup prompts.
+ * `getTemplatePath` returns OS-native paths (backslashes on Windows); they render as ugly backslash strings to the agent and break test assertions
+ * that compare against POSIX shapes.
  */
 function displayTemplatePath(relative: string): string {
   return getTemplatePath(relative).replace(/\\/g, "/");
@@ -99,10 +97,12 @@ function auditPassInstallLine(
 
 /**
  * Render the setup prompt shown when every build check already passes on the current version.
- * Use for the "nothing to install" path: the agent gets an inventory of what is present plus the
- * verification and maintenance commands, and is told not to skip the remaining audit gates.
- * The inventory block is omitted entirely when the target agent has no facts, so a prompt for an
- * unrecognised agent still carries the run-now and maintenance guidance rather than a half-filled list.
+ *
+ * Use for the "nothing to install" path: the agent gets an inventory of what is present plus the verification and maintenance commands, and is told
+ * not to skip the remaining audit gates.
+ *
+ * The inventory block is omitted entirely when the target agent has no facts, so a prompt for an unrecognised agent still carries the run-now and
+ * maintenance guidance rather than a half-filled list.
  *
  * @param facts - detected project facts; the entry matching `agentId` supplies the installed counts
  * @param agentId - agent this prompt is addressed to, selecting its display name and skill/hook dirs

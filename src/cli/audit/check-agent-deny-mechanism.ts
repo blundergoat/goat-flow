@@ -1,11 +1,13 @@
 /**
- * Audit checks for each agent's dangerous-command deny mechanism (concern 4). Verifies that a deny
- * guard is present, that any hook scripts pass `bash -n`, and that deny patterns are registered -
- * accepting both file-based and config-based mechanisms because agents satisfy the contract in
- * different ways. Some checks spawn `bash` and copy fixture hooks to a real path, so this file owns
- * the bridge from the in-memory audit FS to the actual workspace the shell needs. The runtime
- * smoke that replays a blocked payload through configured launchers and the registered hook
- * lives in check-agent-deny-runtime.ts; this file composes both halves into the BuildCheck.
+ * Audit checks for each agent's dangerous-command deny mechanism (concern 4).
+ * Verifies that a deny guard is present, that any hook scripts pass `bash -n`, and that deny patterns are registered - accepting both file-based and
+ * config-based mechanisms because agents satisfy the contract in different ways.
+ *
+ * Some checks spawn `bash` and copy fixture hooks to a real path, so this file owns the bridge from the in-memory audit FS to the actual workspace
+ * the shell needs.
+ *
+ * The runtime smoke that replays a blocked payload through configured launchers and the registered hook lives in check-agent-deny-runtime.ts; this
+ * file composes both halves into the BuildCheck.
  */
 import * as childProcess from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -47,10 +49,9 @@ const DENY_HOOK_TEMPLATE_FILES = [
 /** Check deny-hook presence because unsupported agents and config-based agents need different handling. */
 function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
-    // Capability-limited agents (e.g. Antigravity at v1.0.1) have no documented
-    // deny mechanism upstream. The manifest records this as
-    // `denyMechanism: null`; skip the check rather than producing a permanent
-    // audit failure that downstream projects cannot fix.
+    // Capability-limited agents (e.g. Antigravity at v1.0.1) have no documented deny mechanism upstream.
+    // The manifest records this as `denyMechanism: null`; skip the check rather than producing a permanent audit failure that downstream projects
+    // cannot fix.
     if (agentFacts.agent.denyMechanism === null) continue;
     if (!agentFacts.hooks.denyExists && !agentFacts.hooks.denyIsConfigBased) {
       return {
@@ -183,9 +184,8 @@ function checkLegacyHookDrift(
 /**
  * Read a canonical hook template's text from the packaged `workflow/hooks/` tree.
  *
- * Swallows read errors and returns null as a fallback when the template is absent or
- * unreadable, so drift checks can treat "no canonical template" and "installed copy
- * differs" as distinct, non-fatal outcomes instead of aborting the whole audit.
+ * Swallows read errors and returns null as a fallback when the template is absent or unreadable, so drift checks can treat "no canonical template"
+ * and "installed copy differs" as distinct, non-fatal outcomes instead of aborting the whole audit.
  *
  * @param templateFile - path under `workflow/hooks/` (e.g. `deny-dangerous.sh` or `deny-dangerous/patterns-shell.sh`)
  * @returns the template's UTF-8 contents, or null when the file is missing or unreadable

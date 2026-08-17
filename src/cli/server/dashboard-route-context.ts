@@ -1,11 +1,11 @@
 /**
  * Factory for the shared dashboard route context.
  *
- * Resolves the per-server state-file locations once, allocates the in-memory quality audit cache,
- * and bundles the IO helpers (evidence recording, path validation, error-to-status mapping) that
- * every non-terminal route closure depends on. Centralising these here keeps individual route files
- * free of validation and persistence wiring. Consumed by dashboard-routes.ts; the context shape is
- * defined in dashboard-route-types.ts.
+ * Resolves the per-server state-file locations once, allocates the in-memory quality audit cache, and bundles the IO helpers (evidence recording,
+ * path validation, error-to-status mapping) that every non-terminal route closure depends on.
+ * Centralising these here keeps individual route files free of validation and persistence wiring.
+ *
+ * Consumed by dashboard-routes.ts; the context shape is defined in dashboard-route-types.ts.
  */
 import { recordEvidenceEvent } from "../evidence/envelope.js";
 import {
@@ -45,9 +45,8 @@ export function createDashboardRouteContext(
     legacyProjectsListFile,
     qualityAuditCache: new Map(),
     /**
-     * Record one dashboard interaction into the evidence trace, tagged with the server actor and the
-     * acting project root. Writes to the evidence envelope as a side effect; fire-and-forget from the
-     * route's perspective.
+     * Record one dashboard interaction into the evidence trace, tagged with the server actor and the acting project root.
+     * Writes to the evidence envelope as a side effect; fire-and-forget from the route's perspective.
      */
     recordDashboardEvent(projectPath, eventKind, payload): void {
       recordEvidenceEvent({
@@ -59,9 +58,8 @@ export function createDashboardRouteContext(
       });
     },
     /**
-     * Validate a caller-supplied path for the given purpose, substituting the server default when the
-     * raw value is empty. Throws LocalPathValidationError when the resolved path is outside the allowed
-     * roots, which routes map to a 400 via responseStatusForError.
+     * Validate a caller-supplied path for the given purpose, substituting the server default when the raw value is empty.
+     * Throws LocalPathValidationError when the resolved path is outside the allowed roots, which routes map to a 400 via responseStatusForError.
      */
     validatedPath(raw, purpose): string {
       return validateLocalPath(raw || deps.absDefault, purpose).path;

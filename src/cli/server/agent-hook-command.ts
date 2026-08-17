@@ -1,8 +1,9 @@
 /**
  * Builds and recognizes exact commands registered in coding-agent hook config.
+ *
  * Use when setup installs, syncs, or checks the command a user's provider runs.
- * It owns response modes, portable root discovery, matchers, and host timeouts,
- * while the writer keeps responsibility for reading and changing config files.
+ * It owns response modes, portable root discovery, matchers, and host timeouts, while the writer keeps responsibility for reading and changing config
+ * files.
  */
 import { PROFILES } from "../detect/agents.js";
 import type { AgentId, AgentProfile } from "../types.js";
@@ -145,8 +146,8 @@ const STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS = [
 ];
 
 /**
- * Shared root-selection source: Git root first, then real cwd ancestors, then the approved
- * environment fallback, classifying absent, corrupt, and complete managed roots.
+ * Shared root-selection source: Git root first, then real cwd ancestors, then the approved environment fallback, classifying absent, corrupt, and
+ * complete managed roots.
  * Use after a registration recognizer is defined; both bootstraps must select identical roots.
  *
  * @returns ordered source fragments ending with the validated launcher path; never empty
@@ -214,8 +215,8 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
 
 /**
  * Build the structured `-e` source registered as one exec-form argv element.
- * Use for providers whose live capture approves argv handlers; it keeps the legacy
- * root contract while importing the shipped launcher instead of spawning Node again.
+ * Use for providers whose live capture approves argv handlers; it keeps the legacy root contract while importing the shipped launcher instead of
+ * spawning Node again.
  *
  * @param hookResponseMode - host response selected for this hook; empty uses fail-closed policy behavior
  * @returns structured bootstrap source; never empty because it becomes args[1] of the handler
@@ -315,8 +316,9 @@ export function agentRegistersHostTimeout(
 
 /**
  * Complete handler shape one provider registers for a managed hook.
- * Shell descriptors carry one host-parsed command string; argv descriptors carry
- * an exec-form executable plus ordered arguments that no shell retokenizes.
+ *
+ * Shell descriptors carry one host-parsed command string; argv descriptors carry an exec-form executable plus ordered arguments that no shell
+ * retokenizes.
  * Readers compare the complete selected descriptor, never a reconstructed string.
  */
 export type AgentHookHandlerDescriptor =
@@ -325,9 +327,9 @@ export type AgentHookHandlerDescriptor =
 
 /**
  * Build the handler descriptor written into the selected agent's configuration.
+ *
  * Use during install, sync, and audit so every consumer derives one launch contract.
- * Claude uses the ADR-053 argv form; providers without fresh live captures keep
- * their deferred shell command byte-for-byte.
+ * Claude uses the ADR-053 argv form; providers without fresh live captures keep their deferred shell command byte-for-byte.
  *
  * @param agentId - agent receiving the handler; empty is impossible after setup validation
  * @param hooksDirectory - project hook folder; empty would produce an invalid managed path

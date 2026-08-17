@@ -1,5 +1,9 @@
 /**
- * Reconciles hook settings with agents detected in the user's selected project.
+ * Reconciles which hooks are registered against the agents actually installed in the user's selected project.
+ *
+ * A user reaches this by toggling a hook in the dashboard Hooks view or running `goat-flow hooks sync` after an upgrade.
+ *
+ * Registration is per agent because each one stores hooks differently, so enabling one hook can mean editing several config files.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -866,12 +870,12 @@ function readDesired(projectPath: string, spec: HookSpec): boolean {
 }
 
 /**
- * Remove leftover hook config entries from an agent the registry now marks
- * unsupported for this spec. Without this, flipping an
- * agent to unsupported strands dead registrations that agents may still
- * attempt to run. Cleanup intentionally does not trust current manifest event
- * metadata: a manifest can be corrected to remove a bogus event while stale
- * managed entries for that same event still exist on disk.
+ * Remove leftover hook config entries from an agent the registry now marks unsupported for this spec.
+ * Without this, flipping an agent to unsupported strands dead registrations that agents may still attempt to run.
+ *
+ * Cleanup intentionally does not trust current manifest event metadata: a manifest can be corrected to remove a bogus event while stale managed
+ * entries for that same event still exist on disk.
+ *
  * Scripts are shared across agents and stay untouched.
  */
 function pruneUnsupportedAgentHookEntries(

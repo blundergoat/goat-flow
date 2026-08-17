@@ -1,5 +1,9 @@
 /**
- * Instruction file fact extraction - parses heading sections and gathers instruction-level metadata.
+ * Parses a user's instruction file (`CLAUDE.md`, `AGENTS.md`, or the Copilot file) into the sections the audit checks.
+ *
+ * Sections are keyed by lowercased heading, so a user who retitles a heading's capitalisation does not fail an otherwise correct file.
+ *
+ * Everything downstream that asks "does this project document its constraints?" reads the map this module builds.
  */
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 

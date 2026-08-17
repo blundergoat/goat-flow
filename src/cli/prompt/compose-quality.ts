@@ -1,5 +1,9 @@
 /**
- * Composes structured quality-assessment prompts for the CLI and dashboard.
+ * Builds the quality-assessment prompt a user copies into their agent, for whichever quality mode they selected.
+ *
+ * The mode is a real fork, not a formatting detail: agent-setup and the focused modes are different prompt contracts with different outputs.
+ *
+ * A user gets here from the dashboard Quality tab or `goat-flow quality prompt`, after choosing what they want assessed.
  */
 import {
   type QualityInput,

@@ -1,13 +1,14 @@
 /**
  * Resolves the file paths that goat-flow's own guidance documents point at.
- * A skill or playbook only helps if the resources it names actually ship, so this module reads
- * canonical Markdown, extracts every local path it teaches, maps installed paths back to their
- * workflow source, and reports the ones an agent would fail to open mid-task.
  *
- * Two rules keep the findings honest. Fenced examples are skipped, because a placeholder path
- * a user is meant to fill in is not a broken link. And a target that resolves outside the
- * package is reported even when a similarly named file happens to exist there, since shipped
- * guidance must never depend on a file the install cannot provide.
+ * A skill or playbook only helps if the resources it names actually ship, so this module reads canonical Markdown, extracts every local path it
+ * teaches, maps installed paths back to their workflow source, and reports the ones an agent would fail to open mid-task.
+ *
+ * Two rules keep the findings honest.
+ * Fenced examples are skipped, because a placeholder path a user is meant to fill in is not a broken link.
+ *
+ * And a target that resolves outside the package is reported even when a similarly named file happens to exist there, since shipped guidance must
+ * never depend on a file the install cannot provide.
  */
 import { existsSync } from "node:fs";
 import { dirname, posix as pathPosix, relative, resolve, sep } from "node:path";
@@ -200,8 +201,8 @@ function extractResourceReferences(
 
 /**
  * Report canonical resource paths that an installed skill or playbook cannot provide.
- * Because skills cite both private packs and shared installed paths, gather all sources first
- * so one audit returns every repair path; unreadable sources defer to set-parity findings.
+ * Because skills cite both private packs and shared installed paths, gather all sources first so one audit returns every repair path; unreadable
+ * sources defer to set-parity findings.
  *
  * @param templateRoot - package or fixture root; empty means no canonical sources can be checked
  * @returns resource findings; empty means every deterministic local reference resolves

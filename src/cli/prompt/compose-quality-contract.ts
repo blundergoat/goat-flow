@@ -1,13 +1,13 @@
 /**
  * Writes the contract an agent must follow when it produces a quality report.
- * A quality assessment is written by a language model, so the prompt has to state exactly what
- * a valid report looks like: which fields exist, which values each one accepts, and what the
- * agent is forbidden from inventing. This module renders that contract into the prompt.
  *
- * The vocabulary is pulled from the same constants the parser validates against, so the
- * instructions an agent reads and the rules its output is checked by can never drift apart. A
- * contract that allowed a value the parser rejects would fail the user at save time, after the
- * expensive part of the work was already done.
+ * A quality assessment is written by a language model, so the prompt has to state exactly what a valid report looks like: which fields exist, which
+ * values each one accepts, and what the agent is forbidden from inventing.
+ * This module renders that contract into the prompt.
+ *
+ * The vocabulary is pulled from the same constants the parser validates against, so the instructions an agent reads and the rules its output is
+ * checked by can never drift apart.
+ * A contract that allowed a value the parser rejects would fail the user at save time, after the expensive part of the work was already done.
  */
 import type { AgentId } from "../types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
@@ -61,14 +61,13 @@ function backtickList(values: readonly (string | number)[]): string {
 /**
  * THE single authoritative renderer for the quality report JSON contract.
  *
- * Every surface that asks an agent to write a quality report - the CLI's
- * agent-setup and focused prompts today - appends this block, so a user
- * running `goat-flow quality --agent claude` and one clicking Launch in the
- * dashboard's Quality page get reports that `goat-flow quality validate`,
- * `history`, and `diff` all parse identically. Field lists come from
- * `quality/schema-types.ts`, so prompt text cannot drift from the parser.
- * (The dashboard's browser-side mirror cannot import this module - it is
- * pinned to the same required fields by `test/unit/quality-report-contract.test.ts`.)
+ * Every surface that asks an agent to write a quality report - the CLI's agent-setup and focused prompts today - appends this block, so a user
+ * running `goat-flow quality --agent claude` and one clicking Launch in the dashboard's Quality page get reports that `goat-flow quality validate`,
+ * `history`, and `diff` all parse identically.
+ *
+ * Field lists come from `quality/schema-types.ts`, so prompt text cannot drift from the parser.
+ * (The dashboard's browser-side mirror cannot import this module - it is pinned to the same required fields by
+ * `test/unit/quality-report-contract.test.ts`.)
  *
  * @param lines - prompt line buffer; appended to in place
  * @param input - run facts embedded into the contract (agent, paths, prior report, mode)
@@ -82,9 +81,8 @@ export function appendQualityReportContract(
 ): void {
   const full = opts.detail === "full";
   /**
-   * Push the full-detail or compact wording of one line. The detail branch
-   * lives in this arrow's own scope, so it does not add to the enclosing
-   * function's complexity budget - just its readability.
+   * Push the full-detail or compact wording of one line.
+   * The detail branch lives in this arrow's own scope, so it does not add to the enclosing function's complexity budget - just its readability.
    */
   const pushVariant = (fullText: string, compactText: string): void => {
     lines.push(full ? fullText : compactText);
@@ -364,8 +362,7 @@ function appendStagedDraftPersistence(
 }
 
 /**
- * Focused-mode wrapper over {@link appendQualityReportContract}: compact
- * wording, trailing-section separator, framework-flavoured sample finding.
+ * Focused-mode wrapper over {@link appendQualityReportContract}: compact wording, trailing-section separator, framework-flavoured sample finding.
  * Kept as a named export so focused composers read naturally.
  *
  * @param lines - prompt line buffer; appended to in place

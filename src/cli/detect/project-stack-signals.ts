@@ -1,12 +1,10 @@
 /**
- * Derives the secondary project signals that enrich setup prompts and audit
- * policy: code-generation and deployment tooling, LLM integration, static-analysis
- * tools, compliance-sensitive docs, and per-language formatter gaps.
+ * Derives the secondary project signals that enrich setup prompts and audit policy: code-generation and deployment tooling, LLM integration,
+ * static-analysis tools, compliance-sensitive docs, and per-language formatter gaps.
  *
- * These are advisory signals, not hard facts - compliance detection in particular
- * is signal-only and audit policy decides whether a hit matters. Detector tables
- * come from project-stack-data.js; file matching goes through the read-only fs
- * adapter so a missing or unreadable file is a non-match, never a throw.
+ * These are advisory signals, not hard facts - compliance detection in particular is signal-only and audit policy decides whether a hit matters.
+ * Detector tables come from project-stack-data.js; file matching goes through the read-only fs adapter so a missing or unreadable file is a
+ * non-match, never a throw.
  */
 import type { ProjectSignals, ReadonlyFS } from "../types.js";
 import {
@@ -21,9 +19,8 @@ import {
 import { hasAnyGlob, hasAnyPath } from "./project-stack-files.js";
 
 /**
- * Count distinct source files under the conventional code roots, used as a coarse
- * project-size signal. Globs only src/lib/app/packages, so generated, vendor, and
- * build output outside those trees is excluded by construction rather than filtered.
+ * Count distinct source files under the conventional code roots, used as a coarse project-size signal.
+ * Globs only src/lib/app/packages, so generated, vendor, and build output outside those trees is excluded by construction rather than filtered.
  *
  * @param fs - read-only filesystem adapter for the target project
  * @returns the de-duplicated file count across the code roots; 0 when none match
@@ -196,9 +193,10 @@ function shouldCheckFormatter(lang: string, languages: string[]): boolean {
 
 /**
  * List the detected languages that the project's format command does not appear to cover.
- * Use when building setup signals so the prompt can name the specific languages missing a formatter
- * instead of a generic nudge. Matching is a substring test against the format command text, so a
- * formatter invoked through an unrelated wrapper script reads as a gap.
+ *
+ * Use when building setup signals so the prompt can name the specific languages missing a formatter instead of a generic nudge.
+ * Matching is a substring test against the format command text, so a formatter invoked through an unrelated wrapper script reads as a gap.
+ *
  * Bash is only checked when it is the primary language or one of at most two languages overall,
  * because a repo carrying a few shell scripts should not be told to adopt a shell formatter.
  *
@@ -228,9 +226,8 @@ function detectFormatterGaps(
 }
 
 /**
- * Aggregate every secondary signal into one ProjectSignals record for the setup
- * and audit pipelines. The single entry point so callers run detection once and
- * read a complete picture rather than invoking each detector piecemeal.
+ * Aggregate every secondary signal into one ProjectSignals record for the setup and audit pipelines.
+ * The single entry point so callers run detection once and read a complete picture rather than invoking each detector piecemeal.
  *
  * @param fs - read-only filesystem adapter for the target project
  * @param languages - detected languages in precedence order; gates per-language formatter checks

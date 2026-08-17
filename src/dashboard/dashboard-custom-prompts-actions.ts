@@ -1,5 +1,9 @@
 /**
- * Dashboard custom-prompt surface helpers and UI actions.
+ * The button and form actions behind the custom-prompt editor: adding surface tags, saving a draft, and removing a saved prompt.
+ *
+ * A user reaches these by opening Prompts, clicking New or Edit, and filling in the fields the dashboard shows.
+ *
+ * Each action mutates the Alpine draft in place so the form stays live, then persists only once the user commits the change.
  */
 function dashboardCustomPromptSurfaceTags(
   ctx: DashboardCustomPromptsContext,

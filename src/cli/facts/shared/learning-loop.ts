@@ -1,6 +1,11 @@
 /**
- * Footgun and lesson fact extractors for the learning-loop system.
- * Analyzes category-bucket markdown files for evidence quality, entry counts, and stale references.
+ * Reads the user's learning loop, the footgun and lesson bucket files where their agent's past mistakes are supposed to become permanent knowledge.
+ *
+ * These facts answer what the dashboard Home card shows: how many entries exist, how stale they are, and which references no longer resolve.
+ *
+ * Bucket files are read rather than individual entries, because:
+ * - the loop stores many entries per category file, so counting files would understate the real total
+ * - a stale reference matters per entry, so each one is located and reported separately
  */
 import type {
   SharedFacts,
@@ -245,12 +250,11 @@ function extractMaxEntryDate(body: string): string | null {
 /**
  * Collect feedback-loop graduation candidates from one bucket body.
  *
- * A line-start `**Recurrence update` marker under an entry heading records that the
- * mistake happened again after the entry existed; per the feedback-loop doctrine the
- * prevention should then graduate from prose to a structural gate (preflight check,
- * CI step, deny pattern). Resolved entries are skipped because their trap is closed.
- * The result is report-only `stats` data - never a `--check` finding - so the
- * existing corpus cannot turn the gate into permanent warning noise.
+ * A line-start `**Recurrence update` marker under an entry heading records that the mistake happened again after the entry existed; per the
+ * feedback-loop doctrine the prevention should then graduate from prose to a structural gate (preflight check, CI step, deny pattern).
+ * Resolved entries are skipped because their trap is closed.
+ *
+ * The result is report-only `stats` data - never a `--check` finding - so the existing corpus cannot turn the gate into permanent warning noise.
  *
  * @param body Bucket markdown body with frontmatter already stripped.
  * @returns Entries with at least one recurrence marker, in file order.

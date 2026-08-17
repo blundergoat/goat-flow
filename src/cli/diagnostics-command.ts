@@ -1,7 +1,7 @@
 /**
  * Runs one read-only diagnostics view after the shared CLI parser selects it.
- * Use this boundary for context pressure, readiness, redacted support, or static
- * threat posture without loading collectors belonging to unrelated commands.
+ * Use this boundary for context pressure, readiness, redacted support, or static threat posture without loading collectors belonging to unrelated
+ * commands.
  */
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";

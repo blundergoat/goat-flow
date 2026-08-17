@@ -1,6 +1,11 @@
 /**
- * Project stack detector for languages, frameworks, and workflow signals.
- * The setup pipeline and audit checks rely on this file to infer commands and template routing from repository contents.
+ * Works out what a project is built from, its languages, frameworks, and the test, lint, build, and format commands it already has.
+ *
+ * This runs the moment a user selects a project, and it is what pre-fills the Setup form instead of asking them to type it all in.
+ *
+ * Detection reads what is actually in the repository rather than trusting configuration, so:
+ * - a dependency present only in devDependencies does not make its language look like something the project ships
+ * - placeholder scripts such as the npm-init test stub are ignored rather than offered as a real command
  */
 import type { StackInfo, ReadonlyFS } from "../types.js";
 import {
@@ -205,11 +210,12 @@ function collectNodeLanguages(
 
 /**
  * Turn the repository-root `package.json` into the languages and commands setup reports.
+ *
  * Use for the root manifest only; monorepo subdirectory manifests are detected separately.
- * Runtime and dev dependencies are passed on separately as well as merged, because a package
- * present only in `devDependencies` should not make its language look like something the project
- * ships. Commands come from `scripts` alone, so a project with dependencies but no scripts still
- * reports languages with every command left null.
+ * Runtime and dev dependencies are passed on separately as well as merged, because a package present only in `devDependencies` should not make its
+ * language look like something the project ships.
+ *
+ * Commands come from `scripts` alone, so a project with dependencies but no scripts still reports languages with every command left null.
  *
  * @param fs - readonly project filesystem, used for language markers the manifest only implies
  *   (`tsconfig.json`, Node source files)
@@ -576,9 +582,8 @@ function applyMarkdownFallback(fs: ReadonlyFS, languages: string[]): void {
 /**
  * Detect languages and workflow commands from manifests and source files.
  *
- * Detector order intentionally preserves command priority: the first detector
- * that supplies a build/test/lint/format command wins, while language labels are
- * merged across all detectors.
+ * Detector order intentionally preserves command priority: the first detector that supplies a build/test/lint/format command wins, while language
+ * labels are merged across all detectors.
  *
  * @param fs Read-only project filesystem abstraction.
  * @returns Canonical stack info, source count, and richer project signals.

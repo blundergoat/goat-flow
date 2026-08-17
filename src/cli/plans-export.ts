@@ -1,8 +1,8 @@
 /**
  * Local milestone export adapter for portable plan review and issue drafting.
- * It parses goat-plan Markdown, preserves delivery and verification context,
- * scrubs readable text before rendering, previews to stdout by default, and
- * writes generated JSON or Markdown only when users choose `--output`.
+ *
+ * It parses goat-plan Markdown, preserves delivery and verification context, scrubs readable text before rendering, previews to stdout by default,
+ * and writes generated JSON or Markdown only when users choose `--output`.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -156,9 +156,9 @@ function addRepresentationConflict(
 
 /**
  * Convert Markdown checkbox lines into stable checked/text records for JSON consumers.
- * An item owns every line until the next checkbox or heading, because real tasks
- * wrap across indented continuation lines with the `(est: ...)` entry at the
- * block's end; single-line tasks keep their exact prior text.
+ *
+ * An item owns every line until the next checkbox or heading, because real tasks wrap across indented continuation lines with the `(est: ...)` entry
+ * at the block's end; single-line tasks keep their exact prior text.
  *
  * @param markdown - one estimate-bearing section body
  * @param warnings - record warning sink for malformed est entries

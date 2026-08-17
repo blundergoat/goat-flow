@@ -1,7 +1,6 @@
 /**
- * Local instruction fact extraction - detects existing project-specific
- * guidance under `.github/instructions/`.
- * `.goat-flow/coding-standards/` is user-owned, not framework-managed - ignored here.
+ * Local instruction fact extraction - detects existing project-specific guidance under `.github/instructions/`. `.goat-flow/coding-standards/` is
+ * user-owned, not framework-managed - ignored here.
  */
 import type { SharedFacts, ReadonlyFS } from "../../types.js";
 

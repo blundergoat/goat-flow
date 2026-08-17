@@ -1,12 +1,12 @@
 /**
  * The starter files a user gets from `goat-flow skill new`.
- * Each template is a complete, working skill or playbook with its required sections already
- * in place, so someone creating their first one starts from something valid and edits it,
- * rather than facing an empty file and guessing at the contract.
  *
- * Placeholders use `{{name}}`-style markers filled in at scaffold time. Keep the section
- * headings here in step with what the skill contracts actually require - a template that
- * drifts hands every new author a file that fails validation the moment they run it.
+ * Each template is a complete, working skill or playbook with its required sections already in place, so someone creating their first one starts from
+ * something valid and edits it, rather than facing an empty file and guessing at the contract.
+ *
+ * Placeholders use `{{name}}`-style markers filled in at scaffold time.
+ * Keep the section headings here in step with what the skill contracts actually require - a template that drifts hands every new author a file that
+ * fails validation the moment they run it.
  */
 
 const WORKFLOW_TEMPLATE = `---

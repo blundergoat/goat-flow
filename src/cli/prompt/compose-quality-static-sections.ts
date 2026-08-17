@@ -1,9 +1,9 @@
 /**
- * Context-free Markdown sections of the agent-setup quality prompt: the finding
- * rules, intentional-design notes, skill-testing protocol, template-integrity
- * checklist, rating rubrics/bands, and the closing reminder. Every helper here is
- * pure string assembly over a shared line buffer and needs no prompt context;
- * context-dependent sections stay in compose-quality-agent-setup.ts.
+ * Context-free Markdown sections of the agent-setup quality prompt: the finding rules, intentional-design notes, skill-testing protocol,
+ * template-integrity checklist, rating rubrics/bands, and the closing reminder.
+ *
+ * Every helper here is pure string assembly over a shared line buffer and needs no prompt context; context-dependent sections stay in
+ * compose-quality-agent-setup.ts.
  */
 
 /**
@@ -48,9 +48,8 @@ export function appendRules(lines: string[]): void {
 }
 
 /**
- * Append the intentional-design notes the reviewer must NOT flag - gitignored
- * local state, the advisory `.active` pointer, unchecked task boxes, and the
- * lean post-ADR-014 config - so known-good shapes are not reported as findings.
+ * Append the intentional-design notes the reviewer must NOT flag - gitignored local state, the advisory `.active` pointer, unchecked task boxes, and
+ * the lean post-ADR-014 config - so known-good shapes are not reported as findings.
  *
  * @param lines - prompt line buffer; appended to in place
  */
@@ -77,9 +76,8 @@ export function appendDesignNotes(lines: string[]): void {
 }
 
 /**
- * Append Part 3 skill-testing instructions: the file-analysis vs live-invocation
- * options and the per-skill reporting-only probes, including the stop-and-report
- * rule when a probe attempts a tracked-file write or implementation.
+ * Append Part 3 skill-testing instructions: the file-analysis vs live-invocation options and the per-skill reporting-only probes, including the
+ * stop-and-report rule when a probe attempts a tracked-file write or implementation.
  *
  * @param lines - prompt line buffer; appended to in place
  */

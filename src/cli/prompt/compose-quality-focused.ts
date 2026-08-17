@@ -1,5 +1,6 @@
 /**
  * Focused quality-prompt composer for process, harness, and skills assessments.
+ *
  * Use when a CLI or dashboard user launches a reporting-only review outside agent setup.
  * It carries live audit evidence, target scope, prior context, and the saved-report contract.
  * Prompt assembly is deterministic and performs no project writes.

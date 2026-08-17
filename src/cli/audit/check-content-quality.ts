@@ -1,9 +1,8 @@
 /**
  * Cold-path content quality linting.
  *
- * Three detector families, all running on truth-bearing prose (instruction
- * files, installed skills, canonical docs). Ports logic inline from cclint
- * and agnix (per Assumption "no new runtime deps"):
+ * Three detector families, all running on truth-bearing prose (instruction files, installed skills, canonical docs).
+ * Ports logic inline from cclint and agnix (per Assumption "no new runtime deps"):
  *
  *   - Vague-term detection (3-term conservative subset: `properly`,
  *     `correctly`, `appropriately`). INFO severity.
@@ -12,10 +11,9 @@
  *   - Non-actionable statement detection (3 cclint regex patterns with
  *     negative lookaheads, e.g. bare "remember" without "to"). INFO.
  *
- * Both cclint code-block-skipping bugs are fixed here (ContentOrganizationRule
- * and ContentAppropriatenessRule both leak fenced-block content into their
- * matchers). A single `inCodeBlock` state machine is shared across all three
- * detector families - toggled on lines starting with ``` (after trimming).
+ * Both cclint code-block-skipping bugs are fixed here (ContentOrganizationRule and ContentAppropriatenessRule both leak fenced-block content into
+ * their matchers).
+ * A single `inCodeBlock` state machine is shared across all three detector families - toggled on lines starting with ``` (after trimming).
  */
 import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
@@ -189,11 +187,9 @@ const GENERIC_INSTRUCTIONS: PatternRule[] = [
 
 const NON_ACTIONABLE: PatternRule[] = [
   {
-    // `note` dropped from cclint's term list - too many false positives on
-    // goat-flow's own docs: label usage (`Note:`), direct-object verbs
-    // (`note them`, `Note what X`) all match cclint's `(?!\s+to\s+)` guard
-    // but are legitimate instructions. `remember | keep in mind | don't
-    // forget` retain the non-actionable signal without the label clash.
+    // `note` dropped from cclint's term list - too many false positives on goat-flow's own docs: label usage (`Note:`), direct-object verbs (`note
+    // them`, `Note what X`) all match cclint's `(?!\s+to\s+)` guard but are legitimate instructions.
+    // `remember | keep in mind | don't forget` retain the non-actionable signal without the label clash.
     rule: "non-actionable-remember",
     pattern: /(?:\bremember\b|\bkeep in mind\b|\bdon'?t forget\b)(?!\s+to\s+)/i,
     severity: "info",
@@ -220,12 +216,11 @@ const NON_ACTIONABLE: PatternRule[] = [
 ];
 
 /**
- * Legacy v1.0 six-step Execution Loop drift. Matches only the
- * arrow-sequence declaration, not incidental historical prose mentioning
- * CLASSIFY or LOG. All four reviewed v1.2 consumer projects (ambient-scribe,
- * sus-form-detector, blundergoat-platform, rampart) shipped AGENTS.md with
- * the legacy six-step loop while CLAUDE.md + skill-preamble.md used the v1.2
- * four-step.
+ * Legacy v1.0 six-step Execution Loop drift.
+ * Matches only the arrow-sequence declaration, not incidental historical prose mentioning CLASSIFY or LOG.
+ *
+ * All four reviewed v1.2 consumer projects (ambient-scribe, sus-form-detector, blundergoat-platform, rampart) shipped AGENTS.md with the legacy
+ * six-step loop while CLAUDE.md + skill-preamble.md used the v1.2 four-step.
  */
 const LEGACY_EXECUTION_LOOP: PatternRule[] = [
   {
@@ -288,9 +283,10 @@ interface ReadinessHeading {
 
 /**
  * Read one `#`-style heading the way a reader sees it rendered.
- * Used while scanning a document for readiness sections, so an author's "Open Questions" heading is
- * recognised whether or not they left a few spaces in front of it. Pure inspection: it reads the line
- * and writes nothing, so re-running an audit never changes the document.
+ *
+ * Used while scanning a document for readiness sections, so an author's "Open Questions" heading is recognised whether or not they left a few spaces
+ * in front of it.
+ * Pure inspection: it reads the line and writes nothing, so re-running an audit never changes the document.
  *
  * @param line - one line of the document being audited
  * @returns the heading level and visible text, or null when this line is ordinary prose and the audit
@@ -334,9 +330,9 @@ function nextReadinessHeadingLevel(
 
 /**
  * Find the placeholder a user left behind in a readiness answer, if there is one.
- * Use when checking a readiness section, so an unfinished-answer marker - a to-do note,
- * "???", or a bare "Answer:" - is raised back to the author instead of shipping as though
- * it were a real answer.
+ *
+ * Use when checking a readiness section, so an unfinished-answer marker - a to-do note, "???", or a bare "Answer:" - is raised back to the author
+ * instead of shipping as though it were a real answer.
  *
  * Backticked text is masked out of the line before matching, so an author who writes about
  * such markers as an example is not accused of leaving one behind.
@@ -522,8 +518,8 @@ function scanLine(
 /**
  * Scan one file, skipping fenced code blocks before applying prose detectors.
  *
- * Pass `mode: "restricted"` for learning-loop files to skip vague-term checks
- * on incident-description prose while still rejecting generic instructions.
+ * Pass `mode: "restricted"` for learning-loop files to skip vague-term checks on incident-description prose while still rejecting generic
+ * instructions.
  * Error behavior: throws nothing; every problem is reported as a content finding.
  *
  * @param path - Repo-relative path used in emitted findings and mode-specific rules.
@@ -556,9 +552,9 @@ export function scanContentQuality(
 /**
  * Find moved literal anchors on current guidance surfaces.
  *
- * Missing files remain owned by path-integrity checks. Existing targets with
- * missing needles are unambiguous drift, including accepted ADR evidence: a
- * historical decision still needs a grep-resolvable pointer to its live proof.
+ * Missing files remain owned by path-integrity checks.
+ * Existing targets with missing needles are unambiguous drift, including accepted ADR evidence: a historical decision still needs a grep-resolvable
+ * pointer to its live proof.
  */
 function scanSemanticAnchorQuality(
   ctx: AuditContext,
@@ -587,8 +583,7 @@ function scanSemanticAnchorQuality(
 /**
  * List current ADR files in a deterministic order.
  *
- * ADR content is a stable truth surface, and discovering `ADR-NNN-*.md` files
- * at runtime keeps new decisions inside content-quality coverage without
+ * ADR content is a stable truth surface, and discovering `ADR-NNN-*.md` files at runtime keeps new decisions inside content-quality coverage without
  * requiring a second hard-coded target list.
  */
 function listDecisionMarkdown(ctx: AuditContext): string[] {
@@ -603,9 +598,8 @@ function listDecisionMarkdown(ctx: AuditContext): string[] {
 /**
  * Resolve the full scan target list.
  *
- * The target set is assembled here because static truth surfaces, current ADRs,
- * and every installed skill file are maintained by different setup paths; a
- * single de-duped resolver avoids coverage drift between those sources.
+ * The target set is assembled here because static truth surfaces, current ADRs, and every installed skill file are maintained by different setup
+ * paths; a single de-duped resolver avoids coverage drift between those sources.
  */
 function resolveTargets(ctx: AuditContext): string[] {
   const targets = new Set<string>([
@@ -674,8 +668,8 @@ function isLocalMarkdownArtifact(path: string): boolean {
 
 /**
  * Discover Markdown not already covered by the curated prose-quality scans.
- * The result is sorted so the audit stays deterministic: glob order varies by filesystem, and an
- * unsorted list would reorder findings between runs on the same unchanged tree.
+ * The result is sorted so the audit stays deterministic: glob order varies by filesystem, and an unsorted list would reorder findings between runs on
+ * the same unchanged tree.
  *
  * @param ctx - audit context supplying the target filesystem
  * @param scanned - paths the curated scans already covered; these are excluded
@@ -704,8 +698,7 @@ function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
 /**
  * Run content-quality checks across the configured documentation targets.
  *
- * Missing files and unreadable targets are skipped; the function reports prose
- * findings for available surfaces instead of failing the whole audit on
+ * Missing files and unreadable targets are skipped; the function reports prose findings for available surfaces instead of failing the whole audit on
  * optional buckets.
  *
  * @param ctx - Audit context containing the read-only project filesystem.

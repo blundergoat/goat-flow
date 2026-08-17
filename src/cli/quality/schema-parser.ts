@@ -1,7 +1,8 @@
 /**
  * Validate quality reports before the CLI saves, compares, or shows them.
- * Use when an agent hands back JSON from a quality run, so the user gets a precise schema error
- * instead of a corrupt history entry or a misleading dashboard comparison.
+ *
+ * Use when an agent hands back JSON from a quality run, so the user gets a precise schema error instead of a corrupt history entry or a misleading
+ * dashboard comparison.
  * The parser keeps legacy-read options explicit while current emissions stay strict.
  */
 import { isAbsolute } from "node:path";

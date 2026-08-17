@@ -1,12 +1,11 @@
 /**
- * Filesystem-facing layer of skill-quality scoring: discovers artifacts on disk, safely reads their
- * content under byte caps, composes the scoring surface (primary skill, shared guidance, and skill-local
- * references), and provides the small text utilities (heading counts, frontmatter stripping, token
- * estimate) the metric scorers call.
+ * Filesystem-facing layer of skill-quality scoring: discovers artifacts on disk, safely reads their content under byte caps, composes the scoring
+ * surface (primary skill, shared guidance, and skill-local references), and provides the small text utilities (heading counts, frontmatter stripping,
+ * token estimate) the metric scorers call.
  *
- * This is the only module here that touches the filesystem, so the safety rules live here: symlinks
- * are refused, every reference include is confined to its allowed root (no `..` escape), and uploads
- * can disable disk scanning so a user-supplied name cannot leak on-disk content into the score.
+ * This is the only module here that touches the filesystem, so the safety rules live here: symlinks are refused, every reference include is confined
+ * to its allowed root (no `..` escape), and uploads can disable disk scanning so a user-supplied name cannot leak on-disk content into the score.
+ *
  * Reads are capped and truncate on UTF-8 character boundaries to keep composed sizes deterministic.
  */
 import {
@@ -59,9 +58,9 @@ interface ReferenceCandidate {
 /**
  * Sanitize a path segment for reference ids without leaking separators into artifact ids.
  */
-function referenceIdSegment(value: string): string {
+function referenceIdSegment(pathSegment: string): string {
   return (
-    value
+    pathSegment
       .replace(/^\.+\/?/u, "")
       .replace(/[^a-z0-9_-]+/giu, "-")
       .replace(/^-+|-+$/gu, "")
@@ -69,6 +68,16 @@ function referenceIdSegment(value: string): string {
   );
 }
 
+/**
+ * Build a stable artifact id for one reference file, qualifying it only when the name repeats.
+ * A unique name keeps the short `reference:<name>` id so ids stay readable; only a collision pulls the directory into the id, which keeps ids stable
+ * as unrelated references are added.
+ *
+ * @param candidate - reference file being identified
+ * @param nameCounts - how many candidates share each name, deciding whether qualification is needed
+ * @param usedIds - ids already taken; consulted so a qualified id still cannot collide
+ * @returns the artifact id; never empty
+ */
 function referenceArtifactId(
   candidate: ReferenceCandidate,
   nameCounts: ReadonlyMap<string, number>,
@@ -89,10 +98,9 @@ function referenceArtifactId(
 }
 
 /**
- * Derive the canonical name for a shared reference doc. Plain `*.md` files use
- * their basename; a `README.md` only counts as a shared reference inside the
- * `skill-quality-testing` directory (named after the directory), and is ignored
- * elsewhere so generic READMEs are not treated as references.
+ * Derive the canonical name for a shared reference doc.
+ * Plain `*.md` files use their basename; a `README.md` only counts as a shared reference inside the `skill-quality-testing` directory (named after
+ * the directory), and is ignored elsewhere so generic READMEs are not treated as references.
  *
  * @param refDir - Directory holding the reference file.
  * @param filename - The reference file's basename.
@@ -121,6 +129,20 @@ function relPosix(projectRoot: string, target: string): string {
   return relative(projectRoot, target).replace(/\\/g, "/");
 }
 
+/**
+ * Record one skill file, folding repeat sightings of the same skill into mirror paths.
+ *
+ * The same skill is installed under several agent directories, so the second and later sightings become mirrors of the first rather than separate
+ * artifacts the user would see duplicated.
+ * Side effect: mutates the `artifactsById` map in place.
+ *
+ * @param projectRoot - project root that paths are made relative to
+ * @param artifactsById - accumulator keyed by artifact id
+ * @param name - skill name, which forms the artifact id
+ * @param skillFile - absolute path to this copy of the skill
+ * @param source - which walk root this copy came from
+ * @returns nothing; the result is the added or extended entry
+ */
 function registerSkillArtifact(
   projectRoot: string,
   artifactsById: Map<string, ArtifactEntry>,
@@ -146,6 +168,15 @@ function registerSkillArtifact(
   });
 }
 
+/**
+ * Annotate a skill with the agent directories it is missing from.
+ * Non-skill artifacts pass through untouched, because only skills are expected to be mirrored.
+ *
+ * @param projectRoot - project root that expected paths are made relative to
+ * @param artifact - artifact to annotate; returned unchanged when it is not a skill
+ * @param config - quality config supplying the skill walk roots that should each hold a copy
+ * @returns a copy carrying `missingMirrors`; empty means the skill is installed everywhere expected
+ */
 function addMissingMirrorMetadata(
   projectRoot: string,
   artifact: ArtifactEntry,
@@ -229,6 +260,16 @@ export function discoverArtifacts(
   return artifacts;
 }
 
+/**
+ * Find one discovered artifact by id.
+ * This rediscovers every artifact per call, so callers looping over many ids should discover once and filter themselves rather than calling this
+ * repeatedly.
+ *
+ * @param projectRoot - project root to discover artifacts in
+ * @param artifactId - id to match exactly
+ * @param config - quality config; defaults to the project's own loaded config
+ * @returns the matching artifact, or null when no discovered artifact carries that id
+ */
 export function findArtifact(
   projectRoot: string,
   artifactId: string,
@@ -251,6 +292,16 @@ function isPathWithin(parent: string, child: string): boolean {
   return firstSegment !== "..";
 }
 
+/**
+ * Read at most the configured byte cap from one file, reporting whether content was cut off.
+ *
+ * Only the capped prefix is read rather than the whole file and then sliced, so an oversized artifact cannot force the whole file into memory.
+ * Side effect: opens and closes a file descriptor.
+ *
+ * @param path - absolute file path to read
+ * @param config - quality config supplying the maximum artifact byte cap
+ * @returns the content and whether it was truncated, or null when the path is missing or unsafe
+ */
 function readTextCapped(
   path: string,
   config: QualityConfig,
@@ -261,18 +312,31 @@ function readTextCapped(
   const maxBytes = Math.max(0, Math.floor(config.maxArtifactBytes));
   const bytesToRead = Math.min(stats.size, maxBytes);
   const buffer = Buffer.alloc(bytesToRead);
-  const fd = openSync(path, "r");
+  const fileDescriptor = openSync(path, "r");
   try {
-    const bytesRead = readSync(fd, buffer, 0, bytesToRead, 0);
+    const bytesRead = readSync(fileDescriptor, buffer, 0, bytesToRead, 0);
     return {
       content: buffer.subarray(0, bytesRead).toString("utf-8"),
       truncated: stats.size > config.maxArtifactBytes,
     };
   } finally {
-    closeSync(fd);
+    closeSync(fileDescriptor);
   }
 }
 
+/**
+ * Resolve a skill-local reference include, refusing anything that escapes the references root.
+ *
+ * Containment is checked twice, before and after realpath, because the first check catches traversal in the literal path and the second catches a
+ * symlink pointing outside the root.
+ *
+ * Error behavior: throws nothing; an unresolvable path swallows the failure and reports null, so an include that cannot be proved safe is refused
+ * rather than read.
+ *
+ * @param skillDir - directory holding the skill whose reference is being resolved
+ * @param relativeRef - reference path as written in the skill; embedded NUL bytes are rejected
+ * @returns the absolute path to read, or null when the reference would escape or is unsafe
+ */
 function resolveSkillReferencePath(
   skillDir: string,
   relativeRef: string,
@@ -293,6 +357,16 @@ function resolveSkillReferencePath(
   return refPath;
 }
 
+/**
+ * Read one artifact's own content, capped, with a note when it was truncated.
+ * An unreadable artifact yields empty content rather than an error, so scoring can still report a result for an artifact the user cannot currently
+ * read.
+ *
+ * @param projectRoot - project root the artifact path is relative to
+ * @param artifact - artifact whose file is read
+ * @param config - quality config supplying the byte cap
+ * @returns the content plus any truncation note; empty content means the file was missing or unsafe
+ */
 export function readArtifactContent(
   projectRoot: string,
   artifact: ArtifactEntry,
@@ -346,7 +420,7 @@ export function truncateUtf8Bytes(content: string, maxBytes: number): string {
   return output;
 }
 
-// eslint-disable-next-line complexity -- intentional because composition assembles preamble, conventions, and skill-local references in a fixed pipeline; each branch is a distinct artifact-class case
+// eslint-disable-next-line complexity -- intentional because composition assembles preamble, conventions, and skill-local references in a fixed pipeline; each branch is a distinct artifact-class case, and it throws nothing because an unreadable include is dropped with a note
 export function composeArtifactContent(
   projectRoot: string,
   artifact: ArtifactEntry,
@@ -489,6 +563,15 @@ export function estimateTokens(content: string): number {
   return Math.ceil(content.length / 4);
 }
 
+/**
+ * Count the Markdown reference files a skill would pull in alongside itself.
+ * Non-skill artifacts count zero, and unsafe entries are excluded, so the count reflects what a consumer would actually load rather than everything
+ * present on disk.
+ *
+ * @param projectRoot - project root the artifact path is relative to
+ * @param artifact - artifact to count references for
+ * @returns how many safe Markdown references exist; zero for non-skills or no references directory
+ */
 export function countSubReferences(
   projectRoot: string,
   artifact: ArtifactEntry,

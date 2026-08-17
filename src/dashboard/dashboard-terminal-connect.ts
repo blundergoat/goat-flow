@@ -180,32 +180,28 @@ function dashboardConnectTerminal(
             dashboardScheduleAwaitingInputReveal(ctx, sessionId, session);
           }
         }
-        // Round-6 design: the awaitingInput badge is NEVER cleared by output
-        // chunks. Five rounds of trying to classify chunks (glyph allowlists,
-        // tail-end heuristics, OSC-title preservation) failed because runners
-        // emit continuous spinner / redraw cycles that vary by version and
-        // accumulate over time, pushing the prompt content out of any bounded
-        // tail window. The badge is now cleared only by signals that
-        // unambiguously mean "user moved on":
-        //   1. `term.onData` - user typed in the dashboard xterm. Xterm
-        //      protocol replies such as focus-in/focus-out and DA responses
-        //      still go to the PTY but do not clear pending paste-submit state.
-        //   2. Ctrl+V paste from `attachCustomKeyEventHandler` - clipboard
-        //      input goes straight to the WebSocket and bypasses `term.onData`,
-        //      so it shares `markUserInputSent()` with the keystroke path
-        //   3. `dashboardSendToTerminalSession` - programmatic input from a
-        //      preset launch (line ~943)
-        //   4. Session lifecycle (exit, terminal-ending error, refresh proves
-        //      gone, detach-as-end) - multiple paths in this handler
-        // If the runner is answered out-of-band (e.g. via Claude's remote
-        // control), the badge stays on until session exit. That trade-off is
-        // explicit and acceptable: a stuck badge after out-of-band answer is
-        // far less harmful than a badge that never fires at all, which was
-        // the bug we shipped five rounds trying to fix. See
-        // .goat-flow/learning-loop/patterns/architecture.md
-        // (search: `Asymmetric trust - set state from output`) and
-        // .goat-flow/learning-loop/footguns/dashboard-terminal.md
-        // (search: `Workspace terminal waiting state`).
+        // Round-6 design: the awaitingInput badge is NEVER cleared by output chunks.
+        //
+        // Five rounds of trying to classify chunks (glyph allowlists, tail-end heuristics, OSC-title preservation) failed because runners emit
+        // continuous spinner / redraw cycles that vary by version and accumulate over time, pushing the prompt content out of any bounded tail
+        // window.
+        //
+        // The badge is now cleared only by signals that unambiguously mean "user moved on": 1.
+        // `term.onData` - user typed in the dashboard xterm.
+        // Xterm protocol replies such as focus-in/focus-out and DA responses still go to the PTY but do not clear pending paste-submit state. 2.
+        //
+        // Ctrl+V paste from `attachCustomKeyEventHandler` - clipboard input goes straight to the WebSocket and bypasses `term.onData`, so it shares
+        // `markUserInputSent()` with the keystroke path 3.
+        // `dashboardSendToTerminalSession` - programmatic input from a preset launch (line ~943) 4.
+        //
+        // Session lifecycle (exit, terminal-ending error, refresh proves gone, detach-as-end) - multiple paths in this handler If the runner is
+        // answered out-of-band (e.g. via Claude's remote control), the badge stays on until session exit.
+        //
+        // That trade-off is explicit and acceptable: a stuck badge after out-of-band answer is far less harmful than a badge that never fires at all,
+        // which was the bug we shipped five rounds trying to fix.
+        //
+        // See .goat-flow/learning-loop/patterns/architecture.md (search: `Asymmetric trust - set state from output`) and
+        // .goat-flow/learning-loop/footguns/dashboard-terminal.md (search: `Workspace terminal waiting state`).
         term.write(msg.data);
       } else if (type === "exit") {
         dashboardClearAwaitingInputTimer(ctx, sessionId);
@@ -306,12 +302,11 @@ function dashboardConnectTerminal(
         .readText()
         .then((text) => {
           if (text && ws.readyState === WebSocket.OPEN) {
-            // Bracketed-paste markers tell runners "this is one paste, do not
-            // submit on internal newlines." Copilot in particular submits on
-            // every '\n' without these markers, so multi-line clipboard text
-            // gets fragmented across queries. Claude / Codex / Antigravity
-            // composers tolerate raw multi-line text but still benefit from
-            // the explicit marker, so wrap unconditionally.
+            // Bracketed-paste markers tell runners "this is one paste, do not submit on internal newlines." Copilot in particular submits on every
+            // '\n' without these markers, so multi-line clipboard text gets fragmented across queries.
+            //
+            // Claude / Codex / Antigravity composers tolerate raw multi-line text but still benefit from the explicit marker, so wrap
+            // unconditionally.
             const prepared = dashboardPreparePasteBody(text);
             const data = "\x1b[200~" + prepared + "\x1b[201~";
             ws.send(JSON.stringify({ type: "input", data }));

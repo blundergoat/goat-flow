@@ -1,7 +1,7 @@
 /**
  * Validates and stores the hash-only baseline used by managed setup previews.
- * Users rely on this local state after an install to distinguish their edits
- * from later goat-flow template changes without storing file contents.
+ *
+ * Users rely on this local state after an install to distinguish their edits from later goat-flow template changes without storing file contents.
  * Preview and install flows use this module at the target-project trust boundary.
  */
 import {
@@ -102,9 +102,9 @@ function isRecord(candidate: unknown): candidate is Record<string, unknown> {
 
 /**
  * Validate baseline metadata before accepting any target-provided file rows.
+ *
  * Use to keep incompatible or cross-agent state from authorizing an overwrite.
- * Error behavior: throws when the metadata is unusable, so a rejected baseline cannot be mistaken
- * for an empty one.
+ * Error behavior: throws when the metadata is unusable, so a rejected baseline cannot be mistaken for an empty one.
  *
  * @param rawState - parsed state; null or empty metadata means no trustworthy baseline is available
  * @param expectedAgent - selected CLI agent; never null after command validation
@@ -176,9 +176,10 @@ function parseManagedStateEntry(rawEntry: unknown): ManagedInstallStateEntry {
 
 /**
  * Validate and index one hash-only baseline for the selected agent.
+ *
  * Use before comparing user files so duplicate or unsafe rows cannot weaken protection.
- * Error behavior: throws on a malformed row or a duplicate path, because a duplicate would make the
- * previously expected bytes ambiguous for one visible path.
+ * Error behavior: throws on a malformed row or a duplicate path, because a duplicate would make the previously expected bytes ambiguous for one
+ * visible path.
  *
  * @param rawState - parsed state object; null or malformed values are rejected
  * @param expectedAgent - selected agent; never null after CLI validation
@@ -204,9 +205,9 @@ function parseManagedInstallState(
 
 /**
  * Read local path metadata without exposing the absolute target path in errors.
+ *
  * Use before reading or writing state so target symlinks cannot silently redirect the flow.
- * Error behavior: throws with the repo-relative label only, so an absolute target path is never
- * echoed back to the user.
+ * Error behavior: throws with the repo-relative label only, so an absolute target path is never echoed back to the user.
  *
  * @param pathToInspect - absolute local path; empty is invalid upstream and cannot be inspected
  * @param displayPath - repository-relative label shown to the user; empty would make errors unusable
@@ -258,9 +259,10 @@ function assertManagedStateParentDirectories(projectPath: string): void {
 
 /**
  * Load the previous CLI install baseline without trusting target-controlled bytes.
+ *
  * Use before every preview; malformed or redirected state is visible and blocks by default.
- * Error behavior: throws nothing; every failure is reported as an invalid result carrying a safe
- * message, so the caller can block the install without handling exceptions.
+ * Error behavior: throws nothing; every failure is reported as an invalid result carrying a safe message, so the caller can block the install without
+ * handling exceptions.
  *
  * @param projectPath - selected target root; empty is invalid upstream and yields no useful state path
  * @param agent - selected agent baseline; never null after CLI validation
@@ -344,9 +346,10 @@ export function readManagedInstallBaseline(
 
 /**
  * Refuse state writes through target-controlled symlinks or non-directory parents.
+ *
  * Use after install verification and before creating the user's next local baseline.
- * Error behavior: throws when the state path is a symlink, a non-directory parent, or an existing
- * non-regular file, so a redirected write is refused rather than followed.
+ * Error behavior: throws when the state path is a symlink, a non-directory parent, or an existing non-regular file, so a redirected write is refused
+ * rather than followed.
  *
  * @param projectPath - selected target root; empty is invalid upstream and cannot safely contain state
  * @param agent - installed agent whose state file may be replaced; never null after CLI validation
@@ -372,9 +375,11 @@ function assertManagedStateWritePath(
 
 /**
  * Persist verified package hashes after a successful CLI install.
+ *
  * Use only after current target bytes match the preview's package templates.
- * Invariant: only system-owned, non-retired rows enter the baseline, because a hash for user-owned
- * or generated content would later read as drift against bytes the user legitimately controls.
+ * Invariant: only system-owned, non-retired rows enter the baseline, because a hash for user-owned or generated content would later read as drift
+ * against bytes the user legitimately controls.
+ *
  * Side effect: writes the agent's install-state file under `.goat-flow/install-state/`.
  * Error behavior: throws when the write path is unsafe, leaving the previous baseline in place.
  *

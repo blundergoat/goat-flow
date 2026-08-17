@@ -1,12 +1,11 @@
 /**
- * Enumerates every non-template destination a goat-flow install may write, and
- * inspects one target path without following symlinked components.
- * Managed templates are exact copies compared by hash; the destinations here are
- * user-owned files the installer seeds or migrates in place, plus generated files
- * the CLI rewrites from project state after Bash exits. Preview consumes both so
- * a user sees the complete write set before authorizing an install.
- * Removals and legacy path migrations are deliberately absent: they are cleanup,
- * not writes, and the preview declares that boundary in its limits.
+ * Enumerates every non-template destination a goat-flow install may write, and inspects one target path without following symlinked components.
+ * Managed templates are exact copies compared by hash; the destinations here are user-owned files the installer seeds or migrates in place, plus
+ * generated files the CLI rewrites from project state after Bash exits.
+ *
+ * Preview consumes both so a user sees the complete write set before authorizing an install.
+ *
+ * Removals and legacy path migrations are deliberately absent: they are cleanup, not writes, and the preview declares that boundary in its limits.
  */
 import { createHash } from "node:crypto";
 import { lstatSync, readFileSync } from "node:fs";
@@ -35,8 +34,8 @@ type ProjectWriteOwnership = "user-owned" | "generated";
 
 /**
  * One destination install may write that carries no exact-copy template.
- * `seedable` records whether install creates the path when it is absent; a
- * non-seedable row is only ever repaired in place, so an absent target stays absent.
+ * `seedable` records whether install creates the path when it is absent; a non-seedable row is only ever repaired in place, so an absent target stays
+ * absent.
  */
 export interface ProjectWriteDefinition {
   path: string;
@@ -164,8 +163,8 @@ function manifestProjectWrites(): ProjectWriteDefinition[] {
 
 /**
  * Collect the selected agent's settings and hook-config destinations.
- * These carry the user's permissions, unrelated hook rows, and local preferences,
- * so install seeds them once and afterwards changes only goat-flow's own entries.
+ * These carry the user's permissions, unrelated hook rows, and local preferences, so install seeds them once and afterwards changes only goat-flow's
+ * own entries.
  */
 function agentProjectWrites(agent: AgentId): ProjectWriteDefinition[] {
   const agentProfile = loadManifest().agents[agent];

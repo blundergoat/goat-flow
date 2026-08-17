@@ -1,11 +1,13 @@
 /**
  * Audit, setup-detect, and setup-prompt HTTP route handlers for the dashboard server.
  *
- * Backs `/api/audit` (the shared DashboardReport for Home/Setup/Quality), `/api/setup/detect`,
- * and `/api/setup`. Aggregate `/api/audit` requests fold a persisted disk cache and a per-request
- * profiler over `runAuditBatch`; explicit per-agent requests skip the cache. Handlers return their
- * outcome as JSON and never throw to the server, so a failed audit becomes an error body rather than
- * a crashed request. Route wiring lives in dashboard-routes.ts; report assembly in dashboard-reporting.ts.
+ * Backs `/api/audit` (the shared DashboardReport for Home/Setup/Quality), `/api/setup/detect`, and `/api/setup`.
+ * Aggregate `/api/audit` requests fold a persisted disk cache and a per-request profiler over `runAuditBatch`; explicit per-agent requests skip the
+ * cache.
+ *
+ * Handlers return their outcome as JSON and never throw to the server, so a failed audit becomes an error body rather than a crashed request.
+ *
+ * Route wiring lives in dashboard-routes.ts; report assembly in dashboard-reporting.ts.
  */
 import type { ServerResponse } from "node:http";
 import { isPackagedInstall } from "../paths.js";
@@ -76,11 +78,12 @@ function buildDashboardAuditReport(
       {
         agentFilter,
         harness: includeHarness,
-        // Opening a page must never run code from the project the user selected. Home cards only
-        // need to show whether a deny hook is installed, and clicking one agent still stops at
-        // static evidence, so the card reads "limited" instead of claiming proof it did not gather.
-        // Real runtime proof is a deliberate CLI audit the user chooses to run against a checkout
-        // they trust; picking a folder in the dashboard is not that choice.
+        // Opening a page must never run code from the project the user selected.
+        // Home cards only need to show whether a deny hook is installed, and clicking one agent still stops at static evidence, so the card reads
+        // "limited" instead of claiming proof it did not gather.
+        //
+        // Real runtime proof is a deliberate CLI audit the user chooses to run against a checkout they trust; picking a folder in the dashboard is
+        // not that choice.
         denyMechanismEvidenceLevel:
           agentFilter === null ? "present-only" : "static",
         factProfile: auditFactProfile,
@@ -429,13 +432,16 @@ function createHandleSetupRequest(
 }
 
 /**
- * Bind the audit/setup route handlers to one server's request context so each closure can reach the
- * validated-path resolver, evidence recorder, and JSON responder without per-request wiring. The
- * closure shape is intentional because the context is resolved once per server, and binding it here
- * lets the handlers be registered as plain `(url, res)` callbacks. Each handler reports validation,
- * audit, and cache failures back to the client as a JSON error body instead of throwing, so a failed
- * request never crashes the server. The aggregate audit route also folds a disk cache over
- * `runAuditBatch` to avoid paying a full re-audit on every fresh Home load.
+ * Bind the audit/setup route handlers to one server's request context so each closure can reach the validated-path resolver, evidence recorder, and
+ * JSON responder without per-request wiring.
+ *
+ * The closure shape is intentional because the context is resolved once per server, and binding it here lets the handlers be registered as plain
+ * `(url, res)` callbacks.
+ *
+ * Each handler reports validation, audit, and cache failures back to the client as a JSON error body instead of throwing, so a failed request never
+ * crashes the server.
+ *
+ * The aggregate audit route also folds a disk cache over `runAuditBatch` to avoid paying a full re-audit on every fresh Home load.
  *
  * @param ctx - per-server dashboard route context carrying path validation, the audit cache, and IO hooks
  * @returns the three audit/setup handlers; each returns true once it has owned and answered a matching

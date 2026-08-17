@@ -1,15 +1,17 @@
 /**
  * Drive the Skills tab and Skill Evaluator UI.
- * Use when a dashboard user reviews installed skill quality, opens one skill report, or evaluates
- * pasted/dropped Markdown before deciding whether to keep, revise, or retire an artifact.
- * The helpers translate score payloads into badges, banners, clipboard summaries, and file input
- * state without making the templates re-compute report meaning.
+ *
+ * Use when a dashboard user reviews installed skill quality, opens one skill report, or evaluates pasted/dropped Markdown before deciding whether to
+ * keep, revise, or retire an artifact.
+ *
+ * The helpers translate score payloads into badges, banners, clipboard summaries, and file input state without making the templates re-compute report
+ * meaning.
  */
 
 /**
- * The summary banner shown above the skill-quality breakdown: a title, supporting sentence, and one
- * rolled-up severity. `severity` is the worst metric severity present (fail beats warn beats pass),
- * so the banner colour always reflects the most serious issue rather than an average.
+ * The summary banner shown above the skill-quality breakdown: a title, supporting sentence, and one rolled-up severity.
+ * `severity` is the worst metric severity present (fail beats warn beats pass), so the banner colour always reflects the most serious issue rather
+ * than an average.
  */
 interface SkillSummaryBanner {
   title: string;
@@ -255,9 +257,9 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
 
     /**
      * Build the skills detail headline from recommendation and warn/fail counts.
-     * The branch order promotes blocking findings above percentage score so a high
-     * score cannot hide a small number of load-bearing structural failures because
-     * review must see the risk before the aggregate grade.
+     *
+     * The branch order promotes blocking findings above percentage score so a high score cannot hide a small number of load-bearing structural
+     * failures because review must see the risk before the aggregate grade.
      *
      * @param report - selected skill report; `null` means the Skills tab has no headline yet
      * @returns banner copy and severity; warn fallback keeps an empty selection visually neutral

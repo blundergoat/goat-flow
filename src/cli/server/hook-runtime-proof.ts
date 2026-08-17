@@ -1,7 +1,8 @@
 /**
  * Reads metadata-only results from the user's explicit offline hook verification.
- * Use when CLI, audit, or dashboard status decides whether the current release passed
- * every required scenario without executing checkout hooks during the read-only view.
+ *
+ * Use when CLI, audit, or dashboard status decides whether the current release passed every required scenario without executing checkout hooks during
+ * the read-only view.
  * Only latest matching verdicts count; unrelated, partial, or old-version events stay non-green.
  */
 import { AUDIT_VERSION } from "../constants.js";

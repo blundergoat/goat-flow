@@ -1,8 +1,8 @@
 /**
  * CLI adapter for pre-write durable artifact redaction.
- * Users pipe a draft through `goat-flow redact` before saving session,
- * review, quality, security, or export text. The scrubber runs in memory;
- * only its readable redacted result reaches stdout or `--output`.
+ *
+ * Users pipe a draft through `goat-flow redact` before saving session, review, quality, security, or export text.
+ * The scrubber runs in memory; only its readable redacted result reaches stdout or `--output`.
  */
 import { readFileSync } from "node:fs";
 import type { ParsedCLI } from "./cli-types.js";

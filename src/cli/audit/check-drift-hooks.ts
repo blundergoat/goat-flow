@@ -1,5 +1,6 @@
 /**
  * Reports when installed safety hooks differ from the Goat Flow version a user selected.
+ *
  * Use during setup or audit before relying on command protection in an agent session.
  * It compares hook scripts, configured launchers, and supported host timeouts.
  * Explicitly disabled hooks remain the user's choice instead of appearing as drift.
@@ -84,28 +85,37 @@ function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
  * Collect direct managed commands so timeout drift is checked at the runner entry users execute.
  */
 function collectManagedHookCommands(
-  value: unknown,
+  configNode: unknown,
   spec: HookSpec,
   matchingCommands: Record<string, unknown>[],
 ): void {
   // Arrays represent event groups or nested command lists in agent settings.
-  if (Array.isArray(value)) {
+  if (Array.isArray(configNode)) {
     // Every entry can independently carry a managed command and timeout.
-    for (const nestedValue of value) {
+    for (const nestedValue of configNode) {
       collectManagedHookCommands(nestedValue, spec, matchingCommands);
     }
     return;
   }
   // Primitive or null values cannot contain a runnable command.
-  if (!isRecord(value)) return;
+  if (!isRecord(configNode)) return;
   // Direct matches are the leaf registrations whose timeout affects the user.
-  if (commandEntryReferencesSpec(value, spec)) matchingCommands.push(value);
+  if (commandEntryReferencesSpec(configNode, spec)) {
+    matchingCommands.push(configNode);
+  }
   // Agent formats may add matcher or hook-id containers around the command.
-  for (const nestedValue of Object.values(value)) {
+  for (const nestedValue of Object.values(configNode)) {
     collectManagedHookCommands(nestedValue, spec, matchingCommands);
   }
 }
 
+/**
+ * Return the config's `hooks` object, creating it when absent or wrongly typed.
+ * Side effect: assigns a fresh `hooks` object onto `config` when one was missing.
+ *
+ * @param config - agent config being edited in place
+ * @returns the hooks object callers can mutate; never null
+ */
 function ensureHooksObject(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -116,6 +126,14 @@ function ensureHooksObject(
   return next;
 }
 
+/**
+ * Return the entry list for one hook event, creating it when absent or wrongly typed.
+ * Side effect: assigns a fresh array onto the config's hooks object when one was missing.
+ *
+ * @param config - agent config being edited in place
+ * @param event - hook event key whose entry list is wanted
+ * @returns the entry array callers can push onto; never null
+ */
 function ensureHookEntries(
   config: Record<string, unknown>,
   event: string,
@@ -143,9 +161,11 @@ function readExplicitHooks(fs: ReadonlyFS): Record<string, unknown> | null {
 }
 
 /** Extract an explicit enabled boolean without treating missing config as disabled. */
-function enabledFromHookConfig(value: unknown): boolean | null {
-  if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
-  return value.enabled;
+function enabledFromHookConfig(hookEntry: unknown): boolean | null {
+  if (!isRecord(hookEntry) || typeof hookEntry.enabled !== "boolean") {
+    return null;
+  }
+  return hookEntry.enabled;
 }
 
 /** Resolve a hook toggle, including the legacy gruff-on-change alias used by existing configs. */
@@ -187,6 +207,11 @@ function removeHookEntries(
 
 /**
  * Parses hook JSON for template and installed-config comparisons; null leaves malformed input to setup validation.
+ * Error behavior: throws nothing; it swallows a parse failure because a user may be mid-edit, and setup validation rather than drift owns reporting
+ * malformed settings.
+ *
+ * @param hookConfigText - raw config file contents
+ * @returns the parsed object, or null when the text is not parseable as a JSON object
  */
 function parseHookConfigJson(
   hookConfigText: string,
@@ -203,6 +228,19 @@ function parseHookConfigJson(
   return isRecord(config) ? config : null;
 }
 
+/**
+ * Apply one user hook toggle to a Copilot config, adding or removing its entry.
+ *
+ * A hook the user never toggled is left alone entirely, so the comparison only reflects choices they actually made rather than defaults they never
+ * saw.
+ * Side effect: mutates `config` in place.
+ *
+ * @param fs - the audited project's filesystem, read for the explicit toggle
+ * @param config - Copilot config being edited in place
+ * @param agent - agent profile supplying the command this entry would run
+ * @param spec - hook whose toggle is applied
+ * @returns true when the toggle applied and the config changed shape
+ */
 function applyExplicitHookToggle(
   fs: ReadonlyFS,
   config: Record<string, unknown>,
@@ -223,6 +261,15 @@ function applyExplicitHookToggle(
   return true;
 }
 
+/**
+ * Apply every user hook toggle to a Copilot config before comparing it with the template.
+ * Side effect: mutates `config` in place.
+ *
+ * @param fs - the audited project's filesystem, read for explicit toggles
+ * @param config - Copilot config being edited in place
+ * @param agent - agent profile supplying the commands these entries would run
+ * @returns true when at least one toggle changed the config
+ */
 function applyExplicitHookToggles(
   fs: ReadonlyFS,
   config: Record<string, unknown>,
@@ -367,6 +414,7 @@ function compareHookArtifact(
  * A filter keeps one runtime from reporting another runtime's absent config.
  *
  * @param fs - the audited project's filesystem
+ * @param projectPath - the audited project's root, used to resolve installed baseline hashes
  * @param templateRoot - package root holding the hooks goat-flow would install
  * @param findings - shared list this appends drift to; existing entries are left alone
  * @param checkedHookArtifacts - paths already compared, so one file is not reported twice
@@ -488,7 +536,17 @@ function staleTimeoutLabels(
 
 /**
  * Compare one installed launcher with the command setup would give the user today.
+ *
  * A mismatch adds the exact hook-sync repair to the drift report.
+ * Error behavior: throws nothing; an unsupported lifecycle reports zero comparisons so one agent's missing capability cannot fail another agent's
+ * audit.
+ *
+ * @param installedConfig - the registration found in the user's config
+ * @param agentIdentifier - agent whose config is being compared
+ * @param agentProfile - profile supplying the command setup would install today
+ * @param hookSpec - hook being compared
+ * @param findings - shared list this appends drift to
+ * @returns 1 when this launcher was compared, 0 when the lifecycle is unsupported
  */
 function compareManagedHookCommand(
   installedConfig: InstalledHookConfig,
@@ -536,7 +594,16 @@ function compareManagedHookCommand(
 
 /**
  * Compare one supported host timeout with the window setup gives the user today.
+ *
  * A mismatch adds the exact hook-sync repair to the drift report.
+ * Error behavior: throws nothing; a registry entry with no declared timeout reports zero, because the agent's own default remains valid and is not
+ * drift.
+ *
+ * @param installedConfig - the registration found in the user's config
+ * @param agentIdentifier - agent whose config is being compared
+ * @param hookSpec - hook being compared; no declared timeout skips the check
+ * @param findings - shared list this appends drift to
+ * @returns 1 when a timeout was compared, 0 when the registry declares none
  */
 function compareManagedHookTimeout(
   installedConfig: InstalledHookConfig,
@@ -660,10 +727,11 @@ function shouldCompareRegistryHookScript(
 
 /**
  * Compare optional registry hook scripts when present or explicitly enabled.
- * Use so a user who opted into an optional hook still learns when their copy went stale,
- * while someone who never enabled it is not nagged about a file they do not have.
+ * Use so a user who opted into an optional hook still learns when their copy went stale, while someone who never enabled it is not nagged about a
+ * file they do not have.
  *
  * @param fs - the audited project's filesystem
+ * @param projectPath - the audited project's root, used to resolve installed baseline hashes
  * @param templateRoot - package root holding the scripts goat-flow would install
  * @param findings - shared list this appends drift to
  * @param checkedHookArtifacts - paths already compared, so one file is not reported twice
@@ -710,6 +778,9 @@ export function compareRegistryHookScripts(
 /**
  * Report retired central hook files without changing the user's project.
  * Use after an upgrade so operators get the supported sync command while audit stays read-only.
+ *
+ * Error behavior: throws nothing; a retired file that cannot be read is reported as absent, so a
+ * permission problem narrows the report rather than failing the audit.
  *
  * @param fs - the audited project's filesystem; nothing here is ever written or deleted
  * @param findings - shared list this appends leftover files to; empty afterwards means the

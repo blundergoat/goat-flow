@@ -1,5 +1,9 @@
 /**
- * Per-agent fact extractor - thin composer that delegates to sub-extractors.
+ * Gathers everything the audit knows about one agent's installation: its instructions, settings, skills, router paths, and hooks.
+ *
+ * This is the single call behind "audit this agent", and its result is what the dashboard turns into that agent's pass or fail rows.
+ *
+ * It only composes; each kind of fact is read by a focused sibling module so one unreadable file cannot blank the whole report.
  */
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 import { extractInstructionFacts } from "./instruction.js";

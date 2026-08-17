@@ -1,7 +1,6 @@
 /**
  * Terminal-specific dashboard server wiring.
- * This keeps terminal HTTP routes, WebSocket upgrades, startup health checks,
- * and shutdown handling out of the main dashboard HTTP server.
+ * This keeps terminal HTTP routes, WebSocket upgrades, startup health checks, and shutdown handling out of the main dashboard HTTP server.
  */
 import type {
   IncomingMessage,
@@ -72,9 +71,10 @@ interface DecodedTerminalCreate {
 
 /**
  * Build the terminal-only dashboard handlers for one server instance.
- * Every handler is closed over one lazily created manager, WebSocket server, and shutdown promise,
- * because those are per-server singletons that must be created at most once and torn down together;
- * splitting the handlers apart would mean threading that shared lifecycle through each one.
+ *
+ * Every handler is closed over one lazily created manager, WebSocket server, and shutdown promise, because those are per-server singletons that must
+ * be created at most once and torn down together; splitting the handlers apart would mean threading that shared lifecycle through each one.
+ *
  * Error behavior: throws nothing; each route reports its own failure as a JSON response, so one bad
  * request cannot take the server down.
  *
@@ -166,9 +166,10 @@ export function createDashboardTerminalHandlers(
 
   /**
    * Start one backend terminal session and resolve the paths it actually ended up using.
-   * The manager may substitute its own target path, so the resolved value is read back rather than
-   * assumed; falling through to the request path and finally the server default keeps every session
-   * attributable to some project.
+   *
+   * The manager may substitute its own target path, so the resolved value is read back rather than assumed; falling through to the request path and
+   * finally the server default keeps every session attributable to some project.
+   *
    * Side effect: starts a backend PTY session.
    *
    * @param manager - terminal manager owning session lifecycle
@@ -306,8 +307,8 @@ export function createDashboardTerminalHandlers(
 
   /**
    * Start a terminal session for the requested runner and workspace.
-   * Error behavior: throws nothing; a rejected launch reports as a JSON error whose status is
-   * derived from the failure message, so the dashboard can distinguish a bad request from a fault.
+   * Error behavior: throws nothing; a rejected launch reports as a JSON error whose status is derived from the failure message, so the dashboard can
+   * distinguish a bad request from a fault.
    */
   async function handleTerminalCreateRequest(
     req: IncomingMessage,
@@ -368,8 +369,8 @@ export function createDashboardTerminalHandlers(
 
   /**
    * Kill one terminal session and report whether it existed.
-   * Error behavior: throws nothing; a manager failure reports as a 500 JSON error, and an unknown
-   * session id is a normal negative result rather than a fault.
+   * Error behavior: throws nothing; a manager failure reports as a 500 JSON error, and an unknown session id is a normal negative result rather than
+   * a fault.
    */
   async function handleTerminalDeleteRequest(
     req: IncomingMessage,
@@ -441,8 +442,8 @@ export function createDashboardTerminalHandlers(
 
   /**
    * Accept dragged image files for the active terminal session.
-   * The branch count here is deliberate: ingress validation checks each rejection class separately
-   * so the dashboard can tell the user which rule the upload broke.
+   * The branch count here is deliberate: ingress validation checks each rejection class separately so the dashboard can tell the user which rule the
+   * upload broke.
    */
   // eslint-disable-next-line complexity -- intentional ingress validation; it throws nothing and reports each rejection class as its own JSON status.
   async function handleTerminalUploadRequest(
@@ -535,8 +536,7 @@ export function createDashboardTerminalHandlers(
 
   /**
    * Return terminal-backend health details for dashboard diagnostics.
-   * Error behavior: throws nothing; a manager failure reports as a 500 JSON error, which the
-   * dashboard reads as terminals being unavailable.
+   * Error behavior: throws nothing; a manager failure reports as a 500 JSON error, which the dashboard reads as terminals being unavailable.
    */
   async function handleHealthRequest(
     req: IncomingMessage,
@@ -592,8 +592,8 @@ export function createDashboardTerminalHandlers(
 
   /**
    * Handle terminal WebSocket upgrades and reject bad origins.
-   * Error behavior: throws nothing; a disallowed origin destroys the socket rather than reporting a
-   * response, because an upgrade that failed origin checks has no trusted channel to answer on.
+   * Error behavior: throws nothing; a disallowed origin destroys the socket rather than reporting a response, because an upgrade that failed origin
+   * checks has no trusted channel to answer on.
    */
   function handleTerminalUpgrade(
     req: IncomingMessage,

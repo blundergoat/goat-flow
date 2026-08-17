@@ -1,7 +1,8 @@
 /**
  * Replays configured Gruff and post-turn commands with fixed offline payloads.
- * Use when a user verifies whether the exact command in agent config returns a
- * recognized result without launching a provider model or retaining hook output.
+ *
+ * Use when a user verifies whether the exact command in agent config returns a recognized result without launching a provider model or retaining hook
+ * output.
  * Shared report contracts remain in the deny-runtime evidence module.
  */
 import { spawnSync } from "node:child_process";

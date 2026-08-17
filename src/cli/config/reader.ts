@@ -1,5 +1,6 @@
 /**
  * Load and validate `.goat-flow/config.yaml` for CLI and dashboard flows.
+ *
  * Use when audit, setup, hooks, quality, or prompt builders need one normalized config object.
  * Missing config gives users safe defaults; malformed config returns structured errors that audit can show.
  * Downstream callers never receive partially merged invalid YAML.
@@ -353,9 +354,8 @@ export function readHookScanRootList(rawScanRoots: unknown): string[] | null {
 }
 
 /**
- * Narrow a hook `binaries` override block to non-empty string values; entries of
- * any other shape are dropped. Returns null when nothing valid remains so
- * callers can omit the key entirely instead of carrying an empty object.
+ * Narrow a hook `binaries` override block to non-empty string values; entries of any other shape are dropped.
+ * Returns null when nothing valid remains so callers can omit the key entirely instead of carrying an empty object.
  *
  * @param value - raw `hooks.<id>.binaries` value; absent or non-object means no binary overrides exist
  * @returns validated language-to-path map, or `null` when the user has no valid binary overrides

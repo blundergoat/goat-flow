@@ -1,7 +1,8 @@
 /**
  * Deterministic integrity checks for workflow skills and shared skill documents.
- * Use during `audit --check-drift` so operators see missing resources, duplicate
- * identities, and stale installed files before an agent loads incomplete guidance.
+ *
+ * Use during `audit --check-drift` so operators see missing resources, duplicate identities, and stale installed files before an agent loads
+ * incomplete guidance.
  * The checker compares canonical workflow sources with the selected project mirrors.
  */
 import { posix as pathPosix } from "node:path";
@@ -79,8 +80,8 @@ function readSkillFrontmatterName(skillMarkdown: string): string | null {
 
 /**
  * Identify an explicitly consumer-owned installed playbook.
- * Use so local playbooks created by `goat-flow skill new` do not masquerade as
- * stale package artifacts, while unmarked leftovers still fail drift checks.
+ * Use so local playbooks created by `goat-flow skill new` do not masquerade as stale package artifacts, while unmarked leftovers still fail drift
+ * checks.
  *
  * @param fs - audited project filesystem; unreadable files are not trusted as user-owned
  * @param installedPath - project-relative installed Markdown path; non-playbooks never qualify

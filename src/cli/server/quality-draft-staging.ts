@@ -1,8 +1,8 @@
 /**
  * Create the private project-owned staging path used by dashboard quality capture.
- * The directory walk rejects links and file-shadowed components, including a
- * competing process that wins creation with an unsafe entry. Git ignore proof
- * runs before this module creates any missing project directories.
+ *
+ * The directory walk rejects links and file-shadowed components, including a competing process that wins creation with an unsafe entry.
+ * Git ignore proof runs before this module creates any missing project directories.
  */
 import { chmodSync, lstatSync, mkdirSync } from "node:fs";
 import { join } from "node:path";

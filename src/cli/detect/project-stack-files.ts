@@ -1,8 +1,7 @@
 /**
- * Small read-only filesystem predicates shared by the project-stack detectors:
- * "does any of these candidate paths/globs exist" and "read the first one that
- * does". They exist so each detector row can be a plain list of alternatives
- * (any-of semantics) without every caller re-writing the same loop.
+ * Small read-only filesystem predicates shared by the project-stack detectors: "does any of these candidate paths/globs exist" and "read the first
+ * one that does".
+ * They exist so each detector row can be a plain list of alternatives (any-of semantics) without every caller re-writing the same loop.
  */
 import type { ReadonlyFS } from "../types.js";
 

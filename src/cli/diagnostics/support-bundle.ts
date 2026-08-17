@@ -1,7 +1,8 @@
 /**
  * Builds the redacted local artifact emitted by `goat-flow diagnostics bundle`.
- * Use this when a maintainer needs one shareable view of setup, audit, quality,
- * runtime-event, stack, and environment state without raw project or prompt data.
+ *
+ * Use this when a maintainer needs one shareable view of setup, audit, quality, runtime-event, stack, and environment state without raw project or
+ * prompt data.
  * Collection composes existing read-only facts; renderers never write the target.
  */
 import { existsSync } from "node:fs";
@@ -113,8 +114,7 @@ interface SupportEventMetadata {
 
 /**
  * Successful-bundle schema containing only allowlisted summaries and hashes.
- * Keep raw source bodies outside this contract; `sections: null` is reserved
- * for collection errors so support consumers can branch without guessing.
+ * Keep raw source bodies outside this contract; `sections: null` is reserved for collection errors so support consumers can branch without guessing.
  */
 interface SupportBundleSections {
   manifest: {

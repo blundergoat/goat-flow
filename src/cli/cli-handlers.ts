@@ -28,6 +28,13 @@ import { handleRedactCommand } from "./redact-command.js";
 import { handlePlansCommand } from "./plans-check.js";
 import type { runSkillNew } from "./skill-author.js";
 const PACKAGE_VERSION = getPackageVersion();
+
+/**
+ * Render one candidacy recommendation as the short label the CLI prints.
+ *
+ * @param recommendation - what the candidacy check decided the draft should become
+ * @returns a human-readable label naming the artifact kind and its subtype or reason
+ */
 function formatCandidacyArtifact(
   recommendation: CandidacyResult["recommendedArtifact"],
 ): string {
@@ -153,19 +160,21 @@ function findMenuAction(input: string): MenuAction | null {
 
 /** Ask for a project path, defaulting to the current working directory. */
 async function promptProjectPath(
-  rl: ReturnType<typeof createInterface>,
+  readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<string> {
-  const answer = await rl.question("Project path [.] ");
+  const answer = await readlineInterface.question("Project path [.] ");
   return resolve(answer.trim() || ".");
 }
 
 /** Ask for one supported agent id. */
 async function promptAgent(
-  rl: ReturnType<typeof createInterface>,
+  readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<AgentId> {
   const agents = validAgents();
   for (;;) {
-    const answer = await rl.question(`Agent (${agents.join("/")}) `);
+    const answer = await readlineInterface.question(
+      `Agent (${agents.join("/")}) `,
+    );
     const selected = answer.trim();
     if (agents.includes(selected as AgentId)) return selected as AgentId;
     console.log(`Use one of: ${agents.join(", ")}`);
@@ -174,30 +183,40 @@ async function promptAgent(
 
 /** Ask whether install should overwrite settings/config. */
 async function promptForce(
-  rl: ReturnType<typeof createInterface>,
+  readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<boolean> {
-  const answer = await rl.question(
+  const answer = await readlineInterface.question(
     "Overwrite existing settings/config? [y/N] ",
   );
   return /^y(?:es)?$/iu.test(answer.trim());
 }
 
-/** Read all menu answers and build the command options to run. */
+/**
+ * Read all menu answers and build the command options to run.
+ * Error behavior: throws CLIError with exit code 2 for an unrecognised menu choice, before any further question is asked, so the user is not walked
+ * through a flow that cannot run.
+ *
+ * @param options - parsed CLI options the answers are layered onto
+ * @param readlineInterface - open readline interface used for every question
+ * @returns the options to dispatch, with command, project path, agent, and force filled in
+ */
 async function promptMenuCommand(
   options: ParsedCLI,
-  rl: ReturnType<typeof createInterface>,
+  readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<ParsedCLI> {
   console.log(renderMenuText());
-  const choice = await rl.question("\nChoice [1] ");
+  const choice = await readlineInterface.question("\nChoice [1] ");
   const action = findMenuAction(choice || "1");
   if (!action) {
     throw new CLIError("Unknown menu choice.", 2);
   }
 
-  const projectPath = await promptProjectPath(rl);
-  const agent = action.needsAgent ? await promptAgent(rl) : options.agent;
+  const projectPath = await promptProjectPath(readlineInterface);
+  const agent = action.needsAgent
+    ? await promptAgent(readlineInterface)
+    : options.agent;
   const shouldForce =
-    action.command === "install" ? await promptForce(rl) : false;
+    action.command === "install" ? await promptForce(readlineInterface) : false;
 
   return {
     ...options,
@@ -216,15 +235,15 @@ async function handleMenuCommand(options: ParsedCLI): Promise<void> {
     return;
   }
 
-  const rl = createInterface({
+  const readlineInterface = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
   let nextOptions: ParsedCLI;
   try {
-    nextOptions = await promptMenuCommand(options, rl);
+    nextOptions = await promptMenuCommand(options, readlineInterface);
   } finally {
-    rl.close();
+    readlineInterface.close();
   }
   await dispatchCommand(nextOptions);
 }
@@ -311,7 +330,11 @@ function writeMultiAgentSyncBanner(withDivider: boolean): void {
   process.stdout.write(lines.join("\n"));
 }
 
-/** Handle the setup command: compose and render setup prompts per agent */
+/**
+ * Handle the setup command: compose and render setup prompts per agent.
+ * Error behavior: throws CLIError when the selected agent has no composable setup, so a user asking for an unsupported agent gets that message rather
+ * than an empty prompt.
+ */
 async function handleSetupCommand(
   options: ParsedCLI,
   auditReport: AuditReport,
@@ -421,8 +444,8 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
 
 /**
  * Handle `events tail`, reading the most recent local evidence-envelope events for the project.
- * Throws a usage CLIError (exit 2) for any subcommand other than `tail`. Emits the events as a
- * JSON array under `--format json`, otherwise one compact JSON object per line (JSONL) for piping.
+ * Throws a usage CLIError (exit 2) for any subcommand other than `tail`.
+ * Emits the events as a JSON array under `--format json`, otherwise one compact JSON object per line (JSONL) for piping.
  */
 async function handleEventsCommand(options: ParsedCLI): Promise<void> {
   if (options.eventsSubcommand !== "tail") {
@@ -557,9 +580,9 @@ function skillNewRequest(options: ParsedCLI) {
 /** Render one authoring result in the caller's selected JSON or human-readable contract. */
 function renderSkillNewResult(
   result: SkillNewCommandResult,
-  asJson: boolean,
+  shouldRenderJson: boolean,
 ): string {
-  if (!asJson) return result.output.join("\n");
+  if (!shouldRenderJson) return result.output.join("\n");
   return JSON.stringify(
     {
       candidacy: result.candidacy,
@@ -594,7 +617,14 @@ async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
   writeOutput(options, renderSkillNewResult(result, options.format === "json"));
 }
 
-/** Dispatch one parsed CLI command to its handler. */
+/**
+ * Dispatch one parsed CLI command to its handler.
+ * The handler table is consulted first; setup preview and apply are routed separately because both use the deterministic install path rather than
+ * prompt composition.
+ *
+ * @param options - fully parsed and validated CLI options selecting the command to run
+ * @returns nothing; the selected handler owns all output and exit behaviour
+ */
 export async function dispatchCommand(options: ParsedCLI): Promise<void> {
   const handler = COMMAND_HANDLERS[options.command];
   if (handler) {

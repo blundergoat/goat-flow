@@ -1,7 +1,7 @@
 /**
  * Browser-side payload readers for the dashboard.
- * This is loaded as a classic script before app.js, so helpers intentionally
- * live in the shared browser global scope rather than using module imports.
+ * This is loaded as a classic script before app.js, so helpers intentionally live in the shared browser global scope rather than using module
+ * imports.
  */
 
 type JsonRecord = Record<string, unknown>;

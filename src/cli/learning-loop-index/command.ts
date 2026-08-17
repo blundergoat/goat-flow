@@ -1,5 +1,9 @@
 /**
- * CLI command helpers for regenerating generated learning-loop bucket indexes.
+ * Backs `goat-flow index`, the command that regenerates the learning loop's generated bucket indexes.
+ *
+ * A user runs this after adding, editing, or removing a footgun or lesson, because `stats --check` fails while an index is stale.
+ *
+ * Indexes are always regenerated from the bucket files rather than edited by hand, so retrieval reflects what is actually stored.
  */
 import type { ParsedCLI } from "../cli-types.js";
 import { writeOutput } from "../cli-output.js";
@@ -9,9 +13,9 @@ import { generateIndexes } from "./generate.js";
 import { resolveIndexBucketPaths } from "./parse-bucket.js";
 
 /**
- * Regenerate learning-loop INDEX.md files after a successful install so new projects start with
- * fresh indexes (and `stats --check` index freshness) without a separate manual `goat-flow index`
- * run. The installer has just created the bucket directories, so this never creates them itself.
+ * Regenerate learning-loop INDEX.md files after a successful install so new projects start with fresh indexes (and `stats --check` index freshness)
+ * without a separate manual `goat-flow index` run.
+ * The installer has just created the bucket directories, so this never creates them itself.
  *
  * @param projectPath - target project root whose existing bucket indexes should be regenerated
  */

@@ -1,8 +1,9 @@
 /**
  * Installs, removes, and inspects the hook files behind CLI and dashboard status.
+ *
  * Use when a user enables, disables, syncs, or reviews one managed hook.
- * It keeps filesystem trust and version checks separate from provider support,
- * so local repair guidance reflects the files the selected agent can run.
+ * It keeps filesystem trust and version checks separate from provider support, so local repair guidance reflects the files the selected agent can
+ * run.
  */
 import {
   chmodSync,

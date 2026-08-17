@@ -11,14 +11,41 @@ You are a coding agent. Your job is to run the right gruff tool, fix one cohesiv
 
 Set `target` from the requested language; another gruff binary is not enough.
 
-Look for a project wrapper first in `bin/`, `scripts/`, or package scripts, inspect what it invokes, and prefer it when it targets the requested Gruff port. Wrappers often preserve the working directory, config discovery, or exit-code contract that a raw binary call would lose.
+Start with project-declared paths and wrappers. A repo-relative
+`hooks.gruff-code-quality.binaries.<go|rs|ts|php|py>` path in
+`.goat-flow/config.yaml` is explicit project authority for a non-standard or nested install; verify
+that it is executable and remains inside the project. Look for a wrapper in `bin/`, `bin/test/`,
+`scripts/`, or package scripts, inspect what it invokes, and prefer it for the capabilities it owns.
+Wrappers often preserve the working directory, config discovery, or exit-code contract that a raw
+binary call would lose. Do not assume a wrapper forwards raw-binary flags such as `--version`,
+`--help`, or `--format`.
 
 Availability discovery only inspects wrappers and existing executable paths. It never invokes a package resolver, installer, init command, or dependency-fetching wrapper. Run a wrapper only after inspection proves it uses an already-present executable.
 
 ```bash
 target=gruff-ts  # gruff-go | gruff-rs | gruff-ts | gruff-php | gruff-py
+wrapper=
+for candidate in \
+  "bin/test/$target-analyse.sh" \
+  "bin/$target-analyse.sh" \
+  "scripts/$target-analyse.sh"
+do
+  if [ -x "$candidate" ]; then wrapper="$candidate"; break; fi
+done
+
 found=
-for candidate in "target/release/$target" "bin/$target" "vendor/bin/$target" "node_modules/.bin/$target" ".cargo-tools/bin/$target" "$HOME/.local/bin/$target" "$target"; do
+for candidate in \
+  "target/release/$target" \
+  "bin/$target" \
+  "vendor/bin/$target" \
+  "vendor/blundergoat/$target/bin/$target" \
+  "node_modules/.bin/$target" \
+  "node_modules/@blundergoat/$target/bin/$target" \
+  ".venv/bin/$target" \
+  ".cargo-tools/bin/$target" \
+  "$HOME/.local/bin/$target" \
+  "$target"
+do
   if [ -x "$candidate" ]; then found="$candidate"; break; fi
   if command -v "$candidate" >/dev/null 2>&1; then found="$(command -v "$candidate")"; break; fi
 done
@@ -26,6 +53,11 @@ test -n "$found"
 "$found" --version
 "$found" --help
 ```
+
+Run this from the selected project or owning subproject root. Standard package shims precede their
+direct package binaries; the direct Composer and npm paths are fallbacks for installs whose shim is
+missing. Inspect `$wrapper` before using it. Do not recursively execute name-matched binaries from
+arbitrary child directories; configure an exact repo-relative path for a deliberately nested tool.
 
 If no existing executable is found, say gruff is unavailable and use the project's normal lint/typecheck/tests; do not resolve tooling or invent gruff findings.
 

@@ -1,6 +1,5 @@
 /**
- * Dashboard model readers for injected shell data and API payloads that feed
- * presets, projects, sessions, quality views, and task state.
+ * Dashboard model readers for injected shell data and API payloads that feed presets, projects, sessions, quality views, and task state.
  * Use when server responses must become safe, complete browser-facing models.
  */
 function readSupportedAgent(rawAgent: unknown): SupportedAgent | null {
@@ -203,10 +202,9 @@ function readServerSessionInfo(rawSession: unknown): ServerSessionInfo | null {
   const projectPath = readString(rawSession.projectPath);
   const cwd = readString(rawSession.cwd);
   const targetPath = readString(rawSession.targetPath);
-  // Absent means a session projection that predates access modes, so it keeps
-  // the workspace default. An unrecognised value is a server bug, not a
-  // permission grant: fall back to the restricted mode rather than carry a
-  // write-enabled session into the retry and reconnect payloads.
+  // Absent means a session projection that predates access modes, so it keeps the workspace default.
+  // An unrecognised value is a server bug, not a permission grant: fall back to the restricted mode rather than carry a write-enabled session into
+  // the retry and reconnect payloads.
   const accessMode = readTerminalAccessMode(rawSession.accessMode);
   // Legacy sessions omit capture metadata, which means the UI has no receipt channel to restore.
   const captureQualityDrafts = rawSession.captureQualityDrafts === true;

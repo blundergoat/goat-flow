@@ -169,10 +169,9 @@ class TerminalManager {
       );
     }
 
-    // Reserve the slot synchronously, before any await. This placeholder counts
-    // toward the cap immediately (its status is not "terminated"), so a burst of
-    // concurrent creates that all clear the check above can't each slip a
-    // session in while one of them is parked on the loadNodePty() await.
+    // Reserve the slot synchronously, before any await.
+    // This placeholder counts toward the cap immediately (its status is not "terminated"), so a burst of concurrent creates that all clear the check
+    // above can't each slip a session in while one of them is parked on the loadNodePty() await.
     const id = randomUUID();
     const session: TerminalSession = {
       id,
@@ -211,11 +210,9 @@ class TerminalManager {
   }
 
   /**
-   * Launch the runner into an already-reserved session and promote it to
-   * `active`. Runs after `create` has parked a `starting` placeholder in the
-   * session map; anything thrown here is cleaned up by `create`'s catch. Kept
-   * separate from `create` so slot reservation stays synchronous while the
-   * spawn - which awaits node-pty - happens under the concurrency guard.
+   * Launch the runner into an already-reserved session and promote it to `active`.
+   * Runs after `create` has parked a `starting` placeholder in the session map; anything thrown here is cleaned up by `create`'s catch.
+   * Kept separate from `create` so slot reservation stays synchronous while the spawn - which awaits node-pty - happens under the concurrency guard.
    *
    * @param session - the reserved session to launch and mutate to active
    * @param prompt - launch prompt delivered to the runner once it is ready
@@ -271,10 +268,8 @@ class TerminalManager {
       }
       qualityReportProjectPath = allowedReportOwner;
     }
-    // Staging must exist BEFORE the permission overlay is built below so a
-    // fresh target still receives its `.goat-flow/logs` write allow. Failure
-    // here fails the launch closed: a staged-draft session must never start
-    // without a working persistence path.
+    // Staging must exist BEFORE the permission overlay is built below so a fresh target still receives its `.goat-flow/logs` write allow.
+    // Failure here fails the launch closed: a staged-draft session must never start without a working persistence path.
     const reportingCaptureRoots = stagedQualityCaptureRoots(
       runner,
       session.accessMode,
@@ -314,11 +309,9 @@ class TerminalManager {
       env: spawnSpec.env,
     });
 
-    // A concurrent kill()/DELETE may have cancelled this reservation while we
-    // were awaiting loadNodePty() - e.g. the user closed the launching tab. If
-    // the session was dropped from the map or marked terminated, kill the PTY we
-    // just spawned so it can't outlive its session, and abort instead of
-    // resurrecting a deleted session (which would leak an untracked runner).
+    // A concurrent kill()/DELETE may have cancelled this reservation while we were awaiting loadNodePty() - e.g. the user closed the launching tab.
+    // If the session was dropped from the map or marked terminated, kill the PTY we just spawned so it can't outlive its session, and abort instead
+    // of resurrecting a deleted session (which would leak an untracked runner).
     if (this.sessions.get(id) !== session || session.status === "terminated") {
       try {
         pty.kill();
@@ -433,9 +426,9 @@ class TerminalManager {
   }
 
   /**
-   * Release a reserved session after a failed launch: clear any idle timer,
-   * kill the PTY if one was spawned before the failure, and drop the
+   * Release a reserved session after a failed launch: clear any idle timer, kill the PTY if one was spawned before the failure, and drop the
    * placeholder from the session map so the freed slot is reusable at once.
+   *
    * Reports PTY cleanup errors as process warnings because the launch failure was already shown to the user.
    *
    * @param session - the reserved session whose slot is being freed; missing PTY means no terminal reached the UI
@@ -461,8 +454,8 @@ class TerminalManager {
 
   /**
    * Attach a browser WebSocket to an existing terminal session.
-   * Reports an error on the socket when the session is gone; the branching preserves detach semantics
-   * because a browser disconnect must not be treated as a PTY exit.
+   * Reports an error on the socket when the session is gone; the branching preserves detach semantics because a browser disconnect must not be
+   * treated as a PTY exit.
    */
   attachWebSocket(id: string, socket: WebSocket): void {
     const session = this.sessions.get(id);
@@ -519,8 +512,7 @@ class TerminalManager {
   }
 
   /**
-   * Handle one client WebSocket payload: input keystrokes feed the PTY (with
-   * idle-timer reset and prompt tracing), resize messages clamp and apply
+   * Handle one client WebSocket payload: input keystrokes feed the PTY (with idle-timer reset and prompt tracing), resize messages clamp and apply
    * terminal dimensions, and undecodable payloads report an error to the socket.
    *
    * @param session - terminal session that owns the PTY the message targets
@@ -624,10 +616,9 @@ class TerminalManager {
   /** Tear down a terminal session; swallows kill/close races because either side may already be gone. */
   private killSession(session: TerminalSession): void {
     this.clearIdleTimer(session);
-    // Mark the session dead even if its PTY hasn't spawned yet - a "starting"
-    // reservation cancelled mid-launch has no PTY to kill, but flagging it
-    // terminated lets the in-flight startReservedSession see the cancellation
-    // and tear down whatever it spawns instead of leaking an untracked runner.
+    // Mark the session dead even if its PTY hasn't spawned yet - a "starting" reservation cancelled mid-launch has no PTY to kill, but flagging it
+    // terminated lets the in-flight startReservedSession see the cancellation and tear down whatever it spawns instead of leaking an untracked
+    // runner.
     if (session.status !== "terminated") {
       session.status = "terminated";
       if (session.pty) {

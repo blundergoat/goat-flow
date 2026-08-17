@@ -1,7 +1,8 @@
 /**
  * Audit orchestrator for `goat-flow audit`.
- * Loads config, extracts facts, runs build checks (pass/fail) and optional
- * harness completeness checks (--harness, deterministic pass/fail per concern).
+ *
+ * Loads config, extracts facts, runs build checks (pass/fail) and optional harness completeness checks (--harness, deterministic pass/fail per
+ * concern).
  * Returns an AuditReport consumed by renderers and the dashboard.
  */
 import type { AgentId, ProjectFacts, ReadonlyFS } from "../types.js";
@@ -104,10 +105,11 @@ export { createAuditFactsView } from "./audit-facts-view.js";
 type AuditHarnessOption = Record<"harness", boolean>;
 
 /**
- * Caller-supplied switches for a single `runAudit` invocation. Every field beyond `agentFilter` and
- * the inherited `harness` flag is optional and off by default, so the common audit path stays the
- * deterministic build checks; the optional fields turn on the more expensive diagnostics (drift,
- * content lint, explicit full deny-hook runtime validation) or trade fact depth for dashboard speed.
+ * Caller-supplied switches for a single `runAudit` invocation.
+ *
+ * Every field beyond `agentFilter` and the inherited `harness` flag is optional and off by default, so the common audit path stays the deterministic
+ * build checks; the optional fields turn on the more expensive diagnostics (drift, content lint, explicit full deny-hook runtime validation) or trade
+ * fact depth for dashboard speed.
  */
 interface AuditOptions extends AuditHarnessOption {
   agentFilter: AgentId | null;

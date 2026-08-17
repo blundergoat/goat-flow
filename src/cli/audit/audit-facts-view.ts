@@ -1,9 +1,10 @@
 /**
- * Per-context facts narrowing for the audit pipeline. The orchestrator extracts project facts once
- * and reuses them across the aggregate and per-agent audits; this module hands each audit its own
- * view so a per-agent run cannot mutate the shared batch bundle. The deep-clone choices here are the
- * isolation contract - the only exception is the dashboard-summary profile, which shares stack facts
- * because that profile never mutates them.
+ * Per-context facts narrowing for the audit pipeline.
+ * The orchestrator extracts project facts once and reuses them across the aggregate and per-agent audits; this module hands each audit its own view
+ * so a per-agent run cannot mutate the shared batch bundle.
+ *
+ * The deep-clone choices here are the isolation contract - the only exception is the dashboard-summary profile, which shares stack facts because that
+ * profile never mutates them.
  */
 import type { AgentId, ProjectFacts } from "../types.js";
 import type { AuditFactProfile } from "./types.js";

@@ -1,7 +1,7 @@
 /**
  * Deterministic validation for drafted goat-review Markdown.
- * The validator reads only the supplied report, semantic-anchor files under the
- * reviewed project, and claimed local refutation ledgers; it never persists reports.
+ * The validator reads only the supplied report, semantic-anchor files under the reviewed project, and claimed local refutation ledgers; it never
+ * persists reports.
  */
 import { readFileSync } from "node:fs";
 import { CLIError } from "./cli-error.js";

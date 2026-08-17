@@ -1,7 +1,6 @@
 /**
  * Setup-detection helpers for dashboard routes.
- * These helpers keep project inspection and setup payload shaping out of the
- * main HTTP server so route code can stay focused on request handling.
+ * These helpers keep project inspection and setup payload shaping out of the main HTTP server so route code can stay focused on request handling.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -16,10 +15,9 @@ type ExistingArtifactPresence = Record<
 >;
 
 /**
- * Per-surface presence flags driving the setup view's prefill checkboxes. Extends the skill/lessons/
- * footguns/config presence flags with the two Copilot instruction surfaces (repo-wide
- * `copilot-instructions.md` versus path-scoped `.github/instructions/`). Each flag is advisory: true
- * means the surface was detected, false means absent or unreadable, never an error.
+ * Per-surface presence flags driving the setup view's prefill checkboxes.
+ * Extends the skill/lessons/ footguns/config presence flags with the two Copilot instruction surfaces (repo-wide `copilot-instructions.md` versus
+ * path-scoped `.github/instructions/`). Each flag is advisory: true means the surface was detected, false means absent or unreadable, never an error.
  */
 interface ExistingArtifacts extends ExistingArtifactPresence {
   instructionsRepoWide: boolean;
@@ -155,8 +153,8 @@ function addLabel(labels: string[], label: string): void {
 
 /**
  * Read and parse one root JSON file.
- * Error behavior: throws nothing; a missing, unreadable, or non-object file swallows the failure and
- * reports null, so an unparseable manifest degrades detection instead of failing the whole scan.
+ * Error behavior: throws nothing; a missing, unreadable, or non-object file swallows the failure and reports null, so an unparseable manifest
+ * degrades detection instead of failing the whole scan.
  *
  * @param projectPath - project root the file is resolved against
  * @param filename - root-relative filename to read
@@ -231,8 +229,8 @@ function objectAt(candidate: unknown): Record<string, string> {
 
 /**
  * Pick the best npm script for one command role, preferring exact names over fuzzy matches.
- * Exact hits return the script body so the user sees the real command, while fuzzy hits return
- * `npm run <key>` because a partial name match is not strong enough to quote verbatim.
+ * Exact hits return the script body so the user sees the real command, while fuzzy hits return `npm run <key>` because a partial name match is not
+ * strong enough to quote verbatim.
  *
  * @param scripts - the package's script map
  * @param exactKeys - script names tried first; a hit returns the script body itself
@@ -301,8 +299,9 @@ function isPlaceholderScript(command: string): boolean {
 
 /**
  * Fill only the command slots the target has not already claimed.
- * First writer wins, so the detector order decides which language supplies each command in a
- * polyglot project rather than the last one silently overwriting the rest.
+ *
+ * First writer wins, so the detector order decides which language supplies each command in a polyglot project rather than the last one silently
+ * overwriting the rest.
  * Side effect: mutates `target` in place.
  *
  * @param target - accumulated commands; only empty slots are filled
@@ -384,8 +383,8 @@ function composerScripts(composer: JsonObject): JsonObject {
 
 /**
  * Label PHP frameworks from Composer dependencies and their marker files.
- * Both a dependency and a marker file are accepted because a vendored or partially installed
- * project may show only one of the two.
+ *
+ * Both a dependency and a marker file are accepted because a vendored or partially installed project may show only one of the two.
  * Side effect: appends to the `languages` and `frameworks` lists in place.
  *
  * @param projectPath - project root, checked for framework marker files
@@ -417,8 +416,7 @@ function collectPHPFrameworks(
 
 /**
  * Choose PHP commands from Composer scripts, falling back to conventional vendor binaries.
- * A configured script always wins, because a project that defines one usually wraps setup the raw
- * binary would skip.
+ * A configured script always wins, because a project that defines one usually wraps setup the raw binary would skip.
  *
  * @param projectPath - project root, checked for phpunit and phpstan configuration
  * @param scripts - the `scripts` block from composer.json
@@ -605,8 +603,9 @@ function collectShellSetup(projectPath: string, languages: string[]): void {
 
 /**
  * Run every remaining single-marker language detector against the project root.
- * Node and PHP run before this because they carry framework detection and richer command sources;
- * everything here only needs one marker file, so the order among them does not change the result.
+ *
+ * Node and PHP run before this because they carry framework detection and richer command sources; everything here only needs one marker file, so the
+ * order among them does not change the result.
  * Side effect: appends to `languages` and `frameworks` and fills empty `commands` slots, in place.
  *
  * @param projectPath - project root

@@ -1,7 +1,8 @@
 /**
- * Provenance helpers for audit checks. Two jobs live here: classifying a check's evidence paths into
- * framework-truth versus target-project buckets (so renderers can label where evidence came from),
- * and validating, once per process, that every registered check's provenance still resolves on disk.
+ * Provenance helpers for audit checks.
+ * Two jobs live here: classifying a check's evidence paths into framework-truth versus target-project buckets (so renderers can label where evidence
+ * came from), and validating, once per process, that every registered check's provenance still resolves on disk.
+ *
  * The framework/target split exists because goat-flow audits a target project but its own docs are
  * the canonical truth for some checks; the two must not be conflated in evidence output.
  */
@@ -44,10 +45,11 @@ function unique(values: string[]): string[] {
 }
 
 /**
- * Add explicit framework/target path-base labels to a check's evidence while preserving the legacy
- * flat `evidence_paths`. Each path is classified by prefix and folded into `framework_evidence_paths`
- * or `target_evidence_paths`; duplicates are dropped but original order is preserved. Returns the
- * input untouched when there are no evidence paths, so callers can apply it unconditionally.
+ * Add explicit framework/target path-base labels to a check's evidence while preserving the legacy flat `evidence_paths`.
+ * Each path is classified by prefix and folded into `framework_evidence_paths` or `target_evidence_paths`; duplicates are dropped but original order
+ * is preserved.
+ *
+ * Returns the input untouched when there are no evidence paths, so callers can apply it unconditionally.
  *
  * @param provenance - a check's evidence record; its `evidence_paths` are split, existing labelled
  *   arrays are merged with the newly classified paths rather than overwritten
@@ -88,16 +90,15 @@ let provenanceValidated = false;
 /**
  * Validate provenance on every registered check against the target project or package root.
  *
- * In packaged installs, `evidence_paths` pointing at framework-repo docs
- * (`.goat-flow/learning-loop/footguns/*`, `.goat-flow/learning-loop/lessons/*`, `docs/*`) can't be
- * resolved because those files aren't in `package.json` `files`. Skip the
- * existence check there - the paths are human-readable pointers for future
- * maintainers, not runtime contracts. In dev mode we keep the check so
- * stale provenance surfaces in preflight.
+ * In packaged installs, `evidence_paths` pointing at framework-repo docs (`.goat-flow/learning-loop/footguns/*`,
+ * `.goat-flow/learning-loop/lessons/*`, `docs/*`) can't be resolved because those files aren't in `package.json` `files`.
+ * Skip the existence check there - the paths are human-readable pointers for future maintainers, not runtime contracts.
  *
- * Throws an Error listing every offending `checkId: reason` when any registered check's provenance
- * is invalid (in dev, that includes evidence paths that resolve neither in the target FS nor in the
- * template root). Runs at most once per process and is a no-op on subsequent calls.
+ * In dev mode we keep the check so stale provenance surfaces in preflight.
+ *
+ * Throws an Error listing every offending `checkId: reason` when any registered check's provenance is invalid (in dev, that includes evidence paths
+ * that resolve neither in the target FS nor in the template root).
+ * Runs at most once per process and is a no-op on subsequent calls.
  *
  * @param fs - readonly FS for the target project; used in dev mode to existence-test evidence paths
  *   before falling back to the packaged template root, and ignored entirely in packaged installs

@@ -1,12 +1,12 @@
 /**
  * The map between goat-flow's shipped guidance files and the copies installed in a project.
- * Every "your installed docs drifted from the package" finding traces back to this registry:
- * it names each canonical workflow source, the installed path a user actually opens, and the
- * reading helpers the drift checks use to compare the two.
  *
- * Reads here never throw. A missing or unreadable package file comes back as `null` so the
- * check that owns the comparison can turn it into one precise, repairable finding, rather
- * than aborting an audit halfway and leaving the user with no report at all.
+ * Every "your installed docs drifted from the package" finding traces back to this registry: it names each canonical workflow source, the installed
+ * path a user actually opens, and the reading helpers the drift checks use to compare the two.
+ *
+ * Reads here never throw.
+ * A missing or unreadable package file comes back as `null` so the check that owns the comparison can turn it into one precise, repairable finding,
+ * rather than aborting an audit halfway and leaving the user with no report at all.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { posix as pathPosix, relative, resolve, sep } from "node:path";

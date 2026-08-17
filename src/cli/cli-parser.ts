@@ -1,11 +1,12 @@
 /**
  * Turns raw `process.argv` into the fully-resolved ParsedCLI object that command dispatch consumes.
- * It owns the whole front door: positional command detection, per-flag validation, per-command
- * positional grammars (quality/skill/events/hooks each have their own arity rules), and cross-flag
- * checks that strict parseArgs can't express. The deliberate contract is fail-fast for malformed
- * commands, flags, values, or combinations, throwing CLIError with exit code 2 (usage error) and a
- * human-readable message, so the entry point can print it and exit without a stack trace. Path
- * positionals are resolved to absolute paths here so downstream handlers never see relative input.
+ *
+ * It owns the whole front door: positional command detection, per-flag validation, per-command positional grammars (quality/skill/events/hooks each
+ * have their own arity rules), and cross-flag checks that strict parseArgs can't express.
+ *
+ * The deliberate contract is fail-fast for malformed commands, flags, values, or combinations, throwing CLIError with exit code 2 (usage error) and a
+ * human-readable message, so the entry point can print it and exit without a stack trace.
+ * Path positionals are resolved to absolute paths here so downstream handlers never see relative input.
  */
 
 import { parseArgs } from "node:util";
@@ -212,8 +213,8 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
 
 /**
  * Reject runtime scenario flags outside the explicit hooks verification route.
- * Error behavior: throws CLIError with exit code 2; a scenario name has no meaning for listing,
- * toggling, or syncing, so accepting it silently would imply a check that never ran.
+ * Error behavior: throws CLIError with exit code 2; a scenario name has no meaning for listing, toggling, or syncing, so accepting it silently would
+ * imply a check that never ran.
  *
  * @param command - command the user invoked
  * @param values - parsed flag map; only `--scenario` is inspected here
@@ -275,8 +276,8 @@ function validatePlansStrictFlag(
 
 /**
  * Require a category on timing starts and reject it everywhere else.
- * Error behavior: throws CLIError with exit code 2 in both directions, because a start with no
- * category would record time that no later report can attribute.
+ * Error behavior: throws CLIError with exit code 2 in both directions, because a start with no category would record time that no later report can
+ * attribute.
  *
  * @param command - command the user invoked
  * @param values - parsed flag map; only `--category` is inspected here
@@ -305,8 +306,8 @@ function validatePlansCategoryFlag(
 
 /**
  * Keep pause recovery and finalization flags on timing stops, and mutually exclusive.
- * Error behavior: throws CLIError with exit code 2 for a misplaced flag and again for the combined
- * pair, because finalizing and discarding open entries are opposite resolutions of the same state.
+ * Error behavior: throws CLIError with exit code 2 for a misplaced flag and again for the combined pair, because finalizing and discarding open
+ * entries are opposite resolutions of the same state.
  *
  * @param command - command the user invoked
  * @param values - parsed flag map; `--finalize` and `--discard-open` are inspected here
@@ -340,8 +341,8 @@ function validatePlansStopFlags(
 
 /**
  * Keep plan-force semantics limited to generated export replacement.
- * Error behavior: throws CLIError with exit code 2 when `--force` is used on another plans route,
- * so force can never mean "overwrite" for a command that was not designed to replace a file.
+ * Error behavior: throws CLIError with exit code 2 when `--force` is used on another plans route, so force can never mean "overwrite" for a command
+ * that was not designed to replace a file.
  *
  * @param command - command the user invoked; non-plans commands are left to their own validators
  * @param values - parsed flag map; only `--force` is inspected here
@@ -407,9 +408,9 @@ function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
 
 /**
  * Reject authority combinations that would widen a write past what the user named.
- * Error behavior: throws CLIError with exit code 2 for a force flag outside install/setup, and
- * again for `--force-user-owned` with no `--force-path`, because replacing user-owned content is
- * never a broad choice; every such file must be named explicitly.
+ *
+ * Error behavior: throws CLIError with exit code 2 for a force flag outside install/setup, and again for `--force-user-owned` with no `--force-path`,
+ * because replacing user-owned content is never a broad choice; every such file must be named explicitly.
  *
  * @param command - command the user invoked; only install and setup routes may carry force flags
  * @param values - parsed flag map; the three force flags are inspected here
@@ -526,8 +527,8 @@ function validateTargetTrustFlags(
 
 /**
  * Validate quality mode flags against the selected quality subcommand.
- * Error behavior: throws CLIError with exit code 2 for `--mode` off its three routes, and for
- * `--output` on save, which owns its report destination and must not be redirected.
+ * Error behavior: throws CLIError with exit code 2 for `--mode` off its three routes, and for `--output` on save, which owns its report destination
+ * and must not be redirected.
  *
  * @param command - command the user invoked; non-quality commands pass through untouched
  * @param values - parsed flag map; `--mode` and `--output` are inspected here
@@ -563,8 +564,9 @@ function validateQualityFlags(
 
 /**
  * Validate flag combinations after strict parseArgs has accepted their individual shapes.
- * This is the single ordering point for every per-command validator, so a user with several
- * misplaced flags always sees the same first complaint rather than a parse-order accident.
+ *
+ * This is the single ordering point for every per-command validator, so a user with several misplaced flags always sees the same first complaint
+ * rather than a parse-order accident.
  * Error behavior: throws the first CLIError raised by any validator, all with exit code 2.
  *
  * @param command - command the user invoked

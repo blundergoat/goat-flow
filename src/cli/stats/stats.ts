@@ -1,9 +1,8 @@
 /**
  * Learning-loop health report (`goat-flow stats`).
  *
- * Consumes the live `SharedFacts` pipeline - no second on-disk read path and no
- * persisted derived counts. `--check` mode reuses the same report data to decide
- * pass/fail, so CI and the human-readable report never disagree.
+ * Consumes the live `SharedFacts` pipeline - no second on-disk read path and no persisted derived counts.
+ * `--check` mode reuses the same report data to decide pass/fail, so CI and the human-readable report never disagree.
  */
 import { DECISION_META_FILES } from "../facts/shared/decision-files.js";
 import type {
@@ -474,9 +473,8 @@ function collectMemoryQualityWarnings(
 /**
  * Promote stale current-project evidence in pattern entries to blocking stats findings.
  *
- * Pattern extraction ignores absent external-project targets, so the remaining
- * stale references are concrete local files whose literal anchors moved. Footgun
- * and lesson references are already emitted through their bucket sections.
+ * Pattern extraction ignores absent external-project targets, so the remaining stale references are concrete local files whose literal anchors moved.
+ * Footgun and lesson references are already emitted through their bucket sections.
  */
 function collectPatternReferenceFindings(
   learningLoopEntries: LearningLoopEntryFact[],

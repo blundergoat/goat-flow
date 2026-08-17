@@ -450,10 +450,10 @@ type ExistingArtifactPresence = Record<
 
 /**
  * What goat-flow content already exists in the selected project, as detected by `/api/setup/detect`.
- * Extends the skills/lessons/footguns/config presence flags with how instruction files are scoped:
- * `instructionsRepoWide` true means a root instruction file (e.g. CLAUDE.md) is present, while
- * `instructionsPathScoped` true means per-directory scoped instruction files were found. Both can be
- * true; both false means the project has no instruction file yet, which the setup view treats as bare.
+ *
+ * Extends the skills/lessons/footguns/config presence flags with how instruction files are scoped: `instructionsRepoWide` true means a root
+ * instruction file (e.g. CLAUDE.md) is present, while `instructionsPathScoped` true means per-directory scoped instruction files were found.
+ * Both can be true; both false means the project has no instruction file yet, which the setup view treats as bare.
  */
 interface ExistingArtifacts extends ExistingArtifactPresence {
   instructionsRepoWide: boolean;

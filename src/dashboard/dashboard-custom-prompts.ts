@@ -1,6 +1,10 @@
 /**
- * Custom prompt-library helpers for the dashboard Alpine app.
- * Custom prompts stay browser-local and separate from the built-in JSON catalog.
+ * Manages the prompts a user writes themselves, kept alongside but separate from the built-in catalog.
+ *
+ * Custom prompts live in browser storage rather than the project, so:
+ * - a user can keep private prompts without committing them to a repository
+ * - they follow the person across projects instead of being tied to one workspace
+ * - clearing browser data loses them, which is why the editor never treats them as a backup
  */
 
 const CUSTOM_PROMPT_STORAGE_KEY = "goat-flow-custom-prompts";

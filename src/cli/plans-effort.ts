@@ -1,10 +1,9 @@
 /**
- * Effort-estimate notation parser for goat-plan milestones - the shared grammar
- * behind `plans export` (which carries the fields into bundles) and
- * `plans check` (which audits their arithmetic). Owns the `Effort estimate:`
- * line, countable `Forecast basis:`, forecast range, counted-work
- * `(est: n min category)` entries, and category sums. This keeps the numbers a
- * plan author reviews consistent across checks and portable exports.
+ * Effort-estimate notation parser for goat-plan milestones - the shared grammar behind `plans export` (which carries the fields into bundles) and
+ * `plans check` (which audits their arithmetic).
+ * Owns the `Effort estimate:` line, countable `Forecast basis:`, forecast range, counted-work `(est: n min category)` entries, and category sums.
+ *
+ * This keeps the numbers a plan author reviews consistent across checks and portable exports.
  */
 
 /** Effort category vocabulary from goat-plan's estimation notation. */
@@ -50,10 +49,10 @@ export function isNumericActual(
 /**
  * Optional `Forecast range:` uncertainty band for a milestone estimate.
  *
- * Every value is recorded-unpaused coding-agent minutes on one active milestone
- * timeline - the same unit as the headline - so `likelyMinutes` must equal the
- * headline total. The band is optional by contract: legacy and in-flight
- * point-estimate plans stay valid without it, so absence is never an error.
+ * Every value is recorded-unpaused coding-agent minutes on one active milestone timeline - the same unit as the headline - so `likelyMinutes` must
+ * equal the headline total.
+ * The band is optional by contract: legacy and in-flight point-estimate plans stay valid without it, so absence is never an error.
+ *
  * Human waiting is excluded, matching the Actual it will later be compared to.
  */
 export interface PlanEffortForecastRange {
@@ -65,8 +64,7 @@ export interface PlanEffortForecastRange {
 
 /**
  * Countable inputs behind a milestone forecast.
- * Users can review the work-unit count, per-unit rates, and evidence source
- * instead of trusting an unexplained duration estimate.
+ * Users can review the work-unit count, per-unit rates, and evidence source instead of trusting an unexplained duration estimate.
  */
 export interface PlanEffortForecastBasis {
   agentWorkUnits: number;
@@ -78,8 +76,7 @@ export interface PlanEffortForecastBasis {
 
 /**
  * Parsed `Effort estimate:` milestone line in agent-time minutes.
- * Records omit this entirely when a milestone predates effort estimation -
- * legacy plans are valid local state and must stay noise-free.
+ * Records omit this entirely when a milestone predates effort estimation - legacy plans are valid local state and must stay noise-free.
  */
 export interface PlanExportEffort {
   totalMinutes: number;
@@ -231,8 +228,7 @@ function selectActualText(
 
 /**
  * Parse one task line's trailing est entry into estimate fields.
- * Est-shaped but unreadable text (or a foreign category) warns with a fixed
- * string naming the task position - never user text.
+ * Est-shaped but unreadable text (or a foreign category) warns with a fixed string naming the task position - never user text.
  *
  * @param text - full task text after the checkbox
  * @param taskIndex - zero-based task position used in warning labels
@@ -546,8 +542,8 @@ export function sumTaskEstimates(
 
 /**
  * Parse a milestone's `Effort estimate:` field value into agent-time fields.
- * Because a missing line is valid legacy state while a present-but-unreadable
- * one is drifted notation, only the latter warns (fixed string, never user text).
+ * Because a missing line is valid legacy state while a present-but-unreadable one is drifted notation, only the latter warns (fixed string, never
+ * user text).
  *
  * @param fieldValue - raw text after the `Effort estimate:` label; empty means the
  *   milestone predates estimation and stays silent

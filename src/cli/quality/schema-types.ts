@@ -1,5 +1,9 @@
 /**
- * Strict schema validation for quality reports emitted by agents and persisted by the CLI.
+ * Defines and enforces the exact shape of a quality report, both when an agent emits one and when the CLI persists it.
+ *
+ * Validation is strict on purpose: a report that saved with unexpected fields would later open as a history row nobody can trust.
+ *
+ * The accepted finding types, severities, and score values are fixed here, so the dashboard always has a badge it can render.
  */
 import type { AgentId } from "../types.js";
 
@@ -40,9 +44,9 @@ type QualityFindingType = (typeof QUALITY_FINDING_TYPES)[number];
 type QualityFindingSeverity = (typeof QUALITY_FINDING_SEVERITIES)[number];
 type QualityEvidenceQuality = (typeof QUALITY_EVIDENCE_QUALITIES)[number];
 /**
- * How a finding was gathered: a live `runtime-probe`, `static-analysis` of source, or a `mixed`
- * combination. Present on v2+ reports; v1 reports omit it and are defaulted to static-analysis at
- * parse time, so readers should treat a defaulted value as "unknown", not a confirmed static check.
+ * How a finding was gathered: a live `runtime-probe`, `static-analysis` of source, or a `mixed` combination.
+ * Present on v2+ reports; v1 reports omit it and are defaulted to static-analysis at parse time, so readers should treat a defaulted value as
+ * "unknown", not a confirmed static check.
  */
 export type QualityEvidenceMethod = (typeof QUALITY_EVIDENCE_METHODS)[number];
 /**
@@ -145,9 +149,8 @@ export interface SavedQualityReport extends Omit<QualityReport, "findings"> {
 }
 
 /**
- * Discriminated result of a schema parse: either `ok: true` with the validated report, or
- * `ok: false` with a human-readable `error`. Parsing never throws on bad input - callers must
- * branch on `ok` rather than try/catch, so a malformed report surfaces as a checked error value.
+ * Discriminated result of a schema parse: either `ok: true` with the validated report, or `ok: false` with a human-readable `error`.
+ * Parsing never throws on bad input - callers must branch on `ok` rather than try/catch, so a malformed report surfaces as a checked error value.
  *
  * @template T - the report shape returned on success (`QualityReport` or `SavedQualityReport`).
  */

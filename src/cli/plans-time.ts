@@ -1,6 +1,8 @@
 /**
- * Prospective timing for goat-plan milestones. The milestone-local receipt is the validation authority;
- * evidence-envelope events are best-effort transition diagnostics and are never read back here.
+ * Prospective timing for goat-plan milestones.
+ * The milestone-local receipt is the validation authority; evidence-envelope events are best-effort transition diagnostics and are never read back
+ * here.
+ *
  * Users start, pause, recover, and finalize timing inside the milestone they selected.
  */
 import { randomUUID } from "node:crypto";
@@ -340,8 +342,8 @@ function writeActualField(content: string, actualLine: string): string {
 
 /**
  * Atomically replace one milestone after checking that a normal editor did not save a newer version.
- * The identity/content recheck covers cooperative local edits, not a hostile actor swapping an ancestor
- * after that final check; the adjacent temporary file keeps successful dashboard reads all-or-nothing.
+ * The identity/content recheck covers cooperative local edits, not a hostile actor swapping an ancestor after that final check; the adjacent
+ * temporary file keeps successful dashboard reads all-or-nothing.
  *
  * @param initialContext - verified milestone identity captured before reading; never null after path admission
  * @param milestoneContentAtRead - exact content used for the transition; empty means the user selected an empty milestone

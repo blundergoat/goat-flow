@@ -1,8 +1,8 @@
 /**
  * Reads and writes the hook registrations users run in supported coding agents.
+ *
  * Use when setup, hook toggles, or sync must show the same enabled state everywhere.
- * The registrar owns script files; this module owns the Claude, Codex,
- * Antigravity, and Copilot configuration shapes.
+ * The registrar owns script files; this module owns the Claude, Codex, Antigravity, and Copilot configuration shapes.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -259,8 +259,8 @@ function removeHookEntries(
 
 /**
  * Drop every managed row this spec owns, whatever lifecycle event now holds it.
- * Use before appending the canonical row so a registration that drifted to another event
- * cannot survive a sync or a disable and keep firing on user actions it no longer covers.
+ * Use before appending the canonical row so a registration that drifted to another event cannot survive a sync or a disable and keep firing on user
+ * actions it no longer covers.
  *
  * @param config - parsed agent config; a missing hooks container yields nothing to remove
  * @param spec - managed hook contract whose owned rows are removed from every event

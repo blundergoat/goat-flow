@@ -1,5 +1,9 @@
 /**
- * Agent settings fact extraction - parses settings.json for deny patterns and read-deny coverage.
+ * Reads what an agent's settings file actually blocks, so the audit can tell the user whether their guardrails are real.
+ *
+ * This is the difference between "a deny rule is written down" and "commit and push are genuinely blocked for this agent".
+ *
+ * The facts gathered here feed the audit's constraints concern, which is what a user sees fail when their guardrails have drifted.
  */
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 

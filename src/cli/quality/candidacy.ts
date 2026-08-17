@@ -1,15 +1,13 @@
 /**
- * Candidacy check: given a draft markdown or a description, recommend what
- * kind of artifact the author should create - skill, reference, instruction-
+ * Candidacy check: given a draft markdown or a description, recommend what kind of artifact the author should create - skill, reference, instruction-
  * file rule, learning-loop entry, CLI command, or "don't create."
  *
- * Runs BEFORE the structural quality rubric. The rubric answers "is this
- * artifact well-built?"; the candidacy check answers "should this artifact
- * exist as a skill at all?"
+ * Runs BEFORE the structural quality rubric.
+ * The rubric answers "is this artifact well-built?"; the candidacy check answers "should this artifact exist as a skill at all?"
  *
- * v1 is deterministic. Heuristics for drafts (heading + length signals) and
- * for descriptions (keyword + intent matching). LLM-assisted candidacy for
- * borderline drafts/descriptions is handled by the skill-quality rubric.
+ * v1 is deterministic.
+ * Heuristics for drafts (heading + length signals) and for descriptions (keyword + intent matching).
+ * LLM-assisted candidacy for borderline drafts/descriptions is handled by the skill-quality rubric.
  */
 import type { ArtifactSubtype, QualityConfig } from "./quality-config.js";
 import { DEFAULT_QUALITY_CONFIG } from "./quality-config.js";
@@ -580,9 +578,8 @@ function analyzeDescription(text: string): CandidacyResult {
 }
 
 /**
- * Run the candidacy check against either a markdown draft or a free-text
- * description. Returns a recommended artifact type and the reasoning behind
- * the recommendation.
+ * Run the candidacy check against either a markdown draft or a free-text description.
+ * Returns a recommended artifact type and the reasoning behind the recommendation.
  *
  * The optional `config` parameter is reserved for future per-project
  * heuristic overrides (currently the v1 heuristics are project-independent).

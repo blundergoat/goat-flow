@@ -1,8 +1,9 @@
 /**
  * Runs the runtime half of the deny-hook audit after a user selects a project.
- * It replays safe and blocked commands through configured launchers, then uses the
- * registered script when no launcher is present.
+ *
+ * It replays safe and blocked commands through configured launchers, then uses the registered script when no launcher is present.
  * The result tells the user whether policy ran or failed before protection started.
+ *
  * Static configuration checks remain in check-agent-deny-mechanism.ts.
  */
 import * as childProcess from "node:child_process";
@@ -373,8 +374,8 @@ function extractConfiguredScriptPath(
 
 /**
  * Match a complete managed script token while preserving similar user filenames.
- * Local copy: importing the shared matcher from server/agent-hook-command would
- * close a module-init cycle through manifest.ts, which loads this audit check.
+ * Local copy: importing the shared matcher from server/agent-hook-command would close a module-init cycle through manifest.ts, which loads this audit
+ * check.
  *
  * @param commands - runnable text from one config row; empty is never a match
  * @param script - managed script filename to look for, such as `deny-dangerous.sh`

@@ -1,12 +1,9 @@
 /**
- * Loads and schema-validates the shipped detector tables in
- * workflow/project-stack-data.json, then re-exports each table as a typed
- * constant for the project-stack detector and setup signals.
+ * Loads and schema-validates the shipped detector tables in workflow/project-stack-data.json, then re-exports each table as a typed constant for the
+ * project-stack detector and setup signals.
  *
- * Loaded eagerly at module import: a malformed shipped table throws during
- * startup rather than producing silently wrong detection. The exported
- * PROJECT_STACK_* constants are the only supported way to read these rows;
- * consumers must not re-parse the JSON.
+ * Loaded eagerly at module import: a malformed shipped table throws during startup rather than producing silently wrong detection.
+ * The exported PROJECT_STACK_* constants are the only supported way to read these rows; consumers must not re-parse the JSON.
  */
 import { readFileSync } from "node:fs";
 import { getTemplatePath } from "../paths.js";

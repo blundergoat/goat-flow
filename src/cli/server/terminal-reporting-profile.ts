@@ -1,14 +1,15 @@
 /**
  * Builds the restricted permission profile an agent runs under in a dashboard terminal.
- * When a user launches Claude or Codex from the dashboard to write a report, that session gets
- * a purpose-built sandbox rather than their normal permissions: it may write the report and the
- * local state around it, and nothing else.
  *
- * Two rules shape everything here. Secrets are denied outright - `.env` files, SSH and cloud
- * credentials, private keys - because a reporting session has no reason to read them and the
- * user is not present to approve a prompt. And write access is granted per directory rather
- * than per file, since a report often needs siblings created next to it; the paths granted are
- * the local-state trees goat-flow owns, never the user's source.
+ * When a user launches Claude or Codex from the dashboard to write a report, that session gets a purpose-built sandbox rather than their normal
+ * permissions: it may write the report and the local state around it, and nothing else.
+ *
+ * Two rules shape everything here.
+ * Secrets are denied outright - `.env` files, SSH and cloud credentials, private keys - because a reporting session has no reason to read them and
+ * the user is not present to approve a prompt.
+ *
+ * And write access is granted per directory rather than per file, since a report often needs siblings created next to it; the paths granted are the
+ * local-state trees goat-flow owns, never the user's source.
  */
 import { execFileSync } from "node:child_process";
 import { lstatSync, realpathSync, type Stats } from "node:fs";
@@ -145,9 +146,10 @@ function isGitIgnoredPath(projectPath: string, relativePath: string): boolean {
 
 /**
  * Read tracked files beneath candidate writable paths so exact files stay read-only.
+ *
  * Side effect: spawns `git ls-files` in the project, with a bounded timeout.
- * Error behavior: throws nothing; an unavailable Git or non-repository root swallows the failure
- * and returns no anchors, leaving the conservative canonical fallback list in charge.
+ * Error behavior: throws nothing; an unavailable Git or non-repository root swallows the failure and returns no anchors, leaving the conservative
+ * canonical fallback list in charge.
  *
  * @param projectPath - repository root the query runs in
  * @param candidatePaths - writable candidates to enumerate tracked files beneath
@@ -177,10 +179,9 @@ function trackedReportingAnchors(
 
 /**
  * Confirm a candidate write root exists as a real directory in every workspace.
- * Every root must agree, because one workspace resolving the path outside the project would let a
- * write escape through that root alone.
- * Error behavior: throws nothing; an unreadable or symlinked candidate reports false, so the
- * uncertain case denies the write rather than allowing it.
+ *
+ * Every root must agree, because one workspace resolving the path outside the project would let a write escape through that root alone.
+ * Error behavior: throws nothing; an unreadable or symlinked candidate reports false, so the uncertain case denies the write rather than allowing it.
  *
  * @param rootPaths - every workspace root that must independently prove the same layout
  * @param relativePath - project-relative directory under test
@@ -209,9 +210,9 @@ function isSharedDirectory(
 
 /**
  * Confirm an absent write root can be created without following a parent outside the project.
+ *
  * Existing targets stay governed by {@link isSharedDirectory}, which also rejects final symlinks.
- * Error behavior: throws nothing; an unreadable parent reports false so an unverifiable path is
- * never treated as safe to create.
+ * Error behavior: throws nothing; an unreadable parent reports false so an unverifiable path is never treated as safe to create.
  *
  * @param rootPath - visible project root that owns the prospective directory
  * @param relativePath - project-relative directory the reporting command may need to create
@@ -251,8 +252,9 @@ function isSafeMissingDirectory(
 
 /**
  * List tracked and canonical protected paths beneath one candidate in one root.
- * Invariant: the result is the deny list that keeps committed files read-only inside an otherwise
- * writable directory, so a path missing here becomes writable for the session.
+ *
+ * Invariant: the result is the deny list that keeps committed files read-only inside an otherwise writable directory, so a path missing here becomes
+ * writable for the session.
  * Error behavior: throws nothing; an unreadable anchor is dropped from the list.
  *
  * @param rootPath - workspace root the candidate is resolved against
@@ -284,9 +286,9 @@ function protectedPathsForCandidate(
 
 /**
  * Return the protected paths when every workspace has an identical layout.
- * Shared profile rules apply to every root, so asymmetric layouts cannot safely
- * receive the same write rule without either a missing-path startup failure or
- * an unprotected tracked file.
+ *
+ * Shared profile rules apply to every root, so asymmetric layouts cannot safely receive the same write rule without either a missing-path startup
+ * failure or an unprotected tracked file.
  */
 function sharedProtectedPaths(
   rootPaths: readonly string[],
@@ -320,8 +322,8 @@ function claudePermissionPath(filePath: string): string {
 
 /**
  * Resolve the active Claude config directory without reading its contents.
- * Error behavior: throws nothing; an unset or unusable `CLAUDE_CONFIG_DIR` reports as no paths, so
- * the caller falls back to the default credential locations.
+ * Error behavior: throws nothing; an unset or unusable `CLAUDE_CONFIG_DIR` reports as no paths, so the caller falls back to the default credential
+ * locations.
  *
  * @param projectPath - launch project, used to resolve a relative configured directory
  * @param environment - process environment supplying `CLAUDE_CONFIG_DIR`
@@ -377,10 +379,10 @@ function claudeWritablePaths(rootPath: string): string[] {
 
 /**
  * Build a one-invocation Claude permission overlay for reporting sessions.
- * Inherited user/project settings are disabled by the launch command, so
- * dontAsk permits reads plus these explicit report paths and denies everything
- * else that would require approval. Tracked anchors inside writable roots keep
- * an explicit deny because deny rules take precedence over the directory allow.
+ *
+ * Inherited user/project settings are disabled by the launch command, so dontAsk permits reads plus these explicit report paths and denies everything
+ * else that would require approval.
+ * Tracked anchors inside writable roots keep an explicit deny because deny rules take precedence over the directory allow.
  *
  * @param projectPath - project the user launched the terminal from
  * @param targetPath - project the report is being written about; often the same as
@@ -474,9 +476,11 @@ export function buildClaudeReportingSettings(
 
 /**
  * Build the one-invocation Codex permission profile used by reporting sessions.
+ *
  * Project roots stay readable, while only the mode-selected owner receives log writes.
- * Shared local/build paths remain writable when every root proves the same safe layout,
- * tracked anchors return to read-only, and project secret paths stay denied.
+ * Shared local/build paths remain writable when every root proves the same safe layout, tracked anchors return to read-only, and project secret paths
+ * stay denied.
+ *
  * Error behavior: throws nothing; a path that cannot be proved safe is simply left out of the
  * writable set, so an unverifiable layout narrows permissions instead of widening them.
  *
@@ -577,11 +581,9 @@ export function buildCodexReportingProfile(
 /**
  * Roots whose staging directory this launch owns for the session's lifetime.
  *
- * Empty unless the launch explicitly asked for capture: reporting access alone
- * is not the signal. Every preset without write permission - and every custom
- * prompt, which matches no preset - opens as reporting, so keying off access
- * mode would create a `.goat-flow` staging tree inside any selected target and
- * let an unrelated `.goat-flow` component block a read-only launch (ADR-044).
+ * Empty unless the launch explicitly asked for capture: reporting access alone is not the signal.
+ * Every preset without write permission - and every custom prompt, which matches no preset - opens as reporting, so keying off access mode would
+ * create a `.goat-flow` staging tree inside any selected target and let an unrelated `.goat-flow` component block a read-only launch (ADR-044).
  *
  * Error behavior: throws when capture is requested for a runner or access mode that cannot own
  * persistence, because silently returning no roots would strand the agent waiting on a receipt.

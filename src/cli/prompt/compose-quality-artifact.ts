@@ -1,10 +1,9 @@
 /**
  * Composer for the artifact (skill / reference) quality-assessment prompt.
  *
- * Builds the prompt that scores a single skill or reference document against the
- * five semantic dimensions, applying per-subtype weighting: playbook and index
- * subtypes weight Examples higher, while the meta subtype may mark Examples `n/a`
- * with justification. Pure string assembly over the passed SkillQualityReport.
+ * Builds the prompt that scores a single skill or reference document against the five semantic dimensions, applying per-subtype weighting: playbook
+ * and index subtypes weight Examples higher, while the meta subtype may mark Examples `n/a` with justification.
+ * Pure string assembly over the passed SkillQualityReport.
  */
 import type { SkillQualityReport } from "../quality/skill-quality.js";
 import { markdownTableCell } from "./compose-quality-common.js";

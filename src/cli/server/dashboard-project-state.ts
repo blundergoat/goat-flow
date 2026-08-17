@@ -1,12 +1,12 @@
 /**
  * Persistent identity and on-disk state model for the dashboard's recent-projects list.
  *
- * Resolves a stable identity for each checkout (git remote hash, then a gitignored `.goat-flow`
- * marker, then the absolute path) so the same project is recognised after it moves on disk, and
- * hydrates/normalises the JSON state file into a deduplicated, deterministically ordered shape.
- * Reads and writes the local marker file and shells out to `git config` with a short timeout; all
- * filesystem and git failures are swallowed into path-based fallbacks so a read-only or non-git
- * project still loads. Consumed by dashboard-project-routes.ts.
+ * Resolves a stable identity for each checkout (git remote hash, then a gitignored `.goat-flow` marker, then the absolute path) so the same project
+ * is recognised after it moves on disk, and hydrates/normalises the JSON state file into a deduplicated, deterministically ordered shape.
+ *
+ * Reads and writes the local marker file and shells out to `git config` with a short timeout; all filesystem and git failures are swallowed into
+ * path-based fallbacks so a read-only or non-git project still loads.
+ * Consumed by dashboard-project-routes.ts.
  */
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -202,8 +202,8 @@ function resolveGitRemoteIdentity(
 
 /**
  * Identify a project by its local `.goat-flow` marker file, the fallback when no remote exists.
- * Error behavior: throws only when a marker write was requested and the state path is unsafe; in
- * read-only mode the same failure reports as a null identity so a preview cannot be blocked by it.
+ * Error behavior: throws only when a marker write was requested and the state path is unsafe; in read-only mode the same failure reports as a null
+ * identity so a preview cannot be blocked by it.
  *
  * @param currentPath - realpath-normalised project root
  * @param allowMarkerWrite - true permits creating a missing marker; false keeps the call read-only
@@ -237,9 +237,10 @@ function resolveMarkerIdentity(
 
 /**
  * Resolve the stable identity the dashboard uses to recognise one project across path changes.
+ *
  * Sources are tried in descending durability: Git remote, then local marker, then the path itself.
- * A path identity is deliberately last because it stops matching as soon as the user moves the
- * directory, which is exactly what the other two sources exist to survive.
+ * A path identity is deliberately last because it stops matching as soon as the user moves the directory, which is exactly what the other two sources
+ * exist to survive.
  *
  * @param projectPath - project root as the user selected it; normalised to a realpath first
  * @param options - `allowMarkerWrite` true permits creating a missing marker file
@@ -321,8 +322,8 @@ function readRecordString(
 
 /**
  * Copy the optional identity and title fields onto a normalised record.
- * Absent fields are left unset rather than written as empty, so a later merge can still take the
- * value from another record for the same project.
+ *
+ * Absent fields are left unset rather than written as empty, so a later merge can still take the value from another record for the same project.
  * Side effect: mutates `normalized` in place.
  *
  * @param normalized - record being built; only present fields are assigned
@@ -343,8 +344,8 @@ function applyOptionalProjectRecordFields(
 
 /**
  * Validate one untrusted project record into the shape the dashboard can trust.
- * A record missing identity, source, or current path is rejected outright, because a partial record
- * would let the dashboard claim it recognises a project it cannot actually locate.
+ * A record missing identity, source, or current path is rejected outright, because a partial record would let the dashboard claim it recognises a
+ * project it cannot actually locate.
  *
  * @param identity - map key used as the identity when the record does not carry its own
  * @param candidate - untrusted parsed value; anything that is not a plain object is rejected
@@ -378,8 +379,7 @@ function normalizeDashboardProjectRecord(
 
 /**
  * Read and validate the `projects` map from parsed dashboard state.
- * Invalid records are dropped individually rather than failing the load, so one corrupt entry cannot
- * wipe every project the user has added.
+ * Invalid records are dropped individually rather than failing the load, so one corrupt entry cannot wipe every project the user has added.
  *
  * @param stateRecord - parsed state object; a missing or non-object `projects` yields an empty map
  * @returns validated records keyed by their own identity; empty when none survive validation
@@ -399,8 +399,9 @@ function readOptionalProjectRecordsProperty(
 
 /**
  * Merge one project record into the accumulating identity map.
- * An existing entry keeps its optional fields unless the incoming record supplies them, so re-adding
- * a project by a new path never discards the title or marker learned earlier.
+ *
+ * An existing entry keeps its optional fields unless the incoming record supplies them, so re-adding a project by a new path never discards the title
+ * or marker learned earlier.
  * Side effect: mutates the `records` map in place.
  *
  * @param records - accumulator keyed by identity

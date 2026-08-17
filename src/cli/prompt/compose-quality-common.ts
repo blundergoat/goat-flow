@@ -1,12 +1,11 @@
 /**
  * Shared building blocks for composing agent quality-review prompts.
  *
- * Collects the cross-mode helpers the per-mode composers reuse: shell/JSON/date
- * escaping for embedded snippets, project-path shaping that survives Windows and
- * UNC roots, audit-summary rendering, prior-report delta context, bounded
- * learning-loop context, and the focused JSON-report contract appended to the end
- * of every prompt. Pure string assembly; the only I/O is the `package.json` read
- * behind `inferQualityScope`.
+ * Collects the cross-mode helpers the per-mode composers reuse: shell/JSON/date escaping for embedded snippets, project-path shaping that survives
+ * Windows and UNC roots, audit-summary rendering, prior-report delta context, bounded learning-loop context, and the focused JSON-report contract
+ * appended to the end of every prompt.
+ *
+ * Pure string assembly; the only I/O is the `package.json` read behind `inferQualityScope`.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -39,10 +38,10 @@ export interface QualityInput {
 
 /**
  * How the generated prompt tells the agent to persist its report.
- * `bounded-saver` = the agent pipes the report into `quality save` itself
- * (manual and Codex runs). `staged-draft` = the agent writes one draft file
- * and the dashboard server persists it (enforced Claude reporting sessions,
- * per ADR-044, where no Bash rule can authorize the heredoc saver).
+ *
+ * `bounded-saver` = the agent pipes the report into `quality save` itself (manual and Codex runs).
+ * `staged-draft` = the agent writes one draft file and the dashboard server persists it (enforced Claude reporting sessions, per ADR-044, where no
+ * Bash rule can authorize the heredoc saver).
  */
 export type QualityPersistenceVariant = "bounded-saver" | "staged-draft";
 

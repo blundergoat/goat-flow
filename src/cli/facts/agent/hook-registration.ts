@@ -1,13 +1,10 @@
 /**
- * Reads each agent's hook config and reports which goat-flow guard hooks are
- * registered, normalizing the many per-agent settings shapes (Claude, Antigravity,
- * and others) into simple registered/path facts the audit can compare.
+ * Reads each agent's hook config and reports which goat-flow guard hooks are registered, normalizing the many per-agent settings shapes (Claude,
+ * Antigravity, and others) into simple registered/path facts the audit can compare.
  *
- * Parsing is deliberately defensive: unknown agents, missing hook objects, and
- * malformed entries resolve to "not registered" rather than throwing, because a
- * fact extractor must survive any settings file a user hands it. Antigravity is
- * special-cased - its deny hook lives in a top-level keyed definition with its own
- * enabled flag, not under the shared `hooks` object.
+ * Parsing is deliberately defensive: unknown agents, missing hook objects, and malformed entries resolve to "not registered" rather than throwing,
+ * because a fact extractor must survive any settings file a user hands it.
+ * Antigravity is special-cased - its deny hook lives in a top-level keyed definition with its own enabled flag, not under the shared `hooks` object.
  */
 import type { AgentProfile, ReadonlyFS } from "../../types.js";
 import { pushUniquePath } from "./routing.js";
@@ -24,10 +21,9 @@ function normalizeHookPath(candidate: string): string | null {
   let path = candidate.trim();
   if (!path) return null;
   path = path.replace(/^['"`]|['"`]$/g, "");
-  // Hook launchers prefix the script path with a resolved repo root, either as
-  // an inline substitution ($(git rev-parse --show-toplevel)/...sh) or a shell
-  // variable ($root/...sh, $REPO/...sh) populated earlier in the command. Strip
-  // either prefix so callers see a repo-relative script path.
+  // Hook launchers prefix the script path with a resolved repo root, either as an inline substitution ($(git rev-parse --show-toplevel)/...sh) or a
+  // shell variable ($root/...sh, $REPO/...sh) populated earlier in the command.
+  // Strip either prefix so callers see a repo-relative script path.
   const substitutionMatch = path.match(/\$(?:\([^)]*\)|\{?\w+\}?)\/(.*\.sh)$/);
   if (substitutionMatch && substitutionMatch[1]) {
     path = substitutionMatch[1];
@@ -212,9 +208,8 @@ function normalizeEventConfig(
 }
 
 /**
- * Resolve the parsed hook config for one agent, reusing the already-parsed
- * settings file when the agent stores hooks there and only reading a separate
- * file otherwise - this avoids parsing the same file twice.
+ * Resolve the parsed hook config for one agent, reusing the already-parsed settings file when the agent stores hooks there and only reading a
+ * separate file otherwise - this avoids parsing the same file twice.
  *
  * @param fs - read-only filesystem adapter used only when hooks live in a separate file
  * @param agent - agent profile naming its settings and hook-config files
@@ -239,9 +234,8 @@ export function readHookConfig(
 }
 
 /**
- * Report whether the agent's post-turn (learning-loop) hook is registered and
- * which script it points at. Returns the not-registered shape for agents that
- * declare no hook events or whose config has no usable `hooks` object.
+ * Report whether the agent's post-turn (learning-loop) hook is registered and which script it points at.
+ * Returns the not-registered shape for agents that declare no hook events or whose config has no usable `hooks` object.
  *
  * @param agent - agent profile naming its post-turn hook event, if any
  * @param hookConfigParsed - parsed hook config from readHookConfig, or null/invalid content
@@ -284,10 +278,9 @@ export function buildHookRegistration(
 }
 
 /**
- * Report whether the dangerous-command deny guard is registered as a pre-tool
- * hook, and its script path. Antigravity is handled separately because its deny
- * hook is a top-level keyed definition with its own `enabled` flag, so an
- * explicit `enabled: false` there counts as not registered.
+ * Report whether the dangerous-command deny guard is registered as a pre-tool hook, and its script path.
+ * Antigravity is handled separately because its deny hook is a top-level keyed definition with its own `enabled` flag, so an explicit `enabled:
+ * false` there counts as not registered.
  *
  * @param agent - agent profile naming its pre-tool hook event and identifying Antigravity
  * @param hookConfigParsed - parsed hook config from readHookConfig, or null/invalid content

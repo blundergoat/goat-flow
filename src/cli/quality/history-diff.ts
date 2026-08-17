@@ -1,13 +1,14 @@
 /**
  * Compares two saved quality runs so a user can see what actually changed between them.
- * Answering "did this get better" means more than two scores: it means naming the findings
- * that appeared, the ones that went absent, the ones still present, and how long the
- * stubborn ones have been outstanding.
  *
- * Findings are matched by their attached ids rather than by wording, because an agent
- * rephrasing the same problem between runs must not read as "one fixed, one new". A finding
- * that has survived several consecutive runs is counted and surfaced, since a persistent
- * finding is the signal a user most needs and the easiest one to lose in a diff.
+ * Answering "did this get better" means more than two scores: it means naming the findings that appeared, the ones that went absent, the ones still
+ * present, and how long the stubborn ones have been outstanding.
+ *
+ * Findings are matched by their attached ids rather than by wording, because an agent rephrasing the same problem between runs must not read as "one
+ * fixed, one new".
+ *
+ * A finding that has survived several consecutive runs is counted and surfaced, since a persistent finding is the signal a user most needs and the
+ * easiest one to lose in a diff.
  */
 import type { AgentId } from "../types.js";
 import type {

@@ -1,9 +1,9 @@
 /**
  * Validate dashboard requests at the server boundary.
- * Use when the browser sends terminal, project, hook, upload, or skill-evaluation payloads so the
- * user gets a precise field error instead of a failed terminal session or broken dashboard state.
- * These decoders are intentionally dependency-free because each route only accepts a small,
- * user-facing payload shape.
+ *
+ * Use when the browser sends terminal, project, hook, upload, or skill-evaluation payloads so the user gets a precise field error instead of a failed
+ * terminal session or broken dashboard state.
+ * These decoders are intentionally dependency-free because each route only accepts a small, user-facing payload shape.
  */
 import type { AgentId } from "../types.js";
 import type { ClientMessage, Runner, TerminalAccessMode } from "./types.js";
@@ -213,11 +213,9 @@ function decodeTerminalRunner(
 /**
  * Decode whether this launch should start staged quality-draft capture.
  *
- * Only the dashboard's quality flow sends `true`, because only its prompt tells
- * the agent to write a draft (ADR-044). Access mode cannot stand in for this:
- * every preset without write permission - and every custom prompt, which
- * resolves to no preset at all - is a reporting session, so deriving capture
- * from access mode would create a staging tree in each selected target.
+ * Only the dashboard's quality flow sends `true`, because only its prompt tells the agent to write a draft (ADR-044).
+ * Access mode cannot stand in for this: every preset without write permission - and every custom prompt, which resolves to no preset at all - is a
+ * reporting session, so deriving capture from access mode would create a staging tree in each selected target.
  */
 function decodeTerminalCaptureQualityDrafts(
   raw: Record<string, unknown>,
@@ -699,9 +697,9 @@ function decodeEvaluateFiles(
 /**
  * Decode and validate a `POST /api/quality/evaluate` request body.
  *
- * This stays explicit because the route accepts the current multi-file uploader
- * and the older single-text form; ambiguous bodies are rejected before quality
- * scoring. The deprecated `/api/quality/analyse` alias reuses the same shape.
+ * This stays explicit because the route accepts the current multi-file uploader and the older single-text form; ambiguous bodies are rejected before
+ * quality scoring.
+ * The deprecated `/api/quality/analyse` alias reuses the same shape.
  *
  * @param body - raw request body; empty or malformed JSON means no evaluation starts
  * @returns evaluate payload, or a path-specific error shown before scoring

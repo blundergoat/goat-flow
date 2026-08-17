@@ -21,7 +21,7 @@
 - **Clarity reviews identify low-value changed tests without silently deleting them** - Existing and materially changed findings use `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`; added findings use `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, or `ADDED UNRESOLVED`; removed findings use `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, or `REMOVAL UNRESOLVED`; proven path or namespace-only moves use `RELOCATED`. Every disposition is report-only, and mutation still needs authority.
 - **QA and review expose their evidence boundaries** - QA applies the four-part test-selection gate and dispositions; review records refutations and resolved-only integrity.
 - **Plans and release prose lead with user impact and runnable proof** - Milestones say what breaks and what helps, while comment and writing rules provide executable checks.
-- **Gruff guidance works from consumer checkouts** - Availability checks find `target/release` and `bin` binaries, derive failure flags from help, and avoid controller-only ADR paths.
+- **Gruff guidance works from consumer checkouts** - Availability checks honor configured paths, prefer inspected wrappers, find checkout, Composer, npm, virtual-environment, Cargo-local, and user-local binaries, derive failure flags from help, and avoid controller-only ADR paths.
 
 ## v1.15.1 - 2026-08-10
 

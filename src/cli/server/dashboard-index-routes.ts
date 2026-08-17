@@ -1,5 +1,9 @@
 /**
- * Dashboard routes for maintaining generated learning-loop indexes in the selected target project.
+ * The dashboard endpoints that regenerate a project's learning-loop indexes and report how stale they currently are.
+ *
+ * A user hits these from the Home memory card, after it warns that their footgun or lesson indexes no longer match the bucket files.
+ *
+ * Indexes are generated rather than hand-edited, so this is the supported way for a user to make retrieval trustworthy again.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { loadConfig } from "../config/reader.js";
@@ -54,9 +58,9 @@ async function regenerateLearningLoopIndexes(
 }
 
 /**
- * Bind index-maintenance handlers to one dashboard route context. This factory owns route matching
- * because the aggregator probes every handler for every request; non-index paths must return false
- * and method rejection must happen here before any write-side handler runs.
+ * Bind index-maintenance handlers to one dashboard route context.
+ * This factory owns route matching because the aggregator probes every handler for every request; non-index paths must return false and method
+ * rejection must happen here before any write-side handler runs.
  *
  * @param ctx - per-server dashboard route context
  * @returns route handler bag consumed by the dashboard route aggregator

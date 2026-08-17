@@ -156,9 +156,8 @@ const CONCERN_LABELS: Record<AuditConcernKey, string> = {
 /**
  * Append the stable harness concern summary used by terminal output.
  *
- * This branch structure is intentional because the no-harness tip, concern
- * order, and recommendation/fix pairing are part of the public output contract;
- * structured `details` stay out of prose to preserve JSON/SARIF-only semantics.
+ * This branch structure is intentional because the no-harness tip, concern order, and recommendation/fix pairing are part of the public output
+ * contract; structured `details` stay out of prose to preserve JSON/SARIF-only semantics.
  */
 function renderHarnessConcerns(report: AuditReport, lines: string[]): void {
   if (!report.concerns || !report.scopes.harness) {
@@ -286,8 +285,7 @@ function pathToAgentLabel(path: string): string | null {
 /**
  * Render drift findings in the terminal text format.
  *
- * The tag vocabulary is a stable user-facing contract, and the second pass is
- * intentional because deprecated skills need one combined repair hint per
+ * The tag vocabulary is a stable user-facing contract, and the second pass is intentional because deprecated skills need one combined repair hint per
  * agent rather than one repeated hint per finding.
  */
 function renderTextDriftFindings(drift: DriftReport, lines: string[]): void {
@@ -382,9 +380,8 @@ function renderMdHookCoverage(
 /**
  * Render harness concerns in markdown.
  *
- * Markdown preserves the same stable concern order and summary contract as the
- * terminal renderer because PR comments and terminal output need comparable
- * failure/recommendation ordering.
+ * Markdown preserves the same stable concern order and summary contract as the terminal renderer because PR comments and terminal output need
+ * comparable failure/recommendation ordering.
  */
 function renderMdHarnessConcerns(report: AuditReport, lines: string[]): void {
   if (!report.concerns || !report.scopes.harness) {

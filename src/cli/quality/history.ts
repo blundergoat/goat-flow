@@ -1,5 +1,6 @@
 /**
  * Load and compare persisted quality-report history.
+ *
  * Use when the CLI or dashboard shows previous quality runs, latest summaries, or before/after diffs.
  * Agent-written reports are non-blocking: malformed files become warnings while valid history stays visible.
  * Finding ids are attached at load time so users can compare runs without trusting agent-written ids.
@@ -57,10 +58,9 @@ export interface QualityDiffFindingRow {
 }
 
 /**
- * One finding where the agent's self-reported `delta_tag` contradicts the
- * deterministic id-based diff class. Surfaced as a methodology signal: the
- * agent either found a real continuity the id algorithm missed, or tagged
- * sloppily - either way the user should see it, not have it silently ignored.
+ * One finding where the agent's self-reported `delta_tag` contradicts the deterministic id-based diff class.
+ * Surfaced as a methodology signal: the agent either found a real continuity the id algorithm missed, or tagged sloppily - either way the user should
+ * see it, not have it silently ignored.
  */
 export interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
   /** What the agent claimed when writing the report. */
@@ -82,11 +82,11 @@ export interface QualityDiffResult {
   /**
    * Findings present in the older report and missing from the newer one.
    *
-   * Absence is not proof of a fix. The bucket is a pure id set difference, so a
-   * finding lands here when the defect was repaired, when the newer run never
-   * examined that artifact, and when the finding's id shifted because it encodes
-   * a line number. A degraded run is the worst case: a report generated without
-   * prior-report context carries `prior_report_id: null`, nothing can be tagged
+   * Absence is not proof of a fix.
+   * The bucket is a pure id set difference, so a finding lands here when the defect was repaired, when the newer run never examined that artifact,
+   * and when the finding's id shifted because it encodes a line number.
+   *
+   * A degraded run is the worst case: a report generated without prior-report context carries `prior_report_id: null`, nothing can be tagged
    * `persisted`, and every earlier finding reads as absent.
    *
    * Treat this as a prompt to re-check each cited artifact, never as evidence for
@@ -97,11 +97,9 @@ export interface QualityDiffResult {
   persisted: QualityDiffFindingRow[];
   stuck: QualityDiffFindingRow[];
   /**
-   * Agent-vs-deterministic `delta_tag` contradictions. Only populated when
-   * this diff's source report IS the baseline the newer report was tagged
-   * against (`to.report.prior_report_id === from.id`) - against any other
-   * pair the agent's tags describe a different comparison and disagreement
-   * would be noise.
+   * Agent-vs-deterministic `delta_tag` contradictions.
+   * Only populated when this diff's source report IS the baseline the newer report was tagged against (`to.report.prior_report_id === from.id`) -
+   * against any other pair the agent's tags describe a different comparison and disagreement would be noise.
    */
   deltaTagDisagreements: QualityDeltaTagDisagreementRow[];
 }
@@ -282,9 +280,8 @@ function appendMatchingHistoryEntry(
 /**
  * Load every saved quality-history report from disk.
  *
- * Reports malformed files as warnings and skips them because agent-written
- * history must be non-blocking. Invariant: returned entries stay newest-first
- * and use filename-derived ids for stable diff selection.
+ * Reports malformed files as warnings and skips them because agent-written history must be non-blocking.
+ * Invariant: returned entries stay newest-first and use filename-derived ids for stable diff selection.
  *
  * @param projectPath - project root containing quality logs; missing directory means no history exists yet
  * @returns parsed entries sorted newest-first plus warnings; empty entries mean there are no valid saved runs
@@ -354,9 +351,9 @@ export function loadQualityHistory(projectPath: string): {
 }
 
 /**
- * Load only the newest dashboard-sized quality-history window. For selected
- * agent tables, one extra matching entry is parsed so the oldest displayed row
- * can still calculate its delta without parsing the whole history directory.
+ * Load only the newest dashboard-sized quality-history window.
+ * For selected agent tables, one extra matching entry is parsed so the oldest displayed row can still calculate its delta without parsing the whole
+ * history directory.
  *
  * @param projectPath - project root containing quality logs; missing directory means no history exists yet
  * @param options - agent/mode filters and row limit; `null` limit or agent loads full history
@@ -461,8 +458,7 @@ function tryParseHistoryFile(
 
 /**
  * Find the latest quality report for one agent/mode without parsing all files.
- * Scans filenames newest-first, filters by agent from the filename, and parses
- * only matching JSON until a valid entry is found.
+ * Scans filenames newest-first, filters by agent from the filename, and parses only matching JSON until a valid entry is found.
  *
  * @param projectPath - project root containing quality logs; missing directory means no latest run exists
  * @param agent - agent whose newest report should be found; mismatches are skipped by filename

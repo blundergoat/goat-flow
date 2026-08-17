@@ -1,7 +1,7 @@
 /**
  * Builds the source-aligned Markdown view used by CLI validators.
- * Users can include fenced, indented, raw-HTML, or commented examples without those
- * examples being mistaken for live report fields, while visible text keeps its offsets.
+ * Users can include fenced, indented, raw-HTML, or commented examples without those examples being mistaken for live report fields, while visible
+ * text keeps its offsets.
  */
 /** Mutable state for non-rendered Markdown that can span source lines. */
 interface MarkdownMaskState {
@@ -200,8 +200,8 @@ function findInlineCodeSpan(
 
 /**
  * Hide backticked examples on one line so a validator reads only the user's real text.
- * Use when a check scans a single report line and a user has written something like
- * `Status: done` as an example - without this, that example is read as a live field.
+ * Use when a check scans a single report line and a user has written something like `Status: done` as an example - without this, that example is read
+ * as a live field.
  *
  * @param line - one source line as the user typed it; an empty line has no examples to
  *   hide and comes back unchanged, so the caller sees the same blank line
@@ -247,9 +247,8 @@ const COMPLETE_TAG_LINE =
 /**
  * Return whether a line opens raw HTML, a comment, or another HTML-like block.
  *
- * Split out of {@link interruptsInlineCodeParagraph} so each function stays
- * inside the project complexity budget. Expects the carriage return already
- * trimmed, since the caller compares against `\n`-normalised text.
+ * Split out of {@link interruptsInlineCodeParagraph} so each function stays inside the project complexity budget.
+ * Expects the carriage return already trimmed, since the caller compares against `\n`-normalised text.
  *
  * @param comparableLine - one source line with any trailing `\r` removed
  * @returns true when the line starts an HTML-like block
@@ -451,11 +450,11 @@ function maskMarkdownSourceLine(
 /**
  * Consume the part of a line still covered by a span an earlier line opened.
  *
- * Split out of {@link maskHtmlComments} so each function stays inside the
- * project complexity budget. Mutates `state` when the open span closes on this
- * line, so call it once per cursor position and honour the returned cursor
- * rather than recomputing one. Returns null when nothing is open, which is the
- * signal for the caller to scan this line from scratch.
+ * Split out of {@link maskHtmlComments} so each function stays inside the project complexity budget.
+ * Mutates `state` when the open span closes on this line, so call it once per cursor position and honour the returned cursor rather than recomputing
+ * one.
+ *
+ * Returns null when nothing is open, which is the signal for the caller to scan this line from scratch.
  *
  * @param line - the source line being masked
  * @param cursor - offset into `line` where masking resumes
@@ -509,9 +508,8 @@ function consumeOpenMarkdownSpan(
 /**
  * Return whether a code span starts before the next comment opener on a line.
  *
- * Split out of {@link maskHtmlComments} so each function stays inside the
- * project complexity budget. A span starting at or past `lineLength` began on a
- * later line of the same paragraph, so it cannot mask anything here.
+ * Split out of {@link maskHtmlComments} so each function stays inside the project complexity budget.
+ * A span starting at or past `lineLength` began on a later line of the same paragraph, so it cannot mask anything here.
  *
  * @param inlineCode - the next balanced span found in the paragraph source
  * @param openIndex - offset of the next unescaped `<!--`, or -1 when none
@@ -576,15 +574,13 @@ function maskHtmlComments(
 
 /**
  * Blank out every example in a report so checks only read what the user actually wrote.
- * Use before validating any user-authored Markdown - a plan, review, or quality report -
- * so a fenced sample, an indented snippet, or a commented-out draft is never mistaken for
- * a real field the user filled in.
  *
- * The scan is line-by-line with a lookahead rather than a simple regex because Markdown
- * lets a user open a backticked example on one line and close it several lines later, and
- * because every character must keep its position: callers report problems back to the user
- * by offset, so replacing examples with same-length spaces is what keeps "line 12, column
- * 30" pointing at the place the user is actually looking at.
+ * Use before validating any user-authored Markdown - a plan, review, or quality report - so a fenced sample, an indented snippet, or a commented-out
+ * draft is never mistaken for a real field the user filled in.
+ *
+ * The scan is line-by-line with a lookahead rather than a simple regex because Markdown lets a user open a backticked example on one line and close
+ * it several lines later, and because every character must keep its position: callers report problems back to the user by offset, so replacing
+ * examples with same-length spaces is what keeps "line 12, column 30" pointing at the place the user is actually looking at.
  *
  * @param content - the report exactly as the user saved it; empty content has nothing to
  *   check, so an empty view comes back and the caller reports no findings rather than an error

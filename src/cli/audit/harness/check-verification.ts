@@ -1,6 +1,5 @@
 /**
- * Verification concern: Can the agent verify its own work honestly?
- * 4 checks: hooks-registered, commit-guidance, evidence-before-claims,
+ * Verification concern: Can the agent verify its own work honestly? 4 checks: hooks-registered, commit-guidance, evidence-before-claims,
  * post-turn-hook-integrity.
  */
 import type {

@@ -1,12 +1,10 @@
 /**
  * Configuration layer for the deterministic skill-quality scoring engine.
  *
- * Goat-flow ships with `DEFAULT_QUALITY_CONFIG` calibrated against the in-tree
- * 12-artifact corpus. Consumer projects override pieces via
- * `.goat-flow/config.yaml` under the top-level `quality` section.
+ * Goat-flow ships with `DEFAULT_QUALITY_CONFIG` calibrated against the in-tree 12-artifact corpus.
+ * Consumer projects override pieces via `.goat-flow/config.yaml` under the top-level `quality` section.
  *
- * Zero-config behaviour (no `quality` section in config) is identical to the
- * older hardcoded defaults; fixtures still pass without any project
+ * Zero-config behaviour (no `quality` section in config) is identical to the older hardcoded defaults; fixtures still pass without any project
  * override.
  */
 import { loadConfig } from "../config/reader.js";
@@ -569,9 +567,8 @@ export function cloneQualityConfig(config: QualityConfig): QualityConfig {
 }
 
 /**
- * Load `.goat-flow/config.yaml` and return its merged `quality` section,
- * falling back to `DEFAULT_QUALITY_CONFIG` if the file is missing or has
- * no `quality` block.
+ * Load `.goat-flow/config.yaml` and return its merged `quality` section, falling back to `DEFAULT_QUALITY_CONFIG` if the file is missing or has no
+ * `quality` block.
  *
  * @param projectRoot - Project root that may contain `.goat-flow/config.yaml`.
  * @returns Normalized quality config for the project.

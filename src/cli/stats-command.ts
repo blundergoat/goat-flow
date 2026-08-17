@@ -1,7 +1,7 @@
 /**
  * Runs the read-only learning-loop stats command after CLI parsing.
- * Use this module when an operator wants memory health, check-mode evidence,
- * or machine-readable freshness without loading stats code for other commands.
+ * Use this module when an operator wants memory health, check-mode evidence, or machine-readable freshness without loading stats code for other
+ * commands.
  */
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";

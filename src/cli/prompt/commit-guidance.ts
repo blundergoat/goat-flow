@@ -1,6 +1,9 @@
 /**
- * Install project-local commit guidance from the reviewed workflow template.
- * Git projects receive one deterministic standard; non-Git targets stay untouched.
+ * Installs the project's commit-message guidance from the reviewed workflow template.
+ *
+ * A user gets this during setup, and it is what gives their agent one consistent commit convention to follow.
+ *
+ * Non-Git targets are left untouched, because commit conventions are meaningless in a directory with no version control.
  */
 import {
   constants,
@@ -31,8 +34,8 @@ interface CommitGuidanceWriteResult {
 
 /**
  * Move the former guide to the preferred path without an overwrite window.
- * An exclusive copy fails if the destination appears after the caller's existence check; unlinking
- * only after that copy succeeds preserves the former guide when either operation fails.
+ * An exclusive copy fails if the destination appears after the caller's existence check; unlinking only after that copy succeeds preserves the former
+ * guide when either operation fails.
  */
 function renameLegacyGuide(legacyPath: string, outputPath: string): void {
   copyFileSync(legacyPath, outputPath, constants.COPYFILE_EXCL);
@@ -42,9 +45,11 @@ function renameLegacyGuide(legacyPath: string, outputPath: string): void {
 /**
  * Apply commit-guidance setup to one target project.
  *
- * Targets without a `.git` entry receive no commit guide. Git targets preserve an existing preferred
- * guide, migrate the former filename when it is the only accepted guide, or copy the reviewed
- * workflow template when neither guide exists. A preferred-path collision is never overwritten.
+ * Targets without a `.git` entry receive no commit guide.
+ * Git targets preserve an existing preferred guide, migrate the former filename when it is the only accepted guide, or copy the reviewed workflow
+ * template when neither guide exists.
+ *
+ * A preferred-path collision is never overwritten.
  *
  * @param targetRoot - Project root to inspect and, when applicable, update.
  * @returns The applied or skipped result and its project-relative path.
@@ -92,8 +97,8 @@ function ensureGitCommitInstructions(
 
 /**
  * Print commit-guide setup status after an install that already succeeded.
- * Use as the final install step; it never rethrows, because guidance is additive and a
- * completed, recorded install must not be reported to the user as a crash.
+ * Use as the final install step; it never rethrows, because guidance is additive and a completed, recorded install must not be reported to the user
+ * as a crash.
  *
  * @param projectPath - selected project root; a non-Git target prints nothing
  */

@@ -1,12 +1,13 @@
 /**
  * Plan and milestone state model behind the dashboard's `/api/plans` route.
  *
- * Reads `.goat-flow/plans`, parsing each `M*.md` milestone into a compact summary (title, status,
- * objective, checkbox progress) so the UI never receives raw Markdown, and writes the `.active`
- * marker to switch the selected plan. Plan-name inputs are validated to a single top-level directory
- * segment before any write so a request cannot escape the plans root. Filesystem reads swallow
- * missing paths into empty state; the mutation helpers throw on malformed input or a non-existent
- * plan. Consumed by dashboard-project-routes.ts.
+ * Reads `.goat-flow/plans`, parsing each `M*.md` milestone into a compact summary (title, status, objective, checkbox progress) so the UI never
+ * receives raw Markdown, and writes the `.active` marker to switch the selected plan.
+ * Plan-name inputs are validated to a single top-level directory segment before any write so a request cannot escape the plans root.
+ *
+ * Filesystem reads swallow missing paths into empty state; the mutation helpers throw on malformed input or a non-existent plan.
+ *
+ * Consumed by dashboard-project-routes.ts.
  */
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -328,9 +329,9 @@ function assertTopLevelPlanName(planName: string): void {
 }
 
 /**
- * Extract and validate the active task-plan name from the dashboard request body. Throws when
- * `body.plan` is missing, blank, or not a safe top-level plan name, so a malformed POST cannot select
- * or escape into an unintended directory.
+ * Extract and validate the active task-plan name from the dashboard request body.
+ * Throws when `body.plan` is missing, blank, or not a safe top-level plan name, so a malformed POST cannot select or escape into an unintended
+ * directory.
  *
  * @param body - raw request body; must be JSON with a non-empty string `plan` field
  * @returns the trimmed, validated plan name guaranteed to be a single top-level directory segment
@@ -347,9 +348,9 @@ export function readActiveTaskPlanBody(body: string): string {
 }
 
 /**
- * Persist the selected plan by writing the `.active` marker, but only for a plan that already
- * exists, so the dashboard can switch the active plan without ever creating task structure. Throws
- * when the plans directory is absent or the requested plan does not exist.
+ * Persist the selected plan by writing the `.active` marker, but only for a plan that already exists, so the dashboard can switch the active plan
+ * without ever creating task structure.
+ * Throws when the plans directory is absent or the requested plan does not exist.
  *
  * @param projectPath - absolute project root whose `.goat-flow/plans` directory holds the plans
  * @param planName - validated top-level plan directory name to mark active; must already exist on disk

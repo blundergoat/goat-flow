@@ -1,14 +1,14 @@
 /**
  * Tells a user exactly what is wrong with their `.goat-flow/config.yaml` before anything runs.
- * Each validator owns one config section and reports problems by key name, so someone who
- * mistyped a value gets a message pointing at the line they wrote rather than a failure
- * surfacing later from a command that looks unrelated.
  *
- * The split between errors and warnings is the part that matters to a user. An error means
- * the config cannot be trusted and defaults are used instead; a warning means the setting was
- * understood but is unusual or unrecognised, and their project still runs as written. Unknown
- * top-level keys are warnings on purpose - a config written for a newer goat-flow should not
- * stop an older one from working.
+ * Each validator owns one config section and reports problems by key name, so someone who mistyped a value gets a message pointing at the line they
+ * wrote rather than a failure surfacing later from a command that looks unrelated.
+ *
+ * The split between errors and warnings is the part that matters to a user.
+ * An error means the config cannot be trusted and defaults are used instead; a warning means the setting was understood but is unusual or
+ * unrecognised, and their project still runs as written.
+ *
+ * Unknown top-level keys are warnings on purpose - a config written for a newer goat-flow should not stop an older one from working.
  */
 import { posix } from "node:path";
 import { isReleaseVersion } from "../version-compare.js";
@@ -89,8 +89,7 @@ function validateUnknownTopLevelKeys(
 
 /**
  * Warn about keys inside a block that no validator reads.
- * Use wherever a block has a closed key set, so a misspelling is distinguishable
- * from an omission instead of both producing silence.
+ * Use wherever a block has a closed key set, so a misspelling is distinguishable from an omission instead of both producing silence.
  *
  * @param value - block contents; an empty block produces no warnings
  * @param knownKeys - keys some validator reads at this level; every other key is reported
@@ -114,8 +113,8 @@ function warnUnrecognizedKeys(
 
 /**
  * Warn about unread keys in a block whose path has a registered key set.
- * Use for blocks reached by a fixed config path; blocks nested under a user-chosen
- * name call `warnUnrecognizedKeys` directly with the set for that level.
+ * Use for blocks reached by a fixed config path; blocks nested under a user-chosen name call `warnUnrecognizedKeys` directly with the set for that
+ * level.
  *
  * @param value - block contents; an empty block produces no warnings
  * @param path - dot-separated config path of the owning block; an unregistered path is skipped
@@ -137,9 +136,8 @@ function warnUnknownNestedKeys(
  * Validate that an optional top-level field is an object before reading nested keys.
  * Use so nested validators can assume a named-field block.
  *
- * Sweeping unknown keys here rather than in each nested validator means a new block
- * cannot forget the check: adding its entry to `KNOWN_NESTED_KEYS` is what turns the
- * sweep on, and a block with no entry is skipped rather than warned about wholesale.
+ * Sweeping unknown keys here rather than in each nested validator means a new block cannot forget the check: adding its entry to `KNOWN_NESTED_KEYS`
+ * is what turns the sweep on, and a block with no entry is skipped rather than warned about wholesale.
  *
  * @param raw - parsed config object; missing key means the user omitted this optional block
  * @param key - top-level config key; empty would produce an unusable error path
@@ -567,10 +565,9 @@ function validateHooksField(
 }
 
 /**
- * Validate a hook `binaries` override block: an object mapping language
- * suffixes to non-empty string paths. The hook script enforces the
- * repo-relative and executability rules at runtime; config validation only
- * guards the YAML shape so typos surface in `config-parses`.
+ * Validate a hook `binaries` override block: an object mapping language suffixes to non-empty string paths.
+ * The hook script enforces the repo-relative and executability rules at runtime; config validation only guards the YAML shape so typos surface in
+ * `config-parses`.
  *
  * @param value - raw `hooks.<id>.binaries` value; missing/non-object values cannot configure binaries
  * @param path - dot-separated config path used in emitted issues; empty would hide the bad block

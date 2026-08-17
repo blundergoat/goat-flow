@@ -1,7 +1,8 @@
 /**
  * Builds and renders the local static context-pressure report.
- * Use this after `goat-flow diagnostics context` when a maintainer wants to see
- * which instructions, skills, references, or memory buckets approach their budgets.
+ *
+ * Use this after `goat-flow diagnostics context` when a maintainer wants to see which instructions, skills, references, or memory buckets approach
+ * their budgets.
  * Measurements stay local and deterministic; no provider telemetry is consulted.
  */
 import type {
@@ -15,15 +16,16 @@ import { BUCKET_SIZE_WARN_BYTES } from "../stats/stats.js";
 
 /**
  * Divisor behind every `estimatedTokens` figure this report emits.
- * Four bytes per token is the conventional upper-bound approximation for UTF-8 prose, so the report
- * over-states pressure rather than letting a surface look safe when it is not.
+ * Four bytes per token is the conventional upper-bound approximation for UTF-8 prose, so the report over-states pressure rather than letting a
+ * surface look safe when it is not.
  */
 const ESTIMATED_BYTES_PER_TOKEN = 4;
 /**
- * Human-readable statement of the estimate, published in the report's `measurement` block so a
- * reader can reproduce the arithmetic without opening this file.
- * Invariant: this literal is the single source of truth for both the declared schema type and the
- * emitted value, so the documented formula cannot drift from `ESTIMATED_BYTES_PER_TOKEN`.
+ * Human-readable statement of the estimate, published in the report's `measurement` block so a reader can reproduce the arithmetic without opening
+ * this file.
+ *
+ * Invariant: this literal is the single source of truth for both the declared schema type and the emitted value, so the documented formula cannot
+ * drift from `ESTIMATED_BYTES_PER_TOKEN`.
  */
 const TOKEN_ESTIMATE_FORMULA = "ceil(utf8_bytes / 4)" as const;
 /** Literal type of the published formula, derived so the schema tracks the constant above. */
@@ -444,8 +446,8 @@ function rememberLearningLoopBucket(
 
 /**
  * Collect bucket measurements from shared facts without walking learning-loop directories again.
- * Invariant: one surface per bucket path - the first complete fact wins - and the returned list is
- * sorted by path, so two runs over the same facts stay deterministic.
+ * Invariant: one surface per bucket path - the first complete fact wins - and the returned list is sorted by path, so two runs over the same facts
+ * stay deterministic.
  */
 function collectLearningLoopSurfaces(
   projectFiles: ReadonlyFS,

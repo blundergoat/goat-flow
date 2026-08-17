@@ -1,7 +1,7 @@
 /**
  * Shared data contracts for goat-flow CLI, audit, setup, and dashboard flows.
- * Use these types when a user-facing result crosses module boundaries so every
- * renderer and test sees the same optional, empty, and unavailable states.
+ * Use these types when a user-facing result crosses module boundaries so every renderer and test sees the same optional, empty, and unavailable
+ * states.
  */
 // === Agent Types ===
 
@@ -28,9 +28,8 @@ type SkillSource = "installed" | "agent-mirror" | "github-mirror";
  * Describes an agent's file layout and enforcement mechanisms.
  * One profile per supported agent (Claude, Codex, Antigravity, Copilot).
  *
- * `denyMechanism` and `hookEvents` are nullable to model agents whose upstream
- * runtime has no project-local hook wiring for a given capability; consumers
- * MUST guard for the null case.
+ * `denyMechanism` and `hookEvents` are nullable to model agents whose upstream runtime has no project-local hook wiring for a given capability;
+ * consumers MUST guard for the null case.
  */
 export interface AgentProfile {
   id: AgentId;

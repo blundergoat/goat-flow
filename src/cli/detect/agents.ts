@@ -1,5 +1,9 @@
 /**
- * Canonical per-agent profiles used by setup, fact extraction, and prompt rendering.
+ * The canonical profile for each supported coding agent: where its instruction file, skills, and hooks belong.
+ *
+ * Everything the user sees about an agent resolves from here, whether they picked it in the dashboard dropdown or passed `--agent` on the CLI.
+ *
+ * Profiles resolve lazily on first access, so a manifest problem with one agent cannot break an unrelated command at import time.
  */
 import { KNOWN_AGENT_IDS, type AgentProfile, type AgentId } from "../types.js";
 import { getAgentProfile } from "../agents/registry.js";

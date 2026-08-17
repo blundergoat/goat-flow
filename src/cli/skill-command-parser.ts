@@ -1,7 +1,8 @@
 /**
  * Lightweight positional and flag rules for the `skill` CLI namespace.
- * Use during argv parsing so `skill new` and read-only `skill doctor` remain
- * isolated without importing their heavier authoring or diagnostic runtimes.
+ *
+ * Use during argv parsing so `skill new` and read-only `skill doctor` remain isolated without importing their heavier authoring or diagnostic
+ * runtimes.
  * Every failure is a user-facing CLI usage error with exit code 2.
  */
 import { resolve } from "node:path";

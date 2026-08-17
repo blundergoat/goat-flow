@@ -1,11 +1,12 @@
 /**
  * Parses learning-loop bucket markdown into the entry list behind generated INDEX.md files.
- * One parser covers all four buckets: footguns/lessons/patterns split per `## <Kind>:` heading
- * (skipping `## Resolved Entries` sections and `**Status:** resolved` entries), while decisions
- * derive one entry per ADR file. Hooks are extracted mechanically - first sentence of the
- * bucket-specific lead paragraph - so regeneration stays deterministic and never needs
- * hand-curated metadata. Nothing here reads the clock; `index-fresh` re-runs this parser and
- * diffs, so any time-derived output would break freshness detection.
+ *
+ * One parser covers all four buckets: footguns/lessons/patterns split per `## <Kind>:` heading (skipping `## Resolved Entries` sections and
+ * `**Status:** resolved` entries), while decisions derive one entry per ADR file.
+ *
+ * Hooks are extracted mechanically - first sentence of the bucket-specific lead paragraph - so regeneration stays deterministic and never needs
+ * hand-curated metadata.
+ * Nothing here reads the clock; `index-fresh` re-runs this parser and diffs, so any time-derived output would break freshness detection.
  */
 import type { ReadonlyFS } from "../types.js";
 import type { GoatFlowConfig } from "../config/types.js";
@@ -36,9 +37,8 @@ export interface IndexEntry {
   /** Bucket-relative source file name the row links to (INDEX.md sits in the same directory). */
   sourceFile: string;
   /**
-   * Grep needle for the row's `(search: ...)` anchor - the heading line, cut before an embedded
-   * double quote UNLESS that cut would collapse it to a useless `## Lesson:`-style prefix
-   * (quote-first titles keep the full heading; the renderer switches wrapper quotes for them).
+   * Grep needle for the row's `(search: ...)` anchor - the heading line, cut before an embedded double quote UNLESS that cut would collapse it to a
+   * useless `## Lesson:`-style prefix (quote-first titles keep the full heading; the renderer switches wrapper quotes for them).
    */
   anchor: string;
   /** One-sentence routing hook extracted mechanically from the entry body. */
@@ -70,9 +70,10 @@ const METADATA_LABEL =
 const ADR_FILE = /^ADR-\d{3}-.+\.md$/;
 
 /**
- * Limit rationale: the hook only has to answer "is this row worth opening?", and every agent reads
- * a whole INDEX before starting work, so the cap is a direct retrieval tax. At 200 the lessons index
- * reached 84KB - larger than any bucket it indexes, and over twice the 40,000-byte bucket gate.
+ * Limit rationale: the hook only has to answer "is this row worth opening?", and every agent reads a whole INDEX before starting work, so the cap is
+ * a direct retrieval tax.
+ * At 200 the lessons index reached 84KB - larger than any bucket it indexes, and over twice the 40,000-byte bucket gate.
+ *
  * 100 keeps the routing sentence intact while roughly halving that cost.
  */
 const HOOK_MAX_CHARS = 100;
@@ -114,12 +115,11 @@ const DEGENERATE_NEEDLE = /^#{1,2}\s*(?:[A-Za-z-]+:)?$/;
 /**
  * Build the grep needle for one heading line.
  *
- * A user retrieving a lesson follows the INDEX row's `(search: ...)` anchor into the bucket
- * file, so the needle must land on exactly one heading. Headings with an embedded double quote
- * are cut before the quote to keep the needle copy-pasteable - but for quote-FIRST titles (e.g.
- * `## Lesson: "Double check" means read the files`) that cut collapses to the bare `## Lesson:`
- * prefix shared by every entry. Those keep the full heading line instead, and the renderer
- * wraps them in single quotes (M04, 1.13.0).
+ * A user retrieving a lesson follows the INDEX row's `(search: ...)` anchor into the bucket file, so the needle must land on exactly one heading.
+ * Headings with an embedded double quote are cut before the quote to keep the needle copy-pasteable - but for quote-FIRST titles (e.g.
+ *
+ * `## Lesson: "Double check" means read the files`) that cut collapses to the bare `## Lesson:` prefix shared by every entry.
+ * Those keep the full heading line instead, and the renderer wraps them in single quotes (M04, 1.13.0).
  *
  * @param headingLine - verbatim `## <Kind>: ...` or ADR `# ...` heading line
  * @returns the needle to embed in the row's `(search: ...)` anchor
@@ -134,10 +134,9 @@ function searchNeedle(headingLine: string): string {
 }
 
 /**
- * Extract the first sentence of a paragraph, collapsing whitespace and truncating run-ons at a
- * word boundary. The sentence break requires a capital/backtick/quote follow-up so file names
- * like `cli.ts` inside a sentence do not split it early. Bold markers are stripped because a
- * sentence cut can otherwise leave an unbalanced `**` pair in the rendered row.
+ * Extract the first sentence of a paragraph, collapsing whitespace and truncating run-ons at a word boundary.
+ * The sentence break requires a capital/backtick/quote follow-up so file names like `cli.ts` inside a sentence do not split it early.
+ * Bold markers are stripped because a sentence cut can otherwise leave an unbalanced `**` pair in the rendered row.
  */
 function firstSentence(text: string): string {
   const collapsed = text.replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
@@ -275,10 +274,9 @@ function parseDecisionFile(file: MarkdownEntry): IndexEntry | null {
 }
 
 /**
- * Parse one learning-loop bucket directory into the deterministic entry list a generated
- * INDEX.md is rendered from. Files come back lexicographically sorted (ADR number order for
- * decisions) with entries in document order, so repeated runs over unchanged content always
- * produce the same list.
+ * Parse one learning-loop bucket directory into the deterministic entry list a generated INDEX.md is rendered from.
+ * Files come back lexicographically sorted (ADR number order for decisions) with entries in document order, so repeated runs over unchanged content
+ * always produce the same list.
  *
  * @param fs - read-only filesystem adapter rooted at the target project
  * @param dirPath - bucket directory path relative to the project root

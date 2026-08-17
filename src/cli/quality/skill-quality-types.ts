@@ -1,12 +1,10 @@
 /**
- * Shared type vocabulary for the skill-quality scoring pipeline: the artifact inventory record,
- * classification and shape-detection results, the per-metric result rows, and the report schema
- * that CLI JSON, dashboard routes, and prompt composition all consume.
+ * Shared type vocabulary for the skill-quality scoring pipeline: the artifact inventory record, classification and shape-detection results, the
+ * per-metric result rows, and the report schema that CLI JSON, dashboard routes, and prompt composition all consume.
  *
- * This module is the contract boundary between the scorers (which produce MetricResult rows) and
- * every reader of a SkillQualityReport, so changing a field here ripples to those consumers - keep
- * the public shapes stable. It also hosts the small `finalizeMetric` helper that every metric
- * scorer routes through to apply subtype-specific max-score capping consistently.
+ * This module is the contract boundary between the scorers (which produce MetricResult rows) and every reader of a SkillQualityReport, so changing a
+ * field here ripples to those consumers - keep the public shapes stable.
+ * It also hosts the small `finalizeMetric` helper that every metric scorer routes through to apply subtype-specific max-score capping consistently.
  */
 import type {
   ArtifactKind,
@@ -17,9 +15,8 @@ import type {
 } from "./quality-config.js";
 
 /**
- * Disposition the rubric recommends for an artifact, from `keep-skill` (healthy) through revision
- * and reclassification hints to `retire`. `needs-human-review` is the escape hatch when scores are
- * strong but classification confidence is too low to act on automatically.
+ * Disposition the rubric recommends for an artifact, from `keep-skill` (healthy) through revision and reclassification hints to `retire`.
+ * `needs-human-review` is the escape hatch when scores are strong but classification confidence is too low to act on automatically.
  */
 export type Recommendation =
   | "keep-skill"
@@ -29,9 +26,8 @@ export type Recommendation =
   | "retire"
   | "needs-human-review";
 /**
- * Severity band for one metric row, derived from its score-to-max ratio. `n/a` means the metric
- * does not apply to the artifact's subtype (max score 0), not that it scored zero - dashboards must
- * distinguish the two.
+ * Severity band for one metric row, derived from its score-to-max ratio.
+ * `n/a` means the metric does not apply to the artifact's subtype (max score 0), not that it scored zero - dashboards must distinguish the two.
  */
 export type MetricSeverity = "ok" | "warn" | "fail" | "n/a";
 
@@ -159,9 +155,9 @@ export interface ComposeOptions {
 }
 
 /**
- * Signature every rubric metric implements: pure function from the shared scorer input to one
- * capped result row. Scorers must be deterministic and side-effect free (no disk reads) so the
- * same content always yields the same score; all I/O happens before scoring, in MetricInput.
+ * Signature every rubric metric implements: pure function from the shared scorer input to one capped result row.
+ * Scorers must be deterministic and side-effect free (no disk reads) so the same content always yields the same score; all I/O happens before
+ * scoring, in MetricInput.
  */
 export type MetricScorer = (input: MetricInput) => MetricResult;
 

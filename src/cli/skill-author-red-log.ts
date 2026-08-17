@@ -1,11 +1,12 @@
 /**
  * Checks the RED evidence a user must supply before scaffolding a hardened skill.
- * Skill TDD asks an author to first document how the skill fails - the pressure applied, the
- * rationalisation quoted verbatim, the concrete failure seen - and only then scaffold. This
- * module is the gate that decides whether what they wrote is real evidence or a placeholder.
  *
- * The checks look pedantic on purpose. A log saying "the agent might refuse" proves nothing
- * and would let an author scaffold a skill whose hardening was never tested, so vague values,
+ * Skill TDD asks an author to first document how the skill fails - the pressure applied, the rationalisation quoted verbatim, the concrete failure
+ * seen - and only then scaffold.
+ * This module is the gate that decides whether what they wrote is real evidence or a placeholder.
+ *
+ * The checks look pedantic on purpose.
+ * A log saying "the agent might refuse" proves nothing and would let an author scaffold a skill whose hardening was never tested, so vague values,
  * negated assertions, and absent quotes are all rejected with a message naming what to add.
  */
 import { readFileSync, statSync } from "node:fs";
@@ -37,8 +38,7 @@ interface RedLogValidation {
 
 /**
  * Tell an author what to do next when their RED evidence is missing or too weak.
- * Nothing is written in this case, so this is the whole of what they see: the steps that
- * would let them come back and scaffold successfully.
+ * Nothing is written in this case, so this is the whole of what they see: the steps that would let them come back and scaffold successfully.
  *
  * @param name - skill name they were trying to create, used in the suggested log path
  * @returns ordered steps to follow; never empty, because a blocked author always needs a
@@ -235,9 +235,9 @@ function validateRedLogContent(content: string): string[] {
 
 /**
  * Decide whether an author's RED log really documents a failure, or only claims one.
- * This is the gate before scaffolding: it checks the log sits in the expected place and that
- * its pressures, quoted rationalisation, and failure outcome are concrete rather than
- * placeholder text.
+ *
+ * This is the gate before scaffolding: it checks the log sits in the expected place and that its pressures, quoted rationalisation, and failure
+ * outcome are concrete rather than placeholder text.
  *
  * @param projectRoot - project the author is working in, used to keep the log inside it
  * @param name - skill name being created, used in path and message text

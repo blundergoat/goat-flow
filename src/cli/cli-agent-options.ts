@@ -1,9 +1,11 @@
 /**
  * Resolves the set of agent IDs goat-flow supports and renders them for CLI help and error text.
- * The manifest-backed list is the single source of truth; this module caches it once and offers
- * pre-formatted help strings so the parser, handlers, and `--help` output never hardcode agent
- * names. The list-building helpers swallow manifest-load failures into a "run manifest" hint so a
- * broken manifest degrades help text instead of crashing argument parsing on every invocation.
+ *
+ * The manifest-backed list is the single source of truth; this module caches it once and offers pre-formatted help strings so the parser, handlers,
+ * and `--help` output never hardcode agent names.
+ *
+ * The list-building helpers swallow manifest-load failures into a "run manifest" hint so a broken manifest degrades help text instead of crashing
+ * argument parsing on every invocation.
  */
 
 import type { AgentId } from "./types.js";

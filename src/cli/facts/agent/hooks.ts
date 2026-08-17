@@ -1,7 +1,6 @@
 /**
  * Extracts the hook facts shown by audit and dashboard status screens.
- * Use these readers when a user needs to know whether local hook files,
- * registrations, and executable policy rules provide the claimed coverage.
+ * Use these readers when a user needs to know whether local hook files, registrations, and executable policy rules provide the claimed coverage.
  */
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 import {

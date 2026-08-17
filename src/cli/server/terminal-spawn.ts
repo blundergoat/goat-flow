@@ -1,13 +1,14 @@
 /**
  * Works out exactly how to launch the agent a user picked in the dashboard terminal.
- * Turning "run Claude here, in reporting mode" into a real command means resolving where that
- * CLI actually lives on this machine, choosing a shell that behaves the same on Windows and
- * POSIX, and deciding which flags put the session into the restricted reporting profile.
  *
- * Anything that differs between platforms is settled here rather than inside session
- * management, so a user on Windows and a user on macOS get the same terminal behaviour from
- * the same code path. A runner that cannot be found comes back as null so the caller can tell
- * the user their CLI is not installed, instead of spawning a shell that fails cryptically.
+ * Turning "run Claude here, in reporting mode" into a real command means resolving where that CLI actually lives on this machine, choosing a shell
+ * that behaves the same on Windows and POSIX, and deciding which flags put the session into the restricted reporting profile.
+ *
+ * Anything that differs between platforms is settled here rather than inside session management, so a user on Windows and a user on macOS get the
+ * same terminal behaviour from the same code path.
+ *
+ * A runner that cannot be found comes back as null so the caller can tell the user their CLI is not installed, instead of spawning a shell that fails
+ * cryptically.
  */
 import { execFileSync } from "node:child_process";
 import { extname } from "node:path";
@@ -65,8 +66,8 @@ const WINDOWS_CLAUDE_REPORTING_ARGS =
   "--setting-sources= --settings $env:GOAT_CLAUDE_REPORTING_SETTINGS --permission-mode dontAsk";
 /**
  * Wrap a launch prompt so the runner receives it as one paste, not as typing.
- * Use when the dashboard opens a terminal with a prompt already filled in, so the agent sees
- * the whole instruction at once instead of reacting to it line by line.
+ * Use when the dashboard opens a terminal with a prompt already filled in, so the agent sees the whole instruction at once instead of reacting to it
+ * line by line.
  *
  * @param prompt - full prompt text the user is launching with
  * @returns the bracketed-paste payload, ending in a return so the runner starts immediately
@@ -297,8 +298,7 @@ export function resolveCLIPath(name: string): string | null {
 
 /**
  * Clamp a terminal size the browser reported into a range the PTY can accept.
- * Use on every resize, so a hidden or mid-animation panel reporting zero columns cannot
- * collapse the user's terminal or crash the session.
+ * Use on every resize, so a hidden or mid-animation panel reporting zero columns cannot collapse the user's terminal or crash the session.
  *
  * @param dimensionValue - raw rows or columns from the browser; a missing or non-numeric
  *   value falls back to the default rather than propagating
@@ -320,8 +320,8 @@ export function clampDim(
 
 /**
  * Send a terminal message only while the user's browser socket is still open.
- * Writing to a closed socket throws, and a user closing a tab mid-session is completely
- * normal, so a closed socket is silently skipped rather than treated as an error.
+ * Writing to a closed socket throws, and a user closing a tab mid-session is completely normal, so a closed socket is silently skipped rather than
+ * treated as an error.
  *
  * @param socket - the browser connection for this session
  * @param msg - message to deliver; dropped entirely if the user has already disconnected
@@ -335,8 +335,7 @@ export function sendMessage(socket: WebSocket, msg: ServerMessage): void {
 
 /**
  * Tell a pasted launch prompt apart from something the user typed.
- * Used by tracing so the record shows whether input came from the dashboard's launch flow or
- * from the person at the keyboard.
+ * Used by tracing so the record shows whether input came from the dashboard's launch flow or from the person at the keyboard.
  *
  * @param input - raw text about to be written to the PTY
  * @returns true when this is a bracketed paste, meaning a launch prompt rather than typing

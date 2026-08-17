@@ -1,8 +1,8 @@
 /**
  * Single source of truth for workflow manifest data and derived facts.
- * Use from setup, audit, quality, and dashboard flows when users need the
- * current skills, agents, checks, or required files. Invalid static metadata
- * stops loading with precise repair evidence instead of leaking stale state.
+ *
+ * Use from setup, audit, quality, and dashboard flows when users need the current skills, agents, checks, or required files.
+ * Invalid static metadata stops loading with precise repair evidence instead of leaking stale state.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -202,13 +202,11 @@ function sameSortedSet(
 /**
  * Validate manifest facts against the values observed from live code.
  *
- *  In packaged installs the `src/` tree isn't shipped (package.json `files`
- *  ships only `dist/` + `workflow/`), so source-derived drift checks for
- *  static facts (`dashboard_views`) would always trip against empty observed
- *  values. That fact was validated at publish time - here we trust the
- *  manifest and skip it. Preset count is derived from the shipped preset
- *  catalog, and skill-canonical drift is still checked because `getSkillNames()`
- *  ships in `dist/`.
+ * In packaged installs the `src/` tree isn't shipped (package.json `files` ships only `dist/` + `workflow/`), so source-derived drift checks for
+ * static facts (`dashboard_views`) would always trip against empty observed values.
+ * That fact was validated at publish time - here we trust the manifest and skip it.
+ *
+ * Preset count is derived from the shipped preset catalog, and skill-canonical drift is still checked because `getSkillNames()` ships in `dist/`.
  *
  * @param json - Parsed manifest JSON from `workflow/manifest.json`.
  * @param observed - Facts observed from the current source or packaged install.

@@ -1,22 +1,20 @@
 /**
  * Evidence-provenance schema for audit checks.
  *
- * When a user runs `goat-flow audit`, every finding they see traces back to a
- * check - this schema is each check's citation for WHY the rule exists (spec,
- * vendor doc, paper, or a real incident in this repo).
+ * When a user runs `goat-flow audit`, every finding they see traces back to a check - this schema is each check's citation for WHY the rule exists
+ * (spec, vendor doc, paper, or a real incident in this repo).
  *
- * Co-located with each check's implementation so provenance travels with the
- * check and can't drift from its source. Defined here as the stable import
- * path so back-fill work can consume it without redefining.
+ * Co-located with each check's implementation so provenance travels with the check and can't drift from its source.
+ * Defined here as the stable import path so back-fill work can consume it without redefining.
  *
  * Schema adapted from the agnix project's rules.json schema and its Rust
  * emission code (agnix-core crate).
  *
- * The `"unknown"` source_type + required `reason` field is the critique-locked
- * escape hatch: existing checks include historical entries that cannot
- * have their provenance reconstructed. Such checks declare `source_type:
- * "unknown"` and state the reason (e.g. "pre-dates v1.1.0 cleanup"),
- * rather than fabricating a citation or stalling the back-fill.
+ * The `"unknown"` source_type + required `reason` field is the critique-locked escape hatch: existing checks include historical entries that cannot
+ * have their provenance reconstructed.
+ *
+ * Such checks declare `source_type: "unknown"` and state the reason (e.g. "pre-dates v1.1.0 cleanup"), rather than fabricating a citation or stalling
+ * the back-fill.
  */
 
 /** Where a check's norm came from. */
@@ -51,9 +49,9 @@ export interface CheckEvidence {
   /** Evidence paths that resolve against the audited target project. */
   target_evidence_paths?: string[];
   /**
-   * Required when `source_type === "unknown"`. Explains why the provenance
-   * can't be reconstructed. The type system does not enforce this because
-   * it depends on a runtime field; `validateProvenance` below does.
+   * Required when `source_type === "unknown"`.
+   * Explains why the provenance can't be reconstructed.
+   * The type system does not enforce this because it depends on a runtime field; `validateProvenance` below does.
    */
   reason?: string;
 }
@@ -81,9 +79,8 @@ function checkVerifiedOn(evidence: CheckEvidence): string | null {
 /**
  * Check that non-unknown provenance has at least one citation channel.
  *
- * The separate branches are intentional because legacy checks may cite vendor
- * URLs, framework files, target-project files, or pre-split evidence_paths; the
- * validator must preserve all four channels while still blocking uncited norms.
+ * The separate branches are intentional because legacy checks may cite vendor URLs, framework files, target-project files, or pre-split
+ * evidence_paths; the validator must preserve all four channels while still blocking uncited norms.
  */
 function checkSourceRequired(evidence: CheckEvidence): string | null {
   if (evidence.source_type === "unknown") return null;

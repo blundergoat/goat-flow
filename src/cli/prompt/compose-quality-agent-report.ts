@@ -1,13 +1,10 @@
 /**
  * Agent-setup wrapper over the shared quality report contract.
  *
- * The actual contract text - filename convention, JSON body shape, per-field
- * rules, and the validate-before-confirming step - lives in ONE place:
- * `appendQualityReportContract` in `compose-quality-contract.ts`. This module
- * keeps the historical `appendAgentReportContract` name for the agent-setup
- * composer and selects the `full` detail level (a user launching
- * `goat-flow quality --agent <id>` gets the fully-explained variant, because
- * agent-setup runs are the ones cold agents follow with no other context).
+ * The actual contract text - filename convention, JSON body shape, per-field rules, and the validate-before-confirming step - lives in ONE place:
+ * `appendQualityReportContract` in `compose-quality-contract.ts`. This module keeps the historical `appendAgentReportContract` name for the
+ * agent-setup composer and selects the `full` detail level (a user launching `goat-flow quality --agent <id>` gets the fully-explained variant,
+ * because agent-setup runs are the ones cold agents follow with no other context).
  */
 import { appendQualityReportContract } from "./compose-quality-contract.js";
 import type { ReportContractInput } from "./compose-quality-contract.js";

@@ -1,8 +1,8 @@
 /**
  * Decides whether an install may start, and explains the refusal when it may not.
- * Admission is the last gate before Bash runs, so every refusal here names the exact paths and
- * the narrowest authority that would clear them. Path safety is decided from filesystem evidence
- * and is deliberately unreachable by any flag combination.
+ *
+ * Admission is the last gate before Bash runs, so every refusal here names the exact paths and the narrowest authority that would clear them.
+ * Path safety is decided from filesystem evidence and is deliberately unreachable by any flag combination.
  */
 import { unmatchedAuthorityPaths } from "./managed-setup-authority.js";
 import type { ManagedSetupAuthority } from "./managed-setup-authority.js";
@@ -82,8 +82,8 @@ function admittedAuthorityPaths(preview: ManagedSetupPreview): string[] {
 
 /**
  * Return a complete pre-write error when the supplied authority does not admit every conflict.
- * A conflict the user never authorized, a named path that matches no admitted row, and any
- * unsafe destination each stop the install before the first byte changes.
+ * A conflict the user never authorized, a named path that matches no admitted row, and any unsafe destination each stop the install before the first
+ * byte changes.
  *
  * @param preview - current managed report already resolved against the same authority
  * @param authority - every authority the user supplied; the empty authority admits nothing

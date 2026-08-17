@@ -1,8 +1,9 @@
 /**
  * Builds compact learning-loop entry facts for stats, dashboard, and prompts.
+ *
  * Use this parser when users need stable memory health without scraping Markdown.
- * Entries retain user-facing headings, recurrence metadata, reference health,
- * bounded excerpts, and deterministic ordering without changing project files.
+ * Entries retain user-facing headings, recurrence metadata, reference health, bounded excerpts, and deterministic ordering without changing project
+ * files.
  */
 import type {
   LearningLoopEntryFact,

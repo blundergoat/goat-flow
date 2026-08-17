@@ -1,7 +1,7 @@
 /**
  * Lightweight positional grammar for the `review` namespace.
- * Kept outside the saturated shared parser so one command does not raise its
- * complexity or load validator/runtime dependencies during unrelated parsing.
+ * Kept outside the saturated shared parser so one command does not raise its complexity or load validator/runtime dependencies during unrelated
+ * parsing.
  */
 import { resolve } from "node:path";
 import { CLIError } from "./cli-error.js";

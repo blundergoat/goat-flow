@@ -1,7 +1,8 @@
 /**
  * Read-only diagnostics for goat-flow skill discovery and installed mirrors.
- * Use `skill doctor` when users need paths, invocation text, static blockers,
- * and existing repair commands without asking an AI runtime to trigger a skill.
+ *
+ * Use `skill doctor` when users need paths, invocation text, static blockers, and existing repair commands without asking an AI runtime to trigger a
+ * skill.
  * Renderers keep text, Markdown, and JSON views on one stable report contract.
  */
 import { existsSync, readFileSync } from "node:fs";
@@ -500,8 +501,7 @@ function applyDuplicateNameBlockers(skills: MutableSkillDoctorEntry[]): void {
 
 /**
  * Validate the canonical skill filter users asked to focus on.
- * The filter narrows only the rendered rows: duplicate-name evidence is always
- * collected across the complete canonical inventory first.
+ * The filter narrows only the rendered rows: duplicate-name evidence is always collected across the complete canonical inventory first.
  */
 function selectedSkillNames(
   canonicalSkillNames: readonly string[],

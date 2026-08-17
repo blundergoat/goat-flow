@@ -1,9 +1,11 @@
 /**
  * Resolves what one install run is allowed to replace, and records that decision per path.
- * Authority is deliberately narrow: a conflict is admitted only by an authority that names its
- * ownership, and a named path must match a row the user could actually see in the preview.
- * Nothing here can reach a redirected or unreadable destination - path safety is decided from
- * filesystem evidence before authority is consulted, and no flag combination overrides it.
+ *
+ * Authority is deliberately narrow: a conflict is admitted only by an authority that names its ownership, and a named path must match a row the user
+ * could actually see in the preview.
+ *
+ * Nothing here can reach a redirected or unreadable destination - path safety is decided from filesystem evidence before authority is consulted, and
+ * no flag combination overrides it.
  */
 
 /** Every authority the user supplied for one install or preview run. */

@@ -1,10 +1,9 @@
 /**
  * Redaction helpers for local evidence and user-readable durable artifacts.
  *
- * Sensitive runtime values are recorded as hashes plus byte length so local
- * continuity can compare values without storing raw tool bodies. Copyable
- * session, review, quality, and export text uses a separate pattern scrubber
- * so users retain useful context while common credential shapes disappear.
+ * Sensitive runtime values are recorded as hashes plus byte length so local continuity can compare values without storing raw tool bodies.
+ * Copyable session, review, quality, and export text uses a separate pattern scrubber so users retain useful context while common credential shapes
+ * disappear.
  */
 import { createHash } from "node:crypto";
 
