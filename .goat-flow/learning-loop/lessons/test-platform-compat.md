@@ -1,11 +1,11 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-08-02
+last_reviewed: 2026-08-18
 ---
 
 ## Lesson: Test runners need CI-runtime reproduction when local Node is newer
 
-**Status:** active | **Created:** 2026-06-07 | **Incident count:** 3 | **Latest occurrence:** 2026-08-02
+**Status:** active | **Created:** 2026-06-07 | **Incident count:** 4 | **Latest occurrence:** 2026-08-18
 
 **What happened:** PR #48 local verification ran on Node 22 and passed the programmatic `node:test` runner path. GitHub Actions ran Node 20.20.2 and failed every `.ts` test with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts"` because the programmatic runner's `execArgv: ["--import", "tsx"]` path did not behave like the CLI preload path on the supported minimum Node version.
 
@@ -13,9 +13,11 @@ last_reviewed: 2026-08-02
 
 **Recurrence 2026-08-02:** An alternate-Node probe passed Gruff's POSIX wrapper to Node as JavaScript, causing a false `SyntaxError`. Putting Node 20 on `PATH` and executing the wrapper normally proved `gruff-ts 0.4.0` ran.
 
+**Recurrence 2026-08-18:** PR #60 passed its focused hook suite on local Linux but both Node 20.11.0 Windows jobs failed the same three post-turn cases. The shared root gate accepted case and separator changes but compared directory spellings only, so another Windows alias form could make one Git root look like two locations and suppress its Stop registration. The correction keeps the spelling fast path, falls back to the directory's device and inode/file ID, and adds an alias-form regression; the exact Windows job remains the release proof.
+
 **Root cause:** The package advertised `node >=20.11.0`, but the implementations were verified only on a newer local runtime. A green local test did not prove the CI-supported runtime and filesystem-time behavior matched.
 
-**Prevention:** When changing test infrastructure, reproduce the package's minimum supported Node path or the exact CI runner before treating local test output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. For shell-wrapped binaries, put the alternate Node on `PATH`; do not pass the wrapper to Node. Timing overrides must define zero explicitly and include a future-timestamp fixture instead of assuming the filesystem clock never leads `Date.now()`. Evidence anchors: `scripts/run-tests.mjs` (search: `--import`) and `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`).
+**Prevention:** When changing test infrastructure or platform-sensitive runtime code, reproduce the package's minimum supported Node path or the exact CI runner before treating local output as release evidence. Prefer CLI-shaped `node --import tsx --test ...` execution when CI already proves that form, and keep `scripts/run-tests.mjs` aligned with the `engines.node` floor. For shell-wrapped binaries, put the alternate Node on `PATH`; do not pass the wrapper to Node. Timing overrides must define zero explicitly and include a future-timestamp fixture instead of assuming the filesystem clock never leads `Date.now()`. A Windows path comparison that decides ownership or containment must handle aliases by proven filesystem identity, not case and separators alone. Evidence anchors: `scripts/run-tests.mjs` (search: `--import`), `test/unit/quality-draft-capture.test.ts` (search: `disables the mtime gate when the stability window is zero`), and `test/unit/hook-registrar-surfaces.test.ts` (search: `uses directory identity when Windows aliases have different spellings`).
 
 ---
 

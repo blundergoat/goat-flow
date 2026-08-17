@@ -66,6 +66,49 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     assert.doesNotMatch(installerSource, /gitTopLevel\([^\n]+\) === [^\n]+/u);
   });
 
+  it("uses directory identity when Windows aliases have different spellings", () => {
+    const shortPath = "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\project";
+    const longPath = "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\project";
+    // Both spellings represent one simulated Windows directory object.
+    const sharedIdentity = () => ({ device: 7n, inode: 42n });
+
+    assert.notEqual(win32.relative(shortPath, longPath), "");
+    assert.equal(
+      filesystemPathsAreEquivalent(
+        shortPath,
+        longPath,
+        win32.relative,
+        sharedIdentity,
+      ),
+      true,
+    );
+    assert.equal(
+      filesystemPathsAreEquivalent(
+        shortPath,
+        longPath,
+        win32.relative,
+        (directoryPath) => ({
+          device: 7n,
+          inode: directoryPath === shortPath ? 42n : 43n,
+        }),
+      ),
+      false,
+    );
+
+    const installerSource = readFileSync(
+      join(import.meta.dirname, "..", "..", "workflow", "install-goat-flow.sh"),
+      "utf-8",
+    );
+    assert.match(
+      installerSource,
+      /function filesystemDirectoryIdentity[\s\S]*fs\.statSync\(directoryPath, \{ bigint: true \}\)[\s\S]*stats\.ino === 0n/u,
+    );
+    assert.match(
+      installerSource,
+      /leftIdentity\.device === rightIdentity\.device[\s\S]*leftIdentity\.inode === rightIdentity\.inode/u,
+    );
+  });
+
   it("publishes cleanup metadata for hooks unsupported by one provider", () => {
     const contract = JSON.parse(
       readFileSync(

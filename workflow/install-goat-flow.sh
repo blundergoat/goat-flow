@@ -1629,12 +1629,32 @@ function relativePathEscapesRoot(relativePath) {
   );
 }
 
-/** Compare physical directory spellings under the current host's path semantics. */
+/** Read one directory's device and inode/file ID, or null when the host cannot prove identity. */
+function filesystemDirectoryIdentity(directoryPath) {
+  try {
+    const stats = fs.statSync(directoryPath, { bigint: true });
+    if (!stats.isDirectory() || stats.ino === 0n) return null;
+    return { device: stats.dev, inode: stats.ino };
+  } catch {
+    return null;
+  }
+}
+
+/** Compare physical spellings first, then exact identity for aliases such as Windows short paths. */
 function filesystemPathsAreEquivalent(leftDirectory, rightDirectory) {
   if (!leftDirectory || !rightDirectory) return false;
-  return (
+  const spellingsMatch =
     pathModule.relative(leftDirectory, rightDirectory) === "" &&
-    pathModule.relative(rightDirectory, leftDirectory) === ""
+    pathModule.relative(rightDirectory, leftDirectory) === "";
+  if (spellingsMatch) return true;
+
+  const leftIdentity = filesystemDirectoryIdentity(leftDirectory);
+  const rightIdentity = filesystemDirectoryIdentity(rightDirectory);
+  return (
+    leftIdentity !== null &&
+    rightIdentity !== null &&
+    leftIdentity.device === rightIdentity.device &&
+    leftIdentity.inode === rightIdentity.inode
   );
 }
 

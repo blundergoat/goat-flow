@@ -203,6 +203,33 @@ function physicalDirectory(directoryPath: string): string | null {
 /** Function shape used to compare two platform-native filesystem paths. */
 type RelativePathResolver = (from: string, to: string) => string;
 
+/** Stable filesystem identity for one directory when the host exposes an inode or file ID. */
+interface FilesystemDirectoryIdentity {
+  device: bigint;
+  inode: bigint;
+}
+
+/** Function shape used to resolve aliases that path spelling alone cannot compare. */
+type DirectoryIdentityResolver = (
+  directoryPath: string,
+) => FilesystemDirectoryIdentity | null;
+
+/**
+ * Read one directory's device and inode/file ID without accepting unavailable zero identities.
+ * @throws Never; missing paths and filesystem lookup failures return `null`
+ */
+function filesystemDirectoryIdentity(
+  directoryPath: string,
+): FilesystemDirectoryIdentity | null {
+  try {
+    const stats = statSync(directoryPath, { bigint: true });
+    if (!stats.isDirectory() || stats.ino === 0n) return null;
+    return { device: stats.dev, inode: stats.ino };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Report whether two physical directory spellings identify the same filesystem location.
  * The injected resolver lets cross-platform tests exercise Windows path semantics on any host.
@@ -210,17 +237,28 @@ type RelativePathResolver = (from: string, to: string) => string;
  * @param leftDirectory - first physical directory spelling; empty cannot name a useful root
  * @param rightDirectory - second physical directory spelling; empty cannot name a useful root
  * @param relativePath - platform-native relative-path implementation used for equivalence
+ * @param directoryIdentity - physical identity fallback for aliases such as Windows short paths
  * @returns true only when both spellings are identical under the selected path semantics
  */
 export function filesystemPathsAreEquivalent(
   leftDirectory: string,
   rightDirectory: string,
   relativePath: RelativePathResolver = relative,
+  directoryIdentity: DirectoryIdentityResolver = filesystemDirectoryIdentity,
 ): boolean {
   if (leftDirectory.length === 0 || rightDirectory.length === 0) return false;
-  return (
+  const spellingsMatch =
     relativePath(leftDirectory, rightDirectory) === "" &&
-    relativePath(rightDirectory, leftDirectory) === ""
+    relativePath(rightDirectory, leftDirectory) === "";
+  if (spellingsMatch) return true;
+
+  const leftIdentity = directoryIdentity(leftDirectory);
+  const rightIdentity = directoryIdentity(rightDirectory);
+  return (
+    leftIdentity !== null &&
+    rightIdentity !== null &&
+    leftIdentity.device === rightIdentity.device &&
+    leftIdentity.inode === rightIdentity.inode
   );
 }
 
