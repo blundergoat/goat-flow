@@ -286,7 +286,18 @@ function dashboardAgentPlanHookLoadersFragment(
         }
       }
     },
+  };
+}
 
+/**
+ * Build the Tasks view's display helpers: progress labels, progress percentages, and modified-time text.
+ *
+ * These only format what the loaders already fetched, so they are kept apart from the loading and selection actions.
+ *
+ * @returns dashboard fragment merged into the app alongside the plan loaders
+ */
+function dashboardTaskDisplayFragment(): DashboardAppFragment {
+  return {
     /**
      * Format completed and total task counts for one milestone row.
      * Use in the task-plan table so users can scan progress at a glance.
@@ -496,7 +507,19 @@ function dashboardHookSetupActionsFragment(
           state.supported && state.effectiveState.status !== "effective",
       );
     },
+  };
+}
 
+/**
+ * Build the Hooks view's roll-up counters and the agent lists behind each hook row's disclosure.
+ *
+ * These answer "how many hooks are actually effective across my agents", which is the summary a user reads before opening
+ * any individual hook row.
+ *
+ * @returns dashboard fragment merged into the app alongside the hook actions
+ */
+function dashboardHookSummaryFragment(): DashboardAppFragment {
+  return {
     /**
      * List unsupported agent surfaces that explain why a hook is unavailable.
      * Use so the hook row can disclose unsupported runners instead of looking broken.
@@ -558,7 +581,18 @@ function dashboardHookSetupActionsFragment(
         this.hookHasIneffectiveCoverage(hook),
       ).length;
     },
+  };
+}
 
+/**
+ * Build the Hooks view's filtering, grouping, and per-row actions.
+ *
+ * A user reaches these by clicking a filter chip, expanding a section, or toggling or resyncing one hook.
+ *
+ * @returns dashboard fragment merged into the app alongside the hook summary counters
+ */
+function dashboardHookFilterActionsFragment(): DashboardAppFragment {
+  return {
     /**
      * Test one hook against a selected filter chip.
      * Use before search so the Hooks list reflects enabled/disabled/drift tabs.

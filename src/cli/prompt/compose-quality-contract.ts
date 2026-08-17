@@ -73,7 +73,7 @@ function backtickList(values: readonly (string | number)[]): string {
  * @param input - run facts embedded into the contract (agent, paths, prior report, mode)
  * @param opts - per-surface presentation switches (detail level, separator, sample type)
  */
-// eslint-disable-next-line complexity -- Intentional because mutually exclusive saver contracts require one ordered renderer.
+
 export function appendQualityReportContract(
   lines: string[],
   input: ReportContractInput,
@@ -175,6 +175,29 @@ export function appendQualityReportContract(
   lines.push("}");
   lines.push("```");
   lines.push("");
+  appendReportJsonRules(lines, input, usesStagedDraft, pushVariant, pushFull);
+}
+
+/**
+ * Append the rules the agent must follow when filling in the JSON template above it.
+ *
+ * These are the constraints a saved report is actually validated against, so wording that drifts from the parser is how a
+ * user ends up with a report their own CLI rejects.
+ *
+ * @param lines - prompt lines appended to in place
+ * @param input - the quality request, supplying mode and any prior report being compared
+ * @param usesStagedDraft - true when the dashboard stages the draft, which changes how the report must be handed back
+ * @param pushVariant - emit the full-detail or compact wording of one rule
+ * @param pushFull - emit lines only the full-detail prompt carries
+ * @returns nothing; the rules are appended to `lines`
+ */
+function appendReportJsonRules(
+  lines: string[],
+  input: ReportContractInput,
+  usesStagedDraft: boolean,
+  pushVariant: (fullText: string, compactText: string) => void,
+  pushFull: (...texts: string[]) => void,
+): void {
   lines.push("JSON rules:");
   lines.push(
     "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",

@@ -71,7 +71,7 @@ last_reviewed: 2026-08-17
 
 **Root cause:** Treated a defensive runtime status check as free inside a narrowed synchronous scope. TypeScript correctly rejected a comparison that could not happen in that scope.
 
-**Fix:** Capture stable session resources after the initial guard (`const pty = session.pty`) and keep the synchronous chunk write loop free of repeated status predicates. Evidence anchors: `src/cli/server/terminal.ts` (search: `const pty = session.pty`), `src/cli/server/terminal.ts` (search: `chunkTerminalInput`).
+**Fix:** Capture stable session resources after the initial guard (`const pty = this.session.pty`) and keep the synchronous chunk write loop free of repeated status predicates. Evidence anchors: `src/cli/server/terminal.ts` (search: `class InitialPromptDelivery`), `src/cli/server/terminal.ts` (search: `chunkTerminalInput`).
 
 ---
 

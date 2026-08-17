@@ -177,11 +177,118 @@ async function dashboardUpdateSessionCountImpl(
 }
 
 /**
+ * Drop the xterm bindings for sessions the backend no longer runs, and tear down their loading timers.
+ *
+ * Without this the user keeps a terminal pane wired to a session that has gone, which looks like a frozen terminal rather
+ * than a closed one.
+ *
+ * @param ctx - terminal dashboard state; `_terminalRefs` is replaced with the surviving bindings
+ * @param activeIds - ids the backend still reports as active; an empty set drops every binding
+ * @returns nothing; bindings for dropped sessions are cleaned up in place
+ */
+function pruneTerminalBindings(
+  ctx: DashboardTerminalContext,
+  activeIds: Set<string>,
+): void {
+  const keptRefs: typeof ctx._terminalRefs = {};
+
+  // Keep terminal bindings only for sessions still active on the server.
+  for (const id of Object.keys(ctx._terminalRefs)) {
+    const refs = ctx._terminalRefs[id];
+    // Active sessions stay reconnectable after cleanup.
+    if (activeIds.has(id)) {
+      if (refs) keptRefs[id] = refs;
+      continue;
+    }
+    dashboardClearTerminalLoadingTimers(ctx, id);
+    if (refs?.cleanup) refs.cleanup();
+  }
+  ctx._terminalRefs = keptRefs;
+}
+
+/**
+ * Rebuild the per-project saved sessions and each project's reconnect default.
+ *
+ * These two are pruned together because the default has to point at something that survived; otherwise a user opening a
+ * project would be offered a Reconnect button for a session that no longer exists.
+ *
+ * @param ctx - terminal dashboard state; `_projectSessions` and `_projectActiveSession` are both rewritten
+ * @param activeIds - ids the backend still reports as active; an empty set clears every project's saved sessions
+ * @returns nothing; projects left with no session lose their entry rather than keeping an empty list
+ */
+function pruneProjectSessions(
+  ctx: DashboardTerminalContext,
+  activeIds: Set<string>,
+): void {
+  const keptProjects: typeof ctx._projectSessions = {};
+
+  // Preserve per-project saved sessions only when the backend still reports them active.
+  for (const key of Object.keys(ctx._projectSessions)) {
+    const kept = (ctx._projectSessions[key] ?? []).filter((s) =>
+      activeIds.has(s.sessionId),
+    );
+    // Empty project session lists are pruned so reconnect buttons do not show stale choices.
+    if (kept.length > 0) keptProjects[key] = kept;
+  }
+  ctx._projectSessions = keptProjects;
+
+  // Project active-session pointers fall back to a kept session or disappear.
+  for (const key of Object.keys(ctx._projectActiveSession)) {
+    const activeSessionForProject = ctx._projectActiveSession[key];
+    // A pointer at a session that survived is already correct and stays as it is.
+    if (!activeSessionForProject || activeIds.has(activeSessionForProject)) {
+      continue;
+    }
+    const projectSessions = keptProjects[key];
+    // A remaining session becomes the project's reconnect default; otherwise the project has nothing to point at.
+    if (projectSessions?.[0]) {
+      ctx._projectActiveSession[key] = projectSessions[0].sessionId;
+    } else {
+      Reflect.deleteProperty(ctx._projectActiveSession, key);
+    }
+  }
+}
+
+/**
+ * Drop local session rows the backend no longer runs, and settle any preset badge left spinning.
+ *
+ * A preset the user launched is shown as "running" until its session reports back, so a session cleared out from under it
+ * would otherwise spin forever.
+ *
+ * @param ctx - terminal dashboard state; `sessions`, `activeSessionId`, and `promptRunStates` are all updated
+ * @param activeIds - ids the backend still reports as active; an empty set clears every local row and selection
+ * @returns nothing; a cleared selection leaves no terminal open in the Workspace pane
+ */
+function pruneLocalSessionRows(
+  ctx: DashboardTerminalContext,
+  activeIds: Set<string>,
+): void {
+  ctx.sessions = ctx.sessions.filter((s) => activeIds.has(s.id));
+
+  // If the visible session was cleared, select no active local session.
+  if (ctx.activeSessionId && !activeIds.has(ctx.activeSessionId)) {
+    ctx.activeSessionId = null;
+  }
+
+  // Preset run badges complete when their session disappeared during cleanup.
+  for (const [presetId, state] of Object.entries(ctx.promptRunStates)) {
+    // Only running presets with no matching local session are marked pass.
+    if (
+      state === "running" &&
+      !ctx.sessions.some((s) => s.presetId === presetId)
+    ) {
+      ctx.promptRunStates[presetId] = "pass";
+    }
+  }
+}
+
+/**
  * Clear recent inactive terminal sessions while preserving running backend sessions.
  *
  * Use when the user clicks the clear/recent-session cleanup action in Workspace.
- * Four separate collections are pruned because each tracks sessions by a different key, and leaving any one stale would offer the user a reconnect
- * button for a session the backend already dropped.
+ *
+ * Four separate collections are pruned because each tracks sessions by a different key, and leaving any one stale would
+ * offer the user a reconnect button for a session the backend already dropped.
  *
  * Error behavior: never throws; a failed request reports as a toast and leaves the rows in place.
  *
@@ -206,6 +313,7 @@ async function dashboardEndAllSessions(
         .map((session) => session.id),
     );
     const localRecentCount = ctx.recentTerminalSessions.length;
+
     // Delete inactive backend sessions so stale recent rows disappear from the UI.
     for (const session of inactive) {
       await dashboardFetch(`/api/terminal/${session.id}`, {
@@ -213,59 +321,11 @@ async function dashboardEndAllSessions(
       });
     }
     ctx.recentTerminalSessions = [];
-    const keptRefs: typeof ctx._terminalRefs = {};
-    // Keep terminal bindings only for sessions still active on the server.
-    for (const id of Object.keys(ctx._terminalRefs)) {
-      // Active sessions stay reconnectable after cleanup.
-      if (activeIds.has(id)) {
-        const active = ctx._terminalRefs[id];
-        if (active) keptRefs[id] = active;
-      } else {
-        const refs = ctx._terminalRefs[id];
-        dashboardClearTerminalLoadingTimers(ctx, id);
-        if (refs?.cleanup) refs.cleanup();
-      }
-    }
-    ctx._terminalRefs = keptRefs;
-    const keptProjects: typeof ctx._projectSessions = {};
-    // Preserve per-project saved sessions only when the backend still reports them active.
-    for (const key of Object.keys(ctx._projectSessions)) {
-      const kept = (ctx._projectSessions[key] ?? []).filter((s) =>
-        activeIds.has(s.sessionId),
-      );
-      // Empty project session lists are pruned so reconnect buttons do not show stale choices.
-      if (kept.length > 0) keptProjects[key] = kept;
-    }
-    ctx._projectSessions = keptProjects;
-    // Project active-session pointers fall back to a kept session or disappear.
-    for (const key of Object.keys(ctx._projectActiveSession)) {
-      const activeSessionForProject = ctx._projectActiveSession[key];
-      // Pointers to removed sessions need a replacement before the user reconnects.
-      if (activeSessionForProject && !activeIds.has(activeSessionForProject)) {
-        const projectSessions = keptProjects[key];
-        // A remaining session becomes the project's reconnect default.
-        if (projectSessions?.[0]) {
-          ctx._projectActiveSession[key] = projectSessions[0].sessionId;
-        } else {
-          Reflect.deleteProperty(ctx._projectActiveSession, key);
-        }
-      }
-    }
-    ctx.sessions = ctx.sessions.filter((s) => activeIds.has(s.id));
-    // If the visible session was cleared, select no active local session.
-    if (ctx.activeSessionId && !activeIds.has(ctx.activeSessionId)) {
-      ctx.activeSessionId = null;
-    }
-    // Preset run badges complete when their session disappeared during cleanup.
-    for (const [presetId, state] of Object.entries(ctx.promptRunStates)) {
-      // Only running presets with no matching local session are marked pass.
-      if (
-        state === "running" &&
-        !ctx.sessions.some((s) => s.presetId === presetId)
-      ) {
-        ctx.promptRunStates[presetId] = "pass";
-      }
-    }
+
+    pruneTerminalBindings(ctx, activeIds);
+    pruneProjectSessions(ctx, activeIds);
+    pruneLocalSessionRows(ctx, activeIds);
+
     await ctx.updateSessionCount();
     const count = inactive.length + localRecentCount;
     ctx.showToast(

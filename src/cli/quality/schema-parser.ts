@@ -22,7 +22,9 @@ import {
   type QualityEvidenceMethod,
   type QualityFinding,
   type QualityReport,
+  type QualityMode,
   type QualityReportParseOptions,
+  type QualityScope,
   type QualityScores,
   type QualitySetupScores,
   type QualitySystemScores,
@@ -698,9 +700,9 @@ function parseOptionalCurrentField<T>(
  * @returns an object carrying just the fields that were present
  */
 function optionalReportFields(fields: {
-  scope: QualityReport["scope"] | undefined;
+  scope: QualityScope | undefined;
   rubricVersion: string | undefined;
-  qualityMode: QualityReport["quality_mode"] | undefined;
+  qualityMode: QualityMode | undefined;
   priorReportId: string | null | undefined;
 }): Partial<QualityReport> {
   return {

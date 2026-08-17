@@ -35,6 +35,153 @@ function dashboardSkillEvidenceLimitNotes(
 }
 
 /**
+ * Render an evaluator result as the Markdown a user pastes into a PR, review note, or session summary.
+ *
+ * Section order and metric order both follow the visible panel, so the pasted text reads as the same assessment the user
+ * was just looking at rather than a re-ordered summary of it.
+ *
+ * Optional sections are omitted entirely rather than written as empty headings, because a bare "## Improvement tips" with
+ * nothing under it reads as advice that went missing.
+ *
+ * @param ctx - dashboard app context, used for the same grade, percentage, and slug helpers the panel displays
+ * @param result - the evaluator result being exported
+ * @returns the Markdown document; never empty
+ */
+function buildEvaluatorReportMarkdown(
+  ctx: DashboardAppContext,
+  result: SkillEvaluateResult,
+): string {
+  const lines: string[] = [];
+  const pct = Math.round(ctx.skillReportPct(result) * 100);
+  const grade = ctx.skillLetterGrade(ctx.skillReportPct(result));
+  lines.push(`# ${result.artifact.name} - ${grade} ${pct}%`);
+  lines.push(`Slug: \`${ctx.skillEvaluatorSlug(result)}\``);
+  lines.push(
+    `Subtype: ${result.subtype} (${Math.round(result.classification.confidence * 100)}% ${result.classification.detectedSubtype})`,
+  );
+  // A detected shape only matters to the reader when it disagrees with how the artifact is filed.
+  if (result.shapeMismatch && result.detectedShape) {
+    lines.push(
+      `Detected shape: ${result.detectedShape} (${Math.round((result.shapeConfidence ?? 0) * 100)}%)`,
+    );
+  }
+  lines.push(`Verdict: \`${result.recommendation}\``);
+  lines.push(`Score: ${result.totalScore} / ${result.profileMax}`);
+  lines.push("");
+  lines.push("## Structural metrics");
+  // Copy every metric row so the pasted summary matches what the user saw.
+  for (const metric of result.metrics) {
+    const score =
+      metric.severity === "n/a" ? "n/a" : `${metric.score}/${metric.maxScore}`;
+    lines.push(`- ${metric.label}: ${score} (${metric.severity})`);
+  }
+  // Tips are optional; omit the section when the evaluator has no advice.
+  if (result.tips.length > 0) {
+    lines.push("");
+    lines.push("## Improvement tips");
+    // Keep tip order from the evaluator so copied advice matches the visible panel.
+    for (const tip of result.tips) {
+      lines.push(`- [${tip.metric}] ${tip.message}`);
+    }
+  }
+  // Composed-from entries are optional; omit the section for single-file evaluations.
+  if (result.composedFrom.length > 0) {
+    lines.push("");
+    lines.push("## Composed from");
+    // Copy each source so users can see which files contributed to the score.
+    for (const src of result.composedFrom) {
+      lines.push(`- ${src}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+/** What the Skill Evaluator banner is written from, gathered once so the title and detail agree. */
+interface EvaluatorVerdictSignals {
+  report: SkillEvaluateResult;
+  detected: string;
+  detectedShape: string;
+  shapeConfidence: number;
+  shapeMismatch: boolean;
+  failCount: number;
+  warnCount: number;
+  evidenceLimitNotes: string[];
+  isHardVerdict: boolean;
+  classificationConfidence: number;
+}
+
+/** The action each recommendation asks the user to take, phrased for the banner sentence. */
+const EVALUATOR_RECOMMENDATION_LABELS: Record<string, string> = {
+  "needs-human-review": "Manual review required",
+  "consider-reclassifying": "Consider reclassifying",
+  "consider-revision": "Revise before shipping",
+  retire: "Retire or rewrite",
+  "reference-playbook": "Ship as a reference",
+  "keep-skill": "Keep as a skill",
+};
+
+/**
+ * Choose the single headline the evaluator banner leads with.
+ *
+ * The order is the point: a packaging or classification mismatch is shown ahead of metric counts, because it changes what
+ * the user should do next rather than merely how good the artifact is.
+ *
+ * @param signals - the verdict signals read from the report
+ * @returns the headline; never empty, so the banner always says something
+ */
+function evaluatorVerdictTitle(signals: EvaluatorVerdictSignals): string {
+  // Strong shape mismatch tells the user the artifact may be packaged as the wrong thing.
+  if (signals.shapeMismatch && signals.shapeConfidence >= 0.7) {
+    const packagedAs =
+      signals.report.artifact.kind === "skill" ? "skill" : "reference";
+    return `Packaged as ${packagedAs}, reads like ${signals.detectedShape}`;
+  }
+  // High-confidence subtype mismatch is shown before metric counts because it changes next action.
+  if (
+    signals.classificationConfidence >= 0.85 &&
+    signals.detected !== signals.report.subtype
+  ) {
+    return `This reads as a ${signals.detected}, not a ${signals.report.subtype}`;
+  }
+  // Failing metrics mean the user needs a stronger verdict than warning copy.
+  if (signals.failCount > 0) {
+    const tail = signals.isHardVerdict
+      ? "block ship"
+      : "- needs review before keeping";
+    return `${signals.failCount} failing metric${signals.failCount > 1 ? "s" : ""} ${tail}`;
+  }
+  // Warnings are non-blocking, so the banner keeps the artifact reviewable.
+  if (signals.warnCount > 0) {
+    return `${signals.warnCount} non-blocking warning${signals.warnCount > 1 ? "s" : ""}`;
+  }
+  // Every metric passed, but only across the part of the artifact that was actually read.
+  if (signals.evidenceLimitNotes.length > 0) {
+    return "Assessment used partial evidence";
+  }
+  return "All structural metrics passing";
+}
+
+/**
+ * Build the supporting sentence under the banner headline, describing the same signal the headline chose.
+ *
+ * @param signals - the verdict signals read from the report
+ * @returns the detail phrase, without its trailing full stop
+ */
+function evaluatorVerdictDetail(signals: EvaluatorVerdictSignals): string {
+  if (signals.shapeMismatch && signals.shapeConfidence >= 0.7) {
+    return `${Math.round(signals.shapeConfidence * 100)}% shape confidence`;
+  }
+  if (
+    signals.classificationConfidence >= 0.85 &&
+    signals.detected !== signals.report.subtype
+  ) {
+    return `${Math.round(signals.classificationConfidence * 100)}% ${signals.detected} classification`;
+  }
+  const nonPassing = signals.failCount + signals.warnCount;
+  return `${nonPassing} non-passing metric${nonPassing === 1 ? "" : "s"}`;
+}
+
+/**
  * Build the headline banner for a selected skill-quality report.
  * Use when the Skills tab needs one user-readable status above the metric breakdown.
  *
@@ -307,56 +454,28 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
       const isHardVerdict =
         report.recommendation === "retire" ||
         report.recommendation === "consider-revision";
-      let title = "";
-      // Strong shape mismatch tells the user the artifact may be packaged as the wrong thing.
-      if (shapeMismatch && shapeConfidence >= 0.7) {
-        const packagedAs =
-          report.artifact.kind === "skill" ? "skill" : "reference";
-        title = `Packaged as ${packagedAs}, reads like ${detectedShape}`;
-        // High-confidence subtype mismatch is shown before metric counts because it changes next action.
-      } else if (cls.confidence >= 0.85 && detected !== report.subtype) {
-        title = `This reads as a ${detected}, not a ${report.subtype}`;
-        // Failing metrics mean the user needs a stronger verdict than warning copy.
-      } else if (failCount > 0) {
-        const tail = isHardVerdict
-          ? "block ship"
-          : "- needs review before keeping";
-        title = `${failCount} failing metric${failCount > 1 ? "s" : ""} ${tail}`;
-        // Warnings are non-blocking, so the banner keeps the artifact reviewable.
-      } else if (warnCount > 0) {
-        title = `${warnCount} non-blocking warning${warnCount > 1 ? "s" : ""}`;
-      } else if (evidenceLimitNotes.length > 0) {
-        title = "Assessment used partial evidence";
-      } else {
-        title = "All structural metrics passing";
-      }
-      const recHuman =
-        report.recommendation === "needs-human-review"
-          ? "Manual review required"
-          : report.recommendation === "consider-reclassifying"
-            ? "Consider reclassifying"
-            : report.recommendation === "consider-revision"
-              ? "Revise before shipping"
-              : report.recommendation === "retire"
-                ? "Retire or rewrite"
-                : report.recommendation === "reference-playbook"
-                  ? "Ship as a reference"
-                  : "Keep as a skill";
-      const detail =
-        shapeMismatch && shapeConfidence >= 0.7
-          ? `${Math.round(shapeConfidence * 100)}% shape confidence`
-          : cls.confidence >= 0.85 && detected !== report.subtype
-            ? `${Math.round(cls.confidence * 100)}% ${detected} classification`
-            : `${failCount + warnCount} non-passing metric${
-                failCount + warnCount === 1 ? "" : "s"
-              }`;
+      const signals: EvaluatorVerdictSignals = {
+        report,
+        detected,
+        detectedShape,
+        shapeConfidence,
+        shapeMismatch,
+        failCount,
+        warnCount,
+        evidenceLimitNotes,
+        isHardVerdict,
+        classificationConfidence: cls.confidence,
+      };
       const evidenceLimitDetail =
         evidenceLimitNotes.length > 0
           ? ` Evidence limit: ${evidenceLimitNotes.join("; ")}.`
           : "";
+      const recHuman =
+        EVALUATOR_RECOMMENDATION_LABELS[report.recommendation] ??
+        "Keep as a skill";
       return {
-        title,
-        desc: `${detail}.${evidenceLimitDetail} ${recHuman} before deciding to keep, convert, or discard.`,
+        title: evaluatorVerdictTitle(signals),
+        desc: `${evaluatorVerdictDetail(signals)}.${evidenceLimitDetail} ${recHuman} before deciding to keep, convert, or discard.`,
       };
     },
 
@@ -510,51 +629,9 @@ function dashboardSkillEvaluatorClipboardFragment(): DashboardAppFragment {
       const result = this.skillEvaluatorResult;
       // No result is visible yet, so copying would give the user stale or empty text.
       if (!result) return;
-      const lines: string[] = [];
-      const pct = Math.round(this.skillReportPct(result) * 100);
-      const grade = this.skillLetterGrade(this.skillReportPct(result));
-      lines.push(`# ${result.artifact.name} - ${grade} ${pct}%`);
-      lines.push(`Slug: \`${this.skillEvaluatorSlug(result)}\``);
-      lines.push(
-        `Subtype: ${result.subtype} (${Math.round(result.classification.confidence * 100)}% ${result.classification.detectedSubtype})`,
-      );
-      if (result.shapeMismatch && result.detectedShape) {
-        lines.push(
-          `Detected shape: ${result.detectedShape} (${Math.round((result.shapeConfidence ?? 0) * 100)}%)`,
-        );
-      }
-      lines.push(`Verdict: \`${result.recommendation}\``);
-      lines.push(`Score: ${result.totalScore} / ${result.profileMax}`);
-      lines.push("");
-      lines.push("## Structural metrics");
-      // Copy every metric row so the pasted summary matches what the user saw.
-      for (const metric of result.metrics) {
-        const score =
-          metric.severity === "n/a"
-            ? "n/a"
-            : `${metric.score}/${metric.maxScore}`;
-        lines.push(`- ${metric.label}: ${score} (${metric.severity})`);
-      }
-      // Tips are optional; omit the section when the evaluator has no advice.
-      if (result.tips.length > 0) {
-        lines.push("");
-        lines.push("## Improvement tips");
-        // Keep tip order from the evaluator so copied advice matches the visible panel.
-        for (const tip of result.tips) {
-          lines.push(`- [${tip.metric}] ${tip.message}`);
-        }
-      }
-      // Composed-from entries are optional; omit the section for single-file evaluations.
-      if (result.composedFrom.length > 0) {
-        lines.push("");
-        lines.push("## Composed from");
-        // Copy each source so users can see which files contributed to the score.
-        for (const src of result.composedFrom) {
-          lines.push(`- ${src}`);
-        }
-      }
+      const markdown = buildEvaluatorReportMarkdown(this, result);
       try {
-        const ok = await this.copyTextToClipboard(lines.join("\n"));
+        const ok = await this.copyTextToClipboard(markdown);
         // Clipboard failure means the user needs a visible error instead of a false success badge.
         if (!ok) throw new Error("Clipboard write failed");
         this.skillEvaluatorReportCopied = true;
@@ -578,7 +655,19 @@ function dashboardSkillEvaluatorClipboardFragment(): DashboardAppFragment {
         this.showToast(msg || "Copy failed", true);
       }
     },
+  };
+}
 
+/**
+ * Build the Skill Evaluator's form methods: resetting it, clearing a result, and taking dropped or chosen Markdown files.
+ *
+ * These are the actions that change what the evaluator is about to score, kept apart from the copy action that exports a
+ * score already produced.
+ *
+ * @returns dashboard fragment merged into the app alongside the clipboard fragment
+ */
+function dashboardSkillEvaluatorInputActionsFragment(): DashboardAppFragment {
+  return {
     /**
      * Reset the Skill Evaluator form and result panel.
      * Use when the user starts a fresh evaluation instead of editing the current one.

@@ -43,6 +43,14 @@ interface SnapshotDelta {
   deleted: string[];
 }
 
+/** One user-visible dry-run row needed by write-set assertions. */
+interface PreviewFile {
+  path: string;
+  state: string;
+  action: string;
+  reason: string;
+}
+
 /**
  * Record the content of every file under one target so later writes are detectable.
  * Symlinks and other non-regular entries are recorded by kind rather than hashed, because
@@ -133,7 +141,7 @@ function runCliStep(label: string, ...args: string[]): void {
  * @param agent - selected agent whose managed mirror and configs are previewed
  * @returns every project-relative path the preview discloses; never empty for a supported agent
  */
-function previewWritePaths(projectPath: string, agent: string): Set<string> {
+function previewFiles(projectPath: string, agent: string): PreviewFile[] {
   const preview = runCli(
     "install",
     projectPath,
@@ -147,11 +155,16 @@ function previewWritePaths(projectPath: string, agent: string): Set<string> {
   const report = JSON.parse(preview.stdout) as {
     schemaVersion: string;
     coverage: string;
-    files: Array<{ path: string }>;
+    files: PreviewFile[];
   };
   assert.equal(report.schemaVersion, "goat-flow.managed-setup-preview.v2");
   assert.equal(report.coverage, "install-write-set");
-  return new Set(report.files.map((file) => file.path));
+  return report.files;
+}
+
+/** Read every path named by the dry-run write set. */
+function previewWritePaths(projectPath: string, agent: string): Set<string> {
+  return new Set(previewFiles(projectPath, agent).map((file) => file.path));
 }
 
 /** Collect every hook row inside one parsed config whose command or args name a script. */
@@ -330,6 +343,74 @@ function installedTarget(agentProfile: AgentProfile): string {
 
 describe("install write set", () => {
   const supportedAgentProfiles = getAgentProfiles();
+
+  it("codex previews a migration hidden by an inactive canonical profile", () => {
+    const codexProfile = supportedAgentProfiles.find(
+      (agentProfile) => agentProfile.id === "codex",
+    );
+    assert.ok(codexProfile?.settingsFile);
+    const projectPath = installedTarget(codexProfile);
+    const settingsPath = join(projectPath, codexProfile.settingsFile);
+    const installedSettings = readFileSync(settingsPath, "utf-8");
+    const incompleteActiveSettings = `${installedSettings
+      .replace(
+        'default_permissions = "goat-flow"',
+        'default_permissions = "custom"',
+      )
+      .replaceAll("permissions.goat-flow", "permissions.inactive")
+      .trimEnd()}
+
+[permissions.custom]
+description = "Active fixture profile with an incomplete deny policy."
+extends = ":workspace"
+
+[permissions.custom.filesystem.\":workspace_roots\"]
+"**/.env" = "deny"
+`;
+    writeFileSync(settingsPath, incompleteActiveSettings);
+
+    const settingsPreview = previewFiles(projectPath, "codex").find(
+      (file) => file.path === codexProfile.settingsFile,
+    );
+    assert.ok(settingsPreview);
+    assert.deepEqual(
+      {
+        state: settingsPreview.state,
+        action: settingsPreview.action,
+      },
+      { state: "user-migrated", action: "migrate" },
+      "Codex preview must inspect canonical denies in the active profile only",
+    );
+    assert.match(
+      settingsPreview.reason,
+      /refresh the Codex permission profile/u,
+    );
+
+    const beforeApply = snapshotProject(projectPath);
+    runCliStep(
+      "Codex active-profile migration",
+      "install",
+      projectPath,
+      "--agent",
+      "codex",
+    );
+    const delta = snapshotDelta(beforeApply, snapshotProject(projectPath));
+    assert.deepEqual(delta, {
+      written: [codexProfile.settingsFile],
+      deleted: [],
+    });
+
+    const migratedSettings = readFileSync(settingsPath, "utf-8");
+    assert.match(
+      migratedSettings,
+      /\[permissions\.custom\.filesystem\.":workspace_roots"\][\s\S]*"\*\*\/\.env\.local" = "deny"/u,
+    );
+    assert.match(
+      migratedSettings,
+      /\[permissions\.inactive\.filesystem\.":workspace_roots"\][\s\S]*"\*\*\/\.env\.local" = "deny"/u,
+      "migration must preserve the inactive profile",
+    );
+  });
 
   // Separate names make the failing agent visible in TAP output and CI summaries.
   for (const agentProfile of supportedAgentProfiles) {

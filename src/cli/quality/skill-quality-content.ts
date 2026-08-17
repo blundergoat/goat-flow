@@ -472,7 +472,196 @@ export function truncateUtf8Bytes(content: string, maxBytes: number): string {
   return output;
 }
 
-// eslint-disable-next-line complexity -- intentional because composition assembles preamble, conventions, and skill-local references in a fixed pipeline; each branch is a distinct artifact-class case, and it throws nothing because an unreadable include is dropped with a note
+/** The composition being built up: the text that gets scored, the file names shown back as sources, and any report notes. */
+interface CompositionAccumulator {
+  chunks: string[];
+  sources: string[];
+  notes: string[];
+}
+
+/**
+ * Add the project-wide skill guidance a reviewer expects the artifact to be judged against.
+ *
+ * The preamble always applies, but conventions are only pulled in when the skill mentions them - a skill that never
+ * references the conventions doc should not be scored as though it had.
+ *
+ * @param projectRoot - absolute path the configured guidance paths are resolved against
+ * @param rawContent - the artifact's own text, checked for a conventions mention
+ * @param config - quality config; either guidance path may be empty, which simply skips that include
+ * @param composition - the composition so far, appended to in place
+ * @returns nothing; guidance that is unconfigured or unreadable is skipped rather than failing the scan
+ */
+function appendSharedGuidance(
+  projectRoot: string,
+  rawContent: string,
+  config: QualityConfig,
+  composition: CompositionAccumulator,
+): void {
+  // An empty preamble path means the project opted out of shared guidance entirely.
+  if (config.composition.skillPreamblePath) {
+    const preamble = readOptionalText(
+      join(projectRoot, config.composition.skillPreamblePath),
+      config,
+    );
+    // A null read means the configured file is missing or unreadable, so scoring carries on without it.
+    if (preamble !== null) {
+      composition.chunks.push(preamble);
+      composition.sources.push(basename(config.composition.skillPreamblePath));
+    }
+  }
+
+  // Conventions only matter when the skill points at them, so an unrelated skill is not judged against them.
+  if (
+    config.composition.skillConventionsPath &&
+    /skill-conventions/i.test(rawContent)
+  ) {
+    const conventions = readOptionalText(
+      join(projectRoot, config.composition.skillConventionsPath),
+      config,
+    );
+    // A null read here is the same story: the conventions doc moved or was deleted since the config was written.
+    if (conventions !== null) {
+      composition.chunks.push(conventions);
+      composition.sources.push(
+        basename(config.composition.skillConventionsPath),
+      );
+    }
+  }
+}
+
+/**
+ * Add each reference file the skill itself links to, in the order the skill mentions them.
+ *
+ * Someone who writes `references/browser-use.md` in their skill expects the evaluator to have read that file, so every
+ * linked reference is pulled in once even when the skill repeats the link.
+ *
+ * @param skillDir - absolute directory of the skill, which every relative link is resolved against
+ * @param rawContent - the artifact's own text, scanned for reference links
+ * @param config - quality config supplying the reference link pattern
+ * @param composition - the composition so far, appended to in place
+ * @returns nothing; links that escape the skill directory or cannot be read are skipped
+ */
+function appendLinkedReferences(
+  skillDir: string,
+  rawContent: string,
+  config: QualityConfig,
+  composition: CompositionAccumulator,
+): void {
+  const seenReferences = new Set<string>();
+  const refRegex = new RegExp(config.composition.skillReferencePattern, "g");
+
+  // Walk every reference link in document order so the composed text reads the way the skill itself does.
+  for (const match of rawContent.matchAll(refRegex)) {
+    const relativeRef = match[1];
+    // An empty capture means the pattern matched but caught no path, so there is nothing to resolve.
+    if (!relativeRef) continue;
+    // The same reference linked twice is still one file; adding it again would just eat the byte budget.
+    if (seenReferences.has(relativeRef)) continue;
+    seenReferences.add(relativeRef);
+
+    const refPath = resolveSkillReferencePath(skillDir, relativeRef);
+    // A null path means the link escapes the skill directory, so it is not evidence about this skill.
+    if (refPath === null) continue;
+    const refContent = readOptionalText(refPath, config);
+    // A null read means the skill links a file that does not exist yet - a common state part-way through writing one.
+    if (refContent === null) continue;
+
+    composition.chunks.push(refContent);
+    composition.sources.push(`references/${relativeRef}`);
+  }
+}
+
+/**
+ * Add the skill's sibling Markdown files, which carry the detail a short SKILL.md deliberately leaves out.
+ *
+ * @param skillDir - absolute directory of the skill being scored
+ * @param config - quality config supplying the per-file read limits
+ * @param composition - the composition so far, appended to in place
+ * @returns nothing; an unreadable directory swallows the error and leaves the composition exactly as it was
+ */
+function appendSiblingMarkdown(
+  skillDir: string,
+  config: QualityConfig,
+  composition: CompositionAccumulator,
+): void {
+  try {
+    // Walk the skill folder so notes shipped next to the skill are scored alongside it.
+    for (const entry of readdirSync(skillDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.endsWith(".md")) continue;
+      // SKILL.md is already the artifact under review, and README.md is navigation rather than instruction.
+      if (entry.name === "SKILL.md" || entry.name === "README.md") continue;
+
+      const filePath = join(skillDir, entry.name);
+      // An unsafe entry points outside the skill directory, so it is somebody else's file rather than this skill's evidence.
+      if (!isSafeEntry(filePath)) continue;
+      const content = readOptionalText(filePath, config);
+      // A null read means the file vanished or blew the read limit between listing it and opening it.
+      if (content === null) continue;
+
+      composition.chunks.push(content);
+      composition.sources.push(entry.name);
+    }
+  } catch {
+    // Directory unreadable - for example the user renamed or deleted the skill folder while the dashboard was evaluating it.
+    // Composition continues with the SKILL.md and shared guidance already collected.
+  }
+}
+
+/**
+ * Cap the composed text at the configured byte budget and hand back the finished composition.
+ *
+ * When a skill plus its references overflows the window the report says so out loud, because a user looking at a lower
+ * score on a large skill needs to know part of it was never read.
+ *
+ * @param rawContent - the artifact's own text, handed back unchanged as `raw`
+ * @param config - quality config supplying the composed byte budget
+ * @param composition - the chunks, sources, and notes gathered by the steps above
+ * @returns the finished composition; `notes` is empty when everything fit and carries a truncation note when it did not
+ */
+function capComposedContent(
+  rawContent: string,
+  config: QualityConfig,
+  composition: CompositionAccumulator,
+): ComposeResult {
+  const composed = composition.chunks.join("\n\n---\n\n");
+
+  // Everything fit, so the score describes the whole artifact and there is nothing to warn about.
+  if (utf8ByteLength(composed) <= config.composition.maxComposedBytes) {
+    return {
+      raw: rawContent,
+      composed,
+      sources: composition.sources,
+      notes: composition.notes,
+    };
+  }
+
+  composition.notes.push(
+    `composition truncated at ${Math.round(config.composition.maxComposedBytes / 1024)}KB`,
+  );
+  return {
+    raw: rawContent,
+    composed: truncateUtf8Bytes(composed, config.composition.maxComposedBytes),
+    sources: composition.sources,
+    notes: composition.notes,
+  };
+}
+
+/**
+ * Assemble everything the scorer reads for one artifact: the skill itself, shared guidance, and its own reference files.
+ *
+ * A user sees this as "the evaluator read my skill and the docs it points at".
+ *
+ * The artifact under review always goes in first, so shared guidance can fill the remaining budget but can never displace
+ * the evidence the score is actually describing.
+ *
+ * @param projectRoot - absolute path the artifact and every include are resolved against
+ * @param artifact - the artifact being scored; a `shared-reference` comes back as-is because it has no skill to compose around
+ * @param rawContent - the artifact's own text, exactly as read from disk
+ * @param config - quality config supplying the include paths, reference pattern, and byte budget
+ * @param options - composition options; `scanDisk: false` skips disk lookups for callers scoring pasted or in-memory text
+ * @returns raw text, composed text, the source names shown in the report, and notes; `notes` is empty when nothing was truncated
+ */
 export function composeArtifactContent(
   projectRoot: string,
   artifact: ArtifactEntry,
@@ -480,6 +669,7 @@ export function composeArtifactContent(
   config: QualityConfig,
   options: ComposeOptions = {},
 ): ComposeResult {
+  // A shared reference stands alone - there is no skill around it to pull guidance or sibling files from.
   if (artifact.kind === "shared-reference") {
     return {
       raw: rawContent,
@@ -489,87 +679,26 @@ export function composeArtifactContent(
     };
   }
 
-  const scanDisk = options.scanDisk !== false;
-  const chunks: string[] = [];
-  const sources: string[] = [];
-  const notes: string[] = [];
-
-  // The artifact under review owns the bounded window. Shared guidance and references enrich any
-  // remaining space but cannot displace the primary skill evidence that the score describes.
-  chunks.push(rawContent);
-  sources.push("SKILL.md");
-
-  if (config.composition.skillPreamblePath) {
-    const preamble = readOptionalText(
-      join(projectRoot, config.composition.skillPreamblePath),
-      config,
-    );
-    if (preamble !== null) {
-      chunks.push(preamble);
-      sources.push(basename(config.composition.skillPreamblePath));
-    }
-  }
-  if (
-    config.composition.skillConventionsPath &&
-    /skill-conventions/i.test(rawContent)
-  ) {
-    const conventions = readOptionalText(
-      join(projectRoot, config.composition.skillConventionsPath),
-      config,
-    );
-    if (conventions !== null) {
-      chunks.push(conventions);
-      sources.push(basename(config.composition.skillConventionsPath));
-    }
-  }
-
-  if (scanDisk) {
-    const skillDir = dirname(join(projectRoot, artifact.path));
-    const seenReferences = new Set<string>();
-    const refRegex = new RegExp(config.composition.skillReferencePattern, "g");
-    for (const match of rawContent.matchAll(refRegex)) {
-      const relativeRef = match[1];
-      if (!relativeRef) continue;
-      if (seenReferences.has(relativeRef)) continue;
-      seenReferences.add(relativeRef);
-      const refPath = resolveSkillReferencePath(skillDir, relativeRef);
-      if (refPath === null) continue;
-      const refContent = readOptionalText(refPath, config);
-      if (refContent === null) continue;
-      chunks.push(refContent);
-      sources.push(`references/${relativeRef}`);
-    }
-
-    try {
-      for (const entry of readdirSync(skillDir, { withFileTypes: true })) {
-        if (!entry.isFile()) continue;
-        if (!entry.name.endsWith(".md")) continue;
-        if (entry.name === "SKILL.md" || entry.name === "README.md") continue;
-        const filePath = join(skillDir, entry.name);
-        if (!isSafeEntry(filePath)) continue;
-        const content = readOptionalText(filePath, config);
-        if (content === null) continue;
-        chunks.push(content);
-        sources.push(entry.name);
-      }
-    } catch {
-      // Directory unreadable: ignore - composition continues with what we have.
-    }
-  }
-
-  const composed = chunks.join("\n\n---\n\n");
-  if (utf8ByteLength(composed) <= config.composition.maxComposedBytes) {
-    return { raw: rawContent, composed, sources, notes };
-  }
-  notes.push(
-    `composition truncated at ${Math.round(config.composition.maxComposedBytes / 1024)}KB`,
-  );
-  return {
-    raw: rawContent,
-    composed: truncateUtf8Bytes(composed, config.composition.maxComposedBytes),
-    sources,
-    notes,
+  const composition: CompositionAccumulator = {
+    chunks: [],
+    sources: [],
+    notes: [],
   };
+
+  // The artifact under review owns the bounded window, so it goes in before anything that could crowd it out.
+  composition.chunks.push(rawContent);
+  composition.sources.push("SKILL.md");
+
+  appendSharedGuidance(projectRoot, rawContent, config, composition);
+
+  // Callers scoring pasted text pass `scanDisk: false`; there is no skill directory on disk to walk for them.
+  if (options.scanDisk !== false) {
+    const skillDir = dirname(join(projectRoot, artifact.path));
+    appendLinkedReferences(skillDir, rawContent, config, composition);
+    appendSiblingMarkdown(skillDir, config, composition);
+  }
+
+  return capComposedContent(rawContent, config, composition);
 }
 
 /**

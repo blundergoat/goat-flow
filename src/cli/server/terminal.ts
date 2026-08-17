@@ -104,6 +104,166 @@ export interface TerminalTraceEvent {
 export type TerminalTraceSink = (event: TerminalTraceEvent) => void;
 
 /**
+ * Confirm the quality report owner a launch named is a project the user actually launched into.
+ *
+ * A launch may nominate where its quality report should land. Accepting any path would let one terminal redirect a report
+ * into an unrelated project, so the owner has to resolve to the terminal's own working directory or its selected target.
+ *
+ * @param requestedOwnerPath - the owner the launch asked for; undefined or empty means this launch names no report destination
+ * @param validatedCwd - already-validated PTY working directory
+ * @param validatedTarget - already-validated target project the agent was pointed at
+ * @returns the accepted owner path, or null when the launch named none; throws when the named owner is neither of the two
+ */
+function resolveQualityReportOwner(
+  requestedOwnerPath: string | undefined,
+  validatedCwd: string,
+  validatedTarget: string,
+): string | null {
+  // No owner named: this launch has no mode-specific report destination to restore later.
+  if (!requestedOwnerPath) return null;
+
+  const canonicalOwner = realpathSync(validateProjectPath(requestedOwnerPath));
+  const allowedReportOwner = [validatedCwd, validatedTarget].find(
+    (rootPath) => realpathSync(rootPath) === canonicalOwner,
+  );
+  // A different owner could redirect a quality report into an unrelated project.
+  if (!allowedReportOwner) {
+    throw new Error(
+      "Quality report owner must match the terminal workspace or selected target.",
+    );
+  }
+  return allowedReportOwner;
+}
+
+/**
+ * Create the draft directories a reporting session writes into, and record on the session what capture is now live.
+ *
+ * Ordering matters: staging has to exist before the permission overlay is built, or a fresh target starts without its
+ * `.goat-flow/logs` write allow and the user's report quietly has nowhere to land.
+ *
+ * Failure here fails the launch closed, because a staged-draft session that starts without a working persistence path looks
+ * like it worked and then loses the report.
+ *
+ * @param session - the reserved session; its capture flags are set here from what staging actually allowed
+ * @param captureQualityDrafts - whether the launch asked for staged draft capture at all
+ * @param qualityReportProjectPath - the accepted report owner, or null when the launch named none
+ * @returns the capture roots to poll; empty means this launch stages no drafts, which leaves capture switched off
+ */
+function prepareQualityDraftStaging(
+  session: TerminalSession,
+  captureQualityDrafts: boolean,
+  qualityReportProjectPath: string | null,
+): string[] {
+  const reportingCaptureRoots = stagedQualityCaptureRoots(
+    session.runner,
+    session.accessMode,
+    captureQualityDrafts,
+    qualityReportProjectPath,
+  );
+  session.captureQualityDrafts = reportingCaptureRoots.length > 0;
+  session.qualityReportProjectPath = qualityReportProjectPath;
+
+  // Each capture root must exist on disk before Claude is given permission to write its one draft there.
+  for (const captureRoot of reportingCaptureRoots) {
+    ensureQualityDraftStagingDirectory(captureRoot);
+  }
+  return reportingCaptureRoots;
+}
+
+/**
+ * Types a session's launch prompt into its PTY a moment after the runner starts.
+ *
+ * The prompt is typed rather than passed as a CLI argument because shell and native argv limits truncate long prompts.
+ *
+ * Delivery is delayed because a runner still painting its first frame drops whatever arrives too early, and it is retimed on
+ * every burst of output so a slow-starting runner still gets the prompt as soon as it looks ready.
+ *
+ * A user sees this as "I clicked Launch with a prompt, and the agent picked it up just after the terminal appeared".
+ */
+class InitialPromptDelivery {
+  private readonly session: TerminalSession;
+  private readonly initialInput: string | null;
+  private hasSent = false;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private dueAt = 0;
+  private readonly latestDueAt = Date.now() + INITIAL_PROMPT_FALLBACK_DELAY_MS;
+
+  /**
+   * Bind the delivery to one session and its prompt, starting the fallback deadline from this moment.
+   *
+   * @param session - the now-active session, read for its live PTY and terminated status
+   * @param initialInput - prompt to type; null or empty means the user launched without one and nothing is ever sent
+   */
+  constructor(session: TerminalSession, initialInput: string | null) {
+    this.session = session;
+    this.initialInput = initialInput;
+  }
+
+  /**
+   * Queue the prompt for delivery after `delayMs`, never later than the fixed fallback deadline.
+   *
+   * @param delayMs - requested delay, clamped so it can never push delivery past the fallback deadline
+   * @param options - `reset: true` lets a fresh burst of runner output replace an earlier, sooner schedule
+   * @returns nothing; the call does nothing once the prompt has been sent, or when the user launched without one
+   */
+  schedule(delayMs: number, { reset = false }: { reset?: boolean } = {}): void {
+    // No prompt to send, or it already went out - nothing left to schedule either way.
+    if (!this.initialInput || this.hasSent) return;
+
+    const now = Date.now();
+    const boundedDelayMs = Math.max(
+      0,
+      Math.min(delayMs, this.latestDueAt - now),
+    );
+    const nextDueAt = now + boundedDelayMs;
+    if (this.timer) {
+      // A later or equal reschedule is redundant unless a reset is forced.
+      if (!reset && this.dueAt <= nextDueAt) return;
+      clearTimeout(this.timer);
+    }
+    this.dueAt = nextDueAt;
+    this.timer = setTimeout(() => {
+      this.send();
+    }, boundedDelayMs);
+  }
+
+  /**
+   * Drop any pending delivery, so a runner that exits first never has a prompt typed into its dead terminal.
+   *
+   * @returns nothing; safe to call when nothing is pending
+   */
+  cancel(): void {
+    // Nothing pending: the prompt either already went out or was never scheduled.
+    if (!this.timer) return;
+    clearTimeout(this.timer);
+    this.timer = null;
+    this.dueAt = 0;
+  }
+
+  /**
+   * Type the prompt into the PTY in chunks and mark it delivered.
+   *
+   * @returns nothing; does nothing when there is no prompt, it already went out, or the session died before its turn came
+   */
+  private send(): void {
+    // No prompt to send, or it already went out - either way this call does nothing.
+    if (!this.initialInput || this.hasSent) return;
+
+    const pty = this.session.pty;
+    // Session already gone or PTY missing: there is nothing left to type the prompt into.
+    if (this.session.status === "terminated" || !pty) return;
+    this.hasSent = true;
+    this.cancel();
+
+    // Long prompts are split so no single write hits the PTY's own input limits.
+    for (const chunk of chunkTerminalInput(this.initialInput)) {
+      pty.write(chunk);
+    }
+    this.session.lastInputAt = Date.now();
+  }
+}
+
+/**
  * Own every dashboard PTY session from launch reservation through cleanup.
  * Use when Workspace users start, reconnect, send input to, or close runner terminals.
  * Public snapshots retain the access and report-capture intent needed for safe retries.
@@ -220,7 +380,6 @@ class TerminalManager {
    * @param options - optional explicit target path for the launched agent
    * @returns the create response describing the now-active session
    */
-  // eslint-disable-next-line complexity -- Intentional because owner validation must precede staging, permissions, and spawn.
   private async startReservedSession(
     session: TerminalSession,
     prompt: string,
@@ -246,42 +405,18 @@ class TerminalManager {
     const validatedTarget = validateProjectPath(
       options.targetPath || validatedCwd,
     );
-    const validatedQualityReportProject = options.qualityReportProjectPath
-      ? validateProjectPath(options.qualityReportProjectPath)
-      : null;
-    // A missing owner means this launch has no mode-specific report destination to restore later.
-    const canonicalQualityReportProject =
-      validatedQualityReportProject === null
-        ? null
-        : realpathSync(validatedQualityReportProject);
-    let qualityReportProjectPath: string | null = null;
     // A supplied owner must remain one of the projects the user deliberately launched.
-    if (canonicalQualityReportProject !== null) {
-      const allowedReportOwner = [validatedCwd, validatedTarget].find(
-        (rootPath) => realpathSync(rootPath) === canonicalQualityReportProject,
-      );
-      // A different owner could redirect a quality report into an unrelated project.
-      if (!allowedReportOwner) {
-        throw new Error(
-          "Quality report owner must match the terminal workspace or selected target.",
-        );
-      }
-      qualityReportProjectPath = allowedReportOwner;
-    }
-    // Staging must exist BEFORE the permission overlay is built below so a fresh target still receives its `.goat-flow/logs` write allow.
-    // Failure here fails the launch closed: a staged-draft session must never start without a working persistence path.
-    const reportingCaptureRoots = stagedQualityCaptureRoots(
-      runner,
-      session.accessMode,
+    const qualityReportProjectPath = resolveQualityReportOwner(
+      options.qualityReportProjectPath,
+      validatedCwd,
+      validatedTarget,
+    );
+    // Staging runs BEFORE the permission overlay is built below, so a fresh target still receives its `.goat-flow/logs` write allow.
+    const reportingCaptureRoots = prepareQualityDraftStaging(
+      session,
       options.captureQualityDrafts === true,
       qualityReportProjectPath,
     );
-    session.captureQualityDrafts = reportingCaptureRoots.length > 0;
-    session.qualityReportProjectPath = qualityReportProjectPath;
-    // Each capture root must exist before Claude receives permission to write its one draft.
-    for (const captureRoot of reportingCaptureRoots) {
-      ensureQualityDraftStagingDirectory(captureRoot);
-    }
     const nodePty = await this.loadNodePty();
 
     const spawnSpec = buildTerminalSpawnSpec(
@@ -309,18 +444,7 @@ class TerminalManager {
       env: spawnSpec.env,
     });
 
-    // A concurrent kill()/DELETE may have cancelled this reservation while we were awaiting loadNodePty() - e.g. the user closed the launching tab.
-    // If the session was dropped from the map or marked terminated, kill the PTY we just spawned so it can't outlive its session, and abort instead
-    // of resurrecting a deleted session (which would leak an untracked runner).
-    if (this.sessions.get(id) !== session || session.status === "terminated") {
-      try {
-        pty.kill();
-      } catch {
-        /* already dead */
-      }
-      this.sessions.delete(id);
-      throw new Error("Terminal session was cancelled during startup");
-    }
+    this.rejectCancelledStartup(session, pty);
 
     // PTY is live: promote the reservation to a real session and swap the
     // placeholder paths for the validated ones.
@@ -330,60 +454,79 @@ class TerminalManager {
     session.targetPath = validatedTarget;
     session.pty = pty;
     session.lastInputAt = Date.now();
+    // One poller per staged root, so every destination the user's mode asked for is actually watched for a draft.
     for (const captureRoot of reportingCaptureRoots) {
       session.qualityCaptures.push(
         startQualityDraftCapture({ projectRoot: captureRoot }),
       );
     }
 
-    let hasInitialInputSent = false;
-    let initialInputTimer: ReturnType<typeof setTimeout> | null = null;
-    const initialInputLatestDueAt =
-      Date.now() + INITIAL_PROMPT_FALLBACK_DELAY_MS;
-    let initialInputDueAt = 0;
+    const promptDelivery = new InitialPromptDelivery(
+      session,
+      spawnSpec.initialInput,
+    );
+    this.wireSessionPtyEvents(session, pty, promptDelivery);
+    this.resetIdleTimer(session);
+    promptDelivery.schedule(INITIAL_PROMPT_FALLBACK_DELAY_MS);
 
-    /** Send the launch prompt through the PTY, avoiding shell/native argv limits. */
-    const sendInitialInput = (): void => {
-      if (!spawnSpec.initialInput || hasInitialInputSent) return;
-      const pty = session.pty;
-      // Session already gone or PTY missing: nothing to type the prompt into.
-      if (session.status === "terminated" || !pty) return;
-      hasInitialInputSent = true;
-      if (initialInputTimer) {
-        clearTimeout(initialInputTimer);
-        initialInputTimer = null;
-        initialInputDueAt = 0;
-      }
-      for (const chunk of chunkTerminalInput(spawnSpec.initialInput)) {
-        pty.write(chunk);
-      }
-      session.lastInputAt = Date.now();
+    return {
+      id,
+      status: session.status,
+      wsUrl: `/ws/terminal/${id}`,
     };
+  }
 
-    /** Schedule initial prompt delivery after the runner has had time to draw. */
-    const scheduleInitialInput = (
-      delayMs: number,
-      { reset = false }: { reset?: boolean } = {},
-    ): void => {
-      if (!spawnSpec.initialInput || hasInitialInputSent) return;
-      const now = Date.now();
-      const boundedDelayMs = Math.max(
-        0,
-        Math.min(delayMs, initialInputLatestDueAt - now),
-      );
-      const nextDueAt = now + boundedDelayMs;
-      if (initialInputTimer) {
-        // A later or equal reschedule is redundant unless a reset is forced.
-        if (!reset && initialInputDueAt <= nextDueAt) return;
-        clearTimeout(initialInputTimer);
-      }
-      initialInputDueAt = nextDueAt;
-      initialInputTimer = setTimeout(sendInitialInput, boundedDelayMs);
-    };
+  /**
+   * Abort a startup that was cancelled while node-pty was still loading.
+   *
+   * A user who closes the launching tab right after clicking Launch hits exactly this: the DELETE lands while the spawn is
+   * still in flight, so the PTY that comes back has no session left to belong to.
+   *
+   * Killing it here stops an untracked runner outliving its session, and it throws so the caller frees the reserved slot
+   * rather than resurrecting a session the user already deleted.
+   *
+   * @param session - the reservation being launched, checked against the live session map
+   * @param pty - the PTY just spawned, killed when the reservation is already gone
+   * @returns nothing when the session is still live; throws when it was cancelled during startup
+   */
+  private rejectCancelledStartup(session: TerminalSession, pty: IPty): void {
+    // Still the live session for this id, so the launch may carry on.
+    if (
+      this.sessions.get(session.id) === session &&
+      session.status !== "terminated"
+    ) {
+      return;
+    }
 
-    // Wire PTY output at creation - routes to WebSocket if attached, buffer if detached
+    try {
+      pty.kill();
+    } catch {
+      /* already dead */
+    }
+    this.sessions.delete(session.id);
+    throw new Error("Terminal session was cancelled during startup");
+  }
+
+  /**
+   * Route a live PTY's output and exit back to the browser, and keep the launch prompt on schedule.
+   *
+   * This is what makes the terminal feel live: text appears as the runner prints it.
+   *
+   * When the user has detached the tab there is no socket to write to, so output is buffered instead and reconnecting shows
+   * the scrollback rather than a blank screen.
+   *
+   * @param session - the active session being wired; a null `ws` means nobody is watching, which switches output to the buffer
+   * @param pty - the freshly spawned PTY whose data and exit events are subscribed to
+   * @param promptDelivery - the pending launch prompt, retimed on output and cancelled on exit
+   * @returns nothing; the subscriptions live for as long as the PTY does
+   */
+  private wireSessionPtyEvents(
+    session: TerminalSession,
+    pty: IPty,
+    promptDelivery: InitialPromptDelivery,
+  ): void {
     pty.onData((data: string) => {
-      scheduleInitialInput(INITIAL_PROMPT_AFTER_OUTPUT_DELAY_MS, {
+      promptDelivery.schedule(INITIAL_PROMPT_AFTER_OUTPUT_DELAY_MS, {
         reset: true,
       });
       // Browser attached: stream live; otherwise buffer for the next reconnect.
@@ -399,11 +542,7 @@ class TerminalManager {
     pty.onExit(({ exitCode, signal }) => {
       session.status = "terminated";
       this.disposeQualityCaptures(session);
-      if (initialInputTimer) {
-        clearTimeout(initialInputTimer);
-        initialInputTimer = null;
-        initialInputDueAt = 0;
-      }
+      promptDelivery.cancel();
       // Tell the attached browser the runner exited so the UI can reflect it.
       if (session.ws) {
         sendMessage(session.ws, {
@@ -414,15 +553,6 @@ class TerminalManager {
       }
       this.clearIdleTimer(session);
     });
-
-    this.resetIdleTimer(session);
-    scheduleInitialInput(INITIAL_PROMPT_FALLBACK_DELAY_MS);
-
-    return {
-      id,
-      status: session.status,
-      wsUrl: `/ws/terminal/${id}`,
-    };
   }
 
   /**

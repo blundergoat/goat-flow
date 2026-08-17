@@ -349,6 +349,54 @@ function hasCodexPermissionSurface(
   );
 }
 
+/** Active Codex permission-profile tables separated by the policy they carry. */
+interface CodexPermissionProfileText {
+  profile: string;
+  filesystem: string;
+}
+
+/**
+ * Read only the selected Codex permission profile's TOML regions.
+ * The standalone installer rewrites these regions and preserves every other profile, so preview
+ * must not let an inactive profile satisfy or trigger an active-profile migration check.
+ */
+function selectedCodexPermissionProfileText(
+  settingsText: string,
+  defaultProfile: string,
+): CodexPermissionProfileText {
+  const escapedProfile = escapeRegularExpression(defaultProfile);
+  const profileSection = new RegExp(
+    `^\\s*\\[\\s*permissions\\.${escapedProfile}\\s*\\]\\s*$`,
+    "u",
+  );
+  const filesystemSection = new RegExp(
+    `^\\s*\\[\\s*permissions\\.${escapedProfile}\\.filesystem(?:\\..+)?\\s*\\]\\s*$`,
+    "u",
+  );
+  const anySection = /^\s*\[[^\]]+\]\s*$/u;
+  const selectedLines: Record<keyof CodexPermissionProfileText, string[]> = {
+    profile: [],
+    filesystem: [],
+  };
+  let selectedSection: keyof CodexPermissionProfileText | null = null;
+
+  for (const line of settingsText.split(/\r?\n/u)) {
+    if (profileSection.test(line)) {
+      selectedSection = "profile";
+    } else if (filesystemSection.test(line)) {
+      selectedSection = "filesystem";
+    } else if (anySection.test(line)) {
+      selectedSection = null;
+    }
+    if (selectedSection !== null) selectedLines[selectedSection].push(line);
+  }
+
+  return {
+    profile: selectedLines.profile.join("\n"),
+    filesystem: selectedLines.filesystem.join("\n"),
+  };
+}
+
 /** Return whether any canonical Codex deny rule is absent from the selected profile. */
 function isCanonicalCodexDenyMissing(settingsText: string): boolean {
   return CODEX_CANONICAL_DENY_PATTERNS.some(
@@ -377,17 +425,23 @@ function codexPermissionProfileNeedsMigration(settingsText: string): boolean {
   )
     return false;
 
-  const hasLegacyAccess = /=\s*["']none["']/u.test(settingsText);
-  const hasLegacyAnchor = /["']:project_roots["']/u.test(settingsText);
+  const selectedProfile = selectedCodexPermissionProfileText(
+    settingsText,
+    defaultProfile,
+  );
+  const hasLegacyAccess = /=\s*["']none["']/u.test(selectedProfile.filesystem);
+  const hasLegacyAnchor = /["']:project_roots["']/u.test(
+    selectedProfile.filesystem,
+  );
   const missingWorkspaceExtension =
     defaultProfile === "goat-flow" &&
     hasDefaultProfile &&
-    !/^\s*extends\s*=\s*["']:workspace["']/mu.test(settingsText);
+    !/^\s*extends\s*=\s*["']:workspace["']/mu.test(selectedProfile.profile);
   return [
     hasLegacyAccess,
     hasLegacyAnchor,
     missingWorkspaceExtension,
-    isCanonicalCodexDenyMissing(settingsText),
+    isCanonicalCodexDenyMissing(selectedProfile.filesystem),
   ].some(Boolean);
 }
 
