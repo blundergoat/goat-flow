@@ -362,6 +362,17 @@ function scoreShapeMatch(
   ]);
 }
 
+/**
+ * Work out what kind of artifact a file actually is, so the Skills tab scores it against the right profile.
+ *
+ * A user can paste or install anything, so the shape is inferred from the content rather than trusted from the filename or directory.
+ *
+ * Candidates below the minimum score are discarded before ranking, so a weak partial match never wins by default when nothing else matched.
+ *
+ * @param artifact - the discovered artifact, supplying its path and kind as weak hints
+ * @param content - the artifact's text, which is the real evidence for the decision
+ * @returns the detected shape and its confidence; no confident match falls back to the generic shape rather than guessing
+ */
 export function detectArtifactShape(
   artifact: ArtifactEntry,
   content: string,

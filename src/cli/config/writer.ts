@@ -313,6 +313,17 @@ export function removeHookConfig(projectPath: string, hookId: string): void {
   );
 }
 
+/**
+ * Remove one top-level block from the project's `.goat-flow/config.yaml`, leaving the rest of the user's config untouched.
+ *
+ * Used when a feature is switched off in the dashboard and its settings should disappear rather than linger as dead configuration.
+ *
+ * Side effect: rewrites the config file atomically, and does nothing when the file or the block is already absent.
+ *
+ * @param projectPath - selected project whose config is edited
+ * @param key - top-level key to remove; a key that is not present is a no-op rather than an error
+ * @returns nothing; an unchanged file is left alone entirely, so no needless write or mtime change occurs
+ */
 export function removeTopLevelConfigBlock(
   projectPath: string,
   key: string,

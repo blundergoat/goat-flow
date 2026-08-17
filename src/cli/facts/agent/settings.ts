@@ -245,6 +245,15 @@ function collectCodexWorkspaceRootEntry(
   return pattern ? [{ pattern, mode: value }] : [];
 }
 
+/**
+ * Read the workspace-root deny rules out of a Codex config, so the audit can report what that agent is actually allowed to touch.
+ *
+ * Codex stores these as flattened dotted keys rather than a nested table, so they are gathered by key prefix rather than by walking an object.
+ *
+ * @param parsed - parsed Codex config; anything that is not an object means nothing could be read, and the caller reports no rules configured
+ * @param profileName - permission profile to read, since a project may define more than one
+ * @returns the deny entries found; empty means this profile restricts no workspace roots at all
+ */
 export function collectCodexWorkspaceRootEntries(
   parsed: unknown,
   profileName: string,

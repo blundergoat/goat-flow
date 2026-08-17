@@ -86,6 +86,16 @@ export let dashboardToken = "";
 export let originalDashboardState: string | null = null;
 export let originalLegacyProjectsList: string | null = null;
 
+/**
+ * Fail a pending promise with a named error instead of letting the suite hang.
+ *
+ * Dashboard tests await real HTTP and WebSocket traffic, so a server that never answers should report which wait expired.
+ *
+ * @param promise - work being awaited
+ * @param ms - milliseconds to wait before rejecting
+ * @param label - name used in the timeout error, so the failure says which step stalled
+ * @returns the original promise's result, or a rejection naming the label once the deadline passes
+ */
 export function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
@@ -102,6 +112,15 @@ export function withTimeout<T>(
   ]);
 }
 
+/**
+ * Assert an API payload is a plain object and narrow it, so a test can read fields without casting.
+ *
+ * Rejecting arrays and null explicitly means a malformed response fails on its actual shape rather than later on a missing key.
+ *
+ * @param value - parsed response body
+ * @param context - label used in each assertion message, so a failure names the endpoint under test
+ * @returns the same value narrowed to a record
+ */
 export function expectRecord(
   value: unknown,
   context: string,
@@ -314,6 +333,15 @@ export function assertDashboardReport(value: unknown): Record<string, unknown> {
   return report;
 }
 
+/**
+ * Call a dashboard endpoint the way the browser does, with the per-run token attached, and parse the JSON reply.
+ *
+ * Every dashboard integration test goes through here, so authentication and content-type checking are applied consistently.
+ *
+ * @param path - endpoint path relative to the running server
+ * @param init - optional fetch options; headers are merged so callers never have to re-add the token
+ * @returns the response together with its parsed body
+ */
 export async function fetchJson(
   path: string,
   init?: RequestInit,
@@ -363,6 +391,14 @@ export function assertValidEmittedEnvelope(envelope: EvidenceEnvelope): void {
   );
 }
 
+/**
+ * Write one file into a fixture project, creating parent directories as needed.
+ *
+ * @param root - fixture project root
+ * @param relativePath - path within the project; missing parent directories are created rather than failing
+ * @param content - file contents to write
+ * @returns nothing; the file exists once this resolves
+ */
 export async function writeProjectFile(
   root: string,
   relativePath: string,
@@ -521,6 +557,16 @@ Route lessons, footguns, decisions, and tasks to their goat-flow artifact direct
 `;
 }
 
+/**
+ * Build a temporary project shaped for the setup-prompt tests, and hand back its cleanup function.
+ *
+ * The options control the two conditions those tests distinguish, so one helper covers both the installed and not-yet-installed cases.
+ *
+ * Side effect: creates a temporary directory on disk; the returned cleanup removes it.
+ *
+ * @param options - `decisionsDir` adds a decisions directory, `installSkills` installs skill files
+ * @returns the project root and a cleanup function the test must call
+ */
 export async function makeDashboardSetupPromptProject(options: {
   decisionsDir: boolean;
   installSkills?: boolean;

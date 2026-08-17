@@ -19,6 +19,16 @@ const MANIFEST_PATH =
   join(REPO_ROOT, "scripts", "gruff-warning-baseline.json");
 export const EXPECTED_SCHEMA = "gruff.analysis.v2";
 /**
+ * Coverage floor applied when no reviewed manifest exists.
+ *
+ * The floor normally records what a reviewer approved, and with no manifest nobody has approved a number, so inventing one here
+ * would be a fabricated threshold rather than a reviewed bound.
+ *
+ * One file is the only defensible floor left: it still catches a scan that analysed nothing, while the schema-drift and
+ * analyzer-diagnostics checks continue to fail closed on a broken scan.
+ */
+const DEFAULT_MINIMUM_ANALYSED_FILES = 1;
+/**
  * Build a stable text key for one occurrence so equal shapes compare equal whatever the key order.
  * Used when matching scanned occurrences against the reviewed ones for the same identity.
  *
@@ -197,11 +207,30 @@ function collectAcceptedEntriesByIdentity(parsedManifest, failures) {
  *   the maintainer must fix it before any debt comparison is meaningful
  */
 export function loadReviewedDebtManifest(failures) {
+  let manifestText;
+  try {
+    manifestText = readFileSync(MANIFEST_PATH, "utf8");
+  } catch (error) {
+    // No manifest at all is the intended steady state: this project fixes warnings rather than accepting them,
+    // so there is nothing to review and every warning the scan reports counts as a regression.
+    if (error.code === "ENOENT") {
+      return {
+        minimumAnalysedFiles: DEFAULT_MINIMUM_ANALYSED_FILES,
+        acceptedEntriesByIdentity: new Map(),
+      };
+    }
+    // Present but unreadable is a different story - for example a permission problem on the file.
+    failures.addFailure(
+      "invalid manifest",
+      `${MANIFEST_PATH}: ${error.message}`,
+    );
+    return null;
+  }
   let parsedManifest;
   try {
-    parsedManifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
+    parsedManifest = JSON.parse(manifestText);
   } catch (error) {
-    // Unreadable or half-edited manifest - for example a merge conflict left markers in the JSON.
+    // Half-edited manifest - for example a merge conflict left markers in the JSON.
     failures.addFailure(
       "invalid manifest",
       `${MANIFEST_PATH}: ${error.message}`,

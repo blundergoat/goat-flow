@@ -478,16 +478,36 @@ function effectiveStateRepair(
   };
 }
 
-/** Combine registry and local facts while preserving the user's causal provider gap. */
+/** The observed facts about one agent's hook, gathered before they are combined into a single effective state. */
+interface HookAgentStateFacts {
+  isDesiredByUser: boolean;
+  isRegistered: boolean;
+  isCurrentVersionInstalled: boolean;
+  isTrusted: boolean;
+  doesProviderExclusionOwnState?: boolean;
+}
+
+/**
+ * Combine registry and local facts into the single hook state a user sees, while preserving the causal provider gap.
+ *
+ * These arrive as one named object rather than five positional booleans, because a call reading `false, false, false`
+ * tells the next reader nothing about which condition each one describes.
+ *
+ * When the provider itself excludes the hook, that exclusion owns the state and the local facts are treated as satisfied,
+ * so the user is shown "the provider does not support this" instead of a repair they cannot perform.
+ *
+ * @param projectPath - selected project, used to check local proof of provider support
+ * @param agent - agent whose hook state is being resolved
+ * @param spec - hook being resolved, supplying its provider evidence
+ * @param facts - the observed hook facts; `doesProviderExclusionOwnState` defaults to false
+ * @returns the effective state, its label, evidence identity, and the repair the user should run; the identity is null
+ *   when the provider is undocumented
+ */
 function effectiveAgentState(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
-  isDesiredByUser: boolean,
-  isRegistered: boolean,
-  isCurrentVersionInstalled: boolean,
-  isTrusted: boolean,
-  doesProviderExclusionOwnState = false,
+  facts: HookAgentStateFacts,
 ): Pick<
   HookAgentState,
   | "effectiveState"
@@ -496,6 +516,8 @@ function effectiveAgentState(
   | "repairCommand"
   | "repairSummary"
 > {
+  const isOwnedByProviderExclusion =
+    facts.doesProviderExclusionOwnState ?? false;
   const providerEvidence = spec.providerEvidence?.[agent.id];
   // Missing evidence keeps the user at an unverified provider state.
   const registrySupportGate = providerEvidence
@@ -508,25 +530,22 @@ function effectiveAgentState(
     registrySupportGate,
   );
   const effectiveStateFacts = providerGateFacts(
-    isDesiredByUser,
+    facts.isDesiredByUser,
     effectiveSupportGate,
   );
-  effectiveStateFacts.isRegistered = doesProviderExclusionOwnState
-    ? true
-    : isRegistered;
-  effectiveStateFacts.isCurrentVersionInstalled = doesProviderExclusionOwnState
-    ? true
-    : isCurrentVersionInstalled;
-  effectiveStateFacts.isTrusted = doesProviderExclusionOwnState
-    ? true
-    : isTrusted;
+  // A provider exclusion already explains the state, so local gaps must not add a second, unfixable complaint.
+  effectiveStateFacts.isRegistered =
+    isOwnedByProviderExclusion || facts.isRegistered;
+  effectiveStateFacts.isCurrentVersionInstalled =
+    isOwnedByProviderExclusion || facts.isCurrentVersionInstalled;
+  effectiveStateFacts.isTrusted = isOwnedByProviderExclusion || facts.isTrusted;
   const effectiveState = classifyHookEffectiveState(effectiveStateFacts);
   const repair = effectiveStateRepair(
     projectPath,
     agent,
     spec,
     effectiveState,
-    doesProviderExclusionOwnState,
+    isOwnedByProviderExclusion,
   );
   return {
     effectiveState,
@@ -614,16 +633,13 @@ function unsupportedAgentHookState(
   reason: string,
   doesProviderExclusionOwnState = false,
 ): HookAgentState {
-  const effectivePresentation = effectiveAgentState(
-    projectPath,
-    agent,
-    spec,
+  const effectivePresentation = effectiveAgentState(projectPath, agent, spec, {
     isDesiredByUser,
-    false,
-    false,
-    false,
+    isRegistered: false,
+    isCurrentVersionInstalled: false,
+    isTrusted: false,
     doesProviderExclusionOwnState,
-  );
+  });
   return {
     supported: false,
     installed: false,
@@ -782,15 +798,12 @@ function supportedAgentHookState(
     installationFacts,
   );
   const drift = hookDrift(isDesiredByUser, installed);
-  const effectivePresentation = effectiveAgentState(
-    projectPath,
-    agent,
-    spec,
+  const effectivePresentation = effectiveAgentState(projectPath, agent, spec, {
     isDesiredByUser,
     isRegistered,
     isCurrentVersionInstalled,
-    localDetails.isTrusted,
-  );
+    isTrusted: localDetails.isTrusted,
+  });
   applyManagedFileRepairGuidance(
     effectivePresentation,
     localDetails.installationIssue,

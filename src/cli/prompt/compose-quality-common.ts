@@ -436,6 +436,16 @@ export function renderPriorReportContext(
   return lines.join("\n");
 }
 
+/**
+ * Render the slice of a project's learning loop that belongs in a quality prompt, bounded so it cannot crowd out the assessment itself.
+ *
+ * Only agent-setup and harness modes include it, because those are the assessments where the user's own recorded footguns and lessons
+ * change the answer; the focused modes would just be paying context cost for it.
+ *
+ * @param sharedFacts - project facts holding the learning loop; null or undefined means the project has none to include
+ * @param qualityMode - selected mode; any mode outside agent-setup and harness deliberately renders nothing
+ * @returns the context block, or an empty string when this mode or project contributes none
+ */
 export function renderBoundedLearningLoopContext(
   sharedFacts: SharedFacts | null | undefined,
   qualityMode: QualityMode,

@@ -60,6 +60,12 @@ export const CODEX_WORKSPACE_ROOT_ENTRIES = [
   '"**/*.key" = "deny"',
   '"**/*.pfx" = "deny"',
 ];
+/**
+ * Render a Codex workspace-roots table for settings fixtures.
+ *
+ * @param entries - deny entries to include; the default is the full canonical set a healthy install carries
+ * @returns the inline TOML table as it appears in a Codex config
+ */
 export function codexWorkspaceRootsTable(
   entries = CODEX_WORKSPACE_ROOT_ENTRIES,
 ): string {
@@ -464,6 +470,13 @@ export function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
   };
 }
 
+/**
+ * Build project facts around a real directory so a test can exercise checks that read the filesystem.
+ *
+ * @param root - project root the facts describe
+ * @param agents - agent facts to attach; empty means the project has no supported agent installed
+ * @returns project facts ready to drop into an audit context
+ */
 export function makeProjectFacts(
   root: string,
   agents: AgentFacts[] = [],
@@ -476,6 +489,14 @@ export function makeProjectFacts(
   };
 }
 
+/**
+ * Write one file into a fixture project, creating parent directories as needed.
+ *
+ * @param root - fixture project root
+ * @param relativePath - path within the project; missing parent directories are created rather than failing
+ * @param content - file contents; the default empty string creates a present but empty file, which several checks treat differently from absent
+ * @returns nothing; the file exists once this resolves
+ */
 export async function writeProjectFile(
   root: string,
   relativePath: string,
@@ -486,6 +507,16 @@ export async function writeProjectFile(
   await writeFile(fullPath, content);
 }
 
+/**
+ * Create a temporary project, run one setup function against it, and hand back its cleanup.
+ *
+ * A failure during setup removes the directory before rethrowing, so a broken fixture cannot leave temporary directories behind.
+ *
+ * Side effect: creates a temporary directory on disk; the returned cleanup removes it.
+ *
+ * @param init - callback that populates the fresh project
+ * @returns the project root and the cleanup function the test must call
+ */
 export async function makeTempProject(
   init: (root: string) => Promise<void>,
 ): Promise<{ root: string; cleanup: () => Promise<void> }> {
@@ -503,6 +534,15 @@ export async function makeTempProject(
   };
 }
 
+/**
+ * Populate a fixture project with the setup artifacts the audit expects to find.
+ *
+ * The options toggle exactly the artifacts whose presence changes a check result, so one helper covers the pass and fail shapes.
+ *
+ * @param root - fixture project root
+ * @param options - which optional artifacts to create; omitting one is how a test drives that check to fail
+ * @returns nothing; the fixture is on disk once this resolves
+ */
 export async function writeAuditSetupFixture(
   root: string,
   options: {
@@ -582,6 +622,13 @@ Before declaring any tool or capability unavailable, read the matching playbook 
   await writeProjectFile(root, "CLAUDE.md", instructionContent);
 }
 
+/**
+ * Build one audit scope block for render and contract tests.
+ *
+ * @param status - scope status the renderer should display
+ * @param checks - checks within the scope; an empty list is valid and renders as a scope with nothing to report
+ * @returns the scope object as the report shape expects it
+ */
 export function makeAuditScope(
   status: "pass" | "fail",
   checks: AuditReport["scopes"]["setup"]["checks"],
@@ -596,6 +643,18 @@ export function makeAuditScope(
   };
 }
 
+/**
+ * Assemble a complete audit report so renderer and output-contract tests have a realistic payload.
+ *
+ * Every scope defaults to empty, letting a test supply only the scope it asserts on without hand-building the rest.
+ *
+ * @param root - project path recorded as the audit target
+ * @param status - overall report status
+ * @param setupChecks - setup-scope checks; empty renders that scope with no rows
+ * @param agentChecks - agent-scope checks; empty renders that scope with no rows
+ * @param harnessChecks - harness-scope checks; empty renders that scope with no rows
+ * @returns the assembled report
+ */
 export function makeAuditReport(
   root: string,
   status: "pass" | "fail",
@@ -650,6 +709,12 @@ export function makeAuditReport(
   };
 }
 
+/**
+ * Wrap one harness scope in an otherwise empty report, for tests that assert only on harness detail rendering.
+ *
+ * @param scope - harness scope to place in the report, supplying both its checks and the overall status
+ * @returns a report carrying just that scope
+ */
 export function makeReportWithDetails(
   scope: NonNullable<AuditReport["scopes"]["harness"]>,
 ): AuditReport {

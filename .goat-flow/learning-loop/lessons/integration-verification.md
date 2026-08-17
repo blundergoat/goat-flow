@@ -103,7 +103,7 @@ last_reviewed: 2026-08-15
 
 **Incident count:** 2 | **Latest occurrence:** 2026-08-14
 
-**What happened:** A v1.3.0 version-bump pass added one Essential Commands line to `.github/copilot-instructions.md`. `wc -l` reported 120 lines, but `npm test` still failed the Copilot contract because the test counts `readFileSync(...).split(/\r?\n/)`, so a trailing newline makes a 120-line file count as 121 entries. The same mistake recurred during the v1.16.0 naming-and-placement verification: I refreshed `scripts/gruff-warning-baseline.json` from a `wc -l` result of 752, while Gruff's emitted metadata counted 753 lines and rejected the baseline.
+**What happened:** A v1.3.0 version-bump pass added one Essential Commands line to `.github/copilot-instructions.md`. `wc -l` reported 120 lines, but `npm test` still failed the Copilot contract because the test counts `readFileSync(...).split(/\r?\n/)`, so a trailing newline makes a 120-line file count as 121 entries. The same mistake recurred during the v1.16.0 naming-and-placement verification: I refreshed the since-removed gruff warning baseline from a `wc -l` result of 752, while Gruff's emitted metadata counted 753 lines and rejected the baseline.
 
 **Root cause:** I treated `wc -l` as the repository's universal line metric instead of reading the enforcing contract or analyzer output. The consumer of the count owns the enforced value; a terminal newline can make that value differ from `wc -l`.
 

@@ -80,6 +80,16 @@ export function targetUsesNewerGoatFlow(ctx: AuditContext): boolean {
   return projectIsAheadOfCli(version, AUDIT_VERSION);
 }
 
+/**
+ * Guard every agent check behind the one precondition they all share: the selected agent has an instruction file on disk.
+ *
+ * A user who runs `goat-flow audit --agent codex` against a project that never installed AGENTS.md should see that single clear failure,
+ * not a cascade of later checks all reporting missing sections.
+ *
+ * @param ctx - audit context; a null `agentFilter` means the user audited every agent, so this precondition does not apply
+ * @param check - check id recorded on the failure, so the user can tell which check stopped
+ * @returns the failure to report, or null when the instruction file exists and the caller may continue
+ */
 export function checkSelectedInstructionAvailable(
   ctx: AuditContext,
   check: string,

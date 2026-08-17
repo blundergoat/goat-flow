@@ -76,17 +76,166 @@ export function resolveOutputPath(
  * @returns the chosen subcommand plus resolved paths for it
  * @throws CLIError when the subcommand is unknown or given the wrong number of arguments
  */
-// eslint-disable-next-line complexity -- intentional because each quality positional error reports in CLI order
-export function parseQualityPositionals(
-  positionals: string[],
+
+/**
+ * Work out what the user asked `quality candidacy` to assess: a draft file, or a description they typed.
+ *
+ * The two are mutually exclusive on purpose, because supplying both leaves it ambiguous which one the verdict describes.
+ *
+ * Error behavior: throws CLIError with exit code 2 when both forms are supplied, or when neither is.
+ *
+ * @param second - first positional after the subcommand; the start of a typed description when no draft flag is set
+ * @param rest - remaining positionals, joined into the description so an unquoted sentence still works
+ * @param draftFlag - path from `--draft`; null means the user is describing the artifact instead
+ * @returns the selected input, tagged with which form the user used
+ */
+function parseCandidacyInput(
+  second: string | undefined,
+  rest: string[],
   draftFlag: string | null,
-): {
+): CandidacyInputArg {
+  // A draft file was named, so any typed description alongside it would be a second, conflicting subject.
+  if (draftFlag !== null) {
+    if (second !== undefined || rest.length > 0) {
+      throw new CLIError(
+        "quality candidacy: pass either --draft <path> OR a description, not both.",
+        2,
+      );
+    }
+    return { mode: "draft", value: resolve(draftFlag) };
+  }
+  const description = [second, ...rest]
+    .filter(
+      (part): part is string => typeof part === "string" && part.length > 0,
+    )
+    .join(" ");
+  // Neither form was supplied, so there is nothing for the candidacy check to assess.
+  if (description.length === 0) {
+    throw new CLIError(
+      "quality candidacy: pass --draft <path> or a description string.",
+      2,
+    );
+  }
+  return { mode: "description", value: description };
+}
+
+/** What one `quality` subcommand's positionals resolve to, before the flag validators see them. */
+interface QualityPositionals {
   qualitySubcommand: QualitySubcommand;
   projectPath: string;
   qualityDiffPair: string | null;
   qualityValidatePath: string | null;
   candidacyInput: CandidacyInputArg | null;
-} {
+}
+
+/** The positional arguments one subcommand parser is handed, after the subcommand word itself is consumed. */
+interface QualityPositionalArgs {
+  second: string | undefined;
+  rest: string[];
+  draftFlag: string | null;
+}
+
+/**
+ * Build one subcommand result, defaulting every field the subcommand does not use.
+ *
+ * Defaulting here means each parser states only what makes it different, so a reader sees the subcommand's actual contract
+ * rather than four repeated nulls.
+ *
+ * @param subcommand - the resolved subcommand
+ * @param overrides - only the fields this subcommand populates
+ * @returns the complete positional result
+ */
+function qualityPositionals(
+  subcommand: QualitySubcommand,
+  overrides: Partial<Omit<QualityPositionals, "qualitySubcommand">> = {},
+): QualityPositionals {
+  return {
+    qualitySubcommand: subcommand,
+    projectPath: resolve("."),
+    qualityDiffPair: null,
+    qualityValidatePath: null,
+    candidacyInput: null,
+    ...overrides,
+  };
+}
+
+/**
+ * One parser per `quality` subcommand, so each subcommand's argument rules and error text sit together.
+ *
+ * A subcommand absent from this table falls through to `prompt`, which is what lets `goat-flow quality <path>` work.
+ */
+const QUALITY_SUBCOMMAND_PARSERS: Record<
+  string,
+  (args: QualityPositionalArgs) => QualityPositionals
+> = {
+  /** History takes an optional project path and nothing else. */
+  history: ({ second, rest }) => {
+    if (rest.length > 0) {
+      throw new CLIError(
+        "quality history accepts at most one positional project path.",
+        2,
+      );
+    }
+    return qualityPositionals("history", {
+      projectPath: second !== undefined ? resolve(second) : resolve("."),
+    });
+  },
+  /** Candidacy takes either a draft path or a typed description, never both. */
+  candidacy: ({ second, rest, draftFlag }) =>
+    qualityPositionals("candidacy", {
+      candidacyInput: parseCandidacyInput(second, rest, draftFlag),
+    }),
+  /** Diff takes one optional `<from-id>:<to-id>` pair; omitting it compares the two latest runs. */
+  diff: ({ second, rest }) => {
+    if (rest.length > 0) {
+      throw new CLIError(
+        "quality diff accepts at most one positional pair in the form <from-id>:<to-id>.",
+        2,
+      );
+    }
+    return qualityPositionals("diff", { qualityDiffPair: second ?? null });
+  },
+  /** Validate needs the report file to check, so an omitted path is an error rather than a default. */
+  validate: ({ second, rest }) => {
+    if (second === undefined || rest.length > 0) {
+      throw new CLIError(
+        "quality validate requires exactly one positional <path-to-report>.",
+        2,
+      );
+    }
+    return qualityPositionals("validate", {
+      qualityValidatePath: resolve(second),
+    });
+  },
+  /** Save names the project that will own the stored report, so it is never inferred. */
+  save: ({ second, rest }) => {
+    if (second === undefined || rest.length > 0) {
+      throw new CLIError(
+        "quality save requires exactly one positional project path.",
+        2,
+      );
+    }
+    return qualityPositionals("save", { projectPath: resolve(second) });
+  },
+};
+
+/**
+ * Resolve which `quality` subcommand the user invoked, and what its positional arguments mean.
+ *
+ * A first positional that names no subcommand is treated as a project path for `quality prompt`, which is what makes
+ * `goat-flow quality .` work the way users expect.
+ *
+ * Error behavior: throws CLIError with exit code 2 for the removed `capture` subcommand, or when a subcommand's own
+ * argument rules are broken.
+ *
+ * @param positionals - positional arguments after the `quality` command word
+ * @param draftFlag - value of `--draft`, which only `candidacy` consumes; null means it was not supplied
+ * @returns the resolved subcommand and its arguments
+ */
+export function parseQualityPositionals(
+  positionals: string[],
+  draftFlag: string | null,
+): QualityPositionals {
   const [first, second, ...rest] = positionals;
 
   if (first === "capture") {
@@ -96,113 +245,12 @@ export function parseQualityPositionals(
     );
   }
 
-  if (first === "history") {
-    if (rest.length > 0) {
-      throw new CLIError(
-        "quality history accepts at most one positional project path.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "history",
-      projectPath: second !== undefined ? resolve(second) : resolve("."),
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  }
+  const parseSubcommand =
+    first === undefined ? undefined : QUALITY_SUBCOMMAND_PARSERS[first];
+  if (parseSubcommand) return parseSubcommand({ second, rest, draftFlag });
 
-  if (first === "candidacy") {
-    if (draftFlag !== null) {
-      if (second !== undefined || rest.length > 0) {
-        throw new CLIError(
-          "quality candidacy: pass either --draft <path> OR a description, not both.",
-          2,
-        );
-      }
-      return {
-        qualitySubcommand: "candidacy",
-        projectPath: resolve("."),
-        qualityDiffPair: null,
-        qualityValidatePath: null,
-        candidacyInput: { mode: "draft", value: resolve(draftFlag) },
-      };
-    }
-    const description = [second, ...rest]
-      .filter(
-        (part): part is string => typeof part === "string" && part.length > 0,
-      )
-      .join(" ");
-    if (description.length === 0) {
-      throw new CLIError(
-        "quality candidacy: pass --draft <path> or a description string.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "candidacy",
-      projectPath: resolve("."),
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: { mode: "description", value: description },
-    };
-  }
-
-  if (first === "diff") {
-    if (rest.length > 0) {
-      throw new CLIError(
-        "quality diff accepts at most one positional pair in the form <from-id>:<to-id>.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "diff",
-      projectPath: resolve("."),
-      qualityDiffPair: second ?? null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  }
-
-  if (first === "validate") {
-    if (second === undefined || rest.length > 0) {
-      throw new CLIError(
-        "quality validate requires exactly one positional <path-to-report>.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "validate",
-      projectPath: resolve("."),
-      qualityDiffPair: null,
-      qualityValidatePath: resolve(second),
-      candidacyInput: null,
-    };
-  }
-
-  if (first === "save") {
-    if (second === undefined || rest.length > 0) {
-      throw new CLIError(
-        "quality save requires exactly one positional project path.",
-        2,
-      );
-    }
-    return {
-      qualitySubcommand: "save",
-      projectPath: resolve(second),
-      qualityDiffPair: null,
-      qualityValidatePath: null,
-      candidacyInput: null,
-    };
-  }
-
-  return {
-    qualitySubcommand: "prompt",
-    projectPath: resolve(first ?? "."),
-    qualityDiffPair: null,
-    qualityValidatePath: null,
-    candidacyInput: null,
-  };
+  // No subcommand matched, so the first positional is the project path for a prompt run.
+  return qualityPositionals("prompt", { projectPath: resolve(first ?? ".") });
 }
 
 /**

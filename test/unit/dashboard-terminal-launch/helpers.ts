@@ -439,6 +439,15 @@ function loadFixture(name: string): string {
   );
 }
 
+/**
+ * Load the dashboard terminal helpers with fetch and timers replaced, so launch flows run without a real server or real waiting.
+ *
+ * Injecting timers is what lets these tests assert on debounce and retry behaviour without sleeping for it.
+ *
+ * @param fetchImpl - stand-in for global fetch, supplying scripted responses
+ * @param timers - timer controls; the default uses the real ones, which only suits a test that does not exercise scheduling
+ * @returns the loaded helper surface bound to those substitutes
+ */
 function loadHelpers(
   fetchImpl: typeof fetch,
   timers: TimerControls = {
@@ -513,6 +522,14 @@ globalThis.__helpers = {
   return (context as typeof context & { __helpers: HelperContext }).__helpers;
 }
 
+/**
+ * Build a launch context that starts in a realistic dashboard state, plus a captured list of the toasts a user would have seen.
+ *
+ * Capturing toasts is how these tests assert what the user was actually told, rather than only what the state became.
+ *
+ * @param overrides - context fields to replace; an empty object yields the default project and Home view
+ * @returns the context together with the recorded toasts
+ */
 function makeContext(
   overrides: Partial<LaunchContext> = {},
 ): LaunchContext & { toasts: Array<{ msg: string; isError: boolean }> } {

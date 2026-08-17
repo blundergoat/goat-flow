@@ -166,12 +166,10 @@ Classify each formatter-owned writable path:
 - `AMBIGUOUS`: candidates conflict, cannot be safely scoped, or ownership is unclear. Stop before a
   formatter-owned mutation and ask for the command or boundary.
 
-Freeze the exact `READY` commands in the snapshot. Run the check before mutation. A failing baseline
-is evidence, not permission to rewrite existing user work; disposition it under project authority.
-Attribute it with the committed content at the same path only when the frozen command supports a
-repository-owned stdin/path-context mode. A temporary copy inside the repository is forbidden. If
-safe attribution is unavailable, record `NOT_CHECKED` rather than changing worktree membership. A
-failure present at the baseline is inherited; a newly introduced failure belongs to the current change.
+Freeze the exact `READY` commands in the snapshot. Run the check before mutation. A pre-mutation
+failure is evidence, not permission to rewrite existing user work; disposition it under project
+authority. Attribute formatter failures through Status and Claim Evidence; an equivalent formatter
+comparison preserves the frozen command plus repository-owned path and configuration context.
 After the bounded clarity edits, rerun the check before typecheck, tests, or Gruff. Run the frozen write
 command only on modified formatter-owned writable paths when project authority permits it, inspect the
 formatter diff, map its changed spans, and rerun the check.
@@ -183,6 +181,17 @@ Record the literal command, scope, exit, and salient output separately from what
 - Command status: `PASS | FAIL | NOT_RUN | UNAVAILABLE`.
 - Claim verdict: `VERIFIED | REFUTED | NOT_CHECKED`.
 - Shared proof-class tag: `OBSERVED | INFERRED | UNVERIFIED | HUMAN-PENDING`.
+
+Baseline attribution applies to every mechanical check, including formatter, analyzer, comment-shape,
+width, syntax, and residue checks. Run the exact same check against the current selected bytes and the
+bound comparison baseline bytes with equivalent scope, configuration, and path context. For a
+Git-backed local selector, read baseline bytes with `git show <bound-baseline>:<path>` only when the
+check accepts stdin or an equivalent repository-owned path-context mode; follow an established
+relocation mapping when identity moved. Never write baseline bytes into the worktree; a temporary copy
+inside the repository is forbidden. If an equivalent baseline execution is unavailable, record the
+attribution `NOT_CHECKED` rather than infer causality or change worktree membership. When the comparison
+is observed, a failure reproduced at the comparison baseline is inherited. A failure absent there but
+present on current bytes was introduced by the current change.
 
 A passing command never makes an untested claim verified. `PASS` means only that the named command
 accepted its actual scope. `FAIL` remains failure evidence even when another command passes.

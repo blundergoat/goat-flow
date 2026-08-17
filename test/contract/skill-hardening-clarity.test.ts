@@ -441,6 +441,23 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("attributes every mechanical check against an equivalent bound baseline", () => {
+    const statusAndClaimEvidence = readMarkdownSection(
+      SCOPE_REFERENCE_PATH,
+      "Status and Claim Evidence",
+    );
+    assertGuidanceIncludesAll(statusAndClaimEvidence, SCOPE_REFERENCE_PATH, [
+      "Baseline attribution applies to every mechanical check",
+      "exact same check",
+      "bound comparison baseline bytes",
+      "equivalent scope, configuration, and path context",
+      "Never write baseline bytes into the worktree",
+      "record the attribution `NOT_CHECKED`",
+      "A failure reproduced at the comparison baseline is inherited",
+      "A failure absent there but present on current bytes was introduced by the current change",
+    ]);
+  });
+
   it("reconciles separate like-unit ledgers without fixing presentation", () => {
     const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
     assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [

@@ -555,6 +555,16 @@ function appendOutputFormat(
   appendRatingSections(lines);
 }
 
+/**
+ * Assemble the agent-setup quality prompt, the long-form assessment a user launches from the Quality tab or `goat-flow quality prompt`.
+ *
+ * The prompt is built section by section in a fixed order, because the assessment it asks for depends on the reader having already
+ * seen the audit result and the grounding commands before it reaches the rating instructions.
+ *
+ * @param input - the quality request: selected project, agent, audit facts, and any prior report to compare against
+ * @param qualityMode - selected mode, which decides which rating contract the prompt asks the agent to follow
+ * @returns the composed payload the caller renders or copies; the prompt text is never empty
+ */
 export function composeAgentSetupQuality(
   input: QualityInput,
   qualityMode: QualityMode,

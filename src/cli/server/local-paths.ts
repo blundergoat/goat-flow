@@ -138,6 +138,17 @@ function assertAllowedByPurpose(
   if (realBlock) throw new LocalPathValidationError(purpose, realBlock);
 }
 
+/**
+ * Prove a path the user supplied is a real local directory this server is allowed to act on, before anything reads or writes there.
+ *
+ * This is the trust boundary for every dashboard path: the project a user types into Add Project arrives here as untrusted text.
+ *
+ * Error behavior: throws LocalPathValidationError naming the purpose, so the dashboard can report which action was refused and why.
+ *
+ * @param rawPath - path exactly as the user supplied it, resolved to an absolute path here
+ * @param purpose - what the caller intends to do with it, which selects the rules applied and appears in any error
+ * @returns the validated path; holding one is the caller's evidence that the checks ran
+ */
 export function validateLocalPath(
   rawPath: string,
   purpose: LocalPathPurpose,
@@ -195,6 +206,18 @@ function assertLocalStatePathPurpose(
   }
 }
 
+/**
+ * Resolve a path inside an already-validated project's `.goat-flow` directory, refusing anything that would escape it.
+ *
+ * Containment is re-checked here rather than assumed, because a relative path or a symlinked component could still lead outside
+ * a project that was itself perfectly valid.
+ *
+ * Error behavior: throws LocalPathValidationError when the result would land outside `.goat-flow`, before any read or write.
+ *
+ * @param project - project already proved valid by `validateLocalPath`
+ * @param relativePath - path within `.goat-flow`; traversal segments are rejected rather than normalised away
+ * @returns the absolute path, safe to read or write
+ */
 export function resolveValidatedLocalStatePath(
   project: ValidatedLocalPath,
   relativePath: string,
@@ -212,6 +235,18 @@ export function resolveValidatedLocalStatePath(
   return candidate;
 }
 
+/**
+ * Validate a project path and resolve one path inside its `.goat-flow` directory in a single call.
+ *
+ * This is the convenience entry point most callers use; take the two-step form when one validated project is reused for many paths.
+ *
+ * Error behavior: throws LocalPathValidationError from either step, so an invalid project and an escaping path report the same way.
+ *
+ * @param projectPath - project path as supplied by the user, validated here
+ * @param relativePath - path within `.goat-flow` to resolve
+ * @param purpose - what the caller intends to do, defaulting to writing local state
+ * @returns the absolute path, safe to read or write
+ */
 export function resolveLocalStatePath(
   projectPath: string,
   relativePath: string,
