@@ -65,7 +65,7 @@ last_reviewed: 2026-08-15
 
 **Status:** resolved | **Created:** 2026-05-02 | **Resolved:** 2026-05-02 | **Evidence:** ACTUAL_MEASURED
 
-**Original symptoms:** Agents in consumer projects found ADR-021 and ADR-018 citations in installed skill files, tried to look them up in `.goat-flow/learning-loop/decisions/`, and either hallucinated ADR content or lost context. The rules themselves worked, but the authority citations were dead links.
+**Original symptoms:** Agents in consumer projects found ADR-021 and the removed historical `ADR-018-no-goat-verify-skill.md` citations in installed skill files, tried to look them up in `.goat-flow/learning-loop/decisions/`, and either hallucinated ADR content or lost context. The rules themselves worked, but the authority citations were dead links.
 
 **Resolution:** All ADR references removed from installed skill files in v1.4.0 (goat-critique excuse table, goat-qa regression guard and constraints). Rules are now self-contained with inline rationale. Verified: `rg 'ADR-\d+' workflow/skills/` returns zero matches.
 

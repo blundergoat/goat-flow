@@ -590,7 +590,7 @@ function registrationIssueReason(
   const issueReasons: Record<AgentHookRegistrationIssue, string> = {
     "registration-missing": "The managed hook command is not registered.",
     "duplicate-registration":
-      "The managed hook is registered more than once for the same user action.",
+      "The provider config contains an extra managed registration beyond the registry contract.",
     "retired-registration":
       "A retired hook registration must be migrated to the current dispatcher.",
     "event-mismatch":

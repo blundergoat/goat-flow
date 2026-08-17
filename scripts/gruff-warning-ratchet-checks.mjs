@@ -1,33 +1,29 @@
 /**
  * The rules that decide whether Gruff warning debt regressed, kept apart from running the analyzer.
  * Loaded by scripts/check-gruff-warning-ratchet.mjs, which supplies a fresh scan and prints whatever
- * this module reports. Everything here is a pure comparison against the reviewed list in
- * scripts/gruff-warning-baseline.json: read that list, confirm the scan is the report we know how to
- * read, then judge every warning against what a reviewer signed off. A maintainer changes rules here
- * when the definition of "this got worse" changes, and changes the sibling file when the way the
- * analyzer is launched changes. Failure lines are collected by RatchetFailureReport from
- * ratchet-failure-report.mjs, which every check here writes into.
+ * this module reports. It confirms the scan still meets the reviewed coverage floor, then compares
+ * warnings with scripts/gruff-warning-baseline.json when that accepted-debt manifest exists. A
+ * maintainer changes rules here when the definition of "this got worse" changes, and changes the
+ * sibling file when the way the analyzer is launched changes. Failure lines are collected by
+ * RatchetFailureReport from ratchet-failure-report.mjs, which every check here writes into.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-// Tests point this at a fixture manifest; a normal run reads the reviewed list beside this script.
+// Tests point this at a fixture manifest; a normal run looks for the reviewed list beside this script.
 const MANIFEST_PATH =
   process.env.GOAT_FLOW_GRUFF_RATCHET_BASELINE ??
   join(REPO_ROOT, "scripts", "gruff-warning-baseline.json");
 export const EXPECTED_SCHEMA = "gruff.analysis.v2";
 /**
- * Coverage floor applied when no reviewed manifest exists.
+ * Coverage threshold retained when no accepted warning-debt manifest exists.
  *
- * The floor normally records what a reviewer approved, and with no manifest nobody has approved a number, so inventing one here
- * would be a fabricated threshold rather than a reviewed bound.
- *
- * One file is the only defensible floor left: it still catches a scan that analysed nothing, while the schema-drift and
- * analyzer-diagnostics checks continue to fail closed on a broken scan.
+ * The last reviewed manifest before warning debt reached zero recorded 494 analysed files. Removing
+ * accepted findings does not revoke that coverage approval: a lower count still needs human review.
  */
-const DEFAULT_MINIMUM_ANALYSED_FILES = 1;
+const REVIEWED_MINIMUM_ANALYSED_FILES = 494;
 /**
  * Build a stable text key for one occurrence so equal shapes compare equal whatever the key order.
  * Used when matching scanned occurrences against the reviewed ones for the same identity.
@@ -215,7 +211,7 @@ export function loadReviewedDebtManifest(failures) {
     // so there is nothing to review and every warning the scan reports counts as a regression.
     if (error.code === "ENOENT") {
       return {
-        minimumAnalysedFiles: DEFAULT_MINIMUM_ANALYSED_FILES,
+        minimumAnalysedFiles: REVIEWED_MINIMUM_ANALYSED_FILES,
         acceptedEntriesByIdentity: new Map(),
       };
     }

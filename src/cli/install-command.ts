@@ -601,17 +601,20 @@ function pendingMigrations(
     addPendingMigration(
       migrations,
       profile.hookConfigFile,
-      `Install edits this user-owned hook config in place to ${hookConfigEdits.join("; ")}. Unrelated hook rows and top-level fields stay byte-stable.`,
+      `Install edits this user-owned hook config in place to ${hookConfigEdits.join("; ")}. Unrelated hook rows and top-level fields retain their semantic values, but JSON formatting may be normalized.`,
     );
   }
   for (const [settingsPath, edits] of pendingAgentSettingsMigrations(
     options.projectPath,
     agent,
   )) {
+    const preservationClaim = settingsPath.endsWith(".json")
+      ? "Unrelated settings retain their semantic values, but JSON formatting may be normalized."
+      : "Every other line and unrelated setting stays byte-stable.";
     addPendingMigration(
       migrations,
       settingsPath,
-      `Install edits this user-owned settings file in place to ${edits.join("; ")}. Unrelated settings stay byte-stable.`,
+      `Install edits this user-owned settings file in place to ${edits.join("; ")}. ${preservationClaim}`,
     );
   }
   if (rootGitignoreNeedsMigration(options.projectPath)) {

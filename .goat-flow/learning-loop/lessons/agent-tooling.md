@@ -14,7 +14,7 @@ last_reviewed: 2026-08-16
 **Incident count:** 5
 **Latest occurrence:** 2026-08-16
 
-**What happened:** Four pre-edit reads or commands inferred paths: the agent misread a workflow source/install pair as a move, pluralized a managed source directory, guessed an ADR-016 filename, then guessed an M06 milestone filename. Each failed. `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-033-goat-flow-directory-restructure.md`), and `rg --files --hidden --no-ignore` supplied the exact paths.
+**What happened:** Four pre-edit reads or commands inferred paths: the agent misread a workflow source/install pair as a move, pluralized a managed source directory, guessed the removed historical `ADR-016-dispatcher-is-canonical-skill.md` path, then guessed an M06 milestone filename. Each failed. `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-033-goat-flow-directory-restructure.md`), and `rg --files --hidden --no-ignore` supplied the exact paths.
 
 **Recurrence 2026-08-16:** Copying `workflow/hooks/post-turn-safety.sh` from the NTFS-backed source checkout into a Linux controller with `cp --preserve=mode` propagated mode `0777` over the controller's intended `0755`. The content was correct, but the installation metadata was not. An immediate `chmod 0755` plus `stat` and byte-parity checks restored the expected installation.
 

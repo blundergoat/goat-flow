@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts - evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -10,13 +10,15 @@ last_reviewed: 2026-08-16
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Keep machine-parsed checklist sections contiguous; put explanatory prose and tables under their own headings outside the checklist.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-16
+**Incident count:** 3 | **Latest occurrence:** 2026-08-18
 
 **Symptoms:** `plans check --strict` starts failing on a milestone whose checklist was only ticked, with three errors at once: `proof counted work (N min) does not equal the split component`, `N testing gate item(s) missing an (est: ...) entry`, and `forecast basis declares N agent work units but the plan contains N-1`. The arithmetic looks corrupted even though no estimate was edited, and the named item visibly still carries its `(est: ...)`.
 
 **Evidence:** While closing 1.16.0 M01 on 2026-08-15, a one-paragraph caveat was added under `## Proof`, after C4, to record that C4's last command had not run clean. `plans check --strict` had exited 0 immediately before, and exited 1 straight after with the three errors above; counted proof work dropped from 8 to 6 minutes. Moving the same sentences into `## Mid-implementation evidence` restored exit 0 with no other change.
 
 **Recurrence 2026-08-16:** Inserting a caller-inventory table between M07 task rows made the remaining task list non-contiguous. Strict validation reported product work dropping from 19 to 12 minutes, one missing estimate, and a forecast basis of eight units against seven parsed units. Moving the unchanged table under a dedicated Context heading restored exit 0. The same item-body boundary in `src/cli/plans-export.ts` (search: `Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate`) governs both prose and tables.
+
+**Recurrence 2026-08-18:** While closing M54, an ADR-classification result paragraph was inserted immediately after the final Tasks checkbox. Strict validation dropped parsed product work from 19 to 17 minutes, reported one missing estimate, and saw only 14 of the forecast's 15 work units. Moving the unchanged result under its own heading restored the final task boundary, its two-minute estimate, and the fifteenth unit. Evidence anchors: `src/cli/plans-export.ts` (search: `Headings also end an item`) and `src/cli/plans-effort.ts` (search: `TASK_ESTIMATE_PATTERN`).
 
 **Why it happens:** An item's body is not one line. `src/cli/plans-export.ts` (search: `Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate`) runs each item from its checkbox to the next checkbox or the next heading, so a paragraph after the last row is absorbed into that row's body. The estimate is then read by `src/cli/plans-effort.ts` (search: `TASK_ESTIMATE_PATTERN`), whose regex is anchored to the end of the body text - the appended prose pushes `(est: ...)` away from that anchor and the item reads as unestimated. One insertion therefore produces three errors, and none of them names prose as the cause. A heading terminates an item, which is why prose under the *next* `##` heading is safe.
 

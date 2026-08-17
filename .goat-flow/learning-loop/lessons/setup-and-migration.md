@@ -74,7 +74,7 @@ last_reviewed: 2026-08-04
 
 **Created:** 2026-03-22
 
-**What happened:** Shape removed from scanner code (ADR-002) but `[APP / LIBRARY / SCRIPT COLLECTION]` survived in 9 setup/workflow/doc files. Confusion-log removed (ADR-001) but agent recreated it because the constraint wasn't in the prompt.
+**What happened:** Shape was removed from scanner code under the removed historical `ADR-002-remove-project-shape.md`, but `[APP / LIBRARY / SCRIPT COLLECTION]` survived in 9 setup/workflow/doc files. Confusion-log was removed under the removed historical `ADR-001-remove-confusion-log.md`, but an agent recreated it because the constraint was not in the prompt; current authority is `ADR-033-goat-flow-directory-restructure.md`.
 **Root cause:** Grepped `src/` and `test/` but not `workflow/setup/`, `workflow/`, `docs/`.
 **Fix:** Preflight now enforces removed patterns across all live directories. ADR removals must grep the entire repo.
 

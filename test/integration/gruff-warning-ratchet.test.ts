@@ -348,8 +348,10 @@ describe("gruff warning ratchet", () => {
   });
 
   it("treats a missing manifest as zero accepted debt, so any warning is a regression", async () => {
+    const scan = { ...scanFixture(), paths: { analysedFiles: 494 } };
     const run = await runRatchet({
       baselinePath: join(fixtureRoot, "missing-baseline.json"),
+      scan,
     });
     // No manifest is the intended steady state: this project fixes warnings instead of accepting them,
     // so the scan's warnings must be reported as new rather than as an unusable gate.
@@ -357,13 +359,31 @@ describe("gruff warning ratchet", () => {
     assert.doesNotMatch(run.stderr, /invalid manifest:/);
   });
 
+  it("retains reviewed scan coverage when the warning manifest is missing", async () => {
+    const scan = {
+      ...scanFixture(),
+      paths: { analysedFiles: 1 },
+      findings: [],
+    };
+    const run = await runRatchet({
+      baselinePath: join(fixtureRoot, "missing-baseline.json"),
+      scan,
+    });
+    assertFailure(run, /coverage regression:.*1.*494/s);
+  });
+
   it("passes with no manifest when the scan reports no warnings at all", async () => {
-    const scan = { ...scanFixture(), findings: [] };
+    const scan = {
+      ...scanFixture(),
+      paths: { analysedFiles: 494 },
+      findings: [],
+    };
     const run = await runRatchet({
       baselinePath: join(fixtureRoot, "missing-baseline.json"),
       scan,
     });
     assert.equal(run.status, 0, `expected pass, got:\n${run.stderr}`);
+    assert.match(run.stdout, /analysedFiles 494 >= floor 494/);
   });
 
   it("fails on stale accepted debt so the manifest ratchets down", async () => {
