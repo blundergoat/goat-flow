@@ -507,8 +507,11 @@ interface XTermInstance {
   getSelection(): string;
   /** Load the fit addon created from the separately injected xterm addon bundle. */
   loadAddon(addon: FitAddonInstance): void;
+  /** Subscribe to user keystrokes so the dashboard can forward them to the backend session. */
   onData(callback: (data: string) => void): void;
+  /** Subscribe to geometry changes so the backend PTY can be resized to match. */
   onResize(callback: (size: { cols: number; rows: number }) => void): void;
+  /** Intercept keys before xterm consumes them; returning false stops xterm handling that event. */
   attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean): void;
 }
 
@@ -529,10 +532,12 @@ interface AlpineRefs {
 
 /** Alpine.js magic methods injected at runtime onto `x-data` objects. */
 interface AlpineMagics<TData extends object = Record<string, unknown>> {
+  /** Observe one reactive property; the callback runs after each change, not on the initial value. */
   $watch<K extends Extract<keyof TData, string>>(
     property: K,
     callback: (value: TData[K], oldValue: TData[K]) => void,
   ): void;
+  /** Defer work until Alpine has flushed pending DOM updates, so measurements see the new layout. */
   $nextTick(callback?: () => void): Promise<void>;
   $refs: AlpineRefs;
 }

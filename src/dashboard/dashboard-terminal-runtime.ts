@@ -60,6 +60,7 @@ async function dashboardSendToProjectTarget(
 /**
  * Refresh terminal feature availability from the health endpoint.
  * Use when the dashboard starts so Workspace can enable terminal actions only for runnable agents.
+ * Error behavior: never throws; an unreachable or malformed health reply reports as unavailable.
  *
  * @param ctx - terminal dashboard state; failed health checks disable terminal actions
  * @returns nothing; session count refresh is scheduled afterward
@@ -130,6 +131,7 @@ async function dashboardUpdateSessionCount(
 /**
  * Refresh terminal session state from the server immediately.
  * Use behind the debounced public refresh so local ended sessions reconcile with backend truth.
+ * Error behavior: never throws; a failed refresh swallows the error and keeps the visible sessions.
  *
  * @param ctx - terminal dashboard state; failed refreshes leave current local state in place
  * @returns nothing; stale local sessions may be marked ended
@@ -177,6 +179,9 @@ async function dashboardUpdateSessionCountImpl(
 /**
  * Clear recent inactive terminal sessions while preserving running backend sessions.
  * Use when the user clicks the clear/recent-session cleanup action in Workspace.
+ * Four separate collections are pruned because each tracks sessions by a different key, and leaving
+ * any one stale would offer the user a reconnect button for a session the backend already dropped.
+ * Error behavior: never throws; a failed request reports as a toast and leaves the rows in place.
  *
  * @param ctx - terminal dashboard state; endpoint failures show a toast and keep current rows
  * @returns nothing; cleared count appears as a toast
@@ -304,16 +309,19 @@ function waitForAssetElement(
     const timer = setTimeout(() => {
       reject(new Error(`${label} load timeout`));
     }, 5000);
+    /** Drop the timeout and both listeners so a settled promise leaves nothing attached. */
     const cleanup = (): void => {
       clearTimeout(timer);
       element.removeEventListener("load", onLoad);
       element.removeEventListener("error", onError);
     };
+    /** Mark the element loaded so a later terminal reuses it instead of waiting again. */
     const onLoad = (): void => {
       cleanup();
       element.dataset["loaded"] = "true";
       resolve();
     };
+    /** Leave the element unmarked so the caller can remove it and retry on the next launch. */
     const onError = (): void => {
       cleanup();
       reject(new Error(`${label} load failed`));
@@ -373,6 +381,8 @@ async function loadXtermScript(src: string, label: string): Promise<void> {
 /**
  * Load xterm core and addons for the dashboard terminal.
  * Use before opening or reconnecting a Workspace terminal.
+ * Error behavior: throws the underlying load failure after removing the asset tags, so the caller
+ * reports it and the next explicit launch starts from a clean slate.
  *
  * @param ctx - terminal dashboard state; already-loaded state returns immediately
  * @returns nothing; failed loads reset asset tags so the next launch can retry
@@ -407,6 +417,8 @@ async function dashboardLoadXterm(
 /**
  * Warm xterm assets in the background.
  * Use after health confirms terminals are available so the first launch feels faster.
+ * Error behavior: never throws; a background load failure swallows the error deliberately, because
+ * warming is invisible to the user and the same failure reports on the next explicit launch.
  *
  * @param ctx - terminal dashboard state; unavailable or already-loaded terminals do nothing
  * @returns nothing; background failures are surfaced later on explicit launch
@@ -578,7 +590,16 @@ function dashboardDetachTerminal(
   ctx._detaching = false;
 }
 
-/** Reconnect the workspace to every saved backend session for this project. */
+/**
+ * Reconnect the workspace to every saved backend session for this project.
+ * Each exit path prunes the project's saved-session entries because a saved id the backend no longer
+ * reports would leave the user a reconnect button that can never succeed.
+ * Error behavior: never throws; an unreachable sessions endpoint reports as a failed reconnect after
+ * forgetting this project's saved sessions.
+ *
+ * @param ctx - terminal dashboard state; saved-session and active-session maps are pruned in place
+ * @returns true when at least one session was reopened; false leaves the workspace disconnected
+ */
 async function dashboardReconnectTerminal(
   ctx: DashboardTerminalContext,
 ): Promise<boolean> {
@@ -675,7 +696,20 @@ async function dashboardReconnectTerminal(
   return true;
 }
 
-/** Create a new backend terminal session and open it in the workspace. */
+/**
+ * Create a new backend terminal session and open it in the workspace.
+ * The xterm assets load concurrently with the create request, and its rejection is captured as a
+ * value rather than awaited, because a stalled asset load must not delay creating the session.
+ * Error behavior: never throws; a rejected create, an error payload, or an incomplete reply reports
+ * as a toast and tears down any session that was already created.
+ *
+ * @param ctx - terminal dashboard state; a new local session is pushed on success
+ * @param prompt - prompt text sent after connect; retained so a retry can resend it
+ * @param runner - agent to launch; defaults to Claude when the caller has no override
+ * @param options - launch metadata; `captureQualityDrafts` must survive into retry state so a retried
+ *   report still has somewhere to persist
+ * @returns nothing; the session appears in `ctx.sessions` once the backend accepts it
+ */
 async function dashboardLaunchInTerminal(
   ctx: DashboardTerminalContext,
   prompt: string,

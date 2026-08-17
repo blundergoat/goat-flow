@@ -72,6 +72,11 @@ interface DecodedTerminalCreate {
 
 /**
  * Build the terminal-only dashboard handlers for one server instance.
+ * Every handler is closed over one lazily created manager, WebSocket server, and shutdown promise,
+ * because those are per-server singletons that must be created at most once and torn down together;
+ * splitting the handlers apart would mean threading that shared lifecycle through each one.
+ * Error behavior: throws nothing; each route reports its own failure as a JSON response, so one bad
+ * request cannot take the server down.
  *
  * @param deps - server-local dependencies and limits shared by terminal routes
  * @returns terminal route handlers plus the shutdown hook for active sessions
@@ -124,6 +129,15 @@ export function createDashboardTerminalHandlers(
   let wssPromise: Promise<WebSocketServer> | null = null;
   let closePromise: Promise<void> | null = null;
 
+  /**
+   * Record one terminal evidence event against the project that owns it.
+   * Side effect: writes an evidence event through the shared recorder.
+   *
+   * @param projectPath - project root the event is attributed to
+   * @param eventKind - evidence event type being recorded
+   * @param payload - optional structured detail; omitted records the bare event
+   * @returns nothing; recording is best-effort and owned by the evidence recorder
+   */
   function recordTerminalEvent(
     projectPath: string,
     eventKind: EvidenceEventKind,
@@ -150,6 +164,18 @@ export function createDashboardTerminalHandlers(
     });
   }
 
+  /**
+   * Start one backend terminal session and resolve the paths it actually ended up using.
+   * The manager may substitute its own target path, so the resolved value is read back rather than
+   * assumed; falling through to the request path and finally the server default keeps every session
+   * attributable to some project.
+   * Side effect: starts a backend PTY session.
+   *
+   * @param manager - terminal manager owning session lifecycle
+   * @param decoded - validated create request
+   * @returns the create result, the live session if the manager still holds it, and the resolved
+   *   target path used for evidence attribution
+   */
   async function createTerminalSession(
     manager: TerminalManager,
     decoded: DecodedTerminalCreate,
@@ -183,6 +209,16 @@ export function createDashboardTerminalHandlers(
     };
   }
 
+  /**
+   * Record the create event, and the prompt event when the launch carried prompt text.
+   * Side effect: writes one or two evidence events.
+   *
+   * @param decoded - validated create request supplying runner, access mode, and prompt
+   * @param sessionId - id of the session just created
+   * @param session - live session if still held, used for its resolved working directory
+   * @param resolvedTargetPath - project the events are attributed to
+   * @returns nothing; an empty prompt records only the create event
+   */
   function recordTerminalLaunchEvents(
     decoded: DecodedTerminalCreate,
     sessionId: string,
@@ -268,7 +304,11 @@ export function createDashboardTerminalHandlers(
       });
   }
 
-  /** Start a terminal session for the requested runner and workspace. */
+  /**
+   * Start a terminal session for the requested runner and workspace.
+   * Error behavior: throws nothing; a rejected launch reports as a JSON error whose status is
+   * derived from the failure message, so the dashboard can distinguish a bad request from a fault.
+   */
   async function handleTerminalCreateRequest(
     req: IncomingMessage,
     url: URL,
@@ -303,7 +343,10 @@ export function createDashboardTerminalHandlers(
     return true;
   }
 
-  /** Return the set of currently live terminal sessions. */
+  /**
+   * Return the set of currently live terminal sessions.
+   * Error behavior: throws nothing; a manager failure reports as a 500 JSON error.
+   */
   async function handleTerminalListRequest(
     req: IncomingMessage,
     url: URL,
@@ -323,7 +366,11 @@ export function createDashboardTerminalHandlers(
     return true;
   }
 
-  /** Kill one terminal session and report whether it existed. */
+  /**
+   * Kill one terminal session and report whether it existed.
+   * Error behavior: throws nothing; a manager failure reports as a 500 JSON error, and an unknown
+   * session id is a normal negative result rather than a fault.
+   */
   async function handleTerminalDeleteRequest(
     req: IncomingMessage,
     url: URL,
@@ -368,21 +415,21 @@ export function createDashboardTerminalHandlers(
     return new Promise((resolveBody, rejectBody) => {
       const chunks: Buffer[] = [];
       let size = 0;
-      let tooLarge = false;
+      let isTooLarge = false;
       req.on("data", (chunk: Buffer) => {
         size += chunk.length;
-        if (tooLarge) {
+        if (isTooLarge) {
           return;
         }
         if (size > TERMINAL_UPLOAD_MAX_BODY_BYTES) {
-          tooLarge = true;
+          isTooLarge = true;
           chunks.length = 0;
           return;
         }
         chunks.push(chunk);
       });
       req.on("end", () => {
-        if (tooLarge) {
+        if (isTooLarge) {
           rejectBody(new Error("Upload body too large"));
           return;
         }
@@ -392,8 +439,12 @@ export function createDashboardTerminalHandlers(
     });
   }
 
-  /** Accept dragged image files for the active terminal session. */
-  // eslint-disable-next-line complexity -- intentional ingress validation; each branch maps to one rejection class.
+  /**
+   * Accept dragged image files for the active terminal session.
+   * The branch count here is deliberate: ingress validation checks each rejection class separately
+   * so the dashboard can tell the user which rule the upload broke.
+   */
+  // eslint-disable-next-line complexity -- intentional ingress validation; it throws nothing and reports each rejection class as its own JSON status.
   async function handleTerminalUploadRequest(
     req: IncomingMessage,
     url: URL,
@@ -482,7 +533,11 @@ export function createDashboardTerminalHandlers(
     return true;
   }
 
-  /** Return terminal-backend health details for dashboard diagnostics. */
+  /**
+   * Return terminal-backend health details for dashboard diagnostics.
+   * Error behavior: throws nothing; a manager failure reports as a 500 JSON error, which the
+   * dashboard reads as terminals being unavailable.
+   */
   async function handleHealthRequest(
     req: IncomingMessage,
     url: URL,
@@ -501,7 +556,10 @@ export function createDashboardTerminalHandlers(
     return true;
   }
 
-  /** Return enriched terminal session info with age and idle duration. */
+  /**
+   * Return enriched terminal session info with age and idle duration.
+   * Error behavior: throws nothing; a manager failure reports as a 500 JSON error.
+   */
   async function handleTerminalSessionsRequest(
     req: IncomingMessage,
     url: URL,
@@ -532,7 +590,11 @@ export function createDashboardTerminalHandlers(
     return true;
   }
 
-  /** Handle terminal WebSocket upgrades and reject bad origins. */
+  /**
+   * Handle terminal WebSocket upgrades and reject bad origins.
+   * Error behavior: throws nothing; a disallowed origin destroys the socket rather than reporting a
+   * response, because an upgrade that failed origin checks has no trusted channel to answer on.
+   */
   function handleTerminalUpgrade(
     req: IncomingMessage,
     socket: Duplex,

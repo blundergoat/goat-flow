@@ -268,6 +268,7 @@ const REMOVED_COMMAND_CHECKS: RemovedCommand[] = [
  *
  * Runs across every line including fenced code blocks because fenced command
  * examples are the primary leak path this check exists to catch.
+ * Error behavior: throws nothing; every match is reported as a content finding.
  *
  * @param path Repo-relative source path used in findings.
  * @param text Markdown content to scan.
@@ -311,6 +312,9 @@ function scanRemovedCommands(
  * By default, fenced code blocks are skipped because prose code samples should
  * not be drift-matched. Individual checks can opt in via `scanFenced: true` to
  * catch structural drift in sample-output blocks.
+ * A fresh RegExp is built per line because a global-flag pattern mutates its own `lastIndex`, and a
+ * shared instance would silently skip matches on later lines.
+ * Error behavior: throws nothing; every drift is reported as a content finding.
  *
  * @param path Repo-relative source path used in findings.
  * @param text Markdown content to scan.
@@ -357,9 +361,19 @@ function scanCountClaims(
   return findings;
 }
 
-/** Apply one concern-count check to one line; returns any drift findings.
- *  Extracted from `scanConcernCountClaims` to keep the outer loop under the
- *  eslint complexity cap. */
+/**
+ * Apply one concern-count check to one line and return any drift findings.
+ * Extracted from `scanConcernCountClaims` to keep the outer loop under the eslint complexity cap.
+ * The check's pattern is rebuilt here rather than reused because a global-flag RegExp mutates its
+ * own `lastIndex`, so a shared instance would skip matches on the lines that follow.
+ * Error behavior: throws nothing; a capture group that fails to resolve is skipped silently.
+ *
+ * @param line - single source line to match against
+ * @param lineNum - 1-based line number recorded on any finding
+ * @param path - repo-relative source path used in findings
+ * @param check - concern-count check supplying the pattern and authoritative counts
+ * @returns drift findings for this line; empty when the claims match the live counts
+ */
 function matchConcernCheckOnLine(
   line: string,
   lineNum: number,
@@ -395,6 +409,7 @@ function matchConcernCheckOnLine(
  * Each check's pattern must have two capture groups: (1) concern label,
  * (2) claimed number. The authoritative count is looked up via `actualFor`.
  * Fenced code blocks are skipped unless the check sets `scanFenced: true`.
+ * Error behavior: throws nothing; every drift is reported as a content finding.
  *
  * @param path Repo-relative source path used in findings.
  * @param text Markdown content to scan.
@@ -425,6 +440,8 @@ function scanConcernCountClaims(
 
 /**
  * Extract backtick-wrapped repo-relative paths and flag ones that do not exist.
+ * Error behavior: throws nothing; an unresolved path is reported as informational rather than
+ * failing the check, because a doc may legitimately name a path the target project has not created.
  *
  * @param path Repo-relative source path used in findings.
  * @param text Markdown content to scan.
@@ -504,6 +521,8 @@ const EVIDENCE_ANCHOR_RE =
  * edits to the constant drift past the doc and the divergence ships silently.
  * Fenced code blocks are excluded because sample output legitimately discusses
  * values without anchoring them.
+ * The phrase pattern is rebuilt per file because a global-flag RegExp mutates its own `lastIndex`.
+ * Error behavior: throws nothing; every unanchored claim is reported as informational.
  *
  * @param path Repo-relative source path used in findings.
  * @param text Markdown content to scan.

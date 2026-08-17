@@ -5,7 +5,6 @@
  * Users should see conflicts before any installer mutation occurs.
  */
 import { describe, it } from "node:test";
-import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,

@@ -194,7 +194,20 @@ function shouldCheckFormatter(lang: string, languages: string[]): boolean {
   );
 }
 
-/** Detect formatter gaps. */
+/**
+ * List the detected languages that the project's format command does not appear to cover.
+ * Use when building setup signals so the prompt can name the specific languages missing a formatter
+ * instead of a generic nudge. Matching is a substring test against the format command text, so a
+ * formatter invoked through an unrelated wrapper script reads as a gap.
+ * Bash is only checked when it is the primary language or one of at most two languages overall,
+ * because a repo carrying a few shell scripts should not be told to adopt a shell formatter.
+ *
+ * @param languages - detected languages, most significant first; the first entry drives the bash rule
+ * @param formatCommand - the project's format script; `null` is treated as no formatter configured,
+ *   so every language with a known formatter counts as a gap
+ * @returns gap languages in `languages` order; empty means every language with a known formatter is
+ *   covered, and languages absent from the formatter map are never reported either way
+ */
 function detectFormatterGaps(
   languages: string[],
   formatCommand: string | null,

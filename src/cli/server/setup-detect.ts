@@ -153,7 +153,15 @@ function addLabel(labels: string[], label: string): void {
   if (!labels.includes(label)) labels.push(label);
 }
 
-/** Read and parse one root JSON file. Invalid or missing files are ignored. */
+/**
+ * Read and parse one root JSON file.
+ * Error behavior: throws nothing; a missing, unreadable, or non-object file swallows the failure and
+ * reports null, so an unparseable manifest degrades detection instead of failing the whole scan.
+ *
+ * @param projectPath - project root the file is resolved against
+ * @param filename - root-relative filename to read
+ * @returns the parsed object, or null when the file is absent, malformed, or not a JSON object
+ */
 function readRootJson(
   projectPath: string,
   filename: string,
@@ -221,6 +229,17 @@ function objectAt(candidate: unknown): Record<string, string> {
   );
 }
 
+/**
+ * Pick the best npm script for one command role, preferring exact names over fuzzy matches.
+ * Exact hits return the script body so the user sees the real command, while fuzzy hits return
+ * `npm run <key>` because a partial name match is not strong enough to quote verbatim.
+ *
+ * @param scripts - the package's script map
+ * @param exactKeys - script names tried first; a hit returns the script body itself
+ * @param fuzzyKeys - script names tried next; a hit returns an `npm run` invocation
+ * @param containsKeys - substrings used for the final scan; defaults to `fuzzyKeys`
+ * @returns the chosen command, or an empty string when only placeholder scripts exist
+ */
 function scriptCommand(
   scripts: Record<string, string>,
   exactKeys: readonly string[],
@@ -244,6 +263,13 @@ function scriptCommand(
   return fuzzy ? `npm run ${fuzzy}` : "";
 }
 
+/**
+ * Pick the first matching Composer script, joining array-form scripts into one shell line.
+ *
+ * @param scripts - the `scripts` block from composer.json
+ * @param keys - script names tried in order; the first match wins
+ * @returns the command, or an empty string when no listed key holds a usable string or string array
+ */
 function composerScriptCommand(
   scripts: JsonObject,
   keys: readonly string[],
@@ -273,6 +299,16 @@ function isPlaceholderScript(command: string): boolean {
   );
 }
 
+/**
+ * Fill only the command slots the target has not already claimed.
+ * First writer wins, so the detector order decides which language supplies each command in a
+ * polyglot project rather than the last one silently overwriting the rest.
+ * Side effect: mutates `target` in place.
+ *
+ * @param target - accumulated commands; only empty slots are filled
+ * @param next - candidate commands from one language detector
+ * @returns nothing; the result is the filled slots on `target`
+ */
 function mergeCommands(
   target: SetupCommands,
   next: Partial<SetupCommands>,
@@ -283,6 +319,15 @@ function mergeCommands(
   target.format ||= next.format ?? "";
 }
 
+/**
+ * Detect Node languages, frameworks, and commands from package.json.
+ * Side effect: appends to the `languages` and `frameworks` lists in place.
+ *
+ * @param projectPath - project root
+ * @param languages - accumulator appended to when Node or TypeScript is detected
+ * @param frameworks - accumulator appended to for each recognised framework dependency
+ * @returns detected commands; empty when the project has no readable package.json
+ */
 function collectNodeSetup(
   projectPath: string,
   languages: string[],
@@ -337,6 +382,18 @@ function composerScripts(composer: JsonObject): JsonObject {
     : {};
 }
 
+/**
+ * Label PHP frameworks from Composer dependencies and their marker files.
+ * Both a dependency and a marker file are accepted because a vendored or partially installed
+ * project may show only one of the two.
+ * Side effect: appends to the `languages` and `frameworks` lists in place.
+ *
+ * @param projectPath - project root, checked for framework marker files
+ * @param deps - merged require and require-dev map
+ * @param languages - accumulator appended to with PHP and any templating language
+ * @param frameworks - accumulator appended to for each recognised framework
+ * @returns nothing; the result is the appended labels
+ */
 function collectPHPFrameworks(
   projectPath: string,
   deps: Record<string, string>,
@@ -358,6 +415,15 @@ function collectPHPFrameworks(
   }
 }
 
+/**
+ * Choose PHP commands from Composer scripts, falling back to conventional vendor binaries.
+ * A configured script always wins, because a project that defines one usually wraps setup the raw
+ * binary would skip.
+ *
+ * @param projectPath - project root, checked for phpunit and phpstan configuration
+ * @param scripts - the `scripts` block from composer.json
+ * @returns detected commands; individual slots stay empty when neither source supplies one
+ */
 function collectPHPCommands(
   projectPath: string,
   scripts: JsonObject,
@@ -377,6 +443,15 @@ function collectPHPCommands(
   };
 }
 
+/**
+ * Detect PHP languages, frameworks, and commands from composer.json.
+ * Side effect: appends to the `languages` and `frameworks` lists in place.
+ *
+ * @param projectPath - project root
+ * @param languages - accumulator appended to when PHP is detected
+ * @param frameworks - accumulator appended to for each recognised framework
+ * @returns detected commands; empty when the project has no readable composer.json
+ */
 function collectPHPSetup(
   projectPath: string,
   languages: string[],
@@ -394,6 +469,15 @@ function collectPHPSetup(
   return collectPHPCommands(projectPath, scripts);
 }
 
+/**
+ * Detect Python from any of its packaging markers and fill its conventional commands.
+ * Side effect: appends to `languages` and fills empty slots on `commands`, both in place.
+ *
+ * @param projectPath - project root, checked for packaging markers
+ * @param languages - accumulator appended to when Python is detected
+ * @param commands - accumulated commands; only empty slots are filled
+ * @returns nothing; a project with no Python marker is left untouched
+ */
 function collectPythonSetup(
   projectPath: string,
   languages: string[],
@@ -412,6 +496,15 @@ function collectPythonSetup(
   }
 }
 
+/**
+ * Detect Go from go.mod and fill its conventional toolchain commands.
+ * Side effect: appends to `languages` and fills empty slots on `commands`, both in place.
+ *
+ * @param projectPath - project root, checked for go.mod
+ * @param languages - accumulator appended to when Go is detected
+ * @param commands - accumulated commands; only empty slots are filled
+ * @returns nothing; a project without go.mod is left untouched
+ */
 function collectGoSetup(
   projectPath: string,
   languages: string[],
@@ -426,6 +519,15 @@ function collectGoSetup(
   }
 }
 
+/**
+ * Detect Rust from Cargo.toml and fill its conventional toolchain commands.
+ * Side effect: appends to `languages` and fills empty slots on `commands`, both in place.
+ *
+ * @param projectPath - project root, checked for Cargo.toml
+ * @param languages - accumulator appended to when Rust is detected
+ * @param commands - accumulated commands; only empty slots are filled
+ * @returns nothing; a project without Cargo.toml is left untouched
+ */
 function collectRustSetup(
   projectPath: string,
   languages: string[],
@@ -440,6 +542,15 @@ function collectRustSetup(
   }
 }
 
+/**
+ * Detect Ruby from a Gemfile and fill its conventional commands.
+ * Side effect: appends to `languages` and fills empty slots on `commands`, both in place.
+ *
+ * @param projectPath - project root, checked for a Gemfile
+ * @param languages - accumulator appended to when Ruby is detected
+ * @param commands - accumulated commands; only empty slots are filled
+ * @returns nothing; a project without a Gemfile is left untouched
+ */
 function collectRubySetup(
   projectPath: string,
   languages: string[],
@@ -452,6 +563,16 @@ function collectRubySetup(
   }
 }
 
+/**
+ * Detect Java from Maven or Gradle and fill the matching build tool's commands.
+ * Maven wins when both are present, because a pom.xml is the more specific signal.
+ * Side effect: appends to `languages` and fills empty slots on `commands`, both in place.
+ *
+ * @param projectPath - project root, checked for pom.xml or a build.gradle variant
+ * @param languages - accumulator appended to when Java is detected
+ * @param commands - accumulated commands; only empty slots are filled
+ * @returns nothing; a project with neither build file is left untouched
+ */
 function collectJavaSetup(
   projectPath: string,
   languages: string[],
@@ -482,6 +603,18 @@ function collectShellSetup(projectPath: string, languages: string[]): void {
   }
 }
 
+/**
+ * Run every remaining single-marker language detector against the project root.
+ * Node and PHP run before this because they carry framework detection and richer command sources;
+ * everything here only needs one marker file, so the order among them does not change the result.
+ * Side effect: appends to `languages` and `frameworks` and fills empty `commands` slots, in place.
+ *
+ * @param projectPath - project root
+ * @param languages - accumulator appended to by each detector that matches
+ * @param frameworks - accumulator appended to for Docker
+ * @param commands - accumulated commands; only empty slots are filled
+ * @returns nothing; a project matching no marker is left untouched
+ */
 function collectOtherRootSetup(
   projectPath: string,
   languages: string[],

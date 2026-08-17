@@ -71,7 +71,15 @@ function readBody(
   });
 }
 
-/** Send a JSON response. */
+/**
+ * Send a JSON response and end the request.
+ * Side effect: writes response headers and body, so the response cannot be modified afterwards.
+ *
+ * @param res - response to complete
+ * @param status - HTTP status code to send
+ * @param body - value serialised as the JSON body
+ * @returns nothing; the response is closed on return
+ */
 function jsonResponse(
   res: ServerResponse,
   status: number,
@@ -136,6 +144,13 @@ function tokenMatches(expected: string, actual: string | null): boolean {
 
 /**
  * Start the local dashboard server and expose its API endpoints.
+ * The whole server lives in one closure because every route shares the same per-run token, live
+ * reload set, and terminal state; hoisting the routes out would mean threading that mutable state
+ * through each one, so the length here is deliberate rather than accidental.
+ * Side effect: binds a loopback TCP port, starts a filesystem watcher in dev mode, and registers
+ * SIGTERM and SIGINT handlers that exit the process.
+ * Error behavior: throws nothing out of this call; the promise resolves once the port is listening,
+ * and each per-request failure reports as an HTTP response instead of escaping the server.
  *
  * @param options - selected project path plus optional dev-mode/dashboard configuration
  * @returns running dashboard handle with URL, token, and close method
@@ -222,7 +237,15 @@ export function serveDashboard(
       return liveReloadWssPromise;
     }
 
-    /** DNS rebinding protection: reject API requests with unexpected Host header. */
+    /**
+     * DNS rebinding protection: reject API requests with an unexpected Host or Origin header.
+     * Side effect: writes and ends the response when the request is rejected.
+     *
+     * @param req - incoming request whose headers are checked
+     * @param url - parsed request URL; only `/api/` paths are guarded
+     * @param res - response ended with a rejection when the headers are not allowed
+     * @returns true when the request was rejected and the caller must stop handling it
+     */
     function rejectBadHostOrOrigin(
       req: IncomingMessage,
       url: URL,
@@ -327,7 +350,14 @@ export function serveDashboard(
       return !originAllowed(req);
     }
 
-    /** Dispatch one HTTP request across the dashboard routes in priority order. */
+    /**
+     * Dispatch one HTTP request across the dashboard routes in priority order.
+     * Side effect: writes the response through whichever route claims the request.
+     *
+     * @param req - incoming request
+     * @param res - response completed by the matching route
+     * @returns nothing; the response is ended before this resolves
+     */
     async function handleRequest(
       req: IncomingMessage,
       res: ServerResponse,
@@ -396,7 +426,11 @@ export function serveDashboard(
     let closeDevWatcher: (() => void) | null = null;
     if (devMode) {
       const dashDir = dirname(shellPath);
-      /** Notify live-reload clients that dashboard assets changed. */
+      /**
+       * Notify live-reload clients that dashboard assets changed.
+       * Error behavior: throws nothing; a send to a closed socket is swallowed so one dead client
+       * cannot stop the others from reloading.
+       */
       const notifyReload = (): void => {
         for (const client of liveReloadClients) {
           try {
@@ -504,7 +538,11 @@ export function serveDashboard(
       return closePromise;
     }
 
-    /** Shut down the dashboard server's live terminal state before exiting the process. */
+    /**
+     * Shut down the dashboard server's live terminal state before exiting the process.
+     * Error behavior: exits the process regardless of whether the shutdown succeeded, so a stuck
+     * terminal cannot leave the signal unhandled.
+     */
     const doShutdown = (): void => {
       void closeServer().finally(() => {
         process.exit(0);

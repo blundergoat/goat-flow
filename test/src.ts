@@ -26,6 +26,7 @@ export {
   uniquePaths,
 } from "../src/cli/audit/check-agent-common.js";
 export { agentDenyMechanism } from "../src/cli/audit/check-agent-deny-mechanism.js";
+export { checkHookRuntimeSmoke } from "../src/cli/audit/check-agent-deny-runtime.js";
 export { scanSemanticDrift } from "../src/cli/audit/check-factual-semantic-drift.js";
 export { AGENT_CHECKS } from "../src/cli/audit/check-agent-setup.js";
 export {
@@ -57,6 +58,7 @@ export { extractSettingsFacts } from "../src/cli/facts/agent/settings.js";
 export { extractSkillFacts } from "../src/cli/facts/agent/skills.js";
 export { createFS } from "../src/cli/facts/fs.js";
 export { extractProjectFacts } from "../src/cli/facts/orchestrator.js";
+export { applyHookState } from "../src/cli/server/hook-registrar.js";
 export { composeArtifactQualityPrompt } from "../src/cli/prompt/compose-quality.js";
 export { composeSetup } from "../src/cli/prompt/compose-setup.js";
 export {

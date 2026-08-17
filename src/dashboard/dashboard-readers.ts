@@ -90,6 +90,11 @@ function readString(rawValue: unknown, fallback = ""): string {
   return typeof rawValue === "string" ? rawValue : fallback;
 }
 
+/** Read a boolean value with a safe fallback for invalid payload fields. */
+function readBoolean(rawValue: unknown, withDefault: boolean): boolean {
+  return typeof rawValue === "boolean" ? rawValue : withDefault;
+}
+
 /** Read a string array from raw payload data. */
 function readStringArray(rawValue: unknown): string[] {
   return Array.isArray(rawValue)
@@ -260,9 +265,9 @@ const AUDIT_EVIDENCE_PATH_KEYS = [
 function assignEvidencePaths(
   provenance: AuditCheckProvenance,
   key: "evidence_paths" | "framework_evidence_paths" | "target_evidence_paths",
-  value: unknown,
+  rawPaths: unknown,
 ): void {
-  if (Array.isArray(value)) provenance[key] = readStringArray(value);
+  if (Array.isArray(rawPaths)) provenance[key] = readStringArray(rawPaths);
 }
 
 /** Read one audit-check provenance block and reject unknown contract discriminants. */

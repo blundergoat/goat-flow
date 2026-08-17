@@ -74,36 +74,48 @@ function parseCommand(argv: string[]): {
 }
 
 /** Parse the `--format` flag; throws CLIError for invalid values before command dispatch. */
-function parseFormatArg(value: string | undefined): CLIOptions["format"] {
+function parseFormatArg(rawFormat: string | undefined): CLIOptions["format"] {
   const defaultFormat: CLIOptions["format"] = process.stdout.isTTY
     ? "text"
     : "json";
-  if (!value) return defaultFormat;
-  if (!VALID_FORMATS.includes(value as (typeof VALID_FORMATS)[number])) {
+  if (!rawFormat) return defaultFormat;
+  if (!VALID_FORMATS.includes(rawFormat as (typeof VALID_FORMATS)[number])) {
     throw new CLIError(
-      `Invalid format: ${value}. Use: json, text, markdown, sarif`,
+      `Invalid format: ${rawFormat}. Use: json, text, markdown, sarif`,
       2,
     );
   }
-  return value as CLIOptions["format"];
+  return rawFormat as CLIOptions["format"];
 }
 
 /** Parse the `--agent` flag; throws CLIError for invalid or deprecated aggregate values. */
-function parseAgentArg(value: string | undefined): AgentId | null {
-  if (!value) return null;
-  if (value === "all") {
+function parseAgentArg(rawAgent: string | undefined): AgentId | null {
+  if (!rawAgent) return null;
+  if (rawAgent === "all") {
     throw new CLIError(
       `--agent all is no longer supported. Run setup separately for each agent: ${validAgentFlags()}`,
       2,
     );
   }
-  if (!validAgents().includes(value as AgentId)) {
-    throw new CLIError(`Invalid agent: ${value}. Use: ${validAgentList()}`, 2);
+  if (!validAgents().includes(rawAgent as AgentId)) {
+    throw new CLIError(
+      `Invalid agent: ${rawAgent}. Use: ${validAgentList()}`,
+      2,
+    );
   }
-  return value as AgentId;
+  return rawAgent as AgentId;
 }
 
-/** Validate flags shared across commands. */
+/**
+ * Reject a flag the user placed on a command it does not belong to.
+ * Error behavior: throws CLIError with exit code 2 naming the flag and its owning command.
+ *
+ * @param command - command the user actually invoked
+ * @param expectedCommand - the only command this flag is valid for
+ * @param flag - flag name as the user typed it, echoed verbatim in the message
+ * @param isSet - whether the user supplied the flag; false always passes
+ * @returns nothing; returning at all means the placement is valid
+ */
 function rejectFlagOutsideCommand(
   command: Command,
   expectedCommand: Command,
@@ -139,8 +151,8 @@ function parsedString(
   values: ParsedArgValues,
   name: string,
 ): string | undefined {
-  const value = values[name];
-  return typeof value === "string" ? value : undefined;
+  const parsedEntry = values[name];
+  return typeof parsedEntry === "string" ? parsedEntry : undefined;
 }
 
 /** Supply ignored, valid namespace positionals while help or version short-circuits dispatch. */
@@ -198,7 +210,16 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
   );
 }
 
-/** Reject runtime scenario flags outside the explicit hooks verification route. */
+/**
+ * Reject runtime scenario flags outside the explicit hooks verification route.
+ * Error behavior: throws CLIError with exit code 2; a scenario name has no meaning for listing,
+ * toggling, or syncing, so accepting it silently would imply a check that never ran.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map; only `--scenario` is inspected here
+ * @param hookSubcommand - hooks subcommand, or null when the command is not `hooks`
+ * @returns nothing; returning means no misplaced scenario flag was supplied
+ */
 function validateHookFlags(
   command: Command,
   values: ParsedArgValues,
@@ -230,7 +251,15 @@ function validatePlansFlags(
   validatePlansForceFlag(command, values, plansSubcommand);
 }
 
-/** Keep strict accounting on the read-only check route. */
+/**
+ * Keep strict plan accounting on the read-only check route.
+ * Error behavior: throws CLIError with exit code 2 when `--strict` appears anywhere else.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map; only `--strict` is inspected here
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @returns nothing; returning means the flag is on its only valid route
+ */
 function validatePlansStrictFlag(
   command: Command,
   values: ParsedArgValues,
@@ -244,7 +273,17 @@ function validatePlansStrictFlag(
   }
 }
 
-/** Require a valid category only on timing starts. */
+/**
+ * Require a category on timing starts and reject it everywhere else.
+ * Error behavior: throws CLIError with exit code 2 in both directions, because a start with no
+ * category would record time that no later report can attribute.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map; only `--category` is inspected here
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @param plansTimeAction - timing action, or null when the subcommand is not `time`
+ * @returns nothing; returning means the category is present exactly where it is required
+ */
 function validatePlansCategoryFlag(
   command: Command,
   values: ParsedArgValues,
@@ -264,7 +303,17 @@ function validatePlansCategoryFlag(
   }
 }
 
-/** Keep pause recovery/finalization flags on timing stops and mutually exclusive. */
+/**
+ * Keep pause recovery and finalization flags on timing stops, and mutually exclusive.
+ * Error behavior: throws CLIError with exit code 2 for a misplaced flag and again for the combined
+ * pair, because finalizing and discarding open entries are opposite resolutions of the same state.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map; `--finalize` and `--discard-open` are inspected here
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @param plansTimeAction - timing action, or null when the subcommand is not `time`
+ * @returns nothing; returning means at most one stop flag is set, on the stop route
+ */
 function validatePlansStopFlags(
   command: Command,
   values: ParsedArgValues,
@@ -289,7 +338,16 @@ function validatePlansStopFlags(
   }
 }
 
-/** Keep plan-force semantics limited to generated export replacement. */
+/**
+ * Keep plan-force semantics limited to generated export replacement.
+ * Error behavior: throws CLIError with exit code 2 when `--force` is used on another plans route,
+ * so force can never mean "overwrite" for a command that was not designed to replace a file.
+ *
+ * @param command - command the user invoked; non-plans commands are left to their own validators
+ * @param values - parsed flag map; only `--force` is inspected here
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @returns nothing; returning means force is absent or on the export route
+ */
 function validatePlansForceFlag(
   command: Command,
   values: ParsedArgValues,
@@ -304,16 +362,27 @@ function validatePlansForceFlag(
   }
 }
 
-/** Parse a start category after route validation has rejected misplaced flags. */
+/**
+ * Parse a start category after route validation has rejected misplaced flags.
+ * Error behavior: throws CLIError with exit code 2 for an unrecognised category name.
+ *
+ * @param rawCategory - flag text as typed; undefined is only valid on a non-start action
+ * @param action - timing action; anything but `start` yields null without inspecting the text
+ * @returns the category, or null when this action does not carry one
+ */
 function parsePlansTimeCategoryArg(
-  value: string | undefined,
+  rawCategory: string | undefined,
   action: PlansTimeAction | null,
 ): PlansTimeCategory | null {
-  if (action !== "start" || value === undefined) return null;
-  if (value !== "product" && value !== "proof" && value !== "other") {
+  if (action !== "start" || rawCategory === undefined) return null;
+  if (
+    rawCategory !== "product" &&
+    rawCategory !== "proof" &&
+    rawCategory !== "other"
+  ) {
     throw new CLIError("--category must be product, proof, or other.", 2);
   }
-  return value;
+  return rawCategory;
 }
 
 /** Returns true when the command resolves to a deterministic install or setup preview/apply path. */
@@ -336,7 +405,16 @@ function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
   // rejected them could not answer the question the user is actually asking.
 }
 
-/** Reject authority combinations that would widen a write past what the user named. */
+/**
+ * Reject authority combinations that would widen a write past what the user named.
+ * Error behavior: throws CLIError with exit code 2 for a force flag outside install/setup, and
+ * again for `--force-user-owned` with no `--force-path`, because replacing user-owned content is
+ * never a broad choice; every such file must be named explicitly.
+ *
+ * @param command - command the user invoked; only install and setup routes may carry force flags
+ * @param values - parsed flag map; the three force flags are inspected here
+ * @returns nothing; returning means no force flag widens the write beyond the named paths
+ */
 function validateAuthorityFlags(
   command: Command,
   values: ParsedArgValues,
@@ -446,7 +524,16 @@ function validateTargetTrustFlags(
   }
 }
 
-/** Validate quality mode flags against the selected quality subcommand. */
+/**
+ * Validate quality mode flags against the selected quality subcommand.
+ * Error behavior: throws CLIError with exit code 2 for `--mode` off its three routes, and for
+ * `--output` on save, which owns its report destination and must not be redirected.
+ *
+ * @param command - command the user invoked; non-quality commands pass through untouched
+ * @param values - parsed flag map; `--mode` and `--output` are inspected here
+ * @param qualitySubcommand - selected quality subcommand
+ * @returns nothing; returning means both flags are on routes that honour them
+ */
 function validateQualityFlags(
   command: Command,
   values: ParsedArgValues,
@@ -474,7 +561,21 @@ function validateQualityFlags(
   }
 }
 
-/** Validate flag combinations after strict parseArgs accepts their shapes. */
+/**
+ * Validate flag combinations after strict parseArgs has accepted their individual shapes.
+ * This is the single ordering point for every per-command validator, so a user with several
+ * misplaced flags always sees the same first complaint rather than a parse-order accident.
+ * Error behavior: throws the first CLIError raised by any validator, all with exit code 2.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map handed to each validator in turn
+ * @param qualitySubcommand - selected quality subcommand
+ * @param skillSubcommand - skill subcommand, or null when the command is not `skill`
+ * @param hookSubcommand - hooks subcommand, or null when the command is not `hooks`
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @param plansTimeAction - timing action, or null when the subcommand is not `time`
+ * @returns nothing; returning means every combination check passed
+ */
 function validateFlagCombinations(
   command: Command,
   values: ParsedArgValues,
@@ -503,10 +604,10 @@ function validateFlagCombinations(
 }
 
 /** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
-function parseEventsLimitArg(value: string | undefined): number {
-  if (value === undefined) return 20;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0 || String(parsed) !== value) {
+function parseEventsLimitArg(rawLimit: string | undefined): number {
+  if (rawLimit === undefined) return 20;
+  const parsed = Number.parseInt(rawLimit, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0 || String(parsed) !== rawLimit) {
     throw new CLIError("--limit must be a positive integer.", 2);
   }
   return Math.min(parsed, 500);

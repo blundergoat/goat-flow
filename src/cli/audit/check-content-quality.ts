@@ -390,7 +390,17 @@ function scanUnresolvedReadiness(path: string, text: string): ContentFinding[] {
   return findings;
 }
 
-/** Add one blocking content finding for a marker inside a readiness section. */
+/**
+ * Add one blocking content finding for a marker inside a readiness section.
+ * Side effect: mutates the caller's `findings` array in place rather than returning a new list.
+ * Error behavior: throws nothing; a line with no marker is reported as nothing at all.
+ *
+ * @param line - source line to inspect for an unresolved marker
+ * @param lineNumber - 1-based line number recorded on any finding
+ * @param path - repo-relative source path used in findings
+ * @param findings - accumulator appended to in place; left untouched when the line is clean
+ * @returns nothing; the result is the appended finding, if any
+ */
 function applyUnresolvedContentMarker(
   line: string,
   lineNumber: number,
@@ -417,7 +427,18 @@ function isTableSeparatorLine(line: string): boolean {
   return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(line);
 }
 
-/** Apply a PatternRule array to a line, accumulating any matches into findings. */
+/**
+ * Apply a PatternRule array to a line, accumulating any matches into findings.
+ * Side effect: mutates the caller's `findings` array in place rather than returning a new list.
+ * Error behavior: throws nothing; a rule that does not match is reported as nothing at all.
+ *
+ * @param rules - rules applied in order; every matching rule contributes its own finding
+ * @param line - source line to match against
+ * @param lineNumber - 1-based line number recorded on any finding
+ * @param path - repo-relative source path used in findings
+ * @param findings - accumulator appended to in place; left untouched when no rule matches
+ * @returns nothing; the result is whatever was appended
+ */
 function applyPatternRules(
   rules: PatternRule[],
   line: string,
@@ -438,7 +459,17 @@ function applyPatternRules(
   }
 }
 
-/** Apply vague-term detection to a line (full mode only). */
+/**
+ * Apply vague-term detection to a line, in full mode only.
+ * Side effect: mutates the caller's `findings` array in place rather than returning a new list.
+ * Error behavior: throws nothing; a line with no vague term is reported as nothing at all.
+ *
+ * @param line - source line to match against every configured vague term
+ * @param lineNumber - 1-based line number recorded on any finding
+ * @param path - repo-relative source path used in findings
+ * @param findings - accumulator appended to in place; left untouched when no term matches
+ * @returns nothing; the result is whatever was appended
+ */
 function applyVagueTerms(
   line: string,
   lineNumber: number,
@@ -493,6 +524,7 @@ function scanLine(
  *
  * Pass `mode: "restricted"` for learning-loop files to skip vague-term checks
  * on incident-description prose while still rejecting generic instructions.
+ * Error behavior: throws nothing; every problem is reported as a content finding.
  *
  * @param path - Repo-relative path used in emitted findings and mode-specific rules.
  * @param text - Markdown or instruction-file content to scan.
@@ -640,7 +672,15 @@ function isLocalMarkdownArtifact(path: string): boolean {
   );
 }
 
-/** Discover Markdown not already covered by the curated prose-quality scans. */
+/**
+ * Discover Markdown not already covered by the curated prose-quality scans.
+ * The result is sorted so the audit stays deterministic: glob order varies by filesystem, and an
+ * unsorted list would reorder findings between runs on the same unchanged tree.
+ *
+ * @param ctx - audit context supplying the target filesystem
+ * @param scanned - paths the curated scans already covered; these are excluded
+ * @returns additional Markdown paths in stable lexicographic order; empty when everything is covered
+ */
 function resolveAdditionalEvidenceTargets(
   ctx: AuditContext,
   scanned: ReadonlySet<string>,

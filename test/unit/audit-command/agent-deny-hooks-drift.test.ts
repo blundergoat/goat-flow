@@ -9,6 +9,7 @@ import {
   PROFILES,
   PROJECT_ROOT,
   assert,
+  createFS,
   describe,
   it,
   makeCtx,
@@ -19,9 +20,7 @@ import {
 } from "./helpers.js";
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createFS } from "../../../src/cli/facts/fs.js";
-import { checkHookRuntimeSmoke } from "../../../src/cli/audit/check-agent-deny-runtime.js";
-import { applyHookState } from "../../../src/cli/server/hook-registrar.js";
+import { applyHookState, checkHookRuntimeSmoke } from "../../src.js";
 import { withTempProject } from "../hook-registrar.helpers.js";
 
 /** Build a context that deliberately crosses the trusted runtime-evidence boundary. */
@@ -179,7 +178,6 @@ describe("agent deny hook template comparison", () => {
   }
 
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -274,7 +272,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -323,7 +321,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -376,7 +374,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -430,7 +428,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -503,7 +501,6 @@ describe("agent deny hook template comparison", () => {
   }
 
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -530,7 +527,7 @@ describe("agent deny hook template comparison", () => {
       agentFilter: "claude",
       projectPath: PROJECT_ROOT,
       fs: stubFS({
-        readFile: installedGuardrailContent(".claude/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".goat-flow/hooks/deny-dangerous.sh": `${templates.dispatcher}\n# local drift\n`,
         }),
       }),
@@ -585,7 +582,6 @@ describe("agent deny hook template comparison", () => {
   }
 
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -612,7 +608,7 @@ describe("agent deny hook template comparison", () => {
       agentFilter: "claude",
       projectPath: PROJECT_ROOT,
       fs: stubFS({
-        readFile: installedGuardrailContent(".claude/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh": null,
         }),
       }),
@@ -670,7 +666,6 @@ describe("agent deny hook template comparison", () => {
   }
 
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -713,7 +708,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".github/hooks", templates),
+        readFile: installedGuardrailContent(templates),
       }),
     });
 
@@ -764,7 +759,6 @@ describe("agent deny hook template comparison", () => {
   }
 
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -791,7 +785,7 @@ describe("agent deny hook template comparison", () => {
       agentFilter: "claude",
       projectPath: PROJECT_ROOT,
       fs: stubFS({
-        readFile: installedGuardrailContent(".claude/hooks", templates),
+        readFile: installedGuardrailContent(templates),
       }),
     });
     assert.equal(denyCheck.run(ctx), null);

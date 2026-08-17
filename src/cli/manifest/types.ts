@@ -92,6 +92,14 @@ interface ManifestInstructionParityRule {
   phrases: string[];
 }
 
+/** The shape every agent instruction file (`CLAUDE.md`, `AGENTS.md`, the Copilot file) declares in
+ *  `workflow/manifest.json`. Two fields are load-bearing: `required_sections` is read by
+ *  manifest-json to build the (label, pattern) pairs section checks match on, and `parity_phrases`
+ *  is read by the drift check - so this block, not the check source, is what keeps the three
+ *  instruction files saying the same thing.
+ *  `line_target`, `line_limit`, and `version_header_pattern` are declared here and typed for
+ *  passthrough, but no check currently reads them; treat them as the documented budget authors aim
+ *  at (target 125, hard limit 150) rather than something enforced at audit time. */
 interface ManifestInstructionFile {
   line_target: number;
   line_limit: number;

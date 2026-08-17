@@ -203,7 +203,21 @@ function collectNodeLanguages(
   return languages;
 }
 
-/** Detect root node stack. */
+/**
+ * Turn the repository-root `package.json` into the languages and commands setup reports.
+ * Use for the root manifest only; monorepo subdirectory manifests are detected separately.
+ * Runtime and dev dependencies are passed on separately as well as merged, because a package
+ * present only in `devDependencies` should not make its language look like something the project
+ * ships. Commands come from `scripts` alone, so a project with dependencies but no scripts still
+ * reports languages with every command left null.
+ *
+ * @param fs - readonly project filesystem, used for language markers the manifest only implies
+ *   (`tsconfig.json`, Node source files)
+ * @param pkg - parsed root `package.json`; missing `dependencies`, `devDependencies`, or `scripts`
+ *   keys each degrade to empty rather than throwing
+ * @returns detected languages plus any build/test/lint/format commands; placeholder scripts such as
+ *   the npm-init default test stub are filtered out and come back as null
+ */
 function detectRootNodeStack(
   fs: ReadonlyFS,
   pkg: Record<string, unknown>,

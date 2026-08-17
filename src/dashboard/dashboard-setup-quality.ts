@@ -68,6 +68,13 @@ type DashboardQualityGenerateOptions = Partial<
   Record<"fast" | "fresh", boolean>
 >;
 
+/**
+ * Resolve an agent's human-readable name for setup and quality labels.
+ *
+ * @param ctx - dashboard state holding the supported-agent list
+ * @param agentId - agent to name; ids absent from the list are still rendered rather than dropped
+ * @returns the agent's display name, or `agentId` itself when the list has no entry for it
+ */
 function dashboardAgentDisplayName(
   ctx: DashboardSetupQualityContext,
   agentId: RunnerId,
@@ -77,6 +84,12 @@ function dashboardAgentDisplayName(
   );
 }
 
+/**
+ * List the instruction files the selected agent installs, for the Setup view's explanatory line.
+ *
+ * @param ctx - dashboard state; `setupSelectedAgent` chooses whose surfaces are listed
+ * @returns comma-separated surface list, or the bare agent id when that agent is not in the list
+ */
 function dashboardSetupInstructionSurfaces(
   ctx: DashboardSetupQualityContext,
 ): string {
@@ -86,6 +99,13 @@ function dashboardSetupInstructionSurfaces(
   return agent?.setupSurfaces.join(", ") ?? ctx.setupSelectedAgent;
 }
 
+/**
+ * Look up one configured quality preset by id.
+ *
+ * @param ctx - dashboard state holding the loaded presets
+ * @param presetId - preset to find; an unknown id is a normal miss, not an error
+ * @returns the matching preset, or null when presets have not loaded yet or the id is unknown
+ */
 function dashboardQualityModePreset(
   ctx: DashboardSetupQualityContext,
   presetId: string,
@@ -119,6 +139,15 @@ function dashboardHarnessQualityPrompt(): string {
   ].join("\n");
 }
 
+/**
+ * Build the Quality view's mode cards in display order.
+ * Preset-backed cards render before their preset resolves, so a card can exist with no prompt text
+ * yet; callers must treat a missing prompt as "not ready" rather than "empty prompt".
+ *
+ * @param ctx - dashboard state supplying the loaded presets and the selected project
+ * @returns the mode cards in display order; `prompt` is undefined on a preset-backed card whose
+ *   preset has not loaded
+ */
 function dashboardQualityModes(
   ctx: DashboardSetupQualityContext,
 ): QualityModeOption[] {
@@ -167,6 +196,12 @@ function dashboardQualityModes(
   ];
 }
 
+/**
+ * Resolve the Quality mode card the user currently has selected.
+ *
+ * @param ctx - dashboard state; `selectedQualityModeId` chooses the card
+ * @returns the selected card, or null before a choice is made or when the stored id matches no card
+ */
 function dashboardSelectedQualityModeMeta(
   ctx: DashboardSetupQualityContext,
 ): QualityModeOption | null {
@@ -182,9 +217,15 @@ function dashboardQualityControllingWorkspace(): string {
   return window.__GOAT_FLOW_DEFAULT_PATH__ ?? ".";
 }
 
-/** Quote a value for the shell snippets embedded in generated quality-report prompts. */
-function dashboardQualityShellQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
+/**
+ * Single-quote text for the shell snippets embedded in generated quality-report prompts.
+ *
+ * @param unquotedText - raw text such as a project path; embedded single quotes are escaped, so any
+ *   path the user can select stays one shell word
+ * @returns the quoted text including its surrounding quotes; never empty
+ */
+function dashboardQualityShellQuote(unquotedText: string): string {
+  return `'${unquotedText.replace(/'/g, "'\\''")}'`;
 }
 
 /**
@@ -207,6 +248,14 @@ function dashboardQualityReportProjectPath(
   return ctx.projectPath;
 }
 
+/**
+ * Build the label shown on the Quality launch button.
+ * Prefers the preset's own name so the button matches what the user configured, falling back to the
+ * mode label and finally to the target agent id when no mode is selected.
+ *
+ * @param ctx - dashboard state supplying the selected mode, target agent, and active runner
+ * @returns the launch label; never empty
+ */
 function dashboardQualityLaunchLabel(
   ctx: DashboardSetupQualityContext,
 ): string {
@@ -219,6 +268,15 @@ function dashboardQualityLaunchLabel(
   return `Quality ${modeLabel} for ${dashboardAgentDisplayName(ctx, ctx.qualityAgent)} via ${dashboardAgentDisplayName(ctx, ctx.activeRunner)}`;
 }
 
+/**
+ * Build the report-logging contract appended to every generated quality prompt.
+ * This half of the prompt tells the agent where the report must be saved and what schema it must
+ * satisfy, so a saved report stays loadable by `quality history`.
+ *
+ * @param ctx - dashboard state supplying the target agent and selected project
+ * @param mode - selected mode; decides the owning project and the mode name written into the contract
+ * @returns the contract block as newline-joined Markdown; never empty
+ */
 function dashboardQualityReportLogPrompt(
   ctx: DashboardSetupQualityContext,
   mode: QualityModeOption,
@@ -288,6 +346,13 @@ function dashboardQualityReportLogPrompt(
   ].join("\n");
 }
 
+/**
+ * Assemble one mode's full prompt: the preset text, the scope block, then the report-log contract.
+ *
+ * @param ctx - dashboard state supplying the controlling workspace and the selected target project
+ * @param mode - selected mode; one whose preset has not loaded carries no prompt text yet
+ * @returns the complete prompt, or an empty string when the mode has no prompt text to build on
+ */
 function dashboardBuildQualityModePrompt(
   ctx: DashboardSetupQualityContext,
   mode: QualityModeOption,
@@ -312,7 +377,15 @@ function dashboardBuildQualityModePrompt(
   ].join("\n");
 }
 
-/** Detect the selected project's stack and existing GOAT Flow setup state. */
+/**
+ * Detect the selected project's stack and existing GOAT Flow setup state.
+ * Every payload field is read through a typed fallback because the response is untrusted JSON, so a
+ * partial or malformed reply still leaves the Setup form usable instead of half-populated.
+ * Error behavior: never throws; transport failures and error payloads surface as a toast.
+ *
+ * @param ctx - dashboard state mutated in place with the detected stack, agents, and existing artifacts
+ * @returns nothing; callers read `ctx.setupData` after awaiting
+ */
 async function dashboardDetectStack(
   ctx: DashboardSetupQualityContext,
 ): Promise<void> {
@@ -346,39 +419,31 @@ async function dashboardDetectStack(
     ctx.setupData.agents = Object.fromEntries(
       (Object.keys(defaultAgents) as RunnerId[]).map((agentId) => [
         agentId,
-        typeof agents[agentId] === "boolean"
-          ? agents[agentId]
-          : (defaultAgents[agentId] ?? false),
+        readBoolean(agents[agentId], defaultAgents[agentId] ?? false),
       ]),
     );
     if (!Object.values(ctx.setupData.agents).some((v) => v)) {
       ctx.setupData.agents[ctx.setupSelectedAgent] = true;
     }
     ctx.setupData.existing = {
-      skills:
-        typeof existing.skills === "boolean"
-          ? existing.skills
-          : DEFAULT_EXISTING_ARTIFACTS.skills,
-      instructionsRepoWide:
-        typeof existing.instructionsRepoWide === "boolean"
-          ? existing.instructionsRepoWide
-          : DEFAULT_EXISTING_ARTIFACTS.instructionsRepoWide,
-      instructionsPathScoped:
-        typeof existing.instructionsPathScoped === "boolean"
-          ? existing.instructionsPathScoped
-          : DEFAULT_EXISTING_ARTIFACTS.instructionsPathScoped,
-      lessons:
-        typeof existing.lessons === "boolean"
-          ? existing.lessons
-          : DEFAULT_EXISTING_ARTIFACTS.lessons,
-      footguns:
-        typeof existing.footguns === "boolean"
-          ? existing.footguns
-          : DEFAULT_EXISTING_ARTIFACTS.footguns,
-      config:
-        typeof existing.config === "boolean"
-          ? existing.config
-          : DEFAULT_EXISTING_ARTIFACTS.config,
+      skills: readBoolean(existing.skills, DEFAULT_EXISTING_ARTIFACTS.skills),
+      instructionsRepoWide: readBoolean(
+        existing.instructionsRepoWide,
+        DEFAULT_EXISTING_ARTIFACTS.instructionsRepoWide,
+      ),
+      instructionsPathScoped: readBoolean(
+        existing.instructionsPathScoped,
+        DEFAULT_EXISTING_ARTIFACTS.instructionsPathScoped,
+      ),
+      lessons: readBoolean(
+        existing.lessons,
+        DEFAULT_EXISTING_ARTIFACTS.lessons,
+      ),
+      footguns: readBoolean(
+        existing.footguns,
+        DEFAULT_EXISTING_ARTIFACTS.footguns,
+      ),
+      config: readBoolean(existing.config, DEFAULT_EXISTING_ARTIFACTS.config),
     };
     ctx.setupData.nonGoatFlow = readStringArray(payload.nonGoatFlow);
   } catch (err) {
@@ -388,7 +453,42 @@ async function dashboardDetectStack(
   ctx.setupDetecting = false;
 }
 
-/** Generate setup output for a specific target agent and selected project. */
+/**
+ * Decide whether this agent's cached setup output can be returned without another request.
+ * Switching project empties the whole cache because every cached output describes one project's
+ * detected state, so a stale entry would misdescribe the newly selected target.
+ *
+ * @param ctx - dashboard state whose cache is emptied in place when the project changed
+ * @param agent - agent whose cached output is wanted
+ * @param requestProjectPath - project this request targets; a mismatch clears every cached agent
+ * @param shouldForce - true skips the cache so the caller always refetches
+ * @returns the output to return immediately, or null when the caller must fetch
+ */
+function dashboardReusableSetupOutput(
+  ctx: DashboardSetupQualityContext,
+  agent: RunnerId,
+  requestProjectPath: string,
+  shouldForce: boolean,
+): string | null {
+  if (ctx._setupOutputProjectPath !== requestProjectPath) {
+    ctx.setupOutputs = {};
+    ctx._setupOutputProjectPath = requestProjectPath;
+  }
+  if (shouldForce) return null;
+  return ctx.setupOutputs[agent] || null;
+}
+
+/**
+ * Generate setup output for a specific target agent and selected project.
+ * Three staleness guards exist because the user can switch project or agent mid-request; only the
+ * newest request may overwrite cached output or raise a toast.
+ * Error behavior: never throws; an error payload or transport failure reports as a toast, returns null.
+ *
+ * @param ctx - dashboard state whose `setupOutputs` cache is populated on success
+ * @param targetAgent - agent to generate for; supplies both the request and the cache key
+ * @param options - `force` true regenerates even when this agent already has cached output
+ * @returns the generated output, or null when the request went stale or the server reported an error
+ */
 async function dashboardGenerateSetupPromptForAgent(
   ctx: DashboardSetupQualityContext,
   targetAgent: RunnerId,
@@ -396,20 +496,25 @@ async function dashboardGenerateSetupPromptForAgent(
 ): Promise<string | null> {
   const requestProjectPath = ctx.projectPath;
   const agent = targetAgent;
-  if (ctx._setupOutputProjectPath !== requestProjectPath) {
-    ctx.setupOutputs = {};
-    ctx._setupOutputProjectPath = requestProjectPath;
-  }
-  if (!shouldForce && ctx.setupOutputs[agent]) return ctx.setupOutputs[agent];
+  const cachedOutput = dashboardReusableSetupOutput(
+    ctx,
+    agent,
+    requestProjectPath,
+    shouldForce,
+  );
+  if (cachedOutput !== null) return cachedOutput;
 
   const requestKey = `${requestProjectPath}\0${agent}`;
   ctx._setupPromptRequestKey = requestKey;
   ctx.setupGenerating = true;
+  /** False once the user has switched projects, so this reply must be discarded entirely. */
   const isCurrentProject = (): boolean =>
     ctx.projectPath === requestProjectPath;
+  /** False once a newer request started, so this reply may not overwrite cached output. */
   const isLatestRequest = (): boolean =>
     ctx._setupPromptRequestKey === requestKey;
-  const shouldSurfaceError = (): boolean =>
+  /** A superseded reply still counts when the user has no cached output to fall back on. */
+  const shouldApplyResult = (): boolean =>
     isLatestRequest() || !ctx.setupOutputs[agent];
   try {
     const res = await dashboardFetch(
@@ -419,19 +524,16 @@ async function dashboardGenerateSetupPromptForAgent(
     if (!isCurrentProject()) return null;
     const error = readErrorMessage(payload);
     if (error) {
-      if (shouldSurfaceError()) ctx.showToast(`${agent}: ${error}`, true);
+      if (shouldApplyResult()) ctx.showToast(`${agent}: ${error}`, true);
       return null;
-    } else {
-      const output = readString(payload.output) || "No output generated.";
-      if (isLatestRequest() || !ctx.setupOutputs[agent]) {
-        ctx.setupOutputs[agent] = output;
-      }
-      return output;
     }
+    const output = readString(payload.output) || "No output generated.";
+    if (shouldApplyResult()) ctx.setupOutputs[agent] = output;
+    return output;
   } catch (err) {
     if (!isCurrentProject()) return null;
     const msg = err instanceof Error ? err.message : String(err);
-    if (shouldSurfaceError()) ctx.showToast(msg || "Generation failed", true);
+    if (shouldApplyResult()) ctx.showToast(msg || "Generation failed", true);
     return null;
   } finally {
     if (isLatestRequest()) {
@@ -462,7 +564,15 @@ function dashboardScheduleSetupPrompt(ctx: DashboardSetupQualityContext): void {
   }, SETUP_PROMPT_LOAD_DELAY_MS);
 }
 
-/** Generate a quality prompt for the selected project and agent. */
+/**
+ * Generate a quality prompt for the selected project and agent.
+ * Error behavior: never throws; an error payload or transport failure reports as a toast and leaves
+ * `qualityResult` null so the view keeps its empty state rather than showing a stale report.
+ *
+ * @param ctx - dashboard state mutated in place with the generated result and loading flag
+ * @param options - `fast` allows a cached answer, `fresh` forces regenerated evidence
+ * @returns nothing; callers read `ctx.qualityResult` after awaiting
+ */
 async function dashboardGenerateQuality(
   ctx: DashboardSetupQualityContext,
   {
@@ -482,6 +592,7 @@ async function dashboardGenerateQuality(
   const requestAgent = ctx.qualityAgent;
   const fastParam = useFastCache ? "&fast=true" : "";
   const freshParam = includeFresh ? "&fresh=true" : "";
+  /** False once mode, project, or agent changed, so this reply must not land in the Quality view. */
   const isCurrentRequest = (): boolean =>
     ctx.selectedQualityModeId === requestModeId &&
     ctx.projectPath === requestSelectedProjectPath &&
@@ -506,7 +617,15 @@ async function dashboardGenerateQuality(
   if (isCurrentRequest()) ctx.qualityLoading = false;
 }
 
-/** Load persisted quality-history rows for the selected project and agent. */
+/**
+ * Load persisted quality-history rows for the selected project and agent.
+ * Rows that fail to parse are dropped rather than rejecting the batch, so one corrupt saved report
+ * cannot hide the rest of the user's history.
+ * Error behavior: never throws; an error payload or transport failure reports as a toast.
+ *
+ * @param ctx - dashboard state mutated in place with rows, the latest entry, and any warnings
+ * @returns nothing; callers read `ctx.qualityHistoryRows` after awaiting
+ */
 async function dashboardGenerateQualityHistory(
   ctx: DashboardSetupQualityContext,
 ): Promise<void> {
@@ -519,6 +638,7 @@ async function dashboardGenerateQualityHistory(
     : ctx.projectPath;
   const requestSelectedProjectPath = ctx.projectPath;
   const requestAgent = ctx.qualityAgent;
+  /** False once mode, project, or agent changed, so these rows belong to a view the user left. */
   const isCurrentRequest = (): boolean =>
     ctx.selectedQualityModeId === requestModeId &&
     ctx.projectPath === requestSelectedProjectPath &&

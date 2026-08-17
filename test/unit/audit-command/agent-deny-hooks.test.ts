@@ -141,7 +141,6 @@ describe("agent deny hook template comparison", () => {
   }
 
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -258,7 +257,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates),
+        readFile: installedGuardrailContent(templates),
         listDir: (path) =>
           path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
       }),
@@ -303,7 +302,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates),
+        readFile: installedGuardrailContent(templates),
         listDir: (path) =>
           path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
       }),
@@ -374,7 +373,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates),
+        readFile: installedGuardrailContent(templates),
         listDir: (path) =>
           path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
       }),
@@ -426,7 +425,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -494,7 +493,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -545,7 +544,7 @@ describe("agent deny hook template comparison", () => {
     }) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();
 
-    const readFile = installedGuardrailContent(".codex/hooks", templates, {
+    const readFile = installedGuardrailContent(templates, {
       ".codex/hooks.json": JSON.stringify({
         hooks: {
           PreToolUse: [
@@ -627,7 +626,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -681,7 +680,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -734,7 +733,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks/guard-repository-writes.sh": "# old split hook\n",
         }),
       }),

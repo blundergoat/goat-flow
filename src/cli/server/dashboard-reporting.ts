@@ -53,30 +53,43 @@ interface RecentLessonSummary {
 /**
  * Decide whether to collect per-span audit timings for one request. Profiling is gated on both an
  * explicit opt-in and a trust signal so an untrusted caller cannot force the extra timing work.
+ *
  * @param url - the request URL; profiling requires the `profile=true` query parameter
- * @param devMode - true when the server runs in dev mode; otherwise the `GOAT_FLOW_AUDIT_PROFILE=1`
+ * @param isDevMode - true when the server runs in dev mode; otherwise the `GOAT_FLOW_AUDIT_PROFILE=1`
  *   environment flag must be set to allow profiling on a packaged server
  * @returns true only when the request opts in AND the server is trusted to expose timings
  */
-export function shouldProfileAuditRequest(url: URL, devMode: boolean): boolean {
+export function shouldProfileAuditRequest(
+  url: URL,
+  isDevMode: boolean,
+): boolean {
   return (
     url.searchParams.get("profile") === "true" &&
-    (devMode || process.env["GOAT_FLOW_AUDIT_PROFILE"] === "1")
+    (isDevMode || process.env["GOAT_FLOW_AUDIT_PROFILE"] === "1")
   );
 }
 
+/**
+ * Create the profiler that times audit stages for an opted-in request.
+ * A disabled profiler still runs every measured block, so enabling profiling changes what is
+ * recorded and never what the request computes.
+ *
+ * @param isEnabled - whether timings are collected; false makes `span` a transparent pass-through
+ * @returns a profiler whose `spans` fill only while enabled
+ */
 export function createDashboardAuditProfiler(
-  enabled: boolean,
+  isEnabled: boolean,
 ): DashboardAuditProfiler {
   const spans: DashboardAuditProfileSpan[] = [];
   return {
-    enabled,
+    enabled: isEnabled,
     spans,
-    span<T>(name: string, fn: () => T): T {
-      if (!enabled) return fn();
+    /** Time one stage; the span is recorded even when the measured work throws. */
+    span<T>(name: string, measuredStage: () => T): T {
+      if (!isEnabled) return measuredStage();
       const start = performance.now();
       try {
-        return fn();
+        return measuredStage();
       } finally {
         spans.push({
           name,
@@ -87,6 +100,15 @@ export function createDashboardAuditProfiler(
   };
 }
 
+/**
+ * Attach collected span timings to a response body for an opted-in request.
+ * Error behavior: throws nothing; a disabled profiler returns the body unchanged, so callers can
+ * append unconditionally without checking whether profiling was requested.
+ *
+ * @param body - response body returned unchanged when profiling is disabled
+ * @param profiler - profiler whose spans are summarised into `_profile`
+ * @returns the body, with `_profile` present only when profiling was enabled
+ */
 export function appendAuditProfile<T extends object>(
   body: T,
   profiler: DashboardAuditProfiler,
@@ -139,8 +161,46 @@ export function buildLatestQualitySummary(
 }
 
 /**
+ * Count stats findings matching any of the named rules.
+ * Home groups several rules into one user-visible number, so this takes a rule list rather than one
+ * rule and keeps the grouping visible at the call site.
+ * Contract: each finding is counted at most once, so grouping rules together never double-counts a
+ * finding that would satisfy more than one of them.
+ *
+ * @param findings - stats findings for the selected project
+ * @param rules - rule ids to count together; no rules yields zero
+ * @returns how many findings matched; zero means that repair action is not due
+ */
+function countStatsFindings(
+  findings: ReturnType<typeof checkStats>["findings"],
+  ...rules: string[]
+): number {
+  return findings.filter((finding) => rules.includes(finding.rule)).length;
+}
+
+/**
+ * Count generated indexes sitting in one freshness state.
+ *
+ * @param indexes - index freshness records for the selected project
+ * @param state - state to count, such as `stale` or `missing`
+ * @returns how many indexes are in that state; zero means none need that action
+ */
+function countIndexesInState(
+  indexes: ReturnType<typeof collectIndexFreshness>,
+  state: string,
+): number {
+  return indexes.filter((indexStatus) => indexStatus.state === state).length;
+}
+
+/**
  * Build the compact learning-loop health card shown on Dashboard Home.
  * Use when a user opens a project and needs the next memory-maintenance action at a glance.
+ * Each health count is derived separately because they drive different repair actions: stale review
+ * dates need a re-read, brittle line references need semantic-anchor repair, and oversized buckets
+ * need splitting, so collapsing them into one number would hide which work is due.
+ * Invariant: review dates are sorted so the oldest-review indicator is deterministic across runs.
+ * Error behavior: throws nothing; an unreadable project reports as a null card rather than failing
+ * the whole dashboard response.
  *
  * @param projectPath - selected project; empty or unreadable paths make the Home card unavailable.
  * @returns Home-card data, or null when the selected project cannot provide safe memory facts.
@@ -166,26 +226,22 @@ function buildDashboardLearningLoopSummary(
     });
     const check = checkStats(stats);
     // Users see one count for outdated review dates and broken semantic references.
-    const staleCount = check.findings.filter(
-      (finding) =>
-        finding.rule === "stale-last-reviewed" || finding.rule === "stale-ref",
-    ).length;
+    const staleCount = countStatsFindings(
+      check.findings,
+      "stale-last-reviewed",
+      "stale-ref",
+    );
     // Brittle line evidence gets a separate count because it needs semantic-anchor repair.
-    const invalidLineRefCount = check.findings.filter(
-      (finding) => finding.rule === "invalid-line-ref",
-    ).length;
+    const invalidLineRefCount = countStatsFindings(
+      check.findings,
+      "invalid-line-ref",
+    );
     // Oversized buckets tell users where retrieval context needs splitting.
-    const oversizedCount = check.findings.filter(
-      (finding) => finding.rule === "bucket-size",
-    ).length;
+    const oversizedCount = countStatsFindings(check.findings, "bucket-size");
     // Stale generated indexes prevent users from trusting current retrieval results.
-    const indexStaleCount = indexes.filter(
-      (indexStatus) => indexStatus.state === "stale",
-    ).length;
+    const indexStaleCount = countIndexesInState(indexes, "stale");
     // Missing indexes remain a setup nudge rather than a false health claim.
-    const indexMissingCount = indexes.filter(
-      (indexStatus) => indexStatus.state === "missing",
-    ).length;
+    const indexMissingCount = countIndexesInState(indexes, "missing");
     const recordCount =
       stats.footguns.totalEntries + stats.lessons.totalEntries;
 
@@ -289,7 +345,16 @@ function parseLessonCreated(section: string): string | null {
   return section.match(/\*\*Created:\*\*\s*(\d{4}-\d{2}-\d{2})/)?.[1] ?? null;
 }
 
-/** Read lesson headings from one bucket file. */
+/**
+ * Read lesson headings from one bucket file.
+ * Error behavior: throws nothing; an unreadable bucket swallows the failure and reports no entries,
+ * so one missing file cannot blank the whole Home panel.
+ *
+ * @param lessonsDir - absolute lessons directory for the selected project
+ * @param filename - bucket file to read; a missing file yields an empty list
+ * @param startOrder - running offset so entries keep their file order across buckets
+ * @returns lesson summaries in file order; empty when the bucket is missing or has no headings
+ */
 function readLessonBucketEntries(
   lessonsDir: string,
   filename: string,
@@ -323,7 +388,14 @@ function readLessonBucketEntries(
   );
 }
 
-/** Sort latest lessons first, with file order as the fallback. */
+/**
+ * Sort latest lessons first, with file order as the fallback.
+ * Invariant: the ordering is total and deterministic. Undated entries always sort after dated ones,
+ * and equal dates fall back to file order, so the Home panel cannot reshuffle between identical runs.
+ *
+ * @param lessons - entries to order; sorted in place and also returned
+ * @returns the same array, newest first, with undated entries last
+ */
 function sortRecentLessons(
   lessons: RecentLessonSummary[],
 ): RecentLessonSummary[] {
@@ -384,8 +456,8 @@ const enrichmentCache = new Map<
 >();
 
 /** Hash cache and identity inputs without storing raw remote URLs in keys. */
-function hashString(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
+function hashString(inputText: string): string {
+  return createHash("sha256").update(inputText).digest("hex");
 }
 
 /** Hash one cache input file; swallows disappearing files as a stable `missing` sentinel. */
@@ -397,6 +469,15 @@ function hashExistingFile(projectPath: string, relativePath: string): string {
   }
 }
 
+/**
+ * Stat one cache-signature input without letting a missing path abort the whole signature.
+ * Error behavior: throws nothing; it swallows the stat failure so one vanished file cannot abort
+ * the signature for every other input.
+ *
+ * @param projectPath - selected project root
+ * @param relativePath - repo-relative path to stat
+ * @returns the stat result, or null when the path is missing or unreadable
+ */
 function readSignatureStat(
   projectPath: string,
   relativePath: string,
@@ -408,6 +489,18 @@ function readSignatureStat(
   }
 }
 
+/**
+ * Add one directory entry to the cache signature, recursing into subdirectories.
+ * A missing path contributes an explicit `missing` marker rather than nothing, so a deletion still
+ * changes the signature and invalidates the cache.
+ * Side effect: mutates the caller's `entries` array in place.
+ *
+ * @param projectPath - selected project root
+ * @param relativeDir - repo-relative directory holding `name`
+ * @param name - entry to record; ignored names are skipped entirely
+ * @param entries - accumulator appended to in place
+ * @returns nothing; the result is whatever was appended
+ */
 function appendDirectorySignatureEntry(
   projectPath: string,
   relativeDir: string,
@@ -435,6 +528,19 @@ function appendDirectorySignatureEntry(
   );
 }
 
+/**
+ * Walk one directory into cache-signature entries, stopping at the file-count ceiling.
+ * Invariant: names are sorted before recording, so the same tree always produces the same signature
+ * regardless of the order the filesystem returns entries.
+ * Side effect: mutates the caller's `entries` array in place.
+ * Error behavior: throws nothing; an unreadable directory swallows the failure and records a
+ * `missing` marker, which still changes the signature.
+ *
+ * @param projectPath - selected project root
+ * @param relativeDir - repo-relative directory to walk
+ * @param entries - accumulator appended to in place; the ceiling is checked against its length
+ * @returns nothing; an unreadable directory records a `missing` marker and stops that branch
+ */
 function readDirectorySignatureEntries(
   projectPath: string,
   relativeDir: string,
@@ -477,6 +583,15 @@ function buildLearningLoopCacheSignature(projectPath: string): string {
   );
 }
 
+/**
+ * Build the fingerprint that decides whether a persisted audit cache is still valid.
+ * Invariant: every input that can change audit output contributes, so a stale cache can never be
+ * served as current. Adding a new audit input without listing it here silently keeps stale results.
+ *
+ * @param projectPath - selected project root whose files are fingerprinted
+ * @param packageVersion - running package version, so an upgrade invalidates every cache
+ * @returns the signature string; never empty
+ */
 export function buildAuditCacheSignature(
   projectPath: string,
   packageVersion: string,
@@ -534,19 +649,19 @@ export function buildAuditCacheSignature(
  *
  * @param report - base report; empty enrichment fields are replaced when memory is readable
  * @param projectPath - selected project; empty or unreadable paths produce null loop health
- * @param fresh - true bypasses cache after a new audit; false may reuse current content
+ * @param shouldBypassCache - true skips the cache after a new audit; false may reuse current content
  * @returns copied report; learningLoop is null when project memory is unavailable
  */
 export function enrichDashboardReport(
   report: DashboardReport,
   projectPath: string,
-  fresh = false,
+  shouldBypassCache = false,
 ): DashboardReport {
   const now = Date.now();
   const signature = buildLearningLoopCacheSignature(projectPath);
   const cached = enrichmentCache.get(projectPath);
   if (
-    !fresh &&
+    !shouldBypassCache &&
     cached &&
     cached.signature === signature &&
     now - cached.cachedAt < ENRICHMENT_TTL_MS
@@ -642,16 +757,20 @@ function readConfigVersion(projectPath: string): string | null {
 }
 
 /** Recognize a non-null JSON object before the dashboard reads cache properties. */
-function isCacheObject(value: unknown): value is Record<string, unknown> {
+function isCacheObject(
+  candidate: unknown,
+): candidate is Record<string, unknown> {
   // Null and primitive cache values cannot provide user-visible report fields.
-  return typeof value === "object" && value !== null;
+  return typeof candidate === "object" && candidate !== null;
 }
 
 /** Validate persisted cache JSON before trusting it as a dashboard report. */
-function isAuditCacheEnvelope(value: unknown): value is AuditCacheEnvelope {
+function isAuditCacheEnvelope(
+  candidate: unknown,
+): candidate is AuditCacheEnvelope {
   // Null or primitive cache data cannot carry a dashboard report.
-  if (!isCacheObject(value)) return false;
-  const envelope = value;
+  if (!isCacheObject(candidate)) return false;
+  const envelope = candidate;
   const cachedReport = envelope.report;
   const hasCompleteCacheIdentity = [
     envelope.packageVersion,
@@ -677,6 +796,17 @@ function parseAuditCacheEnvelope(raw: string): AuditCacheEnvelope | null {
   }
 }
 
+/**
+ * Decide whether a persisted envelope still describes the current project and package.
+ * An unreadable config version fails the match rather than being ignored, so a project whose config
+ * cannot be read never serves a cache entry that config might have invalidated.
+ *
+ * @param envelope - parsed cache envelope under test
+ * @param projectPath - selected project root, used to re-read the config version
+ * @param packageVersion - running package version
+ * @param signature - freshly computed input signature
+ * @returns true only when package, signature, and config version all still agree
+ */
 function auditCacheMatches(
   envelope: AuditCacheEnvelope,
   projectPath: string,
@@ -692,6 +822,16 @@ function auditCacheMatches(
   );
 }
 
+/**
+ * Load a persisted audit report when it still matches the current inputs.
+ * Error behavior: throws nothing; a missing, malformed, or stale cache all report as a plain miss,
+ * so the caller only has to distinguish "have a report" from "run the audit".
+ *
+ * @param projectPath - selected project root
+ * @param packageVersion - running package version, compared against the envelope
+ * @param signature - freshly computed input signature, compared against the envelope
+ * @returns the cached report and its timestamp, or null on any kind of miss
+ */
 export function readAuditCache(
   projectPath: string,
   packageVersion: string,
@@ -716,6 +856,20 @@ export function readAuditCache(
   }
 }
 
+/**
+ * Persist an audit report so the next matching request can skip the audit.
+ * A project with no readable config version is skipped, because the stored envelope could never be
+ * matched back and would only occupy local state.
+ * Side effect: writes the audit cache file into the project's local-state directory.
+ * Error behavior: throws nothing; a failed write swallows the error, since losing a cache entry
+ * only costs time on the next request.
+ *
+ * @param projectPath - selected project root
+ * @param packageVersion - running package version recorded in the envelope
+ * @param signature - input signature recorded in the envelope
+ * @param report - report to persist verbatim
+ * @returns nothing; success is the file left in local state
+ */
 export function writeAuditCache(
   projectPath: string,
   packageVersion: string,
@@ -741,6 +895,15 @@ export function writeAuditCache(
   }
 }
 
+/**
+ * Build the in-memory key that separates quality-audit results per project and agent.
+ * Invariant: the newline separator keeps the two parts unambiguous, so no project path and agent
+ * pair can collide with a different pair.
+ *
+ * @param projectPath - selected project root
+ * @param agent - selected agent, so two agents on one project never share an entry
+ * @returns the composite cache key; never empty
+ */
 export function buildQualityAuditCacheKey(
   projectPath: string,
   agent: AgentId,

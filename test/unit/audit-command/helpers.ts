@@ -77,12 +77,21 @@ import type {
 } from "../../src.js";
 
 // ---------------------------------------------------------------------------
-// Cached repo audits - shared across describes that audit this repo with
-// identical inputs. Each fresh audit is ~7–12s; lazy-caching cuts ~30s off
-// this file's suite time. Tests must treat the returned report as read-only.
+// Cached repo audits
 // ---------------------------------------------------------------------------
 
 export const cachedRepoAudits = new Map<string, AuditReport>();
+
+/**
+ * Audit this repository once per distinct option set and reuse the result afterwards.
+ * Use from any describe that audits the controlling workspace with identical inputs: a fresh audit
+ * costs roughly 7-12s, so sharing one cuts about 30s off this file's suite time.
+ * Callers must treat the report as read-only - every caller with equal options receives the same
+ * object, so mutating it corrupts unrelated tests.
+ *
+ * @param opts - audit selectors; `agentFilter` null audits every agent, `harness` adds harness checks
+ * @returns the shared report for `opts`; repeated calls with equal selectors return the same instance
+ */
 export function getRepoAudit(opts: {
   agentFilter: AgentId | null;
   harness: boolean;
@@ -113,15 +122,20 @@ export function posixifyPath(value: string): string {
   return value.replace(/\\/g, "/");
 }
 
-/** Wrap a fake FS handler with host-independent path normalization. */
+/**
+ * Wrap a fake FS handler so it sees POSIX-shape paths on every host.
+ * Use when stubbing a ReadonlyFS method whose test handler matches path literals: production code
+ * passes `path.join` output, which uses backslashes on Windows and would miss those literals.
+ *
+ * @param fn - handler supplied by the test; `undefined` means the caller wants the fallback instead
+ * @param fallback - value yielded when no handler is supplied, so every stubbed method stays populated
+ * @returns a handler that normalises separators before delegating, or one that always yields `fallback`
+ */
 export function wrapPathArg<T>(
   fn: ((path: string) => T) | undefined,
   fallback: T,
-) {
-  /** Invoke a fake FS override after converting Windows separators. */
-  const readNormalizedPath = (path: string): T =>
-    fn ? fn(posixifyPath(path)) : fallback;
-  return readNormalizedPath;
+): (path: string) => T {
+  return (path: string): T => (fn ? fn(posixifyPath(path)) : fallback);
 }
 
 /**

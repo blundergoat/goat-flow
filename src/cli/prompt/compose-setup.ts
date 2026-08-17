@@ -97,6 +97,19 @@ function auditPassInstallLine(
 // Mode: Audit pass (current version, all build checks passing)
 // ----------------------------------------------------------------
 
+/**
+ * Render the setup prompt shown when every build check already passes on the current version.
+ * Use for the "nothing to install" path: the agent gets an inventory of what is present plus the
+ * verification and maintenance commands, and is told not to skip the remaining audit gates.
+ * The inventory block is omitted entirely when the target agent has no facts, so a prompt for an
+ * unrecognised agent still carries the run-now and maintenance guidance rather than a half-filled list.
+ *
+ * @param facts - detected project facts; the entry matching `agentId` supplies the installed counts
+ * @param agentId - agent this prompt is addressed to, selecting its display name and skill/hook dirs
+ * @param evidenceLevel - how deny-mechanism evidence was gathered; `undefined` renders the
+ *   full-confidence headline, while presence-only and static levels say runtime probes were not run
+ * @returns the prompt as newline-joined Markdown; never empty
+ */
 function renderAuditPass(
   facts: ProjectFacts,
   agentId: AgentId,
