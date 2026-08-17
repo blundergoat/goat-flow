@@ -287,6 +287,22 @@ function getSetupAgentIds(options: ParsedCLI, facts: ProjectFacts): AgentId[] {
     : facts.agents.map((af) => af.agent.id);
 }
 
+/**
+ * Return full setup evidence only when the trusted runtime probe named this exact agent.
+ *
+ * @param options - Parsed trust choice and optional agent bound to the setup audit.
+ * @param agentId - Agent whose setup prompt is being rendered.
+ * @returns Full evidence for an exact trusted-agent match; otherwise static evidence.
+ */
+export function setupDenyMechanismEvidenceLevel(
+  options: Pick<ParsedCLI, "agent" | "isTargetTrusted">,
+  agentId: AgentId,
+): "full" | "static" {
+  return options.isTargetTrusted && options.agent === agentId
+    ? "full"
+    : "static";
+}
+
 /** Print the banner that warns multi-agent setup output must stay in sync. */
 function writeMultiAgentSyncBanner(withDivider: boolean): void {
   const lines = withDivider
@@ -318,7 +334,10 @@ async function handleSetupCommand(
   const parts: string[] = [];
   for (const agentId of agentIds) {
     const output = composeSetup(auditReport, facts, agentId, {
-      denyMechanismEvidenceLevel: options.isTargetTrusted ? "full" : "static",
+      denyMechanismEvidenceLevel: setupDenyMechanismEvidenceLevel(
+        options,
+        agentId,
+      ),
     });
     if (output) parts.push(output);
   }
@@ -473,7 +492,8 @@ async function runSetupPipeline(options: ParsedCLI): Promise<void> {
   const auditReport = runAudit(fs, options.projectPath, {
     agentFilter: options.agent ?? null,
     harness: false,
-    denyMechanismEvidenceLevel: options.isTargetTrusted ? "full" : "static",
+    denyMechanismEvidenceLevel:
+      options.isTargetTrusted && options.agent !== null ? "full" : "static",
   });
   await handleSetupCommand(options, auditReport, facts);
 }

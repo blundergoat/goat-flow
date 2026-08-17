@@ -63,6 +63,111 @@ describe("target execution trust flags", () => {
         /cannot be used together/u.test(error.message),
     );
   });
+
+  it("rejects trust choices on routes that cannot execute target code", () => {
+    for (const args of [
+      ["install", ".", "--trusted-target"],
+      ["setup", ".", "--apply", "--trusted-target"],
+      ["setup", ".", "--dry-run", "--untrusted-target"],
+      ["quality", "history", "--trusted-target"],
+      ["hooks", "list", "--trusted-target"],
+      ["status", ".", "--untrusted-target"],
+    ]) {
+      assert.throws(
+        () => parseCLIArgs(args),
+        (error: unknown) =>
+          error instanceof CLIError &&
+          error.exitCode === 2 &&
+          /only valid for audit, setup prompt, quality prompt, or hooks verify/u.test(
+            error.message,
+          ),
+        args.join(" "),
+      );
+    }
+  });
+
+  it("accepts trust choices only on target-executing routes", () => {
+    for (const args of [
+      ["audit", ".", "--trusted-target"],
+      ["setup", ".", "--trusted-target"],
+      ["quality", ".", "--agent", "claude", "--trusted-target"],
+      [
+        "hooks",
+        "verify",
+        ".",
+        "--agent",
+        "codex",
+        "--scenario",
+        "deny-hook",
+        "--trusted-target",
+      ],
+    ]) {
+      const parsed = parseCLIArgs(args);
+      assert.equal(parsed.isTargetTrusted, true, args.join(" "));
+      assert.equal(parsed.isTargetUntrusted, false, args.join(" "));
+    }
+  });
+
+  it("accepts setup dry-run authority flags as preview inputs", () => {
+    const parsed = parseCLIArgs([
+      "setup",
+      ".",
+      "--dry-run",
+      "--force-managed",
+      "--force-user-owned",
+      "--force-path",
+      ".goat-flow/config.yaml",
+      "--update-config-version",
+    ]);
+
+    assert.equal(parsed.shouldDryRun, true);
+    assert.equal(parsed.shouldForceManaged, true);
+    assert.equal(parsed.shouldForceUserOwned, true);
+    assert.deepEqual(parsed.forcePaths, [".goat-flow/config.yaml"]);
+    assert.equal(parsed.updateConfigVersion, true);
+  });
+});
+
+describe("setup runtime evidence identity", () => {
+  it("requires the trusted runtime probe to name the rendered agent", async () => {
+    const { setupDenyMechanismEvidenceLevel } =
+      await import("../../src/cli/cli-handlers.js");
+
+    assert.equal(
+      setupDenyMechanismEvidenceLevel(
+        { agent: null, isTargetTrusted: true },
+        "claude",
+      ),
+      "static",
+    );
+    assert.equal(
+      setupDenyMechanismEvidenceLevel(
+        { agent: "claude", isTargetTrusted: true },
+        "claude",
+      ),
+      "full",
+    );
+    assert.equal(
+      setupDenyMechanismEvidenceLevel(
+        { agent: "claude", isTargetTrusted: true },
+        "codex",
+      ),
+      "static",
+    );
+  });
+});
+
+describe("spawn failure identity", () => {
+  it("names the executable that a configured handler attempted", async () => {
+    const { spawnFailureFor } =
+      await import("../../src/cli/audit/check-agent-deny-runtime.js");
+    const error = Object.assign(new Error("not found"), { code: "ENOENT" });
+
+    const failure = spawnFailureFor(error, "configured hook", "node");
+
+    assert.match(failure?.message ?? "", /could not spawn node/u);
+    assert.match(failure?.howToFix ?? "", /Install node/u);
+  });
 });
 
 /** Return a successful configured-launcher probe while recording that target code was requested. */

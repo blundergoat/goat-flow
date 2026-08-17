@@ -56,6 +56,8 @@ function isSlowTest(path) {
     path === "test/integration/packaged-hook-install.test.ts" ||
     /^test\/integration\/dashboard[^/]*\.test\.ts$/u.test(path) ||
     path === "test/integration/quality-constraint-isolation.test.ts" ||
+    path === "test/integration/hook-effective-state.test.ts" ||
+    path === "test/integration/setup-quality-lifecycle.test.ts" ||
     /^test\/integration\/setup-install[^/]*\.test\.ts$/u.test(path) ||
     path === "test/unit/audit-harness/check-evidence-before-claims.test.ts" ||
     /^test\/unit\/dashboard-terminal-launch\/[^/]*\.test\.ts$/u.test(path)
@@ -114,7 +116,7 @@ const args = [
   "tsx",
   "--test",
   "--test-concurrency",
-  mode === "slow" ? "1" : mode === "fast" ? "16" : "8",
+  mode === "slow" ? "1" : mode === "fast" ? "8" : "8",
 ];
 if (mode === "coverage") {
   args.push("--experimental-test-coverage");

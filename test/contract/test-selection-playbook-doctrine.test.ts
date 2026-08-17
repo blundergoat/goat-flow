@@ -155,6 +155,102 @@ describe("test-selection standalone doctrine", () => {
     });
   });
 
+  it("accounts explicitly for added, removed, and materially changed tests", () => {
+    assertForPlaybooks((content, playbookPath) => {
+      assert.deepEqual(
+        dispositionSet(content, "Added-test dispositions", playbookPath),
+        [
+          "ADDED KEEP",
+          "ADDED CONSOLIDATE",
+          "ADDED MOVE LEVEL",
+          "ADDED DROP CANDIDATE",
+          "ADDED UNRESOLVED",
+        ],
+        playbookPath,
+      );
+      assert.deepEqual(
+        dispositionSet(content, "Removed-test dispositions", playbookPath),
+        [
+          "REMOVAL SUPPORTED",
+          "RESTORE",
+          "REPLACE",
+          "REMOVAL UNRESOLVED",
+        ],
+        playbookPath,
+      );
+      for (const equation of [
+        "assessed_added = ADDED_KEEP + ADDED_CONSOLIDATE + ADDED_MOVE_LEVEL + ADDED_DROP_CANDIDATE + ADDED_UNRESOLVED",
+        "assessed_removed = REMOVAL_SUPPORTED + RESTORE + REPLACE + REMOVAL_UNRESOLVED",
+        "assessed_materially_changed = KEEP + CONSOLIDATE + MOVE_LEVEL + PRUNE_CANDIDATE + UNRESOLVED",
+        "assessed_relocated = RELOCATED",
+        "assessed_pr_or_uncommitted = assessed_added + assessed_removed + assessed_materially_changed + assessed_relocated",
+      ]) {
+        assert.ok(content.includes(equation), `${playbookPath}: missing ${equation}`);
+      }
+      assert.match(
+        content,
+        /Equation identifiers write each disposition with underscores/u,
+        playbookPath,
+      );
+      const normalizedContent = content.replace(/\s+/gu, " ");
+      assert.match(
+        normalizedContent,
+        /rename-shaped pair with uncertain\s+identity[^.]*`ADDED UNRESOLVED`[^.]*`REMOVAL UNRESOLVED`/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /removed-test evidence[^.]*bound comparison\s+baseline[^.]*without fetching[^.]*worktree/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /removal remains unsupported until[^.]*replacement[^.]*passes/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Every disposition is report-only[^.]*never authorizes[^.]*add[^.]*rewrite[^.]*restore[^.]*replace[^.]*move[^.]*consolidate[^.]*omit[^.]*delete[^.]*test/iu,
+        playbookPath,
+      );
+    });
+  });
+
+  it("carries proven test relocations without fabricating additions or removals", () => {
+    assertForPlaybooks((content, playbookPath) => {
+      assert.deepEqual(
+        dispositionSet(content, "Relocated-test state", playbookPath),
+        ["RELOCATED"],
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /case-level anchor and assertion\s+equivalence[\s\S]+path or namespace rename/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /file similarity alone[\s\S]+not proof/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /uncertain[\s\S]+`ADDED UNRESOLVED`[\s\S]+`REMOVAL UNRESOLVED`/iu,
+        playbookPath,
+      );
+      assert.ok(
+        content.includes("assessed_relocated = RELOCATED"),
+        `${playbookPath}: missing relocated-test equation`,
+      );
+      assert.ok(
+        content.includes(
+          "assessed_pr_or_uncommitted = assessed_added + assessed_removed + assessed_materially_changed + assessed_relocated",
+        ),
+        `${playbookPath}: PR accounting must include proven relocations`,
+      );
+    });
+  });
+
   it("chooses the cheapest trustworthy proof level without automatic promotion", () => {
     assertForPlaybooks((content, playbookPath) => {
       for (const level of [
@@ -227,6 +323,11 @@ describe("test-selection standalone doctrine", () => {
       );
       assert.match(content, /ordinary ACT re-reads/iu, playbookPath);
       assert.match(content, /report-only/u, playbookPath);
+      assert.match(
+        content,
+        /before assigning any existing-test, added-test, or removed-test disposition/iu,
+        playbookPath,
+      );
       for (const protectedContract of [
         "authorization",
         "tenancy",
@@ -290,7 +391,22 @@ describe("test-selection standalone doctrine", () => {
       );
       assert.match(
         content,
-        /Incomplete evidence becomes `UNRESOLVED`/u,
+        /Incomplete evidence uses the matching `UNRESOLVED`, `ADDED UNRESOLVED`, or `REMOVAL UNRESOLVED`/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Record one row per assessed existing, added, removed, relocated, materially changed, or proposed test/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Creation, existing-test, added-test, removed-test, and relocated-test states use the correct vocabulary/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Disposition totals reconcile for the applicable selector and change states/iu,
         playbookPath,
       );
       assert.match(

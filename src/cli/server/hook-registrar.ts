@@ -196,6 +196,30 @@ function physicalDirectory(directoryPath: string): string | null {
   }
 }
 
+/** Function shape used to compare two platform-native filesystem paths. */
+type RelativePathResolver = (from: string, to: string) => string;
+
+/**
+ * Report whether two physical directory spellings identify the same filesystem location.
+ * The injected resolver lets cross-platform tests exercise Windows path semantics on any host.
+ *
+ * @param leftDirectory - first physical directory spelling; empty cannot name a useful root
+ * @param rightDirectory - second physical directory spelling; empty cannot name a useful root
+ * @param relativePath - platform-native relative-path implementation used for equivalence
+ * @returns true only when both spellings are identical under the selected path semantics
+ */
+export function filesystemPathsAreEquivalent(
+  leftDirectory: string,
+  rightDirectory: string,
+  relativePath: RelativePathResolver = relative,
+): boolean {
+  if (leftDirectory.length === 0 || rightDirectory.length === 0) return false;
+  return (
+    relativePath(leftDirectory, rightDirectory) === "" &&
+    relativePath(rightDirectory, leftDirectory) === ""
+  );
+}
+
 /**
  * Return the physical Git top-level for one directory.
  * Spawns one bounded read-only Git process; startup, timeout, and non-work-tree failures return `null`.
@@ -270,7 +294,7 @@ function postTurnScanRootState(
       issue: "Selected project is not an existing directory.",
     };
   }
-  if (gitTopLevel(projectRoot) === projectRoot) {
+  if (filesystemPathsAreEquivalent(gitTopLevel(projectRoot) ?? "", projectRoot)) {
     return { status: "implicit", roots: ["."], issue: null };
   }
   const configuredRoots = readHookScanRoots(projectPath, spec.id);
@@ -290,7 +314,12 @@ function postTurnScanRootState(
         issue: `Configured scan root is missing or escapes the selected project: ${configuredRoot}`,
       };
     }
-    if (gitTopLevel(physicalRoot) !== physicalRoot) {
+    if (
+      !filesystemPathsAreEquivalent(
+        gitTopLevel(physicalRoot) ?? "",
+        physicalRoot,
+      )
+    ) {
       return {
         status: "invalid",
         roots: configuredRoots,
@@ -871,13 +900,23 @@ function reconcileHook(
     if (!isSupportedAgent(agent)) continue;
     if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) continue;
     const desiredState = deriveManagedHookDesiredState(agent, spec, enabled);
+    const shouldRegisterHook =
+      desiredState.registrationTargets.length > 0 &&
+      doesRootContractAllowRegistration;
+    // Disabling fills missing managed files but never refreshes existing inert bytes.
+    if (!enabled) {
+      if (desiredState.managedScriptFiles.length > 0) {
+        copyHookScripts(projectPath, agent, spec, false);
+      }
+      if (hookConfigExists(projectPath, agent)) {
+        writeAgentHookState(projectPath, agent, spec, false);
+      }
+      continue;
+    }
     // Current inert files let install and sync repair drift without changing the user's disabled choice.
     if (desiredState.managedScriptFiles.length > 0) {
       copyHookScripts(projectPath, agent, spec);
     }
-    const shouldRegisterHook =
-      desiredState.registrationTargets.length > 0 &&
-      doesRootContractAllowRegistration;
     // A disabled hook removes managed rows from existing config but never scaffolds a missing config file.
     if (shouldRegisterHook || hookConfigExists(projectPath, agent)) {
       writeAgentHookState(projectPath, agent, spec, shouldRegisterHook);
@@ -1009,12 +1048,13 @@ export function applyHookState(
   enabled: boolean,
   projectPath: string,
 ): HookState {
-  pruneRemovedHookTombstones(projectPath);
   const spec = resolveSpec(hookId);
   if (!spec.togglable) {
     throw new HookRegistrarError(`Hook is not togglable: ${hookId}`, 400);
   }
-  assertNoKnownManagedHookDivergence(projectPath, [spec]);
+  // Enabled reconciliation may replace scripts, so prove authority before any cleanup or config write.
+  if (enabled) assertNoKnownManagedHookDivergence(projectPath, [spec]);
+  pruneRemovedHookTombstones(projectPath);
   setHookEnabled(projectPath, spec.id, enabled);
   reconcileHook(projectPath, spec, enabled);
   return readHookState(spec.id, projectPath);
@@ -1030,7 +1070,10 @@ export function applyHookState(
  */
 export function syncHookStates(projectPath: string): HookState[] {
   const togglableSpecs = listHookSpecs().filter((spec) => spec.togglable);
-  assertNoKnownManagedHookDivergence(projectPath, togglableSpecs);
+  const enabledSpecs = togglableSpecs.filter((spec) =>
+    readDesired(projectPath, spec),
+  );
+  assertNoKnownManagedHookDivergence(projectPath, enabledSpecs);
   pruneRemovedHookTombstones(projectPath);
   for (const spec of togglableSpecs) {
     reconcileHook(projectPath, spec, readDesired(projectPath, spec));

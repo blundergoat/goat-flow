@@ -13,7 +13,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join, posix } from "node:path";
+import { basename, dirname, join, posix } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
@@ -584,6 +584,49 @@ function verifyStandaloneInstallerHookSemantics(
     ].join("\n"),
   );
 
+  // A previous Antigravity install may have registered a hook whose delivery is no longer supported.
+  if (agentProfile.id === "antigravity") {
+    assert.ok(agentProfile.hookConfigFile);
+    const hookConfigPath = join(
+      targetProjectPath,
+      agentProfile.hookConfigFile,
+    );
+    mkdirSync(dirname(hookConfigPath), { recursive: true });
+    writeFileSync(
+      hookConfigPath,
+      `${JSON.stringify(
+        {
+          "renamed-gruff-policy": {
+            enabled: true,
+            PostToolUse: [
+              {
+                matcher: "edit_file",
+                hooks: [
+                  {
+                    type: "command",
+                    command:
+                      "node .goat-flow/hooks/run-with-bash.mjs .goat-flow/hooks/gruff-code-quality.sh",
+                  },
+                ],
+              },
+            ],
+          },
+          "team-audit": {
+            enabled: true,
+            PreToolUse: [
+              {
+                matcher: "run_command",
+                hooks: [{ type: "command", command: "./scripts/team-audit.sh" }],
+              },
+            ],
+          },
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  }
+
   const installResult = runInstaller(
     targetProjectPath,
     "--agent",
@@ -601,6 +644,20 @@ function verifyStandaloneInstallerHookSemantics(
   const installedHookConfig = JSON.parse(
     readFileSync(join(targetProjectPath, agentProfile.hookConfigFile), "utf-8"),
   ) as unknown;
+
+  if (agentProfile.id === "antigravity") {
+    const antigravityConfig = installedHookConfig as Record<string, unknown>;
+    assert.equal(
+      countManagedHookRegistrations(
+        antigravityConfig,
+        "gruff-code-quality.sh",
+      ),
+      0,
+      "standalone install must remove registrations unsupported by Antigravity",
+    );
+    assert.equal(antigravityConfig["renamed-gruff-policy"], undefined);
+    assert.ok(antigravityConfig["team-audit"]);
+  }
 
   // Every shipped hook must match provider support plus this non-Git root's eligibility.
   for (const hookSpec of listHookSpecs()) {
@@ -881,6 +938,105 @@ describe("cross-agent install smoke matrix", () => {
       assert.equal(existsSync(convergedHookConfigPath), true);
     });
   }
+
+  it("reads inline and quoted hook toggles as semantic YAML", () => {
+    const targetProjectPath = makeTempProject();
+    const claudeProfile = supportedAgentProfiles.find(
+      (profile) => profile.id === "claude",
+    );
+    const denySpec = getHookSpec("deny-dangerous");
+    const gruffSpec = getHookSpec("gruff-code-quality");
+    assert.ok(claudeProfile?.hookConfigFile);
+    assert.ok(denySpec);
+    assert.ok(gruffSpec);
+    const configText =
+      'hooks: { "deny-dangerous": { enabled: false }, "post-turn-safety": { enabled: false }, "gruff-code-quality": { enabled: true } }\n';
+    mkdirSync(join(targetProjectPath, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(targetProjectPath, ".goat-flow", "config.yaml"),
+      configText,
+    );
+
+    const installResult = runInstaller(
+      targetProjectPath,
+      "--agent",
+      claudeProfile.id,
+    );
+
+    assert.equal(installResult.status, 0, installResult.stderr);
+    assert.equal(
+      readAgentHookState(targetProjectPath, claudeProfile, denySpec).installed,
+      false,
+    );
+    assert.equal(
+      readAgentHookState(targetProjectPath, claudeProfile, gruffSpec).installed,
+      true,
+    );
+    assert.equal(
+      readFileSync(
+        join(targetProjectPath, ".goat-flow", "config.yaml"),
+        "utf-8",
+      ),
+      configText,
+    );
+  });
+
+  it("migrates a legacy disabled guard before reconciling registration", () => {
+    const targetProjectPath = makeTempProject();
+    const claudeProfile = supportedAgentProfiles.find(
+      (profile) => profile.id === "claude",
+    );
+    const denySpec = getHookSpec("deny-dangerous");
+    assert.ok(claudeProfile?.hookConfigFile);
+    assert.ok(denySpec);
+    const firstInstall = runInstaller(
+      targetProjectPath,
+      "--agent",
+      claudeProfile.id,
+    );
+    assert.equal(firstInstall.status, 0, firstInstall.stderr);
+    writeFileSync(
+      join(targetProjectPath, ".goat-flow", "config.yaml"),
+      "hooks:\n  guard-secret-paths:\n    enabled: false\n",
+    );
+
+    const migration = runInstaller(
+      targetProjectPath,
+      "--agent",
+      claudeProfile.id,
+    );
+
+    assert.equal(migration.status, 0, migration.stderr);
+    assert.equal(
+      readAgentHookState(targetProjectPath, claudeProfile, denySpec).installed,
+      false,
+    );
+    const migratedConfig = readFileSync(
+      join(targetProjectPath, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(migratedConfig, /deny-dangerous:\s*\n\s+enabled: false/u);
+    assert.doesNotMatch(migratedConfig, /guard-secret-paths/u);
+  });
+
+  it("keeps a preview-preserved goat-flow gitignore byte-identical", () => {
+    const targetProjectPath = makeTempProject();
+    const gitignorePath = join(targetProjectPath, ".goat-flow", ".gitignore");
+    const preservedContent = "# local policy\n*.private\n";
+    mkdirSync(dirname(gitignorePath), { recursive: true });
+    writeFileSync(gitignorePath, preservedContent);
+
+    const installResult = runInstaller(
+      targetProjectPath,
+      "--agent",
+      "codex",
+      "--preserve-path",
+      ".goat-flow/.gitignore",
+    );
+
+    assert.equal(installResult.status, 0, installResult.stderr);
+    assert.equal(readFileSync(gitignorePath, "utf-8"), preservedContent);
+  });
 
   it("keeps public CLI writes inside the selected consumer target", () => {
     const selectedTargetPath = makeTempProject();

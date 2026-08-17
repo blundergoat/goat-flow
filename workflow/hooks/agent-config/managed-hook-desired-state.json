@@ -28,6 +28,24 @@
       "hookConfigFile": ".claude/settings.json",
       "hooks": {
         "deny-dangerous": {
+          "supported": true,
+          "cleanup": {
+            "hookIds": [
+              "deny-dangerous",
+              "guard-destructive-shell",
+              "guard-secret-paths",
+              "guard-repository-writes"
+            ],
+            "commandScriptNames": [
+              "deny-dangerous.sh",
+              "guard-common.sh",
+              "guard-destructive-shell.sh",
+              "guard-secret-paths.sh",
+              "guard-repository-writes.sh",
+              "guardrails-self-test.sh",
+              "deny-dangerous.self-test.sh"
+            ]
+          },
           "defaultEnabled": true,
           "commandScriptNames": [
             "deny-dangerous.sh",
@@ -76,6 +94,15 @@
           }
         },
         "gruff-code-quality": {
+          "supported": true,
+          "cleanup": {
+            "hookIds": [
+              "gruff-code-quality"
+            ],
+            "commandScriptNames": [
+              "gruff-code-quality.sh"
+            ]
+          },
           "defaultEnabled": false,
           "commandScriptNames": [
             "gruff-code-quality.sh"
@@ -165,6 +192,15 @@
           }
         },
         "post-turn-safety": {
+          "supported": true,
+          "cleanup": {
+            "hookIds": [
+              "post-turn-safety"
+            ],
+            "commandScriptNames": [
+              "post-turn-safety.sh"
+            ]
+          },
           "defaultEnabled": true,
           "commandScriptNames": [
             "post-turn-safety.sh"
@@ -212,6 +248,24 @@
       "hookConfigFile": ".codex/hooks.json",
       "hooks": {
         "deny-dangerous": {
+          "supported": true,
+          "cleanup": {
+            "hookIds": [
+              "deny-dangerous",
+              "guard-destructive-shell",
+              "guard-secret-paths",
+              "guard-repository-writes"
+            ],
+            "commandScriptNames": [
+              "deny-dangerous.sh",
+              "guard-common.sh",
+              "guard-destructive-shell.sh",
+              "guard-secret-paths.sh",
+              "guard-repository-writes.sh",
+              "guardrails-self-test.sh",
+              "deny-dangerous.self-test.sh"
+            ]
+          },
           "defaultEnabled": true,
           "commandScriptNames": [
             "deny-dangerous.sh",
@@ -251,6 +305,15 @@
           }
         },
         "gruff-code-quality": {
+          "supported": true,
+          "cleanup": {
+            "hookIds": [
+              "gruff-code-quality"
+            ],
+            "commandScriptNames": [
+              "gruff-code-quality.sh"
+            ]
+          },
           "defaultEnabled": false,
           "commandScriptNames": [
             "gruff-code-quality.sh"
@@ -286,6 +349,15 @@
           }
         },
         "post-turn-safety": {
+          "supported": true,
+          "cleanup": {
+            "hookIds": [
+              "post-turn-safety"
+            ],
+            "commandScriptNames": [
+              "post-turn-safety.sh"
+            ]
+          },
           "defaultEnabled": true,
           "commandScriptNames": [
             "post-turn-safety.sh"
@@ -325,6 +397,24 @@
       "hookConfigFile": ".agents/hooks.json",
       "hooks": {
         "deny-dangerous": {
+          "supported": true,
+          "cleanup": {
+            "hookIds": [
+              "deny-dangerous",
+              "guard-destructive-shell",
+              "guard-secret-paths",
+              "guard-repository-writes"
+            ],
+            "commandScriptNames": [
+              "deny-dangerous.sh",
+              "guard-common.sh",
+              "guard-destructive-shell.sh",
+              "guard-secret-paths.sh",
+              "guard-repository-writes.sh",
+              "guardrails-self-test.sh",
+              "deny-dangerous.self-test.sh"
+            ]
+          },
           "defaultEnabled": true,
           "commandScriptNames": [
             "deny-dangerous.sh",
@@ -363,6 +453,28 @@
               ]
             }
           }
+        },
+        "gruff-code-quality": {
+          "supported": false,
+          "cleanup": {
+            "hookIds": [
+              "gruff-code-quality"
+            ],
+            "commandScriptNames": [
+              "gruff-code-quality.sh"
+            ]
+          }
+        },
+        "post-turn-safety": {
+          "supported": false,
+          "cleanup": {
+            "hookIds": [
+              "post-turn-safety"
+            ],
+            "commandScriptNames": [
+              "post-turn-safety.sh"
+            ]
+          }
         }
       }
     },
@@ -370,6 +482,24 @@
       "hookConfigFile": ".github/hooks/hooks.json",
       "hooks": {
         "deny-dangerous": {
+          "supported": true,
+          "cleanup": {
+            "hookIds": [
+              "deny-dangerous",
+              "guard-destructive-shell",
+              "guard-secret-paths",
+              "guard-repository-writes"
+            ],
+            "commandScriptNames": [
+              "deny-dangerous.sh",
+              "guard-common.sh",
+              "guard-destructive-shell.sh",
+              "guard-secret-paths.sh",
+              "guard-repository-writes.sh",
+              "guardrails-self-test.sh",
+              "deny-dangerous.self-test.sh"
+            ]
+          },
           "defaultEnabled": true,
           "commandScriptNames": [
             "deny-dangerous.sh",
@@ -406,6 +536,15 @@
           }
         },
         "gruff-code-quality": {
+          "supported": true,
+          "cleanup": {
+            "hookIds": [
+              "gruff-code-quality"
+            ],
+            "commandScriptNames": [
+              "gruff-code-quality.sh"
+            ]
+          },
           "defaultEnabled": false,
           "commandScriptNames": [
             "gruff-code-quality.sh"
@@ -434,6 +573,17 @@
               ]
             },
             "version": 1
+          }
+        },
+        "post-turn-safety": {
+          "supported": false,
+          "cleanup": {
+            "hookIds": [
+              "post-turn-safety"
+            ],
+            "commandScriptNames": [
+              "post-turn-safety.sh"
+            ]
           }
         }
       }

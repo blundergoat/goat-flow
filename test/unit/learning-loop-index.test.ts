@@ -82,6 +82,14 @@ last_reviewed: 2026-06-01
 **What happened:** A mixed-quote title used to break the generated search payload.
 
 **Prevention:** Escape quote payloads in the formatter.
+
+## Lesson: Heading-only paragraphs are not summaries
+
+**Created:** 2026-05-13
+
+### Evidence
+
+The generated hook must use this meaningful prose.
 `;
 
 const PATTERN_BUCKET = `---
@@ -192,9 +200,15 @@ describe("parseBucket", () => {
     const entries = parseBucket(fs, LESSONS_DIR, "lessons").filter(
       (entry) => entry.sourceFile === "agent-behavior.md",
     );
-    assert.equal(entries.length, 3);
     assert.equal(entries[0]?.title, "Agents must read before writing");
     assert.equal(entries[0]?.hook, "The agent edited a file it never read.");
+    const headingOnlyEntry = entries.find(
+      (entry) => entry.title === "Heading-only paragraphs are not summaries",
+    );
+    assert.equal(
+      headingOnlyEntry?.hook,
+      "The generated hook must use this meaningful prose.",
+    );
   });
 
   it("truncates a run-on hook at a word boundary within the retrieval cap", () => {

@@ -8,7 +8,7 @@ last_reviewed: 2026-08-16
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
 **Status:** active | **Created:** 2026-05-25
-**Incident count:** 9 | **Latest occurrence:** 2026-08-16
+**Incident count:** 10 | **Latest occurrence:** 2026-08-17
 **Decision changed:** Treat a human-readable comment, boolean, compact test, or typed contract as unfinished until targeted and repository-wide analyzers accept the exact source shape.
 **Trigger phase:** VERIFY
 
@@ -29,6 +29,8 @@ last_reviewed: 2026-08-16
 **Seventh recurrence (2026-08-10):** Formatting a Gruff contract test exposed five fixture-purpose and test-loop advisories. Moving looped assertions into named cases cleared that cluster, but separate adjacent purpose and side-effect or invariant comments produced six follow-up advisories because only the nearest source shape carried each contract. Combining both meanings in one concise comment reduced the working-tree scan to zero findings. Evidence anchors: `test/integration/hook-provider-contracts.test.ts` (search: `Fixture purpose: creates an edit and runs Gruff`) and `test/integration/gruff-code-quality-contract.test.ts` (search: `Fixture purpose: proves helper bypass`).
 
 **Eighth recurrence (2026-08-16):** Upgrading Gruff from 0.4.0 to 0.5.0 changed the warning rule set while one error-severity file-length finding caused the ratchet to stop before comparing warning debt. Removing that error exposed 120 unmatched warnings and 27 stale accepted identities. After clearing the three warnings in the active M03 launcher, the first approved 117-entry manifest was pretty-printed past the same 1,000-line error threshold and blocked itself. Recording one reviewed entry per JSON line preserved every identity, occurrence, and rationale in 125 lines. Run the ratchet immediately after an analyzer/config upgrade, even while errors exist, and measure the reviewed manifest as part of its own scan. Evidence anchors: `package.json` (search: `@blundergoat/gruff-ts`), `scripts/check-gruff-warning-ratchet.mjs` (search: `splitFindingsBySeverity`), and `scripts/gruff-warning-baseline.json` (search: `reviewedAt`).
+
+**Ninth recurrence (2026-08-17):** A new `renderPriorReportContext` docblock described the function's stable behaviour twice, but `docs.missing-invariant-doc` remained because neither version used a marker the installed rule recognizes. Reading `context-doc-rules.ts` after the second failed rewrite showed the accepted whole-word vocabulary; naming the behavior a `contract` cleared the advisory without changing meaning. Evidence anchors: `src/cli/prompt/compose-quality-common.ts` (search: `continuity contract`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasInvariantMarker`).
 
 **Root cause:** I treated human-readable comments, compact boolean names, a local rename, and focused contract checks as complete before checking analyzer vocabulary, branch budgets, public type use, test structure, and parallel type surfaces.
 

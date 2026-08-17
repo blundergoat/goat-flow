@@ -46,31 +46,31 @@ function errorMessage(error: unknown): string {
  *
  * @param error - The error thrown/returned by the spawn attempt.
  * @param action - Short description of what was being spawned, for the message.
+ * @param executable - Program the runtime attempted to launch.
  * @returns A {@link SpawnFailure} for known spawn errnos, or `null` when the error
  *   is not a recognised spawn failure (i.e. the command actually ran).
  */
 export function spawnFailureFor(
   error: unknown,
   action: string,
+  executable = "bash",
 ): SpawnFailure | null {
   const code = errnoCode(error);
   if (code === "EPERM") {
     return {
-      message: `${action} could not spawn bash (EPERM: ${errorMessage(error)}). The current sandbox or permission profile blocks child-process execution.`,
-      howToFix:
-        "Run this audit outside the child-process-restricted sandbox, or use a profile that permits Node child_process to spawn bash.",
+      message: `${action} could not spawn ${executable} (EPERM: ${errorMessage(error)}). The current sandbox or permission profile blocks child-process execution.`,
+      howToFix: `Run this audit outside the child-process-restricted sandbox, or use a profile that permits Node child_process to spawn ${executable}.`,
     };
   }
   if (code === "ENOENT") {
     return {
-      message: `${action} could not spawn bash (ENOENT: ${errorMessage(error)}).`,
-      howToFix:
-        "Install bash or run the audit in an environment where bash is on PATH.",
+      message: `${action} could not spawn ${executable} (ENOENT: ${errorMessage(error)}).`,
+      howToFix: `Install ${executable} or run the audit in an environment where ${executable} is on PATH.`,
     };
   }
   if (code === "ETIMEDOUT") {
     return {
-      message: `${action} timed out while spawning bash (${errorMessage(error)}).`,
+      message: `${action} timed out while spawning ${executable} (${errorMessage(error)}).`,
       howToFix:
         "Re-run the audit with the hook command manually to inspect whether the hook hangs.",
     };
@@ -103,12 +103,16 @@ export function commandCompletedSuccessfully(error: unknown): boolean {
   );
 }
 
+/** Return a known launcher failure only when the child never reached a numeric exit status. */
 function spawnFailureFromResult(
   result: childProcess.SpawnSyncReturns<string>,
   action: string,
+  executable = "bash",
 ): SpawnFailure | null {
   if (completedWithStatus(result)) return null;
-  return result.error ? spawnFailureFor(result.error, action) : null;
+  return result.error
+    ? spawnFailureFor(result.error, action, executable)
+    : null;
 }
 
 /**
@@ -601,6 +605,7 @@ function configuredHookProbeFailureFromResult(
   const spawnFailure = spawnFailureFromResult(
     result,
     `${agentFacts.agent.id} configured hook command for ${configured.scriptFile}`,
+    configured.args === null ? "bash" : configured.command,
   );
   // A launcher that cannot start leaves the user without policy protection.
   if (spawnFailure !== null) {

@@ -194,6 +194,26 @@ describe("naming and placement playbook doctrine", () => {
     });
   });
 
+  it("treats named arguments and serialized keys as public compatibility surfaces", () => {
+    assertForNamingPlaybook((content, playbookPath) => {
+      assert.match(
+        content,
+        /public or exported parameter name[\s\S]+named arguments[\s\S]+compatibility surface/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /serialized field[\s\S]+payload key[\s\S]+returned associative key[\s\S]+public contract/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /absence of current named-argument callers[\s\S]+not compatibility authority/iu,
+        playbookPath,
+      );
+    });
+  });
+
   it("keeps cardinality and time claims representation-true", () => {
     assertForNamingPlaybook((content, playbookPath) => {
       assert.match(content, /Singular names one object/u, playbookPath);

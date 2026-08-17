@@ -48,7 +48,7 @@ export interface QualityHistoryRow {
   evidenceMethods: SavedQualityFinding["evidence_method"][];
 }
 
-/** Finding summary row shared by resolved, new, persisted, and stuck diff sections. */
+/** Finding summary row shared by absent, new, persisted, and stuck diff sections. */
 export interface QualityDiffFindingRow {
   id: string;
   severity: SavedQualityFinding["severity"];

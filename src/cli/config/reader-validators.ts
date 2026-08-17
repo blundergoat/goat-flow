@@ -458,6 +458,12 @@ function validateSkillsField(
         pushError(errors, "skills.goat-review", "must be an object");
         return;
       }
+      warnUnrecognizedKeys(
+        goatReview,
+        new Set(["local_pr_base"]),
+        "skills.goat-review",
+        warnings,
+      );
       // Local PR base, when present, becomes visible review context.
       if ("local_pr_base" in goatReview) {
         const localPrBase = goatReview.local_pr_base;

@@ -50,7 +50,7 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 **Why it happens:** goat-flow has no prose document defining what makes a skill belong in `workflow/manifest.json` (search: `"canonical"`) vs in an out-of-tree plugin. ADR-009 (search: `A skill must have at least one of`) records the *historical* doctrine of consolidating skills, and ADR-021 (search: `goat-critique runs in one mode: full delegated`) records the rejection of one over-narrow mode, but neither serves as a forward-facing scoping checklist for new skill proposals. `docs/skill-authoring.md` covers how to write a skill once accepted, not whether to accept one. Without that gate, well-intentioned skill PRs are evaluated on craft (which they often pass) rather than scope (where they should fail).
 
 **Evidence:**
-- `workflow/manifest.json` (search: `"canonical"`) enumerates the seven canonical skills; an eighth grows the surface area of every per-harness mirror, every audit check, and every parity script.
+- `workflow/manifest.json` (search: `"canonical"`) enumerates the eight canonical skills; a ninth grows the surface area of every per-harness mirror, every audit check, and every parity script.
 - `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `A skill must have at least one of`) records the doctrine but does not encode it as an authoring-time gate.
 - `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`) is the closest prior art for rejecting a configuration-flavored alternative; it lives as a per-skill decision, not a generic test.
 - `docs/skill-authoring.md` (search: `Decide First`) is structured as scaffold / validate / interactive / dashboard / authoring checks; none of the sections gate on general-purpose vs. workflow-specific.
@@ -85,9 +85,9 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 ## Footgun: Playbook content edits collide with the ADR-023 word cap and exact-phrase contract assertions
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Measure the body budget and inventory phrase-pinning contracts before adding or compressing any shipped skill or playbook guidance.
+**Decision changed:** Measure the body budget and inventory phrase-pinning contracts, vocabulary consumers, and reconciliation owners before adding or compressing shipped skill guidance.
 **Trigger phase:** ACT
-**Incident count:** 2 | **Latest occurrence:** 2026-08-16
+**Incident count:** 6 | **Latest occurrence:** 2026-08-17
 
 **Symptoms:** An approved content addition to a shipped playbook passes typecheck, content lint, and the playbook contract test, then fails preflight twice. First on the ADR-023 progressive-pack word cap. Then, after the compression pass that makes room, on skill-hardening assertions pinning exact sentences the compression reworded.
 
@@ -99,12 +99,22 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 
 **Recurrence 2026-08-17:** The 3000-word ADR-023 progressive cap is not the binding limit. `test/contract/skill-hardening-contracts.test.ts` also enforces tighter per-playbook rollout budgets - measured that day, `code-comments.md` caps at 2880 (M02) and `writing-sentence-diagnostics.md` must sit inside 900-1100 (M51). Both files were already within six and two words of those numbers, so a headroom figure computed against 3000 read as 126 and 1902 words of room that did not exist, and two approved additions failed the suite. Read the caps from the contract before sizing an edit; `code-comments.md` additionally carries 84 `assert.match` assertions, so funding an addition by compression there is its own scoped task, not a side edit.
 
+**Recurrence 2026-08-17 (mode-aware clarity gate):** A focused new contract proved both replacement empty-selection branches, but two older assertions in the same clarity contract still pinned phrases removed by the approved rewrite. The aggregate skill gate failed first on `zero eligible source files`, then on the comma-sensitive `binary or generated`. Re-reading the complete assertion block against the source diff preserved the binary/generated fail-closed invariant while removing only the superseded mode-agnostic phrase. Evidence anchors: `workflow/skills/goat-clarity/SKILL.md` (search: `Code mode fails closed`) and `test/contract/skill-hardening-clarity.test.ts` (search: `fails closed on unsupported path state`).
+
+**Recurrence 2026-08-17 (goat-clarity budget):** The new test dispositions and mode-aware empty-selection guidance passed focused contracts but raised goat-clarity from 2,457 to 2,641 body words. The full ADR-023 gate rejected it before the slow suite. Compressing duplicated test-selection explanation back into its owner left the explicit dispositions, equations, and report-only guard in the skill at 2,491 words across all mirrors. Evidence anchors: `workflow/skills/goat-clarity/SKILL.md` (search: `Added-test dispositions`) and `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap`).
+
+**Recurrence 2026-08-17 (closed-vocabulary consumers):** An external review found that goat-clarity's added/removed-test vocabulary and equations had reached the skill and playbook while the batch checkpoint, public docs, changelog, and receipt still enumerated only existing-test outcomes. The focused suite was green because it pinned the checkpoint's stale five-label equation independently instead of relating selector mode to its applicable equation. Adding those missing consumer contracts briefly moved the 2,491-word skill to the rejecting 2,500 boundary; a semantics-preserving trim left 2,490 words and all 88 aggregate skill contracts green. Evidence anchors: `workflow/skills/goat-clarity/references/target-scope-and-evidence.md` (search: `batch_expected = assessed_added`) and `test/contract/skill-hardening-clarity.test.ts` (search: `batch_expected = assessed_added`).
+
 **Prevention:** Before editing a playbook, measure its body word count, read its actual cap from `test/contract/skill-hardening-contracts.test.ts` rather than assuming the ADR-023 tier, and grep the contract tests for its filename to list the pinned phrases:
 
 ```bash
 node -e 'const t=require("fs").readFileSync(process.argv[1],"utf8").replace(/^---\n[\s\S]*?\n---\n?/,"");console.log(t.split(/\s+/).filter(Boolean).length)' .goat-flow/skill-docs/playbooks/<name>.md
 rg -n "<name>|<distinctive heading or phrase>" test/contract/skill-hardening-*.test.ts
 ```
+
+For a closed vocabulary or reconciliation equation, also grep every label and total across skills,
+references, receipts, docs, and release prose. Contract which equation applies to each selector or
+change state; independent literal-presence checks can preserve two contradictory owners.
 
 Restore pinned phrases verbatim after any compression, take compensating words from prose no assertion covers, and run the relevant skill-hardening contract tests before preflight. Mirror the result to every installed skill or playbook copy in the same turn; preflight diffs them.
 

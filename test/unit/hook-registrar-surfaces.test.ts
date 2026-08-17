@@ -15,10 +15,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { describe, it } from "node:test";
 import {
   applyHookState,
+  filesystemPathsAreEquivalent,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
 import {
@@ -45,6 +46,71 @@ import {
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: surface detection, toggles, and sync", () => {
+  it("treats Windows case and separator variants as the same physical root", () => {
+    assert.equal(
+      filesystemPathsAreEquivalent(
+        "C:\\Work\\HealthKit",
+        "c:/work/healthkit",
+        win32.relative,
+      ),
+      true,
+    );
+    const installerSource = readFileSync(
+      join(import.meta.dirname, "..", "..", "workflow", "install-goat-flow.sh"),
+      "utf-8",
+    );
+    assert.match(
+      installerSource,
+      /function filesystemPathsAreEquivalent[\s\S]*pathModule\.relative\(leftDirectory, rightDirectory\)[\s\S]*pathModule\.relative\(rightDirectory, leftDirectory\)/u,
+    );
+    assert.doesNotMatch(
+      installerSource,
+      /gitTopLevel\([^\n]+\) === [^\n]+/u,
+    );
+  });
+
+  it("publishes cleanup metadata for hooks unsupported by one provider", () => {
+    const contract = JSON.parse(
+      readFileSync(
+        join(
+          import.meta.dirname,
+          "..",
+          "..",
+          "workflow",
+          "hooks",
+          "agent-config",
+          "managed-hook-desired-state.json",
+        ),
+        "utf-8",
+      ),
+    ) as {
+      agents: Record<
+        string,
+        {
+          hooks: Record<
+            string,
+            {
+              supported: boolean;
+              cleanup: {
+                hookIds: string[];
+                commandScriptNames: string[];
+              };
+            }
+          >;
+        }
+      >;
+    };
+    const antigravityContract = contract.agents.antigravity;
+    assert.ok(antigravityContract);
+    assert.deepEqual(antigravityContract.hooks["gruff-code-quality"], {
+      supported: false,
+      cleanup: {
+        hookIds: ["gruff-code-quality"],
+        commandScriptNames: ["gruff-code-quality.sh"],
+      },
+    });
+  });
+
   it("uses the selected Git project as the implicit post-turn scan root", () => {
     withTempProject((root) => {
       runGit(root, ["init", "-q"]);

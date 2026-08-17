@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { getAgentProfile } from "./agents/registry.js";
 import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
 import type { ParsedCLI } from "./cli-types.js";
@@ -23,6 +24,7 @@ import {
 } from "./managed-setup-preview.js";
 import { managedSetupAdmissionFailure } from "./managed-setup-admission.js";
 import type { ManagedSetupAuthority } from "./managed-setup-authority.js";
+import { readManagedTargetEvidence } from "./managed-setup-write-set.js";
 import {
   emitManagedSetupDryRun,
   validateManagedSetupRequest,
@@ -30,6 +32,15 @@ import {
 import { getTemplatePath } from "./paths.js";
 import { emitIndexGenerationInstallResult } from "./learning-loop-index/command.js";
 import { emitCommitGuidanceInstallResult } from "./prompt/commit-guidance.js";
+import {
+  readAgentHookState,
+  type AgentHookReadState,
+} from "./server/agent-hook-writer.js";
+import {
+  readAllHookStates,
+  type HookState,
+} from "./server/hook-registrar.js";
+import { listHookSpecs } from "./server/hooks-registry.js";
 import type { AgentId } from "./types.js";
 
 /** Derive installer flags from the project's adoption state. */
@@ -38,7 +49,6 @@ function deriveInstallFlags(
   agentId: string,
   options: ParsedCLI,
 ): string[] {
-  if (options.shouldForce) return [];
   try {
     const projectFS = createFS(projectPath);
     const state = classifyProjectState(projectFS, agentId);
@@ -124,17 +134,326 @@ const SHIPPED_HOOK_TOGGLES = [
   "gruff-code-quality",
 ] as const;
 
-/** Read one target's config text; it swallows any read error as null, so a first install simply has none yet. */
-function readTargetConfigText(projectPath: string): string | null {
+/**
+ * Read one safe regular target file without following an already-observed unsafe destination.
+ * Side effects: none; read and metadata errors are converted to a null result.
+ *
+ * @param projectPath - selected target root containing the relative path
+ * @param relativePath - repository-relative file to inspect and read
+ * @returns file text, or null for absence, redirection, hard links, or read errors
+ * @throws Never; filesystem failures are represented by null
+ */
+function readExistingTargetText(
+  projectPath: string,
+  relativePath: string,
+): string | null {
+  if (readManagedTargetEvidence(projectPath, relativePath).status !== "regular")
+    return null;
   try {
-    return readFileSync(
-      join(projectPath, ".goat-flow", "config.yaml"),
-      "utf-8",
-    );
+    return readFileSync(join(projectPath, relativePath), "utf-8");
   } catch {
-    // A first install scaffolds the file instead of migrating it, so absence is not a migration.
+    // A disappearing or newly unreadable target is classified again by admission before any write.
     return null;
   }
+}
+
+/** Read one target's config text; a first install has no migration source. */
+function readTargetConfigText(projectPath: string): string | null {
+  return readExistingTargetText(projectPath, ".goat-flow/config.yaml");
+}
+
+type HookRegistrationEdit = "restore" | "repair" | "remove";
+
+/** Return whether setup's root contract permits this desired provider registration. */
+function hookRegistrationIsAllowed(hookState: HookState): boolean {
+  return (
+    hookState.enabled &&
+    (hookState.scanRoots === null ||
+      hookState.scanRoots.status === "implicit" ||
+      hookState.scanRoots.status === "configured")
+  );
+}
+
+/**
+ * Classify the one config edit needed to reach desired registration state.
+ * Missing or invalid configs stay outside migration because setup either seeds or preserves them.
+ */
+function hookRegistrationEdit(
+  current: AgentHookReadState,
+  shouldRegister: boolean,
+): HookRegistrationEdit | null {
+  if (current.configMissing || current.configInvalid) return null;
+  if (shouldRegister && current.installed) return null;
+  if (shouldRegister) {
+    return current.registrationIssue === "registration-missing"
+      ? "restore"
+      : "repair";
+  }
+  const hasOwnedRegistration =
+    current.installed ||
+    (current.registrationIssue !== undefined &&
+      current.registrationIssue !== "registration-missing");
+  return hasOwnedRegistration ? "remove" : null;
+}
+
+/** User-facing verbs for the three registration changes install can perform. */
+const HOOK_REGISTRATION_EDIT_PREFIX: Record<HookRegistrationEdit, string> = {
+  restore: "restore managed hook registrations",
+  repair: "repair managed hook registrations",
+  remove: "remove inactive managed hook registrations",
+};
+
+/**
+ * Name managed registration edits the standalone installer will make to an existing agent config.
+ * Missing configs are covered by the preview's create action, while invalid JSON stays preserved.
+ *
+ * @param projectPath - selected target whose current config and root contract are inspected
+ * @param agent - selected provider whose one hook-config row receives the summary
+ * @returns concise edit phrases; empty means hook reconciliation leaves the config unchanged
+ */
+function pendingHookConfigEdits(
+  projectPath: string,
+  agent: AgentId,
+): string[] {
+  const profile = getAgentProfile(agent);
+  if (
+    profile.hookConfigFile === null ||
+    readExistingTargetText(projectPath, profile.hookConfigFile) === null
+  ) {
+    return [];
+  }
+
+  const hookStates = new Map(
+    readAllHookStates(projectPath).map((hookState) => [
+      hookState.id,
+      hookState,
+    ]),
+  );
+  const edits: Record<HookRegistrationEdit, string[]> = {
+    restore: [],
+    repair: [],
+    remove: [],
+  };
+
+  for (const spec of listHookSpecs()) {
+    if (spec.unsupportedAgents?.[agent] !== undefined) continue;
+    const hookState = hookStates.get(spec.id);
+    const agentState = hookState?.agents[agent];
+    if (!hookState || !agentState?.supported) continue;
+    const current = readAgentHookState(projectPath, profile, spec);
+    // Root eligibility matters because standalone apply removes an ineligible Stop row instead of restoring it.
+    const edit = hookRegistrationEdit(
+      current,
+      hookRegistrationIsAllowed(hookState),
+    );
+    if (edit !== null) edits[edit].push(spec.id);
+  }
+
+  return (Object.keys(edits) as HookRegistrationEdit[]).flatMap((edit) =>
+    edits[edit].length > 0
+      ? [`${HOOK_REGISTRATION_EDIT_PREFIX[edit]}: ${edits[edit].join(", ")}`]
+      : [],
+  );
+}
+
+/** Add one path-specific edit sentence without discarding an earlier migration summary. */
+function addPendingMigration(
+  migrations: Map<string, string>,
+  path: string,
+  summary: string,
+): void {
+  const existing = migrations.get(path);
+  migrations.set(path, existing ? `${existing} ${summary}` : summary);
+}
+
+/**
+ * Return whether supplied Codex TOML still declares the retired feature key.
+ * Side effects: updates only local parser state and never changes the supplied text or filesystem.
+ */
+function hasDeprecatedCodexHooksFlag(settingsText: string): boolean {
+  let section = "";
+  for (const line of settingsText.split(/\r?\n/u)) {
+    const sectionMatch = /^\s*\[([^\]]+)\]\s*(?:#.*)?$/u.exec(line);
+    if (sectionMatch) {
+      section = sectionMatch[1]?.trim() ?? "";
+      continue;
+    }
+    const assignment = /^\s*([A-Za-z0-9_.-]+)\s*=\s*(?:true|false)\s*(?:#.*)?$/u.exec(
+      line,
+    );
+    if (!assignment) continue;
+    const rawKey = assignment[1] ?? "";
+    const normalizedKey =
+      section === "features" && !rawKey.includes(".")
+        ? `features.${rawKey}`
+        : rawKey;
+    if (normalizedKey === "features.codex_hooks") return true;
+  }
+  return false;
+}
+
+/** Canonical Codex deny patterns whose absence makes the active permission profile migratable. */
+const CODEX_CANONICAL_DENY_PATTERNS = [
+  "**/.env",
+  "**/.env.local",
+  "**/.env.development",
+  "**/.env.production",
+  "**/.env.staging",
+  "**/.env.test",
+  "**/.envrc",
+  "**/.env.*.local",
+  "**/secrets/**",
+  "**/.ssh/**",
+  "**/.aws/**",
+  "**/.docker/**",
+  "**/.gnupg/**",
+  "**/.kube/**",
+  "**/credentials*",
+  "**/.npmrc",
+  "**/.pypirc",
+  "**/*.pem",
+  "**/*.key",
+  "**/*.pfx",
+] as const;
+
+/** Escape literal text before matching one TOML key. */
+function escapeRegularExpression(literalText: string): string {
+  return literalText.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/**
+ * Return whether supplied Codex permission text triggers canonical migration.
+ * Side effects: none; all matching reads only the supplied string.
+ */
+function codexPermissionProfileNeedsMigration(settingsText: string): boolean {
+  const defaultProfile =
+    /^\s*default_permissions\s*=\s*["']([^"']+)["']/mu.exec(
+      settingsText,
+    )?.[1] ?? "goat-flow";
+  const hasDefaultProfile = /^\s*default_permissions\s*=/mu.test(settingsText);
+  const escapedProfile = escapeRegularExpression(defaultProfile);
+  const profileSection = new RegExp(
+    `^\\s*\\[\\s*permissions\\.${escapedProfile}\\s*\\]\\s*$`,
+    "mu",
+  );
+  const filesystemSection = new RegExp(
+    `^\\s*\\[\\s*permissions\\.${escapedProfile}\\.filesystem(?:\\..+)?\\s*\\]\\s*$`,
+    "mu",
+  );
+  const hasPermissionSurface =
+    hasDefaultProfile ||
+    settingsText.match(profileSection) !== null ||
+    settingsText.match(filesystemSection) !== null;
+  if (!hasPermissionSurface) return false;
+
+  const hasLegacyAccess = /=\s*["']none["']/u.test(settingsText);
+  const hasLegacyAnchor = /["']:project_roots["']/u.test(settingsText);
+  const missingWorkspaceExtension =
+    defaultProfile === "goat-flow" &&
+    hasDefaultProfile &&
+    !/^\s*extends\s*=\s*["']:workspace["']/mu.test(settingsText);
+  const missingCanonicalDeny = CODEX_CANONICAL_DENY_PATTERNS.some(
+    (pattern) =>
+      settingsText.match(
+        new RegExp(
+          `^[ \\t]*["']${escapeRegularExpression(pattern)}["'][ \\t]*=[ \\t]*["']deny["']`,
+          "mu",
+        ),
+      ) === null,
+  );
+  return (
+    hasLegacyAccess ||
+    hasLegacyAnchor ||
+    missingWorkspaceExtension ||
+    missingCanonicalDeny
+  );
+}
+
+/**
+ * Return whether supplied Claude permissions contain a rule install rewrites or removes.
+ * Side effects: none; malformed JSON is treated as preserved, matching standalone apply.
+ *
+ * @param settingsText - current JSON bytes from a safe regular settings file
+ * @returns true only when a recognized stale rule would be changed
+ * @throws Never; parse failures return false
+ */
+function claudePermissionsNeedMigration(settingsText: string): boolean {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(settingsText) as unknown;
+  } catch {
+    return false;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+    return false;
+  const permissions = (parsed as Record<string, unknown>).permissions;
+  if (
+    permissions === null ||
+    typeof permissions !== "object" ||
+    Array.isArray(permissions)
+  )
+    return false;
+  const permissionRecord = permissions as Record<string, unknown>;
+  return ["deny", "allow", "ask"].some((arrayName) => {
+    const rules = permissionRecord[arrayName];
+    if (!Array.isArray(rules)) return false;
+    return rules.some(
+      (rule) =>
+        typeof rule === "string" &&
+        (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(/u.test(rule) ||
+          (arrayName === "deny" &&
+            (rule === "Read(**/.env*)" || rule === "Edit(**/.env*)"))),
+    );
+  });
+}
+
+/** Name in-place settings migrations for the selected provider and optional local override. */
+function pendingAgentSettingsMigrations(
+  projectPath: string,
+  agent: AgentId,
+): Map<string, string[]> {
+  const profile = getAgentProfile(agent);
+  const settingsMigrations = new Map<string, string[]>();
+  if (profile.settingsFile === null) return settingsMigrations;
+  const paths = [profile.settingsFile];
+  if (agent === "claude") paths.push(".claude/settings.local.json");
+
+  for (const settingsPath of paths) {
+    const settingsText = readExistingTargetText(projectPath, settingsPath);
+    if (settingsText === null) continue;
+    const edits: string[] = [];
+    if (agent === "codex" && hasDeprecatedCodexHooksFlag(settingsText)) {
+      edits.push("migrate the deprecated codex_hooks feature flag");
+    }
+    if (
+      agent === "codex" &&
+      codexPermissionProfileNeedsMigration(settingsText)
+    ) {
+      edits.push("refresh the Codex permission profile");
+    }
+    if (agent === "claude" && claudePermissionsNeedMigration(settingsText)) {
+      edits.push("repair stale or unmatched Claude permission rules");
+    }
+    if (edits.length > 0) settingsMigrations.set(settingsPath, edits);
+  }
+  return settingsMigrations;
+}
+
+/** Return whether install will append its dependency ignore to an existing root policy. */
+function rootGitignoreNeedsMigration(projectPath: string): boolean {
+  const gitignoreText = readExistingTargetText(projectPath, ".gitignore");
+  if (gitignoreText === null) return false;
+  const equivalentEntries = new Set([
+    "node_modules/",
+    "node_modules",
+    "/node_modules/",
+    "/node_modules",
+    "**/node_modules/",
+    "**/node_modules",
+  ]);
+  return !gitignoreText
+    .split(/\r?\n/u)
+    .some((line) => equivalentEntries.has(line.trim()));
 }
 
 /**
@@ -151,34 +470,62 @@ function pendingMigrations(
   agent: AgentId,
 ): ReadonlyMap<string, string> {
   const configText = readTargetConfigText(options.projectPath);
+  const migrations = new Map<string, string>();
   // Without an existing config there is nothing to migrate; the seed row already covers creation.
-  if (configText === null) return new Map();
-
-  const edits: string[] = [];
-  const migratesConfigVersion =
-    options.updateConfigVersion ||
-    deriveInstallFlags(options.projectPath, agent, options).includes(
-      "--update-config-version",
+  if (configText !== null) {
+    const edits: string[] = [];
+    const migratesConfigVersion =
+      options.updateConfigVersion ||
+      deriveInstallFlags(options.projectPath, agent, options).includes(
+        "--update-config-version",
+      );
+    if (migratesConfigVersion) edits.push("update the version field");
+    for (const retired of RETIRED_CONFIG_BLOCKS) {
+      if (retired.pattern.test(configText)) edits.push(retired.edit);
+    }
+    const absentToggles = SHIPPED_HOOK_TOGGLES.filter(
+      (hookId) => !new RegExp(`^\\s{2}${hookId}\\s*:`, "mu").test(configText),
     );
-  if (migratesConfigVersion) edits.push("update the version field");
-  for (const retired of RETIRED_CONFIG_BLOCKS) {
-    if (retired.pattern.test(configText)) edits.push(retired.edit);
-  }
-  const absentToggles = SHIPPED_HOOK_TOGGLES.filter(
-    (hookId) => !new RegExp(`^\\s{2}${hookId}\\s*:`, "mu").test(configText),
-  );
-  if (absentToggles.length > 0) {
-    edits.push(`add hook toggles: ${absentToggles.join(", ")}`);
+    if (absentToggles.length > 0) {
+      edits.push(`add hook toggles: ${absentToggles.join(", ")}`);
+    }
+
+    if (edits.length > 0) {
+      addPendingMigration(
+        migrations,
+        ".goat-flow/config.yaml",
+        `Install edits this user-owned file in place to ${edits.join("; ")}. Every other line, comment, and hook choice stays byte-stable.`,
+      );
+    }
   }
 
-  // No pending edit means the config row stays a preserved file, not a migration.
-  if (edits.length === 0) return new Map();
-  return new Map([
-    [
-      ".goat-flow/config.yaml",
-      `Install edits this user-owned file in place to ${edits.join("; ")}. Every other line, comment, and hook choice stays byte-stable.`,
-    ],
-  ]);
+  const profile = getAgentProfile(agent);
+  const hookConfigEdits = pendingHookConfigEdits(options.projectPath, agent);
+  if (profile.hookConfigFile !== null && hookConfigEdits.length > 0) {
+    addPendingMigration(
+      migrations,
+      profile.hookConfigFile,
+      `Install edits this user-owned hook config in place to ${hookConfigEdits.join("; ")}. Unrelated hook rows and top-level fields stay byte-stable.`,
+    );
+  }
+  for (const [settingsPath, edits] of pendingAgentSettingsMigrations(
+    options.projectPath,
+    agent,
+  )) {
+    addPendingMigration(
+      migrations,
+      settingsPath,
+      `Install edits this user-owned settings file in place to ${edits.join("; ")}. Unrelated settings stay byte-stable.`,
+    );
+  }
+  if (rootGitignoreNeedsMigration(options.projectPath)) {
+    addPendingMigration(
+      migrations,
+      ".gitignore",
+      "Install appends the node_modules/ dependency ignore and preserves every existing line.",
+    );
+  }
+  return migrations;
 }
 
 /**

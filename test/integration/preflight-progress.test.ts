@@ -30,6 +30,7 @@ const PREFLIGHT_RUNNER_PATH = join(
   "scripts",
   "preflight-command-runner.mjs",
 );
+const TEST_RUNNER_PATH = join(PROJECT_ROOT, "scripts", "run-tests.mjs");
 const CHILD_FAILURE_STATUS = 7;
 const fixtureProcessIds = new Set<number>();
 const fixtureTemporaryDirectories = new Set<string>();
@@ -491,7 +492,7 @@ describe("preflight Tests-phase progress", () => {
     assert.equal(await waitForFixtureProcessExit(workerProcessId), true);
   });
 
-  it("pins one bounded fast-suite run to interactive ten-second heartbeats", () => {
+  it("pins one bounded coverage run to interactive ten-second heartbeats", () => {
     const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
     const fastSelectionIndex = preflightSource.indexOf('"test:fast"');
     const coverageSelectionIndex = preflightSource.indexOf('"test:coverage"');
@@ -501,10 +502,10 @@ describe("preflight Tests-phase progress", () => {
     assert.match(preflightSource, /"Tests" "\$\{test_command\[@\]\}"/u);
     assert.match(
       preflightSource,
-      /GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-28/u,
+      /GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-600/u,
     );
     assert.ok(fastSelectionIndex >= 0);
-    assert.ok(coverageSelectionIndex > fastSelectionIndex);
+    assert.ok(coverageSelectionIndex < fastSelectionIndex);
     assert.doesNotMatch(preflightSource, /Tests retry/u);
     assert.doesNotMatch(preflightSource, /GOAT_FLOW_PREFLIGHT_TEST_COMMAND/u);
     assert.equal(
@@ -512,6 +513,23 @@ describe("preflight Tests-phase progress", () => {
         .length,
       2,
       "expected one helper definition plus one bounded Tests call site",
+    );
+  });
+
+  it("keeps fast concurrency bounded and isolates observed subprocess-heavy suites", () => {
+    const runnerSource = readFileSync(TEST_RUNNER_PATH, "utf-8");
+
+    assert.match(
+      runnerSource,
+      /mode === "slow" \? "1" : mode === "fast" \? "8" : "8"/u,
+    );
+    assert.match(
+      runnerSource,
+      /test\/integration\/hook-effective-state\.test\.ts/u,
+    );
+    assert.match(
+      runnerSource,
+      /test\/integration\/setup-quality-lifecycle\.test\.ts/u,
     );
   });
 });

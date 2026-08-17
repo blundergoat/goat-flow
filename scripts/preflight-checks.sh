@@ -65,7 +65,7 @@ Environment:
   COLUMNS=N      - override terminal width detection (default: tput cols, or 80)
   CI=true        - implies --no-color unless FORCE_COLOR is set
   GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=N
-                 - test command timeout in seconds (default: 28; 0 disables)
+                 - test command timeout in seconds (default: 600; 0 disables)
 HELP
             exit 0
             ;;
@@ -420,7 +420,7 @@ collapsed_desc_for() {
         "Cross-Agent Consistency") printf 'execution loop · router table' ;;
         "Instruction Parity Contract") printf 'agent files share contract' ;;
         "Instruction File Quality") printf 'within line budget · no encyclopedia' ;;
-        "Tests") printf 'fast suite · bounded to 30s' ;;
+        "Tests") printf 'coverage suite · bounded to 600s' ;;
         "Dependency Audit") printf 'npm audit' ;;
         "GOAT Flow Audit") printf 'all checks' ;;
         "Learning-Loop Schema") printf 'footguns + lessons valid' ;;
@@ -1764,25 +1764,25 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     section "Tests"
     test_reports_coverage=false
     coverage_output=""
-    if grep -q '"test:fast"' package.json; then
-        test_command=(npm run test:fast)
-        test_label="Fast suite"
-    elif grep -q '"test:coverage"' package.json; then
+    if grep -q '"test:coverage"' package.json; then
         test_command=(npm run test:coverage)
         test_label="Tests + coverage"
         test_reports_coverage=true
+    elif grep -q '"test:fast"' package.json; then
+        test_command=(npm run test:fast)
+        test_label="Fast suite"
     else
         test_command=(npm test)
         test_label="All"
     fi
     test_output=""
     test_exit=1
-    test_timeout_seconds="${GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-28}"
+    test_timeout_seconds="${GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-600}"
     if [[ "$test_timeout_seconds" =~ ^[0-9]+$ ]]; then
         :
     else
-        warn "Invalid GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=$test_timeout_seconds; using 28"
-        test_timeout_seconds=28
+        warn "Invalid GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=$test_timeout_seconds; using 600"
+        test_timeout_seconds=600
     fi
     run_command_capture_with_timeout \
         test_output test_exit "$test_timeout_seconds" "Tests" "${test_command[@]}"

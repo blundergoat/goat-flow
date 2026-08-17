@@ -86,7 +86,7 @@ describe("skill hardening contracts: goat-clarity", () => {
   it("reports test-value dispositions without mutating test meaning", () => {
     assertIncludesAll([
       "test-value pass",
-      "For a PR or uncommitted selector, assess every added, removed, or materially changed test case",
+      "For a PR or uncommitted selector, assess every added, removed, relocated, or materially changed test case",
       "For a folder or file selector, assess every test case in selected test-source units",
       "four-part value gate",
       "plausible regression",
@@ -98,11 +98,20 @@ describe("skill hardening contracts: goat-clarity", () => {
       "MOVE LEVEL",
       "PRUNE CANDIDATE",
       "UNRESOLVED",
-      "one row per assessed existing test",
+      "Each assessed test gets one row",
       "assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED",
       "report-only",
       "no replacement is required",
-      "keep the original until replacement coverage passes",
+      "keeps the original until replacement coverage passes",
+      "Added-test dispositions: `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, `ADDED UNRESOLVED`",
+      "Removed-test dispositions: `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, `REMOVAL UNRESOLVED`",
+      "assessed_added = ADDED_KEEP + ADDED_CONSOLIDATE + ADDED_MOVE_LEVEL + ADDED_DROP_CANDIDATE + ADDED_UNRESOLVED",
+      "assessed_removed = REMOVAL_SUPPORTED + RESTORE + REPLACE + REMOVAL_UNRESOLVED",
+      "assessed_materially_changed = KEEP + CONSOLIDATE + MOVE_LEVEL + PRUNE_CANDIDATE + UNRESOLVED",
+      "assessed_relocated = RELOCATED",
+      "assessed_pr_or_uncommitted = assessed_added + assessed_removed + assessed_materially_changed + assessed_relocated",
+      "`test-selection.md` meanings and evidence gates to every existing, added, removed, relocated, and materially changed row",
+      "drop, deletion, restore, or replacement candidates",
     ]);
 
     const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
@@ -113,9 +122,33 @@ describe("skill hardening contracts: goat-clarity", () => {
       "no more than 20 cases",
       "filter provider data before it reaches the evidence response",
       "batch_expected = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED",
+      "batch_expected = assessed_added + assessed_removed + assessed_materially_changed",
+      "baseline/current presence for a PR or uncommitted selector",
+      "relocation mapping",
+      "case-level anchor and assertion equivalence",
+      "Read removed-test evidence from the bound comparison baseline without fetching or materializing it into the worktree",
+      "`UNRESOLVED`, `ADDED UNRESOLVED`, or `REMOVAL UNRESOLVED`",
+      "drop, deletion, restore, or replacement recommendation",
       "every case must reconcile",
       "reserve the final provider lookup for head-drift revalidation",
     ]);
+  });
+
+  it("uses a mode-aware empty-selection gate", () => {
+    assertIncludesAll([
+      "Code mode fails closed on zero eligible source-code or test-source units",
+      "Documentation mode fails closed on zero eligible selected human-documentation units",
+      "eligible selected prose remains writable",
+      "Writable only in explicit documentation mode when the unit is inside the selected inventory",
+      "Code mode may read documentation to verify a claim but cannot edit it",
+      "Documentation and READMEs are read-only in code mode",
+      "Documentation mode changes only eligible selected human prose",
+    ]);
+    assert.doesNotMatch(
+      clarityGuidance,
+      /zero eligible source files/iu,
+      `${SKILL_PATH}: retired mode-agnostic empty-selection gate must not return`,
+    );
   });
 
   it("freezes selector authority before any write", () => {
@@ -133,16 +166,44 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("binds authority provenance and reconciles the frozen inventory", () => {
+    assertIncludesAll([
+      "Authority:",
+      "Reconciliation: inventory",
+      "Pre-existing dirty paths:",
+    ]);
+
+    const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
+      "committed, modified, untracked, or absent",
+      "current authority bytes",
+      "comparison baseline",
+      "semantic authority drift",
+      "fails closed",
+      "literal integers",
+      "commit OID equality",
+      "branch names are irrelevant",
+      "selected inventory paths",
+      "unrelated dirty paths",
+      "PR_FEEDBACK_OUT_OF_SCOPE",
+      "edit batch",
+      "scoped to the frozen writable paths",
+    ]);
+  });
+
   it("fails closed on unsupported path state and keeps remote PR diagnosis read-only", () => {
     assertIncludesAll([
       "unmerged state",
       "direct symlink selector",
       "never follow symlinks",
-      "zero eligible source files",
       "outside the repository",
-      "binary or generated",
       "PR_FEEDBACK_NOT_CHECKED",
     ]);
+    assert.match(
+      clarityGuidance,
+      /Fail closed on[^.]*\bbinary\b[^.]*\bgenerated content\b/isu,
+      `${SKILL_PATH}: fail-closed content classes must stay in one sentence`,
+    );
 
     const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
     assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
@@ -201,6 +262,16 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("does not rewrite a false comment to normalize defective behaviour", () => {
+    assertIncludesAll([
+      "Deferred with reason `BLOCKED-ON-BEHAVIOUR`",
+      "preserve the comment bytes",
+      "route the reproduced defect to `goat-debug`",
+      "expected final shape",
+      "every applicable rule",
+    ]);
+  });
+
   it("keeps safe edits separate from scope expansion", () => {
     assertIncludesAll([
       "Safe apply",
@@ -216,6 +287,12 @@ describe("skill hardening contracts: goat-clarity", () => {
       "wait for explicit approval",
       "preserve observable behaviour",
       "whitespace-only churn",
+    ]);
+
+    assertIncludesAll([
+      "public or exported parameter name in a language with named arguments",
+      "serialized field, payload key, or returned associative key",
+      "route it to `goat-plan`",
     ]);
   });
 
@@ -345,6 +422,9 @@ describe("skill hardening contracts: goat-clarity", () => {
       "AMBIGUOUS",
       "preserve repository-owned flags",
       "scope the command to formatter-owned writable paths",
+      "complete formatter-capability outcome",
+      "current project authority",
+      "temporary copy inside the repository is forbidden",
     ]);
   });
 
@@ -371,6 +451,8 @@ describe("skill hardening contracts: goat-clarity", () => {
       "never add unlike units",
       "receipt meanings are stable but headings and presentation may vary",
       "no JSON schema is promised",
+      "aggregate spans by file and diagnosed rule",
+      "symbol-level evidence",
     ]);
   });
 
@@ -398,9 +480,10 @@ describe("skill hardening contracts: goat-clarity", () => {
       "no diagnosed findings",
       "compact summary",
       "literal verification results",
-      "receipt without Formatter proof is incomplete",
       "Agent: <claude | codex | antigravity | copilot>",
       "Selector: <github-pr | uncommitted | folder | file>",
+      "Summary: <paste-ready pull-request summary when requested or needed for headless/sub-agent handoff; otherwise not requested>",
+      "A receipt is complete when formatter capability is classified",
     ]);
   });
 
@@ -442,6 +525,13 @@ describe("skill hardening contracts: goat-clarity", () => {
       "selected-unit, changed-span, and command-evidence ledgers",
       "remote report-only",
       "test-selection record",
+      "ADDED KEEP",
+      "REMOVAL SUPPORTED",
+      "RELOCATED",
+      "BLOCKED-ON-BEHAVIOUR",
+      "named arguments",
+      "formatter capability",
+      "PR and uncommitted work",
     ]);
   });
 

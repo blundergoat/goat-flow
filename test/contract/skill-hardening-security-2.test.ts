@@ -143,7 +143,7 @@ describe("skill hardening contracts: security (2/2)", () => {
       assertMatchesAll(
         readProjectFile(skillPath),
         [
-          /Bootstrap authority.*host.*pre-load.*skill.*mandatory references.*independently trusted.*immutable.*absolute installed source.*version\/digest.*assessed head\/worktree.*evidence only.*no load\/invocation\/clearance.*cannot self-authorize after load/isu,
+          /Bootstrap authority.*host-selected.*immutable.*absolute installed.*skill.*mandatory references.*may load.*unproven provenance.*`UNVERIFIED`.*MUST NOT support.*clearance.*`ACCEPTED-RISK`.*target-controlled invocation.*assessed head\/worktree.*evidence only.*cannot self-authorize/isu,
           /apply.*common-threats.*non-executing Git inspection profile.*before.*Git/iu,
           /networked tools.*endpoint.*data.*credentials.*trusted configuration.*explicit authorization before submission.*effective destination/isu,
           /DNS\/redirects.*approved scope.*before forwarding.*stop\/re-authorize.*change/iu,
@@ -207,7 +207,8 @@ describe("skill hardening contracts: security (2/2)", () => {
     assertMatchesAll(
       readMarkdownSection("docs/skills.md", "/goat-security"),
       [
-        /bootstrap authority.*invoking host.*before loading.*goat-security.*mandatory references.*independently trusted.*immutable.*absolute installed source.*version.*digest.*assessed head\/worktree.*evidence only.*withhold.*invocation.*clearance.*cannot establish.*own authority.*after load/isu,
+        /bootstrap authority.*host-selected.*immutable.*absolute installed.*skill.*mandatory references.*may load.*unproven provenance.*`UNVERIFIED`.*MUST NOT support.*clearance.*`ACCEPTED-RISK`.*target-controlled invocation.*assessed head\/worktree.*evidence only.*cannot self-authorize/isu,
+        /Quick Scan.*read.*`common-threats\.md`.*`supply-chain-and-cicd\.md`.*`identity-and-data\.md`.*identity.*authentication.*authorization.*sessions.*secrets.*data.*`file-upload-and-paths\.md`.*uploads.*paths.*archives.*applicable reference.*unavailable.*`not assessed`.*coverage-degraded.*MUST NOT recommend clearance/isu,
         /trusted absolute Git binary.*clean, allowlisted environment.*inherited `GIT_\*`/iu,
         /worktree-sensitive Git diff\/status.*filters.*neutralized.*worktree bytes.*non-Git read-only/iu,
         /no-follow.*before every worktree content read.*symlink.*link text.*escape.*`UNVERIFIED`/iu,
@@ -232,7 +233,8 @@ describe("skill hardening contracts: security (2/2)", () => {
     assertMatchesAll(
       readPresetPrompt("security"),
       [
-        /bootstrap authority.*invoking host.*before loading.*goat-security.*mandatory references.*independently trusted.*immutable.*absolute installed source.*version.*digest.*assessed head\/worktree.*evidence only.*withhold.*invocation.*clearance.*cannot establish.*own authority.*after load/isu,
+        /bootstrap authority.*host-selected.*immutable.*absolute installed.*skill.*mandatory references.*may load.*unproven provenance.*UNVERIFIED.*must not support.*clearance.*ACCEPTED-RISK.*target-controlled invocation.*assessed head\/worktree.*evidence only.*cannot self-authorize/isu,
+        /Quick Scan.*read.*common-threats\.md.*supply-chain-and-cicd\.md.*identity-and-data\.md.*identity.*authentication.*authorization.*sessions.*secrets.*data.*file-upload-and-paths\.md.*uploads.*paths.*archives.*applicable reference.*unavailable.*not assessed.*coverage-degraded.*must not recommend clearance/isu,
         /trusted absolute Git binary.*clean, allowlisted environment.*inherited GIT_\*/iu,
         /worktree-sensitive Git diff\/status.*filters.*neutralized.*worktree bytes.*non-Git read-only/iu,
         /no-follow.*before every worktree content read.*symlink.*link text.*escape.*UNVERIFIED/iu,

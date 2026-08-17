@@ -1568,15 +1568,15 @@ hook_v1_report() {
       $ranges
       | split(",")
       | map(select(length > 0) | split("-") | {start: (.[0] | tonumber), end: (.[1] | tonumber)});
-    def overlaps_changed_ranges($start; $end):
+    def overlaps_changed_ranges($start; $range_end):
       parsed_ranges as $parsed
-      | ($parsed | length) == 0 or any($parsed[]; $start <= .end and $end >= .start);
+      | ($parsed | length) == 0 or any($parsed[]; $start <= .end and $range_end >= .start);
     def attributable_line_or_span:
       (.line // null) as $start
       | if $start == null then false
         else (.endLine // $start) as $reported_end
-        | (if $reported_end >= $start then $reported_end else $start end) as $end
-        | overlaps_changed_ranges($start; $end)
+        | (if $reported_end >= $start then $reported_end else $start end) as $range_end
+        | overlaps_changed_ranges($start; $range_end)
         end;
     # A file-scope finding describes the file the agent is editing right now - it is too long,
     # it has no overview, it sits in an import cycle. Those never overlap a changed line, so

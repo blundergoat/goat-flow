@@ -718,7 +718,15 @@ export function writeAgentHookState(
   }
   // Antigravity keeps managed hooks as top-level definitions with provider-specific migration ids.
   if (agent.id === "antigravity") {
-    Reflect.deleteProperty(config.value, spec.id);
+    // Ownership follows the exact managed command, even when an older install used a different sibling id.
+    for (const [definitionId, definition] of Object.entries(config.value)) {
+      if (
+        definitionId === spec.id ||
+        managedRegistrationCommandCount(definition, spec) > 0
+      ) {
+        Reflect.deleteProperty(config.value, definitionId);
+      }
+    }
     // The current deny hook replaces every earlier split Antigravity policy id.
     if (spec.id === "deny-dangerous") {
       // Each exact retired id is Goat Flow-owned and safe to remove from the user's config.

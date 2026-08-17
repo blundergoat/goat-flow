@@ -68,6 +68,22 @@ Creation dispositions: `ADD UNIT`, `ADD INTEGRATION`, `ADD END-TO-END/MANUAL`, `
 
 Existing-test dispositions: `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, `UNRESOLVED`
 
+Added-test dispositions: `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, `ADDED UNRESOLVED`
+
+Removed-test dispositions: `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, `REMOVAL UNRESOLVED`
+
+Relocated-test state: `RELOCATED`
+
+For PR or uncommitted work, cases absent from the base use added-test dispositions, cases absent from
+the selected current snapshot use removed-test dispositions, and materially changed cases present in
+both use existing-test dispositions. A relocation mapping requires case-level anchor and assertion
+equivalence after ignoring only a demonstrated path or namespace rename; file similarity alone is a
+lead, not proof. Proven carryover uses `RELOCATED`. These states are mutually exclusive. Folder and
+file reviews use existing-test dispositions for every selected case. Read removed-test evidence from
+the bound comparison baseline without fetching or materializing it into the worktree. A rename-shaped
+pair with uncertain identity receives one `ADDED UNRESOLVED` row and one `REMOVAL UNRESOLVED` row;
+never collapse or double-count either path.
+
 | Disposition | Use when |
 |-------------|----------|
 | `ADD UNIT` | A new focused deterministic check passes the gate at unit level. |
@@ -78,6 +94,16 @@ Existing-test dispositions: `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDAT
 | `CONSOLIDATE` | Replacement coverage can preserve the same invariants with less duplication. |
 | `MOVE LEVEL` | The invariant is valuable but the current level cannot prove its real boundary. |
 | `PRUNE CANDIDATE` | Current evidence proves the behaviour no longer needs protection and no replacement is required. |
+| `ADDED KEEP` | The added case protects a distinct valuable invariant at a trustworthy level. |
+| `ADDED CONSOLIDATE` | The invariant is valuable, but replacement-backed consolidation can remove duplication. |
+| `ADDED MOVE LEVEL` | The invariant is valuable, but another level must pass before the added case is omitted. |
+| `ADDED DROP CANDIDATE` | Complete evidence shows the added case protects no distinct valuable invariant. |
+| `ADDED UNRESOLVED` | Evidence needed to judge the added case is unavailable. |
+| `REMOVAL SUPPORTED` | Retained coverage protects the invariant, or current evidence proves it no longer needs protection. |
+| `RESTORE` | The removed case protected a valuable invariant that retained coverage does not protect. |
+| `REPLACE` | The removed invariant remains valuable; the removal remains unsupported until replacement coverage at another owner or level passes. |
+| `REMOVAL UNRESOLVED` | Evidence needed to judge the removed case is unavailable. |
+| `RELOCATED` | The same case and assertions moved under a proven path or namespace-only mapping. |
 | `UNRESOLVED` | A required production, coverage, compatibility, or runtime fact is missing. |
 
 Failing the creation gate blocks a new recommendation; it never authorizes deletion of an existing test. Unresolved evidence keeps an existing test in place and records the next evidence needed.
@@ -87,6 +113,9 @@ Failing the creation gate blocks a new recommendation; it never authorizes delet
 Selection evidence can drift. Ordinary ACT re-reads current production code, the candidate test, adjacent coverage, and the handoff invariant immediately before any approved mutation. Human approval selects work but does not replace coverage evidence.
 
 `CONSOLIDATE` and `MOVE LEVEL` keep the original until replacement coverage proves the same invariant and passes at the chosen level. `PRUNE CANDIDATE` records why no replacement is required. All dispositions from goat-qa remain report-only; an implementing agent or human owns any separately authorized change and its verification.
+
+Every disposition is report-only and never authorizes an agent to add, rewrite, restore, replace,
+move, consolidate, omit, or delete a test.
 
 ## Mock Boundary
 
@@ -100,7 +129,7 @@ Consolidation is replacement-backed, not immediate deletion. Name the invariants
 
 ## Deletion Safeguards
 
-Read the production path and relevant tests before assigning any existing-test disposition. Preserve real authorization, tenancy, financial, clinical, date/time, persisted-data, external-contract, reproduced-regression, and other high-impact invariants. These labels prompt evidence; they are neither automatic exemptions nor automatic deletions.
+Read the production path and relevant tests before assigning any existing-test, added-test, or removed-test disposition. Preserve real authorization, tenancy, financial, clinical, date/time, persisted-data, external-contract, reproduced-regression, and other high-impact invariants. These labels prompt evidence; they are neither automatic exemptions nor automatic deletions.
 
 Age, mock use, suite size, a high test-to-change ratio, or failed admission for a new test cannot independently justify pruning. A superficial deletion request remains rejected unless current evidence satisfies `CONSOLIDATE`, `MOVE LEVEL`, or `PRUNE CANDIDATE` and the actor boundary is honored.
 
@@ -112,15 +141,27 @@ Maintenance is part of value. Prefer stable inputs and observable outcomes. Reje
 
 ## Decision Record and Handoff
 
-Record one row per assessed existing test or proposed test. Use a repository-relative path plus a semantic anchor for an existing test; use the intended owning surface for a proposal.
+Record one row per assessed existing, added, removed, relocated, materially changed, or proposed test. Use a repository-relative path plus a semantic anchor for an assessed test; use the intended owning surface for a proposal.
 
 | Disposition | Regression and impact | Current overlap | Stable contract | Chosen level | Evidence status | Owning surface | Semantic anchor | Handoff invariant and next check |
 |-------------|-----------------------|-----------------|-----------------|--------------|-----------------|----------------|-----------------|----------------------------------|
 | `<disposition>` | `<regression; impact>` | `<coverage; insufficiency or sufficient owner>` | `<observable outcome>` | `<static; unit; integration; end-to-end/manual>` | `<OBSERVED; INFERRED; UNVERIFIED; HUMAN-PENDING>` | `<path or proposed owner>` | `<searchable anchor or n/a>` | `<protected invariant; immediate revalidation>` |
 
-Incomplete evidence becomes `UNRESOLVED` with the reason and next check; never omit the row silently. Reconcile existing-test totals with this equation:
+Incomplete evidence uses the matching `UNRESOLVED`, `ADDED UNRESOLVED`, or `REMOVAL UNRESOLVED` with the reason and next check; never omit the row silently. For folder and file work, reconcile existing-test totals with this equation:
 
 assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED
+
+For PR and uncommitted change-state accounting, reconcile these mutually exclusive totals too:
+
+```text
+assessed_added = ADDED_KEEP + ADDED_CONSOLIDATE + ADDED_MOVE_LEVEL + ADDED_DROP_CANDIDATE + ADDED_UNRESOLVED
+assessed_removed = REMOVAL_SUPPORTED + RESTORE + REPLACE + REMOVAL_UNRESOLVED
+assessed_materially_changed = KEEP + CONSOLIDATE + MOVE_LEVEL + PRUNE_CANDIDATE + UNRESOLVED
+assessed_relocated = RELOCATED
+assessed_pr_or_uncommitted = assessed_added + assessed_removed + assessed_materially_changed + assessed_relocated
+```
+
+Equation identifiers write each disposition with underscores.
 
 Do not add unlike units to that total. Content hashes and persistent approval receipts are conditional on long-lived, content-specific approval or an applicable repository boundary; they are not universal paperwork.
 
@@ -139,13 +180,13 @@ Do not add unlike units to that total. Content hashes and persistent approval re
 
 Before handing off a selection:
 
-1. Every candidate has all four value-gate answers or is explicitly `UNRESOLVED`.
-2. Creation and existing-test dispositions use the correct vocabulary.
+1. Every candidate has all four value-gate answers or uses its matching unresolved disposition.
+2. Creation, existing-test, added-test, removed-test, and relocated-test states use the correct vocabulary.
 3. The chosen level proves the real contract at the lowest trustworthy cost.
 4. Structural mock assertions receive no behavioural or integration credit without a public-protocol basis.
 5. Consolidation or movement names replacement invariants and preserves originals until proof passes.
 6. A prune candidate explains why no replacement is required and identifies the production and coverage evidence read.
-7. Existing-test disposition totals reconcile, and every material-change handoff names the invariant and immediate next check.
+7. Disposition totals reconcile for the applicable selector and change states, and every material-change handoff names the invariant and immediate next check.
 8. Required repository gates remain visible and the ordinary actor revalidation boundary is explicit.
 
 ## Related References

@@ -7,17 +7,17 @@ Use this before adding or editing a comment, docstring, or annotation. Start nam
 
 ## Availability Check
 
-This is a discipline reference, not a runnable tool. Load it when:
-
-- About to write a comment, docstring, annotation, or TODO / FIXME / HACK marker.
-- Naming work has finished and the remaining change needs comment-specific guidance.
-- Editing code with existing comments, or reviewing a diff that changes them.
-
-Enforcement is partial: static tools may flag mechanical items, not `[judge]` semantic checks. Do not claim more enforcement than the project runs.
+This is a discipline reference, not a runnable tool. Load it before writing or reviewing a comment,
+docstring, annotation, or TODO / FIXME / HACK marker, after naming work. Static tools cover only
+mechanical items, not `[judge]` semantic checks.
 
 ## Project Authority
 
-Project-documented comment conventions govern discipline choices. When no designated project comment standard exists, use this playbook's defaults. Explicit current instructions and the authoritative project hierarchy remain above both. Project convention and playbook defaults cannot override safety, accepted architecture, verified facts, evidence requirements, or verification gates.
+The project standard governs all points it addresses. Playbook defaults apply only when no project
+guidance addresses a point; drop a conflicting default. Before editing a block governed by multiple rules, state
+the expected final shape and check every applicable rule against it. Record the rule source per changed span.
+Explicit current instructions and accepted architecture remain controlling. Project standards and playbook
+defaults cannot override safety, accepted architecture, verified facts, evidence requirements, or verification gates.
 
 ## Pick the Reader First
 
@@ -47,6 +47,10 @@ Then apply a separate layer lens. The reader selects who needs the fact; the lay
 All comments use plain English for the reader and layer selected above. These rules are conditions,
 not quotas; apply a rule only when its stated contract exists.
 
+A request to cover every method, branch, loop, catch, or null/empty path means inspect every candidate;
+it does not require a comment where no verified hidden reader information exists. A 150-character
+layout is a ceiling, not a target: never add filler or merge distinct points to approach it.
+
 1. **Doc comments where project or language canon requires them, for public/exported APIs, and for
    file/module/class boundaries with a non-obvious contract.** Say what the unit does, when to use it,
    and how it fits the reader's process; self-explanatory private/local units need none. When a method
@@ -65,12 +69,10 @@ not quotas; apply a rule only when its stated contract exists.
 5. **Journey context only when useful.** Add verified arrival context only when it changes the
    reader's interpretation and remains hidden from the code.
 
-Tighten without deleting `@param` / `@returns`; use verified rationale. Fix stale comments in scope;
-outside the authorized scope, report or defer it and do not delete it. The project or language
-formatter's enforced width governs. When neither defines a width, 150 characters is the fallback ceiling.
-Look for that width in `.editorconfig` `max_line_length`, then a linter rule such as `max-len`, then the
-formatter's configured width. A formatter's print width governs comments only if it reflows comment text;
-Prettier does not, so a project using it without `max_line_length` falls to the 150 ceiling.
+Tighten without deleting `@param`, `@return`, or `@returns`. Fix stale comments in scope; outside the authorized
+scope, report or defer it and do not delete it. The project or language formatter's enforced width governs. Resolve it
+from `.editorconfig`, lint, then a formatter that actually reflows comments. When neither defines a
+width, 150 characters is the fallback ceiling.
 The shortest complete useful comment wins; never split one point across lines merely to stay short.
 Before a width sweep, measure the longest existing comment line; many violations can expose a wrong assumed limit.
 
@@ -123,9 +125,11 @@ Reserve PHP file-level PHPDoc for classless scripts, bootstrap/config, or genera
 
 - **Real descriptions, not restated types**, in the language's structured form (JSDoc, PHPDoc, PEP 257, godoc, rustdoc). Each tag names at least one of: what an absent or empty value causes, where the value comes from, what this unit does with it, or the constraint it must satisfy. `@param record - parsed milestone` restates the type and names none. If an admitted null/empty/absent state changes the reader outcome and code hides it, state the consequence; never invent a state.
 - **Hyphen-separate each tag's subject from its description** (`@param value - parsed JSON ...`), with a **blank ` *` line between description and tags**. Use one physical line per tag. Only when the prefix passes column 100 and a meaningful description cannot fit may it use one aligned continuation line, for two physical lines maximum. Keep the complete tag subject on line one; never create a dash-only line or dangling name.
-- **Pure dependency-injection constructors** that require a doc comment may omit per-dependency tags for obvious non-null services. A scalar, optional, configured, or side-effectful input is not pure DI and keeps its tag.
+- **Pure dependency-injection constructors** may omit tags for obvious non-null services. The exemption removes tags only;
+  it never removes a separately required description. A scalar, optional, configured, or side-effectful
+  input is not pure DI and keeps its tag.
 
-When a doc comment is verbose, tighten the prose; a `@param` or `@returns` line is never the thing you cut.
+When a doc comment is verbose, tighten the prose; a `@param`, `@return`, or `@returns` line is never the thing you cut.
 
 ## Shape of a Comment Block
 
@@ -144,15 +148,13 @@ consequence. This applies to `if`, loops, chained transformations, null/empty fa
 code gets none. Route a naming or placement defect through [`naming-and-placement.md`](./naming-and-placement.md)
 and report or defer remedies outside the current authorization.
 
-The line must translate, not restate. `// check if invoice is paid` is banned; "Paid invoices are locked - the user gets a read-only view instead of the edit form" earns its place because that consequence is visible nowhere in the condition. Name the acting component only when ownership or sequence changes how the reader interprets the consequence; omit it when the code already makes the actor clear.
+The line must translate, not restate; `// check if invoice is paid` is banned.
+Name the acting component only when ownership or sequence changes how the reader interprets the consequence; omit it
+when code already makes the actor clear.
 
-The consequence is the requirement; the sentence shape is not. Vary the construction, and omit a
-line when a returned name already states the complete outcome.
-
-Give compound conditions, the default, and any fail-closed path the closest scrutiny because their
-consequence is often hidden. When a comment is warranted, explain the case instead of repeating a
-documented constant. Validation, permission, and compliance comments name the product rule and user
-outcome, not merely "validate input".
+The consequence matters, not sentence shape. Omit a line when a returned name states the outcome.
+Scrutinize compound conditions, the default, and fail-closed paths; when prose is warranted, name the
+product rule and user outcome instead of repeating a constant or saying "validate input".
 
 ## Catch Comments
 
@@ -166,21 +168,21 @@ Before describing code behaviour, open it. Read a query's predicate before claim
 
 Tightening inherited prose turns it into an assertion you own. Verify it before making it more confident: concise false prose is more convincing, not safer. A fluent false comment is worse than a missing one because tests and analyzers may never challenge its meaning.
 
+If prose is false because behaviour is defective, preserve it as
+`Deferred (BLOCKED-ON-BEHAVIOUR)` and route the reproduced defect; do not rewrite the bug as intent.
+
 Identifier and placement claims are verified through [`naming-and-placement.md`](./naming-and-placement.md)
 before comment work begins. Comments cannot make an unverified claim true.
 
 ## Discretionary Inline Comments (tier 5)
 
-Extra inline comments are a last resort after authorized naming and structural work. If intent remains hidden, one of four reasons earns a line. Name the constraint, prevented failure, and removal trigger.
+Extra inline comments are a last resort after authorized naming and structural work. If intent remains
+hidden, one of four reasons earns a line:
 
-- **Hidden constraint** the code cannot encode - rate limit, vendor contract, regulation, hardware quirk.
-  `# Vendor exports omit the timezone; treat as source-local by contract.`
-- **Subtle invariant** the code relies on but does not enforce, including hidden coupling - name the other side, the breakage from changing only one, and a checkable trigger (`safe only while X`).
-  `// Must match the mobile app timeout; changing only this side can double-submit payments.`
-- **Workaround** for a bug or constraint elsewhere - name the cause and the removal trigger.
-  `// Double rAF flushes layout before measuring; single rAF is stale on Safari 17. Remove at Safari >= 18.`
-- **Surprising behaviour** that is correct but looks wrong.
-  `// Intentionally mutates the input buffer; copying doubles memory on 2GB+ exports.`
+- **Hidden constraint** the code cannot encode, such as a vendor or regulatory contract.
+- **Subtle invariant** or coupling, naming the other side and breakage from changing only one.
+- **Workaround**, naming its cause and checkable removal trigger.
+- **Surprising behaviour** that is correct but looks wrong, with its consequence.
 
 **Half-Life Test:** a good comment survives renames, extraction, and movement. Anchor it to a durable constraint, not a person, ticket, or review thread; translate provenance into the current reader reason.
 
@@ -196,20 +198,20 @@ Every marker has a `YYYY-MM-DD` date or concrete trigger. Add a tracking referen
 The next reader cannot use these; fix them when already editing the surrounding code.
 
 - **Restating the mechanics.** `i++; // increment i`, `// check if invoice is paid`. Context lines must add reader meaning, not narrate syntax.
-- **One sentence template for every line.** Vary the shape; drop the half the code states.
-- **Stripping tags while tightening.** Concision never removes `@param` / `@returns` lines.
-- **Codebase jargon.** A comment that only makes sense after reading the module has not reached the user's perspective.
+- **One sentence template for every line.** Drop what code already states.
+- **Stripping tags while tightening.** Concision never removes `@param`, `@return`, or `@returns` lines.
+- **Codebase jargon.** Translate it for the selected reader.
 - **Compensating prose.** A comment explaining what a better name, type, or structure would show. This
   is compensating prose, not a remedy. Make an already-authorised code change or report or defer the
   defect; the comment pass grants no structural authority.
-- **Unverified rationale.** `// for performance`, `// probably safe`. Verify the reason or omit it.
+- **Unverified rationale.** Verify `// for performance` or omit it.
 - **Tombstones and non-load-bearing history.** Version deltas live in git. Keep history only when it defines a current compatibility obligation or a checkable removal trigger. Never cite gitignored paths, local state, or removed symbols.
-- **Position or line-number references.** `// see function below`, `// line 142`. Refer by symbol name.
+- **Position or line-number references.** Refer by symbol name.
 - **Bare suppression markers.** `// eslint-disable-next-line` with no reason is noise.
 - **Non-load-bearing provenance.** PRs, issues, ADRs, task IDs, review notes - unless the reference is the durable contract, removal trigger, or verification path.
 - **Counts of adjacent mutable collections.** Describe what a list or branch family is for; the reader can count it. A schema- or test-enforced count remains a valid contract.
-- **Decorative density.** Comment count or presence alone is never evidence of quality.
-- **Markdown, emoji, and session artifacts.** Code comments are plain prose, not chat history.
+- **Decorative density.** Comment presence is not quality evidence.
+- **Markdown, emoji, and session artifacts.** Code comments are plain prose.
 
 ## Special Contexts
 
@@ -260,14 +262,17 @@ Before claiming comment work is done, confirm the naming route is complete and c
 11. **[static] Comment lines meet the project or language formatter's enforced width, or the 150-character fallback ceiling when neither defines one.** Tags and description blocks meet their physical-line limits.
 12. **[static] Apply the em-dash rule above without rewriting exempt material.**
 
-The width and consecutive-prose-line checks are mechanical; run them rather than eyeballing, with `<width>` set to the ceiling resolved in The Comment Standard:
+Mechanical checks locate candidates; they never override surface classification or semantic review.
+A mechanical hit is a lead, not a diagnosis. Machine-readable annotations, generated regions, and
+sanctioned bullet shapes are known false-positive classes. Confirm each hit before editing, with
+`<width>` set to the resolved ceiling:
 
 ```bash
-awk 'length><width> && /^[[:space:]]*(\/\/|\/\*|\*|#)/ {print FILENAME":"FNR}' <files>
-awk 'FNR==1{n=0} /^[[:space:]]*(\/\/|\*|#)/ && !/^[[:space:]]*(\*\/?|\/\/|#)[[:space:]]*$/{n++; if(n==4) print FILENAME":"FNR; next} {n=0}' <files>
+awk 'length><width> && /^[[:space:]]*(\/\/|\/\*|\*|#)/ && !/^[[:space:]]*\*[[:space:]]*@(phpstan|psalm|template)[-a-z]*[[:space:]]/ {print FILENAME":"FNR}' <files>
+awk 'FNR==1{n=0} /^[[:space:]]*(\/\/|\*|#)[[:space:]]*([-*+]|@[[:alnum:]-]+)[[:space:]]/{n=0; next} /^[[:space:]]*(\/\/|\*|#)/ && !/^[[:space:]]*(\*\/?|\/\/|#)[[:space:]]*$/{n++; if(n==4) print FILENAME":"FNR; next} {n=0}' <files>
 ```
 
-If a comment fails any check, fix it before merging.
+Fix a confirmed applicable failure before merging.
 
 ## Related References
 

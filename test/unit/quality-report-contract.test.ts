@@ -654,6 +654,13 @@ describe("quality report contract: CLI surfaces", () => {
     assert.ok(withPrior.includes("literal denied or unavailable probe"));
     assert.ok(withPrior.includes("omission is not verified resolution"));
     assert.ok(
+      withPrior.includes(
+        "Do NOT emit `absent` in current findings - absence is derived later",
+      ),
+    );
+    assert.ok(withPrior.includes("the diff's derived `absent` bucket"));
+    assert.equal(withPrior.includes("derived `resolved`"), false);
+    assert.ok(
       withPrior.includes("absent from the later report, not proven fixed"),
     );
     assert.equal(

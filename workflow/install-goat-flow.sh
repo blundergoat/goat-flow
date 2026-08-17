@@ -872,6 +872,11 @@ ensure_gitignore_entry() {
   local path="$1"
   local entry="$2"
   local transform_result
+  # Preview-preserved local content is authoritative for every later reconciliation pass.
+  if installer_path_is_preserved "$path"; then
+    LAST_TRANSFORM_RESULT="unchanged"
+    return 0
+  fi
   stage_existing_destination "$path"
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$entry" <<'NODE'
 const fs = require("node:fs");
@@ -1048,16 +1053,34 @@ ensure_config_hooks_entry() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
-  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$GOAT_FLOW_ROOT" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
+const frameworkRoot = process.argv[3];
+const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
 const content = fs.readFileSync(path, "utf8");
 const eol = content.includes("\r\n") ? "\r\n" : "\n";
 const repeatedEol = new RegExp(`(?:${eol === "\r\n" ? "\\r\\n" : "\\n"}){3,}`, "gu");
 const hadFinalNewline = /\r?\n$/u.test(content);
 let lines = content.split(/\r?\n/u);
 if (hadFinalNewline) lines.pop();
+let parsedHooks = null;
+try {
+  const parsedConfig = yaml.load(content);
+  if (
+    parsedConfig !== null &&
+    typeof parsedConfig === "object" &&
+    !Array.isArray(parsedConfig) &&
+    parsedConfig.hooks !== null &&
+    typeof parsedConfig.hooks === "object" &&
+    !Array.isArray(parsedConfig.hooks)
+  ) {
+    parsedHooks = parsedConfig.hooks;
+  }
+} catch {
+  // Existing line-based migration retains its fail-safe behavior for malformed user YAML.
+}
 const staleHookRe = /^  guard-(destructive-shell|secret-paths|repository-writes):\s*$/u;
 const removedHookRe = /^  plan-checkbox-guard:\s*$/u;
 let changed = false;
@@ -1065,7 +1088,13 @@ let legacyEnabled = "true";
 
 function insertHookEntry(lines, hooksIndex, hookId, enabled) {
   const hookRe = new RegExp(`^  ${hookId}:\\s*$`, "u");
-  if (lines.some((line) => hookRe.test(line))) return false;
+  if (
+    lines.some((line) => hookRe.test(line)) ||
+    (parsedHooks !== null &&
+      Object.prototype.hasOwnProperty.call(parsedHooks, hookId))
+  ) {
+    return false;
+  }
   let insertAt = hooksIndex + 1;
   while (insertAt < lines.length && /^  [A-Za-z0-9_-]+:\s*$/u.test(lines[insertAt])) {
     insertAt += 1;
@@ -1075,7 +1104,9 @@ function insertHookEntry(lines, hooksIndex, hookId, enabled) {
   return true;
 }
 
-let hooksIndex = lines.findIndex((line) => /^hooks\s*:/u.test(line));
+let hooksIndex = lines.findIndex((line) =>
+  /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line),
+);
 if (hooksIndex !== -1) {
   const next = [];
   for (let i = 0; i < lines.length; i += 1) {
@@ -1094,7 +1125,9 @@ if (hooksIndex !== -1) {
     next.push(lines[i]);
   }
   lines = next;
-  hooksIndex = lines.findIndex((line) => /^hooks\s*:/u.test(line));
+  hooksIndex = lines.findIndex((line) =>
+    /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line),
+  );
   changed = insertHookEntry(lines, hooksIndex, "deny-dangerous", legacyEnabled) || changed;
   changed = insertHookEntry(lines, hooksIndex, "post-turn-safety", "true") || changed;
   changed = insertHookEntry(lines, hooksIndex, "gruff-code-quality", "false") || changed;
@@ -1199,7 +1232,7 @@ migrate_agent_hook_config() {
   fi
 
   stage_existing_destination "$user_hook_config_path"
-  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$desired_state_contract_path" "$AGENT" <<'NODE'
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$desired_state_contract_path" "$AGENT" "$GOAT_FLOW_ROOT" <<'NODE'
 /**
  * Reconciles one staged user hook config from the TypeScript-generated desired-state contract.
  * Use during standalone setup so enabled, disabled, duplicate, and retired rows match CLI and dashboard behavior.
@@ -1209,9 +1242,10 @@ const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const pathModule = require("node:path");
 
-const [userHookConfigPath, desiredStateContractPath, agentId] =
+const [userHookConfigPath, desiredStateContractPath, agentId, frameworkRoot] =
   process.argv.slice(2);
 const CONTRACT_SCHEMA = "goat-flow.managed-hook-desired-state.v1";
+const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
 
 /** Recognize JSON objects that can safely hold provider hook configuration. */
 function isObject(value) {
@@ -1275,6 +1309,20 @@ function entryReferencesManagedScript(entry, scriptNames) {
   );
 }
 
+/** Detect one exact managed command anywhere inside a provider definition. */
+function valueReferencesManagedScript(value, scriptNames) {
+  if (Array.isArray(value)) {
+    return value.some((nestedValue) =>
+      valueReferencesManagedScript(nestedValue, scriptNames),
+    );
+  }
+  if (!isObject(value)) return false;
+  if (entryReferencesManagedScript(value, scriptNames)) return true;
+  return Object.values(value).some((nestedValue) =>
+    valueReferencesManagedScript(nestedValue, scriptNames),
+  );
+}
+
 /**
  * Remove managed commands recursively while retaining user commands in the same provider row.
  * An empty matcher wrapper disappears so the user's config does not keep a dead lifecycle entry.
@@ -1324,46 +1372,25 @@ function removeManagedRowsFromSharedHooks(currentHooks, scriptNames) {
  * The gruff-on-change alias keeps earlier user choices effective during migration.
  */
 function configuredHookEnabled(hookId, defaultEnabled) {
-  let configContent = "";
+  let configValue;
   try {
-    configContent = fs.readFileSync(".goat-flow/config.yaml", "utf8");
+    configValue = yaml.load(
+      fs.readFileSync(".goat-flow/config.yaml", "utf8"),
+    );
   } catch {
-    // For example, a first-time installer has not copied config.yaml yet, so the user receives the documented defaults.
+    // A missing or malformed config cannot override the registry's documented default.
     return defaultEnabled === true;
   }
-
-  let isInsideHooks = false;
-  let currentHookId = "";
-  // Each config line can enter the hooks section, select one hook, or expose its enabled value.
-  for (const line of configContent.split(/\r?\n/u)) {
-    // A new top-level section ends the hook choices visible in setup.
-    if (/^\S/u.test(line) && !/^hooks\s*:/u.test(line)) {
-      isInsideHooks = false;
-      currentHookId = "";
-    }
-    // The hooks heading starts the user-controlled toggle list.
-    if (/^hooks\s*:/u.test(line)) {
-      isInsideHooks = true;
-      continue;
-    }
-    // Lines outside hooks cannot change whether this registration is installed.
-    if (!isInsideHooks) continue;
-    const hookMatch = line.match(/^  ([A-Za-z0-9_-]+):\s*$/u);
-    // A hook heading identifies which following enabled value belongs to the user.
-    if (hookMatch) {
-      currentHookId = hookMatch[1];
-      continue;
-    }
-    const matchesRequestedHook =
-      currentHookId === hookId ||
-      (hookId === "gruff-code-quality" && currentHookId === "gruff-on-change");
-    // Other hook blocks must not affect the registration currently being reconciled.
-    if (!matchesRequestedHook) continue;
-    const enabledMatch = line.match(
-      /^    enabled:\s*(true|false)\s*(?:#.*)?$/u,
-    );
-    // An explicit boolean is the user's final choice for this hook.
-    if (enabledMatch) return enabledMatch[1] === "true";
+  if (!isObject(configValue) || !isObject(configValue.hooks)) {
+    return defaultEnabled === true;
+  }
+  const configuredHook =
+    configValue.hooks[hookId] ??
+    (hookId === "gruff-code-quality"
+      ? configValue.hooks["gruff-on-change"]
+      : undefined);
+  if (isObject(configuredHook) && typeof configuredHook.enabled === "boolean") {
+    return configuredHook.enabled;
   }
   return defaultEnabled === true;
 }
@@ -1602,6 +1629,15 @@ function relativePathEscapesRoot(relativePath) {
   );
 }
 
+/** Compare physical directory spellings under the current host's path semantics. */
+function filesystemPathsAreEquivalent(leftDirectory, rightDirectory) {
+  if (!leftDirectory || !rightDirectory) return false;
+  return (
+    pathModule.relative(leftDirectory, rightDirectory) === "" &&
+    pathModule.relative(rightDirectory, leftDirectory) === ""
+  );
+}
+
 /** Validate one configured root against lexical, physical, and exact Git ownership. */
 function isContainedGitScanRoot(projectRoot, configuredRoot) {
   if (
@@ -1620,14 +1656,19 @@ function isContainedGitScanRoot(projectRoot, configuredRoot) {
   if (physicalCandidate === null) return false;
   const physicalRelative = pathModule.relative(projectRoot, physicalCandidate);
   if (relativePathEscapesRoot(physicalRelative)) return false;
-  return gitTopLevel(physicalCandidate) === physicalCandidate;
+  return filesystemPathsAreEquivalent(
+    gitTopLevel(physicalCandidate),
+    physicalCandidate,
+  );
 }
 
 /** Apply the registrar's implicit-Git or all-explicit-roots registration contract. */
 function postTurnRootContractAllowsRegistration() {
   const projectRoot = physicalDirectory(process.cwd());
   if (projectRoot === null) return false;
-  if (gitTopLevel(projectRoot) === projectRoot) return true;
+  if (filesystemPathsAreEquivalent(gitTopLevel(projectRoot), projectRoot)) {
+    return true;
+  }
   const configuredRoots = configuredPostTurnScanRoots();
   return (
     Array.isArray(configuredRoots) &&
@@ -1664,12 +1705,24 @@ function readDesiredStateContract(path) {
 /** Return validated hook rows for the selected provider, rejecting incomplete generated state. */
 function managedHookEntries(agentContract) {
   const hookEntries = Object.entries(agentContract.hooks);
-  // Every generated hook row must carry ownership, default, target, and config data.
+  // Every generated hook row declares support and cleanup ownership before optional enabled state.
   for (const [hookId, hookContract] of hookEntries) {
-    // A malformed row could remove user state without restoring a valid registration, so installation stops.
+    const cleanup = isObject(hookContract) ? hookContract.cleanup : null;
     if (
       !hookId ||
       !isObject(hookContract) ||
+      typeof hookContract.supported !== "boolean" ||
+      !isObject(cleanup) ||
+      !Array.isArray(cleanup.hookIds) ||
+      !Array.isArray(cleanup.commandScriptNames)
+    ) {
+      throw new Error(
+        "managed hook desired-state contract has an invalid hook row",
+      );
+    }
+    // Unsupported rows carry cleanup only, preventing this provider from receiving unusable config.
+    if (!hookContract.supported) continue;
+    if (
       typeof hookContract.defaultEnabled !== "boolean" ||
       !Array.isArray(hookContract.commandScriptNames) ||
       !Array.isArray(hookContract.managedScriptFiles) ||
@@ -1734,6 +1787,9 @@ if (!isObject(agentContract) || !isObject(agentContract.hooks)) {
   );
 }
 const hookEntries = managedHookEntries(agentContract);
+const supportedHookEntries = hookEntries.filter(
+  ([, hookContract]) => hookContract.supported,
+);
 const currentConfig = readJsonObject(userHookConfigPath);
 // Invalid user JSON remains untouched so setup never replaces settings the user needs to repair.
 if (!currentConfig) {
@@ -1744,18 +1800,28 @@ const originalConfig = JSON.stringify(currentConfig);
 
 // Antigravity stores managed hook definitions as top-level ids instead of shared lifecycle arrays.
 if (agentId === "antigravity") {
-  const managedHookIds = [
-    ...hookEntries.map(([hookId]) => hookId),
+  const managedHookIds = new Set([
+    ...hookEntries.flatMap(([, hookContract]) => hookContract.cleanup.hookIds),
     ...desiredStateContract.retiredHookIds,
+  ]);
+  const managedScriptNames = [
+    ...new Set(
+      hookEntries.flatMap(
+        ([, hookContract]) => hookContract.cleanup.commandScriptNames,
+      ),
+    ),
   ];
-  // Every current or retired top-level id is setup-owned and safe to replace or remove.
-  for (const hookId of managedHookIds) {
-    // An absent id already represents the desired disabled state.
-    if (!Object.prototype.hasOwnProperty.call(currentConfig, hookId)) continue;
-    delete currentConfig[hookId];
+  // Exact command ownership removes renamed definitions as well as canonical current and retired ids.
+  for (const [definitionId, definition] of Object.entries(currentConfig)) {
+    if (
+      managedHookIds.has(definitionId) ||
+      valueReferencesManagedScript(definition, managedScriptNames)
+    ) {
+      delete currentConfig[definitionId];
+    }
   }
   // Enabled provider fragments restore exactly one current definition after stale ids are removed.
-  for (const [hookId, hookContract] of hookEntries) {
+  for (const [hookId, hookContract] of supportedHookEntries) {
     // A disabled user choice leaves the current files installed but no runnable registration.
     if (!shouldRegisterManagedHook(hookId, hookContract)) continue;
     Object.assign(currentConfig, hookContract.config);
@@ -1771,11 +1837,11 @@ if (agentId === "antigravity") {
   for (const [, hookContract] of hookEntries) {
     removeManagedRowsFromSharedHooks(
       currentConfig.hooks,
-      hookContract.commandScriptNames,
+      hookContract.cleanup.commandScriptNames,
     );
   }
   // Enabled hooks append one generated provider fragment; disabled hooks remain installed but inert.
-  for (const [hookId, hookContract] of hookEntries) {
+  for (const [hookId, hookContract] of supportedHookEntries) {
     // The config toggle is the user's authority over whether their agent runs this hook.
     if (!shouldRegisterManagedHook(hookId, hookContract)) continue;
     appendSharedHookFragment(currentConfig, hookContract.config);
@@ -2688,7 +2754,73 @@ if $CLEAN_DEPRECATED; then
 fi
 
 # ==========================================================================
-# 7. Install hooks (always overwrite - verbatim copy)
+# 7. Scaffold or migrate config.yaml before hook registration reads it
+# ==========================================================================
+echo "Config:"
+CONFIG_PATH=".goat-flow/config.yaml"
+assert_file_ownership "$CONFIG_PATH" "user-owned"
+
+# Existing config keeps user-selected hooks and skills while narrow migrations repair retired shapes.
+if [[ -f "$CONFIG_PATH" ]]; then
+  CONFIG_CHANGED=false
+  CONFIG_NOTES=()
+  if $UPDATE_CONFIG_VERSION; then
+    if grep -q "^version:" "$CONFIG_PATH"; then
+      update_config_version_line "$CONFIG_PATH"
+      CONFIG_CHANGED=true
+      CONFIG_NOTES+=("version updated to $VERSION")
+    else
+      stage_existing_destination "$CONFIG_PATH"
+      printf 'version: "%s"\n' "$VERSION" >> "$STAGED_PAYLOAD_PATH"
+      commit_staged_payload "$CONFIG_PATH" "replace"
+      CONFIG_CHANGED=true
+      CONFIG_NOTES+=("version field added: $VERSION")
+    fi
+  fi
+  remove_config_agents_entry "$CONFIG_PATH"
+  # A changed result removes a legacy agent allowlist that no longer controls setup.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("legacy agents allowlist removed")
+  fi
+  migrate_config_tasks_entry "$CONFIG_PATH"
+  # A changed result points planning workflows at the current local-state directory.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("legacy tasks config migrated to plans")
+  fi
+  ensure_config_hooks_entry "$CONFIG_PATH"
+  # A changed result gives users explicit controls for each shipped hook.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("hook toggles added")
+  fi
+  remove_config_plan_guard_entry "$CONFIG_PATH"
+  # A changed result removes configuration for the retired plan guard.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("removed retired plan guard config")
+  fi
+  if $CONFIG_CHANGED; then
+    COPIED=$((COPIED + 1))
+    note_text="$(IFS=', '; echo "${CONFIG_NOTES[*]}")"
+    echo "  ✓ $CONFIG_PATH ($note_text)"
+  else
+    SKIPPED=$((SKIPPED + 1))
+    echo "  · $CONFIG_PATH (exists, no config changes)"
+  fi
+else
+  prepare_staged_payload "$CONFIG_PATH"
+  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$STAGED_PAYLOAD_PATH"
+  # A first install may scaffold config, but a concurrent or existing user file wins.
+  commit_staged_payload "$CONFIG_PATH" "create-only"
+  COPIED=$((COPIED + 1))
+  echo "  ✓ $CONFIG_PATH (scaffolded)"
+fi
+echo ""
+
+# ==========================================================================
+# 8. Install hooks (always overwrite - verbatim copy)
 # ==========================================================================
 if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
@@ -2738,7 +2870,7 @@ fi
 echo ""
 
 # ==========================================================================
-# 8. Install or safely migrate agent settings without replacing user choices
+# 9. Install or safely migrate agent settings without replacing user choices
 # ==========================================================================
 echo "Settings:"
 SETTINGS_SKIPPED=false
@@ -2811,72 +2943,6 @@ if $HOOKS_ENABLED && [[ -z "${HOOK_CONFIG_DST:-}" && -n "${SETTINGS_DST:-}" && -
     SETTINGS_SKIPPED=false
     echo "  ✓ $SETTINGS_DST (migrated deny hook registration)"
   fi
-fi
-echo ""
-
-# ==========================================================================
-# 9. Scaffold or maintain config.yaml
-# ==========================================================================
-echo "Config:"
-CONFIG_PATH=".goat-flow/config.yaml"
-assert_file_ownership "$CONFIG_PATH" "user-owned"
-
-# Existing config keeps user-selected hooks and skills while narrow migrations repair retired shapes.
-if [[ -f "$CONFIG_PATH" ]]; then
-  CONFIG_CHANGED=false
-  CONFIG_NOTES=()
-  if $UPDATE_CONFIG_VERSION; then
-    if grep -q "^version:" "$CONFIG_PATH"; then
-      update_config_version_line "$CONFIG_PATH"
-      CONFIG_CHANGED=true
-      CONFIG_NOTES+=("version updated to $VERSION")
-    else
-      stage_existing_destination "$CONFIG_PATH"
-      printf 'version: "%s"\n' "$VERSION" >> "$STAGED_PAYLOAD_PATH"
-      commit_staged_payload "$CONFIG_PATH" "replace"
-      CONFIG_CHANGED=true
-      CONFIG_NOTES+=("version field added: $VERSION")
-    fi
-  fi
-  remove_config_agents_entry "$CONFIG_PATH"
-  # A changed result removes a legacy agent allowlist that no longer controls setup.
-  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
-    CONFIG_CHANGED=true
-    CONFIG_NOTES+=("legacy agents allowlist removed")
-  fi
-  migrate_config_tasks_entry "$CONFIG_PATH"
-  # A changed result points planning workflows at the current local-state directory.
-  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
-    CONFIG_CHANGED=true
-    CONFIG_NOTES+=("legacy tasks config migrated to plans")
-  fi
-  ensure_config_hooks_entry "$CONFIG_PATH"
-  # A changed result gives users explicit controls for each shipped hook.
-  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
-    CONFIG_CHANGED=true
-    CONFIG_NOTES+=("hook toggles added")
-  fi
-  remove_config_plan_guard_entry "$CONFIG_PATH"
-  # A changed result removes configuration for the retired plan guard.
-  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
-    CONFIG_CHANGED=true
-    CONFIG_NOTES+=("removed retired plan guard config")
-  fi
-  if $CONFIG_CHANGED; then
-    COPIED=$((COPIED + 1))
-    note_text="$(IFS=', '; echo "${CONFIG_NOTES[*]}")"
-    echo "  ✓ $CONFIG_PATH ($note_text)"
-  else
-    SKIPPED=$((SKIPPED + 1))
-    echo "  · $CONFIG_PATH (exists, no config changes)"
-  fi
-else
-  prepare_staged_payload "$CONFIG_PATH"
-  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$STAGED_PAYLOAD_PATH"
-  # A first install may scaffold config, but a concurrent or existing user file wins.
-  commit_staged_payload "$CONFIG_PATH" "create-only"
-  COPIED=$((COPIED + 1))
-  echo "  ✓ $CONFIG_PATH (scaffolded)"
 fi
 echo ""
 

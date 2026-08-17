@@ -23,6 +23,7 @@ export type ManagedSetupAuthorityDecision =
   | "granted-path"
   | "granted-user-owned"
   | "withheld"
+  | "refused-replaceability"
   | "refused-path-safety";
 
 /** The row fields authority resolution reads; the full preview row satisfies this shape. */
@@ -31,6 +32,7 @@ interface AuthorityInput {
   ownership: "system-owned" | "user-owned" | "generated";
   isConflict: boolean;
   isPathUnsafe: boolean;
+  isReplaceable: boolean;
 }
 
 /** An authority carrying nothing, used for preview runs where the user supplied no flags. */
@@ -58,6 +60,7 @@ export function resolveAuthorityDecision(
   if (row.ownership === "user-owned") {
     if (!authority.shouldReplaceNamedUserOwned || !isNamed)
       return "not-required";
+    if (!row.isReplaceable) return "refused-replaceability";
     return row.isPathUnsafe ? "refused-path-safety" : "granted-user-owned";
   }
 

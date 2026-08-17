@@ -167,7 +167,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Decision changed:** Make semantic wording assertions case-insensitive unless casing is the contract, and bound shared files to the exact owned section, object, or fence.
 
-**Trigger phase:** VERIFY | **Incident count:** 5 | **Latest occurrence:** 2026-08-15
+**Trigger phase:** VERIFY | **Incident count:** 6 | **Latest occurrence:** 2026-08-17
 
 **What happened:** The first partial GREEN for test-selection rejected correct prose because heading and table capitalization differed, stopped a template block at a nested heading before its records, and scanned an entire shared preset catalog instead of the four owned prompts. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `function templateBlock`) and (search: `affectedPresetIds`).
 
@@ -179,6 +179,8 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Recurrence (2026-08-15):** Goat-clarity's first-use cardinality proof expected literal lowercase agent and selector IDs, while the receipt template allowed a free-form integration name and accepted invocation. Real agents emitted values such as `Codex`, `uncommitted files`, and Markdown-emphasized labels, so a complete receipt could never satisfy its consumer. The correction makes canonical IDs part of the producer contract and lets the scanner ignore optional emphasis without weakening the values. Evidence anchors: `workflow/skills/goat-clarity/SKILL.md` (search: `Agent: <claude | codex | antigravity | copilot>`) and `test/contract/skill-hardening-clarity.test.ts` (search: `Selector: <github-pr | uncommitted | folder | file>`).
 
+**Recurrence (2026-08-17):** New goat-clarity disposition contracts first rejected correct Markdown wrapping at `uncertain identity` and `bound comparison baseline`, while an older literal assertion rejected the grammatical change from `keep` to `keeps`. The correction made whitespace flexible only inside the same bounded sentence and aligned the existing phrase pin with the producer without weakening the replacement-coverage requirement. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `rename-shaped pair with uncertain\\s+identity`) and `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the original until replacement coverage passes`).
+
 **Root cause:** The contract parser treated presentation boundaries and a shared container as the semantic owner, or expected canonical values that the producer never promised. The assertions therefore coupled correct doctrine to incidental casing, Markdown nesting, unrelated sibling content, and free-form labels.
 
 **Fix:** Use case-insensitive semantic regular expressions, bound template extraction to its code fence, inspect only the named prompt objects owned by the change, define machine-counted values in the producer, normalize presentation-only wrappers, and separate exhaustive path-existence proof from content checks over exact semantic owners.
@@ -189,4 +191,5 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 3. Keep unrelated sibling content outside neutrality and doctrine assertions.
 4. Rerun the focused contract before expanding verification.
 5. When a downstream check counts prose records, define canonical values in the producer and normalize only presentation wrappers; do not infer identity from unconstrained display text.
+6. In sentence-bounded prose regexes, tolerate Markdown whitespace and grammatical inflection that do not carry policy; keep the semantic actors, action, and boundary pinned.
 ---

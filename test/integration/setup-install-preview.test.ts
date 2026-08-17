@@ -9,11 +9,11 @@ import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -25,6 +25,7 @@ import {
   recordStaleBaselineHashes,
   runCliInstaller,
   symlinkDirectoryOrSkip,
+  symlinkFileOrSkip,
 } from "./setup-install.helpers.js";
 
 const CODEX_GOAT_CLARITY_PATH = ".agents/skills/goat-clarity/SKILL.md";
@@ -584,6 +585,117 @@ describe("managed setup preview", () => {
   });
 
   /**
+   * Fixture purpose: supplies two existing user files whose narrow install migrations are pending.
+   * Filesystem side effects: previews without writes, then applies both edits in a disposable target.
+   */
+  it("previews settings and gitignore migrations that apply performs", () => {
+    const projectPath = makeTempProject();
+    const codexSettingsPath = join(projectPath, ".codex", "config.toml");
+    const gitignorePath = join(projectPath, ".gitignore");
+    mkdirSync(join(projectPath, ".codex"), { recursive: true });
+    const settingsBefore = [
+      'model = "gpt-5"',
+      "",
+      "[features]",
+      "codex_hooks = true",
+      "",
+    ].join("\n");
+    const gitignoreBefore = "dist/\n";
+    writeFileSync(codexSettingsPath, settingsBefore);
+    writeFileSync(gitignorePath, gitignoreBefore);
+
+    const preview = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    const report = JSON.parse(preview.stdout) as { files: PreviewRow[] };
+    assertPreviewLists(report.files, {
+      path: ".codex/config.toml",
+      state: "user-migrated",
+      action: "migrate",
+    });
+    assert.match(
+      report.files.find((file) => file.path === ".codex/config.toml")
+        ?.reason ?? "",
+      /deprecated codex_hooks/u,
+    );
+    assertPreviewLists(report.files, {
+      path: ".gitignore",
+      state: "user-migrated",
+      action: "migrate",
+    });
+    assert.match(
+      report.files.find((file) => file.path === ".gitignore")?.reason ?? "",
+      /appends the node_modules\//u,
+    );
+    assert.equal(readFileSync(codexSettingsPath, "utf-8"), settingsBefore);
+    assert.equal(readFileSync(gitignorePath, "utf-8"), gitignoreBefore);
+
+    const apply = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const settingsAfter = readFileSync(codexSettingsPath, "utf-8");
+    assert.match(settingsAfter, /^hooks = true$/mu);
+    assert.doesNotMatch(settingsAfter, /codex_hooks/u);
+    assert.equal(
+      readFileSync(gitignorePath, "utf-8"),
+      "dist/\nnode_modules/\n",
+    );
+  });
+
+  /**
+   * Fixture purpose: removes one managed Codex registration while retaining a user-owned field.
+   * Filesystem side effects: rewrites a disposable hook config, previews it, then applies reconciliation.
+   */
+  it("previews the hook-config reconciliation that apply performs", () => {
+    const projectPath = makeTempProject();
+    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    const hooksPath = join(projectPath, ".codex", "hooks.json");
+    const hooksConfig = JSON.parse(readFileSync(hooksPath, "utf-8")) as {
+      hooks?: Record<string, unknown[]>;
+      userInterface?: { statusMessage: string };
+    };
+    hooksConfig.hooks ??= {};
+    delete hooksConfig.hooks.PreToolUse;
+    hooksConfig.userInterface = { statusMessage: "keep this user field" };
+    writeFileSync(hooksPath, `${JSON.stringify(hooksConfig, null, 2)}\n`);
+    const beforePreview = readFileSync(hooksPath, "utf-8");
+
+    const preview = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    assert.equal(readFileSync(hooksPath, "utf-8"), beforePreview);
+    const report = JSON.parse(preview.stdout) as { files: PreviewRow[] };
+    const hooksRow = report.files.find(
+      (file) => file.path === ".codex/hooks.json",
+    );
+
+    const apply = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const reconciledHooks = readFileSync(hooksPath, "utf-8");
+    assert.match(reconciledHooks, /deny-dangerous\.sh/u);
+    assert.match(reconciledHooks, /keep this user field/u);
+    assert.equal(hooksRow?.state, "user-migrated");
+    assert.equal(hooksRow?.action, "migrate");
+    assert.match(hooksRow?.reason ?? "", /restore.*deny-dangerous/u);
+  });
+
+  /**
    * This fixture writes and removes disposable target directories around a managed symlink.
    * It reproduces redirected install risk and proves admission preserves outside-project bytes.
    */
@@ -656,6 +768,70 @@ describe("managed setup preview", () => {
       rmSync(projectPath, { recursive: true, force: true });
       rmSync(redirectedDirectory, { recursive: true, force: true });
     }
+  });
+
+  // Fixture purpose: writes and hard-links disposable files, then runs install to prove admission protects the outside inode.
+  it("blocks a multiply linked generated target before any install write", () => {
+    const projectPath = makeTempProject();
+    const outsideDirectory = makeTempProject();
+    const outsideIndexPath = join(outsideDirectory, "outside-index.md");
+    const managedIndexPath = join(
+      projectPath,
+      ".goat-flow",
+      "learning-loop",
+      "lessons",
+      "INDEX.md",
+    );
+    mkdirSync(join(projectPath, ".goat-flow", "learning-loop", "lessons"), {
+      recursive: true,
+    });
+    writeFileSync(outsideIndexPath, "outside bytes must survive\n");
+    linkSync(outsideIndexPath, managedIndexPath);
+
+    const install = runCliInstaller(projectPath, "--agent", "codex");
+
+    assert.notEqual(install.status, 0);
+    assert.match(install.stderr, /no authority bypasses path safety/u);
+    assert.equal(
+      readFileSync(outsideIndexPath, "utf-8"),
+      "outside bytes must survive\n",
+    );
+    assert.equal(
+      existsSync(join(projectPath, ".agents", "skills", "goat", "SKILL.md")),
+      false,
+      "admission must stop before the installer creates an unrelated file",
+    );
+  });
+
+  // Fixture purpose: redirects a user-owned file to prove admission blocks before unrelated writes.
+  it("blocks an unsafe user-owned target before any install write", (testContext) => {
+    const projectPath = makeTempProject();
+    const outsideDirectory = makeTempProject();
+    const outsideGitignorePath = join(outsideDirectory, "outside.gitignore");
+    writeFileSync(outsideGitignorePath, "outside ignore bytes\n");
+    if (
+      !symlinkFileOrSkip(
+        testContext,
+        outsideGitignorePath,
+        join(projectPath, ".gitignore"),
+      )
+    ) {
+      return;
+    }
+
+    const install = runCliInstaller(projectPath, "--agent", "codex");
+
+    assert.notEqual(install.status, 0);
+    assert.equal(
+      readFileSync(outsideGitignorePath, "utf-8"),
+      "outside ignore bytes\n",
+    );
+    assert.equal(
+      existsSync(join(projectPath, ".agents", "skills", "goat", "SKILL.md")),
+      false,
+      "one unsafe project-write row must block every later installer write",
+    );
+    assert.match(install.stderr, /no authority bypasses path safety/u);
   });
 
   // Covers a symlinked baseline under --force: writes it; the install must be blocked before any write.

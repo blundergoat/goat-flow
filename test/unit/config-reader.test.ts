@@ -319,6 +319,23 @@ skills:
       JSON.stringify(result.errors),
     );
   });
+
+  it("warns when a goat-review option is misspelled", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+skills:
+  goat-review:
+    local_pr_baze: "deploy"
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+
+    assert.ok(
+      result.warnings.some(
+        (warning) => warning.path === "skills.goat-review.local_pr_baze",
+      ),
+      JSON.stringify(result.warnings),
+    );
+  });
 });
 
 describe("config ignores legacy agents field", () => {

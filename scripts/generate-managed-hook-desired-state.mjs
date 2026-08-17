@@ -60,6 +60,24 @@ function buildEnabledHookConfig(temporaryProjectRoot, agentProfile, hookSpec) {
   return JSON.parse(readFileSync(hookConfigPath, "utf-8"));
 }
 
+/** Return every provider id and exact script name setup owns for one hook. */
+function hookCleanupContract(hookSpec) {
+  return {
+    hookIds: [
+      hookSpec.id,
+      ...(hookSpec.id === "deny-dangerous"
+        ? LEGACY_DENY_DANGEROUS_HOOK_IDS
+        : []),
+    ],
+    commandScriptNames: [
+      hookSpec.primaryScript,
+      ...(hookSpec.id === "deny-dangerous"
+        ? LEGACY_DENY_DANGEROUS_SCRIPT_NAMES
+        : []),
+    ],
+  };
+}
+
 /**
  * Derive one deterministic provider/hook contract from the same public writer used by UI toggles and sync.
  *
@@ -90,14 +108,23 @@ function buildManagedHookContract() {
 
       // Each supported hook is generated independently so its fragment cannot contain another hook.
       for (const hookSpec of hookSpecs) {
-        // Unsupported delivery stays absent, which prevents the installer from registering unusable feedback.
-        if (hookSpec.unsupportedAgents?.[agentProfile.id]) continue;
+        const cleanup = hookCleanupContract(hookSpec);
+        // Unsupported delivery still publishes cleanup ownership so upgrades remove an obsolete registration.
+        if (hookSpec.unsupportedAgents?.[agentProfile.id]) {
+          hookContracts[hookSpec.id] = {
+            supported: false,
+            cleanup,
+          };
+          continue;
+        }
         const desiredState = deriveManagedHookDesiredState(
           agentProfile,
           hookSpec,
           true,
         );
         hookContracts[hookSpec.id] = {
+          supported: true,
+          cleanup,
           defaultEnabled: hookSpec.defaultEnabled,
           commandScriptNames: [
             hookSpec.primaryScript,

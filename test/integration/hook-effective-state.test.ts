@@ -25,13 +25,17 @@ import {
   renderAuditText,
 } from "../../src/cli/audit/render.js";
 import { createFS } from "../../src/cli/facts/fs.js";
+import { hashFile } from "../../src/cli/managed-setup-write-set.js";
 import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.js";
 import {
+  applyHookState,
   readAllHookStates,
   syncHookStates,
   type HookAgentState,
   type HookState,
 } from "../../src/cli/server/hook-registrar.js";
+import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
+import { PROFILES } from "../../src/cli/detect/agents.js";
 import {
   currentHookProviderSupportGate,
   getHookSpec,
@@ -40,6 +44,9 @@ import {
 } from "../../src/cli/server/hooks-registry.js";
 import { verifyManagedDenyHook } from "../../src/cli/hooks-runtime-evidence.js";
 import { verifyManagedConfiguredHook } from "../../src/cli/hooks-configured-runtime-evidence.js";
+import {
+  countOwnedCommandRows,
+} from "../unit/hook-registrar.helpers.js";
 
 const disposableProjects: string[] = [];
 
@@ -77,6 +84,36 @@ function createClaudeProject(): string {
   );
   writeFileSync(join(projectPath, ".claude", "settings.json"), "{}\n");
   return projectPath;
+}
+
+/**
+ * Record previous managed hook bytes for one disposable agent install.
+ * Filesystem side effects: writes that fixture's hash-only install-state JSON.
+ * Invariant: each stored hash represents the exact fixture bytes present when this helper runs.
+ */
+function recordManagedHookBaseline(
+  projectPath: string,
+  agentId: "claude" | "codex",
+  managedPaths: readonly string[],
+): void {
+  const stateDirectory = join(projectPath, ".goat-flow", "install-state");
+  mkdirSync(stateDirectory, { recursive: true });
+  writeFileSync(
+    join(stateDirectory, `${agentId}.json`),
+    `${JSON.stringify(
+      {
+        schemaVersion: "goat-flow.install-state.v1",
+        agent: agentId,
+        goatFlowVersion: "previous-test-version",
+        files: managedPaths.map((managedPath) => ({
+          path: managedPath,
+          expectedSha256: hashFile(join(projectPath, managedPath)),
+        })),
+      },
+      null,
+      2,
+    )}\n`,
+  );
 }
 
 /** Return one named hook row; a missing registry hook is an immediate fixture failure. */
@@ -127,7 +164,7 @@ function readClaudeHookSettings(
   ) as ClaudeHookSettingsFixture;
 }
 
-/** Write one intentionally drifted Claude fixture for the next read-only status assertion. */
+/** Write one intentionally drifted Claude fixture; filesystem side effect: replaces disposable settings. */
 function writeClaudeHookSettings(
   projectPath: string,
   settings: ClaudeHookSettingsFixture,
@@ -268,6 +305,134 @@ describe("effective hook state", () => {
       postTurnState.repairSummary,
       /No matching previous-install baseline proves the drift direction/u,
     );
+  });
+
+  /**
+   * Fixture purpose: records shared hook bytes under Codex while reading the same installation as Claude.
+   * Side effects: writes one hash-only baseline and one older managed script in a disposable project.
+   * Invariant: any matching installed-agent baseline may classify shared hook bytes as safely behind.
+   */
+  it("uses another installed agent baseline for shared managed hook bytes", () => {
+    const projectPath = createClaudeProject();
+    syncHookStates(projectPath);
+    const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
+    const hookScriptPath = join(projectPath, managedPath);
+    writeFileSync(hookScriptPath, "#!/usr/bin/env bash\n# previous package bytes\n");
+    recordManagedHookBaseline(projectPath, "codex", [managedPath]);
+
+    const denyState = claudeHookState(projectPath, "deny-dangerous");
+
+    assert.equal(denyState.installationIssue, "installed-version-behind");
+    assert.match(
+      denyState.repairSummary,
+      /previous-install baseline.*safely advances/iu,
+    );
+  });
+
+  /**
+   * Fixture purpose: stores an exact managed Antigravity command under a noncanonical sibling id.
+   * Filesystem side effects: rewrites one disposable provider config and requests managed removal.
+   * Invariant: ownership follows the exact script reference while unrelated definitions remain user-owned.
+   */
+  it("removes an Antigravity alias that references the exact managed script", () => {
+    const projectPath = createClaudeProject();
+    const denySpec = getHookSpec("deny-dangerous");
+    assert.ok(denySpec);
+    writeAgentHookState(projectPath, PROFILES.antigravity, denySpec, true);
+    const configPath = join(projectPath, ".agents", "hooks.json");
+    const config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<
+      string,
+      unknown
+    >;
+    config["renamed-managed-policy"] = config["deny-dangerous"];
+    delete config["deny-dangerous"];
+    config["team-audit"] = {
+      enabled: true,
+      PreToolUse: [
+        {
+          matcher: "run_command",
+          hooks: [{ type: "command", command: "./scripts/team-audit.sh" }],
+        },
+      ],
+    };
+    writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+    writeAgentHookState(projectPath, PROFILES.antigravity, denySpec, false);
+
+    const cleaned = JSON.parse(readFileSync(configPath, "utf-8")) as Record<
+      string,
+      unknown
+    >;
+    assert.equal(countOwnedCommandRows(cleaned, denySpec), 0);
+    assert.ok(cleaned["team-audit"]);
+  });
+
+  /**
+   * Fixture purpose: locally diverges a registered script after recording its prior managed hash.
+   * Filesystem side effects: toggles the disposable hook off while preserving its inert edited bytes.
+   * Invariant: disabling unregisters execution and never needs authority to refresh dormant files.
+   */
+  it("disables a diverged hook without refreshing its managed files", () => {
+    const projectPath = createClaudeProject();
+    syncHookStates(projectPath);
+    const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
+    recordManagedHookBaseline(projectPath, "claude", [managedPath]);
+    const hookPath = join(projectPath, managedPath);
+    const localBytes = `${readFileSync(hookPath, "utf-8")}\n# local disabled copy\n`;
+    writeFileSync(hookPath, localBytes);
+
+    const disabled = applyHookState("deny-dangerous", false, projectPath);
+
+    assert.equal(disabled.enabled, false);
+    assert.equal(readFileSync(hookPath, "utf-8"), localBytes);
+    assert.doesNotMatch(
+      readFileSync(join(projectPath, ".claude", "settings.json"), "utf-8"),
+      /deny-dangerous\.sh/u,
+    );
+  });
+
+  /**
+   * Fixture purpose: combines a blocking local edit with removable tombstone state.
+   * Filesystem side effects: invokes a rejected enable against a disposable project only.
+   * Invariant: an enabled-state blocker is detected before cleanup, toggle, config, or script mutation.
+   */
+  it("checks enabled divergence before pruning any other hook state", () => {
+    const projectPath = createClaudeProject();
+    syncHookStates(projectPath);
+    const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
+    recordManagedHookBaseline(projectPath, "claude", [managedPath]);
+    const hookPath = join(projectPath, managedPath);
+    writeFileSync(
+      hookPath,
+      `${readFileSync(hookPath, "utf-8")}\n# local enabled copy\n`,
+    );
+    const tombstonePath = join(
+      projectPath,
+      ".goat-flow",
+      "hooks",
+      "plan-checkbox-guard.sh",
+    );
+    writeFileSync(tombstonePath, "retired bytes\n");
+    const configPath = join(projectPath, ".goat-flow", "config.yaml");
+    writeFileSync(
+      configPath,
+      [
+        "hooks:",
+        "  deny-dangerous:",
+        "    enabled: true",
+        "plan-guard:",
+        "  enabled: true",
+        "",
+      ].join("\n"),
+    );
+    const configBefore = readFileSync(configPath, "utf-8");
+
+    assert.throws(
+      () => applyHookState("deny-dangerous", true, projectPath),
+      /Refusing to sync diverged managed hook files/u,
+    );
+    assert.equal(readFileSync(configPath, "utf-8"), configBefore);
+    assert.equal(readFileSync(tombstonePath, "utf-8"), "retired bytes\n");
   });
 
   // A hard-linked agent config can contain exact bytes while remaining unsafe to execute.

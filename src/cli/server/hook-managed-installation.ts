@@ -23,7 +23,7 @@ import {
 import { readManagedInstallBaseline } from "../managed-setup-state.js";
 import { hashFile } from "../managed-setup-write-set.js";
 import { getTemplatePath } from "../paths.js";
-import type { AgentProfile } from "../types.js";
+import { KNOWN_AGENT_IDS, type AgentProfile } from "../types.js";
 import { projectIsAheadOfCli } from "../version-compare.js";
 import type { HookSpec } from "./hooks-registry.js";
 import { writeFileAtomic } from "./safe-exec.js";
@@ -109,14 +109,25 @@ function managedHookRelativePath(
 function managedHookFileDirection(
   projectPath: string,
   managedHookFile: ManagedHookFileContract,
-  expectedHashes: Map<string, string> | null,
+  expectedHashSets: readonly Map<string, string>[],
 ): ManagedSetupChangeDirection {
   const managedPath = managedHookRelativePath(projectPath, managedHookFile);
   try {
+    const currentSha256 = hashFile(managedHookFile.installedPath);
+    const newExpectedSha256 = hashFile(managedHookFile.templatePath);
+    const oldExpectedHashes = expectedHashSets.flatMap((expectedHashes) => {
+      const expectedHash = expectedHashes.get(managedPath);
+      return expectedHash === undefined ? [] : [expectedHash];
+    });
+    // Shared files are safe to advance when any installed agent baseline exactly names current bytes.
+    const oldExpectedSha256 =
+      oldExpectedHashes.find((expectedHash) => expectedHash === currentSha256) ??
+      oldExpectedHashes[0] ??
+      null;
     const state = classifyManagedSetupFile({
-      oldExpectedSha256: expectedHashes?.get(managedPath) ?? null,
-      currentSha256: hashFile(managedHookFile.installedPath),
-      newExpectedSha256: hashFile(managedHookFile.templatePath),
+      oldExpectedSha256,
+      currentSha256,
+      newExpectedSha256,
     });
     return managedSetupChangeDirection(state);
   } catch {
@@ -361,12 +372,17 @@ export function managedHookInstallationFacts(
   const hasAllRequiredFiles = managedHookFiles.every((managedHookFile) =>
     existsSync(managedHookFile.installedPath),
   );
-  const baseline = readManagedInstallBaseline(projectPath, agent.id);
-  const expectedHashes =
-    baseline.status === "loaded" ? baseline.expectedHashes : null;
+  const expectedHashSets = KNOWN_AGENT_IDS.flatMap((agentId) => {
+    const baseline = readManagedInstallBaseline(projectPath, agentId);
+    return baseline.status === "loaded" ? [baseline.expectedHashes] : [];
+  });
   const fileDirections = managedHookFiles.map((managedHookFile) =>
     existsSync(managedHookFile.installedPath)
-      ? managedHookFileDirection(projectPath, managedHookFile, expectedHashes)
+      ? managedHookFileDirection(
+          projectPath,
+          managedHookFile,
+          expectedHashSets,
+        )
       : "unclassified",
   );
   const changedPaths = managedHookFiles.flatMap((managedHookFile, index) =>
@@ -725,12 +741,14 @@ function removeScriptIfPresent(
  * @param projectPath - selected project; empty text cannot own safe destinations
  * @param agent - selected agent; a null hook directory leaves setup unchanged
  * @param hookSpec - hook files to install; an empty list writes no runnable hook
- * @returns nothing; successful completion leaves current executable managed files
+ * @param overwriteExisting - false fills missing inert files without refreshing existing bytes
+ * @returns nothing; missing files are filled, while default mode also refreshes existing files
  */
 export function copyHookScripts(
   projectPath: string,
   agent: AgentProfile,
   hookSpec: HookSpec,
+  overwriteExisting = true,
 ): void {
   // An agent without a hook directory has no install destination for the user.
   if (!agent.hooksDir) return;
@@ -743,6 +761,8 @@ export function copyHookScripts(
       agent,
       hookScriptName,
     );
+    // Disabled reconciliation restores missing files but leaves every existing inert byte untouched.
+    if (!overwriteExisting && existsSync(installedHookPath)) continue;
     // A newer installed guard must not be silently downgraded by an older CLI.
     if (installedHookIsNewer(installedHookPath)) {
       throw new HookManagedInstallationError(
@@ -778,6 +798,7 @@ export function copyHookScripts(
         policyFileName,
       );
       assertWithinProject(projectPath, installedPolicyPath);
+      if (!overwriteExisting && existsSync(installedPolicyPath)) continue;
       writeFileAtomic(
         installedPolicyPath,
         readFileSync(policyTemplatePath, "utf-8"),

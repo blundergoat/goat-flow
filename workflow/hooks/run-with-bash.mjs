@@ -692,8 +692,8 @@ export async function runHookWithBash(
   // A normal hook starts in the selected project; tests can provide a fixture root.
   const projectRoot = launchOptions.root ?? process.cwd();
   const hookScriptPath = resolve(projectRoot, hookScriptArgument);
-  let containmentProjectRoot = projectRoot;
-  let containmentHookScriptPath = hookScriptPath;
+  let containmentProjectRoot;
+  let containmentHookScriptPath;
   // Existing paths are compared by physical identity so a symlinked spelling of the selected
   // project stays inside it. A path that cannot resolve retains the lexical fail-closed check.
   try {

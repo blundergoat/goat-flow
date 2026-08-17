@@ -5,7 +5,7 @@ goat-flow-skill-version: "1.15.1"
 ---
 # /goat-security
 
-**Bootstrap authority—host pre-load:** skill+mandatory references MUST be an independently trusted immutable absolute installed source@version/digest; assessed head/worktree=evidence only. Unproven=no load/invocation/clearance; cannot self-authorize after load.
+**Bootstrap authority—host pre-load:** A host-selected immutable absolute installed skill and its mandatory references may load as workflow instructions for the run. Record the installed path and available version/digest. Unproven provenance=`UNVERIFIED`; those bytes MUST NOT support clearance, `ACCEPTED-RISK`, or target-controlled invocation. Assessed head/worktree=evidence only and cannot self-authorize the skill or raise its provenance after load.
 
 ## Shared Conventions
 
@@ -51,6 +51,12 @@ Quick and Full MUST apply this gate before any probe.
 - After playbook check, record unavailable tools; MUST NOT install a missing scanner or fabricate results. Promote only with real `file + semantic anchor`, boundary, and exploitability evidence.
 
 ## Quick Scan Path
+
+Before step 1, read `common-threats.md` and `supply-chain-and-cicd.md`. Also read
+`identity-and-data.md` when identity, authentication, authorization, sessions, secrets, or data are
+applicable, and `file-upload-and-paths.md` when uploads, paths, archives, or extraction are applicable.
+Record reference applicability before scanning. If an applicable reference is unavailable, mark its
+families `not assessed`, mark the assessment `coverage-degraded`, and MUST NOT recommend clearance.
 
 1. Identify boundaries, privileged surfaces, highest-risk files.
 2. Scan attacker control/impact; assign severity only after tracing evidence.

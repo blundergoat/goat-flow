@@ -125,6 +125,11 @@ old-name residue search. Public or exported renames require explicit compatibili
 authority and checks across consumers, reflection, configuration, serialization,
 and old-name residue.
 
+A public or exported parameter name in a language with named arguments is a compatibility surface;
+absence of current named-argument callers is not compatibility authority over future callers. A
+serialized field, payload key, or returned associative key is likewise a public contract, not a
+local/private rename.
+
 ### 5. Resolve or defer findings
 
 Classify every guard before recommending any change:

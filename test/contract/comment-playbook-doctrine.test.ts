@@ -41,7 +41,7 @@ describe("comment playbook verification doctrine", () => {
       );
       assert.match(
         content,
-        /When neither defines a width, 150 characters is the fallback ceiling/u,
+        /When neither defines a\s+width, 150 characters is the fallback ceiling/u,
         playbookPath,
       );
       assert.match(
@@ -103,7 +103,7 @@ describe("comment playbook verification doctrine", () => {
       );
       assert.match(
         content,
-        /outside the authori[sz]ed scope[\s\S]+report or defer it[\s\S]+do not delete it/u,
+        /outside the authori[sz]ed\s+scope[\s\S]+report or defer it[\s\S]+do not delete it/u,
         playbookPath,
       );
       assert.match(
@@ -322,6 +322,62 @@ describe("comment playbook verification doctrine", () => {
       );
     });
   });
+
+  it("composes project rules and exemptions into one valid post-state", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.match(
+        content,
+        /project standard[\s\S]+points it addresses[\s\S]+playbook defaults[\s\S]+only when no project[\s\S]+guidance addresses a point/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /expected final shape[\s\S]+every applicable rule/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /dependency-injection[\s\S]+exemption removes tags only[\s\S]+required description/iu,
+        playbookPath,
+      );
+      assert.match(content, /rule source per changed span/iu, playbookPath);
+    });
+  });
+
+  it("translates broad reviewability prompts into exhaustive diagnosis, not prose quotas", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.match(
+        content,
+        /every method, branch, loop, catch, or null\/empty path[\s\S]+inspect/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /does not require a comment[\s\S]+hidden reader information/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /150-character[\s\S]+ceiling[\s\S]+not a target/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /mechanical hit is a lead, not a diagnosis/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /machine-readable annotations[\s\S]+sanctioned bullet shapes[\s\S]+known false-positive classes/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /without deleting `@param`, `@return`, or `@returns`/u,
+        playbookPath,
+      );
+    });
+  });
 });
 
 describe("Gruff documentation-pass doctrine", () => {
@@ -375,6 +431,21 @@ describe("Gruff documentation-pass doctrine", () => {
       assert.match(
         content,
         /clean Gruff run does not prove comment meaning/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /each introduced stable identity[\s\S]+disposition/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /(?:applying\s+)?project\s+authority introduces[\s\S]+finding[\s\S]+form that satisfies both/iu,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /project authority wins[\s\S]+receipt records/iu,
         playbookPath,
       );
     });

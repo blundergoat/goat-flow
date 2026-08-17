@@ -136,7 +136,7 @@ npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness   # Ha
 npx @blundergoat/goat-flow@latest quality . --agent claude --mode skills    # Skills mode
 npx @blundergoat/goat-flow@latest quality history --agent antigravity            # List saved reports + same-agent score deltas
 npx @blundergoat/goat-flow@latest quality history --mode process            # Filter history to one quality mode
-npx @blundergoat/goat-flow@latest quality diff --agent antigravity               # Derive resolved / new / persisted / stuck vs prior run
+npx @blundergoat/goat-flow@latest quality diff --agent antigravity               # Derive absent / new / persisted / stuck vs prior run
 npx @blundergoat/goat-flow@latest quality diff --mode skills                # Compare within one mode only
 ```
 
@@ -155,7 +155,7 @@ The `--mode` flag selects a focused quality assessment. Each mode generates a di
 
 - `quality` composes a structured prompt with a bounded persistence contract. Positional finding IDs are computed at load time by `history` / `diff`.
 - `quality history` lists saved reports and same-agent setup/system score deltas.
-- `quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from saved same-agent report ids.
+- `quality diff` derives `absent`, `new`, `persisted`, and `stuck` from saved same-agent report ids.
 
 The two commands stay separated in storage as well as terminology: audit output goes to stdout or `--output`, while quality reports land in a gitignored log directory for local trend analysis.
 

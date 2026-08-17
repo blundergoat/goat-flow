@@ -12,11 +12,53 @@ import { getAgentProfiles } from "../../src/cli/agents/registry.js";
 import { listHookSpecs } from "../../src/cli/server/hooks-registry.js";
 import {
   makeTempProject,
+  PROJECT_ROOT,
   readClaudePostTurnSafetyTimeout,
+  runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
 
 describe("setup --apply installer upgrade migrations", () => {
+  it("keeps derived config migration flags under the force alias", () => {
+    const root = makeTempProject();
+    const firstInstall = runCliInstaller(root, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    writeFileSync(
+      configPath,
+      readFileSync(configPath, "utf-8").replace(
+        /^version: .*$/mu,
+        'version: "1.14.0"',
+      ),
+    );
+    const packageVersion = (
+      JSON.parse(
+        readFileSync(join(PROJECT_ROOT, "package.json"), "utf-8"),
+      ) as { version: string }
+    ).version;
+
+    const forcedUpgrade = runCliInstaller(
+      root,
+      "--agent",
+      "codex",
+      "--force",
+    );
+
+    assert.equal(
+      forcedUpgrade.status,
+      0,
+      forcedUpgrade.stderr || forcedUpgrade.stdout,
+    );
+    assert.match(
+      readFileSync(configPath, "utf-8"),
+      new RegExp(`^version: ["']${packageVersion}["']$`, "mu"),
+    );
+  });
+
   // Covers upgrading past the retired guard: writes old config, which must be pruned because it is retired.
   it("prunes retired plan checkbox guard config and selected-agent registration", () => {
     const root = makeTempProject();

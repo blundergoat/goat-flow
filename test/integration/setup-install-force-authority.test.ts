@@ -25,6 +25,9 @@ const SECOND_CONFLICT_PATH = ".goat-flow/logs/review/README.md";
 /** A seeded user-owned policy file, the only ownership `--force-user-owned` can reach. */
 const USER_OWNED_PATH = ".goat-flow/security-policy.md";
 
+/** User configuration is migrated in place but has no package template that force may replace. */
+const NON_REPLACEABLE_USER_PATH = ".goat-flow/config.yaml";
+
 /** One preview row as the JSON contract publishes it. */
 interface PreviewRow {
   path: string;
@@ -217,6 +220,26 @@ describe("install force authority", () => {
       ),
       /post-turn-safety/u,
     );
+  });
+
+  it("rejects force replacement for a user-owned file with no package source", () => {
+    const target = conflictedTarget();
+    const configPath = join(target.projectPath, NON_REPLACEABLE_USER_PATH);
+    const configBefore = readFileSync(configPath, "utf-8");
+
+    const refused = runCliInstaller(
+      target.projectPath,
+      "--agent",
+      "codex",
+      "--force-managed",
+      "--force-user-owned",
+      "--force-path",
+      NON_REPLACEABLE_USER_PATH,
+    );
+
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /not replaceable from a package source/u);
+    assert.equal(readFileSync(configPath, "utf-8"), configBefore);
   });
 
   it("rejects a named path that matches no conflict", () => {

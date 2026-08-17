@@ -256,6 +256,35 @@ export function symlinkDirectoryOrSkip(
 }
 
 /**
+ * Create a file symlink, or mark the test skipped when the host forbids the fixture.
+ * Unexpected filesystem errors propagate so a broken fixture cannot read as a passing test.
+ *
+ * @param testContext - active test whose result records an unsupported host
+ * @param target - existing file the disposable link points to
+ * @param link - new symlink path created by this helper
+ * @returns true when the symlink exists; false when the test was skipped
+ * @throws when symlink creation fails for any reason other than an unsupported host
+ */
+export function symlinkFileOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+): boolean {
+  try {
+    symlinkSync(target, link, "file");
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EPERM") {
+      testContext.skip(
+        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
+      );
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
  * Rewrite one disposable Codex install-state file without its goat-clarity row.
  * Reads and replaces only the fixture baseline so the next installer run sees a loaded seven-skill state.
  */

@@ -52,6 +52,7 @@ fallback_temp_sequence=0
 fallback_max_seconds="${GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS:-60}"
 fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
+post_turn_native_workspace=""
 post_turn_action="scan"
 post_turn_hook_version="1.15.1"
 post_turn_result_schema="goat-flow.hook-result.v1"
@@ -684,6 +685,15 @@ function yamlStringScalar(rawValue) {
   return value;
 }
 
+function yamlMappingValue(line, expectedKey) {
+  const separatorIndex = line.indexOf(":");
+  if (separatorIndex < 0) return null;
+  const parsedKey = yamlStringScalar(line.slice(0, separatorIndex));
+  return parsedKey === expectedKey
+    ? line.slice(separatorIndex + 1).trim()
+    : null;
+}
+
 function yamlFlowStringList(rawValue) {
   const value = stripYamlComment(rawValue).trim();
   if (!value.startsWith("[") || !value.endsWith("]")) return null;
@@ -750,7 +760,8 @@ function configuredScanRoots() {
   }
   const lines = configText.replace(/\r\n?/gu, "\n").split("\n");
   const hooksIndex = lines.findIndex((line) =>
-    lineIndent(line) === 0 && stripYamlComment(line).trim() === "hooks:");
+    lineIndent(line) === 0 &&
+    yamlMappingValue(stripYamlComment(line).trim(), "hooks") === "");
   if (hooksIndex < 0) return null;
   let hooksEnd = lines.length;
   for (let index = hooksIndex + 1; index < lines.length; index += 1) {
@@ -764,7 +775,13 @@ function configuredScanRoots() {
   let hookIndent = -1;
   for (let index = hooksIndex + 1; index < hooksEnd; index += 1) {
     const indent = lineIndent(lines[index]);
-    if (indent > 0 && stripYamlComment(lines[index]).trim() === "post-turn-safety:") {
+    if (
+      indent > 0 &&
+      yamlMappingValue(
+        stripYamlComment(lines[index]).trim(),
+        "post-turn-safety",
+      ) === ""
+    ) {
       hookIndex = index;
       hookIndent = indent;
       break;
@@ -777,9 +794,8 @@ function configuredScanRoots() {
     if (trimmedLine.length === 0) continue;
     const indent = lineIndent(lines[index]);
     if (indent <= hookIndent) break;
-    const fieldMatch = /^scan-roots:\s*(.*)$/u.exec(trimmedLine);
-    if (!fieldMatch) continue;
-    const inlineValue = fieldMatch[1].trim();
+    const inlineValue = yamlMappingValue(trimmedLine, "scan-roots");
+    if (inlineValue === null) continue;
     if (inlineValue.length > 0) return yamlFlowStringList(inlineValue);
     const roots = [];
     for (let rootIndex = index + 1; rootIndex < hooksEnd; rootIndex += 1) {
@@ -1978,10 +1994,19 @@ if ! read_stop_context; then
   exit 2
 fi
 
-# A managed non-Git controller scans only its explicit, wholly valid Git-root list.
+current_directory_is_git_top_level() {
+  local selected_root=""
+  local discovered_root=""
+  selected_root="$(pwd -P 2>/dev/null)" || return 1
+  discovered_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  discovered_root="$(cd "$discovered_root" 2>/dev/null && pwd -P)" || return 1
+  [ -n "$selected_root" ] && [ "$selected_root" = "$discovered_root" ]
+}
+
+# A managed controller outside its own Git top level scans only its explicit, wholly valid roots.
 # Status 3 means the list was absent or invalid, so bounded root-failure recovery remains authoritative.
 if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" != 1 ] && \
-  ! git rev-parse --show-toplevel >/dev/null 2>&1; then
+  ! current_directory_is_git_top_level; then
   run_controller_child_scans
   controller_scan_status=$?
   if [ "$controller_scan_status" -ne 3 ]; then
@@ -3062,6 +3087,11 @@ collect_z() {
 }
 
 # Run the optimized scan and return the coding agent's final Stop decision.
+cleanup_post_turn_native_workspace() {
+  [ -n "${post_turn_native_workspace:-}" ] || return 0
+  rm -rf -- "$post_turn_native_workspace"
+}
+
 main() {
   local root
   local WORKDIR
@@ -3089,7 +3119,8 @@ main() {
     finish_infrastructure_failure "$root" "native:scan workspace unavailable"
     return $?
   fi
-  trap 'rm -rf "$WORKDIR"' EXIT
+  post_turn_native_workspace="$WORKDIR"
+  trap cleanup_post_turn_native_workspace EXIT
   post_turn_result_records_path="$WORKDIR/hook-result-records"
 
   local head_present=0

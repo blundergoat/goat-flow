@@ -17,6 +17,7 @@ import {
   writeFile,
   writePostTurnScanRoots,
   runHook,
+  withTempRepo,
 } from "./post-turn-safety-hook.helpers.js";
 
 const POST_TURN_SCANNER_VARIANTS = [
@@ -331,6 +332,61 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
       });
       assert.equal(envelope.findings[0].target, "group/nested-repo/.env");
       assert.doesNotMatch(result.stdout, /sibling-repo/u);
+    });
+  });
+
+  it("accepts quoted controller and scan-root keys", () => {
+    withTempController(["gruff-go"], (controllerRoot, childRoots) => {
+      writeFile(childRoots["gruff-go"], ".env", `API_KEY=${TEST_API_TOKEN}\n`);
+      writeFile(
+        controllerRoot,
+        ".goat-flow/config.yaml",
+        [
+          '"hooks":',
+          '  "post-turn-safety":',
+          '    "enabled": true',
+          '    "scan-roots": ["gruff-go"]',
+          "",
+        ].join("\n"),
+      );
+
+      const envelope = assertManagedEnvelope(
+        runHook(
+          controllerRoot,
+          MANAGED_STOP_ENV,
+          buildStopPayload("controller-quoted-keys", false),
+        ),
+      );
+
+      assert.equal(envelope.outcome, "block");
+      assert.equal(envelope.findings[0].target, "gruff-go/.env");
+    });
+  });
+
+  it("keeps a nested controller scoped to its configured child repositories", () => {
+    withTempRepo((outerRepository) => {
+      const controllerRoot = join(outerRepository, "controller");
+      const childRoot = join(controllerRoot, "gruff-go");
+      createCommittedRepo(childRoot);
+      writeFile(childRoot, ".env", `API_KEY=${TEST_API_TOKEN}\n`);
+      writePostTurnScanRoots(controllerRoot, ["gruff-go"]);
+
+      const envelope = assertManagedEnvelope(
+        runHook(
+          controllerRoot,
+          MANAGED_STOP_ENV,
+          buildStopPayload("controller-inside-unrelated-git", false),
+        ),
+      );
+
+      assert.equal(envelope.outcome, "block");
+      assert.deepEqual(envelope.coverage, {
+        status: "complete",
+        attemptedUnits: 1,
+        completedUnits: 1,
+        skippedUnits: 0,
+      });
+      assert.equal(envelope.findings[0].target, "gruff-go/.env");
     });
   });
 

@@ -142,7 +142,7 @@ npx @blundergoat/goat-flow@latest quality diff --agent claude
 npx @blundergoat/goat-flow@latest quality diff 2026-04-01-0900-claude-aaaaa:2026-04-15-1000-claude-bbbbb --format json
 ```
 
-`quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from positional finding ids - those ids are the source of truth. The agent-reported `delta_tag` on each finding is consumed as a cross-check, not a classification: when the diff pair matches the newer report's `prior_report_id` baseline, findings whose `delta_tag` contradicts the deterministic class are listed in a `Delta-tag disagreements` section (`deltaTagDisagreements` in JSON output) as a methodology signal about the agent's continuity claims. `stuck` is a subset of persisted high-severity findings and resets after history gaps longer than 30 days.
+`quality diff` derives `absent`, `new`, `persisted`, and `stuck` from positional finding ids - those ids are the source of truth. An absent finding is missing from the later report; that alone does not prove it was fixed. The agent-reported `delta_tag` on each finding is consumed as a cross-check, not a classification: when the diff pair matches the newer report's `prior_report_id` baseline, findings whose `delta_tag` contradicts the deterministic class are listed in a `Delta-tag disagreements` section (`deltaTagDisagreements` in JSON output) as a methodology signal about the agent's continuity claims. `stuck` is a subset of persisted high-severity findings and resets after history gaps longer than 30 days.
 
 ### `goat-flow quality validate <path-to-report>`
 

@@ -42,6 +42,7 @@ export interface ProjectWriteDefinition {
   path: string;
   ownership: ProjectWriteOwnership;
   seedable: boolean;
+  replaceable: boolean;
   reason: string;
 }
 
@@ -109,8 +110,8 @@ export function readManagedTargetEvidence(
   const targetFilePath = join(projectPath, managedPath);
   try {
     const targetStats = lstatSync(targetFilePath);
-    // Symlinks and directories must never look equal to a regular managed template.
-    if (!targetStats.isFile()) {
+    // Symlinks, directories, and multiply linked files can redirect a managed replacement.
+    if (!targetStats.isFile() || targetStats.nlink !== 1) {
       return { status: "non-regular", sha256: null };
     }
     return { status: "regular", sha256: hashFile(targetFilePath) };
@@ -138,6 +139,7 @@ function manifestProjectWrites(): ProjectWriteDefinition[] {
         path: managedPath,
         ownership: "user-owned",
         seedable: true,
+        replaceable: ownership.source !== undefined,
         reason: MANIFEST_USER_OWNED_REASONS[managedPath] ?? SEED_ONLY_REASON,
       });
       continue;
@@ -151,6 +153,7 @@ function manifestProjectWrites(): ProjectWriteDefinition[] {
         path: managedPath,
         ownership: "generated",
         seedable: true,
+        replaceable: false,
         reason:
           "Install creates this anchor when it is missing so the directory survives an empty checkout.",
       });
@@ -179,6 +182,7 @@ function agentProjectWrites(agent: AgentId): ProjectWriteDefinition[] {
       path: settingsPath,
       ownership: "user-owned",
       seedable: true,
+      replaceable: false,
       reason:
         "Install seeds agent settings once, then applies only declared narrow migrations; permissions, comments, and unrelated keys are preserved.",
     });
@@ -190,6 +194,7 @@ function agentProjectWrites(agent: AgentId): ProjectWriteDefinition[] {
       path: hookConfigPath,
       ownership: "user-owned",
       seedable: true,
+      replaceable: false,
       reason:
         "Install seeds this hook config once, then converges only goat-flow's own registrations; unrelated hook rows are preserved.",
     });
@@ -200,6 +205,7 @@ function agentProjectWrites(agent: AgentId): ProjectWriteDefinition[] {
       path: CLAUDE_LOCAL_SETTINGS_PATH,
       ownership: "user-owned",
       seedable: false,
+      replaceable: false,
       reason:
         "Install repairs stale permission rules in this optional local override only when it already exists; it is never created.",
     });
@@ -221,6 +227,7 @@ function conditionalProjectWrites(
       path: ".gitignore",
       ownership: "user-owned",
       seedable: true,
+      replaceable: false,
       reason:
         "Install appends a node_modules/ ignore line when one is missing and never rewrites your other entries.",
     },
@@ -228,6 +235,7 @@ function conditionalProjectWrites(
       path: ".goat-flow/plans/.active",
       ownership: "user-owned",
       seedable: true,
+      replaceable: false,
       reason:
         "Install writes this marker only when no marker exists and the target holds exactly one version-named plan directory.",
     },
@@ -235,6 +243,7 @@ function conditionalProjectWrites(
       path: "docs/coding-standards/git-commit-message.md",
       ownership: "user-owned",
       seedable: true,
+      replaceable: false,
       reason:
         "Install seeds commit guidance only in a Git project that has no guide at this path.",
     },
@@ -242,6 +251,7 @@ function conditionalProjectWrites(
       path: `.goat-flow/install-state/${agent}.json`,
       ownership: "generated",
       seedable: true,
+      replaceable: false,
       reason:
         "Install records this hash-only baseline after verifying the managed refresh.",
     },
@@ -249,6 +259,7 @@ function conditionalProjectWrites(
       path: posix.join(bucketPaths[bucket], "INDEX.md"),
       ownership: "generated" as const,
       seedable: true,
+      replaceable: false,
       reason: `Install regenerates the ${bucket} index from that bucket's current entries.`,
     })),
   ];

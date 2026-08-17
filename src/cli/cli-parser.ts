@@ -316,11 +316,12 @@ function parsePlansTimeCategoryArg(
   return value;
 }
 
-/** Returns true when the command resolves to a deterministic install/apply path. */
+/** Returns true when the command resolves to a deterministic install or setup preview/apply path. */
 function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
   return (
     command === "install" ||
-    (command === "setup" && parsedFlag(values, "apply"))
+    (command === "setup" &&
+      (parsedFlag(values, "apply") || parsedFlag(values, "dry-run")))
   );
 }
 /** Validate managed-preview combinations; throws CLIError before ignored write flags confuse users. */
@@ -348,7 +349,7 @@ function validateAuthorityFlags(
   for (const [flag, isSupplied] of authorityFlags) {
     if (isSupplied && !isInstallCommand(command, values)) {
       throw new CLIError(
-        `${flag} is only valid for install or setup --apply.`,
+        `${flag} is only valid for install or setup --apply/--dry-run.`,
         2,
       );
     }
@@ -390,10 +391,41 @@ function validateInstallFlags(command: Command, values: ParsedArgValues): void {
   for (const [flag, set] of installOnly) {
     if (set === true && !isInstallCommand(command, values)) {
       throw new CLIError(
-        `${flag} is only valid for install or setup --apply.`,
+        `${flag} is only valid for install or setup --apply/--dry-run.`,
         2,
       );
     }
+  }
+}
+
+/** Restrict target-code trust choices to executing routes; throws CLIError for every inert route. */
+function validateTargetTrustFlags(
+  command: Command,
+  values: ParsedArgValues,
+  qualitySubcommand: QualitySubcommand,
+  hookSubcommand: HookSubcommand | null,
+): void {
+  const suppliedFlag = parsedFlag(values, "trusted-target")
+    ? "--trusted-target"
+    : parsedFlag(values, "untrusted-target")
+      ? "--untrusted-target"
+      : null;
+  if (suppliedFlag === null) return;
+
+  const isSetupPrompt =
+    command === "setup" &&
+    !parsedFlag(values, "apply") &&
+    !parsedFlag(values, "dry-run");
+  const canExecuteTarget =
+    command === "audit" ||
+    isSetupPrompt ||
+    (command === "quality" && qualitySubcommand === "prompt") ||
+    (command === "hooks" && hookSubcommand === "verify");
+  if (!canExecuteTarget) {
+    throw new CLIError(
+      `${suppliedFlag} is only valid for audit, setup prompt, quality prompt, or hooks verify.`,
+      2,
+    );
   }
 }
 
@@ -444,6 +476,7 @@ function validateFlagCombinations(
       2,
     );
   }
+  validateTargetTrustFlags(command, values, qualitySubcommand, hookSubcommand);
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
   validateQualityFlags(command, values, qualitySubcommand);

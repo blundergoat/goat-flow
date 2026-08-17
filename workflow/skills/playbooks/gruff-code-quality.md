@@ -94,6 +94,11 @@ Before editing comments, run Gruff on the exact paths and keep the before-edit J
 
 A clean Gruff run does not prove comment meaning. Gruff checks detectable presence and shape; a reviewer still verifies claims against the code they describe.
 
+Disposition each introduced stable identity; a histogram is insufficient. When applying project
+authority introduces a finding, read the full rule and look for a form that satisfies both. If none
+exists, project authority wins and the receipt records the introduced identity, rule conflict, and
+reason. Never revert a correct edit silently or report the analyzer as clean.
+
 A documentation pass edits comments and doc blocks. Route every naming finding through [`naming-and-placement.md`](./naming-and-placement.md); a documentation pass grants no rename, extraction, signature-change, or other structural authority. List each separately authorized rename where the change is described. A comment that already meets the `code-comments.md` bar is out of scope - rewrite only on a diagnosed defect, and do not re-align untouched tag columns or reflow compliant lines unless a formatter enforces it.
 
 The identity diff proves no new finding, not that the pass earned its review cost. Report compliant comments left untouched and any whitespace-only churn, and size the pass like any cluster: one subsystem a human can actually review, not the whole tree.

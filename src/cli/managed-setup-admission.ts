@@ -18,8 +18,13 @@ import {
  * @returns user-facing conflict lines; empty means the managed admission gate can proceed
  */
 function managedSetupBlockingSummary(preview: ManagedSetupPreview): string[] {
-  // Only states requiring user intent belong in the blocking error.
-  const blockingFiles = preview.files.filter(isBlockingManagedFile);
+  // Conflicts and unsafe write-set destinations both need a path-specific repair line.
+  const blockingFiles = preview.files.filter(
+    (file) =>
+      isBlockingManagedFile(file) ||
+      file.currentStatus === "non-regular" ||
+      file.currentStatus === "unreadable",
+  );
   // Each path stays on one line so users can inspect or copy it directly.
   const lines = blockingFiles.map(
     (file) => `${file.path} [${file.state}]: ${file.reason}`,
@@ -38,12 +43,11 @@ function managedSetupBlockingSummary(preview: ManagedSetupPreview): string[] {
  * Use before honoring force so explicit conflict replacement never becomes path redirection.
  */
 function hasUnsafeManagedTarget(preview: ManagedSetupPreview): boolean {
-  // Only current templates can be written; retired unsafe paths remain preserved without installer access.
+  // Every preview row is a possible install write, including generated and user-owned destinations.
   return preview.files.some(
     (file) =>
-      file.newExpectedSha256 !== null &&
-      (file.currentStatus === "non-regular" ||
-        file.currentStatus === "unreadable"),
+      file.currentStatus === "non-regular" ||
+      file.currentStatus === "unreadable",
   );
 }
 
@@ -55,6 +59,9 @@ function unmatchedPathReason(
   const row = preview.files.find((file) => file.path === namedPath);
   // A path absent from the write set is a typo or belongs to another agent's mirror.
   if (!row) return "--force-path names no path in this preview.";
+  if (row.authority === "refused-replaceability") {
+    return "--force-path names a user-owned file that is not replaceable from a package source.";
+  }
   // Naming a user-owned path is the common near-miss: the second authority is missing.
   if (row.ownership === "user-owned") {
     return "--force-path names a user-owned file; add --force-user-owned to replace it.";
@@ -102,8 +109,8 @@ export function managedSetupAdmissionFailure(
   const withheldFiles = preview.files.filter(
     (file) => file.authority === "withheld",
   );
-  // A ready or warning preview with nothing withheld needs no override.
-  if (preview.verdict !== "blocked") return null;
+  // A ready or warning preview with nothing withheld and no unsafe target needs no override.
+  if (preview.verdict !== "blocked" && !unsafeManagedTarget) return null;
   if (withheldFiles.length === 0 && !unsafeManagedTarget) return null;
   // Every conflict stays on its own bullet so the user can inspect the exact paths first.
   const conflicts = managedSetupBlockingSummary(preview)

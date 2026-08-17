@@ -351,6 +351,14 @@ export function markdownTableCell(value: string): string {
   return value.replaceAll("|", "\\|").replace(/\r?\n/g, " ");
 }
 
+/**
+ * Render prior findings and continuity instructions for a quality prompt.
+ * The continuity contract keeps prior claims provisional and never treats absence as proof of a fix.
+ *
+ * @param priorReport - selected same-mode report; null produces no-prior guidance
+ * @param qualityMode - active mode used to describe a missing prior report
+ * @returns Markdown context block ready for prompt composition
+ */
 export function renderPriorReportContext(
   priorReport: QualityHistoryEntry | null,
   qualityMode: QualityMode,
@@ -406,13 +414,13 @@ export function renderPriorReportContext(
       "A prior finding is a claim to re-test, not a fact. Validate its premise (who the violated standard binds, whether an accepted ADR already resolves it, whether the code still shows it) before carrying it forward; a prior severity is not evidence.",
     );
     lines.push(
-      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `resolved` in current findings - resolved issues are derived later by `goat-flow quality diff` when a prior finding id disappears from a later run.',
+      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `absent` in current findings - absence is derived later by `goat-flow quality diff` when a prior finding id disappears from a later run, and it is not proof that the issue was resolved.',
     );
     lines.push(
       `Set top-level \`prior_report_id\` to \`${priorReport.id}\` so readers can tell that \`delta_tag: "new"\` means newly discovered relative to that same-agent report, not necessarily newly introduced in the codebase.`,
     );
     lines.push(
-      'When a prior finding cannot be re-tested, do not carry the unverified claim into the current findings array solely to keep it visible and do not assign it `delta_tag: "persisted"`. List it under `What You Did Not Verify`, include the literal denied or unavailable probe, and state that omission is not verified resolution; the diff\'s derived `resolved` label means absent from the later report, not proven fixed.',
+      'When a prior finding cannot be re-tested, do not carry the unverified claim into the current findings array solely to keep it visible and do not assign it `delta_tag: "persisted"`. List it under `What You Did Not Verify`, include the literal denied or unavailable probe, and state that omission is not verified resolution; the diff\'s derived `absent` bucket means absent from the later report, not proven fixed.',
     );
   } else {
     const modeText = qualityMode === "agent-setup" ? "" : `${qualityMode} `;

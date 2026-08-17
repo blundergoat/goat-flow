@@ -39,6 +39,10 @@ describe("skill hardening contracts: security (1/2)", () => {
       assertMatchesAll(
         quickScanPath,
         [
+          /Before step 1.*read.*`common-threats\.md`.*`supply-chain-and-cicd\.md`/isu,
+          /`identity-and-data\.md`.*identity.*authentication.*authorization.*session.*secret.*data/isu,
+          /`file-upload-and-paths\.md`.*upload.*path.*archive/isu,
+          /applicable reference.*unavailable.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/isu,
           /Phase 4.*Phase 5.*shared definitions.*does not enter.*Full Assessment/iu,
           /Before stopping.*shared Proof Gate.*Phase 6.*does not enter.*Full Assessment/iu,
           /every retained or withheld lead.*confidence.*evidence status.*exploit status.*finding type.*risk disposition.*severity/iu,

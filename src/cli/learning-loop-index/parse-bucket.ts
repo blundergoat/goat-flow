@@ -164,6 +164,16 @@ function firstBodyParagraph(content: string): string {
   for (const raw of withoutHeading.split(/\n\s*\n/)) {
     const paragraph = raw.trim();
     if (paragraph.length === 0 || METADATA_LABEL.test(paragraph)) continue;
+    const paragraphLines = paragraph
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    if (
+      paragraphLines.length > 0 &&
+      paragraphLines.every((line) => /^#{1,6}\s+\S/u.test(line))
+    ) {
+      continue;
+    }
     return paragraph.replace(/^\*\*[^*\n]+:\*\*\s*/, "");
   }
   return "";

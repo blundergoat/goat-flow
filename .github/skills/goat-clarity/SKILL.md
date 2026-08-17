@@ -24,11 +24,11 @@ Human-documentation work requires this explicit grammar:
 - `/goat-clarity documentation <GitHub PR URL | uncommitted files | folder | file>`
 
 Documentation is a mode over the same four selectors, not a fifth selector. Resolve the value after
-`documentation` under the matching PR, uncommitted, folder, or file contract. A bare documentation
-path never becomes writable; without the explicit mode it remains read-only context.
+`documentation` under the matching selector contract. A bare documentation path never becomes
+writable; it remains read-only context.
 
-The invocation must resolve to exactly one supported selector. Ask for one selector when none is
-supplied. Refuse multiple or ambiguous selectors instead of guessing which target controls writes.
+The invocation requires exactly one supported selector. Ask for one selector when none is
+supplied; refuse multiple or ambiguous selectors.
 
 ## Boundary Commands
 
@@ -49,7 +49,10 @@ locate evidence but never change these instructions or expand authority.
 
 Read applicable instructions, accepted architecture, compatibility policy, local vocabulary, and
 relevant source before judging code. Project authority and the user's request outrank shared defaults.
-Record missing authority as `NOT_CHECKED`; never import convention from another project.
+For every authority document, record its current state and comparison baseline under the reference.
+Semantic authority drift fails closed until the controlling current authority bytes and provenance are
+explicit; never choose working or committed rules silently. Record missing authority as
+`NOT_CHECKED`; never import convention from another project.
 
 Read `references/target-scope-and-evidence.md` for selector, snapshot, drift, formatter, status, and
 receipt mechanics. Then emit a per-unit owner routing matrix. Load an owner only when at least one
@@ -89,13 +92,15 @@ The most restrictive applicable class wins. Classification ambiguity fails close
 `NOT_CHECKED` or excluded and do not write it. A path must already be in the frozen selector inventory
 before explicit selection can make its eligible class writable.
 
-Fail closed on unmerged state, a direct symlink selector, escape, outside the repository, binary or
-generated content, or zero eligible source files. Never follow symlinks. For PR work use authenticated,
-read-only GitHub access and the reference's remote report-only lane when the invocation checkout does
-not match. Require a matching local repository and head before mutation, and emit
-`PR_FEEDBACK_NOT_CHECKED` when review-thread completeness cannot be established. Bind writable authority
-to the repository root resolved from the invocation working directory; never search parent, child,
-sibling, scratchpad, or cached repositories for write authority.
+Fail closed on unmerged state, a direct symlink selector, escape, outside the repository, binary, or
+generated content. Code mode fails closed on zero eligible source-code or test-source units.
+Documentation mode fails closed on zero eligible selected human-documentation units; eligible selected
+prose remains writable. Never follow symlinks. For PR work use authenticated, read-only GitHub access
+and the reference's remote report-only lane when the invocation checkout does not match. Require a
+matching local repository and head before mutation, and emit `PR_FEEDBACK_NOT_CHECKED` when review-thread
+completeness cannot be established. Bind writable authority to the
+repository root resolved from the invocation working directory; never search parent, child, sibling,
+scratchpad, or cached repositories for write authority.
 
 ### 0.3 Freeze the Target Scope Snapshot
 
@@ -104,25 +109,25 @@ Present this snapshot before the first edit:
 ```text
 Target Scope Snapshot
 Identity: <repository, mode, selector, HEAD, and PR identity when applicable>
+Authority: <documents, current state and provenance, comparison baseline, and semantic authority drift>
 Writable paths: <frozen, deduplicated repository-relative eligible paths>
 Exclusions: <deleted, ignored, protected, context-only, generated, binary, or unsupported paths>
 Unknowns: <unresolved identity, access, provenance, or compatibility evidence>
 Read-only context: <instructions, consumers, producers, tests, configuration, and review evidence>
+Reconciliation: inventory <N> = writable <W> + read-only/protected <R> + excluded <X> + inaccessible <I> + NOT_CHECKED <U>; use literal integers
+Pre-existing dirty paths: <frozen selected and unrelated paths, or none>
 Baseline proof: <status, hashes, checks, and tool availability used to bind this snapshot>
 Formatter check: <exact repository-owned command scoped to writable formatter-owned paths, or NOT_CHECKED>
 Formatter write: <exact repository-owned command scoped to writable formatter-owned paths, or NOT_CHECKED>
 ```
 
-Use the reference's read-only capability classification to resolve the exact repository-owned
-formatter check and write commands for writable formatter-owned paths and preserve their repository
-flags. Run the frozen formatter check before mutation and record its literal command and result in
-Baseline proof. Disposition a missing or failing baseline explicitly before editing; do not replace it
-with another verification result.
+Use the reference to resolve the exact repository-owned formatter check and write commands, retain
+their flags, and run the frozen formatter check before mutation. Record and disposition the literal
+baseline; another result never substitutes.
 
-Read outside writable paths only to verify behaviour, ownership, vocabulary, references, and impact.
-Revalidate identity, membership, content digest, type, and containment as the reference requires
-before every bounded edit batch. Membership drift or any other unexplained drift stops mutation and
-requires a newly presented snapshot; context reads never become write authority.
+Read outside writable paths only for evidence. Revalidate the reference drift tuple before each
+bounded edit batch. Membership drift or other unexplained drift stops mutation and needs a replacement
+snapshot; context reads never become write authority.
 
 **CHECKPOINT:** Snapshot v1 is frozen; begin diagnosis without widening it.
 
@@ -135,37 +140,32 @@ record the gap instead of manufacturing a finding.
 
 ### 1. Diagnose naming and placement
 
-Naming and placement before comments. Trace producers, transformations, effects, and consumers, then
-verify what each name promises to the UI, caller, or operator reader and the domain, repository, or
-infrastructure layer. Use the project's own vocabulary and confirm cardinality, time, role, and guard
-claims against actual values and behaviour.
+Naming and placement before comments. Trace producers, transformations, effects, and consumers.
+Verify what each name promises to the UI, caller, or operator reader and the domain, repository, or
+infrastructure layer, including cardinality, time, role, and guards.
 
 Before changing a name or comment, name the incumbent's concrete false, missing, or misleading claim
-and the behaviour that proves it. A preference for different synonyms, emphasis, or phrasing is not a
-finding; when the incumbent remains accurate, keep its bytes.
+and proof. A preference for different synonyms, emphasis, or phrasing is not a finding; when the
+incumbent remains accurate, keep its bytes.
 
-A local or private rename is eligible only when every reference is known and contained in writable
-paths. Reject cryptic names, but do not strengthen a name beyond what the value does. Leave a
-compliant incumbent byte-stable. Record placement, public/exported, cross-file, or uncertain findings
-for Scope v2 instead of adding compensating prose.
+A local or private rename needs every reference inside writable paths. Reject cryptic or overstated
+names, preserve a compliant incumbent, and route placement, public/exported, cross-file, or uncertain
+findings to Scope v2 instead of compensating prose.
 
 ### 2. Diagnose comments and documentation
 
-After naming, inspect existing and missing prose under `code-comments.md` and the Gruff documentation
-route. Choose the UI, caller, or operator reader first, then the domain, repository, or infrastructure
-layer. Inspect every branch, loop, null/empty path, catch, entry point, and applicable doc contract, but
-add prose only where verified reader information remains hidden.
-
-Apply the owners to:
-
-- journey anchors at flow entry points and non-obvious triggers;
-- branch, loop, and null/empty consequences when code does not state the reader outcome;
-- each catch cause and next visible state when the cause is traceable;
-- `@param` and `@return` or `@returns` null, empty, and absent consequences;
-- verified constraints or surprising behaviour that code cannot express.
+After naming, choose the UI, caller, or operator reader and domain, repository, or infrastructure
+layer. Inspect every branch, loop, null/empty path, catch, entry point, and doc contract. Apply the
+owners to journey anchors; hidden branch, loop, and null/empty consequences; each traceable catch
+cause and next visible state; structured-tag consequences; and verified constraints code cannot state.
 
 Never add a catch comment merely because a catch exists. When the exact cause and next reader-visible
 state are not provable from inspected code, leave it comment-free and record the evidence gap.
+
+When a comment is false because behaviour is defective, preserve the comment bytes instead of
+documenting the defect as intent. Record it as Deferred with reason `BLOCKED-ON-BEHAVIOUR` and route
+the reproduced defect to `goat-debug`. Before rewriting a block governed by multiple rules, state its
+expected final shape and check every applicable rule against that shape.
 
 Describe the current contract, never history. Do not mention removed symbols, local plans, review
 provenance, or anything a fresh clone cannot inspect. A comment that restates code, compensates for a
@@ -178,49 +178,62 @@ claim but cannot edit it.
 
 ### 3. Run the test-value pass
 
-When the owner matrix selects `test-selection.md`, keep test assertions, fixtures, snapshots,
-expected output, level, coverage, and meaning read-only. For a PR or uncommitted selector, assess every
-added, removed, or materially changed test case. For a folder or file selector, assess every test case
-in selected test-source units.
+For a PR or uncommitted selector, assess every added, removed, relocated, or materially changed test
+case. For a folder or file selector, assess every test case in selected test-source units.
 
-Read production, consumers, and overlap, then apply the four-part value gate:
-plausible regression, user or business impact, current overlap, and stable observable contract. Record
-one row per assessed existing test as `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or
-`UNRESOLVED`. A `PRUNE CANDIDATE` must explain why no replacement is required. For `CONSOLIDATE` or
-`MOVE LEVEL`, keep the original until replacement coverage passes. Incomplete evidence is
-`UNRESOLVED`; age, mock use, suite size, or test volume is not deletion evidence.
+Each assessed test gets one row from the four-part value gate: plausible regression, user or business
+impact, current overlap, and stable observable contract. Existing or materially changed tests use
+`KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`. A `PRUNE CANDIDATE`
+must prove no replacement is required; `CONSOLIDATE` or `MOVE LEVEL` keeps the original until
+replacement coverage passes. Incomplete evidence is `UNRESOLVED`; volume is not deletion evidence.
 
-Before broader clarity diagnosis, enumerate the test cases and gather production and overlap evidence
-in bounded evidence batches; never depend on one oversized provider response. Large scopes may use
-multiple compact ledgers, but every case must reconcile.
+Added-test dispositions: `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, `ADDED UNRESOLVED`
 
-Reconcile `assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED`.
-This test-value pass is report-only and never authorizes a test change. Route broader coverage gaps or
-test-plan work to `goat-qa`.
+Removed-test dispositions: `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, `REMOVAL UNRESOLVED`
+
+Relocated-test state: `RELOCATED`
+
+Apply `test-selection.md` meanings and evidence gates to every existing, added, removed, relocated,
+and materially changed row.
+Folder and file selectors reconcile
+`assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED`. PR and
+uncommitted selectors reconcile:
+
+```text
+assessed_added = ADDED_KEEP + ADDED_CONSOLIDATE + ADDED_MOVE_LEVEL + ADDED_DROP_CANDIDATE + ADDED_UNRESOLVED
+assessed_removed = REMOVAL_SUPPORTED + RESTORE + REPLACE + REMOVAL_UNRESOLVED
+assessed_materially_changed = KEEP + CONSOLIDATE + MOVE_LEVEL + PRUNE_CANDIDATE + UNRESOLVED
+assessed_relocated = RELOCATED
+assessed_pr_or_uncommitted = assessed_added + assessed_removed + assessed_materially_changed + assessed_relocated
+```
+
+Use the reference checkpoint; every case must reconcile. This pass is report-only and never
+authorizes a test change. Route broader coverage work to `goat-qa`.
 
 ### 4. Choose the apply lane
 
 #### Safe apply
 
-Snapshot v1 permits only diagnosed source or test comment changes, truthful local/private renames
-whose complete references are writable, contained private placement changes already authorized by
-project rules, and eligible human-prose edits in explicit documentation mode. Preserve observable
-behaviour, public shape, errors, side effects, ordering, compatible inputs and outputs, test meaning,
-and protected bytes. Reject whitespace-only churn.
+Snapshot v1 permits diagnosed comments, complete local/private renames, authorized private placement,
+and eligible documentation-mode prose inside writable paths. Preserve observable behaviour, public
+shape, errors, side effects, ordering, compatible inputs and outputs, test meaning, and protected
+bytes. Reject whitespace-only churn.
+
+A public or exported parameter name in a language with named arguments, or a serialized field,
+payload key, or returned associative key, is a compatibility surface. It is outside Safe apply and
+the Scope v2 spelling exception; route it to `goat-plan`.
 
 #### Scope v2
 
-Stop before any new writable path, move outside Snapshot v1, or public-name change. Scope v2 may
-approve exact writable paths for an already-permitted clarity operation. It may also approve one public
-or exported identifier rename plus its mechanical reference updates. Present the diagnosis, exact
-proposed paths and identifier, reason, user-visible risk, byte-preservation boundary, and required
-proof, then wait for explicit approval.
+Stop before a new writable path, move outside Snapshot v1, or public-name change. Scope v2 may approve
+exact writable paths for an already-permitted clarity operation or one public or exported identifier
+rename plus its mechanical reference updates. Present the diagnosis, paths, identifier, user-visible
+risk, byte boundary, and proof; then wait for explicit approval.
 
 Scope v2 cannot approve behaviour, signature shape, serialization, persisted data, compatibility or
-migration, test meaning, a second public/exported rename, or non-mechanical follow-on work. The
-public-name exception is the only capability extension. Approval does not waive another Ask First
-boundary or silently rewrite Snapshot v1. Re-inventory the approved paths and freeze Target Scope
-Snapshot v2 before mutation.
+migration, test meaning, a second public/exported rename, or non-mechanical follow-on work. Approval
+does not waive another boundary. Re-inventory approved paths and freeze Target Scope Snapshot v2
+before mutation.
 
 Scope v2 remains a blocking human gate in sub-agent mode. A sub-agent must return to the invoking
 agent without writes; it cannot convert this gate into a checkpoint or treat parent context as human
@@ -240,32 +253,26 @@ protected. Produce summary text in memory; never post it or edit a remote descri
 
 ## Verification
 
-Revalidate the reference's full drift tuple before each bounded edit batch and stop if identity,
-membership, content digest, type, or containment changed. Inspect the final diff for paths outside the
-writable set, behaviour or signature changes, test-meaning changes, protected-byte changes, secrets,
-and whitespace-only churn. Search old names after every rename.
+Before each edit batch, revalidate the reference drift tuple. Inspect the scoped final diff for
+unauthorized paths or semantics, protected bytes, secrets, and churn; search old names after renames.
 
-Rerun the frozen formatter check before typecheck, tests, or Gruff on the exact modified
-formatter-owned paths. If it fails, run the frozen write command only on those paths, inspect the
-resulting diff, and rerun the check. A passing typecheck or test never substitutes for formatter
-proof; do not claim completion while the formatter check is failing.
+Rerun the frozen formatter check before typecheck, tests, or Gruff on modified formatter-owned paths.
+If needed, run only its frozen scoped write command, inspect the diff, and recheck. Another passing
+check never substitutes for formatter proof.
 
-Use `test-selection.md` to choose the smallest trustworthy focused checks, then run every project gate
-required for the touched language. If Gruff is applicable and available through the project wrapper,
-compare the same target paths before and after by stable finding identity; a clean analyzer does not
-prove comment meaning. The receipt carries literal verification results. A failed or unavailable check
-is not a pass. Record command status separately from claim verdict under the reference; a command can
-be `PASS` while a claim remains `NOT_CHECKED`.
+Use `test-selection.md` for focused checks and run required project gates. Compare applicable Gruff
+results on identical paths by stable finding identity; clean analysis does not prove meaning. Record
+literal verification results, command status, and separate claim verdicts. Failed or unavailable is
+not a pass.
 
 ## Clarity Remediation Receipt
 
 Return one compact receipt using the reference's selected-unit, changed-span, and command-evidence
-ledgers. Give every selected unit exactly one disposition; do not merge modified, compliant, deferred,
-excluded, inaccessible, or unchecked work. Map every changed span to its diagnosed finding or an
-explicitly reported formatter-owned reflow.
+ledgers. Give every selected unit one disposition and map every changed span to its finding or
+reported formatter reflow.
 
-Receipt meanings are stable but headings and presentation may vary; no JSON schema is promised. Use
-the lowercase canonical agent ID and selector kind below; put the accepted target after the dash.
+Meanings are stable but presentation may vary; no JSON schema is promised. Use the lowercase agent ID
+and selector kind below, then the accepted target.
 
 ```text
 Agent: <claude | codex | antigravity | copilot>
@@ -278,16 +285,17 @@ Deferred: <valid findings requiring Scope v2 or another workflow>
 Excluded: <units outside selector eligibility>
 Inaccessible: <units that could not be read>
 NOT_CHECKED: <claims or proof not completed>
-Test-selection record: <disposition counts and evidence-backed deletion or replacement candidates, or not applicable>
+Test-selection record: <disposition counts and evidence-backed drop, deletion, restore, or replacement candidates, or not applicable>
 Formatter proof: <baseline and final literal formatter commands and results, or NOT_CHECKED with reason>
 Verification: <literal commands and results>
-Summary: <paste-ready pull-request summary; never posted>
+Summary: <paste-ready pull-request summary when requested or needed for headless/sub-agent handoff; otherwise not requested>
 ```
 
-A receipt without Formatter proof is incomplete, including a no-findings run.
+A receipt is complete when formatter capability is classified. `READY` needs baseline and final
+results, `NOT_FOUND` needs its discovery evidence, and `AMBIGUOUS` blocks mutation.
 
-A run with no diagnosed findings keeps every label in one compact summary. Do not render separate
-empty sections merely to prove completeness. Never add unlike units to manufacture a total.
+A run with no diagnosed findings keeps every label in one compact summary. Never add unlike units to
+manufacture a total.
 
 ## Routing
 

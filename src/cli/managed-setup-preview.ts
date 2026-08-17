@@ -452,6 +452,7 @@ function buildPreviewFile(
         ownership: "system-owned",
         isConflict: BLOCKING_STATES.has(state),
         isPathUnsafe: unsafeCurrentTarget,
+        isReplaceable: true,
       },
       authority,
     ),
@@ -501,6 +502,7 @@ function buildProjectWriteFile(
         // A user-owned row is never a blocking conflict; replacing it is an explicit request.
         isConflict: false,
         isPathUnsafe: unsafeCurrentTarget,
+        isReplaceable: definition.replaceable,
       },
       authority,
     ),
@@ -570,17 +572,13 @@ function previewVerdict(
 ): ManagedSetupVerdict {
   // Corrupt baseline data cannot authorize an overwrite even if current bytes happen to look safe.
   if (baselineStatus === "invalid") return "blocked";
-  // Only exact-copy templates can block: install never replaces user-owned or generated content,
-  // so an unsafe path there is reported without withholding every unrelated managed refresh.
-  if (files.some(isBlockingManagedFile)) return "blocked";
-  // An unsafe user-owned or generated destination still needs the user's attention before install.
+  // Every destination belongs to the install write set, so an unsafe path blocks before Bash starts.
   if (
     files.some(
-      (file) => file.ownership !== "system-owned" && file.state === "unmanaged",
+      (file) => isBlockingManagedFile(file) || file.state === "unmanaged",
     )
-  ) {
-    return "warning";
-  }
+  )
+    return "blocked";
   // Retired paths are preserved and pre-baseline adoptions replace bytes, so
   // both still deserve user attention before the installer runs.
   if (

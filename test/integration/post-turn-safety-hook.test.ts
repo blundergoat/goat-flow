@@ -6,7 +6,13 @@
  * scanner behaves as asserted, not a reimplementation of it.
  */
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -47,6 +53,25 @@ const POST_TURN_SCANNER_VARIANTS = [
 ] as const;
 
 describe("post-turn-safety hook: secret and marker detection", () => {
+  it("removes the native scan workspace when the process exits", () => {
+    withTempRepo((root) => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-post-turn-workspace-"),
+      );
+      try {
+        const result = runHook(root, {
+          TMPDIR: temporaryRoot,
+          [FORCE_BASH3_ENV_KEY]: "0",
+        });
+
+        assert.equal(result.status, 0, result.stderr);
+        assert.deepEqual(readdirSync(temporaryRoot), []);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe("must-block fixtures", () => {
     const fixtures = [
       {
