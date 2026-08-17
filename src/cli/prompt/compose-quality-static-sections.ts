@@ -246,7 +246,7 @@ function appendRatingBands(lines: string[]): void {
   lines.push("");
   lines.push("### Top 5 Improvements");
   lines.push(
-    "Do NOT recommend adding quick/lite/reduced modes to any skill. Skill mode decisions (e.g. goat-critique being full-delegated-only) are ADR-decided architectural choices, not gaps to fill. See `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md`.",
+    'Do NOT recommend adding quick/lite/reduced modes to any skill. Skill mode decisions (e.g. goat-critique being full-delegated-only) are ADR-decided architectural choices, not gaps to fill. See ADR-021, "goat-critique is a core feature, full delegated mode only".',
   );
   lines.push("For each:");
   lines.push("1. What to change");

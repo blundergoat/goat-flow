@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-17
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, masking blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy it is [verification-gruff.md](verification-gruff.md).
@@ -33,7 +33,7 @@ last_reviewed: 2026-08-16
 
 **Root cause:** I treated an npm script as a transparent binary wrapper while capturing machine-readable output. npm can prepend lifecycle/script text unless invoked silently, which corrupts stdout-only JSON reports.
 
-**Prevention:** For machine-readable gruff reports, use `node_modules/.bin/gruff-ts analyse --format json --fail-on none ...` or an explicitly silent npm invocation. Validate the capture with `JSON.parse` before grouping findings or writing plan evidence. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `node_modules/.bin`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `--fail-on none`).
+**Prevention:** For machine-readable gruff reports, use `node_modules/.bin/gruff-ts analyse --format json --fail-on none ...` or an explicitly silent npm invocation. Validate the capture with `JSON.parse` before grouping findings or writing plan evidence. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `node_modules/.bin`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Confirm the threshold flag against`).
 
 ## Lesson: Gruff error-behavior comments need rule vocabulary
 

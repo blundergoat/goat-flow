@@ -355,6 +355,16 @@ describe("quality report contract: CLI surfaces", () => {
     }
   });
 
+  it("names framework decisions without consumer-relative ADR paths", () => {
+    const prompt = composeQuality(makeInput("agent-setup")).prompt;
+
+    assert.match(
+      prompt,
+      /ADR-021, "goat-critique is a core feature, full delegated mode only"/u,
+    );
+    assert.doesNotMatch(prompt, /\.goat-flow\/learning-loop\/decisions\/ADR-/u);
+  });
+
   // Reviewers with denied probes still receive an honest evidence path in every relevant mode.
   it("defines degraded grounding without weakening the skills fallback", () => {
     const agentSetupPrompt = composeQuality(makeInput("agent-setup")).prompt;

@@ -18,7 +18,7 @@ Availability discovery only inspects wrappers and existing executable paths. It 
 ```bash
 target=gruff-ts  # gruff-go | gruff-rs | gruff-ts | gruff-php | gruff-py
 found=
-for candidate in "vendor/bin/$target" "node_modules/.bin/$target" ".cargo-tools/bin/$target" "$HOME/.local/bin/$target" "$target"; do
+for candidate in "target/release/$target" "bin/$target" "vendor/bin/$target" "node_modules/.bin/$target" ".cargo-tools/bin/$target" "$HOME/.local/bin/$target" "$target"; do
   if [ -x "$candidate" ]; then found="$candidate"; break; fi
   if command -v "$candidate" >/dev/null 2>&1; then found="$(command -v "$candidate")"; break; fi
 done
@@ -73,7 +73,7 @@ gruff-ts list-rules --format json
 - Use `check-ignore <path>` to verify a config ignore before planning CONFIGURE/SKIP.
 - Use `dashboard` or `report` only when the installed tool exposes it and the user needs an artifact.
 
-Exit codes matter: `analyse` may exit `1` because findings exist; that is not tool failure. Exit `2` is a real diagnostic such as parse error, missing path, or rejected config. Use `--fail-on none` for pure reporting when supported; gruff-go/gruff-rs may spell the threshold `--min-severity`.
+Exit codes matter: `analyse` may exit `1` because findings exist; that is not tool failure. Exit `2` is a real diagnostic such as parse error, missing path, or rejected config. Confirm the threshold flag against `analyse --help` for the exact binary; use its pure-reporting value when supported and do not infer a shared spelling across ports.
 
 ## JSON Triage
 

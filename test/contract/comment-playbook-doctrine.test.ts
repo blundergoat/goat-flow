@@ -325,15 +325,36 @@ describe("comment playbook verification doctrine", () => {
 });
 
 describe("Gruff documentation-pass doctrine", () => {
-  it("uses project wrappers before raw binaries", () => {
+  it("discovers checkout-local binaries before package candidates", () => {
     assertForPlaybook("gruff-code-quality.md", (content, playbookPath) => {
       const wrapperOffset = content.indexOf("Look for a project wrapper first");
-      const rawCandidateOffset = content.indexOf(
-        'for candidate in "vendor/bin/$target"',
+      const releaseCandidateOffset = content.indexOf(
+        '"target/release/$target"',
       );
+      const binCandidateOffset = content.indexOf('"bin/$target"');
+      const packageCandidateOffset = content.indexOf('"vendor/bin/$target"');
       assert.ok(wrapperOffset >= 0, playbookPath);
-      assert.ok(rawCandidateOffset >= 0, playbookPath);
-      assert.ok(wrapperOffset < rawCandidateOffset, playbookPath);
+      assert.ok(releaseCandidateOffset >= 0, playbookPath);
+      assert.ok(binCandidateOffset >= 0, playbookPath);
+      assert.ok(packageCandidateOffset >= 0, playbookPath);
+      assert.ok(wrapperOffset < releaseCandidateOffset, playbookPath);
+      assert.ok(releaseCandidateOffset < binCandidateOffset, playbookPath);
+      assert.ok(binCandidateOffset < packageCandidateOffset, playbookPath);
+    });
+  });
+
+  it("derives threshold flags from the installed binary's help", () => {
+    assertForPlaybook("gruff-code-quality.md", (content, playbookPath) => {
+      assert.match(
+        content,
+        /Confirm the threshold flag against `analyse --help`/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        content,
+        /gruff-go\/gruff-rs may spell the threshold `--min-severity`/u,
+        playbookPath,
+      );
     });
   });
 

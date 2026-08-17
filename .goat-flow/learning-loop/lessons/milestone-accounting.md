@@ -63,7 +63,7 @@ last_reviewed: 2026-08-17
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** VERIFY
-**Incident count:** 6
+**Incident count:** 7
 **Latest occurrence:** 2026-08-17
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
@@ -76,6 +76,8 @@ last_reviewed: 2026-08-17
 
 **Recurrence 2026-08-17:** M39 left its product span open across a human approval wait and resumed work. The status check could not separate waiting from agent time, so `plans time stop --discard-open` marked the receipt incomplete before a fresh proof segment began. Evidence anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
 
+**Recurrence 2026-08-17:** M40 was abandoned before timing began, but I wrote its Actual as `unavailable - timing was never started`. Strict plan validation rejected the prose-equivalent separator because Actual is machine-parsed state; changing it to the canonical `unavailable: timing was never started` form passed parsing. Evidence anchor: `test/unit/plans-effort.test.ts` (search: `unavailable: timing was never started`).
+
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
 
 **Prevention:**
@@ -87,6 +89,7 @@ last_reviewed: 2026-08-17
 6. Calibrate future estimates only after at least three comparable measured milestones. Use the median `actual / estimate` ratio plus a low/likely/high range; one fast milestone is evidence, not a universal multiplier.
 7. Pass the exact milestone-file path to timing commands; a display identifier is not a file locator.
 8. Set exactly one rendered milestone status to `in-progress` or `testing-gate` before `plans time start`; the lifecycle transition precedes clock opening.
+9. When no receipt exists, copy the canonical `unavailable: <reason>` Actual grammar exactly; punctuation is parser state, not optional prose.
 
 **Evidence anchors:** `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI proof records`) defines the handoff requirement; `src/cli/plans-effort.ts` (search: `renderActualLine`) renders the recorded value but cannot create timing evidence.
 
