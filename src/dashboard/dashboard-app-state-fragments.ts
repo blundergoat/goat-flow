@@ -383,7 +383,7 @@ function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
     // --- Projects state ---
     projectsList: [] as ProjectEntry[],
 
-    projectsAuditing: false,
+    projectsRefreshing: false,
 
     showAddProject: false,
 

@@ -35,7 +35,56 @@ npm exec --package=@blundergoat/goat-flow -- goat-flow dashboard .
 
 The embedded terminal needs the optional `node-pty` package to compile. See [Troubleshooting](#troubleshooting) if the terminal does not appear.
 
+<<<<<<< Updated upstream
 ## What GOAT Flow adds
+=======
+## Dashboard views
+
+![Dashboard](docs/assets/dashboard-preview.png)
+
+The desktop dashboard uses a persistent side menu for primary navigation. The
+header keeps the current project switcher, runner switcher, and utility actions
+available while you move between views.
+
+### Home
+
+Live audit results for every supported agent. Per-agent cards show pass/fail across two scopes (GOAT Flow Setup, Agent Setup) with actionable fix hints. An AI Harness section scores each agent across five concerns - Context, Constraints, Verification, Recovery, and Feedback Loop - so you can see exactly where your setup is strong and where it's weak. "What to do next" action cards surface the highest-priority gaps. Re-audit after changes without leaving the page.
+
+### Plans
+
+Plan milestone view for the selected project. Surfaces `.goat-flow/plans/` plan
+directories, milestone status, and checkbox progress, and lets you set the
+active plan.
+
+### Setup
+
+Guided setup flow. Detects your project stack and existing configuration, lets you pick a target agent, then generates a setup prompt you can preview and launch directly in a terminal session. The agent configures your project: instruction file, skills, hooks, and learning loop.
+
+### Prompts
+
+A library of 24 visible preset prompts across six categories: critique, debug, plan, QA, review, and security, plus 2 internal quality prompts used by dashboard workflows. Two-pane layout with search, category filters, and favorites. Select a prompt and launch it in a new terminal, send it to an active session, or copy it to clipboard. Keyboard-navigable: `/` to search, arrows to browse, Enter to launch.
+
+Prompts include structured workflows like pre-walk-through notes with targeted testing plans, multi-lens critiques, full threat assessments, dependency scans, coverage audits, and milestone planning.
+
+### Workspace
+
+Split layout for terminal work. A sessions rail lists all running terminal sessions (up to 10) with runner, age, and idle indicators, plus collapsed-rail tooltips and an active-session status pip. Single-click switching between sessions. The right pane is a full xterm.js terminal with WebSocket-based PTY - run Claude, Codex, Antigravity, or Copilot directly in the browser. Drag and drop images onto the terminal pane to attach them to the next prompt.
+
+### Projects
+
+Multi-project browser. The Projects view discovers immediate non-hidden folders beside the launch project and lets you register paths elsewhere. `Refresh Status` updates lightweight setup/version state without writing identity markers; `Open audit` switches to Home for the full report. Archive hides a project while retaining its checkout-local dashboard identity, title, and aliases for Restore. Titles and favorites follow a stable identity where possible: git remote hash first, then a local `.goat-flow/project-id` marker for explicitly registered non-git goat-flow projects, then path fallback.
+
+### Quality
+
+Generate agent quality-assessment prompts. Select a target agent, generate the
+prompt, and preview the full output with embedded audit results. Passive page
+loads use cached audit enrichment when available so the view opens quickly;
+Regenerate requests a fresh audit before composing the prompt.
+
+## What's under the hood
+
+The dashboard is the interface. Underneath, GOAT Flow installs a harness that makes agents more reliable:
+>>>>>>> Stashed changes
 
 | Component | What it prevents |
 |---|---|

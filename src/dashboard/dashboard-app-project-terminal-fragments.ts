@@ -198,9 +198,14 @@ function dashboardProjectActionsFragment(): DashboardAppFragment {
       await dashboardAddProject(this);
     },
 
-    /** Remove a project from the saved workspace list. */
-    removeProject(path: string) {
-      dashboardRemoveProject(this, path);
+    /** Retain a project in archived dashboard state and hide it from the active list. */
+    async archiveProject(path: string) {
+      await dashboardSetProjectArchived(this, path, true);
+    },
+
+    /** Return a retained archived project to the active workspace list. */
+    async restoreProject(path: string) {
+      await dashboardSetProjectArchived(this, path, false);
     },
 
     /** Sort saved projects by the active key and direction. */
@@ -213,9 +218,14 @@ function dashboardProjectActionsFragment(): DashboardAppFragment {
       return dashboardSortedProjectsList(this);
     },
 
-    /** Refresh audit status for every saved project. */
+    /** Refresh lightweight adoption status for every active project. */
+    async refreshProjectStatuses() {
+      await dashboardRefreshProjectStatuses(this);
+    },
+
+    /** Compatibility entry used by startup while the Projects UI uses truthful status terminology. */
     async auditAllProjects() {
-      await dashboardAuditAllProjects(this);
+      await dashboardRefreshProjectStatuses(this);
     },
 
     /** Load saved dashboard state from disk, with localStorage as a migration fallback. */

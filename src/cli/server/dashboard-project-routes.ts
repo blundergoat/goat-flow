@@ -9,13 +9,16 @@
  * Persistence and identity normalisation live in dashboard-project-state.ts; task-plan parsing in dashboard-task-state.ts.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { dirname } from "node:path";
+import { readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { classifyProjectState } from "../classify-state.js";
 import { createFS } from "../facts/fs.js";
 import {
   hydrateDashboardState,
   loadDashboardState,
   resolveProjectIdentity,
+  setDashboardProjectArchived,
+  type DashboardStateData,
 } from "./dashboard-project-state.js";
 import type { DashboardRouteContext } from "./dashboard-route-types.js";
 import {
@@ -31,6 +34,200 @@ import { validateLocalPath } from "./local-paths.js";
  */
 function readDashboardState(ctx: DashboardRouteContext) {
   return loadDashboardState(ctx.dashboardStateFile, ctx.legacyProjectsListFile);
+}
+
+/**
+ * List immediate non-hidden sibling directories beside the dashboard launch project.
+ * Use for read-only Projects discovery; filesystem errors degrade to no discovered rows.
+ *
+ * @param launchProjectPath - project path supplied when the dashboard server started
+ * @returns sorted absolute sibling paths, excluding hidden directories and the parent itself
+ */
+export function discoverSiblingProjectPaths(
+  launchProjectPath: string,
+): string[] {
+  const discoveryRoot = dirname(launchProjectPath);
+  if (discoveryRoot === launchProjectPath) return [];
+
+  try {
+    return readdirSync(discoveryRoot, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
+      .map((entry) => join(discoveryRoot, entry.name))
+      .sort((first, second) => first.localeCompare(second));
+  } catch {
+    return [];
+  }
+}
+
+/** Return discovered siblings that have not been archived in this dashboard state. */
+function activeDiscoveredProjectPaths(
+  launchProjectPath: string,
+  state: DashboardStateData,
+): string[] {
+  const archivedProjects = Object.values(state.projects).filter((project) =>
+    Boolean(project.archivedAt),
+  );
+
+  return discoverSiblingProjectPaths(launchProjectPath).filter((path) => {
+    const identity = resolveProjectIdentity(path, { allowMarkerWrite: false });
+    return !archivedProjects.some(
+      (project) =>
+        project.identity === identity.identity ||
+        project.paths.includes(identity.currentPath),
+    );
+  });
+}
+
+/** Persist normalized dashboard state and retire the legacy list after the replacement is durable. */
+async function writeDashboardState(
+  ctx: DashboardRouteContext,
+  state: DashboardStateData,
+): Promise<void> {
+  const { mkdir, rm: remove, writeFile } = await import("node:fs/promises");
+  await mkdir(dirname(ctx.dashboardStateFile), { recursive: true });
+  await writeFile(ctx.dashboardStateFile, JSON.stringify(state, null, 2));
+  await remove(ctx.legacyProjectsListFile, { force: true });
+}
+
+type ProjectArchiveAction = "archive" | "restore";
+
+/** Archive or restore one validated project and return the result through the route response. */
+async function handleProjectArchiveRequest(
+  ctx: DashboardRouteContext,
+  req: IncomingMessage,
+  res: ServerResponse,
+  action: ProjectArchiveAction,
+): Promise<void> {
+  if (req.method !== "POST") {
+    ctx.jsonResponse(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const { decodeProjectPathBody } = await import("./decoders.js");
+    const decoded = decodeProjectPathBody(await ctx.readBody(req));
+    if (!decoded.ok) {
+      ctx.jsonResponse(res, 400, {
+        error: decoded.error,
+        path: decoded.path,
+      });
+      return;
+    }
+    const projectPath = validateLocalPath(
+      decoded.value.path,
+      "write-local-state",
+    ).path;
+    const previousState = await readDashboardState(ctx);
+    const nextState = setDashboardProjectArchived(
+      previousState,
+      projectPath,
+      action === "archive" ? new Date().toISOString() : null,
+    );
+    await writeDashboardState(ctx, nextState);
+    ctx.recordDashboardEvent(ctx.absDefault, "project.save", {
+      project_count: nextState.paths.length,
+      favorite_count: nextState.favorites.length,
+      archived_count: action === "archive" ? 1 : 0,
+      restored_count: action === "restore" ? 1 : 0,
+    });
+    ctx.jsonResponse(res, 200, { ok: true });
+  } catch (err) {
+    ctx.jsonResponse(res, 400, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/** Persist the legacy project-list request as active and retained archived records. */
+async function handleProjectsListWriteRequest(
+  ctx: DashboardRouteContext,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<void> {
+  const body = await ctx.readBody(req);
+  try {
+    const { decodeProjectsListBody } = await import("./decoders.js");
+    const decoded = decodeProjectsListBody(body);
+    if (!decoded.ok) {
+      ctx.jsonResponse(res, 400, {
+        error: decoded.error,
+        path: decoded.path,
+      });
+      return;
+    }
+    const previousState = await readDashboardState(ctx);
+    const validatedProjectPaths = decoded.value.paths.map(
+      (path) => validateLocalPath(path, "write-local-state").path,
+    );
+    const activeIdentities = new Set(
+      validatedProjectPaths.map(
+        (path) =>
+          resolveProjectIdentity(path, { allowMarkerWrite: true }).identity,
+      ),
+    );
+    const archivedAt = new Date().toISOString();
+    const previousProjects = Object.fromEntries(
+      Object.entries(previousState.projects).map(([identity, project]) => {
+        const nextProject = { ...project };
+        if (activeIdentities.has(identity)) {
+          Reflect.deleteProperty(nextProject, "archivedAt");
+          const title =
+            decoded.value.projectTitles[identity] ??
+            decoded.value.projectTitles[project.currentPath];
+          if (title) nextProject.title = title;
+          else Reflect.deleteProperty(nextProject, "title");
+        } else if (!nextProject.archivedAt) {
+          nextProject.archivedAt = archivedAt;
+        }
+        return [identity, nextProject];
+      }),
+    );
+    const nextState = hydrateDashboardState(
+      {
+        ...decoded.value,
+        paths: validatedProjectPaths,
+        projects: previousProjects,
+      },
+      { allowMarkerWrite: true },
+    );
+    const previousActiveIdentities = new Set(
+      Object.values(previousState.projects)
+        .filter((project) => !project.archivedAt)
+        .map((project) => project.identity),
+    );
+    const previousArchivedIdentities = new Set(
+      Object.values(previousState.projects)
+        .filter((project) => Boolean(project.archivedAt))
+        .map((project) => project.identity),
+    );
+    const nextActiveIdentities = new Set(
+      Object.values(nextState.projects)
+        .filter((project) => !project.archivedAt)
+        .map((project) => project.identity),
+    );
+    const archivedCount = [...previousActiveIdentities].filter(
+      (identity) => !nextActiveIdentities.has(identity),
+    ).length;
+    const restoredCount = [...previousArchivedIdentities].filter((identity) =>
+      nextActiveIdentities.has(identity),
+    ).length;
+    const addedCount = [...nextActiveIdentities].filter(
+      (identity) => !Object.hasOwn(previousState.projects, identity),
+    ).length;
+    await writeDashboardState(ctx, nextState);
+    ctx.recordDashboardEvent(ctx.absDefault, "project.save", {
+      project_count: nextState.paths.length,
+      favorite_count: nextState.favorites.length,
+      added_count: addedCount,
+      archived_count: archivedCount,
+      restored_count: restoredCount,
+    });
+    ctx.jsonResponse(res, 200, { ok: true });
+  } catch (err) {
+    ctx.jsonResponse(res, 400, {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /**
@@ -120,69 +317,31 @@ async function handleProjectsListRequest(
   url: URL,
   res: ServerResponse,
 ): Promise<boolean> {
+  const archiveAction =
+    url.pathname === "/api/projects/archive"
+      ? "archive"
+      : url.pathname === "/api/projects/restore"
+        ? "restore"
+        : null;
+
+  if (archiveAction !== null) {
+    await handleProjectArchiveRequest(ctx, req, res, archiveAction);
+    return true;
+  }
+
   if (url.pathname !== "/api/projects/list") return false;
 
   if (req.method === "GET") {
-    ctx.jsonResponse(res, 200, await readDashboardState(ctx));
+    const state = await readDashboardState(ctx);
+    ctx.jsonResponse(res, 200, {
+      ...state,
+      discoveredPaths: activeDiscoveredProjectPaths(ctx.absDefault, state),
+    });
     return true;
   }
 
   if (req.method === "POST") {
-    const body = await ctx.readBody(req);
-    try {
-      const { decodeProjectsListBody } = await import("./decoders.js");
-      const decoded = decodeProjectsListBody(body);
-      if (!decoded.ok) {
-        ctx.jsonResponse(res, 400, {
-          error: decoded.error,
-          path: decoded.path,
-        });
-        return true;
-      }
-      const { mkdir, rm: remove, writeFile } = await import("node:fs/promises");
-      const previousState = await readDashboardState(ctx);
-      const validatedProjectPaths = decoded.value.paths.map(
-        (path) => validateLocalPath(path, "write-local-state").path,
-      );
-      const nextState = hydrateDashboardState(
-        {
-          ...decoded.value,
-          paths: validatedProjectPaths,
-          projects: {},
-        },
-        { allowMarkerWrite: true },
-      );
-      const previousPaths = new Set(previousState.paths);
-      const nextPaths = new Set(nextState.paths);
-      const removedCount = previousState.paths.filter(
-        (path) => !nextPaths.has(path),
-      ).length;
-      const addedCount = nextState.paths.filter(
-        (path) => !previousPaths.has(path),
-      ).length;
-      await mkdir(dirname(ctx.dashboardStateFile), { recursive: true });
-      await writeFile(
-        ctx.dashboardStateFile,
-        JSON.stringify(nextState, null, 2),
-      );
-      await remove(ctx.legacyProjectsListFile, { force: true });
-      ctx.recordDashboardEvent(ctx.absDefault, "project.save", {
-        project_count: nextState.paths.length,
-        favorite_count: nextState.favorites.length,
-        added_count: addedCount,
-        removed_count: removedCount,
-      });
-      if (removedCount > 0) {
-        ctx.recordDashboardEvent(ctx.absDefault, "project.remove", {
-          removed_count: removedCount,
-        });
-      }
-      ctx.jsonResponse(res, 200, { ok: true });
-    } catch (err) {
-      ctx.jsonResponse(res, 400, {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+    await handleProjectsListWriteRequest(ctx, req, res);
     return true;
   }
 
@@ -218,7 +377,7 @@ function handleProjectsStatusRequest(
     try {
       const projectPath = validateLocalPath(p, "write-local-state").path;
       const identity = resolveProjectIdentity(projectPath, {
-        allowMarkerWrite: true,
+        allowMarkerWrite: false,
       });
       const fs = createFS(identity.currentPath);
       return {

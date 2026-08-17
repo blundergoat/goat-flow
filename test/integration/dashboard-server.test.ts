@@ -63,6 +63,12 @@ describe("dashboard HTML", () => {
     assert.match(html, /\/assets\/dashboard-prompts\.js/);
     assert.match(html, /\/assets\/dashboard-terminal\.js/);
     assert.match(html, /\/assets\/app\.js/);
+    assert.match(html, /Refresh Status/u);
+    assert.match(html, /return 'Open audit'/u);
+    assert.match(html, />\s*Archive\s*</u);
+    assert.match(html, />\s*Restore\s*</u);
+    assert.doesNotMatch(html, />\s*Audit All\s*</u);
+    assert.doesNotMatch(html, />\s*Remove\s*</u);
     assert.equal(
       html.match(/x-show="activeView === 'home'"/g)?.length ?? 0,
       1,

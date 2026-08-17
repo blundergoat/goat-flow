@@ -50,6 +50,8 @@ interface ProjectEntry {
   identitySource?: ProjectIdentitySource;
   remoteUrlHash?: string;
   markerId?: string;
+  archivedAt?: string;
+  discovered?: boolean;
   state: string;
   action: string;
   details: string;

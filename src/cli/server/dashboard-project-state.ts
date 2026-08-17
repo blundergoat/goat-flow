@@ -33,6 +33,7 @@ export interface DashboardProjectIdentity {
 interface DashboardProjectRecord extends DashboardProjectIdentity {
   paths: string[];
   title?: string | undefined;
+  archivedAt?: string | undefined;
 }
 
 /**
@@ -337,9 +338,11 @@ function applyOptionalProjectRecordFields(
   const remoteUrlHash = readRecordString(record, "remoteUrlHash");
   const markerId = readRecordString(record, "markerId");
   const title = readRecordString(record, "title")?.trim();
+  const archivedAt = readRecordString(record, "archivedAt");
   if (remoteUrlHash) normalized.remoteUrlHash = remoteUrlHash;
   if (markerId) normalized.markerId = markerId;
   if (title) normalized.title = title.slice(0, 120);
+  if (archivedAt) normalized.archivedAt = archivedAt;
 }
 
 /**
@@ -427,6 +430,7 @@ function addProjectRecord(
     title: next.title ?? existing.title,
     remoteUrlHash: next.remoteUrlHash ?? existing.remoteUrlHash,
     markerId: next.markerId ?? existing.markerId,
+    archivedAt: next.archivedAt ?? existing.archivedAt,
   });
 }
 
@@ -477,7 +481,9 @@ export function hydrateDashboardState(
     [...records.entries()].sort(([a], [b]) => a.localeCompare(b)),
   );
   const paths = dedupeStrings(
-    Object.values(projects).flatMap((record) => record.paths),
+    Object.values(projects)
+      .filter((record) => !record.archivedAt)
+      .flatMap((record) => record.paths),
   );
   return {
     paths,
@@ -485,6 +491,60 @@ export function hydrateDashboardState(
     projectTitles,
     projects,
   };
+}
+
+/**
+ * Archive or restore one dashboard project without deleting its identity, aliases, or title.
+ * Use for explicit Projects-page actions so older path-list saves cannot erase recoverable state.
+ *
+ * @param state - current dashboard state loaded from disk
+ * @param projectPath - validated project directory selected by the user
+ * @param archivedAt - archive timestamp, or `null` to restore the project
+ * @returns normalized state with the project retained and active paths derived from archive state
+ */
+export function setDashboardProjectArchived(
+  state: DashboardStateData,
+  projectPath: string,
+  archivedAt: string | null,
+): DashboardStateData {
+  const currentPath = normalizeProjectPath(projectPath);
+  const identity = resolveProjectIdentity(currentPath, {
+    allowMarkerWrite: false,
+  });
+  const matchedRecord =
+    state.projects[identity.identity] ??
+    Object.values(state.projects).find(
+      (record) =>
+        record.currentPath === currentPath ||
+        record.paths.includes(currentPath),
+    );
+  const record: DashboardProjectRecord = matchedRecord
+    ? {
+        ...matchedRecord,
+        currentPath,
+        paths: dedupeStrings([...matchedRecord.paths, currentPath]),
+      }
+    : { ...identity, paths: [currentPath] };
+
+  // Archive retains the complete record; restore removes only the archive marker.
+  if (archivedAt === null) {
+    Reflect.deleteProperty(record, "archivedAt");
+  } else {
+    record.archivedAt = archivedAt;
+  }
+
+  const projects = { ...state.projects, [record.identity]: record };
+  const paths =
+    archivedAt === null
+      ? dedupeStrings([...state.paths, currentPath])
+      : state.paths.filter(
+          (path) => normalizeProjectPath(path) !== currentPath,
+        );
+
+  return hydrateDashboardState(
+    { ...state, paths, projects },
+    { allowMarkerWrite: false },
+  );
 }
 
 /** Normalize parsed dashboard state JSON into the server's expected shape. */

@@ -4,6 +4,7 @@
  * without leaking raw private remote URLs or creating markers during passive browse, migrates the
  * legacy projects file, blocks shared temp roots, and returns 400/405 for bad input or methods.
  */
+import { discoverSiblingProjectPaths } from "../../src/cli/server/dashboard-project-routes.js";
 import {
   assert,
   DASHBOARD_STATE_PATH,
@@ -13,6 +14,7 @@ import {
   it,
   join,
   LEGACY_PROJECTS_LIST_PATH,
+  mkdir,
   mkdtemp,
   PROJECT_PATH,
   readFile,
@@ -25,6 +27,26 @@ import {
   writeProjectFile,
 } from "./dashboard-server.helpers.js";
 describe("dashboard /api/projects", () => {
+  it("discovers immediate non-hidden sibling directories", async () => {
+    const parent = await mkdtemp(
+      join(tmpdir(), "goat-flow-project-discovery-"),
+    );
+    const launchProject = join(parent, "launch-project");
+    const siblingProject = join(parent, "sibling-project");
+    try {
+      await mkdir(launchProject);
+      await mkdir(siblingProject);
+      await mkdir(join(parent, ".hidden-project"));
+
+      assert.deepEqual(discoverSiblingProjectPaths(launchProject), [
+        launchProject,
+        siblingProject,
+      ]);
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+
   it("classifies project state for a valid path", async () => {
     const { res, body } = await fetchJson(
       `/api/projects/status?paths=${encodeURIComponent(PROJECT_PATH)}`,
@@ -90,6 +112,26 @@ describe("dashboard /api/projects", () => {
     }
   });
 
+  it("does not create project identity markers during passive status refresh", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-status-project-"));
+    try {
+      await writeProjectFile(
+        root,
+        ".goat-flow/config.yaml",
+        "version: 1.7.0\n",
+      );
+      const { res } = await fetchJson(
+        `/api/projects/status?paths=${encodeURIComponent(root)}`,
+      );
+      assert.equal(res.status, 200);
+      await assert.rejects(
+        readFile(join(root, ".goat-flow", "project-id"), "utf-8"),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("migrates the legacy projects file with empty favorites and titles", async () => {
     await rm(DASHBOARD_STATE_PATH, { force: true });
     const nextPaths = [PROJECT_PATH, resolve(PROJECT_PATH, "docs")];
@@ -136,11 +178,16 @@ describe("dashboard /api/projects", () => {
         "Persisted dashboard state",
       );
       const projects = expectRecord(parsed.projects, "Persisted projects");
-      assert.equal(Object.keys(projects).length, 1);
-      const project = expectRecord(
-        Object.values(projects)[0],
-        "Persisted project",
-      );
+      const matchingProjects = Object.values(projects)
+        .map((value) => expectRecord(value, "Persisted project"))
+        .filter(
+          (project) =>
+            Array.isArray(project.paths) &&
+            (project.paths.includes(root) || project.paths.includes(alias)),
+        );
+      assert.equal(matchingProjects.length, 1);
+      const [project] = matchingProjects;
+      assert.ok(project);
       assert.deepEqual(
         new Set(project.paths as string[]),
         new Set([root, alias]),
@@ -152,33 +199,133 @@ describe("dashboard /api/projects", () => {
   });
 
   it("persists the dashboard state roundtrip", async () => {
-    const nextPaths = [PROJECT_PATH, resolve(PROJECT_PATH, "src")];
+    const first = await mkdtemp(join(tmpdir(), "goat-flow-roundtrip-one-"));
+    const second = await mkdtemp(join(tmpdir(), "goat-flow-roundtrip-two-"));
+    const nextPaths = [first, second];
     const nextFavorites = ["goat-review", "goat-qa"];
-    const nextProjectTitles = { [PROJECT_PATH]: "goat-flow WSL" };
-    const post = await fetchJson("/api/projects/list", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        paths: nextPaths,
-        favorites: nextFavorites,
-        projectTitles: nextProjectTitles,
-      }),
-    });
-    assert.equal(post.res.status, 200);
-    assert.deepEqual(post.body, { ok: true });
+    const nextProjectTitles = { [first]: "Roundtrip project" };
+    try {
+      const post = await fetchJson("/api/projects/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths: nextPaths,
+          favorites: nextFavorites,
+          projectTitles: nextProjectTitles,
+        }),
+      });
+      assert.equal(post.res.status, 200);
+      assert.deepEqual(post.body, { ok: true });
 
-    const get = await fetchJson("/api/projects/list");
-    assert.equal(get.res.status, 200);
-    const body = expectRecord(get.body, "dashboard state");
-    assert.deepEqual(new Set(body.paths as string[]), new Set(nextPaths));
-    assert.deepEqual(body.favorites, nextFavorites);
-    const projectTitles = expectRecord(
-      body.projectTitles,
-      "dashboard state projectTitles",
-    );
-    assert.ok(Object.values(projectTitles).includes("goat-flow WSL"));
-    const projects = expectRecord(body.projects, "dashboard state projects");
-    assert.ok(Object.keys(projects).length >= 1);
+      const get = await fetchJson("/api/projects/list");
+      assert.equal(get.res.status, 200);
+      const body = expectRecord(get.body, "dashboard state");
+      assert.deepEqual(new Set(body.paths as string[]), new Set(nextPaths));
+      assert.deepEqual(body.favorites, nextFavorites);
+      const projectTitles = expectRecord(
+        body.projectTitles,
+        "dashboard state projectTitles",
+      );
+      assert.ok(Object.values(projectTitles).includes("Roundtrip project"));
+      const projects = expectRecord(body.projects, "dashboard state projects");
+      assert.ok(Object.keys(projects).length >= 1);
+    } finally {
+      await rm(first, { recursive: true, force: true });
+      await rm(second, { recursive: true, force: true });
+    }
+  });
+
+  it("archives and restores a project without deleting its directory or metadata", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-archive-project-"));
+    try {
+      await writeProjectFile(root, "sentinel.txt", "retained\n");
+      const save = await fetchJson("/api/projects/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths: [root],
+          favorites: [],
+          projectTitles: { [root]: "Archived fixture" },
+        }),
+      });
+      assert.equal(save.res.status, 200);
+
+      const archive = await fetchJson("/api/projects/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: root }),
+      });
+      assert.equal(archive.res.status, 200);
+
+      const archived = await fetchJson("/api/projects/list");
+      const archivedBody = expectRecord(archived.body, "archived state");
+      assert.equal((archivedBody.paths as string[]).includes(root), false);
+      const archivedProjects = Object.values(
+        expectRecord(archivedBody.projects, "archived projects"),
+      ).map((project) => expectRecord(project, "archived project"));
+      const archivedProject = archivedProjects.find(
+        (project) => project.currentPath === root,
+      );
+      assert.ok(archivedProject);
+      assert.equal(typeof archivedProject.archivedAt, "string");
+      assert.equal(archivedProject.title, "Archived fixture");
+      assert.equal(
+        await readFile(join(root, "sentinel.txt"), "utf-8"),
+        "retained\n",
+      );
+
+      const restore = await fetchJson("/api/projects/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: root }),
+      });
+      assert.equal(restore.res.status, 200);
+
+      const restored = await fetchJson("/api/projects/list");
+      const restoredBody = expectRecord(restored.body, "restored state");
+      assert.ok((restoredBody.paths as string[]).includes(root));
+      const restoredProjects = Object.values(
+        expectRecord(restoredBody.projects, "restored projects"),
+      ).map((project) => expectRecord(project, "restored project"));
+      const restoredProject = restoredProjects.find(
+        (project) => project.currentPath === root,
+      );
+      assert.ok(restoredProject);
+      assert.equal(restoredProject.archivedAt, undefined);
+      assert.equal(restoredProject.title, "Archived fixture");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("converts a shortened legacy project save into archive state", async () => {
+    const first = await mkdtemp(join(tmpdir(), "goat-flow-active-project-"));
+    const second = await mkdtemp(join(tmpdir(), "goat-flow-legacy-remove-"));
+    try {
+      for (const paths of [[first, second], [first]]) {
+        const save = await fetchJson("/api/projects/list", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paths, favorites: [], projectTitles: {} }),
+        });
+        assert.equal(save.res.status, 200);
+      }
+
+      const get = await fetchJson("/api/projects/list");
+      const body = expectRecord(get.body, "legacy archive state");
+      const projects = Object.values(
+        expectRecord(body.projects, "legacy archive projects"),
+      ).map((project) => expectRecord(project, "legacy archive project"));
+      const archivedProject = projects.find(
+        (project) => project.currentPath === second,
+      );
+      assert.ok(archivedProject);
+      assert.equal(typeof archivedProject.archivedAt, "string");
+      assert.equal((body.paths as string[]).includes(second), false);
+    } finally {
+      await rm(first, { recursive: true, force: true });
+      await rm(second, { recursive: true, force: true });
+    }
   });
 
   it("rejects exact shared temp roots when saving project state", async () => {
@@ -282,6 +429,16 @@ describe("dashboard /api/projects", () => {
         ".goat-flow/config.yaml",
         "version: 1.7.0\n",
       );
+      const registration = await fetchJson("/api/projects/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths: [root],
+          favorites: [],
+          projectTitles: {},
+        }),
+      });
+      assert.equal(registration.res.status, 200);
       const first = await fetchJson(
         `/api/projects/status?paths=${encodeURIComponent(root)}`,
       );

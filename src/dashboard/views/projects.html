@@ -5,7 +5,8 @@
   style="height: calc(100vh - 3.5rem); overflow-y: auto"
   x-data="{
     projectSearch: '',
-    confirmRemovePath: null,
+    confirmArchivePath: null,
+    showArchived: false,
     /**
      * Choose the badge style shown beside a saved project in the Projects view.
      * Use when a user scans the project list and needs the recommended next step to read visually.
@@ -41,7 +42,7 @@
      */
     get filteredProjects() {
       const searchText = this.projectSearch.toLowerCase().trim();
-      const visibleProjects = this.sortedProjectsList;
+      const visibleProjects = this.activeProjects;
 
       // Empty search means the user wants the normal sorted Projects table.
       if (!searchText) return visibleProjects;
@@ -53,19 +54,38 @@
       });
     },
     /**
-     * Count saved projects by the recommended action shown in the summary bar.
+     * Return active sorted projects while archived records remain recoverable below the table.
+     */
+    get activeProjects() {
+      return this.sortedProjectsList.filter(projectRow => !projectRow.archivedAt);
+    },
+    /** Return retained archived projects for the collapsible recovery section. */
+    get archivedProjects() {
+      return this.sortedProjectsList.filter(projectRow => Boolean(projectRow.archivedAt));
+    },
+    /**
+     * Count active projects by the state shown in the summary bar.
      * Use when the user scans the Projects header before opening individual rows.
      *
-     * @returns action counts for visible summary chips, with `unknown` for rows that have no action yet
+     * @returns state counts for visible summary chips, with `unknown` for rows not refreshed yet
      */
-    projectActionCounts() {
+    projectStateCounts() {
       const counts = {};
       // Each saved row contributes to the summary the user sees above the table.
-      for (const projectRow of this.projectsList) {
-        const key = projectRow.action || 'unknown';
+      for (const projectRow of this.activeProjects) {
+        const key = projectRow.state || 'unknown';
         counts[key] = (counts[key] || 0) + 1;
       }
       return counts;
+    },
+    /** Return truthful user-facing copy for an internal recommended action. */
+    projectActionLabel(projectRow) {
+      if (projectRow.action === 'audit') return 'Open audit';
+      if (projectRow.action === 'setup') return 'Open setup';
+      if (projectRow.action === 'migration') return 'Migrate';
+      if (projectRow.action === 'upgrade') return 'Upgrade';
+      if (projectRow.action === 'fix') return 'Fix';
+      return projectRow.action || 'Open';
     },
     /**
      * Open the dashboard flow that matches a project's recommended action.
@@ -106,11 +126,13 @@
       >
       <div style="display: flex; gap: 8px">
         <button
-          @click="auditAllProjects()"
-          :disabled="projectsAuditing"
+          @click="refreshProjectStatuses()"
+          :disabled="projectsRefreshing"
           class="gf-btn gf-btn-md gf-btn-secondary"
         >
-          <span x-text="projectsAuditing ? 'Auditing...' : 'Audit All'"></span>
+          <span
+            x-text="projectsRefreshing ? 'Refreshing...' : 'Refresh Status'"
+          ></span>
         </button>
         <button
           @click="showAddProject = true; $nextTick(() => $refs.addProjectInput?.focus())"
@@ -123,7 +145,7 @@
 
     <!-- Summary bar -->
     <div
-      x-show="projectsList.length > 0"
+      x-show="activeProjects.length > 0"
       class="gf-text-muted"
       style="
         font-size: 12px;
@@ -135,25 +157,25 @@
       "
     >
       <span
-        x-text="`${projectsList.length} project${projectsList.length !== 1 ? 's' : ''}`"
+        x-text="`${activeProjects.length} project${activeProjects.length !== 1 ? 's' : ''}`"
         class="gf-text-secondary"
         style="font-weight: 500"
       ></span>
       <span style="opacity: 0.4">&#8212;</span>
       <template
-        x-for="[action, count] in Object.entries(projectActionCounts())"
-        :key="'sum-' + action"
+        x-for="[state, count] in Object.entries(projectStateCounts())"
+        :key="'sum-' + state"
       >
         <span>
           <span x-text="count" style="font-weight: 600"></span>
-          <span x-text="action"></span>
+          <span x-text="state"></span>
           <span style="opacity: 0.3; margin: 0 2px">&#183;</span>
         </span>
       </template>
     </div>
 
     <!-- Search filter -->
-    <div x-show="projectsList.length > 3" style="margin-bottom: 12px">
+    <div x-show="activeProjects.length > 3" style="margin-bottom: 12px">
       <input
         type="text"
         x-model="projectSearch"
@@ -203,6 +225,12 @@
           Add
         </button>
         <button
+          @click="showAddProject = false; openBrowser()"
+          class="gf-btn gf-btn-md gf-btn-secondary"
+        >
+          Browse
+        </button>
+        <button
           @click="showAddProject = false; newProjectPath = ''"
           class="gf-btn gf-btn-md gf-btn-text"
           style="background: none; border: none; color: var(--text-muted)"
@@ -214,7 +242,7 @@
 
     <!-- Projects table -->
     <div
-      x-show="projectsList.length > 0"
+      x-show="activeProjects.length > 0"
       class="gf-card"
       style="border-radius: 8px; overflow: hidden; margin-bottom: 20px"
     >
@@ -320,7 +348,7 @@
                   "
                   @mouseenter="$el.style.textDecoration = 'underline'"
                   @mouseleave="$el.style.textDecoration = 'none'"
-                  x-text="project.action"
+                  x-text="projectActionLabel(project)"
                 ></button>
               </td>
               <!-- Details (truncated, full text in tooltip) -->
@@ -349,10 +377,10 @@
                 >
                   Terminal
                 </button>
-                <!-- Remove with confirmation -->
+                <!-- Archive with confirmation -->
                 <button
-                  x-show="confirmRemovePath !== project.path"
-                  @click="confirmRemovePath = project.path"
+                  x-show="confirmArchivePath !== project.path"
+                  @click="confirmArchivePath = project.path"
                   class="gf-btn gf-btn-sm"
                   style="
                     background: none;
@@ -361,27 +389,27 @@
                     font-size: 11px;
                     padding: 2px 6px;
                   "
-                  @mouseenter="$el.style.color = 'var(--red-400)'"
+                  @mouseenter="$el.style.color = 'var(--accent)'"
                   @mouseleave="$el.style.color = 'var(--text-muted)'"
                 >
-                  Remove
+                  Archive
                 </button>
                 <span
-                  x-show="confirmRemovePath === project.path"
+                  x-show="confirmArchivePath === project.path"
                   style="display: inline-flex; align-items: center; gap: 4px"
                 >
                   <span class="gf-text-muted" style="font-size: 11px"
-                    >Remove?</span
+                    >Archive?</span
                   >
                   <button
-                    @click="removeProject(project.path); confirmRemovePath = null"
-                    class="gf-btn gf-btn-sm gf-btn-danger"
+                    @click="archiveProject(project.path); confirmArchivePath = null"
+                    class="gf-btn gf-btn-sm gf-btn-secondary"
                     style="font-size: 11px; padding: 1px 6px"
                   >
                     Yes
                   </button>
                   <button
-                    @click="confirmRemovePath = null"
+                    @click="confirmArchivePath = null"
                     class="gf-btn gf-btn-sm"
                     style="
                       background: none;
@@ -410,16 +438,72 @@
       </div>
     </div>
 
+    <!-- Archived projects remain recoverable and hidden until the user expands them. -->
+    <div x-show="archivedProjects.length > 0" style="margin-bottom: 20px">
+      <button
+        @click="showArchived = !showArchived"
+        class="gf-btn gf-btn-md gf-btn-ghost"
+        style="margin-bottom: 8px"
+      >
+        <span x-text="showArchived ? 'Hide archived' : 'Show archived'"></span>
+        <span x-text="` (${archivedProjects.length})`"></span>
+      </button>
+      <div
+        x-show="showArchived"
+        class="gf-card"
+        style="border-radius: 8px; overflow: hidden"
+      >
+        <template
+          x-for="project in archivedProjects"
+          :key="'archived-' + (project.identity || project.path)"
+        >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 16px;
+              padding: 10px 12px;
+              border-bottom: 1px solid var(--border-subtle);
+            "
+          >
+            <div style="min-width: 0">
+              <div
+                class="gf-text-secondary"
+                style="font-family: var(--font-mono); font-size: 12px"
+                x-text="displayNameFor(project.path)"
+              ></div>
+              <div
+                class="gf-text-muted"
+                style="
+                  font-family: var(--font-mono);
+                  font-size: 10px;
+                  overflow: hidden;
+                  text-overflow: ellipsis;
+                "
+                x-text="project.path"
+                :title="project.path"
+              ></div>
+            </div>
+            <button
+              @click="restoreProject(project.path)"
+              class="gf-btn gf-btn-sm gf-btn-secondary"
+            >
+              Restore
+            </button>
+          </div>
+        </template>
+      </div>
+    </div>
+
     <!-- Empty state -->
     <div
-      x-show="projectsList.length === 0"
+      x-show="activeProjects.length === 0"
       class="gf-surface gf-empty-state"
       style="border-radius: 8px; margin-bottom: 20px"
     >
       <span class="gf-empty-mark">PR</span>
-      <p>
-        No projects added. Click "Add Project" to monitor a project directory.
-      </p>
+      <p>No active projects. Add a project or restore one from the archive.</p>
     </div>
 
     <!-- Footer -->
