@@ -113,6 +113,7 @@ function app() {
     dashboardSkillQualityInventoryLoadersFragment(),
     dashboardSkillQualityReportFragment(),
     dashboardSkillEvaluatorResultFragment(),
+    dashboardSkillEvaluatorLabelsFragment(),
     dashboardSkillEvaluatorClipboardFragment(),
     dashboardSkillEvaluatorInputFragment(),
     dashboardProjectActionsFragment(),

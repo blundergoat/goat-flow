@@ -194,20 +194,32 @@ function addMissingMirrorMetadata(
   };
 }
 
-// eslint-disable-next-line complexity -- intentional because inventory walks multiple artifact roots and dedupes mirrored skills into one canonical artifact
-export function discoverArtifacts(
+/**
+ * Walk every configured skills root and fold each skill's copies into one artifact.
+ *
+ * The same skill is installed under several agent directories, so later sightings become mirrors of the first rather than
+ * separate rows the user would see duplicated in the Skills tab.
+ *
+ * Unsafe entries and directories without a SKILL.md are skipped, so a stray folder never appears as an artifact.
+ *
+ * @param projectRoot - project being inventoried
+ * @param config - quality config supplying the skills walk roots
+ * @returns the discovered skills keyed by artifact id; empty means no skills are installed anywhere
+ */
+function collectSkillArtifacts(
   projectRoot: string,
-  config: QualityConfig = loadQualityConfig(projectRoot),
-): ArtifactEntry[] {
+  config: QualityConfig,
+): Map<string, ArtifactEntry> {
   const artifactsById = new Map<string, ArtifactEntry>();
-
   for (const { dir, source } of config.walkRoots.skills) {
     const skillsDir = join(projectRoot, dir);
+    // A configured root the project never created is a normal absence, not a problem to report.
     if (!existsSync(skillsDir)) continue;
     for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
       const entryPath = join(skillsDir, entry.name);
       if (!entry.isDirectory() || !isSafeEntry(entryPath)) continue;
       const skillFile = join(entryPath, "SKILL.md");
+      // A directory with no SKILL.md is not a skill, however it is named.
       if (!existsSync(skillFile) || !isSafeEntry(skillFile)) continue;
       registerSkillArtifact(
         projectRoot,
@@ -218,46 +230,86 @@ export function discoverArtifacts(
       );
     }
   }
+  return artifactsById;
+}
 
-  const artifacts = Array.from(artifactsById.values()).map((artifact) =>
-    addMissingMirrorMetadata(projectRoot, artifact, config),
-  );
-
-  const referenceCandidates: ReferenceCandidate[] = [];
+/**
+ * Walk every configured references root and collect the shared reference files.
+ *
+ * @param projectRoot - project being inventoried
+ * @param config - quality config supplying the references walk roots
+ * @returns the candidates in walk order; empty means the project ships no shared references
+ */
+function collectReferenceCandidates(
+  projectRoot: string,
+  config: QualityConfig,
+): ReferenceCandidate[] {
+  const candidates: ReferenceCandidate[] = [];
   for (const { dir } of config.walkRoots.references) {
     const refDir = join(projectRoot, dir);
+    // A configured root the project never created is a normal absence.
     if (!existsSync(refDir)) continue;
     for (const entry of readdirSync(refDir, { withFileTypes: true })) {
       const filePath = join(refDir, entry.name);
       if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
       const name = sharedReferenceName(refDir, entry.name);
+      // An unnameable or unsafe file cannot be shown to the user as an artifact.
       if (name === null || !isSafeEntry(filePath)) continue;
-      referenceCandidates.push({
-        name,
-        path: relPosix(projectRoot, filePath),
-      });
+      candidates.push({ name, path: relPosix(projectRoot, filePath) });
     }
   }
+  return candidates;
+}
 
-  const referenceNameCounts = new Map<string, number>();
-  for (const candidate of referenceCandidates) {
-    referenceNameCounts.set(
-      candidate.name,
-      (referenceNameCounts.get(candidate.name) ?? 0) + 1,
-    );
+/**
+ * Turn reference candidates into artifacts, qualifying an id only where the same name appears more than once.
+ *
+ * Counting names first is what lets unique references keep a short readable id while collisions still resolve.
+ *
+ * @param candidates - reference files found during the walk
+ * @param takenIds - ids already used by skills, so a reference can never collide with one
+ * @returns the reference artifacts, in walk order
+ */
+function buildReferenceArtifacts(
+  candidates: ReferenceCandidate[],
+  takenIds: Set<string>,
+): ArtifactEntry[] {
+  const nameCounts = new Map<string, number>();
+  for (const candidate of candidates) {
+    nameCounts.set(candidate.name, (nameCounts.get(candidate.name) ?? 0) + 1);
   }
-  const usedReferenceIds = new Set(artifacts.map((artifact) => artifact.id));
-  for (const candidate of referenceCandidates) {
-    artifacts.push({
-      id: referenceArtifactId(candidate, referenceNameCounts, usedReferenceIds),
-      name: candidate.name,
-      path: candidate.path,
-      kind: "shared-reference",
-      source: "shared-reference",
-    });
-  }
+  return candidates.map((candidate) => ({
+    id: referenceArtifactId(candidate, nameCounts, takenIds),
+    name: candidate.name,
+    path: candidate.path,
+    kind: "shared-reference" as const,
+    source: "shared-reference" as const,
+  }));
+}
 
-  return artifacts;
+/**
+ * Inventory every skill and shared reference in a project, which is the list the Skills tab renders.
+ *
+ * A user reaches this by opening the Skills tab or running skill-quality scoring, asking what is actually installed here.
+ *
+ * @param projectRoot - project to inventory
+ * @param config - quality config; defaults to the project's own loaded config
+ * @returns skills first, then shared references; empty means the project has neither installed
+ */
+export function discoverArtifacts(
+  projectRoot: string,
+  config: QualityConfig = loadQualityConfig(projectRoot),
+): ArtifactEntry[] {
+  const skillsById = collectSkillArtifacts(projectRoot, config);
+  const artifacts = Array.from(skillsById.values()).map((artifact) =>
+    addMissingMirrorMetadata(projectRoot, artifact, config),
+  );
+
+  const references = buildReferenceArtifacts(
+    collectReferenceCandidates(projectRoot, config),
+    new Set(artifacts.map((artifact) => artifact.id)),
+  );
+  return [...artifacts, ...references];
 }
 
 /**

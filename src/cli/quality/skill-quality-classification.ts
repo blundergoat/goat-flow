@@ -64,7 +64,49 @@ function subtypeConfidence(
  *  - Empty rules (fallback subtype): SUBTYPE_FALLBACK_SCORE so the fallback
  *    always matches with low confidence.
  */
-// eslint-disable-next-line complexity -- intentional because subtype match scoring exhausts kind compatibility, fallback rules, name-vs-heading scoring, and mustNotHave veto in one place to keep priority semantics local
+
+/**
+ * Add up the score for every detection heading present in the artifact.
+ *
+ * Each matching heading counts, so an artifact carrying several of a subtype's hallmark sections scores higher than one
+ * carrying a single heading by coincidence.
+ *
+ * Side effect: appends one reasoning line per match, which is what the Skills tab shows as evidence for the classification.
+ *
+ * @param headingPatterns - the subtype's heading patterns
+ * @param content - raw artifact text
+ * @param reasoning - accumulator appended to in place
+ * @returns the total heading score; zero means no hallmark heading was found
+ */
+function scoreHeadingMatches(
+  headingPatterns: readonly string[],
+  content: string,
+  reasoning: string[],
+): number {
+  let score = 0;
+  for (const pattern of headingPatterns) {
+    if (new RegExp(pattern, "i").test(content)) {
+      score += SUBTYPE_HEADING_MATCH_SCORE;
+      reasoning.push(`heading "${pattern}" present`);
+    }
+  }
+  return score;
+}
+
+/**
+ * Find the first must-not-have pattern present in the artifact, which disqualifies a heading-only match.
+ *
+ * @param vetoes - the subtype's must-not-have patterns
+ * @param content - raw artifact text
+ * @returns the matching veto pattern, or null when none applies
+ */
+function findMatchingVeto(
+  vetoes: readonly string[],
+  content: string,
+): string | null {
+  return vetoes.find((veto) => new RegExp(veto, "i").test(content)) ?? null;
+}
+
 function scoreSubtypeMatch(
   artifact: ArtifactEntry,
   content: string,
@@ -84,30 +126,29 @@ function scoreSubtypeMatch(
     return { subtype, score: SUBTYPE_FALLBACK_SCORE, reasoning };
   }
 
+  const nameMatched = detection.namePatterns.includes(artifact.name);
   let score = 0;
-  if (detection.namePatterns.includes(artifact.name)) {
+  if (nameMatched) {
     score += SUBTYPE_NAME_MATCH_SCORE;
     reasoning.push(`name "${artifact.name}" in name-patterns`);
   }
 
-  let headingMatched = false;
-  for (const pattern of detection.headingPatterns) {
-    if (new RegExp(pattern, "i").test(content)) {
-      score += SUBTYPE_HEADING_MATCH_SCORE;
-      headingMatched = true;
-      reasoning.push(`heading "${pattern}" present`);
-    }
-  }
+  const headingScore = scoreHeadingMatches(
+    detection.headingPatterns,
+    content,
+    reasoning,
+  );
+  score += headingScore;
 
+  // Nothing matched, so this subtype is simply not a candidate for the artifact.
   if (score === 0) return { subtype, score: 0, reasoning };
 
-  const nameMatched = detection.namePatterns.includes(artifact.name);
-  if (!nameMatched && headingMatched) {
-    for (const veto of detection.mustNotHave) {
-      if (new RegExp(veto, "i").test(content)) {
-        reasoning.push(`vetoed by must-not-have "${veto}"`);
-        return { subtype, score: 0, reasoning };
-      }
+  // A heading-only match is the weak case, so a must-not-have veto is allowed to overturn it.
+  if (!nameMatched && headingScore > 0) {
+    const veto = findMatchingVeto(detection.mustNotHave, content);
+    if (veto !== null) {
+      reasoning.push(`vetoed by must-not-have "${veto}"`);
+      return { subtype, score: 0, reasoning };
     }
   }
 

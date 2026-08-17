@@ -408,7 +408,19 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
       }
       return groups;
     },
+  };
+}
 
+/**
+ * Build the Skill Evaluator's label and interaction methods: tip toggling, audit recency, file roles, and the export slug.
+ *
+ * These are the small pieces the result panel reads around the verdict, kept apart from the verdict and tip builders so
+ * neither half becomes a wall of unrelated methods.
+ *
+ * @returns dashboard fragment merged into the app alongside the result fragment
+ */
+function dashboardSkillEvaluatorLabelsFragment(): DashboardAppFragment {
+  return {
     /**
      * Toggle one evaluator tip group open or closed.
      * Use when the user expands advice for a specific metric.

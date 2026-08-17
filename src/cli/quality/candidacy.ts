@@ -108,21 +108,27 @@ function inspectDraft(content: string, suggestedName?: string): DraftSignals {
   };
 }
 
-// eslint-disable-next-line complexity -- intentional because artifact-type signals must stay in priority order
-function analyzeDraft(
-  content: string,
-  suggestedName?: string,
-): CandidacyResult {
-  const signals = inspectDraft(content, suggestedName);
-  const reasoning: string[] = [];
+/** One routing rule: the structural signal that fires it, why it fired, and the verdict it produces. */
+interface CandidacyRule {
+  matches: (signals: DraftSignals) => boolean;
+  explain: (signals: DraftSignals) => string;
+  verdict: Omit<CandidacyResult, "reasoning">;
+}
 
-  // Strong skill signals
-  if (signals.hasStep0 && signals.hasVerification) {
-    reasoning.push("has both ## Step 0 and ## Verification headings");
-    return {
+/**
+ * The draft-routing rules, in priority order: the first match wins.
+ *
+ * Order is the contract here. Skill signals are checked before reference signals, and both before the name-based
+ * learning-loop patterns, because a draft that carries real skill structure should be routed on that structure even when
+ * its filename happens to look like an incident note.
+ */
+const CANDIDACY_RULES: readonly CandidacyRule[] = [
+  {
+    matches: (signals) => signals.hasStep0 && signals.hasVerification,
+    explain: () => "has both ## Step 0 and ## Verification headings",
+    verdict: {
       recommendedArtifact: { type: "skill", subtype: "workflow" },
       confidence: 0.9,
-      reasoning,
       nextSteps: [
         {
           action: "Place under .claude/skills/<name>/SKILL.md",
@@ -130,162 +136,162 @@ function analyzeDraft(
         },
         { action: "Run skill-quality scoring after drafting" },
       ],
-    };
-  }
-  if (signals.hasRouteMap && !signals.hasStep0) {
-    reasoning.push("has ## Route Map without ## Step 0");
-    return {
+    },
+  },
+  {
+    matches: (signals) => signals.hasRouteMap && !signals.hasStep0,
+    explain: () => "has ## Route Map without ## Step 0",
+    verdict: {
       recommendedArtifact: { type: "skill", subtype: "dispatcher" },
       confidence: 0.85,
-      reasoning,
       nextSteps: [
         {
           action: "Place under .claude/skills/<name>/SKILL.md",
           template: "dispatcher",
         },
       ],
-    };
-  }
-  if (
-    (signals.hasQuickScan || signals.hasAuditMode) &&
-    !signals.hasFileWriteMode
-  ) {
-    reasoning.push(
-      "has Quick Scan / Audit Mode markers and no File-Write mode",
-    );
-    return {
+    },
+  },
+  {
+    matches: (signals) =>
+      (signals.hasQuickScan || signals.hasAuditMode) &&
+      !signals.hasFileWriteMode,
+    explain: () => "has Quick Scan / Audit Mode markers and no File-Write mode",
+    verdict: {
       recommendedArtifact: { type: "skill", subtype: "report" },
       confidence: 0.85,
-      reasoning,
       nextSteps: [
         {
           action: "Place under .claude/skills/<name>/SKILL.md",
           template: "report",
         },
       ],
-    };
-  }
-
-  // Reference signals
-  if (signals.hasAvailabilityCheck) {
-    reasoning.push("has Availability Check section");
-    return {
+    },
+  },
+  {
+    matches: (signals) => signals.hasAvailabilityCheck,
+    explain: () => "has Availability Check section",
+    verdict: {
       recommendedArtifact: { type: "reference", subtype: "playbook" },
       confidence: 0.85,
-      reasoning,
       nextSteps: [
         {
           action: "Place under .goat-flow/skill-docs/playbooks/<name>.md",
           template: "playbook",
         },
       ],
-    };
-  }
-  if (signals.hasIndexHints) {
-    reasoning.push("looks like an index/router for sibling references");
-    return {
+    },
+  },
+  {
+    matches: (signals) => signals.hasIndexHints,
+    explain: () => "looks like an index/router for sibling references",
+    verdict: {
       recommendedArtifact: { type: "reference", subtype: "index" },
       confidence: 0.7,
-      reasoning,
       nextSteps: [
         {
           action: "Place under .goat-flow/skill-docs/playbooks/<name>.md",
           template: "index",
         },
       ],
-    };
-  }
-
-  // Learning-loop signals (name-based)
-  if (signals.startsWithIncident) {
-    reasoning.push("name or H1 matches incident/postmortem/lesson pattern");
-    return {
+    },
+  },
+  {
+    matches: (signals) => signals.startsWithIncident,
+    explain: () => "name or H1 matches incident/postmortem/lesson pattern",
+    verdict: {
       recommendedArtifact: { type: "learning-loop", subtype: "lesson" },
       confidence: 0.85,
-      reasoning,
       nextSteps: [
         {
           action: "Place under .goat-flow/learning-loop/lessons/<category>.md",
         },
       ],
-    };
-  }
-  if (signals.startsWithFootgun) {
-    reasoning.push("name or H1 matches footgun pattern");
-    return {
+    },
+  },
+  {
+    matches: (signals) => signals.startsWithFootgun,
+    explain: () => "name or H1 matches footgun pattern",
+    verdict: {
       recommendedArtifact: { type: "learning-loop", subtype: "footgun" },
       confidence: 0.85,
-      reasoning,
       nextSteps: [
         {
           action: "Place under .goat-flow/learning-loop/footguns/<category>.md",
         },
       ],
-    };
-  }
-  if (signals.startsWithADR && signals.hasADRStructure) {
-    reasoning.push("ADR-NNN name with Decision/Context/Consequences structure");
-    return {
+    },
+  },
+  {
+    matches: (signals) => signals.startsWithADR && signals.hasADRStructure,
+    explain: () => "ADR-NNN name with Decision/Context/Consequences structure",
+    verdict: {
       recommendedArtifact: { type: "learning-loop", subtype: "decision" },
       confidence: 0.9,
-      reasoning,
       nextSteps: [
         {
           action:
             "Place under .goat-flow/learning-loop/decisions/ADR-NNN-<title>.md",
         },
       ],
-    };
-  }
-
-  // Short rule-shaped content
-  if (
-    signals.lineCount < MIN_DRAFT_LINES_FOR_SKILL &&
-    signals.hasRuleVocabulary
-  ) {
-    reasoning.push(
-      `${signals.lineCount} lines with MUST/always/never vocabulary`,
-    );
-    return {
-      recommendedArtifact: {
-        type: "instruction-file",
-        reason: "rule-shaped",
-      },
-      confidence: 0.75,
-      reasoning,
-      nextSteps: [
-        {
-          action: "Add to CLAUDE.md or AGENTS.md as a rule line",
-        },
-      ],
-    };
-  }
-  if (signals.lineCount < 5) {
-    reasoning.push(`only ${signals.lineCount} lines of content`);
-    return {
-      recommendedArtifact: {
-        type: "do-not-create",
-        reason: "no-clear-intent",
-      },
-      confidence: 0.6,
-      reasoning,
-      nextSteps: [
-        {
-          action: "Provide more detail before deciding artifact type",
-        },
-      ],
-    };
-  }
-
-  // Low-confidence fallback: needs human review
-  reasoning.push("no decisive structural signal found");
-  return {
-    recommendedArtifact: {
-      type: "do-not-create",
-      reason: "no-clear-intent",
     },
+  },
+  {
+    matches: (signals) =>
+      signals.lineCount < MIN_DRAFT_LINES_FOR_SKILL &&
+      signals.hasRuleVocabulary,
+    explain: (signals) =>
+      `${signals.lineCount} lines with MUST/always/never vocabulary`,
+    verdict: {
+      recommendedArtifact: { type: "instruction-file", reason: "rule-shaped" },
+      confidence: 0.75,
+      nextSteps: [{ action: "Add to CLAUDE.md or AGENTS.md as a rule line" }],
+    },
+  },
+  {
+    matches: (signals) => signals.lineCount < 5,
+    explain: (signals) => `only ${signals.lineCount} lines of content`,
+    verdict: {
+      recommendedArtifact: { type: "do-not-create", reason: "no-clear-intent" },
+      confidence: 0.6,
+      nextSteps: [
+        { action: "Provide more detail before deciding artifact type" },
+      ],
+    },
+  },
+];
+
+/**
+ * Decide what a draft should become, from its structure alone.
+ *
+ * A user reaches this by running `quality candidacy` on a file they have written but not yet filed, asking whether it is a
+ * skill, a reference, a learning-loop entry, or something that belongs as one line in an instruction file.
+ *
+ * The first matching rule wins, so the table order is the routing policy; nothing matching means the draft carries no
+ * decisive signal and the verdict is deliberately low-confidence rather than a guess.
+ *
+ * @param content - the draft text being routed
+ * @param suggestedName - filename hint used by the name-based rules; omitted just skips those signals
+ * @returns the recommendation, its confidence, the reasoning shown to the user, and the next steps to take
+ */
+function analyzeDraft(
+  content: string,
+  suggestedName?: string,
+): CandidacyResult {
+  const signals = inspectDraft(content, suggestedName);
+  const matchedRule = CANDIDACY_RULES.find((rule) => rule.matches(signals));
+  // A decisive structural signal fired, so the user gets a concrete placement rather than advice to add headings.
+  if (matchedRule) {
+    return {
+      ...matchedRule.verdict,
+      reasoning: [matchedRule.explain(signals)],
+    };
+  }
+
+  return {
+    recommendedArtifact: { type: "do-not-create", reason: "no-clear-intent" },
     confidence: 0.4,
-    reasoning,
+    reasoning: ["no decisive structural signal found"],
     nextSteps: [
       {
         action:

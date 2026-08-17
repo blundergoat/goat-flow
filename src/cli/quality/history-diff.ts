@@ -150,11 +150,183 @@ function countConsecutivePresence(
  * Build the diff between two comparable quality-history runs.
  * Use when the user asks what went absent, was introduced, persisted, or stuck between runs.
  *
+ * Invariant: "absent" means a finding is missing from the newer report, which is not the same as fixed. An unexamined
+ * artifact, or a line-based id that shifted, lands there too, so the label deliberately claims disappearance and not repair.
+ *
  * @param entries - sorted quality-history entries; empty entries cannot produce a diff
  * @param options - agent, explicit pair, and mode filters; missing pair uses latest two matching runs
  * @returns diff result, or a user-facing error explaining why comparison is not possible
  */
-// eslint-disable-next-line complexity -- intentional because diff selection branches on implicit latest-vs-explicit pair resolution and validation before the shared comparison path.
+/** The two runs a diff compares, oldest first. */
+interface DiffPair {
+  sourceEntry: QualityHistoryEntry;
+  targetEntry: QualityHistoryEntry;
+}
+
+/** A resolved pair, or the reason the user's request cannot be compared. */
+type DiffPairResult =
+  { ok: true; pair: DiffPair } | { ok: false; error: string };
+
+/**
+ * Explain why two named runs cannot be diffed, or confirm that they can.
+ *
+ * Two rejections protect the meaning of the diff itself: runs from different agents, or different quality modes, measure
+ * different things, so comparing them would produce a result that looks informative while saying nothing.
+ *
+ * The other two protect the user's intent: a pair that contradicts `--agent` or `--mode` is refused rather than silently
+ * honouring one input over the other.
+ *
+ * @param sourceEntry - the older run
+ * @param targetEntry - the newer run
+ * @param agent - the `--agent` filter, when supplied
+ * @param qualityMode - the `--mode` filter, or null when unscoped
+ * @returns the reason the pair cannot be compared, or null when it can
+ */
+function describeIncomparablePair(
+  sourceEntry: QualityHistoryEntry,
+  targetEntry: QualityHistoryEntry,
+  agent: AgentId | null,
+  qualityMode: QualityMode | null,
+): string | null {
+  // Cross-agent diffs are rejected because runner outputs are not comparable.
+  if (sourceEntry.agent !== targetEntry.agent) {
+    return "quality diff rejects cross-agent comparisons";
+  }
+  // Agent filters must agree with the explicit pair so CLI flags do not mislead the user.
+  if (agent && sourceEntry.agent !== agent) {
+    return `quality diff pair does not match --agent ${agent}`;
+  }
+  // Cross-mode diffs are rejected because setup and system reviews measure different workflows.
+  if (entryQualityMode(sourceEntry) !== entryQualityMode(targetEntry)) {
+    return "quality diff rejects cross-mode comparisons";
+  }
+  // Mode filters must agree with both explicit ids.
+  if (
+    qualityMode !== null &&
+    (entryQualityMode(sourceEntry) !== qualityMode ||
+      entryQualityMode(targetEntry) !== qualityMode)
+  ) {
+    return `quality diff pair does not match --mode ${qualityMode}`;
+  }
+  return null;
+}
+
+/**
+ * Resolve the two runs named by an explicit `<from-id>:<to-id>` pair.
+ *
+ * Every rejection here protects a comparison the user would misread: runs from different agents or different quality
+ * modes measure different things, so a diff between them would look meaningful while comparing nothing.
+ *
+ * A pair that contradicts the `--agent` or `--mode` flags is also refused, because silently honouring one over the other
+ * would show the user a diff they did not ask for.
+ *
+ * @param entries - all saved history entries
+ * @param pair - the raw pair text as typed
+ * @param agent - the `--agent` filter, when the user supplied one
+ * @param qualityMode - the `--mode` filter, or null when the user did not scope by mode
+ * @returns the resolved pair, or the reason it cannot be compared
+ */
+function resolveExplicitDiffPair(
+  entries: QualityHistoryEntry[],
+  pair: string,
+  agent: AgentId | null,
+  qualityMode: QualityMode | null,
+): DiffPairResult {
+  const [fromId, toId, ...rest] = pair.split(":");
+  // Pair ids must be two report ids separated by one colon.
+  if (!fromId || !toId || rest.length > 0) {
+    return {
+      ok: false,
+      error: "quality diff pair must be in the form <from-id>:<to-id>",
+    };
+  }
+  const sourceEntry = entries.find((entry) => entry.id === fromId);
+  const targetEntry = entries.find((entry) => entry.id === toId);
+  // Both ids must refer to saved reports the user can inspect.
+  if (!sourceEntry || !targetEntry) {
+    return {
+      ok: false,
+      error: "quality diff pair must reference existing saved report ids",
+    };
+  }
+  const incomparable = describeIncomparablePair(
+    sourceEntry,
+    targetEntry,
+    agent,
+    qualityMode,
+  );
+  if (incomparable) return { ok: false, error: incomparable };
+  return { ok: true, pair: { sourceEntry, targetEntry } };
+}
+
+/**
+ * Resolve the two most recent matching runs when the user named no explicit pair.
+ *
+ * An agent is required here because "the latest two" is otherwise ambiguous across runners, and comparing a Claude run to
+ * a Codex one would be meaningless.
+ *
+ * When no mode filter is set and the newest two runs happen to be different modes, the user is asked to scope the
+ * comparison rather than being shown a cross-mode diff by accident.
+ *
+ * @param entries - all saved history entries, newest first
+ * @param agent - the `--agent` filter; required for this path
+ * @param qualityMode - the `--mode` filter, or null to accept any single mode
+ * @returns the resolved pair, or the reason it cannot be compared
+ */
+function resolveLatestDiffPair(
+  entries: QualityHistoryEntry[],
+  agent: AgentId | null,
+  qualityMode: QualityMode | null,
+): DiffPairResult {
+  // Without explicit ids, the user must choose an agent so "latest two" is unambiguous.
+  if (!agent) {
+    return {
+      ok: false,
+      error: "quality diff without explicit ids requires --agent",
+    };
+  }
+  const sameAgent = entries.filter(
+    (entry) => entry.agent === agent && matchesQualityMode(entry, qualityMode),
+  );
+  // At least two matching runs are required to show before/after changes.
+  if (sameAgent.length < 2) {
+    const modeScope = qualityMode === null ? "" : ` in ${qualityMode} mode`;
+    return {
+      ok: false,
+      error: `Not enough saved quality reports for ${agent}${modeScope}. Need at least 2 runs.`,
+    };
+  }
+  const targetEntry = sameAgent[0];
+  const sourceEntry = sameAgent[1];
+  // Defensive guard keeps a sparse list from producing an undefined comparison.
+  if (!targetEntry || !sourceEntry) {
+    return {
+      ok: false,
+      error: "quality diff could not resolve the requested report pair",
+    };
+  }
+  // If all modes are allowed but the newest two differ, ask the user to scope the comparison.
+  if (
+    qualityMode === null &&
+    entryQualityMode(sourceEntry) !== entryQualityMode(targetEntry)
+  ) {
+    return {
+      ok: false,
+      error: `quality diff would compare ${entryQualityMode(sourceEntry)} to ${entryQualityMode(targetEntry)}. Pass --mode to diff one quality mode, or pass explicit same-mode report ids.`,
+    };
+  }
+  return { ok: true, pair: { sourceEntry, targetEntry } };
+}
+
+/**
+ * Build the diff between two comparable quality-history runs.
+ *
+ * Use when the user asks what went absent, was introduced, persisted, or stuck between runs.
+ *
+ * @param entries - sorted quality-history entries; an empty list cannot produce a diff
+ * @param options - agent, explicit pair, and mode filters; no pair means the latest two matching runs
+ * @returns the diff, or a user-facing error explaining why the comparison is not possible
+ */
 export function buildQualityDiff(
   entries: QualityHistoryEntry[],
   options: {
@@ -164,102 +336,11 @@ export function buildQualityDiff(
   },
 ): { ok: true; diff: QualityDiffResult } | { ok: false; error: string } {
   const qualityMode = options.qualityMode ?? null;
-  let sourceEntry: QualityHistoryEntry | undefined;
-  let targetEntry: QualityHistoryEntry | undefined;
-
-  // Explicit pairs let the user compare two chosen saved runs by id.
-  if (options.pair) {
-    const [fromId, toId, ...rest] = options.pair.split(":");
-    // Pair ids must be two report ids separated by one colon.
-    if (!fromId || !toId || rest.length > 0) {
-      return {
-        ok: false,
-        error: "quality diff pair must be in the form <from-id>:<to-id>",
-      };
-    }
-    sourceEntry = entries.find((entry) => entry.id === fromId);
-    targetEntry = entries.find((entry) => entry.id === toId);
-    // Both ids must refer to saved reports the user can inspect.
-    if (!sourceEntry || !targetEntry) {
-      return {
-        ok: false,
-        error: "quality diff pair must reference existing saved report ids",
-      };
-    }
-    // Cross-agent diffs are rejected because runner outputs are not comparable.
-    if (sourceEntry.agent !== targetEntry.agent) {
-      return {
-        ok: false,
-        error: "quality diff rejects cross-agent comparisons",
-      };
-    }
-    // Agent filters must agree with the explicit pair so CLI flags do not mislead the user.
-    if (options.agent && sourceEntry.agent !== options.agent) {
-      return {
-        ok: false,
-        error: `quality diff pair does not match --agent ${options.agent}`,
-      };
-    }
-    // Cross-mode diffs are rejected because setup and system reviews measure different workflows.
-    if (entryQualityMode(sourceEntry) !== entryQualityMode(targetEntry)) {
-      return {
-        ok: false,
-        error: "quality diff rejects cross-mode comparisons",
-      };
-    }
-    // Mode filters must agree with both explicit ids.
-    if (
-      qualityMode !== null &&
-      (entryQualityMode(sourceEntry) !== qualityMode ||
-        entryQualityMode(targetEntry) !== qualityMode)
-    ) {
-      return {
-        ok: false,
-        error: `quality diff pair does not match --mode ${qualityMode}`,
-      };
-    }
-  } else {
-    // Without explicit ids, the user must choose an agent so "latest two" is unambiguous.
-    if (!options.agent) {
-      return {
-        ok: false,
-        error: "quality diff without explicit ids requires --agent",
-      };
-    }
-    const sameAgent = entries.filter(
-      (entry) =>
-        entry.agent === options.agent && matchesQualityMode(entry, qualityMode),
-    );
-    // At least two matching runs are required to show before/after changes.
-    if (sameAgent.length < 2) {
-      const modeScope = qualityMode === null ? "" : ` in ${qualityMode} mode`;
-      return {
-        ok: false,
-        error: `Not enough saved quality reports for ${options.agent}${modeScope}. Need at least 2 runs.`,
-      };
-    }
-    const latest = sameAgent[0];
-    const previous = sameAgent[1];
-    // Defensive guard keeps a sparse list from producing an undefined comparison.
-    if (!latest || !previous) {
-      return {
-        ok: false,
-        error: "quality diff could not resolve the requested report pair",
-      };
-    }
-    targetEntry = latest;
-    sourceEntry = previous;
-    // If all modes are allowed but the newest two differ, ask the user to scope the comparison.
-    if (
-      qualityMode === null &&
-      entryQualityMode(sourceEntry) !== entryQualityMode(targetEntry)
-    ) {
-      return {
-        ok: false,
-        error: `quality diff would compare ${entryQualityMode(sourceEntry)} to ${entryQualityMode(targetEntry)}. Pass --mode to diff one quality mode, or pass explicit same-mode report ids.`,
-      };
-    }
-  }
+  const resolved = options.pair
+    ? resolveExplicitDiffPair(entries, options.pair, options.agent, qualityMode)
+    : resolveLatestDiffPair(entries, options.agent, qualityMode);
+  if (!resolved.ok) return resolved;
+  const { sourceEntry, targetEntry } = resolved.pair;
 
   const fromMap = getFindingMap(sourceEntry.report);
   const toMap = getFindingMap(targetEntry.report);

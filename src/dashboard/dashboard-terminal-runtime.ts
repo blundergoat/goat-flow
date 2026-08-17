@@ -595,6 +595,104 @@ function dashboardDetachTerminal(
 }
 
 /**
+ * Ask the server which terminal sessions are still alive, keyed by id.
+ *
+ * Error behavior: throws nothing; an unreachable endpoint reports null, which the caller treats as "cannot prove any
+ * saved session is live" rather than as an empty server.
+ *
+ * @returns live sessions by id, or null when the endpoint could not be read
+ */
+async function fetchLiveSessionsById(): Promise<Map<
+  string,
+  ServerSessionInfo
+> | null> {
+  try {
+    const res = await dashboardFetch("/api/terminal/sessions");
+    const payload = readRecord(await res.json(), "Terminal sessions response");
+    const aliveMap = new Map<string, ServerSessionInfo>();
+    if (Array.isArray(payload.sessions)) {
+      for (const raw of payload.sessions) {
+        const session = readServerSessionInfo(raw);
+        if (session) aliveMap.set(session.id, session);
+      }
+    }
+    return aliveMap;
+  } catch {
+    // For example, the user resumed a laptop whose dashboard server had already exited.
+    return null;
+  }
+}
+
+/**
+ * Drop this project's saved reconnect state, so the workspace stops offering a reconnect that cannot succeed.
+ *
+ * Side effect: deletes the project's entries from both session maps.
+ *
+ * @param ctx - terminal dashboard state mutated in place
+ * @returns nothing; the project is left with no saved sessions
+ */
+function forgetProjectSessions(ctx: DashboardTerminalContext): void {
+  Reflect.deleteProperty(ctx._projectSessions, ctx.projectPath);
+  Reflect.deleteProperty(ctx._projectActiveSession, ctx.projectPath);
+}
+
+/**
+ * Rebuild one saved session as a live workspace row, reconciling what the browser saved with what the backend reports.
+ *
+ * The backend is preferred for anything it validated, but a legacy row that omits capture or its report owner falls back
+ * to the saved launch values, so an older session keeps the receipt channel it was started with.
+ *
+ * Side effect: pushes the session, records its title, registers retry bindings, and arms its loading timers.
+ *
+ * @param ctx - terminal dashboard state mutated in place
+ * @param saved - the session as the browser stored it at launch
+ * @param alive - the same session as the backend currently reports it
+ * @returns nothing; the session appears in the workspace once this returns
+ */
+function restoreSavedSession(
+  ctx: DashboardTerminalContext,
+  saved: SavedSession,
+  alive: ServerSessionInfo,
+): void {
+  const session: LocalSession = {
+    id: saved.sessionId,
+    runner: saved.agent,
+    promptLabel: saved.prompt,
+    projectPath: alive.projectPath,
+    cwd: alive.cwd || saved.cwd || alive.projectPath,
+    targetPath: alive.targetPath || saved.targetPath || alive.projectPath,
+    accessMode: alive.accessMode,
+    captureQualityDrafts:
+      alive.captureQualityDrafts || saved.captureQualityDrafts,
+    qualityReportProjectPath:
+      alive.qualityReportProjectPath ?? saved.qualityReportProjectPath,
+    startTime: saved.startTime,
+    lastInputTime: alive.lastInputAt,
+    connected: false,
+    ended: false,
+    awaitingInput: false,
+    outputTail: "",
+    loadingPhase: "connecting",
+    loadingShowSlowHint: false,
+    loadingShowRetry: false,
+    age: "",
+    presetId: null,
+  };
+  ctx.rememberSessionTitle(session.id, session.promptLabel);
+  ctx.sessions.push(session);
+  ctx._terminalRefs[session.id] = {
+    retryPromptLabel: session.promptLabel,
+    retryPresetId: null,
+    retryCwdPath: session.cwd,
+    retryTargetPath: session.targetPath,
+    retryAccessMode: session.accessMode,
+    retryCaptureQualityDrafts: session.captureQualityDrafts,
+    retryQualityReportProjectPath: session.qualityReportProjectPath,
+  };
+  dashboardArmTerminalLoadingTimers(ctx, session.id, session);
+}
+
+/**
  * Reconnect the workspace to every saved backend session for this project.
  *
  * Each exit path prunes the project's saved-session entries because a saved id the backend no longer reports would leave the user a reconnect button
@@ -608,19 +706,10 @@ async function dashboardReconnectTerminal(
   ctx: DashboardTerminalContext,
 ): Promise<boolean> {
   const savedList = ctx._projectSessions[ctx.projectPath];
-  const aliveMap = new Map<string, ServerSessionInfo>();
-  try {
-    const res = await dashboardFetch("/api/terminal/sessions");
-    const payload = readRecord(await res.json(), "Terminal sessions response");
-    if (Array.isArray(payload.sessions)) {
-      for (const raw of payload.sessions) {
-        const session = readServerSessionInfo(raw);
-        if (session) aliveMap.set(session.id, session);
-      }
-    }
-  } catch {
-    Reflect.deleteProperty(ctx._projectSessions, ctx.projectPath);
-    Reflect.deleteProperty(ctx._projectActiveSession, ctx.projectPath);
+  const aliveMap = await fetchLiveSessionsById();
+  // The endpoint is unreachable, so the saved ids cannot be proved live and would offer a reconnect that fails.
+  if (aliveMap === null) {
+    forgetProjectSessions(ctx);
     return false;
   }
   if (!savedList || savedList.length === 0) {
@@ -631,9 +720,9 @@ async function dashboardReconnectTerminal(
     return true;
   }
   const liveSaved = savedList.filter((sv) => aliveMap.has(sv.sessionId));
+  // Every saved session has since ended, so the project's reconnect state is stale and is dropped.
   if (liveSaved.length === 0) {
-    Reflect.deleteProperty(ctx._projectSessions, ctx.projectPath);
-    Reflect.deleteProperty(ctx._projectActiveSession, ctx.projectPath);
+    forgetProjectSessions(ctx);
     return false;
   }
   ctx._projectSessions[ctx.projectPath] = liveSaved;
@@ -643,46 +732,7 @@ async function dashboardReconnectTerminal(
   for (const saved of liveSaved) {
     const alive = aliveMap.get(saved.sessionId);
     if (!alive) continue;
-    // Legacy backend rows may omit capture, so the browser's saved true value preserves the receipt channel.
-    const reconnectCaptureQualityDrafts =
-      alive.captureQualityDrafts || saved.captureQualityDrafts;
-    // Prefer the backend's validated owner; a missing legacy value falls back to the saved launch owner.
-    const reconnectQualityReportProjectPath =
-      alive.qualityReportProjectPath ?? saved.qualityReportProjectPath;
-    const session: LocalSession = {
-      id: saved.sessionId,
-      runner: saved.agent,
-      promptLabel: saved.prompt,
-      projectPath: alive.projectPath,
-      cwd: alive.cwd || saved.cwd || alive.projectPath,
-      targetPath: alive.targetPath || saved.targetPath || alive.projectPath,
-      accessMode: alive.accessMode,
-      captureQualityDrafts: reconnectCaptureQualityDrafts,
-      qualityReportProjectPath: reconnectQualityReportProjectPath,
-      startTime: saved.startTime,
-      lastInputTime: alive.lastInputAt,
-      connected: false,
-      ended: false,
-      awaitingInput: false,
-      outputTail: "",
-      loadingPhase: "connecting",
-      loadingShowSlowHint: false,
-      loadingShowRetry: false,
-      age: "",
-      presetId: null,
-    };
-    ctx.rememberSessionTitle(session.id, session.promptLabel);
-    ctx.sessions.push(session);
-    ctx._terminalRefs[session.id] = {
-      retryPromptLabel: session.promptLabel,
-      retryPresetId: null,
-      retryCwdPath: session.cwd,
-      retryTargetPath: session.targetPath,
-      retryAccessMode: session.accessMode,
-      retryCaptureQualityDrafts: session.captureQualityDrafts,
-      retryQualityReportProjectPath: session.qualityReportProjectPath,
-    };
-    dashboardArmTerminalLoadingTimers(ctx, session.id, session);
+    restoreSavedSession(ctx, saved, alive);
   }
   const savedActiveId = ctx._projectActiveSession[ctx.projectPath];
   const first = liveSaved[0];
@@ -698,6 +748,162 @@ async function dashboardReconnectTerminal(
   }
   void ctx.updateSessionCount();
   return true;
+}
+
+/** The launch choices sent to the backend when creating a terminal session. */
+interface BackendSessionRequest {
+  controllingCwd: string;
+  selectedTargetPath: string;
+  runner: RunnerId;
+  accessMode: TerminalAccessMode;
+  captureQualityDrafts: boolean;
+  qualityReportProjectPath: string | null;
+}
+
+/**
+ * Ask the backend to create a terminal session, and confirm the reply can actually be connected to.
+ *
+ * The prompt is deliberately not sent here: it is typed into the session after connect, so a failed launch never leaves
+ * the user's prompt sitting in a session they cannot see.
+ *
+ * Error behavior: throws the server's own message when it reports one, and throws when the reply omits the id or socket
+ * URL, so an unusable session is never pushed into the workspace.
+ *
+ * @param request - the launch choices to create the session with
+ * @returns the new session id and the WebSocket URL to connect to
+ */
+async function requestBackendSession(
+  request: BackendSessionRequest,
+): Promise<{ id: string; wsUrl: string }> {
+  const res = await dashboardFetch("/api/terminal/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      prompt: "",
+      projectPath: request.controllingCwd,
+      targetPath: request.selectedTargetPath,
+      runner: request.runner,
+      accessMode: request.accessMode,
+      captureQualityDrafts: request.captureQualityDrafts,
+      ...(request.qualityReportProjectPath
+        ? { qualityReportProjectPath: request.qualityReportProjectPath }
+        : {}),
+    }),
+  });
+  const payload = readRecord(await res.json(), "Terminal create response");
+  const error = readErrorMessage(payload);
+  if (error) throw new Error(error);
+  const id = readString(payload.id);
+  const wsUrl = readString(payload.wsUrl);
+  // A reply missing either field describes a session the workspace could never connect to.
+  if (!id || !wsUrl) {
+    throw new Error("Terminal create response returned an invalid payload");
+  }
+  return { id, wsUrl };
+}
+
+/** Everything the workspace needs to remember about a launch, including what a retry would have to repeat. */
+interface LaunchRegistration {
+  prompt: string;
+  promptLabel: string | null;
+  presetId: string | null;
+  runner: RunnerId;
+  controllingCwd: string;
+  selectedTargetPath: string;
+  accessMode: TerminalAccessMode;
+  captureQualityDrafts: boolean;
+  qualityReportProjectPath: string | null;
+}
+
+/**
+ * Add a newly created session to the workspace, along with the state a retry would need.
+ *
+ * Retry bindings carry the capture flag and report owner forward, because a retry that dropped them would leave the agent
+ * waiting on a receipt that has nowhere to persist.
+ *
+ * Side effect: records the title, pushes the session, stores retry bindings, and arms its loading timers.
+ *
+ * @param ctx - terminal dashboard state mutated in place
+ * @param created - the id returned by the backend
+ * @param launch - the launch choices, retained so a retry can repeat them exactly
+ * @returns the session now visible in the workspace
+ */
+function registerLaunchedSession(
+  ctx: DashboardTerminalContext,
+  created: { id: string },
+  launch: LaunchRegistration,
+): LocalSession {
+  const session: LocalSession = {
+    id: created.id,
+    runner: launch.runner,
+    promptLabel: launch.promptLabel || "Custom prompt",
+    projectPath: launch.selectedTargetPath,
+    cwd: launch.controllingCwd,
+    targetPath: launch.selectedTargetPath,
+    accessMode: launch.accessMode,
+    captureQualityDrafts: launch.captureQualityDrafts,
+    qualityReportProjectPath: launch.qualityReportProjectPath,
+    startTime: Date.now(),
+    lastInputTime: Date.now(),
+    connected: false,
+    ended: false,
+    awaitingInput: false,
+    outputTail: "",
+    loadingPhase: "connecting",
+    loadingShowSlowHint: false,
+    loadingShowRetry: false,
+    age: "",
+    presetId: launch.presetId,
+  };
+  ctx.rememberSessionTitle(session.id, session.promptLabel);
+  ctx.sessions.push(session);
+  ctx._terminalRefs[session.id] = {
+    retryPrompt: launch.prompt,
+    retryPromptLabel: session.promptLabel,
+    retryPresetId: launch.presetId,
+    retryCwdPath: launch.controllingCwd,
+    retryTargetPath: launch.selectedTargetPath,
+    retryAccessMode: launch.accessMode,
+    // Retry must reopen with capture too, or the retried report has nowhere to persist
+    // and the agent waits on a receipt that never arrives.
+    retryCaptureQualityDrafts: launch.captureQualityDrafts,
+    retryQualityReportProjectPath: launch.qualityReportProjectPath,
+  };
+  dashboardArmTerminalLoadingTimers(ctx, session.id, session);
+  return session;
+}
+
+/**
+ * Tear down a session that was created but never became usable, so the user is not left with a dead workspace row.
+ *
+ * The backend copy is deleted too, and that request is deliberately fire-and-forget: the user has already been told the
+ * launch failed, and a second error about the cleanup would only add noise.
+ *
+ * Side effect: clears timers, removes the row and its bindings, may reselect the active session, and sends a DELETE.
+ * Error behavior: throws nothing; the backend delete swallows its own failure, since the user has already been told the
+ * launch failed and a second error would only add noise.
+ *
+ * @param ctx - terminal dashboard state mutated in place
+ * @param failedSessionId - id of the session to discard
+ * @returns nothing; the failed session is gone from the workspace once this returns
+ */
+function discardFailedSession(
+  ctx: DashboardTerminalContext,
+  failedSessionId: string,
+): void {
+  const refs = ctx._terminalRefs[failedSessionId];
+  dashboardClearTerminalLoadingTimers(ctx, failedSessionId);
+  if (refs?.cleanup) refs.cleanup();
+  Reflect.deleteProperty(ctx._terminalRefs, failedSessionId);
+  ctx.sessions = ctx.sessions.filter((s) => s.id !== failedSessionId);
+  // The failed session was the selected one, so the workspace falls back to whatever remains.
+  if (ctx.activeSessionId === failedSessionId) {
+    ctx.activeSessionId = ctx.sessions[0]?.id || null;
+  }
+  dashboardFetch(`/api/terminal/${failedSessionId}`, {
+    method: "DELETE",
+  }).catch(() => {});
+  void ctx.updateSessionCount();
 }
 
 /**
@@ -752,6 +958,7 @@ async function dashboardLaunchInTerminal(
       AlpineMagics<DashboardTerminalContext>;
     const selectedTargetPath = targetPath || ctx.projectPath;
     const controllingCwd = cwdPath || selectedTargetPath;
+    let wsUrl = "";
     let xtermPromise: Promise<{ ok: true } | { ok: false; error: unknown }>;
     try {
       xtermPromise = ctx.loadXterm().then(
@@ -761,65 +968,27 @@ async function dashboardLaunchInTerminal(
     } catch (error) {
       xtermPromise = Promise.resolve({ ok: false, error });
     }
-    const res = await dashboardFetch("/api/terminal/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt: "",
-        projectPath: controllingCwd,
-        targetPath: selectedTargetPath,
-        runner,
-        accessMode,
-        captureQualityDrafts,
-        ...(qualityReportProjectPath ? { qualityReportProjectPath } : {}),
-      }),
-    });
-    const payload = readRecord(await res.json(), "Terminal create response");
-    const error = readErrorMessage(payload);
-    if (error) throw new Error(error);
-    const id = readString(payload.id);
-    const wsUrl = readString(payload.wsUrl);
-    if (!id || !wsUrl) {
-      throw new Error("Terminal create response returned an invalid payload");
-    }
-    const session: LocalSession = {
-      id,
+    const created = await requestBackendSession({
+      controllingCwd,
+      selectedTargetPath,
       runner,
-      promptLabel: promptLabel || "Custom prompt",
-      projectPath: selectedTargetPath,
-      cwd: controllingCwd,
-      targetPath: selectedTargetPath,
       accessMode,
       captureQualityDrafts,
       qualityReportProjectPath,
-      startTime: Date.now(),
-      lastInputTime: Date.now(),
-      connected: false,
-      ended: false,
-      awaitingInput: false,
-      outputTail: "",
-      loadingPhase: "connecting",
-      loadingShowSlowHint: false,
-      loadingShowRetry: false,
-      age: "",
+    });
+    const session = registerLaunchedSession(ctx, created, {
+      prompt,
+      promptLabel,
       presetId,
-    };
+      runner,
+      controllingCwd,
+      selectedTargetPath,
+      accessMode,
+      captureQualityDrafts,
+      qualityReportProjectPath,
+    });
     createdSessionId = session.id;
-    ctx.rememberSessionTitle(session.id, session.promptLabel);
-    ctx.sessions.push(session);
-    ctx._terminalRefs[session.id] = {
-      retryPrompt: prompt,
-      retryPromptLabel: session.promptLabel,
-      retryPresetId: presetId,
-      retryCwdPath: controllingCwd,
-      retryTargetPath: selectedTargetPath,
-      retryAccessMode: accessMode,
-      // Retry must reopen with capture too, or the retried report has nowhere
-      // to persist and the agent waits on a receipt that never arrives.
-      retryCaptureQualityDrafts: captureQualityDrafts,
-      retryQualityReportProjectPath: qualityReportProjectPath,
-    };
-    dashboardArmTerminalLoadingTimers(ctx, session.id, session);
+    wsUrl = created.wsUrl;
     ctx.activeSessionId = session.id;
     ctx.activeView = "workspace";
     ctx.workspacePanel = "terminal";
@@ -830,22 +999,10 @@ async function dashboardLaunchInTerminal(
     dashboardScheduleLaunchPrompt(ctx, session.id, prompt);
     void ctx.updateSessionCount();
   } catch (err) {
-    if (createdSessionId) {
-      const failedSessionId = createdSessionId;
-      const refs = ctx._terminalRefs[failedSessionId];
-      dashboardClearTerminalLoadingTimers(ctx, failedSessionId);
-      if (refs?.cleanup) refs.cleanup();
-      Reflect.deleteProperty(ctx._terminalRefs, failedSessionId);
-      ctx.sessions = ctx.sessions.filter((s) => s.id !== failedSessionId);
-      if (ctx.activeSessionId === failedSessionId) {
-        ctx.activeSessionId = ctx.sessions[0]?.id || null;
-      }
-      dashboardFetch(`/api/terminal/${failedSessionId}`, {
-        method: "DELETE",
-      }).catch(() => {});
-      void ctx.updateSessionCount();
-    }
+    // For example, the user launched while the backend was at its session cap, or closed the laptop mid-create.
+    if (createdSessionId) discardFailedSession(ctx, createdSessionId);
     const msg = err instanceof Error ? err.message : String(err);
+    // Hitting the session cap gets its own modal, because the fix is closing a session rather than retrying.
     if (msg.includes("Maximum") || msg.includes("concurrent")) {
       ctx.showMaxSessionsModal = true;
     } else {

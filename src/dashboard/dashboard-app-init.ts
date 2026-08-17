@@ -311,6 +311,51 @@ function dashboardHandleGlobalShortcut(
   return false;
 }
 
+/**
+ * Drive the prompt list from the keyboard: arrows move the selection, Enter launches it.
+ *
+ * Enter only launches when a preset is selected, no launch is already in flight, and the user is below their session
+ * limit, so a held key cannot open a queue of terminals they never asked for.
+ *
+ * Side effect: may call preventDefault and start a terminal launch.
+ *
+ * @param ctx - dashboard state supplying the selection, launch flag, and session counts
+ * @param event - the keydown being handled; keys other than the three navigation keys are ignored
+ * @returns nothing; the effect is the moved selection or the started launch
+ */
+function handlePromptListNavigation(
+  ctx: DashboardAlpineContext,
+  event: KeyboardEvent,
+): void {
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    ctx.selectPresetByOffset(1);
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    ctx.selectPresetByOffset(-1);
+    return;
+  }
+  if (event.key !== "Enter") return;
+
+  const canLaunchNow =
+    ctx.selectedPreset &&
+    !ctx.launching &&
+    Math.max(ctx.sessions.length, ctx.serverSessions.length) <
+      ctx.serverMaxSessions;
+  // Nothing selected, a launch already running, or the session limit reached each mean Enter must do nothing.
+  if (!canLaunchNow || !ctx.selectedPreset) return;
+
+  event.preventDefault();
+  void ctx.launchPreset(
+    ctx.selectedPreset.prompt,
+    ctx.activeRunner,
+    ctx.selectedPreset.name,
+    { presetId: ctx.selectedPreset.id },
+  );
+}
+
 function dashboardHandlePromptShortcut(
   ctx: DashboardAlpineContext,
   event: KeyboardEvent,
@@ -321,32 +366,11 @@ function dashboardHandlePromptShortcut(
     ctx.cancelCustomPromptEdit();
     return;
   }
-  const inputFocused = ["INPUT", "TEXTAREA", "SELECT"].includes(
+  const isTypingInField = ["INPUT", "TEXTAREA", "SELECT"].includes(
     document.activeElement?.tagName ?? "",
   );
-  if (!inputFocused) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      ctx.selectPresetByOffset(1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      ctx.selectPresetByOffset(-1);
-    } else if (
-      event.key === "Enter" &&
-      ctx.selectedPreset &&
-      !ctx.launching &&
-      Math.max(ctx.sessions.length, ctx.serverSessions.length) <
-        ctx.serverMaxSessions
-    ) {
-      event.preventDefault();
-      void ctx.launchPreset(
-        ctx.selectedPreset.prompt,
-        ctx.activeRunner,
-        ctx.selectedPreset.name,
-        { presetId: ctx.selectedPreset.id },
-      );
-    }
-  }
+  // While the user is typing, arrow keys and Enter belong to the field they are in, not the prompt list.
+  if (!isTypingInField) handlePromptListNavigation(ctx, event);
   if (event.key === "Escape") {
     if (ctx.presetSearch) ctx.presetSearch = "";
     else if (ctx.selectedPreset) ctx.selectedPreset = null;

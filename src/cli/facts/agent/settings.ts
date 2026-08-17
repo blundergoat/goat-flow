@@ -73,8 +73,69 @@ export function checkDenyPatterns(
   };
 }
 
-/** Extract settings facts from supported agent config formats. */
-// eslint-disable-next-line complexity -- intentional multi-format settings extraction requires branching.
+/**
+ * Parse a Codex `config.toml` into the flattened dotted-key object the audit inspects.
+ *
+ * Only what the audit reads is supported: section headers, key/value pairs, and comments. Nested tables and arrays of
+ * tables are deliberately out of scope, because flattening to dotted keys is what lets the deny-rule checks match by prefix.
+ *
+ * @param tomlContent - raw file contents
+ * @returns the flattened object; empty means the file held no readable key/value pairs, which the caller treats as invalid
+ */
+function parseFlatToml(tomlContent: string): Record<string, unknown> {
+  const flattened: Record<string, unknown> = {};
+  let currentSection = "";
+  for (const line of tomlContent.split("\n")) {
+    const trimmed = line.trim();
+    // Blank lines and comments carry no settings the audit can act on.
+    if (trimmed.startsWith("#") || trimmed === "") continue;
+    const sectionMatch = trimmed.match(/^\[(.+)\]$/);
+    // A section header changes the prefix every following key is stored under.
+    if (sectionMatch?.[1]) {
+      currentSection = normalizeTomlDottedKey(sectionMatch[1]);
+      continue;
+    }
+    const kvMatch = trimmed.match(
+      /^((?:"(?:\\.|[^"\\])*")|[\w.-]+)\s*=\s*(.+)$/,
+    );
+    if (kvMatch?.[1] && kvMatch[2]) {
+      const key = currentSection
+        ? `${currentSection}.${normalizeTomlKey(kvMatch[1])}`
+        : normalizeTomlKey(kvMatch[1]);
+      flattened[key] = parseTomlScalar(kvMatch[2]);
+    }
+  }
+  return flattened;
+}
+
+/**
+ * Report whether parsed settings declare at least one deny rule.
+ *
+ * An empty deny array is treated the same as none at all, because a rule list with nothing in it protects the user from nothing.
+ *
+ * @param parsed - parsed settings object; null or a non-object means nothing could be read
+ * @returns true only when a non-empty deny list is present
+ */
+function hasNonEmptyDenyList(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== "object") return false;
+  const permissions = (parsed as Record<string, unknown>).permissions as
+    Record<string, unknown> | undefined;
+  const denyRules = permissions?.deny;
+  return Array.isArray(denyRules) && denyRules.length > 0;
+}
+
+/**
+ * Read one agent's settings file and report what it actually protects, in whatever format that agent stores it.
+ *
+ * This feeds the audit's constraints concern, so it answers the user's real question: are my guardrails in force for this
+ * agent, or merely written down?
+ *
+ * JSON and Codex TOML are both supported, and an agent with no settings file is a normal state rather than an error.
+ *
+ * @param fs - read-only project filesystem adapter
+ * @param agent - agent whose settings are read; a profile with no settings file reports everything as absent
+ * @returns whether the file exists and parses, its parsed contents, and whether deny rules cover the secret-bearing paths
+ */
 export function extractSettingsFacts(
   fs: ReadonlyFS,
   agent: AgentProfile,
@@ -86,46 +147,18 @@ export function extractSettingsFacts(
   let hasDenyPatterns = false;
   if (agent.settingsFile) {
     if (agent.settingsFile.endsWith(".toml")) {
-      // TOML (Codex config.toml) -- parse key=value pairs into a flattened object
       const tomlContent = fs.readFile(agent.settingsFile);
-      if (tomlContent) {
-        const tomlObj: Record<string, unknown> = {};
-        let currentSection = "";
-        for (const line of tomlContent.split("\n")) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith("#") || trimmed === "") continue;
-          const sectionMatch = trimmed.match(/^\[(.+)\]$/);
-          if (sectionMatch?.[1]) {
-            currentSection = normalizeTomlDottedKey(sectionMatch[1]);
-            continue;
-          }
-          const kvMatch = trimmed.match(
-            /^((?:"(?:\\.|[^"\\])*")|[\w.-]+)\s*=\s*(.+)$/,
-          );
-          if (kvMatch?.[1] && kvMatch[2]) {
-            const key = currentSection
-              ? `${currentSection}.${normalizeTomlKey(kvMatch[1])}`
-              : normalizeTomlKey(kvMatch[1]);
-            const val = parseTomlScalar(kvMatch[2]);
-            tomlObj[key] = val;
-          }
-        }
-        isSettingsValid = Object.keys(tomlObj).length > 0;
-        parsed = tomlObj;
+      const tomlObject = tomlContent ? parseFlatToml(tomlContent) : null;
+      // An unreadable or entirely empty config leaves the agent with no settings the audit can trust.
+      if (tomlObject) {
+        isSettingsValid = Object.keys(tomlObject).length > 0;
+        parsed = tomlObject;
       }
     } else {
       parsed = fs.readJson(agent.settingsFile);
       isSettingsValid = parsed !== null;
     }
-    if (isSettingsValid && parsed) {
-      /** Permissions object from the parsed settings */
-      const perms = (parsed as Record<string, unknown>).permissions as
-        Record<string, unknown> | undefined;
-      /** Raw deny array from permissions */
-      const denyArr = perms?.deny;
-      hasDenyPatterns =
-        Array.isArray(denyArr) && (denyArr as string[]).length > 0;
-    }
+    hasDenyPatterns = isSettingsValid && hasNonEmptyDenyList(parsed);
   }
 
   // Require deny coverage for the common secret-bearing paths goat-flow cares about.

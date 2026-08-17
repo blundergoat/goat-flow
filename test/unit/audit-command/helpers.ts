@@ -543,6 +543,53 @@ export async function makeTempProject(
  * @param options - which optional artifacts to create; omitting one is how a test drives that check to fail
  * @returns nothing; the fixture is on disk once this resolves
  */
+/**
+ * Report whether a manifest path belongs to the shared skill-docs pack.
+ *
+ * @param manifestPath - a required file or directory from the manifest
+ * @returns true when the path sits under the skill-docs tree, so the fixture can omit it on request
+ */
+function isSkillDocsPath(manifestPath: string): boolean {
+  return (
+    manifestPath.startsWith(".goat-flow/skill-docs/") ||
+    manifestPath === ".goat-flow/skill-docs/" ||
+    manifestPath === ".goat-flow/skill-docs/playbooks/"
+  );
+}
+
+/**
+ * Supply the contents one fixture file needs to pass its own audit check.
+ *
+ * Two files carry real content because checks parse them: the config is read for its version, and the gitignore is
+ * compared against the shipped template. Everything else only needs to exist.
+ *
+ * @param file - manifest-relative path being written
+ * @returns the file contents to write
+ */
+function auditFixtureFileContent(file: string): string {
+  if (file === ".goat-flow/config.yaml") {
+    return `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`;
+  }
+  if (file === ".goat-flow/.gitignore") {
+    return readFileSync(
+      join(PROJECT_ROOT, "workflow/setup/reference/goat-flow-gitignore"),
+      "utf-8",
+    );
+  }
+  return "# Stub\n";
+}
+
+/**
+ * Populate a fixture project with the setup artifacts the audit expects to find.
+ *
+ * The options toggle exactly the artifacts whose presence changes a check result, so one helper covers the pass shape and
+ * both failure shapes without a test hand-building the manifest itself.
+ * Side effect: writes directories and files into the fixture project on disk.
+ *
+ * @param root - fixture project root
+ * @param options - which optional artifacts to create; omitting one is how a test drives that check to fail
+ * @returns nothing; the fixture is on disk once this resolves
+ */
 export async function writeAuditSetupFixture(
   root: string,
   options: {
@@ -556,45 +603,21 @@ export async function writeAuditSetupFixture(
   ) as { required_files: string[]; required_dirs: string[] };
 
   for (const dir of manifest.required_dirs) {
-    if (
-      !options.skillReferenceDir &&
-      (dir.startsWith(".goat-flow/skill-docs/") ||
-        dir.startsWith(".goat-flow/skill-docs/playbooks/") ||
-        dir === ".goat-flow/skill-docs/" ||
-        dir === ".goat-flow/skill-docs/playbooks/")
-    ) {
-      continue;
-    }
+    // Omitting the skill-docs tree is how a test drives the "reference pack missing" checks to fail.
+    if (!options.skillReferenceDir && isSkillDocsPath(dir)) continue;
     await mkdir(join(root, dir), { recursive: true });
   }
 
   for (const file of manifest.required_files) {
-    if (
-      !options.skillReferenceDir &&
-      (file.startsWith(".goat-flow/skill-docs/") ||
-        file.startsWith(".goat-flow/skill-docs/playbooks/"))
-    ) {
-      continue;
-    }
+    if (!options.skillReferenceDir && isSkillDocsPath(file)) continue;
+    // Omitting just the README exercises the narrower "pack present but unreadable" case.
     if (
       options.skillReferenceReadme === false &&
       file === ".goat-flow/skill-docs/README.md"
     ) {
       continue;
     }
-    const content =
-      file === ".goat-flow/config.yaml"
-        ? `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`
-        : file === ".goat-flow/.gitignore"
-          ? readFileSync(
-              join(
-                PROJECT_ROOT,
-                "workflow/setup/reference/goat-flow-gitignore",
-              ),
-              "utf-8",
-            )
-          : "# Stub\n";
-    await writeProjectFile(root, file, content);
+    await writeProjectFile(root, file, auditFixtureFileContent(file));
   }
 
   const instructionContent = options.instructionPointer
