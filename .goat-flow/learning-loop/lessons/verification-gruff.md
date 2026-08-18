@@ -115,3 +115,15 @@ last_reviewed: 2026-08-18
 **Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, include the side effect in plain maintainer language (`Write`, `Run`, `filesystem`) instead of a generic purpose sentence. After large docs batches, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
 
 ---
+
+## Lesson: A source comment can be a cited learning-loop anchor, so rewording it breaks the audit
+
+**Status:** active | **Created:** 2026-08-18
+**Decision changed:** Before rewording an existing comment during a docs pass, grep the learning loop for that exact string; a cited comment is a durable artifact, not free text.
+**Trigger phase:** VERIFY
+
+**What happened:** Clearing `docs.missing-side-effect-doc` across the repo, I rewrote `test/integration/audit-drift.helpers.ts` from "Write canonical skill stubs" to "Writes canonical skill stubs" so the comment carried the rule's exact vocabulary. Gruff went clean, typecheck passed, and the targeted rerun showed the finding removed. The full `npm test` run then failed one case in `test/unit/support-bundle.test.ts` ("emits clean JSON through the CLI", expected exit 0, got 1), because `goat-flow diagnostics bundle` embeds the harness audit, whose `feedback-loop-active` check calls `stats --check`, which found `verification-gruff.md` citing the old wording as a `(search: ...)` anchor. One letter in a test-helper comment turned a green docs pass into a failing CLI contract three layers away.
+
+**Root cause:** I treated comment prose as local text. The learning loop cites source comments as evidence anchors, so the comment is a cross-file contract and the audit enforces it.
+
+**Prevention:** When a docs pass rewords an existing comment, keep the cited substring intact and add the analyzer vocabulary in a second sentence rather than editing the first. Run `stats --check` (or the harness audit) after any batch that rewrites existing comments, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).

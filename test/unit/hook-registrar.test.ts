@@ -728,6 +728,7 @@ describe("hook registrar: launchers and installation", () => {
         { hooks: Record<string, { config: Record<string, never> }> }
       >;
     };
+    // Read one agent's deny-hook config out of the contract snapshot.
     const denyContractConfig = (agentId: string): Record<string, never> =>
       contract.agents[agentId]!.hooks["deny-dangerous"]!.config;
 
@@ -801,6 +802,8 @@ describe("hook registrar: launchers and installation", () => {
     assert.deepEqual(claudeContractRow.args, claudeDescriptor.args);
   });
 
+  // Fixture: writes four repository shapes a user can really be sitting in.
+  // A launcher that resolves the wrong root silently protects nothing.
   it("generated Claude launchers resolve active worktrees, submodules, bare repos, and outside-repo cwd", () => {
     withTempProject((root) => {
       const main = join(root, "main");

@@ -33,6 +33,7 @@ const MANAGED_STOP_ENV = {
   GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
 };
 
+// Assert the hook returned a usable managed envelope, since an empty or failed response would leave the agent with no decision.
 function assertManagedEnvelope(result: ReturnType<typeof runHook>) {
   assert.equal(result.status, 0, result.stderr);
   assert.notEqual(result.stdout.trim(), "", result.stderr);

@@ -73,6 +73,12 @@ function classifySecretDeny(ctx: Pick<AuditContext, "agents">) {
   return { covered, scriptOnly, uncoveredSettings, uncoveredScript };
 }
 
+/**
+ * Build the per-agent evidence table showing which runners actually block secret access, which is what the user sees under this check.
+ *
+ * @param agents - agent facts collected for this audit
+ * @returns the details shown beside the check result
+ */
 function secretDenyDetails(
   agents: AuditContext["agents"],
 ): HarnessCheckDetails {
@@ -101,6 +107,12 @@ function secretDenyDetails(
   };
 }
 
+/**
+ * Build the per-agent evidence table showing which runners block piping a download straight into a shell.
+ *
+ * @param agents - agent facts collected for this audit
+ * @returns the details shown beside the check result
+ */
 function pipeToShellDetails(
   agents: AuditContext["agents"],
 ): HarnessCheckDetails {
@@ -116,6 +128,15 @@ function pipeToShellDetails(
   };
 }
 
+/**
+ * Build the evidence table for deny-hook registration, separating agents that never registered from those pointing at the wrong path.
+ *
+ * @param agents - agent facts collected for this audit
+ * @param unregistered - agents with a hook file but no registration
+ * @param noDeny - agents with no deny hook at all
+ * @param pathMismatch - agents whose registration names a different script than the managed one
+ * @returns the details shown beside the check result
+ */
 function denyRegistrationDetails(
   agents: AuditContext["agents"],
   unregistered: string[],
@@ -335,6 +356,13 @@ const denyBlocksPipeToShell: HarnessCheck = {
   },
 };
 
+/**
+ * Look up one agent's facts by id while building a failure message.
+ *
+ * @param agents - agent facts collected for this audit
+ * @param id - agent id to find
+ * @returns that agent's facts, or `undefined` when the agent is not installed in this project
+ */
 function findAgent(
   agents: AuditContext["agents"],
   id: string,
@@ -377,6 +405,16 @@ function classifyDenyRegistration(agents: AuditContext["agents"]): {
   return { registered, unregistered, noDeny, pathMismatch };
 }
 
+/**
+ * Turn the registration tallies into the failure a user reads, naming the exact repair for each affected agent.
+ *
+ * @param agents - agent facts collected for this audit
+ * @param registered - agents already wired up correctly
+ * @param unregistered - agents with a hook file but no registration
+ * @param noDeny - agents with no deny hook at all
+ * @param pathMismatch - agents whose registration names a different script than the managed one
+ * @returns the failure to show, describing what is protected and what is not
+ */
 function buildDenyRegistrationFailure(
   agents: AuditContext["agents"],
   registered: string[],

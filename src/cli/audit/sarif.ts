@@ -187,6 +187,14 @@ function buildAuditSarifLog(report: AuditReport): SarifLog {
   };
 }
 
+/**
+ * Turn one audit scope into SARIF rules and results, so a failing check appears as an annotation in the reviewer's code host.
+ *
+ * @param rules - rule registry built up across scopes, added to in place
+ * @param results - SARIF results collected so far, added to in place
+ * @param scope - SARIF scope label distinguishing setup, agent, and harness checks
+ * @param auditScope - audit scope whose failing checks become results; passing checks contribute nothing
+ */
 function collectScope(
   rules: Map<string, RuleRegistration>,
   results: SarifResult[],
@@ -200,6 +208,14 @@ function collectScope(
   }
 }
 
+/**
+ * Turn drift findings into SARIF results, so a stale installed file shows up beside the code it no longer matches.
+ * Each result carries a fingerprint derived from its own identity, which is the contract that lets a code host recognise the same finding again.
+ *
+ * @param rules - rule registry built up across scopes, added to in place
+ * @param results - SARIF results collected so far, added to in place
+ * @param findings - drift findings from the audit; an empty list adds nothing
+ */
 function collectDrift(
   rules: Map<string, RuleRegistration>,
   results: SarifResult[],
@@ -241,6 +257,14 @@ function collectDrift(
   }
 }
 
+/**
+ * Turn content findings into SARIF results, so a doc problem is reported at the line the reader would open.
+ * Each result carries a fingerprint derived from its own identity, which is the contract that lets a code host recognise the same finding again.
+ *
+ * @param rules - rule registry built up across scopes, added to in place
+ * @param results - SARIF results collected so far, added to in place
+ * @param findings - content findings from the audit; an empty list adds nothing
+ */
 function collectContent(
   rules: Map<string, RuleRegistration>,
   results: SarifResult[],
@@ -284,6 +308,13 @@ function collectContent(
   }
 }
 
+/**
+ * Record one rule once, so a rule that fires on several files is described a single time in the SARIF run.
+ *
+ * @param rules - rule registry, added to in place; an id already present is left as it was
+ * @param scope - SARIF scope the rule belongs to
+ * @param descriptor - rule description shown by the code host
+ */
 function registerRule(
   rules: Map<string, RuleRegistration>,
   scope: SarifScope,
@@ -293,6 +324,13 @@ function registerRule(
   rules.set(descriptor.id, { scope, descriptor });
 }
 
+/**
+ * Describe one audit check as a SARIF rule, which is the text a reviewer reads in the annotation.
+ *
+ * @param scope - SARIF scope the check belongs to, used to keep rule ids unique across scopes
+ * @param check - the audit check being described
+ * @returns the rule descriptor for this check
+ */
 function ruleFromCheck(
   scope: SarifScope,
   check: CheckResult,
@@ -315,6 +353,14 @@ function ruleFromCheck(
   };
 }
 
+/**
+ * Turn one failing check into the SARIF result a reviewer sees, including its evidence path when the check captured one.
+ *
+ * @param scope - SARIF scope the check belongs to
+ * @param check - the audit check that failed
+ * @param failure - failure detail supplying the message and any evidence location
+ * @returns the SARIF result to add to the run
+ */
 function resultFromCheck(
   scope: SarifScope,
   check: CheckResult,
@@ -426,6 +472,13 @@ function contentRuleId(rule: string): string {
   return `content:${rule}`;
 }
 
+/**
+ * Order rule registrations so two runs over the same project emit byte-identical SARIF, which keeps code-host diffs meaningful.
+ *
+ * @param left - first registration in the comparison
+ * @param right - second registration in the comparison
+ * @returns a negative, zero, or positive sort result
+ */
 function compareRuleRegistrations(
   left: RuleRegistration,
   right: RuleRegistration,
@@ -479,6 +532,15 @@ function locationUri(locations: SarifLocation[]): string {
   return locations[0]?.physicalLocation.artifactLocation.uri ?? "";
 }
 
+/**
+ * Build the fingerprint a code host uses to recognise a finding across runs, so an unresolved issue is not reported as new every time.
+ *
+ * @param scope - SARIF scope the finding belongs to
+ * @param ruleId - rule that produced it
+ * @param uri - file the finding points at
+ * @param message - finding text, which distinguishes two findings from the same rule in one file
+ * @returns the partial-fingerprint map attached to the result
+ */
 function fingerprintFor(
   scope: SarifScope,
   ruleId: string,

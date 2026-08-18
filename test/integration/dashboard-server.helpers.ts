@@ -353,7 +353,12 @@ export async function fetchJson(
   return { res, body: await res.json() };
 }
 
-/** Read emitted evidence envelopes with a stable empty-array fallback when the temp log directory is absent. */
+/**
+ * Read emitted evidence envelopes with a stable empty-array fallback when the temp log directory is absent.
+ *
+ * @param root - fixture project root whose event log is read
+ * @returns the envelopes in file order; an empty array means nothing was recorded, which several tests assert deliberately
+ */
 export async function readEventEnvelopes(
   root: string,
 ): Promise<EvidenceEnvelope[]> {
@@ -392,7 +397,7 @@ export function assertValidEmittedEnvelope(envelope: EvidenceEnvelope): void {
 }
 
 /**
- * Write one file into a fixture project, creating parent directories as needed.
+ * Writes one file into a fixture project, creating parent directories as needed.
  *
  * @param root - fixture project root
  * @param relativePath - path within the project; missing parent directories are created rather than failing
@@ -444,7 +449,11 @@ export function commitDashboardCacheProject(root: string): void {
   ]);
 }
 
-/** Writes a minimal committed goat-flow fixture project for dashboard cache tests. */
+/**
+ * Writes a minimal committed goat-flow fixture project for dashboard cache tests.
+ *
+ * @returns the project root plus the cleanup the test must call to remove the temporary directory
+ */
 export async function makeDashboardCacheProject(): Promise<{
   root: string;
   cleanup: () => Promise<void>;
@@ -561,8 +570,7 @@ Route lessons, footguns, decisions, and tasks to their goat-flow artifact direct
  * Build a temporary project shaped for the setup-prompt tests, and hand back its cleanup function.
  *
  * The options control the two conditions those tests distinguish, so one helper covers both the installed and not-yet-installed cases.
- *
- * Side effect: creates a temporary directory on disk; the returned cleanup removes it.
+ * It writes a temporary directory on disk, which the returned cleanup removes.
  *
  * @param options - `decisionsDir` adds a decisions directory, `installSkills` installs skill files
  * @returns the project root and a cleanup function the test must call

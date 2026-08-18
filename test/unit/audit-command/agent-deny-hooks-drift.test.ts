@@ -76,7 +76,7 @@ describe("Claude agent-config deny parity", () => {
 
 /**
  * Build a real non-Git Codex install and pass it to one runtime-audit assertion.
- * Use when the configured launcher itself, rather than a direct script substitute, matters.
+ * It writes the hook files and configuration into a temporary project, because the configured launcher itself is what this assertion exercises.
  */
 function withRealCodexAudit(
   runAuditAssertion: (
@@ -177,6 +177,7 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
@@ -500,6 +501,7 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
@@ -581,6 +583,7 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
@@ -665,6 +668,7 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
@@ -758,6 +762,7 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},

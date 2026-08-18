@@ -125,6 +125,12 @@ class SafeExecRejection extends Error {
     | "args-contain-metacharacters"
     | "args-not-array";
 
+  /**
+   * Keep the machine-readable reason beside the message, so a route can react to why a command was refused rather than parsing its text.
+   *
+   * @param reason - which guard refused the call
+   * @param message - human-readable explanation surfaced to the dashboard
+   */
   constructor(
     reason:
       | "command-not-in-allow-list"
@@ -169,8 +175,9 @@ function isWithinProject(projectRoot: string, targetPath: string): boolean {
 /**
  * Write one file atomically inside a project root.
  *
- * The temp file lives beside the destination so `rename` stays atomic on the same filesystem.
- * Existing destination content is replaced only after the temp file is flushed and closed.
+ * The temp file lives beside the destination so `rename` stays atomic on the same filesystem, and the destination is replaced only after that
+ * temp file is flushed and closed, which means a reader never sees a half-written file.
+ * It throws `SafeFileWriteRejection` before writing anything when either path would land outside the project.
  *
  * @param targetPath - destination path to replace atomically
  * @param content - complete file contents to write
@@ -243,6 +250,14 @@ function rejectIfUnsafeArgs(args: string[]): void {
   }
 }
 
+/**
+ * Turn captured process output into text the dashboard can show, cutting it at the cap and saying so rather than flooding the panel.
+ *
+ * @param buffers - output chunks captured from the child process
+ * @param totalBytes - how much was captured in total, including anything past the cap
+ * @param capBytes - most bytes to show
+ * @returns the text plus whether it was cut; truncated text ends with a visible marker so the user knows more existed
+ */
 function capBuffer(
   buffers: Buffer[],
   totalBytes: number,
@@ -250,6 +265,7 @@ function capBuffer(
 ): { text: string; truncated: boolean } {
   const truncated = totalBytes > capBytes;
   const joined = Buffer.concat(buffers);
+  // Output fits, so the user sees exactly what the command printed.
   if (!truncated) return { text: joined.toString("utf-8"), truncated: false };
   const decoder = new StringDecoder("utf8");
   const head = decoder.write(joined.subarray(0, Math.max(0, capBytes)));
@@ -300,7 +316,15 @@ function appendOutputChunk(
   if (capture.bytes <= capBytes * 2) capture.chunks.push(chunk);
 }
 
-/** Start the timeout that first sends SIGTERM, then SIGKILL after the grace period. */
+/**
+ * Stop a command that overruns its deadline, asking it to quit first and killing it if it ignores that.
+ * It swallows errors from both signal attempts, because a process that already exited is the normal case rather than a fault.
+ *
+ * @param child - the running process to stop
+ * @param timeoutMs - how long the command may run before it is stopped
+ * @param onTimeout - callback that records the timeout so the user is told why the output stops
+ * @returns the unref'd timer, so the caller can clear it when the command finishes on its own
+ */
 function startTimeoutGuard(
   child: ReturnType<typeof spawn>,
   timeoutMs: number,

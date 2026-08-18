@@ -302,7 +302,7 @@ export function classifyManagedSetupFile(
 
 /**
  * Add one exact-copy template while rejecting conflicting manifest destinations.
- * Use while building the path list users inspect before install; collisions throw instead of guessing.
+ * Use while building the path list users inspect before install; it throws on a collision instead of guessing which template wins.
  */
 function addManagedTemplate(
   definitions: Map<string, ManagedTemplateDefinition>,

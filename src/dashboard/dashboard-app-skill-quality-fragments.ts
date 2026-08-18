@@ -96,7 +96,10 @@ function buildEvaluatorReportMarkdown(
   return lines.join("\n");
 }
 
-/** What the Skill Evaluator banner is written from, gathered once so the title and detail agree. */
+/**
+ * What the Skill Evaluator banner is written from, gathered once so the title and detail agree.
+ * Collecting them in one shape is the contract that stops the headline saying one thing while the detail beneath it says another.
+ */
 interface EvaluatorVerdictSignals {
   report: SkillEvaluateResult;
   detected: string;

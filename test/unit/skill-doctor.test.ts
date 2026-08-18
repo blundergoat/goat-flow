@@ -252,6 +252,7 @@ describe("skill doctor", () => {
     );
   });
 
+  // Fixture: a Codex install scanned end to end, because automation parses this JSON and a user must be told the text view is static-only.
   it("renders parseable JSON and an explicit static-only text limit", () => {
     const markdown = skillMarkdown("goat");
     const report = runCodexFixture(

@@ -322,6 +322,7 @@ function resolveLatestDiffPair(
  * Build the diff between two comparable quality-history runs.
  *
  * Use when the user asks what went absent, was introduced, persisted, or stuck between runs.
+ * Comparability is the contract behind every number here: only runs from the same agent and the same mode are ever paired.
  *
  * @param entries - sorted quality-history entries; an empty list cannot produce a diff
  * @param options - agent, explicit pair, and mode filters; no pair means the latest two matching runs

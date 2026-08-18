@@ -240,17 +240,27 @@ function resolveDenyMechanismPath(agent: AgentProfile): string | null {
   return null;
 }
 
+/**
+ * List the policy files that must sit beside a deny hook for its protection to be real, so the audit reports partial guardrails as absent.
+ *
+ * @param fs - read-only view of the target project
+ * @param denyHookPath - project-relative deny hook path; null means no hook is configured and there is nothing to support
+ * @returns every required sibling, or an empty list when any one is missing, because a partial set gives the user no working policy
+ */
 function siblingGuardrailPaths(
   fs: ReadonlyFS,
   denyHookPath: string | null,
 ): string[] {
+  // Nothing registered, so there are no supporting files to report either way.
   if (!denyHookPath) return [];
+  // The current deny hook keeps its policy files at fixed paths shared by every agent.
   if (denyHookPath.endsWith("/deny-dangerous.sh")) {
     return DENY_DANGEROUS_POLICY_FILES.every((path) => fs.exists(path))
       ? DENY_DANGEROUS_POLICY_FILES
       : [];
   }
   const slash = denyHookPath.lastIndexOf("/");
+  // A bare filename gives no directory to search, so no sibling set can be confirmed.
   if (slash === -1) return [];
   const dir = denyHookPath.slice(0, slash);
   const paths = LEGACY_GUARDRAIL_HOOK_FILES.map((file) => `${dir}/${file}`);

@@ -48,6 +48,7 @@ function makeTempProject(): string {
   return root;
 }
 
+// Spawns the real CLI so the suite asserts on the output a user sees, not on an internal call.
 function runCLI(
   cwd: string,
   args: string[],

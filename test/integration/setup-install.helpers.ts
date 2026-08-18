@@ -235,7 +235,15 @@ export function recordStaleBaselineHashes(
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
-/** Create a directory symlink, or skip when the host forbids the fixture. */
+/**
+ * Create a directory symlink, or skip when the host forbids the fixture.
+ * It swallows that platform failure into a skip rather than a red test, because a host without link support cannot express the case at all.
+ *
+ * @param testContext - the running test, so an unsupporting host skips instead of failing
+ * @param target - existing directory the link should point at
+ * @param link - link path the install check will then try to write through
+ * @returns true when the link exists and the check can run; false means the test has already been skipped
+ */
 export function symlinkDirectoryOrSkip(
   testContext: TestContext,
   target: string,
@@ -287,6 +295,8 @@ export function symlinkFileOrSkip(
 /**
  * Rewrite one disposable Codex install-state file without its goat-clarity row.
  * Reads and replaces only the fixture baseline so the next installer run sees a loaded seven-skill state.
+ *
+ * @param projectPath - disposable consumer whose install state is downgraded
  */
 export function downgradeCodexBaselineToSevenSkills(projectPath: string): void {
   const statePath = join(

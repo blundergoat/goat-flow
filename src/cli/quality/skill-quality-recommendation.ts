@@ -31,6 +31,14 @@ function reclassifyNote(classification: ClassificationResult): string {
   )}% in ${classification.detectedSubtype}. ${altText}`;
 }
 
+/**
+ * Say plainly when a file is filed as one kind of artifact but reads like another, so a misfiled document cannot pass review silently.
+ *
+ * @param artifact - artifact being scored, supplying the path shown in the note
+ * @param subtype - subtype the classifier settled on
+ * @param shape - shape the content actually reads as
+ * @returns the note shown to the reviewer, or null when filing and content agree and there is nothing to warn about
+ */
 function shapeMismatchNote(
   artifact: ArtifactEntry,
   subtype: ArtifactSubtype,

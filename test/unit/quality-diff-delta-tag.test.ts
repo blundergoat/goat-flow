@@ -14,7 +14,7 @@ import type {
   SavedQualityReport,
 } from "../../src/cli/quality/schema.js";
 
-/** Build one saved finding row with sane defaults. */
+/** Build one saved finding row with sane defaults; the id is what the diff contract matches on, so tests set it deliberately. */
 function finding(
   id: string,
   deltaTag: "new" | "persisted" | null,
@@ -233,7 +233,7 @@ describe("quality diff stuck-finding continuity", () => {
 
 describe("quality diff absent-bucket honesty", () => {
   /**
-   * A finding missing from the newer report is not evidence it was fixed. It also
+   * A finding missing from the newer report is not evidence it was fixed, which is the contract this suite holds. It also
    * disappears when the newer run never examined that artifact, or when a line-based
    * id shifted. Measured 2026-07-31: two findings were reported resolved while the
    * defects were still present in the cited files, and remediation closed on the count.

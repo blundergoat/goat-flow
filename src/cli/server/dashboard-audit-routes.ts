@@ -46,6 +46,13 @@ interface AuditRouteHandlers {
   handleSetupRequest: (url: URL, res: ServerResponse) => Promise<boolean>;
 }
 
+/**
+ * Decide whether this request may be answered from the persisted audit cache, which is what makes the Home view open instantly.
+ *
+ * @param agentFilter - agent the user narrowed to; a named agent is answered live because the cache holds the aggregate view
+ * @param includeHarness - true when the user asked for harness scores as well
+ * @returns true when a cached report would answer this exact request
+ */
 function isCacheEligible(
   agentFilter: AgentId | null,
   includeHarness: boolean,
@@ -60,6 +67,15 @@ function resolveDashboardManagedAgentIds(
   return agentFilter === null ? [...KNOWN_AGENT_IDS] : [agentFilter];
 }
 
+/**
+ * Run the audit behind every dashboard view and shape it into the one report Home, Setup, and Quality all read.
+ *
+ * @param projectPath - validated project the user selected
+ * @param agentFilter - agent to narrow to; null audits every installed agent, which is what the Home view shows
+ * @param includeHarness - true to score the harness concerns as well
+ * @param profiler - per-request profiler that labels each stage for the dev timing panel
+ * @returns the report the dashboard renders
+ */
 function buildDashboardAuditReport(
   projectPath: string,
   agentFilter: AgentId | null,
@@ -118,6 +134,15 @@ function jsonErrorResponse(
   });
 }
 
+/**
+ * Look for a saved audit that still matches this project, so a user reopening the dashboard does not wait for a full rerun.
+ *
+ * @param ctx - dashboard route context supplying cache access
+ * @param projectPath - validated project the user selected
+ * @param fresh - true when the user pressed Re-audit and asked for live results
+ * @param signature - fingerprint of the project state; null means the cache cannot be trusted for this request
+ * @returns the cached report, or null when nothing usable was stored and the audit has to run
+ */
 function readCachedDashboardAudit(
   ctx: DashboardRouteContext,
   projectPath: string,
@@ -230,6 +255,13 @@ function parseAgentFilter(param: string | null): AgentId | null {
   return param && VALID_AGENTS.has(param) ? (param as AgentId) : null;
 }
 
+/**
+ * Note that a setup prompt was handed out, so the project timeline shows when the user last asked for one.
+ *
+ * @param projectPath - validated project the user selected
+ * @param agent - agent the prompt was composed for
+ * @param renderedOutput - the prompt text, measured for the event rather than stored in full
+ */
 function recordSetupPrompt(
   projectPath: string,
   agent: AgentId,
@@ -247,7 +279,13 @@ function recordSetupPrompt(
   });
 }
 
-/** Build the `/api/audit` handler bound to one dashboard route context. */
+/**
+ * Build the `/api/audit` handler bound to one dashboard route context.
+ * The handler reports a failed audit as a JSON error body, because a crashed request would leave the user staring at an empty dashboard.
+ *
+ * @param ctx - dashboard route context supplying path validation, caching, and response helpers
+ * @returns the request handler, which returns false for any URL it does not own
+ */
 function createHandleAuditRequest(
   ctx: DashboardRouteContext,
 ): AuditRouteHandlers["handleAuditRequest"] {
@@ -324,7 +362,13 @@ function createHandleAuditRequest(
   };
 }
 
-/** Build the `/api/setup/detect` handler bound to one dashboard route context. */
+/**
+ * Build the `/api/setup/detect` handler bound to one dashboard route context.
+ * The handler reports an unreadable project as a JSON error body rather than throwing, so the Setup view can explain what went wrong.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @returns the request handler, which returns false for any URL it does not own
+ */
 function createHandleSetupDetectRequest(
   ctx: DashboardRouteContext,
 ): AuditRouteHandlers["handleSetupDetectRequest"] {
@@ -340,6 +384,7 @@ function createHandleSetupDetectRequest(
         "project-read",
       );
       ctx.jsonResponse(res, 200, buildSetupDetectPayload(projectPath));
+      // For example, the user removed or renamed the project folder since adding it to the dashboard.
     } catch (err) {
       jsonErrorResponse(ctx, res, err);
     }
@@ -394,7 +439,13 @@ async function composeDashboardSetupOutput(
   return output ?? "No setup output generated.";
 }
 
-/** Build the `/api/setup` handler bound to one dashboard route context. */
+/**
+ * Build the `/api/setup` handler bound to one dashboard route context.
+ * The handler reports a rejected agent or a failed compose as a JSON error body, so the user sees why no prompt appeared.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @returns the request handler, which returns false for any URL it does not own
+ */
 function createHandleSetupRequest(
   ctx: DashboardRouteContext,
 ): AuditRouteHandlers["handleSetupRequest"] {

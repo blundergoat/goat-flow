@@ -26,7 +26,7 @@ import {
 const STAGING_NAME_FRAGMENT = ".goat-flow-stage.";
 
 /**
- * Install a command wrapper that changes one child-process boundary without changing production code.
+ * Writes a command wrapper that changes one child-process boundary without changing production code.
  * Use it to reproduce what a user sees when copy or rename stops partway through installation.
  */
 function writeCommandWrapper(

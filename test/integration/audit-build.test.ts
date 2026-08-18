@@ -83,6 +83,7 @@ Before declaring any tool or capability unavailable, read the matching playbook 
 `;
 }
 
+// Build an audit context whose skill-docs tree is present or missing exactly as the case under test needs.
 function makeSkillDocsCtx(options: {
   dirPresent: boolean;
   readmePresent?: boolean;

@@ -102,7 +102,12 @@ type LaunchContext = Record<"launching", boolean> & {
     string,
     {
       cleanup?: () => void;
-      ws?: { readyState: number; send(payload: string): void };
+      ws?: {
+        readyState: number;
+        /** Record one outbound socket message, standing in for the real WebSocket. */
+        send(payload: string): void;
+      };
+      /** Terminal stub whose focus call the test asserts on. */
       xterm?: { focus(): void };
       awaitingInputTimer?: ReturnType<typeof setTimeout>;
       pasteSubmitTimer?: ReturnType<typeof setTimeout>;
@@ -233,6 +238,7 @@ type HelperContext = {
   TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS: number;
   TERMINAL_PASTE_SUBMIT_RETRY_CADENCE_MS: number;
   TERMINAL_PASTE_SUBMIT_MAX_RETRIES: number;
+  /** Resolve the access mode a launch should use for this preset and role. */
   dashboardTerminalAccessMode(
     preset: { mayWriteFiles?: boolean } | null,
     userRole: string,

@@ -138,6 +138,7 @@ type SupportedAgent = {
   supportsPostTurnHook: boolean;
 };
 
+// Build one supported-agent row with sane defaults, so each test states only the field it cares about.
 function supportedAgent(
   id: string,
   overrides: Partial<SupportedAgent> = {},

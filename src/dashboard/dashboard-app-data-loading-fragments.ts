@@ -29,7 +29,7 @@ function dashboardIsCurrentQualityRequest(
  * Use so the Home dashboard can show the most recent agent-setup review for the selected runner.
  *
  * @param ctx - dashboard state to update; stale project/runner responses are ignored
- * @returns nothing; missing history leaves the Home quality summary empty
+ * @returns nothing; it swallows a failed request into an empty Home summary rather than blocking the page
  */
 async function dashboardGenerateHomeQualitySummary(
   ctx: DashboardAppContext,
@@ -213,7 +213,7 @@ async function dashboardLoadSkillQualityInventory(
  * @param projectPath - project captured when the prefetch started; empty means stale/no-op
  * @param runner - runner captured when the prefetch started; empty means stale/no-op
  * @param generation - prefetch generation captured at request start; old values are ignored
- * @returns nothing; per-artifact failures leave that skill without a cached grade
+ * @returns nothing; it swallows a per-artifact failure, leaving that one skill without a cached grade
  */
 async function dashboardPrefetchOneSkillReport(
   ctx: DashboardAppContext,

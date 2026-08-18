@@ -35,7 +35,7 @@ after(async () => {
 
 /**
  * Attempt one live-reload WebSocket upgrade and report whether the server let
- * it open or tore it down, resolving either way so a hung handshake fails via
+ * it open or tore it down; it swallows socket errors and resolves either way, so a hung handshake fails via
  * the per-test timeout rather than leaking a socket.
  *
  * @param headers - request headers to send with the upgrade (Host / Origin)
@@ -51,7 +51,7 @@ async function attemptLiveReload(
       headers,
     });
     let hasSettled = false;
-    /** Resolve once and null out listeners so a later event can't double-settle. */
+    /** Resolve once and null out listeners; it swallows any later event so a socket error after close cannot double-settle the promise. */
     const settle = (outcome: "opened" | "rejected"): void => {
       if (hasSettled) return;
       hasSettled = true;

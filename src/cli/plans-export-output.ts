@@ -223,7 +223,7 @@ export function renderPlanExportMarkdown(record: PlanExportRecord): string {
   return lines.join("\n");
 }
 
-/** Refuse implicit regeneration when any generated destination already exists. */
+/** Refuse implicit regeneration when any generated destination already exists; it throws on the first collision so nothing is part-written. */
 function assertOutputPathsAvailable(
   outputPaths: string[],
   shouldForce: boolean,
@@ -267,7 +267,7 @@ function assertWritableDestinations(outputPaths: string[]): void {
   }
 }
 
-/** Require every existing export-directory component to be a real directory. */
+/** Require every existing export-directory component to be a real directory; it throws on a symlink or file where a directory must be. */
 function assertRealDirectoryPathOrAbsent(
   directoryPath: string,
   outputLabel: string,
@@ -312,7 +312,7 @@ function assertUniqueOutputPaths(outputPaths: string[]): void {
   );
 }
 
-/** Reject any existing destination that resolves to one of the source milestones. */
+/** Reject any existing destination that resolves to one of the source milestones; it throws rather than let an export overwrite its own input. */
 function assertOutputPathsDoNotAliasSources(
   outputPaths: string[],
   sourceFiles: readonly string[],
@@ -341,7 +341,8 @@ function assertOutputPathsDoNotAliasSources(
 }
 
 /**
- * Write one Markdown file per milestone after every destination passes collision checks.
+ * Writes one Markdown file per milestone, but only after every destination has passed its collision checks.
+ * It throws before writing anything when a destination is taken or unsafe, so the user never ends up with a half-finished export directory.
  *
  * @param records - milestones to write, already redacted
  * @param outputDirectory - directory the user passed to `--output`
@@ -380,7 +381,8 @@ export function writeMarkdownExports(
 }
 
 /**
- * Write one JSON array after preserving an existing file unless force is explicit.
+ * Writes one JSON array, preserving any existing file unless the user passed force.
+ * It throws before writing when the destination is taken or would alias a source milestone.
  *
  * @param records - milestones to serialise, already redacted
  * @param outputPath - file the user passed to `--output`

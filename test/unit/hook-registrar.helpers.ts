@@ -553,7 +553,7 @@ export function installClaudeDenyHook(root: string): ClaudeReplayHandler {
   return readClaudeDenyLauncher(root);
 }
 
-/** Install a Codex deny hook without requiring the fixture root to be a Git repository.
+/** Writes a Codex deny hook into the fixture without requiring the root to be a Git repository.
  *
  * @param root - fixture project root
  * @returns generated Codex launcher command, ready for literal execution
@@ -874,6 +874,7 @@ export function assertLauncherAllows(
  * @param command - generated launcher command line to execute
  * @param cwd - working directory the process runs in
  * @param payload - hook JSON delivered on stdin; defaults to the safe Codex payload
+ * @param env - extra environment for the launcher process; omitted inherits the test environment unchanged
  * @returns the finished launcher process for the Codex payload shape
  */
 export function runCodexLauncher(
@@ -885,7 +886,12 @@ export function runCodexLauncher(
   return runLauncherWithPayload(command, cwd, payload, env);
 }
 
-/** Render one captured launcher result for assertion failures. */
+/**
+ * Render one captured launcher result for assertion failures.
+ *
+ * @param result - finished launcher process whose status and streams the reader needs
+ * @returns a multi-line diagnostic block, so a failing assertion shows what the launcher actually printed
+ */
 export function launcherDiagnostics(
   result: ReturnType<typeof spawnSync>,
 ): string {

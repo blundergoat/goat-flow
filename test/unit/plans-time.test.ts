@@ -84,7 +84,7 @@ function writeTimingFixture(
   return { milestonePath, planPath, projectRoot };
 }
 
-/** Move the fixture to the lifecycle state users see before their next timing action. */
+/** Writes the fixture into the lifecycle state users see before their next timing action. */
 function rewriteTimingFixtureStatus(
   milestonePath: string,
   milestoneStatus: string,
@@ -117,7 +117,7 @@ function timingStamp(epochSeconds: number): string {
   return `${new Date(epochSeconds * 1000).toISOString().replace(/\.\d{3}Z$/u, "Z")} / ${epochSeconds}`;
 }
 
-/** Create a symlink, or skip only when the host forbids unprivileged links. */
+/** Create a symlink, or skip only when the host forbids unprivileged links; it swallows that platform failure into a skip rather than a red test. */
 function symlinkOrSkip(
   testContext: TestContext,
   target: string,

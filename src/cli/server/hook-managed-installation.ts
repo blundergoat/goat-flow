@@ -203,7 +203,7 @@ function assertWithinProject(projectPath: string, targetPath: string): void {
 
 /**
  * Resolve one managed hook file inside the agent folder shown in setup.
- * Use whenever status or sync needs the same installed path.
+ * Use whenever status or sync needs the same installed path; it throws for an agent with no hook surface rather than inventing a location.
  * @param projectPath - selected project; empty text cannot identify an owned destination
  * @param agent - selected agent profile; a null hook directory means that agent has no hook surface
  * @param hookScriptName - managed filename; empty text cannot identify an installable script
@@ -297,7 +297,7 @@ function managedPathEntriesAreTrusted(
 
 /**
  * Verify one managed file and its parents use the launcher's trusted shape.
- * Use before a status screen presents installed bytes as safe to execute.
+ * Use before a status screen presents installed bytes as safe to execute; it reports every doubtful case as untrusted rather than throwing.
  * @param projectPath - selected project root; empty or redirected roots are untrusted
  * @param managedFilePath - installed hook/config file; missing or empty paths are untrusted
  * @returns true only for one regular file under real directories; false covers missing or redirected paths
@@ -355,7 +355,7 @@ export function managedFileIsTrusted(
 
 /**
  * Classify the files one installed hook needs before users rely on it.
- * Use when CLI, audit, or dashboard builds the local effective-state chain.
+ * Use when CLI, audit, or dashboard builds the local effective-state chain; it reports each gap as a false fact instead of throwing.
  * @param projectPath - selected project; empty text produces missing installation facts
  * @param agent - selected agent; an absent hook surface cannot produce complete facts
  * @param hookSpec - registry contract; an empty script set cannot establish runnable coverage
@@ -561,7 +561,7 @@ export function hookConfigExists(
 
 /**
  * Add one required managed path to the project-local ignore policy.
- * Use while enabling hooks so files needed after clone stay tracked.
+ * Use while enabling hooks so files needed after clone stay tracked; it writes the project ignore file only when the entry is not already there.
  * @param projectPath - selected project; empty text cannot own a safe ignore file
  * @param gitignoreEntry - exact negation shown in the ignore file; empty text adds no useful rule
  * @returns nothing; an existing entry leaves the file unchanged
@@ -611,7 +611,7 @@ function ensureHookGitignoreEntries(projectPath: string): void {
 
 /**
  * Remove one old per-agent script when an upgrade centralizes hook files.
- * Use during enable, disable, and sync migrations.
+ * Use during enable, disable, and sync migrations; it swallows a missing file, because an already-clean project is the expected outcome.
  * @param projectPath - selected project; empty text cannot own a safe removal
  * @param legacyHookDirectory - old agent hook folder; empty text resolves to the project root and is rejected
  * @param hookScriptName - managed filename; empty text cannot identify intended residue
@@ -710,7 +710,7 @@ function installedHookIsNewer(installedHookPath: string): boolean {
 
 /**
  * Remove one current managed script by exact name.
- * Use only when migration retires a hook while preserving user scripts.
+ * Use only when migration retires a hook while preserving user scripts; it swallows a missing file so repeated syncs stay quiet.
  * @param projectPath - selected project; empty text cannot own a safe removal
  * @param agent - selected agent; a null hook directory cannot resolve a script
  * @param hookScriptName - exact managed filename; empty text is rejected by target validation

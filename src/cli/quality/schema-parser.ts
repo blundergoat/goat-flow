@@ -509,8 +509,8 @@ function parseFindingDeltaTag(
  * Every rejection names the exact field path, because the user's next action is fixing that field in the report their
  * agent produced.
  *
- * Unknown keys and a caller-supplied `id` are both refused: hidden fields would make the saved report differ from what the
- * user can inspect, and identity belongs to history rather than the emitting agent.
+ * The accepted key set is a closed schema: unknown keys and a caller-supplied `id` are both refused, because hidden fields would make the saved
+ * report differ from what the user can inspect, and identity belongs to history rather than the emitting agent.
  *
  * @param raw - raw finding value; anything that is not an object cannot be displayed as a row
  * @param index - zero-based position, used only to point the user at the broken row
@@ -724,8 +724,8 @@ function optionalReportFields(fields: {
  *
  * Invariant: findings keep their emitted order, so the index in an error path always names the row the user must fix.
  *
- * One invalid row blocks the whole report, because saved history that mixed valid and dropped findings would understate
- * what the run actually found.
+ * It reports the first bad row and blocks the whole report, because saved history that mixed valid and dropped findings would understate what
+ * the run actually found.
  *
  * @param rawFindings - the raw findings value; anything other than an array cannot render as an issue list
  * @param options - strictness selector, passed through to each row

@@ -368,7 +368,10 @@ function summarizeAgentSetup(
   };
 }
 
-/** Select and summarize the newest comparable quality run. */
+/**
+ * Select and summarize the newest comparable quality run.
+ * Comparability is the contract here: an agent-scoped bundle never borrows another runner's history.
+ */
 function summarizeQuality(
   history: BuildSupportBundleInput["qualityHistory"],
   selectedAgent: AgentId | null,
@@ -452,7 +455,10 @@ function summarizeStack(
   };
 }
 
-/** Build all allowlisted sections from existing collectors without raw body fields. */
+/**
+ * Build all allowlisted sections from existing collectors.
+ * The allowlist is the contract that keeps raw project and prompt text out of a bundle a user may share.
+ */
 function buildSupportSections(
   input: BuildSupportBundleInput,
   redactions: RedactionCounter,
@@ -566,6 +572,8 @@ export function buildSupportBundleError(
 
 /**
  * Collect one support bundle from existing read-only fact, audit, history, and event APIs.
+ * It reports a missing or unreadable target inside the bundle rather than throwing, so automation always receives structured JSON.
+ *
  * @param projectPath - selected local project; an absent directory returns a target-not-found bundle
  * @param selectedAgent - one agent mirror, or null to summarize all installed mirrors
  * @returns a support bundle; null sections mean collection could not provide safe evidence

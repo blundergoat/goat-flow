@@ -490,7 +490,7 @@ export function makeProjectFacts(
 }
 
 /**
- * Write one file into a fixture project, creating parent directories as needed.
+ * Writes one file into a fixture project, creating parent directories as needed.
  *
  * @param root - fixture project root
  * @param relativePath - path within the project; missing parent directories are created rather than failing
@@ -510,9 +510,7 @@ export async function writeProjectFile(
 /**
  * Create a temporary project, run one setup function against it, and hand back its cleanup.
  *
- * A failure during setup removes the directory before rethrowing, so a broken fixture cannot leave temporary directories behind.
- *
- * Side effect: creates a temporary directory on disk; the returned cleanup removes it.
+ * It writes a temporary directory on disk and throws only after removing it again, so a broken fixture cannot leave scratch directories behind.
  *
  * @param init - callback that populates the fresh project
  * @returns the project root and the cleanup function the test must call
@@ -750,8 +748,13 @@ export function makeReportWithDetails(
   );
 }
 
-/** Create a profile span recorder for audit-cache instrumentation assertions. */
+/**
+ * Create a profile span recorder for audit-cache instrumentation assertions.
+ *
+ * @returns the profiler to pass into an audit plus the shared `names` array, which fills with span labels in call order
+ */
 export function createSpanRecorder(): {
+  /** Profiler seam accepted by the audit entry points. */
   profile: { span<T>(name: string, fn: () => T): T };
   names: string[];
 } {
@@ -759,6 +762,7 @@ export function createSpanRecorder(): {
   return {
     names,
     profile: {
+      /** Record this span's label, then run the block untouched so timing never changes what the audit produces. */
       span<T>(name: string, fn: () => T): T {
         names.push(name);
         return fn();

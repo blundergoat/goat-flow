@@ -243,6 +243,7 @@ describe("codex settings feature flags", () => {
 });
 
 describe("codex settings feature flags", () => {
+  // Build the Codex agent facts this scenario audits, with the parsed settings under test and stub hooks.
   function codexAgentFacts(
     parsed: Record<string, unknown>,
     hooks = stubAgentFacts().hooks,
@@ -285,6 +286,7 @@ describe("codex settings feature flags", () => {
 });
 
 describe("codex settings feature flags", () => {
+  // Build the Codex agent facts this scenario audits, with the parsed settings under test and stub hooks.
   function codexAgentFacts(
     parsed: Record<string, unknown>,
     hooks = stubAgentFacts().hooks,
@@ -322,6 +324,7 @@ describe("codex settings feature flags", () => {
 });
 
 describe("codex settings feature flags", () => {
+  // Build the Codex agent facts this scenario audits, with the parsed settings under test and stub hooks.
   function codexAgentFacts(
     parsed: Record<string, unknown>,
     hooks = stubAgentFacts().hooks,
@@ -402,6 +405,7 @@ describe("codex settings feature flags", () => {
 });
 
 describe("codex settings feature flags", () => {
+  // Build the Codex agent facts this scenario audits, with the parsed settings under test and stub hooks.
   function codexAgentFacts(
     parsed: Record<string, unknown>,
     hooks = stubAgentFacts().hooks,

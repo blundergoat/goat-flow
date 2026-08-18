@@ -474,6 +474,7 @@ describe("hook provider contracts", () => {
         const projectRoot = makeRoot();
         const sessionIdentifier = `non-git-session-${forceBash3Fallback}`;
         const stateDirectory = join(projectRoot, ".goat-flow", "scratchpad");
+        // List the state files present right now, so an assertion reads current disk truth rather than a cached snapshot.
         const statePaths = (): string[] =>
           existsSync(stateDirectory)
             ? readdirSync(stateDirectory)

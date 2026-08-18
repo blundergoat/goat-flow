@@ -501,7 +501,8 @@ function applyDuplicateNameBlockers(skills: MutableSkillDoctorEntry[]): void {
 
 /**
  * Validate the canonical skill filter users asked to focus on.
- * The filter narrows only the rendered rows: duplicate-name evidence is always collected across the complete canonical inventory first.
+ * It throws when the named skill is not canonical.
+ * The filter narrows only the rendered rows, because duplicate-name evidence is collected across the whole inventory first.
  */
 function selectedSkillNames(
   canonicalSkillNames: readonly string[],

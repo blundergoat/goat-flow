@@ -252,6 +252,8 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
     });
   });
 
+  // Fixture: writes untracked paths the scanner cannot read.
+  // Reporting them as clean would tell a user their tree was checked when it was not.
   it("reports unscannable untracked paths as incomplete", () => {
     const fixtures = [
       {
@@ -289,7 +291,7 @@ describe("post-turn-safety hook: git states and batched scanning", () => {
   // that batching could silently change while the headline detectors still
   // pass: line bytes, path attribution, and diff-frame parsing.
   describe("batched scanning preserves per-line semantics", () => {
-    // A Windows-edited conflict must block just like the same user's LF file.
+    // A Windows-edited conflict must block just like the same user's LF file; the fixture writes that CRLF file into a temporary repository.
     it("detects CRLF merge markers after normalizing the line ending", () => {
       withTempRepo((root) => {
         writeFile(

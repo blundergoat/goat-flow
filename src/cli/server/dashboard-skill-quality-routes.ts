@@ -32,12 +32,22 @@ import {
 } from "./dashboard-route-types.js";
 import { decodeEvaluateBody, type EvaluateBody } from "./decoders.js";
 
+/**
+ * Insist on a known agent before any skill discovery runs, since the answer depends entirely on which runner the user picked.
+ *
+ * @param ctx - dashboard route context supplying the response helper
+ * @param param - raw `agent` query value; missing or unknown values are answered with a 400 naming the valid ones
+ * @param routeName - route named in that error so the user knows which request failed
+ * @param res - response already answered when the value is rejected
+ * @returns the accepted agent, or null once an error response has been sent and the caller should stop
+ */
 function parseRequiredAgentParam(
   ctx: DashboardRouteContext,
   param: string | null,
   routeName: string,
   res: ServerResponse,
 ): AgentId | null {
+  // Without a valid runner the inventory would be a guess, so the user is told which values work.
   if (!param || !VALID_AGENTS.has(param)) {
     ctx.jsonResponse(res, 400, {
       error: `${routeName} requires agent. Valid: ${KNOWN_AGENT_LIST}`,
@@ -67,7 +77,15 @@ function runnerSkillQualityConfig(projectPath: string, agent: AgentId) {
   };
 }
 
-/** Return the skill/reference artifact inventory for a project. */
+/**
+ * List the skills and references installed for one runner, which is what fills the Skills tab.
+ * It reports a missing agent or an unreadable project as a JSON status body rather than throwing at the server.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @param url - request URL carrying the project path and agent
+ * @param res - JSON response target
+ * @returns true once this route has answered; false means the URL belongs to another handler
+ */
 function handleSkillQualityInventoryRequest(
   ctx: DashboardRouteContext,
   url: URL,
@@ -159,6 +177,15 @@ function markEvaluateAliasDeprecation(res: ServerResponse): void {
   res.setHeader("Link", '</api/quality/evaluate>; rel="successor-version"');
 }
 
+/**
+ * Answer a failed evaluate request, keeping the deprecation header on the old alias so callers still see they should move off it.
+ *
+ * @param ctx - dashboard route context supplying the response helper
+ * @param res - JSON response target
+ * @param isAlias - true when the request came in on the deprecated alias path
+ * @param status - HTTP status to send
+ * @param payload - error body shown to the user
+ */
 function sendEvaluateError(
   ctx: DashboardRouteContext,
   res: ServerResponse,
@@ -170,6 +197,16 @@ function sendEvaluateError(
   ctx.jsonResponse(res, status, payload);
 }
 
+/**
+ * Read the pasted or uploaded markdown, refusing anything past the size cap before it reaches the scorer.
+ * It reports an oversized body as a 413 rather than throwing, so the modal can tell the user their upload was too big.
+ *
+ * @param ctx - dashboard route context supplying the body reader
+ * @param req - incoming POST request carrying the content
+ * @param res - response already answered when the body is refused
+ * @param isAlias - true when the request came in on the deprecated alias path
+ * @returns the body text, or null once an error response has been sent and the caller should stop
+ */
 async function readEvaluateRequestBody(
   ctx: DashboardRouteContext,
   req: IncomingMessage,
@@ -208,7 +245,16 @@ function evaluateRequestBody(projectPath: string, value: EvaluateBody) {
   });
 }
 
-/** POST /api/quality/evaluate - score uploaded markdown and return tips. */
+/**
+ * Score the markdown a user pasted or dropped into the Evaluate modal and return its tips.
+ * It reports a wrong method, an oversized body, or a scoring failure as a JSON status body rather than throwing at the server.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @param req - incoming POST request carrying the content
+ * @param url - request URL, which also selects the deprecated alias behaviour
+ * @param res - JSON response target
+ * @returns true once this route has answered; false means the URL belongs to another handler
+ */
 async function handleQualityEvaluateRequest(
   ctx: DashboardRouteContext,
   req: IncomingMessage,

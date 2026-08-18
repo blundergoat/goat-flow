@@ -103,7 +103,8 @@ describe("checkDrift: hook templates", () => {
   });
 
   // Covers missing and stale managed launch assets because a silent gap would
-  // leave the registered handler failing at runtime with no named local repair.
+  // leave the registered handler failing at runtime with no named local repair. The fixture writes those assets, and the repair line is the
+  // contract this test holds: a user must be told which command puts the launcher back.
   it("names absent or stale managed launch assets with the hooks sync repair", () => {
     const root = setupFixture();
     try {

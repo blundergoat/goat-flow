@@ -47,7 +47,10 @@ export function isWithinProject(
   );
 }
 
-/** Resolve an anchor from one immutable Git commit or tree. */
+/**
+ * Resolve an anchor from one immutable Git commit or tree.
+ * It spawns git to read the pinned bytes, and reports an unreadable object as a violation.
+ */
 function validateGitObjectAnchor(
   projectRoot: string,
   candidatePath: string,
@@ -88,7 +91,7 @@ function validateGitObjectAnchor(
   }
 }
 
-/** Resolve an anchor from the declared live worktree without following escapes. */
+/** Resolve an anchor from the declared live worktree without following escapes; it reports a missing file or absent text as a violation. */
 function validateWorktreeAnchor(
   projectRoot: string,
   candidatePath: string,
@@ -295,6 +298,7 @@ function readFindingEvidence(text: string): FindingDefinition["evidence"] {
  * @param authority - what the report claims as its source of truth, the live worktree or a pinned git object;
  *   this decides where anchors are resolved from
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
+ * @returns nothing; every problem is added to that shared list rather than returned
  */
 export function validateFindingLine(
   locatedLine: LocatedLine,

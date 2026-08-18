@@ -168,7 +168,12 @@ async function dashboardRunAudit(
   dashboardRefreshAgentsAfterAudit(ctx);
 }
 
-/** Regenerate learning-loop indexes for the selected project, then refresh the Home audit payload. */
+/**
+ * Regenerate the project's learning-loop indexes after the user clicks the Home memory card, then refresh what that card shows.
+ * It reports a failed regenerate in the card's own error line rather than throwing, so the rest of Home keeps working.
+ *
+ * @param ctx - live Alpine dashboard context
+ */
 async function dashboardRegenerateLearningLoopIndex(
   ctx: DashboardAppContext,
 ): Promise<void> {

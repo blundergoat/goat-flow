@@ -107,7 +107,16 @@ function ownershipSourceFinding(
   return null;
 }
 
-/** Explain missing source/generator evidence for one otherwise valid ownership record. */
+/**
+ * Explain missing source or generator evidence for one otherwise valid ownership record.
+ * Each ownership class carries its own evidence contract, so a record that names a class must also prove where the file comes from.
+ *
+ * @param artifactPath - repository-relative path named in the finding
+ * @param ownership - declared ownership class for that path
+ * @param source - declared source value; anything unusable becomes a finding rather than a silent default
+ * @param generator - declared generator value, required only by the classes whose files are produced rather than shipped
+ * @returns one finding per missing piece of evidence; empty means the record proves its own origin
+ */
 function ownershipEvidenceFindings(
   artifactPath: string,
   ownership: ManifestFileOwnership,
@@ -120,7 +129,14 @@ function ownershipEvidenceFindings(
   ].filter((finding): finding is string => finding !== null);
 }
 
-/** Validate one path record and return user-actionable schema findings. */
+/**
+ * Reports what a user must repair in one file-ownership record, so setup never acts on a record it cannot interpret.
+ *
+ * @param artifactPath - repository-relative path being described
+ * @param rawSpec - raw record from manifest JSON; a non-object cannot describe how setup should treat the file
+ * @param declaredPaths - every path the manifest currently requires or offers
+ * @returns findings for this record; empty means the record is safe to install from
+ */
 function ownershipEntryFindings(
   artifactPath: string,
   rawSpec: unknown,
@@ -257,7 +273,7 @@ function isCommittedSkillReference(referencePath: string): boolean {
 
 /**
  * Validate one skill's declared reference-pack entry.
- * Use so setup copies a unique, committed set of files for the named skill.
+ * Use so setup copies a unique, committed set of files for the named skill; it reports every problem as a finding and never throws.
  *
  * @param canonical - valid skill names; empty means every reference key is unknown
  * @param skillName - manifest key; empty means no skill can own the references

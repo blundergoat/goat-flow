@@ -15,6 +15,7 @@ import type { DashboardRouteContext } from "./dashboard-route-types.js";
 
 /**
  * Regenerate all existing learning-loop bucket indexes for the caller-selected project.
+ * It reports every failure, from a bad request body to an unwritable project, as a JSON error rather than letting it take the server down.
  *
  * @param ctx - dashboard route context with path validation and response helpers
  * @param req - incoming POST request carrying `{ path }`
@@ -28,6 +29,7 @@ async function regenerateLearningLoopIndexes(
   try {
     const { decodeProjectPathBody } = await import("./decoders.js");
     const decoded = decodeProjectPathBody(await ctx.readBody(req));
+    // The request body did not carry a usable project path, so the user is told which field to fix.
     if (!decoded.ok) {
       ctx.jsonResponse(res, 400, {
         error: decoded.error,
@@ -50,6 +52,7 @@ async function regenerateLearningLoopIndexes(
         .length,
     });
     ctx.jsonResponse(res, 200, { results, indexes });
+    // For example, the user picked a project whose `.goat-flow` directory is read-only, so index generation cannot write.
   } catch (err) {
     ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),

@@ -390,7 +390,7 @@ async function dashboardAddProject(
  * @param ctx - dashboard state being refreshed after the server action
  * @param path - project path selected by the user
  * @param archived - `true` archives the record; `false` restores it
- * @returns promise that settles after state and visible status rows are refreshed
+ * @returns promise that settles after state and visible status rows are refreshed; it reports a failed server action as a toast
  */
 async function dashboardSetProjectArchived(
   ctx: DashboardProjectsContext,

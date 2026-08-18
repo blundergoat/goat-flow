@@ -106,7 +106,7 @@ function claimStillMatches(path: string, expected: ClaimSnapshot): boolean {
   );
 }
 
-/** Treat unsafe marker shapes as abandoned and valid files as stale after their lease. */
+/** Treat unsafe marker shapes as abandoned and valid files as stale after their lease; it swallows an unreadable marker as no claim at all. */
 function staleClaimSnapshot(
   path: string,
   staleMs: number,

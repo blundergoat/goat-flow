@@ -82,7 +82,7 @@ export const SHARED_ARTIFACT_MIRRORS: readonly ArtifactMirrorSpec[] = [
 
 /**
  * Read one canonical UTF-8 source without aborting the wider audit.
- * Use when a missing or unreadable resource should become a precise finding.
+ * It swallows a missing or unreadable file into a null result, so the caller reports it as one precise finding instead of ending the run.
  *
  * @param templateRoot - package or fixture root; empty means no source root is available
  * @param relativePath - canonical repo-relative path; empty means no file was selected
@@ -106,7 +106,7 @@ export function readTemplateText(
 
 /**
  * List canonical Markdown below one workflow directory with stable POSIX paths.
- * Use when comparing the complete source set with declared install mappings.
+ * It swallows an unreadable directory into an empty list, so a partial package produces findings rather than a crashed audit.
  *
  * @param templateRoot - package or fixture root; empty means no source tree can be listed
  * @param relativeRoot - workflow directory to scan; empty means the package root itself

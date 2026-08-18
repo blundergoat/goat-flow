@@ -264,7 +264,7 @@ function countManagedHookRegistrations(
 }
 
 /**
- * Run the public source-mode doctor against a disposable consumer target.
+ * Spawns the public source-mode doctor against a disposable consumer target.
  * Use after install or deliberate damage to show the path a user needs to repair.
  *
  * @param targetProjectPath - selected consumer; empty would make target evidence meaningless
@@ -558,7 +558,7 @@ function verifyAgentRepairAndCleanup(agentProfile: AgentProfile): string {
 }
 
 /**
- * Prove the standalone installer and TypeScript writer show one hook state to a user.
+ * Prove the standalone installer and TypeScript writer show one hook state to a user; it writes into a disposable consumer target.
  * Use per agent after launcher or migration behavior changes.
  *
  * @param agentProfile - agent selected at install time; missing support keeps that hook absent
@@ -766,8 +766,8 @@ function seedDuplicateAndStaleDenyRows(
 }
 
 /**
- * Prove the standalone installer converges duplicate and stale deny rows in
- * three consecutive runs while preserving the user's own hook rows.
+ * Prove the standalone installer converges duplicate and stale deny rows across
+ * three consecutive runs while preserving the user's own hook rows; it writes into a disposable consumer target.
  * Use per agent so a convergence failure names the exact provider shape.
  *
  * @param agentProfile - agent selected at install time

@@ -29,6 +29,7 @@ function qualityCaptureReceiptPath(
 
 /**
  * Refuse an occupied or unreadable receipt path before irreversible persistence.
+ * It throws in both cases, so returning normally is the caller's proof that the destination is free.
  *
  * @param stagingDir - private capture directory; empty cannot locate a valid receipt
  * @param draftName - contract-shaped draft identity; empty cannot produce a valid result name
@@ -68,6 +69,7 @@ function isTerminalReceiptValue(value: unknown): boolean {
 
 /**
  * Return true only for a bounded, single-link terminal receipt from an earlier owner.
+ * It swallows a missing or unreadable receipt as false, because an absent receipt simply means nobody finished this draft yet.
  *
  * @param stagingDir - private capture directory; empty cannot locate a valid receipt
  * @param draftName - contract-shaped draft identity; empty cannot produce a valid result name
@@ -100,6 +102,7 @@ function removeUnsafeReceiptEntry(resultPath: string): boolean {
 
 /**
  * Write one scrubbed private receipt with exclusive-create and link-count enforcement.
+ * It throws when the destination is already taken or is not a plain single-link file, so a receipt can never overwrite another owner's outcome.
  *
  * @param stagingDir - private capture directory; empty causes the filesystem write to throw
  * @param draftName - source draft identity; empty cannot satisfy the filename contract

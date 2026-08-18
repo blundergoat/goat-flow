@@ -254,8 +254,8 @@ function compareInstructionParity(
 }
 
 /**
- * Compare installed skill copies with the templates users receive on setup or upgrade.
- * Use an agent filter to keep a selected-runtime audit from reporting another runtime's drift.
+ * Compare installed skill copies with the templates users receive on setup or upgrade, and reports each stale copy as a finding.
+ * The agent filter exists because a user auditing one runtime should not be shown drift belonging to another runtime they never installed.
  */
 function compareSkills(
   fs: ReadonlyFS,
@@ -317,7 +317,14 @@ function compareSkills(
   return checked;
 }
 
-/** Compare shared setup files against their workflow templates for drift. */
+/**
+ * Compare shared setup files against their shipped templates and reports each stale copy as a finding.
+ *
+ * @param fs - audited project filesystem
+ * @param templateRoot - package or fixture root holding the shipped templates
+ * @param findings - drift findings appended to in place
+ * @returns how many files were compared, which the caller shows so a zero-finding result is not read as a skipped check
+ */
 function compareSharedFiles(
   fs: ReadonlyFS,
   templateRoot: string,
@@ -357,8 +364,8 @@ function compareSharedFiles(
 }
 
 /**
- * Find non-canonical skills in the mirrors selected for audit.
- * Use the SKILL.md marker to ignore editor files while keeping cleanup guidance actionable.
+ * Find non-canonical skills in the mirrors selected for audit and reports each one as a finding.
+ * A directory counts only when it holds a `SKILL.md`, so that editor scratch folders never turn into cleanup instructions for the user.
  */
 function findOrphans(
   fs: ReadonlyFS,

@@ -356,10 +356,18 @@ function mergeWalkRoot(rawRoots: unknown, fallback: WalkRoot[]): WalkRoot[] {
   return result.length > 0 ? result : fallback;
 }
 
+/**
+ * Fold a project's `composition` overrides onto the shipped defaults, keeping each shipped value whenever the override is missing or unusable.
+ *
+ * @param rawComposition - the `quality.composition` value from the project config; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped composition defaults
+ * @returns the resolved composition settings; an explicit null path is honoured and means the user turned that file off
+ */
 function mergeComposition(
   rawComposition: unknown,
   fallback: CompositionConfig,
 ): CompositionConfig {
+  // Not a mapping at all, so the project said nothing usable and the shipped defaults stand.
   if (!isRecord(rawComposition)) return fallback;
   return {
     skillPreamblePath:
@@ -387,10 +395,18 @@ function mergeComposition(
   };
 }
 
+/**
+ * Fold a project's gate-vocabulary overrides onto the shipped word lists, so a team can score against its own terminology.
+ *
+ * @param rawVocabulary - the `quality.gate-vocabulary` value from the project config; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped vocabulary defaults
+ * @returns the resolved word lists used when scoring artifacts
+ */
 function mergeGateVocabulary(
   rawVocabulary: unknown,
   fallback: GateVocabularyConfig,
 ): GateVocabularyConfig {
+  // Not a mapping at all, so the project said nothing usable and the shipped defaults stand.
   if (!isRecord(rawVocabulary)) return fallback;
   return {
     verificationGate: regexArray(
@@ -405,6 +421,13 @@ function mergeGateVocabulary(
   };
 }
 
+/**
+ * Fold a project's subtype-detection overrides onto the shipped signals that decide what kind of artifact a file is.
+ *
+ * @param rawDetection - the `detection` value for one subtype; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped detection signals for that subtype
+ * @returns the resolved detection signals
+ */
 function mergeSubtypeDetection(
   rawDetection: unknown,
   fallback: SubtypeDetection,
@@ -426,6 +449,13 @@ function mergeSubtypeDetection(
   };
 }
 
+/**
+ * Fold one subtype's overrides onto its shipped profile, which is what sets that subtype's weights and detection rules.
+ *
+ * @param rawProfile - one subtype entry from the project config; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped profile for that subtype
+ * @returns the resolved profile used when scoring artifacts of this subtype
+ */
 function mergeSubtypeProfile(
   rawProfile: unknown,
   fallback: SubtypeProfile,
@@ -448,6 +478,13 @@ function mergeSubtypeProfile(
   };
 }
 
+/**
+ * Fold every subtype override onto the shipped set, so a project can retune one subtype without restating the rest.
+ *
+ * @param rawSubtypes - the `quality.subtypes` value from the project config; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped profiles for all subtypes
+ * @returns a complete profile for every known subtype
+ */
 function mergeSubtypes(
   rawSubtypes: unknown,
   fallback: Record<ArtifactSubtype, SubtypeProfile>,

@@ -44,6 +44,13 @@ function isFallbackOnlyMatch(match: SubtypeMatchScore): boolean {
   );
 }
 
+/**
+ * Say how clearly the winning subtype beat the runner-up, which is what tells a reviewer whether to trust the classification.
+ *
+ * @param top - highest-scoring subtype match
+ * @param second - next-best match; `undefined` means nothing else scored at all, which reads as an unopposed win
+ * @returns confidence between 0 and 1, shown beside the subtype in the Skills tab
+ */
 function subtypeConfidence(
   top: SubtypeMatchScore,
   second: SubtypeMatchScore | undefined,
@@ -107,6 +114,15 @@ function findMatchingVeto(
   return vetoes.find((veto) => new RegExp(veto, "i").test(content)) ?? null;
 }
 
+/**
+ * Score how well one artifact matches a single candidate subtype, from its name, its headings, and the shapes that rule the subtype out.
+ *
+ * @param artifact - artifact being classified, supplying the name hints
+ * @param content - artifact text, which carries the heading evidence
+ * @param detection - signals configured for this subtype
+ * @param subtype - subtype being scored
+ * @returns the score plus the reasons behind it; a vetoed subtype scores zero rather than a weak positive
+ */
 function scoreSubtypeMatch(
   artifact: ArtifactEntry,
   content: string,
@@ -258,6 +274,13 @@ function countRegexMatches(content: string, pattern: RegExp): number {
   return Array.from(content.matchAll(pattern)).length;
 }
 
+/**
+ * Add up the signals that fired for one subtype and keep their labels, so the reviewer can see why a file was classified the way it was.
+ *
+ * @param subtype - subtype these signals belong to
+ * @param signals - triples of whether the signal fired, its weight, and its reader-facing label
+ * @returns the summed score with one reason per fired signal; no fired signal yields a zero score and no reasons
+ */
 function scoreFromSignals(
   subtype: ArtifactSubtype,
   signals: Array<[boolean, number, string]>,
@@ -408,7 +431,7 @@ function scoreShapeMatch(
  *
  * A user can paste or install anything, so the shape is inferred from the content rather than trusted from the filename or directory.
  *
- * Candidates below the minimum score are discarded before ranking, so a weak partial match never wins by default when nothing else matched.
+ * Ranking is a stable contract: candidates below the minimum score are dropped before sorting, so a weak partial match never wins by default.
  *
  * @param artifact - the discovered artifact, supplying its path and kind as weak hints
  * @param content - the artifact's text, which is the real evidence for the decision
@@ -425,6 +448,7 @@ export function detectArtifactShape(
     .sort((a, b) => b.score - a.score);
 
   const top = matches[0];
+  // Nothing scored above the floor, so the artifact keeps a neutral shape rather than being labelled from a guess.
   if (!top) {
     const fallback =
       artifact.kind === "shared-reference" ? "playbook" : "workflow";

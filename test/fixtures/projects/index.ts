@@ -74,6 +74,7 @@ Fixture capability is available.
 // .goat-flow/.gitignore, everything else empty/present). Pass overrides to
 // simulate the specific filesystem condition a check is meant to detect.
 export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
+  // Stands in for the committed goat-flow files an audit user would really have on disk.
   const defaultReadFile = (path: string): string | null => {
     // The default project keeps committed goat-flow files visible to audit users.
     if (path === ".goat-flow/.gitignore") return HEALTHY_GOAT_FLOW_GITIGNORE;

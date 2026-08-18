@@ -236,8 +236,8 @@ function validateRedLogContent(content: string): string[] {
 /**
  * Decide whether an author's RED log really documents a failure, or only claims one.
  *
- * This is the gate before scaffolding: it checks the log sits in the expected place and that its pressures, quoted rationalisation, and failure
- * outcome are concrete rather than placeholder text.
+ * This is the gate before scaffolding: it reports every problem it finds in the log rather than throwing, and checks that the pressures, quoted
+ * rationalisation, and failure outcome are concrete rather than placeholder text.
  *
  * @param projectRoot - project the author is working in, used to keep the log inside it
  * @param name - skill name being created, used in path and message text

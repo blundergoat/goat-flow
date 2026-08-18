@@ -56,7 +56,7 @@ function readTimerId(
   return Number.isFinite(id) ? id : null;
 }
 
-/** Find the earliest timer due at or before the target timestamp. */
+/** Find the earliest timer due at or before the target timestamp; firing in due order is the contract that makes fake-clock tests deterministic. */
 function findNextDueTimer(
   timers: ReadonlyMap<number, FakeTimerEntry>,
   target: number,
@@ -373,6 +373,8 @@ export function makeCapturingWebSocket(sent: string[]): {
 /**
  * Creates the minimum browser global surface needed by dashboard-terminal.ts
  * because these tests load the classic dashboard script in a VM, not a browser.
+ *
+ * @returns the globals object the VM context is built from, plus the recorders a test asserts against
  */
 export function makeBrowserTerminalGlobals(): {
   globals: Record<string, unknown>;

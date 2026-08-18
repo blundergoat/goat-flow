@@ -9,14 +9,24 @@
 type DashboardAlpineContext = DashboardAppContext &
   AlpineMagics<DashboardAppContext>;
 
+/**
+ * Refit one terminal to its panel and tell the server the new size, so wrapped output matches what the user sees.
+ *
+ * @param sessionId - session whose panel is being resized
+ * @param refs - live socket references for that session
+ * @param xterm - terminal instance to refit
+ * @returns true when the resize applied; false means the panel is hidden and the caller should try again later
+ */
 function dashboardResizeTerminalRef(
   sessionId: string,
   refs: TerminalRefs,
   xterm: XTermInstance,
 ): boolean {
   const container = document.getElementById(`gf-terminal-${sessionId}`);
+  // The panel is not on screen yet, so measuring it now would size the terminal to zero columns.
   if (!container || container.offsetWidth === 0) return false;
   xterm._addonFit?.fit();
+  // Only a live socket can carry the new size; a reconnect sends it again on open.
   if (refs.ws?.readyState === WebSocket.OPEN) {
     refs.ws.send(
       JSON.stringify({ type: "resize", cols: xterm.cols, rows: xterm.rows }),
@@ -33,7 +43,13 @@ function dashboardShouldWarmXterm(
   return (view === "workspace" || view === "setup") && ctx.terminalAvailable;
 }
 
-/** Fire-and-forget xterm warmup keeps navigation responsive; terminal overlays report failures. */
+/**
+ * Start loading the terminal engine in the background when the user moves toward a view that will need it.
+ * It swallows a failed warmup, because the terminal overlay reports the real failure when the user actually opens a session.
+ *
+ * @param ctx - live Alpine dashboard context
+ * @param view - view the user is switching to
+ */
 function dashboardWarmXtermForView(
   ctx: DashboardAlpineContext,
   view: string,
@@ -229,6 +245,12 @@ function dashboardRegisterViewWatchers(ctx: DashboardAlpineContext): void {
   });
 }
 
+/**
+ * Register the watchers that keep the page in step when the user switches runner or project.
+ * Without these, changing project would leave the previous project's summaries and skill lists on screen.
+ *
+ * @param ctx - live Alpine dashboard context whose watchers are registered in place
+ */
 function dashboardRegisterRunnerAndProjectWatchers(
   ctx: DashboardAlpineContext,
 ): void {
@@ -242,6 +264,7 @@ function dashboardRegisterRunnerAndProjectWatchers(
   ctx.$watch("sessionsCollapsed", (value: boolean) => {
     localStorage.setItem("gf-sessions-collapsed", String(value));
   });
+  // Keeps the browser tab title on the current project, so a user with several dashboards open can tell them apart.
   const updateTitle = (): void => {
     document.title = `${ctx.projectName} | GOAT Flow`;
   };
@@ -271,10 +294,18 @@ function dashboardRegisterRunnerAndProjectWatchers(
   updateTitle();
 }
 
+/**
+ * Handle the keyboard shortcuts that work anywhere in the dashboard, before any view-specific handler sees the key.
+ *
+ * @param ctx - live Alpine dashboard context
+ * @param event - the key the user pressed
+ * @returns true when the shortcut was handled and no other handler should act on it
+ */
 function dashboardHandleGlobalShortcut(
   ctx: DashboardAlpineContext,
   event: KeyboardEvent,
 ): boolean {
+  // Escape always closes the directory picker, wherever the user opened it from.
   if (event.key === "Escape") ctx.showBrowser = false;
   if (
     event.key === "D" &&
@@ -356,11 +387,19 @@ function handlePromptListNavigation(
   );
 }
 
+/**
+ * Handle the shortcuts that only apply while the user is on the Prompts view.
+ *
+ * @param ctx - live Alpine dashboard context
+ * @param event - the key the user pressed
+ */
 function dashboardHandlePromptShortcut(
   ctx: DashboardAlpineContext,
   event: KeyboardEvent,
 ): void {
+  // The user is somewhere else, so these keys belong to that view instead.
   if (ctx.activeView !== "prompts") return;
+  // Escape closes the editor first, which is what a user expects before it starts affecting anything behind it.
   if (event.key === "Escape" && ctx.showCustomPromptEditor) {
     event.preventDefault();
     ctx.cancelCustomPromptEdit();

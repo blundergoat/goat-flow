@@ -85,6 +85,7 @@ interface DashboardTerminalContext extends Record<
   ): boolean;
   /** Rehydrate a server-active terminal session into the browser UI. */
   openServerSession(serverSession: ServerSessionInfo): Promise<void>;
+  /** Open a new terminal for the user with this prompt already delivered, optionally naming the runner and access mode. */
   launchInTerminal(
     prompt: string,
     runner?: RunnerId,
@@ -106,6 +107,7 @@ interface DashboardTerminalContext extends Record<
   updateSessionCount(): Promise<void>;
   /** Remove one session id from persisted reconnect state. */
   _forgetSavedSession(sessionId: string): void;
+  /** Keep the title a session reported, so its tab keeps a meaningful label after a reconnect; a null title leaves the current one alone. */
   rememberSessionTitle(
     sessionId: string,
     title: string | null | undefined,

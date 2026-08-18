@@ -534,7 +534,7 @@ function dashboardSendClipboardPaste(
  *
  * @param attachment - the pane, its session, and its socket
  * @param markUserInputSent - records that the user acted, clearing the waiting badge and resetting the idle clock
- * @returns nothing; input sent while the socket is closed is dropped rather than queued
+ * @returns nothing; it swallows input sent while the socket is closed rather than queueing it, so a reconnect never replays old keystrokes
  */
 function dashboardInstallTerminalInputHandlers(
   attachment: DashboardTerminalAttachment,
@@ -586,7 +586,7 @@ function dashboardInstallTerminalInputHandlers(
  * @param attachment - the pane, its session, and its socket
  * @param fit - the resize observer and window listener installed for this pane
  * @param getAgeInterval - reads the current age ticker, which is null when the socket never opened
- * @returns the cleanup function stored on the pane's refs
+ * @returns the cleanup function stored on the pane's refs; it swallows teardown errors so one dead listener cannot block the rest
  */
 function dashboardBuildTerminalCleanup(
   attachment: DashboardTerminalAttachment,
@@ -701,7 +701,13 @@ function dashboardConnectTerminal(
   view.term.focus();
 }
 
-/** End a local terminal session and release its browser bindings. */
+/**
+ * End the terminal the user just closed and release everything the pane was holding.
+ * It swallows the failure of the server-side delete, because the pane is already gone from the user's screen either way.
+ *
+ * @param ctx - live Alpine terminal context
+ * @param sessionId - session the user closed; an unknown id does nothing
+ */
 function dashboardEndSession(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -734,7 +740,14 @@ function dashboardExitTerminal(ctx: DashboardTerminalContext): void {
   if (ctx.activeSessionId) ctx.endSession(ctx.activeSessionId);
 }
 
-/** Retry a terminal session that failed or stalled before first PTY output. */
+/**
+ * Retry a session that never produced output, reusing the prompt the user originally launched with.
+ * A session restored from the server has no recorded prompt, so it is left intact rather than restarted empty; it reports other failures
+ * through the pane's own error state.
+ *
+ * @param ctx - live Alpine terminal context
+ * @param sessionId - session the user asked to retry
+ */
 async function dashboardRetryTerminalSession(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -872,7 +885,13 @@ async function dashboardOpenServerSession(
   ctx.connectTerminal(session.id, `/ws/terminal/${serverSession.id}`);
 }
 
-/** Terminate a backend terminal session by ID. */
+/**
+ * End a session on the server, whether or not this browser still has a pane for it.
+ * It swallows the delete failure, because a session that is already gone is the expected case when cleaning up stale rows.
+ *
+ * @param ctx - live Alpine terminal context
+ * @param sessionId - session to terminate
+ */
 async function dashboardEndServerSession(
   ctx: DashboardTerminalContext,
   sessionId: string,

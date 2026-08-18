@@ -188,6 +188,7 @@ function stopChildProcessGroup(childProcess, stopSignal) {
 /**
  * Write one out-of-band heartbeat for the developer watching an interactive preflight.
  * Use only with an inherited descriptor; null means CI receives no progress noise.
+ * It swallows a failed write, so a closed progress pipe cannot end the run.
  *
  * @param {number | null} progressFileDescriptor - inherited operator channel; null hides progress
  * @param {string} progressLabel - label matching the verification work the user is waiting on

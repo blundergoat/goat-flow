@@ -123,7 +123,7 @@ function readRegistrationCommand(playbookPath: string): string {
 }
 
 /**
- * Run the copied command inside an isolated project shaped like a user's checkout.
+ * Spawns the copied command inside an isolated project shaped like a user's checkout.
  * @param playbookPath - shipped command source; empty cannot identify user guidance
  * @param registrationFiles - project files; empty models no supported registration surface
  * @returns exit and output; either output stream may be empty for a quiet result

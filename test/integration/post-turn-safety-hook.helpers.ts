@@ -76,7 +76,7 @@ export const TEST_JWT_TOKEN = [
 export const TEST_DOCUMENTED_AWS_PLACEHOLDER = `AKIA${"IOSFODNN7EXAMPLE"}`;
 export const TEST_DOCUMENTED_SLACK_PLACEHOLDER = `xoxb-${"test-1234567890-1234567890"}`;
 
-/** Run one committed-repository scenario that mirrors a user's edited project.
+/** Run one committed-repository scenario that mirrors a user's edited project; it writes and then removes a temporary repository.
  *
  * @param fn - required scenario callback; absence means there is no user action to verify
  * @returns nothing; the fixture repository is removed even when the scenario throws
@@ -91,7 +91,7 @@ export function withTempRepo(fn: (root: string) => void): void {
   }
 }
 
-/** Create one committed fixture repository at an already selected directory.
+/** Writes one committed fixture repository at an already selected directory.
  *
  * @param root - non-empty directory that becomes an independent Git top level
  * @returns nothing; the caller owns fixture cleanup
@@ -156,7 +156,7 @@ export function withTempController(
   }
 }
 
-/** Run one unborn-repository scenario that mirrors a user's first commit.
+/** Run one unborn-repository scenario that mirrors a user's first commit; it writes and then removes a temporary repository.
  *
  * @param fn - required callback given a repo with no HEAD; absence means no scenario
  * @returns nothing; the fixture repository is removed even when the scenario throws

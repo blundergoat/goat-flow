@@ -192,8 +192,8 @@ function rejectedProbeExecution(): HookProbeExecution {
 }
 
 /**
- * Execute one inert classifier operand through Bash without a shell interpolation layer.
- * Exported so containment tests can prove redirected script paths never run.
+ * Spawns one inert classifier operand through Bash, with no shell interpolation layer in between.
+ * Exported so containment tests can prove redirected script paths never run; it reports containment and startup failures as a rejected result.
  *
  * @param projectPath - selected project checkout; empty or unresolved paths return a rejected probe result
  * @param scriptPath - managed hook path inside the checkout; missing or escaped paths are never executed
@@ -274,8 +274,8 @@ function configuredDenyHookPayload(
 }
 
 /**
- * Replay one inert policy input through the exact handler setup registered.
- * Use when deny verification checks the same launcher the user's agent invokes.
+ * Replay one inert policy input through the exact handler setup the user registered.
+ * It spawns that registered launcher, so verification proves the same path the user's agent takes rather than an equivalent one.
  *
  * @param projectPath - selected checkout; empty text cannot provide a safe working directory
  * @param configuredHandler - exact managed handler; a missing executable produces a bounded spawn error

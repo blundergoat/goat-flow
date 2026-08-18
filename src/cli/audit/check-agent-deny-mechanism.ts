@@ -79,7 +79,15 @@ function listShellHookFiles(ctx: AuditContext, hooksDir: string): string[] {
   }
 }
 
-/** Spawn bash syntax validation for one hook and map process failures into audit evidence. */
+/**
+ * Spawns a bash syntax check for one hook file and reports what came back as audit evidence.
+ * A hook that cannot even parse would fail silently at runtime, which is exactly the protection a user believes they have.
+ *
+ * @param ctx - audit context supplying the target project path
+ * @param hooksDir - project-relative hooks directory
+ * @param file - hook filename to check
+ * @returns the syntax verdict plus any error text; an unavailable shell reports as unchecked rather than as a pass
+ */
 function checkHookFileSyntax(
   ctx: AuditContext,
   hooksDir: string,
@@ -153,6 +161,14 @@ function checkDenyPatterns(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
+/**
+ * Report hook scripts left behind by an older layout, which would otherwise sit unused while the user assumes they still run.
+ *
+ * @param ctx - audit context supplying the target filesystem
+ * @param agentId - agent whose hook directory is being audited
+ * @param hooksDir - project-relative hooks directory for that agent
+ * @returns the failure to show the user, or null when no legacy copies remain
+ */
 function checkLegacyHookDrift(
   ctx: AuditContext,
   agentId: string,
@@ -200,6 +216,13 @@ function readHookTemplateContent(templateFile: string): string | null {
   }
 }
 
+/**
+ * Work out where one shipped hook template lives once installed, since the policy files sit in a shared directory rather than the agent's own.
+ *
+ * @param hooksDir - project-relative hooks directory for the agent being audited
+ * @param templateFile - template path as shipped
+ * @returns the project-relative installed path to compare against
+ */
 function installedTemplateRelPath(
   hooksDir: string,
   templateFile: string,
@@ -209,6 +232,14 @@ function installedTemplateRelPath(
     : join(hooksDir, templateFile);
 }
 
+/**
+ * Report installed hook files that no longer match the shipped templates, so a user learns their guardrails are running old bytes.
+ *
+ * @param ctx - audit context supplying the target filesystem
+ * @param agentId - agent whose hook directory is being audited
+ * @param hooksDir - project-relative hooks directory for that agent
+ * @returns the failure to show the user, or null when every installed file matches its template
+ */
 function checkTemplateDrift(
   ctx: AuditContext,
   agentId: string,

@@ -73,7 +73,7 @@ export function writeMockGruff(root: string): string {
 }
 
 /**
- * Write an executable legacy-analyse mock gruff binary into the test root.
+ * Writes an executable legacy-analyse mock gruff binary into the test root.
  *
  * The mock logs each analysed file to gruff-invocations.log, emits a fixed
  * pre-existing finding on line 1 plus a changed-line finding on line 3, and
@@ -231,7 +231,7 @@ export function runMigratedHook(
 }
 
 /**
- * Creates one edited project for a migrated Gruff result scenario.
+ * Writes one edited project for a migrated Gruff result scenario.
  * Use when users need the same source edit while analyzer output or failure changes.
  *
  * @param analyzerEnvelope - analyzer JSON; empty text models no analyzer response
@@ -484,7 +484,7 @@ export const FINDING_GRUFF_CONTRACT_ENVELOPE =
   '{"contractVersion":"gruff.hook.v1","findings":[{"ruleId":"size.file-length","pillar":"size","severity":"warning","scope":"file","file":"src/sample.ts","line":1,"message":"file too long","remediation":"split it"},{"ruleId":"naming.short","pillar":"naming","severity":"advisory","scope":"line","file":"src/sample.ts","line":3,"message":"too short"}],"suppressed":{"count":0},"ignored":{"paths":[]},"config":{"schemaOk":true,"error":null}}';
 
 /**
- * Install a contract-aware mock that advertises gruff.hook.v1 from
+ * Writes a contract-aware mock that advertises gruff.hook.v1 from
  * `hook --capabilities` and emits a gruff.hook.v1 envelope from `hook --format
  * json`, so tests exercise the hook's thin-renderer contract path (not the
  * legacy analyse path). Logs the `hook` argv to gruff-hook-args.log.

@@ -1,4 +1,6 @@
-# Ignore everything by default
+# Ignore everything by default. Ignore-aware search tools read this file too (Claude Code's session `grep` is a ugrep shim; ripgrep) and can
+# drop the re-included directories below - the shim does so whenever `.goat-flow/` is passed as an operand from a parent directory. Search with
+# the working directory inside `.goat-flow/`, or use `command grep`, before reading zero hits here as absence.
 *
 
 # Committed goat-flow files

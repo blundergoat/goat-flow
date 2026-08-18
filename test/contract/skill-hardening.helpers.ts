@@ -33,7 +33,7 @@ export function readProjectFile(projectRelativePath: string): string {
 }
 
 /**
- * Extracts one Markdown H2 section so a UI-facing rule cannot pass by matching an example elsewhere.
+ * Reads one Markdown H2 section so a UI-facing rule cannot pass by matching an example elsewhere.
  * A missing section means the installed workflow can no longer orient the user as documented.
  *
  * @param projectRelativePath - installed file to read, exactly as a user's agent would
@@ -193,6 +193,9 @@ export function installedSkillReferencePaths(
 /**
  * Applies one contract to every user-facing target while preserving its failure label.
  * Use this for mirror parity rather than accepting one correct installation as enough.
+ *
+ * @param contractTargets - installed targets to check, one per mirror a user could be reading
+ * @param verifyTarget - contract applied to each target; its failure label names the mirror that failed
  */
 export function assertForEachTarget<T>(
   contractTargets: readonly T[],
@@ -222,7 +225,7 @@ export const TIMING_OBLIGATION_CHECKS = [
 
 /**
  * Resolve every `path` (search: `anchor`) citation in a skill bundle against its target file.
- * Use when a skill points a reader at another document: a citation that no longer matches
+ * Use when a skill points a reader at another document, because a citation that no longer matches
  * sends the agent to text that is not there, which reads as a missing instruction.
  *
  * Anchors whose path starts with an angle-bracket token are consumer-project placeholders,

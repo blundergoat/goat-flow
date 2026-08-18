@@ -23,7 +23,7 @@ interface QualityDraftStagingDeps {
   createDraftDirectory?: (path: string, options?: { mode?: number }) => unknown;
 }
 
-/** Inspect components without creating them; unreadable paths fail before any write. */
+/** Inspect components without creating them; it throws on an unreadable path before any write happens. */
 function inspectQualityDraftDirectories(
   componentPaths: readonly string[],
 ): InspectedDraftDirectory[] {
@@ -41,7 +41,7 @@ function inspectQualityDraftDirectories(
   });
 }
 
-/** Reject existing components that would redirect or shadow the private staging tree. */
+/** Reject existing components that would redirect or shadow the private staging tree; it throws on the first one it finds. */
 function assertQualityDraftDirectories(
   components: readonly InspectedDraftDirectory[],
 ): void {
@@ -54,7 +54,7 @@ function assertQualityDraftDirectories(
   }
 }
 
-/** Create one missing component; non-`EEXIST` failures and unsafe winners abort capture. */
+/** Create one missing component; it throws when creation fails for any reason other than a safe concurrent winner. */
 function createMissingQualityDraftDirectory(
   component: InspectedDraftDirectory,
   stagingPath: string,
@@ -89,7 +89,7 @@ function assertCurrentQualityDraftDirectory(componentPath: string): void {
   );
 }
 
-/** Keep the POSIX staging leaf private; a mode that remains permissive aborts capture. */
+/** Keep the POSIX staging leaf private; it throws when the mode stays group or world readable after the change. */
 function enforcePrivateQualityStagingDirectory(
   componentPath: string,
   stagingPath: string,
@@ -119,7 +119,7 @@ function createQualityDraftDirectories(
 /**
  * Create the quality staging directory after proving it is ignored and local.
  * Use before launching a reporting agent so its narrow write allow already exists.
- * Unsafe, unreadable, or non-ignored paths throw before capture starts.
+ * It throws on an unsafe, unreadable, or non-ignored path before capture starts, so a reporting agent never writes outside private staging.
  *
  * @param projectRoot - report owner project; empty or missing roots cannot pass Git ignore proof
  * @param deps - optional directory creator used to reproduce concurrent replacement in tests

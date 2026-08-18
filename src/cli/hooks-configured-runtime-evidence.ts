@@ -397,7 +397,7 @@ function readManagedConfiguredHookState(
   };
 }
 
-/** Execute one fixed payload through the exact handler the selected agent configuration names. */
+/** Spawns one fixed payload through the exact handler the selected agent configuration names, so verification exercises the user's real command. */
 function executeConfiguredFeedbackProbe(
   projectPath: string,
   configuredHandler: AgentHookHandlerDescriptor,

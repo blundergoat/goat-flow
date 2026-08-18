@@ -198,6 +198,12 @@ export interface ObservedFacts {
 
 /** Raised when the on-disk manifest's static facts disagree with observed reality. */
 class ManifestValidationError extends Error {
+  /**
+   * Carry every finding alongside the summary line, so a caller can show the whole repair list instead of one problem at a time.
+   *
+   * @param message - summary line shown to the user, naming how many findings were collected
+   * @param findings - every drift or schema problem found in one pass, so the user can repair them together
+   */
   constructor(
     message: string,
     public readonly findings: string[],

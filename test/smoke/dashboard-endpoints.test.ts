@@ -55,6 +55,7 @@ interface TestTerminalSession {
   idleTimer: ReturnType<typeof setTimeout> | null;
   detachBuffer: string[];
   detachBufferSize: number;
+  /** Capture stubs the test can close, standing in for the real quality-draft watchers. */
   qualityCaptures: Array<{ dispose(): void }>;
 }
 
@@ -181,7 +182,9 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
 /** Create the fake spawned PTY used by prompt-delivery timing tests. */
 function makeSpawnedPty(): {
   pty: TestPty & {
+    /** Register the handler the fake PTY calls when it emits output. */
     onData(handler: (data: string) => void): void;
+    /** Register the handler the fake PTY calls when the session ends. */
     onExit(
       handler: (event: { exitCode: number; signal?: number | string }) => void,
     ): void;
@@ -193,7 +196,9 @@ function makeSpawnedPty(): {
   emitExit(): void;
 } {
   const writes: string[] = [];
+  // Handlers start as no-ops so a test that never wires them up cannot fail on an undefined call.
   let dataHandler: (data: string) => void = () => undefined;
+  // Same no-op default for the exit path, so a test that only exercises output still runs cleanly.
   let exitHandler: (event: {
     exitCode: number;
     signal?: number | string;

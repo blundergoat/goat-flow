@@ -332,6 +332,7 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
+  // Fixture: writes an output parent that is a symlink to another directory, so a JSON export would land outside the folder the author named.
   it("refuses JSON export through a symlinked parent directory", (testContext: TestContext) => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
@@ -360,6 +361,7 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
+  // Fixture: writes a symlink above the output directory, so checking only the final path would miss the escape.
   it("refuses JSON export through a symlinked intermediate ancestor", (testContext: TestContext) => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
@@ -391,6 +393,7 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
+  // Fixture: writes a destination that is a hardlink to an unrelated file, so the export would overwrite content the author never named.
   it("refuses a hardlinked JSON destination even with force", (testContext: TestContext) => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plans-"));
     const planPath = join(temporaryRoot, "plan");
@@ -494,6 +497,7 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
+  // Fixture: writes an output directory that is itself a symlink, so a forced export would land outside the directory the author named.
   it("refuses a symlinked Markdown output directory", (testContext: TestContext) => {
     // Fixture: an output directory that is itself a symlink to elsewhere, so a forced export
     // would silently write outside the directory the author named.
@@ -527,6 +531,7 @@ describe("plans export: CLI previews and protected writes", () => {
     }
   });
 
+  // Fixture: writes the symlink one level above the output directory, so a naive check of the final path would pass while the write escapes.
   it("refuses Markdown export through a symlinked intermediate ancestor", (testContext: TestContext) => {
     // Fixture: the symlink sits one level above the output directory, so a naive check of the
     // final path would pass while the write still escapes the tree the author chose.

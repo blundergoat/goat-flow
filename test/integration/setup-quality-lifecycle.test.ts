@@ -52,7 +52,7 @@ interface ConsumerQualityPayload {
 }
 
 /**
- * Run one public CLI action from the controlling workspace against an explicit target.
+ * Spawns one public CLI action from the controlling workspace against an explicit target.
  * Use this instead of importing internals so the test covers the entry point users execute.
  *
  * @param commandArguments - CLI words after `cli.ts`; empty means show the default help path
@@ -222,7 +222,7 @@ templates; audit and quality commands read project evidence from this consumer t
 }
 
 /**
- * Run a scenario in a disposable consumer while preserving content outside the selected target.
+ * Run a scenario in a disposable consumer that this helper writes and then removes, so content outside the selected target is preserved.
  * Use for success and failure paths so users never lose neighboring files during test cleanup.
  *
  * @param scenario - consumer action sequence; a rejection is rethrown after cleanup

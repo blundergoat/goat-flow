@@ -192,6 +192,7 @@ describe("plans check: forecasts, calibration, and CLI usage", () => {
   // Covers the three Actual shapes that must stay out of calibration: writes each and expects all excluded.
   it("excludes prose-measured, retrospective, and empty legacy Actuals from calibration", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-legacy-"));
+    // Build a milestone in the older receipt shape, so the forecast is proven to still read plans written before the current format.
     const legacyBody = (
       milestoneId: string,
       actualLine: string | undefined,

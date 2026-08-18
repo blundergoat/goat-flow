@@ -56,7 +56,7 @@ function dashboardApplyHookToggleResult(
  * @param ctx - dashboard state; missing current project means stale responses are ignored
  * @param hook - hook row being saved; non-togglable hooks leave the row unchanged
  * @param shouldEnable - desired hook state; `false` may require user confirmation
- * @returns nothing; failures show in the Hooks banner/toast and keep rows visible
+ * @returns nothing; it reports a failed toggle in the Hooks banner and toast while leaving every row visible
  */
 async function dashboardToggleHookState(
   ctx: DashboardAppContext,
@@ -292,7 +292,7 @@ function dashboardAgentPlanHookLoadersFragment(
 /**
  * Build the Tasks view's display helpers: progress labels, progress percentages, and modified-time text.
  *
- * These only format what the loaders already fetched, so they are kept apart from the loading and selection actions.
+ * These only format what the loaders already fetched, so they stay apart from the loading actions and it reports no failures of its own.
  *
  * @returns dashboard fragment merged into the app alongside the plan loaders
  */

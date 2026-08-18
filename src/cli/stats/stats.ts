@@ -188,7 +188,8 @@ export function buildStatsReport(shared: {
 
 /**
  * Read the selected decision directory into the stats report.
- * Use when users request ADR structure checks; an absent directory becomes an empty section.
+ * Use when users request ADR structure checks; an absent directory becomes an empty section rather than a failure, and the row order follows the
+ * directory listing so two runs over unchanged files stay stable.
  *
  * @param projectFiles - selected-project reader; unreadable files remain rows with empty content.
  * @param configuredDecisionPath - configured ADR path; an empty path yields an absent section.
@@ -254,7 +255,7 @@ export const BUCKET_SIZE_WARN_BYTES = 40_000;
 
 /**
  * Collect every blocking problem for one learning-loop bucket.
- * Use when an operator needs a complete repair list for that source file.
+ * It reports all of them together, because an operator fixing a bucket should see the full repair list rather than one problem per run.
  */
 function collectBucketFindings(
   bucket: BucketSection["buckets"][number],
@@ -415,7 +416,7 @@ function describeMemoryQualityIssues(entry: LearningLoopEntryFact): string[] {
 
 /**
  * Group malformed supplied memory metadata by source bucket with bounded examples.
- * Optional-field migration stays in JSON; warnings identify values users actually supplied incorrectly.
+ * Only values a user actually supplied are warned about, which is the contract that keeps optional-field migration out of the warning list.
  */
 function collectMemoryQualityWarnings(
   learningLoopEntries: LearningLoopEntryFact[],
@@ -473,7 +474,7 @@ function collectMemoryQualityWarnings(
 /**
  * Promote stale current-project evidence in pattern entries to blocking stats findings.
  *
- * Pattern extraction ignores absent external-project targets, so the remaining stale references are concrete local files whose literal anchors moved.
+ * It reports the remaining stale references, which are concrete local files whose literal anchors moved; absent external-project targets are ignored.
  * Footgun and lesson references are already emitted through their bucket sections.
  */
 function collectPatternReferenceFindings(

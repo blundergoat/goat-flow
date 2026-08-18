@@ -251,7 +251,7 @@ function applyAdvisoryCheck(
 /**
  * Fold one check result into the concern score the user reads.
  * This is where a finding either blocks the concern or only moves its number, so it decides whether the user is told "this is missing" or "this could
- * be better".
+ * be better". It reports a blocking failure by marking the concern failed, never by throwing.
  *
  * @param concern - the concern accumulating this check's outcome
  * @param check - the check being applied; its type decides whether a failure can block

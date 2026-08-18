@@ -187,7 +187,7 @@ function requirePlansRoot(milestonePath: string): string {
   return plansRoot;
 }
 
-/** Reject a milestone path that does not remain below the resolved plans directory. */
+/** Reject a milestone path that does not remain below the resolved plans directory; it throws rather than write outside the selected plan. */
 function requireNestedMilestone(
   plansRoot: string,
   milestonePath: string,
@@ -219,7 +219,7 @@ function requireProjectDirectory(projectRoot: string): void {
     throw new CLIError("Containing project root must be a directory.", 2);
 }
 
-/** Validate one milestone path component and return whether it is the destination. */
+/** Validate one milestone path component; it throws on a symlink or a shared-identity destination that timing must not replace. */
 function validateMilestoneComponent(
   stats: Stats,
   isDestination: boolean,
@@ -244,7 +244,7 @@ function validateMilestoneComponent(
   }
 }
 
-/** Inspect each component without following redirects and return destination identity. */
+/** Inspect each component without following redirects; it throws as soon as one fails, so no write is attempted through a redirected parent. */
 function inspectMilestonePath(
   projectRoot: string,
   milestonePath: string,
@@ -349,7 +349,7 @@ function writeActualField(content: string, actualLine: string): string {
  * @param milestoneContentAtRead - exact content used for the transition; empty means the user selected an empty milestone
  * @param updatedMilestoneContent - generated receipt and Actual content; never empty after a valid transition
  * @param beforeMilestoneReplacement - test-only editor-save simulation; omitted in the user-facing CLI flow
- * @returns nothing; success replaces the milestone, while an error leaves the user's selected file unchanged
+ * @returns nothing; it throws when the file changed under the user, which leaves their selected milestone exactly as their editor saved it
  */
 function writeMilestoneAtomically(
   initialContext: PlanFileContext,
@@ -461,7 +461,7 @@ function transitionReceipt(
   return stopReceipt(receipt, openSegment, transition, stamp);
 }
 
-/** Add one open span, dropping any old final summary while preserving raw history. */
+/** Add one open span, dropping any old final summary while preserving raw history; it throws on a second Start or a clock behind the history. */
 function startReceipt(
   receipt: PlanTimingReceipt,
   openSegment: PlanTimingSegment | null,
@@ -528,7 +528,7 @@ function stopReceipt(
   };
 }
 
-/** Reject contradictory recovery, empty finalization, and backwards clocks before mutation. */
+/** Reject contradictory recovery, empty finalization, and backwards clocks before mutation; it throws so no partial timing is written. */
 function validateStopTransition(
   receipt: PlanTimingReceipt,
   openSegment: PlanTimingSegment | null,

@@ -98,7 +98,12 @@ function classifyEnforcementAssurance(
   return "not-observed";
 }
 
-/** Reject empty or contradictory sources before they become a user-visible capability claim. */
+/**
+ * Reject empty or contradictory evidence before it becomes a user-visible capability claim.
+ * It throws in both cases, so returning normally is the caller's proof that the claim rests on real evidence.
+ *
+ * @param sources - evidence backing one enforcement capability
+ */
 function validateEnforcementSources(
   sources: readonly EnforcementCapabilitySource[],
 ): void {
@@ -114,7 +119,13 @@ function validateEnforcementSources(
   }
 }
 
-/** Reject a strength badge when its proof class would mislead the user about protection. */
+/**
+ * Reject a strength badge whose proof class would overstate the protection a user actually has.
+ * It throws on a mismatch, so returning normally is the caller's proof that badge and evidence agree.
+ *
+ * @param status - the badge about to be shown
+ * @param assurance - how strongly that status was proven
+ */
 function validateEnforcementStatus(
   status: EnforcementCapabilityStatus,
   assurance: EnforcementCapabilityAssurance,

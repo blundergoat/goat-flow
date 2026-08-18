@@ -108,10 +108,10 @@ export function extractBacktickPaths(content: string): string[] {
 /**
  * Collect markdown files from a shallow documentation tree.
  *
- * Missing directories and non-directory children are swallowed because harness
- * checks treat absent optional buckets as empty sets, not audit crashes.
+ * It swallows missing directories and non-directory children, because harness checks treat an absent optional bucket as an empty set rather than
+ * an audit crash.
  *
- * @param fs - Read-only filesystem view rooted at the audited project.
+ * @param fs - read-only filesystem view rooted at the audited project
  * @param dir - Directory to scan for markdown files and one level of children.
  * @returns Repo-relative markdown file paths in the scanned tree.
  */

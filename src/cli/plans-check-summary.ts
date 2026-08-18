@@ -264,7 +264,7 @@ interface LocalWorkUnitRates {
   highMinutesPerUnit: number;
 }
 
-/** Convert sorted receipt samples into the local rates used for the next forecast. */
+/** Convert sorted receipt samples into the local rates used for the next forecast; the sort is what makes the low, middle, and high values stable. */
 function readLocalWorkUnitRates(
   workUnitSamples: WorkUnitCalibrationSample[],
 ): LocalWorkUnitRates {

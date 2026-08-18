@@ -180,11 +180,13 @@ export function parseFrontmatterFields(
  *
  * @param lastReviewed - ISO date from bucket frontmatter, or null when absent
  * @param now - comparison clock for deterministic tests and reports
+ * @returns days since review with its band; `days: null` and band `unknown` mean the date could not be read, not that the bucket is fresh
  */
 export function computeFreshness(
   lastReviewed: string | null,
   now: Date = new Date(),
 ): { days: number | null; band: BucketFreshness["freshnessBand"] } {
+  // Absent or wrongly shaped dates report as unknown so a caller can flag them instead of showing a made-up age.
   if (lastReviewed === null || !ISO_DATE_REGEX.test(lastReviewed)) {
     return { days: null, band: "unknown" };
   }
@@ -197,6 +199,7 @@ export function computeFreshness(
     now.getUTCDate(),
   );
   const days = Math.max(0, Math.floor((todayMs - reviewedMs) / 86400000));
+  // Bands the dashboard colours: a month is fresh, a quarter is aging, anything older reads as stale.
   if (days <= 30) return { days, band: "fresh" };
   if (days <= 90) return { days, band: "aging" };
   return { days, band: "stale" };
@@ -370,11 +373,19 @@ function flagGitignoredEvidenceAnchor(
   return true;
 }
 
+/**
+ * Whether a file reference is immediately followed by its `(search: ...)` anchor, which is the shape that makes a citation checkable.
+ *
+ * @param line - entry line holding the reference
+ * @param match - the file-reference match found on that line
+ * @returns true when an anchor follows; a match with no index reports false rather than guessing a position
+ */
 function isFollowedBySearchAnchor(
   line: string,
   match: RegExpMatchArray,
 ): boolean {
   const matchIndex = match.index;
+  // Without a position there is no text to look at after the reference, so the citation cannot be confirmed.
   if (matchIndex === undefined) return false;
   return line
     .slice(matchIndex + match[0].length)

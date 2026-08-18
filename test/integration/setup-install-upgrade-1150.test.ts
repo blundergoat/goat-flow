@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 import { makeTempProject, runCliInstaller } from "./setup-install.helpers.js";
 
-/** Create a file symlink, or skip when the host forbids the fixture. */
+/** Create a file symlink, or skip when the host forbids the fixture; it swallows that platform failure into a skip rather than a red test. */
 function symlinkFileOrSkip(
   testContext: TestContext,
   target: string,

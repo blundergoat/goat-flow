@@ -483,11 +483,19 @@ function pushConfiguredArgvCommand(
   });
 }
 
+/**
+ * Walk a settings file of unknown shape and pull out every hook command it registers, wherever the agent chose to nest them.
+ *
+ * @param value - any node of the parsed config; non-command values are walked through and contribute nothing
+ * @param configPath - config file the commands came from, kept so a finding can name the file the user must edit
+ * @param commands - collected commands, appended to in place
+ */
 function collectNestedCommandValues(
   value: unknown,
   configPath: string,
   commands: ConfiguredHookCommand[],
 ): void {
+  // Agents nest hook registrations differently, so both arrays and objects are walked rather than assuming one layout.
   if (Array.isArray(value)) {
     for (const entry of value) {
       collectNestedCommandValues(entry, configPath, commands);
@@ -510,12 +518,21 @@ function collectNestedCommandValues(
   }
 }
 
+/**
+ * Read the guard commands one agent has actually registered, which is what the runtime audit replays rather than trusting the file list.
+ * It swallows an unreadable or malformed config as an empty list, which the caller reports as no registered protection.
+ *
+ * @param ctx - audit context supplying the target filesystem
+ * @param agentFacts - agent whose configuration is being read
+ * @returns every registered hook command; empty means this agent has nothing wired up
+ */
 function configuredGuardCommands(
   ctx: AuditContext,
   agentFacts: AuditContext["agents"][number],
 ): ConfiguredHookCommand[] {
   const configPath =
     agentFacts.agent.hookConfigFile ?? agentFacts.agent.settingsFile;
+  // An agent with no settings file cannot register anything, so there is nothing to replay.
   if (!configPath) return [];
   const rawConfig = ctx.fs.readFile(configPath);
   if (rawConfig === null) return [];
@@ -548,10 +565,18 @@ function describeConfiguredCommand(configured: ConfiguredHookCommand): string {
     : [configured.command, ...configured.args].join(" ");
 }
 
+/**
+ * Say why a registered command does not point at the managed hook script, so a user with a hand-edited config learns what to correct.
+ *
+ * @param agentFacts - agent whose registration is being judged
+ * @param configured - the command as registered in the user's config
+ * @returns the failure text, or null when the registration names the expected script
+ */
 function configuredHookCommandPathFailure(
   agentFacts: AuditContext["agents"][number],
   configured: ConfiguredHookCommand,
 ): string | null {
+  // The registration runs something, but nothing that resolves to a managed script path.
   if (configured.scriptPath === null) {
     return `${agentFacts.agent.id} configured hook command does not name an exact managed hook script path: ${describeConfiguredCommand(configured)}`;
   }
@@ -645,7 +670,7 @@ function configuredHookProbeFailureFromResult(
 
 /**
  * Replay safe and blocked user commands through one exact configured launcher.
- * Use during trusted runtime audit so launcher, root selection, and policy are proved together.
+ * It spawns the registered launcher, so the audit proves the launcher, root selection, and policy together rather than inferring them.
  */
 function verifyConfiguredHookRuntime(
   ctx: AuditContext,
@@ -706,7 +731,7 @@ function verifyConfiguredHookRuntime(
 
 /**
  * Replay one blocked user command through the installed script itself.
- * Use only when no configured launcher is available to provide stronger end-to-end proof.
+ * It spawns the script directly, and is used only when no configured launcher exists to give stronger end-to-end proof.
  */
 function verifyDirectHookRuntime(
   ctx: AuditContext,

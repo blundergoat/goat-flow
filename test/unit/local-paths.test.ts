@@ -21,6 +21,7 @@ import {
   validateLocalPath,
 } from "../../src/cli/server/local-paths.js";
 
+// Create a symlink, or skip when the host forbids unprivileged links; it swallows that platform failure so an unsupported host never fails the suite.
 function symlinkOrSkip(
   testContext: TestContext,
   target: string,
@@ -44,6 +45,7 @@ function symlinkOrSkip(
   }
 }
 
+// Assert a call was refused with the exact validation class, so a test cannot pass on the wrong refusal reason.
 function assertLocalPathError(
   fn: () => unknown,
   validationClass: LocalPathValidationError["validationClass"],

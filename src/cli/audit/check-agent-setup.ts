@@ -24,7 +24,7 @@ import {
 
 /**
  * Detect whether an agent directory contains goat-flow-owned artifacts.
- * Use when audit finds an agent config directory but must avoid flagging ordinary agent-only config.
+ * It reports absence rather than throwing on an unreadable directory, so a user's own agent config is never mistaken for a broken install.
  *
  * @param fs - target project filesystem; missing directories mean no goat-flow artifact exists there
  * @param profile - manifest profile for one agent; missing hook dir limits detection to skills
@@ -361,7 +361,7 @@ function expectedReferenceFiles(ctx: AuditContext, skill: string): Set<string> {
 
 /**
  * Check installed skill references that are no longer declared by the manifest.
- * Use after upgrades so users see stale reference files that could mislead an agent.
+ * Use after upgrades, because a reference file left behind by a rename still looks authoritative to an agent reading it.
  *
  * @param ctx - audit context; empty agent list produces no stale reference findings
  * @returns audit failure listing unexpected references, or `null` when installed references are current

@@ -169,7 +169,14 @@ function countMalformedFences(content: string): number {
   return malformed;
 }
 
-/** List installed skill directories that contain a `SKILL.md` file. */
+/**
+ * List the skills that are really installed, judged by the presence of `SKILL.md` rather than by directory name alone.
+ * The sorted result is a stable contract: audit output and dashboard rows list skills in the same order on every run.
+ *
+ * @param fs - read-only view of the target project
+ * @param agent - agent profile supplying the skills directory to read
+ * @returns sorted skill directory names; empty means nothing is installed for this agent yet
+ */
 function collectInstalledSkillDirs(
   fs: ReadonlyFS,
   agent: AgentProfile,
@@ -250,7 +257,15 @@ function scanExpectedSkills(
   };
 }
 
-/** Count installed skills whose Step 0 section still matches the template too closely. */
+/**
+ * Count skills whose Step 0 still reads like the shipped template, which is the signal that setup was installed but never adapted.
+ * It swallows a missing or unreadable template and skips that skill, because a custom skill with no shipped template is not evidence of anything.
+ *
+ * @param fs - read-only view of the target project
+ * @param agent - agent profile supplying the skills directory
+ * @param found - installed skill names to compare
+ * @returns how many skills still match their template; zero means every installed skill was adapted or could not be compared
+ */
 function countUnadaptedSkills(
   fs: ReadonlyFS,
   agent: AgentProfile,
@@ -272,6 +287,7 @@ function countUnadaptedSkills(
     } catch {
       // Template missing (e.g. custom skill with no goat-flow template) - skip
     }
+    // Without both sides there is nothing to compare, so the skill is left out of the count rather than guessed at.
     if (!installed || !template) continue;
 
     const installedStepZero = extractSection(installed, "Step 0");

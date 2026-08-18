@@ -37,16 +37,18 @@ function readDashboardState(ctx: DashboardRouteContext) {
 }
 
 /**
- * List immediate non-hidden sibling directories beside the dashboard launch project.
- * Use for read-only Projects discovery; filesystem errors degrade to no discovered rows.
+ * Offer the folders sitting beside the project the dashboard was launched from, so a user can add a neighbouring repo without typing its path.
+ * It swallows an unreadable parent directory into an empty list, and the alphabetical order is a stable contract so the suggestions do not
+ * reshuffle between visits.
  *
  * @param launchProjectPath - project path supplied when the dashboard server started
- * @returns sorted absolute sibling paths, excluding hidden directories and the parent itself
+ * @returns sorted absolute sibling paths, excluding hidden directories and the parent itself; empty when nothing could be listed
  */
 export function discoverSiblingProjectPaths(
   launchProjectPath: string,
 ): string[] {
   const discoveryRoot = dirname(launchProjectPath);
+  // The launch project is a filesystem root, so it has no siblings to offer.
   if (discoveryRoot === launchProjectPath) return [];
 
   try {
@@ -54,6 +56,7 @@ export function discoverSiblingProjectPaths(
       .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
       .map((entry) => join(discoveryRoot, entry.name))
       .sort((first, second) => first.localeCompare(second));
+    // For example, the user launched from a directory whose parent they cannot read, so no suggestions are offered.
   } catch {
     return [];
   }
@@ -78,7 +81,12 @@ function activeDiscoveredProjectPaths(
   });
 }
 
-/** Persist normalized dashboard state and retire the legacy list after the replacement is durable. */
+/**
+ * Writes the normalized dashboard state to disk, then removes the legacy list once the replacement is safely on disk.
+ *
+ * @param ctx - dashboard route context supplying the state and legacy file paths
+ * @param state - complete state to persist; it replaces the stored file rather than merging into it
+ */
 async function writeDashboardState(
   ctx: DashboardRouteContext,
   state: DashboardStateData,
@@ -91,7 +99,15 @@ async function writeDashboardState(
 
 type ProjectArchiveAction = "archive" | "restore";
 
-/** Archive or restore one validated project and return the result through the route response. */
+/**
+ * Archive or restore one project after the user clicks it in the Projects list, then answer with the updated state.
+ * It reports a wrong method, a bad body, or an unusable path as a JSON status body rather than throwing at the server.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @param req - incoming POST request carrying the project path
+ * @param res - JSON response target
+ * @param action - whether the user asked to archive or restore
+ */
 async function handleProjectArchiveRequest(
   ctx: DashboardRouteContext,
   req: IncomingMessage,
@@ -138,7 +154,14 @@ async function handleProjectArchiveRequest(
   }
 }
 
-/** Persist the legacy project-list request as active and retained archived records. */
+/**
+ * Persists a whole projects list sent by an older client, keeping already-archived records rather than dropping them.
+ * It reports a bad body or an unusable path as a JSON status body rather than throwing at the server.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @param req - incoming POST request carrying the list of project paths
+ * @param res - JSON response target
+ */
 async function handleProjectsListWriteRequest(
   ctx: DashboardRouteContext,
   req: IncomingMessage,
@@ -243,6 +266,15 @@ function planWriteErrorStatus(message: string): number {
     : 400;
 }
 
+/**
+ * Switch which plan the Tasks view is working on, writing the `.active` marker and answering with the refreshed state.
+ * It reports an unknown plan or an unwritable project as a JSON status body, so the user sees why the selection did not stick.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @param req - incoming POST request carrying the plan name
+ * @param url - request URL carrying the project path
+ * @param res - JSON response target
+ */
 async function writeDashboardActivePlan(
   ctx: DashboardRouteContext,
   req: IncomingMessage,
@@ -263,6 +295,14 @@ async function writeDashboardActivePlan(
   }
 }
 
+/**
+ * Answer the Tasks view with the plans in this project and the milestones of the selected one.
+ * It reports an unreadable project as a JSON status body rather than throwing at the server.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @param url - request URL carrying the project path and the plan the user clicked
+ * @param res - JSON response target
+ */
 function readDashboardPlans(
   ctx: DashboardRouteContext,
   url: URL,

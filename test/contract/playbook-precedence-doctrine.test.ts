@@ -48,6 +48,12 @@ function readPlaybookSection(
   return content.slice(start, nextHeading === -1 ? undefined : nextHeading);
 }
 
+/**
+ * Assert one playbook keeps project authority bounded, so a consumer project cannot be told it may override safety or evidence rules.
+ *
+ * @param content - installed playbook text being checked
+ * @param playbookPath - path named in the failure message so the reader knows which file to open
+ */
 function assertBoundedProjectAuthority(
   content: string,
   playbookPath: string,

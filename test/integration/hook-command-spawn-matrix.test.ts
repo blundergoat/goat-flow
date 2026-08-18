@@ -60,7 +60,7 @@ interface RegisteredHandler {
 /**
  * Build a Git project whose name carries spaces and shell metacharacters, with
  * the shipped hook files installed and all three Claude hooks registered.
- * Side effects: creates one temp tree recorded for suite cleanup.
+ * It writes one temporary tree, recorded for suite cleanup.
  *
  * @returns hostile-named project root ready for exact handler replay
  */
@@ -157,7 +157,7 @@ function denyPayload(shellCommand: string): string {
 }
 
 /**
- * Spawn one registered handler with its exact argv, no shell, payload on stdin.
+ * Spawns one registered handler with its exact argv, no shell, payload on stdin.
  * This is the provider-native execution path Claude's exec form uses.
  *
  * @param projectRoot - fixture root; a different cwd exercises root discovery

@@ -35,6 +35,12 @@ class LocalPathValidationError extends Error {
   readonly validationClass: LocalPathValidationClass;
   readonly purpose: LocalPathPurpose | "state-path";
 
+  /**
+   * Carry both what the user was trying to do and which rule stopped them, so the dashboard can explain the refusal instead of showing a bare error.
+   *
+   * @param purpose - what the caller intended to do with the path, echoed in the message the user sees
+   * @param validationClass - which rule refused it, used by the dashboard to choose the wording
+   */
   constructor(
     purpose: LocalPathPurpose | "state-path",
     validationClass: LocalPathValidationClass,
@@ -109,10 +115,18 @@ function isPolicyEnforcedPurpose(purpose: LocalPathPurpose): boolean {
   return purpose !== "browse";
 }
 
+/**
+ * Decide whether a path is somewhere the server refuses to act, such as a system root the user should never be able to launch a terminal in.
+ *
+ * @param path - absolute path to judge, already resolved
+ * @param purpose - what the caller intends to do; browsing is exempt because reading a directory listing changes nothing
+ * @returns the rule that blocks it, or null when the path is allowed for this purpose
+ */
 function blockedClassForPath(
   path: string,
   purpose: LocalPathPurpose,
 ): LocalPathValidationClass | null {
+  // Browsing cannot damage anything, so a user can still look at a directory this server would refuse to work in.
   if (!isPolicyEnforcedPurpose(purpose)) return null;
 
   const posixPath = toPosixPath(path);
@@ -127,14 +141,24 @@ function blockedClassForPath(
   return null;
 }
 
+/**
+ * Refuse a blocked location before any route acts on it, checking the typed path and the path it really resolves to.
+ * It throws `LocalPathValidationError`; returning normally is the caller's evidence that both forms passed.
+ *
+ * @param resolvedPath - the path as typed, resolved to absolute
+ * @param realPath - the same path with symlinks followed, which is where work would actually land
+ * @param purpose - what the caller intends to do, which selects the rules and appears in the error
+ */
 function assertAllowedByPurpose(
   resolvedPath: string,
   realPath: string,
   purpose: LocalPathPurpose,
 ): void {
   const resolvedBlock = blockedClassForPath(resolvedPath, purpose);
+  // The path the user typed is blocked outright.
   if (resolvedBlock) throw new LocalPathValidationError(purpose, resolvedBlock);
   const realBlock = blockedClassForPath(realPath, purpose);
+  // A symlink pointing somewhere blocked is refused too, so a link cannot be used to reach a protected root.
   if (realBlock) throw new LocalPathValidationError(purpose, realBlock);
 }
 
@@ -184,23 +208,39 @@ function existingPathComponents(from: string, target: string): string[] {
   return paths.filter((path) => existsSync(path));
 }
 
+/**
+ * Walk every existing directory on the way to a target and prove none of them leads outside the project.
+ * It throws `LocalPathValidationError`; returning normally is the caller's evidence that the whole chain stays inside.
+ *
+ * @param realRoot - project root with symlinks already resolved
+ * @param components - existing path components from the root down to the target, in order
+ */
 function assertExistingComponentsStayInside(
   realRoot: string,
   components: string[],
 ): void {
   for (const [index, component] of components.entries()) {
+    // A symlink anywhere below the root could point outside the project, so it is refused rather than followed.
     if (index > 0 && lstatSync(component).isSymbolicLink()) {
       throw new LocalPathValidationError("state-path", "state-path-escape");
     }
+    // Even without a symlink, a component that resolves outside the root means the target is not really inside it.
     if (!isPathWithin(realRoot, realpathSync(component))) {
       throw new LocalPathValidationError("state-path", "state-path-escape");
     }
   }
 }
 
+/**
+ * Prove the caller validated this project for writing before any state path is derived from it.
+ * It throws `LocalPathValidationError`; returning normally narrows the type so later code cannot forget the check.
+ *
+ * @param project - a path already validated for some purpose, which must be a writing one here
+ */
 function assertLocalStatePathPurpose(
   project: ValidatedLocalPath,
 ): asserts project is ValidatedLocalPath & { purpose: LocalStatePathPurpose } {
+  // A path validated only for browsing or terminal launch was never checked for writing, so it cannot be used to build one.
   if (project.purpose !== "write-local-state" && project.purpose !== "upload") {
     throw new LocalPathValidationError("state-path", "state-path-escape");
   }

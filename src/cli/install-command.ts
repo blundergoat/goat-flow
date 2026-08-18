@@ -41,7 +41,10 @@ import { readAllHookStates, type HookState } from "./server/hook-registrar.js";
 import { listHookSpecs, type HookSpec } from "./server/hooks-registry.js";
 import type { AgentId, AgentProfile } from "./types.js";
 
-/** Derive installer flags from the project's adoption state. */
+/**
+ * Derive installer flags from the project's adoption state.
+ * It swallows an unreadable project into the default flag set rather than blocking the install.
+ */
 function deriveInstallFlags(
   projectPath: string,
   agentId: string,

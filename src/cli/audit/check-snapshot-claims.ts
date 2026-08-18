@@ -172,11 +172,13 @@ function isFenceLine(line: string): boolean {
 
 /**
  * Scan one CHANGELOG section body against its matching snapshot.
+ * The snapshot is the contract: a released section is checked against the numbers frozen at release time, because later code changes must not
+ * silently rewrite what a past release claimed. It reports each disagreement as a finding rather than throwing.
  *
- * @param section Parsed CHANGELOG section or whole-file release notes wrapper.
- * @param snapshot Frozen facts for the section version.
- * @param path Display path used in content findings.
- * @returns Content findings for numeric claims that disagree with the snapshot.
+ * @param section - parsed CHANGELOG section, or the whole-file wrapper used for release notes
+ * @param snapshot - frozen facts for that version
+ * @param path - display path shown in content findings
+ * @returns findings for numeric claims that disagree with the snapshot; empty means the section still tells the truth
  */
 function scanSectionAgainstSnapshot(
   section: ChangelogSection,

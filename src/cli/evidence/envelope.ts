@@ -245,6 +245,12 @@ function validatePayload(payload: EvidencePayload | undefined): string[] {
   );
 }
 
+/**
+ * Copy across only the optional fields a producer actually supplied, so an absent field stays absent instead of becoming a null in the record.
+ *
+ * @param envelope - envelope under construction, extended in place
+ * @param input - producer-supplied values; every field here is optional
+ */
 function applyEnvelopeOptionalFields(
   envelope: EvidenceEnvelope,
   input: CreateEvidenceEnvelopeInput,
@@ -323,6 +329,12 @@ export function validateEvidenceEnvelope(
   return errors;
 }
 
+/**
+ * Surface a non-fatal evidence-writing problem through the caller's own reporter, since evidence must never take down the work it describes.
+ *
+ * @param options - write options carrying the reporter; `undefined` means the caller wanted no warnings at all
+ * @param message - what could not be recorded
+ */
 function warn(
   options: EvidenceEnvelopeWriteOptions | undefined,
   message: string,

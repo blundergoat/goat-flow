@@ -76,7 +76,7 @@ function toRuntimeDenyMechanism(deny: ManifestDenyMechanism): DenyMechanism {
 
 /**
  * Read a required manifest directory for an agent setup surface.
- * Use when missing metadata would leave the UI pointing users at nowhere.
+ * It throws when the value is missing, because a UI pointing users at nowhere is worse than a loud failure at startup.
  *
  * @param id - agent whose setup metadata is being loaded; empty is impossible after manifest id validation
  * @param field - manifest field name shown in the error; empty would make the operator message unclear
@@ -100,7 +100,7 @@ function requireManifestDirectory(
 
 /**
  * Read a required manifest capability before it appears in prompts or dashboard cards.
- * Use when missing copy would make the next setup action ambiguous for the user.
+ * It throws when the value is missing, because ambiguous setup copy would leave the user guessing at their next action.
  *
  * @param id - agent whose capability is being loaded; empty is impossible after manifest id validation
  * @param field - capability field shown in the error; empty would make the operator message unclear

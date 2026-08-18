@@ -119,6 +119,7 @@ type SetupPromptHelpers = {
     _qualityContext: SetupPromptContext,
     mode: { id: string },
   ): string;
+  /** Generate the setup prompt for one agent, as the Home card's button does. */
   dashboardGenerateSetupPromptForAgent(
     ctx: SetupPromptContext,
     targetAgent: string,

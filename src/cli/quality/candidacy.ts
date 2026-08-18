@@ -383,6 +383,12 @@ function matchSkillIntent(tokens: DescriptionTokens): CandidacyResult | null {
   return null;
 }
 
+/**
+ * Spot an author describing reference material, so they are steered to a playbook instead of building a skill nobody will invoke.
+ *
+ * @param tokens - tokenised description the author typed
+ * @returns the reference recommendation, or null when this shape does not apply and the next matcher gets its turn
+ */
 function matchReferenceIntent(
   tokens: DescriptionTokens,
 ): CandidacyResult | null {
@@ -395,6 +401,7 @@ function matchReferenceIntent(
       lower,
     );
   const isSkillModeChange = /\bgoat-[a-z0-9-]+\b.*\bmode\b/.test(lower);
+  // Reference words plus a named skill mode means the author is changing an existing skill, not writing a new document.
   if (wantsReferenceArtifact && !isSkillModeChange) {
     return {
       recommendedArtifact: { type: "reference", subtype: "playbook" },
@@ -431,10 +438,17 @@ function matchReferenceIntent(
   return null;
 }
 
+/**
+ * Spot an author describing a rule rather than a procedure, so it lands in the instruction file where it is read every session.
+ *
+ * @param tokens - tokenised description the author typed
+ * @returns the instruction-file recommendation, or null when this shape does not apply and the next matcher gets its turn
+ */
 function matchInstructionRuleIntent(
   tokens: DescriptionTokens,
 ): CandidacyResult | null {
   const { lower } = tokens;
+  // Rule words with no procedure words: a line in the instruction file, not a skill with steps.
   if (
     /\b(rule|policy|constraint|always|never|must)\b/.test(lower) &&
     !/\bworkflow|process|protocol|step\b/.test(lower)
@@ -454,10 +468,17 @@ function matchInstructionRuleIntent(
   return null;
 }
 
+/**
+ * Spot an author writing up something that already went wrong, so it is captured as a lesson or footgun instead of a new skill.
+ *
+ * @param tokens - tokenised description the author typed
+ * @returns the learning-loop recommendation, or null when this shape does not apply and the next matcher gets its turn
+ */
 function matchLearningLoopIntent(
   tokens: DescriptionTokens,
 ): CandidacyResult | null {
   const { lower } = tokens;
+  // Past-incident language is the tell: the author is recording what happened, not defining how to work.
   if (
     /\blearn(?:ed|t)\b.*\b(failure mode|mistake|incident|lesson)\b/.test(
       lower,
@@ -510,10 +531,17 @@ function matchLearningLoopIntent(
   return null;
 }
 
+/**
+ * Spot work that runs the same way every time, which belongs in a CLI subcommand rather than a skill that asks an agent to judge anything.
+ *
+ * @param tokens - tokenised description the author typed
+ * @returns the CLI recommendation, or null when this shape does not apply and the next matcher gets its turn
+ */
 function matchCliCommandIntent(
   tokens: DescriptionTokens,
 ): CandidacyResult | null {
   const { lower } = tokens;
+  // Deterministic, decision-free work is code; the decision words in the second test are what keep a real skill out of this branch.
   if (
     /\bgenerate\b.*\b(index|indexes|indices)\b.*\b(markdown|md)\b/.test(
       lower,

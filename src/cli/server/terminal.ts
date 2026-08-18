@@ -306,7 +306,8 @@ class TerminalManager {
 
   /**
    * Reserve and create one runner terminal for the user's selected project.
-   * The synchronous placeholder keeps double-clicks under the session cap, then becomes active or is released.
+   * The synchronous placeholder keeps double-clicks under the session cap, then becomes active or is released; it reports a failed launch to the
+   * caller after releasing that reservation, so a crashed spawn never leaves a phantom session in the list.
    */
   async create(
     prompt: string,
@@ -371,7 +372,7 @@ class TerminalManager {
 
   /**
    * Launch the runner into an already-reserved session and promote it to `active`.
-   * Runs after `create` has parked a `starting` placeholder in the session map; anything thrown here is cleaned up by `create`'s catch.
+   * It spawns the runner process, and anything it throws is cleaned up by the `create` call that reserved the slot.
    * Kept separate from `create` so slot reservation stays synchronous while the spawn - which awaits node-pty - happens under the concurrency guard.
    *
    * @param session - the reserved session to launch and mutate to active
@@ -773,7 +774,7 @@ class TerminalManager {
     this.sessions.delete(session.id);
   }
 
-  /** Emit redaction-ready input metadata; tracing errors never affect PTY writes. */
+  /** Emit redaction-ready input metadata; it swallows tracing errors so a logging fault never blocks the keystrokes a user is typing. */
   private traceTerminalInput(
     session: TerminalSession,
     eventKind: TerminalTraceEventKind,

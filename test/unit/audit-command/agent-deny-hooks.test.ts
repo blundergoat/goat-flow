@@ -140,6 +140,7 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},

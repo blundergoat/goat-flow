@@ -126,8 +126,8 @@ function compareEntriesDesc(
 }
 
 /**
- * Count findings at one severity level.
- * Use for quality history row badges the user scans before opening a run.
+ * Count findings at one severity level for the history-row badges a user scans before opening a run.
+ * Counting the saved findings rather than a stored total is deliberate: the badge must stay true to the report it sits beside.
  *
  * @param report - saved quality report; empty findings means the count is zero
  * @param severity - severity to count; missing/unknown severities cannot reach this helper after parsing
@@ -402,7 +402,7 @@ export function loadQualityHistoryWindow(
 
 /**
  * Load and validate one quality-history file.
- * Use for latest-run lookup and bounded windows so malformed files stay non-blocking.
+ * It swallows a malformed or unreadable file into a warning so one bad report never hides the rest of a user's history.
  *
  * @param dir - quality log directory; missing directories must be checked by callers first
  * @param filename - history filename to read; empty names produce a bad file path
@@ -523,6 +523,8 @@ export function selectQualityHistoryEntries(
 
 /**
  * Build display rows with same-agent, same-mode setup deltas.
+ * Deltas are only ever taken against the previous run by the same agent in the same mode, because comparing across either one is not a like-for-like
+ * contract and would show the user movement that never happened.
  *
  * @param entries - pre-sorted quality-history entries; empty entries produce no history rows
  * @param options - filter and limit options; `null` limit means return every matching row

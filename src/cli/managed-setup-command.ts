@@ -39,7 +39,7 @@ export function validateManagedSetupRequest(options: ParsedCLI): AgentId {
 
 /**
  * Emit one text or JSON preview and mark unresolved conflicts as a failed dry run.
- * Use after a user selects `install` or `setup` with `--dry-run`.
+ * It throws a usage error for an unsupported format, and exits non-zero on unresolved conflicts so a script cannot read a blocked run as clean.
  *
  * @param options - parsed dry-run choices; absent output means the report is printed to stdout
  * @param preview - complete managed result; an empty files list still emits verdict and limits

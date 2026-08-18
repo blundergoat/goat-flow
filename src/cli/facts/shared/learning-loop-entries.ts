@@ -371,10 +371,11 @@ function extractDecisionEntries(
 
 /**
  * Extract compact learning-loop entries for bounded prompt retrieval.
+ * Ordering is a stable contract: footguns, lessons, patterns, then decisions, each in on-disk order, so two runs over unchanged files agree.
  *
- * @param projectFiles - selected-project files; an empty project produces no memory rows for users.
- * @param configState - memory paths; absent directories produce no entries for that memory kind.
- * @returns ordered facts; an empty array means the selected project has no durable memories to show.
+ * @param projectFiles - selected-project files; an empty project produces no memory rows for users
+ * @param configState - memory paths; absent directories produce no entries for that memory kind
+ * @returns ordered facts; an empty array means the selected project has no durable memories to show
  */
 export function extractLearningLoopEntries(
   projectFiles: ReadonlyFS,

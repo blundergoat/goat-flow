@@ -175,6 +175,7 @@ export function validateIntegrityCounts(
 
 /**
  * Read either documented Top 5 heading and reject multiple risk summaries.
+ * One risk summary per report is the contract: two would leave a reader unsure which set of risks the review actually stands behind.
  *
  * @param lines - the report split into lines; an empty report fails earlier than this
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail

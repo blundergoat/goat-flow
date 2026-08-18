@@ -117,7 +117,10 @@ function withTempProject<T>(fn: (root: string) => T): T {
   }
 }
 
-/** Create a symlink, or skip when the host blocks unprivileged link fixtures. */
+/**
+ * Create a symlink, or skip when the host blocks unprivileged link fixtures.
+ * It swallows that platform failure into a skip rather than a red test.
+ */
 function symlinkOrSkip(
   testContext: TestContext,
   target: string,

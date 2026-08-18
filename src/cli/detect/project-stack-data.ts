@@ -127,7 +127,7 @@ function readToolSignals(
   });
 }
 
-/** Read setup-framework marker rows from the project-stack data JSON. */
+/** Read setup-framework marker rows from the project-stack data JSON; it throws on a malformed row so detection never runs on half a table. */
 function readSetupFrameworkMarkers(
   value: unknown,
   label: string,
@@ -149,7 +149,7 @@ function readSetupFrameworkMarkers(
   });
 }
 
-/** Read Node framework rows from the project-stack data JSON. */
+/** Read Node framework rows from the project-stack data JSON; it throws on a malformed row so detection never runs on half a table. */
 function readNodeFrameworkSignals(
   value: unknown,
   label: string,
@@ -170,7 +170,7 @@ function readNodeFrameworkSignals(
   });
 }
 
-/** Read Node test framework rows from the project-stack data JSON. */
+/** Read Node test framework rows from the project-stack data JSON; it throws on a malformed row so detection never runs on half a table. */
 function readNodeTestFrameworkSignals(
   value: unknown,
   label: string,

@@ -410,7 +410,7 @@ function parsePlansTimePositionals(
   };
 }
 
-/** Parse the single plan directory consumed by export and check. */
+/** Parse the single plan directory consumed by export and check; it throws a usage error naming the accepted subcommands rather than guessing one. */
 function parsePlansReadPositionals(
   subcommand: string | undefined,
   planPath: string | undefined,
@@ -438,6 +438,16 @@ function parsePlansReadPositionals(
   };
 }
 
+/**
+ * Read the hook id and project path for `hooks enable` and `hooks disable`, so a toggle names exactly one hook in one project.
+ * It throws a usage error rather than toggling something the user did not name.
+ *
+ * @param subcommand - whether the user is enabling or disabling
+ * @param hookId - hook the user named; missing raises a usage error rather than toggling something unnamed
+ * @param projectPath - project the user named; missing defaults to the current directory
+ * @param rest - any further words typed, which have no meaning here and are rejected
+ * @returns the resolved toggle request
+ */
 function parseHookTogglePositionals(
   subcommand: "enable" | "disable",
   hookId: string | undefined,

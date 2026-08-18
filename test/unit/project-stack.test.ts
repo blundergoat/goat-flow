@@ -37,7 +37,7 @@ function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   };
 }
 
-/** Write a nested file inside a temp project, creating parent directories first. */
+/** Writes a nested file inside a temp project, creating parent directories first. */
 async function writeFileInProject(
   root: string,
   path: string,

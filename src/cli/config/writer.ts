@@ -167,6 +167,13 @@ function replaceTopLevelHooksBlock(text: string, block: string): string {
     .concat("\n");
 }
 
+/**
+ * Find the line range one top-level config block occupies, so a toggle can replace only that block and leave the user's comments alone.
+ *
+ * @param lines - config file split into lines
+ * @param key - top-level key to locate
+ * @returns the block's start and end lines, or null when the key is not in the file yet
+ */
 function topLevelBlockRange(
   lines: string[],
   key: string,
@@ -185,6 +192,14 @@ function topLevelBlockRange(
   return { start, end };
 }
 
+/**
+ * Work out how far above a block its own comment header reaches, so replacing the block takes its header with it.
+ *
+ * @param lines - config file split into lines
+ * @param start - first line of the block itself
+ * @param key - top-level key being replaced
+ * @returns the first line to remove, which equals `start` when the block has no header of its own
+ */
 function removablePrefixStart(
   lines: string[],
   start: number,
@@ -263,6 +278,7 @@ export function readHookScanRoots(
 
 /**
  * Set one hook's desired enabled state in `.goat-flow/config.yaml`.
+ * It writes the file in place, replacing only the hook block so the rest of the user's config, including their comments, survives the toggle.
  *
  * @param projectPath - project whose goat-flow config should be written
  * @param hookId - canonical hook id to update

@@ -47,6 +47,13 @@ function parseQualityModeParam(param: string | null): QualityMode | null {
   return VALID_QUALITY_MODES.has(param) ? (param as QualityMode) : null;
 }
 
+/**
+ * Decide whether one saved run belongs in the history list the user is currently looking at.
+ *
+ * @param entry - saved run being considered
+ * @param filters - agent and mode the user selected; a null filter means that dimension is not being narrowed
+ * @returns true when the run should appear in the table
+ */
 function qualityHistoryEntryMatchesFilters(
   entry: { agent: AgentId; report: { quality_mode?: QualityMode } },
   agent: AgentId | null,
@@ -68,6 +75,14 @@ interface QualityHistoryFilters {
   qualityMode: QualityMode | null;
 }
 
+/**
+ * Read and check the history filters from the query string before any file is opened.
+ *
+ * @param ctx - dashboard route context supplying the response helpers
+ * @param url - request URL carrying the agent, mode, and limit parameters
+ * @param res - response already answered with a 400 when a parameter is rejected
+ * @returns the accepted filters, or null once an error response has been sent and the caller should stop
+ */
 function readQualityHistoryFilters(
   ctx: DashboardRouteContext,
   url: URL,
@@ -101,6 +116,14 @@ function readQualityHistoryFilters(
   };
 }
 
+/**
+ * Read and check the parameters for composing a quality prompt, before any audit work starts.
+ *
+ * @param ctx - dashboard route context supplying the response helpers
+ * @param url - request URL carrying the agent, mode, and freshness parameters
+ * @param res - response already answered with a 400 when a parameter is rejected
+ * @returns the accepted parameters, or null once an error response has been sent and the caller should stop
+ */
 function parseQualityRequestParams(
   ctx: DashboardRouteContext,
   url: URL,
@@ -130,6 +153,15 @@ function parseQualityRequestParams(
   };
 }
 
+/**
+ * Reuse a recent audit for this project and agent, so composing a prompt does not re-audit on every click.
+ *
+ * @param ctx - dashboard route context supplying the short-lived cache
+ * @param projectPath - validated project the user selected
+ * @param agent - agent the prompt is being composed for
+ * @param fresh - true when the user asked for live results and the cache must be ignored
+ * @returns the cached report, or null when nothing recent enough was stored
+ */
 function readQualityAuditCache(
   ctx: DashboardRouteContext,
   projectPath: string,
@@ -148,6 +180,14 @@ function readQualityAuditCache(
   return cached.report;
 }
 
+/**
+ * Keep a just-computed audit in memory so the next prompt for the same project and agent is instant.
+ *
+ * @param ctx - dashboard route context supplying the short-lived cache
+ * @param projectPath - validated project the user selected
+ * @param agent - agent the report was produced for
+ * @param report - audit result to reuse until it expires
+ */
 function writeQualityAuditCache(
   ctx: DashboardRouteContext,
   projectPath: string,
@@ -160,6 +200,15 @@ function writeQualityAuditCache(
   });
 }
 
+/**
+ * Return the audit a quality prompt needs, reusing the cached one when it is still good and running a fresh audit otherwise.
+ * A failed audit throws through to the route handler, which reports it to the user as a JSON status body.
+ *
+ * @param ctx - dashboard route context supplying the cache and audit entry points
+ * @param projectPath - validated project the user selected
+ * @param agent - agent the prompt is being composed for
+ * @returns the audit report to embed in the prompt
+ */
 function getOrRunQualityAudit(
   ctx: DashboardRouteContext,
   projectPath: string,
@@ -265,7 +314,15 @@ function handleQualityRequest(
   return true;
 }
 
-/** Return persisted quality-history rows and latest trend summary for dashboard UI rendering. */
+/**
+ * Answer the Quality tab with the user's saved runs plus the latest trend summary.
+ * It reports a rejected filter or an unreadable history directory as a JSON status body rather than throwing at the server.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @param url - request URL carrying the project path and filters
+ * @param res - JSON response target
+ * @returns true once this route has answered; false means the URL belongs to another handler
+ */
 async function handleQualityHistoryRequest(
   ctx: DashboardRouteContext,
   url: URL,

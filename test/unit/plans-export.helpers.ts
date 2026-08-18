@@ -16,7 +16,12 @@ import { join, resolve } from "node:path";
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 export const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
 
-/** Build a full milestone body with every field users expect in an exported issue. */
+/**
+ * Build a full milestone body with every field users expect in an exported issue.
+ *
+ * @param secretValue - objective text, so a redaction test can plant a value it then proves never reaches the export
+ * @returns the milestone Markdown a fixture writes to disk
+ */
 export function completeMilestoneBody(secretValue = "safe objective"): string {
   return `# M42: Portable plan
 
@@ -83,7 +88,7 @@ export function runPlansExport(...args: string[]) {
 }
 
 /**
- * Create a symlink, or skip the test on hosts that forbid unprivileged links.
+ * Create a symlink, or skip the test on hosts that forbid unprivileged links; it swallows that platform failure into a skip rather than a red test.
  *
  * @param testContext - the running test, so a forbidden host skips rather than fails
  * @param target - existing path the link should point at
@@ -114,7 +119,7 @@ export function symlinkOrSkip(
 }
 
 /**
- * Create a hardlink, or skip when the host filesystem does not support it.
+ * Create a hardlink, or skip when the host filesystem does not support it; it swallows that platform failure into a skip rather than a red test.
  *
  * @param testContext - the running test, so an unsupporting filesystem skips rather than fails
  * @param target - existing file the link should alias

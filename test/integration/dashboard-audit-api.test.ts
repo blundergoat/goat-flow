@@ -53,6 +53,7 @@ describe("dashboard /api/audit", () => {
     return spans.filter((spanEntry) => spanEntry.name === name).length;
   }
 
+  // Request one audit with profiling on, so the test can assert the span labels a developer sees in the timing panel.
   async function fetchProfiledAudit(
     projectPath: string,
     suffix = "",
@@ -71,6 +72,7 @@ describe("dashboard /api/audit", () => {
     return { ms, body: expectRecord(body, "Profiled audit response") };
   }
 
+  // Reduce a response to the keys the dashboard actually renders, so an added internal field cannot break the assertion.
   function dashboardReportSurface(
     value: Record<string, unknown>,
   ): Record<string, unknown> {

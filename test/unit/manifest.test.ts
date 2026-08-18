@@ -78,6 +78,7 @@ function fixtureJson(
   };
 }
 
+// Build the observed facts a manifest is validated against, so each test overrides only the value it is about.
 function fixtureObserved(
   overrides: Partial<ObservedFacts> = {},
 ): ObservedFacts {
@@ -93,6 +94,7 @@ function fixtureObserved(
   };
 }
 
+// Build one manifest agent entry with valid defaults, so each test states only the field it is exercising.
 function fixtureAgent(
   overrides: Partial<ManifestJson["agents"][string]> = {},
 ): ManifestJson["agents"][string] {
@@ -511,6 +513,7 @@ describe("checkManifest (real repo)", () => {
 });
 
 describe("manifest snapshot coverage (real repo)", () => {
+  // Fixture: the real CHANGELOG, because a release without a readable snapshot cannot have its historical claims checked later.
   it("provides a readable snapshot for every changelog release from v1.1.0", () => {
     const changelog = readFileSync(getTemplatePath("CHANGELOG.md"), "utf8");
     const releaseVersions = Array.from(

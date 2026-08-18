@@ -100,9 +100,11 @@ export function chunkTerminalInput(
 
 /**
  * Pick the most runnable Windows runner path from a `where` result set.
+ * Extension priority is a stable contract: the same candidate list always yields the same executable, so a user does not get a different runner
+ * between launches.
  *
- * @param candidates Raw paths returned by `where`, including possible blank or duplicate lines.
- * @returns The preferred executable-like path, or null when nothing usable remains.
+ * @param candidates - raw paths returned by `where`, including possible blank or duplicate lines
+ * @returns the preferred executable-like path, or null when nothing usable remains and the caller must report the runner as missing
  */
 export function pickWindowsRunnerPath(
   candidates: readonly string[],
@@ -118,6 +120,7 @@ export function pickWindowsRunnerPath(
   );
   if (cleaned.length === 0) return null;
 
+  // Lower rank wins: a real executable extension beats an unknown one, which is what stops a shim being launched instead of the runner.
   const rank = (candidate: string): number => {
     const ext = extname(candidate).toLowerCase();
     const index = WINDOWS_RUNNER_EXTENSION_PRIORITY.indexOf(

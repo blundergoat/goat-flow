@@ -131,6 +131,7 @@ interface AuditOptions extends AuditHarnessOption {
 
 /** Synchronous profiler seam used by dashboard development benchmarks. */
 interface AuditProfiler {
+  /** Time one labelled audit step; implementations return whatever the wrapped block returned. */
   span<T>(name: string, fn: () => T): T;
 }
 
@@ -258,6 +259,12 @@ function describeAggregateAgentSkips(agentScope: AuditScope): string | null {
   return `${skippedAgentChecks.length} agent-specific check(s) skipped in aggregate mode (${skippedAgentChecks.join(", ")}); rerun with --agent <id> for selected-agent runtime evidence.`;
 }
 
+/**
+ * Describe how much of the enforcement matrix stayed unproven, so a passing constraint score is not read as full filesystem enforcement.
+ *
+ * @param matrix - per-agent enforcement capabilities collected for this audit
+ * @returns the caveat sentence, or null when every capability was verified and no hedge is needed
+ */
 function enforcementLimitSummary(
   matrix: AgentEnforcementCapability[],
 ): string | null {
@@ -314,6 +321,14 @@ function isAggregateAgentSkip(
   );
 }
 
+/**
+ * Run one build check and shape its outcome into the row the renderers and dashboard display.
+ * An agent-scoped check that cannot answer for every agent is skipped in aggregate mode rather than reported as a failure the user cannot act on.
+ *
+ * @param ctx - audit context supplying facts, config, and the selected agent filter
+ * @param check - registered build check to execute
+ * @returns the pass, fail, or skipped result carrying provenance and any failure detail
+ */
 function runSingleBuildCheck(
   ctx: AuditContext,
   check: BuildCheck,
@@ -481,6 +496,13 @@ function runAuditFromContext(
   };
 }
 
+/**
+ * Validate registered check provenance inside a labelled profiler span.
+ *
+ * @param ctx - audit context supplying the target filesystem
+ * @param options - audit switches carrying the optional profiler
+ * @param profileScope - profiler label distinguishing aggregate, per-agent, and single runs
+ */
 function validateProvenanceWithProfile(
   ctx: AuditContext,
   options: AuditOptions,
@@ -491,17 +513,33 @@ function validateProvenanceWithProfile(
   });
 }
 
+/**
+ * Score the harness concerns inside a labelled profiler span, but only when the user asked for them.
+ *
+ * @param ctx - audit context supplying facts and config
+ * @param options - audit switches; without `--harness` this stays null
+ * @param profileScope - profiler label distinguishing aggregate, per-agent, and single runs
+ * @returns the harness result, or null when the user did not request harness scoring
+ */
 function computeHarnessWithProfile(
   ctx: AuditContext,
   options: AuditOptions,
   profileScope: string,
 ): ReturnType<typeof computeHarness> | null {
+  // The user did not ask for harness scores, so the report simply has no harness section.
   if (!options.harness) return null;
   return span(options.profile, `${profileScope} harness checks`, () =>
     computeHarness(ctx),
   );
 }
 
+/**
+ * Decide whether this run compares installed files against the shipped templates.
+ *
+ * @param ctx - audit context supplying the target version skew
+ * @param options - audit switches; an explicit drift request always wins
+ * @returns true to run drift, false when the target is newer than this CLI or auto-drift does not apply
+ */
 function shouldRunDriftCheck(
   ctx: AuditContext,
   options: AuditOptions,
@@ -538,11 +576,20 @@ function computeDriftWithProfile(
   );
 }
 
+/**
+ * Run the cold-path content checks inside a labelled profiler span, but only when the user asked for them.
+ *
+ * @param ctx - audit context supplying facts and the target version skew
+ * @param options - audit switches; without `--check-content` this stays null
+ * @param profileScope - profiler label distinguishing aggregate, per-agent, and single runs
+ * @returns the content report, or null when content checks were skipped
+ */
 function computeContentWithProfile(
   ctx: AuditContext,
   options: AuditOptions,
   profileScope: string,
 ): ContentReport | null {
+  // The user did not ask for content checks, so the report has no content section.
   if (!options.checkContent) return null;
   // Same stale-CLI reasoning as drift: newer cold-path content would be linted
   // against rules this release does not carry yet.
@@ -556,10 +603,14 @@ function computeContentWithProfile(
  * Run aggregate + per-agent audits sharing a single config/structure/provenance pass.
  * Eliminates the N+1 pattern where each per-agent audit re-parses config and facts.
  *
+ * It swallows a per-agent audit that throws and leaves that agent out of the result, because one unreadable runtime must not cost the caller the
+ * aggregate report as well.
+ *
  * @param fs - filesystem adapter scoped to the target project
  * @param projectPath - target project root reused by aggregate and per-agent runs
  * @param options - aggregate audit switches reused by the per-agent runs
  * @param agentIds - supported agent ids to audit individually after the aggregate run
+ * @returns the aggregate report plus one entry per agent that audited without throwing
  */
 export function runAuditBatch(
   fs: ReadonlyFS,
@@ -648,6 +699,7 @@ export function runAuditBatch(
           shouldRunAutoDrift: false,
         }),
       });
+      // For example, the user's agent settings file is malformed, so that runner is left out and the rest of the report still renders.
     } catch {
       /* skip agents that fail to audit */
     }

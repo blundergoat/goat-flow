@@ -37,6 +37,7 @@ import {
 // ---------------------------------------------------------------------------
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const cachedRepoAudits = new Map<string, AuditReport>();
+// Audit this repository once per option shape, so the suite measures real output rather than a fixture's idea of it.
 function getRepoAudit(opts: {
   agentFilter: AgentId | null;
   harness: boolean;

@@ -419,6 +419,14 @@ function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
   };
 }
 
+/**
+ * Seed the Quality and Setup views with the state they open on, before any request has returned.
+ *
+ * @param supportedAgents - agents this build knows about, shown in the runner pickers
+ * @param defaultRunner - runner selected until the user picks another
+ * @param defaultSetupAgents - setup rows rendered before the first audit response arrives
+ * @returns the fragment merged into the dashboard app
+ */
 function dashboardQualitySetupStateFragment(
   supportedAgents: SupportedAgent[],
   defaultRunner: RunnerId,

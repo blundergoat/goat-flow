@@ -116,7 +116,7 @@ describe("collectIndexFreshness", () => {
     assert.deepEqual(states, ["fresh", "fresh", "fresh", "fresh"]);
   });
 
-  // Fixture purpose: mutates one bucket per temp repo so every bucket can independently report stale.
+  // Fixture purpose: mutates one bucket per temp repo, because each bucket must be able to report stale on its own rather than only in a group.
   it("reports stale after a bucket entry changes in any of the four buckets", () => {
     for (const [bucket, dirPath] of Object.entries(BUCKET_PATHS)) {
       const stale = makeFreshRepo();

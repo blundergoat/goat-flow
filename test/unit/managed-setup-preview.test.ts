@@ -391,7 +391,7 @@ describe("managed install state", () => {
   });
 });
 
-/** Write one target-controlled baseline body for invalid-state preview tests. */
+/** Writes one target-controlled baseline body for invalid-state preview tests. */
 function writeInvalidStateFixture(
   projectPath: string,
   serializedState: string,

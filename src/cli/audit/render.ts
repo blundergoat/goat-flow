@@ -246,7 +246,13 @@ export function renderAuditText(report: AuditReport): string {
   return lines.join("\n");
 }
 
-/** Render content-check findings in the terminal text format. */
+/**
+ * Render content-check findings in the terminal text format.
+ * A clean run still prints a line, because silence would leave the user unsure whether the check ran at all; that is the contract the summary keeps.
+ *
+ * @param content - the content report to render
+ * @param lines - output lines appended to in place
+ */
 function renderTextContentFindings(
   content: ContentReport,
   lines: string[],
@@ -347,7 +353,14 @@ function renderMdScope(name: string, scope: AuditScope): string {
   return lines.join("\n");
 }
 
-/** Render effective hook links and repairs in the Markdown summary users paste into reviews. */
+/**
+ * Render effective hook links and repairs in the Markdown summary users paste into reviews.
+ * The heading leads with the ineffective count because that is the number a reviewer acts on, and it says status is offline so nobody reads it as
+ * proof the hooks ran.
+ *
+ * @param hookCoverage - hook coverage report to render
+ * @param lines - output lines appended to in place
+ */
 function renderMdHookCoverage(
   hookCoverage: AuditHookCoverageReport,
   lines: string[],

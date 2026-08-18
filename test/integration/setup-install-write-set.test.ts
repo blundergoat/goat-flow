@@ -88,7 +88,7 @@ function snapshotProject(
 
 /**
  * Compare two snapshots of one target and report what an operation changed.
- * A rewrite with identical bytes is deliberately invisible: users judge an install by
+ * Identical bytes are deliberately invisible, which is the contract here: users judge an install by
  * the content they end up with, not by inode churn from atomic replacement.
  *
  * @param before - snapshot captured immediately before the operation

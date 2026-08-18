@@ -90,7 +90,7 @@ function parseSkillNewPositionals(
   return null;
 }
 
-/** Parse either supported project-path placement for read-only `skill doctor`. */
+/** Parse either supported project-path placement for read-only `skill doctor`; it throws a usage error when extra positionals are supplied. */
 function parseSkillDoctorPositionals(
   positionals: string[],
 ): SkillPositionals | null {
@@ -169,7 +169,7 @@ export function parseSkillPositionals(positionals: string[]): SkillPositionals {
   );
 }
 
-/** Validate draft input against candidacy and skill-new modes. */
+/** Validate draft input against candidacy and skill-new modes; it throws a usage error when `--draft` is passed to a command that ignores it. */
 function validateDraftFlag(
   command: Command,
   values: ParsedArgValues,
@@ -192,7 +192,7 @@ function validateDraftFlag(
   }
 }
 
-/** Validate the three write-capable authoring flags through one rule table. */
+/** Validate the write-capable authoring flags through one rule table; it throws a usage error when one is used outside `skill new`. */
 function validateAuthoringOnlyFlags(
   values: ParsedArgValues,
   isSkillNew: boolean,
@@ -212,7 +212,7 @@ function validateAuthoringOnlyFlags(
   }
 }
 
-/** Validate the read-only canonical skill filter. */
+/** Validate the read-only canonical skill filter; it throws a usage error when `--skill` is passed to anything but `skill doctor`. */
 function validateDoctorFilter(
   values: ParsedArgValues,
   isSkillDoctor: boolean,

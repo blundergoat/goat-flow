@@ -238,7 +238,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
   // Cross-analyzer hardening: the five gruff ports (Go/Rust/TS/PHP/Py) may emit
   // subtly different gruff.hook.v1 envelopes. The hook's contract reader matches
-  // the legacy reader's tolerance so any conforming port renders identically.
+  // the legacy reader's tolerance so any conforming port renders identically. The fixture writes that mock binary into a temporary project.
   it("renders a gruff.hook.v1 finding that reports its location under `path` instead of `file`", () => {
     const root = makeRoot();
     writeContractGruffBinary(

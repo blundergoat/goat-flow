@@ -261,18 +261,29 @@ export interface CodexWorkspaceRootEntry {
   mode: string;
 }
 
+/**
+ * Turn one Codex config key into workspace-root rules, covering both shapes a user's config can be written in.
+ *
+ * @param key - config key being read
+ * @param value - value at that key; anything other than a string is not a rule and yields nothing
+ * @param inlineTableKey - key whose value holds every rule on one line
+ * @param prefix - key prefix used when each rule is its own dotted key
+ * @returns the rules this key contributes; an empty array means the key is unrelated to workspace roots
+ */
 function collectCodexWorkspaceRootEntry(
   key: string,
   value: unknown,
   inlineTableKey: string,
   prefix: string,
 ): CodexWorkspaceRootEntry[] {
+  // The whole table written on one line, so every rule is parsed out of this single value.
   if (key === inlineTableKey && typeof value === "string") {
     return parseTomlInlineStringTable(value).map(([pattern, mode]) => ({
       pattern,
       mode,
     }));
   }
+  // Any other key belongs to a different setting, so it contributes no rule.
   if (typeof value !== "string" || !key.startsWith(prefix)) return [];
   const pattern = key.slice(prefix.length);
   return pattern ? [{ pattern, mode: value }] : [];
@@ -301,6 +312,13 @@ export function collectCodexWorkspaceRootEntries(
   );
 }
 
+/**
+ * Narrow the workspace-root rules to the ones that actually deny access, which is the set the guardrail audit scores.
+ *
+ * @param parsed - parsed Codex config; anything that is not an object yields an empty set
+ * @param profileName - permission profile to read
+ * @returns denied patterns; an empty set means this profile blocks nothing, not that the config failed to parse
+ */
 function collectCodexDeniedWorkspaceRootPatterns(
   parsed: unknown,
   profileName: string,
@@ -310,6 +328,7 @@ function collectCodexDeniedWorkspaceRootPatterns(
     parsed,
     profileName,
   )) {
+    // Read and ask modes still grant access, so only outright denials count as a guardrail.
     if (isCodexDenyMode(mode)) denied.add(pattern);
   }
   return denied;

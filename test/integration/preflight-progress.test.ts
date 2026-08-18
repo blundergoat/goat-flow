@@ -60,7 +60,7 @@ interface PreflightRunnerFixture {
 }
 
 /**
- * Run the production preflight command runner and capture its three operator-visible channels.
+ * Spawns the production preflight command runner and captures its three operator-visible channels.
  * Omitted fixture values select a short successful child; empty output means the child stayed silent.
  *
  * @param fixture - harmless child and timing choices; omitted progress uses a dedicated descriptor

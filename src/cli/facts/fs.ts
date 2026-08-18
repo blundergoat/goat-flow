@@ -282,7 +282,8 @@ interface DirectoryReadResult {
 
 /**
  * Cache directory readability and entries from one filesystem operation.
- * Use when audit users need to distinguish an empty directory from an unusable path.
+ * Use when audit users need to distinguish an empty directory from an unusable path; it swallows a failed read into a cached unreadable result
+ * rather than raising it, so one bad path cannot end the whole audit.
  *
  * @param resolvePath - roots a project-relative path inside the selected project
  * @returns non-mutating directory readiness and listing helpers

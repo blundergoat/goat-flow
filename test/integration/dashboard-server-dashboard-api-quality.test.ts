@@ -106,6 +106,7 @@ describe("dashboard /api/quality", () => {
   });
 
   it("reuses cached quality audits unless fresh=true is requested", async () => {
+    // Issue one quality request and hand back its parsed body for assertions.
     const runQualityRequest = async (
       suffix: string,
     ): Promise<Record<string, unknown>> => {
@@ -161,6 +162,7 @@ describe("dashboard /api/quality", () => {
         }),
       );
 
+      // Issue one quality request against this server and hand back its parsed body.
       const requestQuality = async (
         suffix: string,
       ): Promise<Record<string, unknown>> => {

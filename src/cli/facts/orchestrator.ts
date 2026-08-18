@@ -14,6 +14,7 @@ import { extractAgentFacts } from "./agent/index.js";
 
 /** Optional profiler seam for timing fact extraction spans without changing returned facts. */
 interface FactExtractionProfiler {
+  /** Time one labelled extraction step; implementations return whatever the wrapped block returned. */
   span<T>(name: string, fn: () => T): T;
 }
 
@@ -30,6 +31,14 @@ interface ExtractOptions {
   profile?: FactExtractionProfiler | undefined;
 }
 
+/**
+ * Run one extraction step inside a profiler span when the caller supplied a profiler, and plainly when nobody is measuring.
+ *
+ * @param profile - optional profiler; `undefined` means the step runs untimed, which is the normal user path
+ * @param name - label shown in profiler output
+ * @param fn - extraction step to run
+ * @returns whatever the step returned, unchanged either way
+ */
 function span<T>(
   profile: FactExtractionProfiler | undefined,
   name: string,

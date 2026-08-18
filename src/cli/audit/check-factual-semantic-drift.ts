@@ -157,10 +157,14 @@ function driftSkillPlaybookInventory(
   ];
 }
 
-/** Drift: docs/dashboard.md session-cap claims don't match MAX_SESSIONS.
- *  Matches both the rail phrasing (`up to N`) and the hard-cap phrasing
- *  (`Maximum N concurrent sessions`). Every claim that disagrees with the live
- *  constant is reported separately so same-doc contradictions surface too. */
+/**
+ * Catch session-cap numbers in the dashboard docs that no longer match the live limit a user would actually hit.
+ * It reports each disagreeing claim separately, so two contradictory sentences in one document both surface instead of one masking the other.
+ *
+ * @param dashboard - the dashboard document text being checked
+ * @param ctx - audit context supplying the live constant to compare against
+ * @returns one finding per stale claim; empty means the document matches the code
+ */
 function driftDashboardSessions(
   dashboard: string,
   ctx: AuditContext,
@@ -226,7 +230,14 @@ function driftDashboardViewNames(dashboard: string): ContentFinding[] {
   ];
 }
 
-/** Drift: docs/dashboard.md idle-timeout claims don't match terminal defaults. */
+/**
+ * Catch idle-timeout numbers in the dashboard docs that no longer match the terminal default.
+ * It reports each stale claim as a finding; an unreadable default yields no findings rather than a false accusation.
+ *
+ * @param dashboard - the dashboard document text being checked
+ * @param ctx - audit context supplying the live default to compare against
+ * @returns one finding per stale claim; empty means the document matches the code
+ */
 function driftDashboardIdleTimeout(
   dashboard: string,
   ctx: AuditContext,

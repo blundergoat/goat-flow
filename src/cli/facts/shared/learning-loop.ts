@@ -174,7 +174,15 @@ function hasFootgunEvidence(content: string): boolean {
   return hasFileEvidence(content);
 }
 
-/** Append a category-missing diagnostic when the bucket body requires one. */
+/**
+ * Reports a bucket that carries entries but no `category:` field, which is the metadata the stats check and the dashboard group memories by.
+ *
+ * @param path - project-relative bucket path named in any diagnostic
+ * @param body - bucket text after frontmatter, scanned for entry headings
+ * @param fields - parsed frontmatter fields; a missing category is what triggers the diagnostic
+ * @param diagnostics - diagnostic list appended to in place
+ * @returns true when the file holds lesson, pattern, or footgun entries, which tells the caller to check the review date as well
+ */
 function collectCategoryDiagnostic(
   path: string,
   body: string,
@@ -185,11 +193,13 @@ function collectCategoryDiagnostic(
   const footgunBuckets = countMatches(body, /^##\s+Footgun:\s+/gm);
   const isBucket = lessonBuckets > 0 || footgunBuckets > 0;
 
+  // A lessons bucket without a category cannot be routed, so the user is told which file to label.
   if (!fields.category && lessonBuckets > 0) {
     diagnostics.push(
       `${path} is a lessons category bucket but missing frontmatter category`,
     );
   }
+  // Same rule for footguns, reported separately so the message names the right bucket kind.
   if (!fields.category && footgunBuckets > 0) {
     diagnostics.push(
       `${path} is a footguns category bucket but missing frontmatter category`,
@@ -198,17 +208,25 @@ function collectCategoryDiagnostic(
   return isBucket;
 }
 
-/** Append a last_reviewed diagnostic when the field is missing or malformed. */
+/**
+ * Reports a bucket whose review date is missing or unreadable, since freshness banding is what tells a user their memory has gone stale.
+ *
+ * @param path - project-relative bucket path named in any diagnostic
+ * @param fields - parsed frontmatter fields
+ * @param diagnostics - diagnostic list appended to in place; left untouched when the date is present and well formed
+ */
 function collectLastReviewedDiagnostic(
   path: string,
   fields: Record<string, string>,
   diagnostics: string[],
 ): void {
   const raw = fields.last_reviewed;
+  // No date at all, so the bucket can never be banded and the user is told to add one.
   if (raw === undefined || raw === "") {
     diagnostics.push(`${path} missing frontmatter last_reviewed`);
     return;
   }
+  // A date in the wrong shape is worse than none, because it reads as reviewed while parsing to nothing.
   if (!ISO_DATE_REGEX.test(raw)) {
     diagnostics.push(
       `${path} has invalid last_reviewed format "${raw}" (expected YYYY-MM-DD)`,
@@ -304,7 +322,16 @@ function buildBucketFreshness(
   };
 }
 
-/** Aggregate evidence, labels, directory mentions, stale refs, and per-bucket freshness across footgun entries. */
+/**
+ * Roll every footgun bucket into the one summary the audit and dashboard read: evidence quality, reference health, and freshness per bucket.
+ *
+ * Format problems are collected as diagnostics rather than thrown, so one malformed bucket still leaves the user a complete report.
+ *
+ * @param fs - read-only view of the target project
+ * @param entries - footgun bucket files found on disk; an empty list yields zero counts, which the caller reads as an unused loop
+ * @param now - comparison clock, passed in so freshness bands stay deterministic in tests and reports
+ * @returns the aggregated footgun facts, with a null `formatDiagnostic` when every bucket parsed cleanly
+ */
 function summarizeFootgunEntries(
   fs: ReadonlyFS,
   entries: MarkdownEntry[],
@@ -380,7 +407,16 @@ function summarizeFootgunEntries(
   };
 }
 
-/** Aggregate entry counts, stale refs, diagnostics, and per-bucket freshness across lesson entries. */
+/**
+ * Roll every lesson bucket into one summary of counts, reference health, and freshness.
+ *
+ * Format problems are collected as diagnostics rather than thrown, so one malformed bucket still leaves the user a complete report.
+ *
+ * @param fs - read-only view of the target project
+ * @param entries - lesson bucket files found on disk; an empty list yields zero counts, which the caller reads as an unused loop
+ * @param now - comparison clock, passed in so freshness bands stay deterministic in tests and reports
+ * @returns the aggregated lesson facts, with a null `formatDiagnostic` when every bucket parsed cleanly
+ */
 function summarizeLessonEntries(
   fs: ReadonlyFS,
   entries: MarkdownEntry[],
@@ -434,6 +470,8 @@ function summarizeLessonEntries(
  * @param fs - filesystem adapter for the target project
  * @param configState - loaded config that chooses the footgun artifact path
  * @param now - comparison clock for deterministic bucket freshness
+ * @returns the footgun facts for this project; `exists: false` means the user has no footgun directory yet, which reads differently from an
+ *   existing directory holding zero entries
  */
 export function extractFootgunFacts(
   fs: ReadonlyFS,
@@ -442,6 +480,7 @@ export function extractFootgunFacts(
 ): SharedFacts["footguns"] {
   const dir = listMarkdownEntries(fs, configState.config.footguns.path);
   const summary = summarizeFootgunEntries(fs, dir.files, now);
+  // An empty-but-present directory is its own finding: the user set the loop up and then never wrote to it.
   const formatDiagnostic =
     summary.entryCount === 0 && dir.exists
       ? "Footgun directory exists but contains 0 entries"
@@ -476,6 +515,8 @@ export function extractFootgunFacts(
  * @param fs - filesystem adapter for the target project
  * @param configState - loaded config that chooses the lessons artifact path
  * @param now - comparison clock for deterministic bucket freshness
+ * @returns the lesson facts for this project; `exists: false` means the user has no lessons directory yet, which reads differently from an
+ *   existing directory holding zero entries
  */
 export function extractLessonsFacts(
   fs: ReadonlyFS,

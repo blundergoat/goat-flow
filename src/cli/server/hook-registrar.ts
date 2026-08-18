@@ -693,6 +693,13 @@ function unsupportedAgentHookState(
   };
 }
 
+/**
+ * Name the gap between what the user asked for and what is actually installed, which is what the Hooks card shows as a repair prompt.
+ *
+ * @param desired - whether the user has this hook switched on
+ * @param installed - whether the file is really present and registered
+ * @returns the drift direction, or `undefined` when the two agree and nothing needs repairing
+ */
 function hookDrift(
   desired: boolean,
   installed: boolean,

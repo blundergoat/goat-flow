@@ -471,6 +471,7 @@ describe("codex config migration", () => {
     assert.doesNotMatch(result.stdout, /migrated:.*Codex permission profile/);
   });
 
+  // Fixture: writes a valid case where 'none' appears in a table the validator does not own, so a false positive there would block a clean install.
   it("post-install validator does not flag a glob 'none' entry in an unrelated table", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");

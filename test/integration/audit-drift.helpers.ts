@@ -96,6 +96,7 @@ export interface CommandResult {
 /**
  * Write canonical skill stubs (SKILL.md plus shared reference files) for one skill into a
  * template or installed mirror under the fixture root, so drift comparison sees matching copies.
+ * It writes only inside the fixture root, so a drift fixture can never touch the real project.
  *
  * @param root - the temp fixture root the files are written beneath
  * @param baseDir - skills directory relative to root (e.g. "workflow/skills" or an installed dir)
