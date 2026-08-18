@@ -18,6 +18,11 @@ on:
       - "scripts/**"
       - ".agents/**"
 
+# A new commit on a PR branch cancels this workflow's in-flight run for that branch instead of queueing a second one behind it.
+concurrency:
+  group: context-validation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest

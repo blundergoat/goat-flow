@@ -476,7 +476,7 @@ describe("consumer setup to quality-report lifecycle", () => {
         join(consumerTargetPath, ".goat-flow", ".gitignore"),
         "utf-8",
       );
-      assert.match(installedGitignore, /^logs\/quality\/\*\.json$/mu);
+      assert.match(installedGitignore, /^\*\*\/logs\/quality\/\*\.json$/mu);
 
       const expectedScopeContextByMode: Record<QualityMode, RegExp> = {
         "agent-setup": /"scope": "consumer"/u,

@@ -20,6 +20,12 @@ No availability command applies. If the project has draft-shape, link, or versio
 
 An authoritative project release-note policy controls the chosen surface, voice, structure, and required notices. If no such project standard exists, fall back to this playbook's defaults. Active instructions and the project's authoritative hierarchy still rank higher. Those lower layers must not weaken safety, accepted architecture, verified facts, evidence requirements, or verification gates.
 
+## Prose Routing
+
+This playbook owns audience, evidence selection, output surface, and release-note shape. Set those here, then apply [`writing-style.md`](./writing-style.md) as the core prose pass.
+
+Load [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) only when a document-level assembly defect remains, and [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) only when a sentence-level reader cost remains. If both apply, repair structure first. Diagnostics may refine admitted prose but never add or remove release facts, change version attribution, or expand the write scope.
+
 ## Intent
 
 You are a coding agent producing or reviewing a release artifact. Your job is to turn verified changelog evidence into the shortest useful user-facing release notes.
@@ -46,12 +52,13 @@ diff -> changelog -> release notes -> shorter surfaces
 
 Rules:
 
-- Fix the changelog first if it is missing a shipped change.
-- Every release-note claim must trace to the changelog or a verified changed surface.
+- A changed surface can prove the ledger is incomplete; use it to correct the changelog, not to bypass it.
+- If that correction is within the approved write scope, make it first. If it is outside the approved write scope, stop publication, report the ledger gap, and request scope expansion.
+- Every release-note claim must trace to the corrected changelog.
 - If a claim is internal-only, cut it.
-- If the release notes contradict the changelog, the changelog wins.
+- If release notes and changelog conflict, resolve the fact against verified release evidence and correct the changelog before drafting the notes.
 - Do not summarize from memory.
-- Record the release version, evidence baseline, and requested output surface before drafting variants.
+- Record the release version, evidence baseline, and requested output surface in working evidence; the published copy need not narrate that process.
 - Derive shorter variants from the verified full notes so email, in-app, and social outputs share provenance.
 
 The useful signal order mirrors changelog work: PRs/issues, tests, changed product surfaces, diff, config/dependency changes, then commit messages last.
@@ -136,14 +143,14 @@ A draft that loses half its words without losing a fact was too verbose. That is
 
 Before publishing:
 
-1. Every claim traces to the changelog or verified diff evidence, and output provenance names the version and surface.
+1. Every claim traces to the corrected changelog, and working evidence names the version, baseline, and surface.
 2. Every breaking change appears clearly and early.
 3. The Audience Gate identifies the real product reader and interface; no internal-only item slipped through.
 4. No marketing without measurements.
 5. No internal jargon on end-user surfaces.
 6. Multi-surface variants do not contradict each other.
 7. Upgrade instructions are concrete.
-8. Version, date, and install/update location are present.
+8. Version, date, and install/update location are present in the copy or authoritative publication metadata.
 9. A reader can decide whether to upgrade without reading commit history.
 10. The compression pass ran.
 11. Selected changes lead with effect, consequence, and required action while preserving visible regressions and exact public detail.
@@ -151,14 +158,15 @@ Before publishing:
 
 ## Troubleshooting
 
-- **Thin changelog:** fix it first; release notes from a weak changelog become guesswork.
+- **Thin or missing changelog:** follow **Output Provenance**; correct it when in scope, otherwise stop publication and report the ledger gap.
 - **Too long or polished:** cut wrapper prose, duplicate context, and internal mechanism before changing facts.
 - **Different headline requested:** use user impact, not internal implementation framing.
-- **Missing changelog entry:** add it first, then write the release-note line.
 
 ## Related References
 
 - [`changelog.md`](./changelog.md) - source-of-truth release ledger.
 - [`writing-style.md`](./writing-style.md) - core correctness and diagnostic routing after audience and selection are settled.
+- [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) - optional document-level assembly diagnosis before sentence work.
+- [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) - optional sentence-level diagnosis after structure is sound.
 - Project's prior release announcements - match voice and structure before inventing a new one.
 - Project instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) may declare release-note policy.

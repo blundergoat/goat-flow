@@ -429,6 +429,11 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       "workflow/skills/playbooks/writing-style.md",
       ".goat-flow/skill-docs/playbooks/writing-style.md",
     ]) {
+      assert.match(
+        readProjectFile(playbookPath),
+        /core prose pass after an applicable surface owner settles scope and facts/u,
+        playbookPath,
+      );
       assertSectionPatterns(playbookPath, "Availability Check", [
         /review authorizes diagnosis, not an unrequested rewrite/u,
       ]);
@@ -618,7 +623,38 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       );
       assert.match(releaseState, /last published release/u, playbookPath);
       assert.match(releaseState, /Unreleased[\s\S]+net state that will ship/u);
+      assert.match(
+        releaseState,
+        /Prepared release[\s\S]+versioned heading[\s\S]+before[^\n]+tag/u,
+        playbookPath,
+      );
+      assert.match(
+        releaseState,
+        /Published release[\s\S]+tag or release artifact/u,
+        playbookPath,
+      );
       assert.match(releaseState, /one version and one category/u, playbookPath);
+
+      const sourceOrder = readMarkdownSection(playbookPath, "Source Order");
+      assert.match(
+        sourceOrder,
+        /<previous-published-ref>\.\.<release-ref>/u,
+        playbookPath,
+      );
+      assert.match(
+        sourceOrder,
+        /`HEAD` before tagging[\s\S]+published tag afterward/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(sourceOrder, /<current-tag>/u, playbookPath);
+
+      assertSectionPatterns(playbookPath, "Prose Routing", [
+        /writing-style\.md[\s\S]+core prose pass/u,
+        /writing-structure-diagnostics\.md[\s\S]+assembly defect/u,
+        /writing-sentence-diagnostics\.md[\s\S]+sentence-level reader cost/u,
+        /structure first/u,
+        /never[^\n]+change version attribution[^\n]+expand the write scope/u,
+      ]);
 
       const historicalEditing = readMarkdownSection(
         playbookPath,
@@ -643,6 +679,11 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       assert.match(
         lengthFallback,
         /Never generalise an exact public flag, config key, version, error, or measurement to meet the fallback/u,
+        playbookPath,
+      );
+      assert.match(
+        lengthFallback,
+        /exact heading of the section being edited/u,
         playbookPath,
       );
       assert.doesNotMatch(
@@ -675,6 +716,34 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       );
       assert.match(outputProvenance, /diff -> changelog -> release notes/u);
       assert.match(outputProvenance, /Do not summarize from memory/u);
+      assert.match(
+        outputProvenance,
+        /changed surface[^\n]+correct the changelog[^\n]+not to bypass it/u,
+        playbookPath,
+      );
+      assert.match(
+        outputProvenance,
+        /outside the approved write scope[^\n]+stop publication/u,
+        playbookPath,
+      );
+      assert.match(
+        outputProvenance,
+        /working evidence[^\n]+published copy need not narrate/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        outputProvenance,
+        /claim must trace to the changelog or a verified changed surface/u,
+        playbookPath,
+      );
+
+      assertSectionPatterns(playbookPath, "Prose Routing", [
+        /writing-style\.md[\s\S]+core prose pass/u,
+        /writing-structure-diagnostics\.md[\s\S]+assembly defect/u,
+        /writing-sentence-diagnostics\.md[\s\S]+sentence-level reader cost/u,
+        /structure first/u,
+        /never[^\n]+add or remove release facts[^\n]+expand the write scope/u,
+      ]);
 
       const writingRules = readMarkdownSection(playbookPath, "Writing Rules");
       assert.match(
@@ -693,6 +762,16 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
         /project or release surface owns no different shape/u,
       );
       assert.match(lengthFallback, /150 characters/u, playbookPath);
+
+      const verificationGate = readMarkdownSection(
+        playbookPath,
+        "Verification Gate",
+      );
+      assert.match(
+        verificationGate,
+        /copy or authoritative publication metadata/u,
+        playbookPath,
+      );
       assert.doesNotMatch(
         readProjectFile(playbookPath),
         /\u2014/u,

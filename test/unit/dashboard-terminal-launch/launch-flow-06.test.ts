@@ -576,7 +576,8 @@ describe("dashboard terminal launch flow", () => {
     const source = readDashboardAppSource();
     assert.match(
       source,
-      /item\?\.kind === "file" && item\.type\.startsWith\("image\/"\)/,
+      // The drag-item local is renamed by refactors; both conditions are the contract, its identifier is not.
+      /(\w+)\?\.kind === "file" && \1\.type\.startsWith\("image\/"\)/u,
     );
   });
 

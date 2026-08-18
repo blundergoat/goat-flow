@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.16.0"
 ---
 # Writing Style
 
-Use this first for human-read prose in the Scope Gate. Sibling playbooks own diagnostics and release surfaces; load one only on its objective trigger.
+Apply this core prose pass after an applicable surface owner settles scope and facts. Sibling playbooks own diagnostics and release surfaces; load them only on objective triggers.
 
 ## Availability Check
 

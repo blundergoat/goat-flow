@@ -91,9 +91,9 @@ describe("dashboard /api/quality", () => {
       assertValidEmittedEnvelope(event);
       assert.equal(JSON.stringify(event).includes(prompt), false);
 
-      const payload = expectRecord(event.payload, "Quality event payload");
+      const eventPayload = expectRecord(event.payload, "Quality event payload");
       const redactedPrompt = expectRecord(
-        payload.prompt,
+        eventPayload.prompt,
         "Quality event payload.prompt",
       );
       assert.equal(redactedPrompt.kind, "redacted");

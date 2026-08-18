@@ -54,6 +54,7 @@
     "test": "npm run test:fast",
     "test:fast": "node scripts/run-tests.mjs fast",
     "test:slow": "npm run build && node scripts/run-tests.mjs slow",
+    "test:slow:ci": "node scripts/run-tests.mjs slow",
     "test:full": "npm run test:fast && npm run test:slow",
     "test:performance": "npm run build && node scripts/run-tests.mjs performance",
     "test:coverage": "node scripts/run-tests.mjs coverage",

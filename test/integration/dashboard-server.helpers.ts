@@ -193,11 +193,11 @@ export function assertAuditCheckProvenance(
  * Assert one rendered audit scope has a pass/fail status, a checks array (each with valid
  * provenance), a failures array, and a string-valued summary map.
  *
- * @param scope - one scope object (setup/agent/harness) from the dashboard report, unknown shape
+ * @param candidate - one scope object (setup/agent/harness) from the dashboard report, unknown shape
  * @param context - label woven into assertion messages to identify which scope failed
  */
-export function assertAuditScope(scope: unknown, context: string): void {
-  const scope = expectRecord(scope, context);
+export function assertAuditScope(candidate: unknown, context: string): void {
+  const scope = expectRecord(candidate, context);
   assert.match(
     String(scope.status),
     /^(pass|fail)$/,
@@ -230,13 +230,13 @@ export function assertAuditScope(scope: unknown, context: string): void {
  * target, agentScores, the setup/agent (and optional harness) scopes, overall status, and the
  * learningLoop and recentLessons sections - so a contract drift fails the test, not the UI.
  *
- * @param report - the parsed dashboard report response body, of unknown runtime shape
+ * @param candidate - the parsed dashboard report response body, of unknown runtime shape
  * @returns the same payload narrowed to a record, for callers that read further fields
  */
 export function assertDashboardReport(
-  report: unknown,
+  candidate: unknown,
 ): Record<string, unknown> {
-  const report = expectRecord(report, "Dashboard report");
+  const report = expectRecord(candidate, "Dashboard report");
   assert.match(
     String(report.status),
     /^(pass|fail)$/,

@@ -69,7 +69,10 @@ describe("dashboard /api/audit", () => {
     );
     const elapsedMs = performance.now() - start;
     assert.equal(res.status, 200);
-    return { elapsedMs, body: expectRecord(body, "Profiled audit response") };
+    return {
+      ms: elapsedMs,
+      body: expectRecord(body, "Profiled audit response"),
+    };
   }
 
   // Reduce a response to the keys the dashboard actually renders, so an added internal field cannot break the assertion.

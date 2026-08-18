@@ -20,6 +20,12 @@ No availability command applies. If the project has changelog, version, or link 
 
 Project-documented changelog style and policy govern categories, ordering, links, and version shape. When no designated project standard exists, use this playbook's defaults. Explicit current instructions and the authoritative project hierarchy remain controlling. Project policy and generic defaults cannot override safety, accepted architecture, verified facts, evidence requirements, or verification gates.
 
+## Prose Routing
+
+This playbook owns audience, release state, version attribution, categories, and output shape. Set those here, then apply [`writing-style.md`](./writing-style.md) as the core prose pass.
+
+Load [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) only when a document-level assembly defect remains, and [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) only when a sentence-level reader cost remains. If both apply, repair structure first. Diagnostics may refine admitted prose but never add or remove release facts, change version attribution, or expand the write scope.
+
 ## Intent
 
 Read release evidence, write the smallest accurate changelog entry for the product's actual reader, and preserve enough history to identify what changed and which version shipped it.
@@ -38,13 +44,15 @@ Preserve exact public flags, config keys, versions, errors, measurements, and mi
 
 Read richer signals before commit messages. Commit messages are often old intent, not shipped behavior.
 
-1. `git diff <prev-tag>..<current-tag> --stat`
-2. `git diff <prev-tag>..<current-tag> --name-status`
+Set `<release-ref>` to the candidate commit or `HEAD` before tagging, and to the published tag afterward. If the project does not tag, use its immutable published release commit. Apply the same rule to `<previous-published-ref>`.
+
+1. `git diff <previous-published-ref>..<release-ref> --stat`
+2. `git diff <previous-published-ref>..<release-ref> --name-status`
 3. PR titles/bodies and closed issues for user-facing reason, if available.
 4. Test names/descriptions for behavior the product now guarantees.
 5. Actual changed source in the surfaces that moved most.
 6. Config, dependency, runtime, CLI, API, and docs-install surfaces.
-7. `git log --oneline <prev-tag>..<current-tag>` last, as a hint only.
+7. `git log --oneline <previous-published-ref>..<release-ref>` last, as a hint only.
 
 If the diff contradicts the PR title or commit subject, the diff wins.
 
@@ -89,10 +97,16 @@ The project's established changelog shape and the release surface own entry leng
 
 Never generalise an exact public flag, config key, version, error, or measurement to meet the fallback. Breaking impact, migration commands, verified caveats, and distinct user actions may use a second sentence or sub-bullet. A cap is a scanning aid, not permission to remove facts.
 
-Locate candidates mechanically, then judge each against the exemptions in this section:
+Pass the exact heading of the section being edited so published history does not drown the current candidates. Then judge each hit against the exemptions in this section:
 
 ```bash
-awk '/^- /{ if (length>150) print FILENAME":"NR" ("length")" }' CHANGELOG.md
+awk -v heading='## [1.4.0] - 2026-03-12' '
+$0 == heading { active=1; next }
+active && /^## / { exit }
+active && /^- / && length($0)>150 {
+  print FILENAME ":" FNR " (" length($0) ")"
+}
+' CHANGELOG.md
 ```
 
 ## Breaking Changes
@@ -114,7 +128,13 @@ For deprecations before removal, name the target removal version. "Will be remov
 
 Start the release comparison at the last published release, not an arbitrary commit or the last time the file was edited. Attribute each shipped behaviour to one version and one category. If one change has several reader effects, keep one owning entry and add detail there instead of duplicating it across categories.
 
-`Unreleased` describes the net state that will ship. Remove superseded intermediate behaviour, merge a fix into the feature it corrects when neither shipped separately, and keep a visible regression or migration step that remains true at release. After publishing, move those facts under the released version and leave `Unreleased` empty until new user-facing work appears.
+Track release facts through three states:
+
+- **`Unreleased`.** Holds the net state that will ship but has not entered a prepared release. Remove superseded intermediate behaviour, merge a fix into the feature it corrects when neither shipped separately, and preserve any visible regression or migration step that remains true.
+- **Prepared release.** A versioned heading may hold the candidate before publication or a tag exists. It remains editable from verified candidate evidence; work started after the release cut stays in `Unreleased`.
+- **Published release.** A tag or release artifact establishes what shipped. Freeze its attribution and edit it only under **Historical Editing**.
+
+Move net facts from `Unreleased` when the project cuts a prepared section, or at publication when it does not prepare one earlier. Leave later work in `Unreleased` instead of folding it into the candidate.
 
 If the project uses SemVer: **MAJOR** breaks contracts, **MINOR** adds non-breaking behaviour, and **PATCH** fixes behaviour or ships safe internal work. For `0.x.y` or calendar versioning, mark risk in prose and provide migration steps rather than relying on the number.
 
@@ -124,7 +144,7 @@ Every release bump updates the project's live version surfaces: package metadata
 
 Historical entries may receive fact-preserving cleanup when the user asks or when a verified correction is necessary. Preserve version attribution, public identifiers, measurements, regressions, chronology, and migration facts. Do not rewrite every prior release to match a new house style, move an old fact into a version where it did not ship, or erase an obsolete constraint without recording when it changed.
 
-For a published section, evidence from that release controls. For `Unreleased`, current net shipped intent controls. If attribution cannot be verified from tags, release artifacts, the diff, or another source of truth, leave the entry unchanged and mark the uncertainty rather than guessing.
+For a published section, evidence from that release controls. For `Unreleased`, current net shipped intent controls. For a prepared section, candidate evidence controls until publication freezes it. If attribution cannot be verified from tags, release artifacts, the diff, or another source of truth, leave the entry unchanged and mark the uncertainty rather than guessing.
 
 ## Compression Pass
 
@@ -161,7 +181,7 @@ Before merging or tagging:
 6. Every deprecation names a target removal version.
 7. No marketing, hedging, or vague improvement claims.
 8. Version surfaces agree.
-9. `Unreleased` reflects net state before release and is empty immediately after release.
+9. `Unreleased`, any prepared section, and published history reflect their real lifecycle; work after a release cut remains in `Unreleased`.
 10. The compression pass ran.
 11. Published history keeps its version attribution, public facts, and chronology.
 12. The Length Fallback was used only when no project or surface shape controlled, without generalising exact detail.
@@ -176,6 +196,8 @@ Before merging or tagging:
 
 - [`release-notes.md`](./release-notes.md) - user-facing announcement derived from the changelog.
 - [`writing-style.md`](./writing-style.md) - core correctness and routing after audience, category, and version are settled.
+- [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) - optional document-level assembly diagnosis before sentence work.
+- [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) - optional sentence-level diagnosis after structure is sound.
 - [keepachangelog.com](https://keepachangelog.com)
 - [semver.org](https://semver.org)
 - Project instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) may declare project-specific changelog policy.

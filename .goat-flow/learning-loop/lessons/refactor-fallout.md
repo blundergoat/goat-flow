@@ -1,9 +1,19 @@
 ---
 category: refactor-fallout
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-19
 ---
 
 **Scope:** What breaks downstream when code is split, renamed, or extracted - browser script load graphs, source-shape tests that pinned the old layout, dist builds, and shared scope a split test no longer imports. Using the Gruff analyzer is [gruff-cleanup.md](gruff-cleanup.md).
+
+## Lesson: Rename sweeps into test/ skip typecheck entirely
+
+**Status:** active | **Created:** 2026-08-19
+
+**What happened:** The 1.16.0 vocabulary rename (`ccf02efb`) renamed parameters and locals across `src` and `test`. Typecheck, build, and lint stayed green locally, and the breakage only appeared 16 minutes into the CI job, as 17 failures. Two functions took a parameter renamed onto the name of the narrowed local already declared in the same body, which esbuild rejects with `The symbol "scope" has already been declared`; every one of the 15 dashboard integration files that imports those helpers failed at transform time without running a single test. A third file renamed `ms` to `elapsedMs` in a returned object literal but not in the declared return type or the call sites, so `fresh.ms` read `undefined`. A fourth pinned the pre-rename `item` identifier in a source-text assertion.
+
+**Root cause:** `tsconfig.json` excludes `test`, so `npm run typecheck` never compiles test files. Nothing validates a rename inside `test/` until tsx transforms the file and runs it, and the files that owned all four breakages live in the slow suite at the end of the run. A same-name parameter and local is a redeclaration rather than a shadow, so the file does not load at all - a green typecheck says nothing about it, and neither does a passing fast suite.
+
+**Prevention:** After a rename sweep that touches `test/`, run the suites owning the renamed files before trusting typecheck; for the slow suite that is `npm run test:slow:ci -- --shard=<i>/5` on the shard holding those files. When only a declaration or a call site is renamed, check that the declared return type and every reader moved with it. Evidence anchors: `tsconfig.json` (search: `"exclude"`), `test/integration/dashboard-server.helpers.ts` (search: `export function assertAuditScope`), `test/integration/dashboard-audit-api.test.ts` (search: `ms: elapsedMs`), `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `only treats image file drag items`).
 
 ## Lesson: Check staged deletions after bulk gruff rewrites
 

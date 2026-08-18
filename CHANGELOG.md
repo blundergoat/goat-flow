@@ -10,7 +10,7 @@
 - **New `/goat-clarity` tidies comments, docs, and private names** - Use a PR, uncommitted files, folder, or file; behaviour and tests stay unchanged.
 - **`/goat-clarity documentation <selector>` edits selected prose** - Bugs go to debug; named arguments and serialized keys go to planning.
 - **Clarity reviews changed tests without editing them** - Each gets a report-only keep, consolidate, move, prune/drop, restore, or replace label.
-- **Upgrades preserve local edits when templates are unchanged** - Install applies other updates; drift reports distinguish behind from diverged files.
+- **Upgrades preserve local edits when templates are unchanged** - Install applies the rest; drift reports distinguish behind from diverged files.
 - **Install previews show every write** - Use `--force-path` or `--force-managed`; replacing user-owned files also needs `--force-user-owned`.
 - **Claude hooks now start on Windows and duplicate entries are removed** - Run `hooks sync` or reinstall once; your custom hooks stay intact.
 - **Projects view discovers nearby workspaces and supports archive/restore** - Refresh setup status without a full audit or new identity marker.
