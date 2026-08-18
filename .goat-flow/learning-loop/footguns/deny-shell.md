@@ -1,6 +1,6 @@
 ---
 category: deny-shell
-last_reviewed: 2026-08-11
+last_reviewed: 2026-08-18
 ---
 
 Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
@@ -114,6 +114,10 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 1. Never parse shell substitutions with `[^()]` regexes alone; quoted delimiters inside the body are still body text, not the close delimiter.
 2. Every substitution-parser change needs both bypass canaries (`git push` behind a quoted `)`) and false-positive canaries (single-quoted `$(` repeated past the DoS cap).
 3. Keep command substitution and process substitution tests paired; they share the matching-paren risk but route through different shell execution paths.
+
+**Recurrence 2026-08-18 (post-walk projection, same family):** the matching-paren scan was correct, but `check_command_substitutions` then discarded its own quote state and re-derived quoting twice with a line-oriented `sed -E "s/'[^']*'//g"` — once for the Complex-substitution check and once for the Backtick check, the latter over the raw input. `sed` cannot match a single-quoted span containing a newline, and naive left-to-right pairing reads the `'\''` escape idiom as an empty quoted span, exposing the characters after it. Measured: 4 false positives (backtick or `$(` text inside a quoted span crossing a newline; the same after `'\''`), 0 bypasses — strictly fail-closed. Worse, the recorded remediation in `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`) advises single-quoting, which is exactly what fails in these shapes. Fixed by accumulating `residual_unquoted` inside the existing character walk (append only when `in_single` is 0; append the `__goat_subst__`/`__goat_arith__`/`__goat_proc_subst__` placeholders whose bodies recursion already checked) and deleting both `sed` derivations. Canaries: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `Quote-projection canaries`) — 4 allow plus 4 block, corpus 434 -> 442.
+
+**Prevention (extends rule 1):** never re-derive quote state a parser already computed. If a check needs an unquoted projection, build it in the same pass that tracks the quotes; a second, simpler stripper will disagree with the first on newlines and escape idioms. Keep double-quoted content in the projection — backticks and `$(` execute inside double quotes.
 
 ---
 

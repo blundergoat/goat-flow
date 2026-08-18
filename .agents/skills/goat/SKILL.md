@@ -54,6 +54,7 @@ Relevant prior learnings: <direct route: matches | none | retrieval miss; routed
 | Code quality review, area audit, diff check | `/goat-review` |
 | Multi-perspective critique | `/goat-critique` |
 | Security, compliance, dependency audit | `/goat-security` |
+| Comment, documentation, naming, or private-placement remediation | `/goat-clarity` |
 | Testing gaps, coverage, verification planning | `/goat-qa` |
 | Bare task path (no action verb) | Bare or ambiguous task paths are read-only context. Do not update `.active`, milestone status, or code from a path alone |
 | Plan/design or non-trivial build/change | `/goat-plan`; build/change carries `return-to-implement`, plan/design stops after planning |

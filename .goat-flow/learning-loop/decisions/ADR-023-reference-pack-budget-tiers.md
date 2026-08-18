@@ -54,7 +54,7 @@ Every rule MUST apply to every session. Situation-specific guidance belongs in s
 
 | Tier | Budget | Applies to |
 |------|--------|-----------|
-| Dispatcher skill | ≤555 words | `goat/SKILL.md` |
+| Dispatcher skill | ≤600 words | `goat/SKILL.md` |
 | Functional skill | <2500 words | `goat-debug/SKILL.md`, `goat-plan/SKILL.md`, `goat-qa/SKILL.md`, `goat-review/SKILL.md`, `goat-critique/SKILL.md`, `goat-security/SKILL.md`, `goat-clarity/SKILL.md` |
 | Always-loaded shared content | <1500 words per file | `skill-preamble.md`, `skill-conventions.md` (loaded by every goat-* skill on invocation) |
 | Progressive reference pack | <3000 words per file | Files under per-skill `references/` subdirs, `.goat-flow/skill-docs/skill-quality-testing/`, and `.goat-flow/skill-docs/playbooks/` (loaded only when a skill enters the mode that needs them) |
@@ -109,6 +109,8 @@ The `ddt-layer/` directory is removed. goat-plan detects language from project s
 - Future split work: if any topical file exceeds 3000w, it splits further under the same model. `tdd-iteration.md` is the one to watch.
 
 **2026-05-02 amendment:** Dispatcher budget raised from <500 to ≤555. The dispatcher gained a structured Route Snapshot output contract, multi-intent decomposition protocol, GATHER checklist, and contract-test-mandated phrases (Proof Gate, "verification planning") that the original 500w budget didn't anticipate. The file was trimmed from 585w to 552w in the same pass - net reduction despite added features.
+
+**2026-08-18 amendment:** Dispatcher budget raised from ≤555 to ≤600. Three same-day quality reports found that the Route Map had no row for `goat-clarity`, so an inferred clarity request ("bring these comments and names up to standard") fell through to `/goat-review`, which returns findings instead of a bounded remediation pass, or to the direct-execution row, which edits without the frozen Target Scope Snapshot and Scope v2 gate that make goat-clarity safe. ADR-009 enrolls goat-clarity as canonical and is silent on routing; only human-facing `docs/skills.md` called it direct-only, so the agent-facing surface never carried the intent. The fix is one 10-token route row, but the dispatcher measured 554/555 body words - the cap had become a freeze rather than a budget, blocking a safety fix. Raised to 600 (564 used) rather than trimming prose that seven contract assertions pin. This is the second dispatcher raise; a third should prompt restructuring instead.
 
 **2026-05-17 measurement note:** The "Actual shipped state" table above reflects the 2026-04-20 baseline. Re-measured body word counts as of 2026-05-17:
 

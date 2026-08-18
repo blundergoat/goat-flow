@@ -10,6 +10,7 @@
 - **Clarity never renames a compatibility surface** - Named-argument parameters and serialized or returned keys route to `goat-plan` instead.
 - **Clarity reviews label low-value changed tests without deleting them** - Existing or materially changed tests get `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`; added tests get `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, or `ADDED UNRESOLVED`; removed tests get `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, or `REMOVAL UNRESOLVED`; proven path or namespace-only moves get `RELOCATED`. Every label is report-only.
 - **`goat-clarity` evidence stays attributable in a dirty worktree** - Its snapshot names pre-existing dirty paths and reconciles unit counts.
+- **`/goat` routes comment and naming cleanup to `/goat-clarity`** - Asking for a tidy-up gets a bounded remediation pass instead of review findings.
 - **BREAKING: target audits no longer execute project hooks by default** - Audit, setup, and quality stay static; `hooks verify` needs `--trusted-target`. The deprecated `--untrusted-target` static alias stays accepted through v1.16.x.
 - **Claude hooks now start on Windows** - Existing setups need one `hooks sync`, or a reinstall, to convert their old hook entries.
 - **A hook that ran twice now runs once** - Sync and install remove the duplicate entries and leave hooks you added yourself alone.
@@ -22,10 +23,12 @@
 - **Post-turn scans work in non-Git workspaces** - Name the repositories to scan in `hooks.post-turn-safety.scan-roots`.
 - **The deny hook catches more command forms** - Git push aliases, `send-pack`, and Windows-style secret paths are blocked.
 - **Read-only searches can name protected paths** - `git log -S`, `-G`, `--grep`, and `grep -e` treat their query as data; secret access stays denied.
+- **Quoted text in a command no longer trips the safety hook** - Commands quoting backticks or `$(` across a newline now run instead of being denied.
 - **A project config cannot run a tool from outside the project** - An analyzer path that resolves outside the repository is refused.
 - **Hook timeout overrides no longer block commands** - Empty `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` uses the ceiling, larger clamps, invalid is refused.
 - **Invalid post-turn byte limits fail safely** - A bad `MAX_FILE_BYTES` value falls back to the default instead of scanning nothing and passing.
 - **`skill doctor` no longer calls a skill ready when only its files check out** - It reports static eligibility and runtime registration separately.
+- **Skill quality scores write risk on report-only skills** - `/goat-security` is measured on how it bounds its own writes, and scores out of 95.
 - **`audit --check-drift` flags instruction files that drift apart across agents** - Sibling `CLAUDE.md`, `AGENTS.md`, and Copilot files must agree.
 - **`goat-qa` gates every recommendation** - Each passes the four-part test-selection gate and gets a disposition; thin evidence is `UNRESOLVED`.
 - **`goat-review` emits only resolved Review Integrity fields** - Small reviews stop drowning in `n/a` rows; degradation flags stay mandatory.

@@ -625,16 +625,24 @@ check_command_substitutions() {
   local in_double=0
   local escaped=0
 
+  # `residual_unquoted` is built here rather than re-derived afterwards. A
+  # line-oriented strip cannot see a single-quoted span that crosses a newline
+  # and mis-pairs the '\'' escape idiom, so it reported inert text as
+  # executable. This walk already knows the exact quote state of every
+  # character. Single-quoted content is dropped; double-quoted content is kept,
+  # because backticks and $( still execute inside double quotes.
   for ((i = 0; i < ${#remaining}; i++)); do
     char="${remaining:i:1}"
 
     if [[ "$escaped" -eq 1 ]]; then
       residual+="$char"
+      residual_unquoted+="$char"
       escaped=0
       continue
     fi
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       residual+="$char"
+      residual_unquoted+="$char"
       escaped=1
       continue
     fi
@@ -654,6 +662,7 @@ check_command_substitutions() {
         in_double=1
       fi
       residual+="$char"
+      residual_unquoted+="$char"
       continue
     fi
 
@@ -665,6 +674,7 @@ check_command_substitutions() {
           inner="${remaining:i+3:close_index-i-3}"
           check_command_substitutions "$inner" "$depth" || return $?
           residual+="__goat_arith__"
+          residual_unquoted+="__goat_arith__"
           i="$close_index"
           continue
         fi
@@ -675,6 +685,7 @@ check_command_substitutions() {
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
           residual+="__goat_subst__"
+          residual_unquoted+="__goat_subst__"
           i="$close_index"
           continue
         fi
@@ -685,6 +696,7 @@ check_command_substitutions() {
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
           residual+="__goat_proc_subst__"
+          residual_unquoted+="__goat_proc_subst__"
           i="$close_index"
           continue
         fi
@@ -692,24 +704,18 @@ check_command_substitutions() {
     fi
 
     residual+="$char"
+    if [[ "$in_single" -eq 0 ]]; then
+      residual_unquoted+="$char"
+    fi
   done
-
-  residual_unquoted="$residual"
-  if [[ "$residual" == *\'* ]]; then
-    # shellcheck disable=SC2001  # ERE pattern; parameter expansion uses globs
-    residual_unquoted=$(sed -E "s/'[^']*'//g" <<<"$residual")
-  fi
 
   if [[ "$residual_unquoted" =~ \$\( || "$residual_unquoted" =~ [\<\>]\( ]]; then
     block "Complex command substitution. Write the expanded command directly." || return $?
   fi
 
-  local remaining_unquoted="$remaining"
-  if [[ "$remaining" == *\'* ]]; then
-    # shellcheck disable=SC2001  # ERE pattern; parameter expansion uses globs
-    remaining_unquoted=$(sed -E "s/'[^']*'//g" <<<"$remaining")
-  fi
-  remaining_unquoted="${remaining_unquoted//\\\`/}"
+  # An escaped backtick is literal text, so drop those pairs before the scan.
+  # Substitution bodies already left as placeholders were checked recursively.
+  local remaining_unquoted="${residual_unquoted//\\\`/}"
 
   if [[ "$remaining_unquoted" == *\`* ]]; then
     block "Backtick command substitution hides nested execution. Use a direct command instead, or for an inline script run it from a file (e.g. node script.js)." || return $?

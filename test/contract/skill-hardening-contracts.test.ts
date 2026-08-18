@@ -13,7 +13,7 @@ import {
 } from "./skill-hardening.helpers.js";
 
 describe("ADR-023 word budget tiers", () => {
-  const DISPATCHER_CAP = 555;
+  const DISPATCHER_CAP = 600;
   const FUNCTIONAL_CAP = 2500;
   const ALWAYS_LOADED_CAP = 1500;
   const AUTHORING_INDEX_CAP = 400;
@@ -45,7 +45,7 @@ describe("ADR-023 word budget tiers", () => {
     "goat-clarity",
   ] as const;
 
-  it("dispatcher /goat stays within the 555-word cap across all mirrors", () => {
+  it("dispatcher /goat stays within the 600-word cap across all mirrors", () => {
     assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
       const userFacingWordCount = countSkillBodyWords(skillPath);
       assert.ok(

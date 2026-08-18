@@ -136,7 +136,10 @@ const DEFAULT_PROFILES: Record<ArtifactSubtype, Record<MetricName, number>> = {
     "cold-start": 10,
     "token-cost": 10,
     "tool-deps": 10,
-    "write-risk": 0,
+    // Report-only does not mean write-free: these skills persist redacted
+    // findings and gate target-controlled execution, so how well they bound
+    // their own write authority is scored, not skipped.
+    "write-risk": 10,
     "skill-reference-fit": 10,
   },
   playbook: {

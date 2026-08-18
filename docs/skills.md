@@ -25,7 +25,8 @@ flowchart LR
     Dispatcher --> Critique["/goat-critique"]
     Dispatcher --> QA["/goat-qa"]
     Dispatcher --> Security["/goat-security"]
-    User --> Clarity["/goat-clarity\n(direct)"]
+    Dispatcher --> Clarity["/goat-clarity"]
+    User --> Clarity
 ```
 
 | Skill | Purpose | Hard Gate | When to Use |
@@ -57,7 +58,7 @@ flowchart LR
 | "Is this bug fix verified?" | /goat-debug | Re-run the original repro and adjacent regressions |
 | "Is this diff/PR verified?" | /goat-review | Two-pass review with Review Integrity |
 | "Is this plan/assessment sound?" | /goat-critique | Multi-perspective critique before shipping |
-| "Bring these comments and names up to standard" | /goat-clarity (direct invocation) | Applies a bounded remediation pass instead of returning review findings |
+| "Bring these comments and names up to standard" | /goat-clarity | Applies a bounded remediation pass instead of returning review findings |
 
 ---
 

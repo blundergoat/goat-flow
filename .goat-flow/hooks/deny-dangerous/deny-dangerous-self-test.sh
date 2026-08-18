@@ -959,6 +959,28 @@ run_full() {
   _literal_subst+="'"
   expect_allow shell "printf '%s\n' ${_literal_subst}" "single-quoted substitution-looking text does not trip opener cap"
 
+  # --- Quote-projection canaries. The substitution checks must read quoting from
+  # the character walk, not from a line-oriented re-strip. A single-quoted span
+  # that crosses a newline, and the '\'' escape idiom, both defeat naive pairing:
+  # inert text was blocked while genuine execution still had to block. Each allow
+  # case is paired with the dangerous shape it must not start permitting. ---
+  local _ml_backtick _ml_subst _nested_backtick _nested_subst
+  local _ml_real_backtick _nested_then_real
+  _ml_backtick=$'grep -n \'line one `npm run build`\nline two\' README.md'
+  _ml_subst=$'grep -n \'line one $(npm run build)\nline two\' README.md'
+  _nested_backtick="echo 'it'\\''s \`safe\`'"
+  _nested_subst="echo 'it'\\''s \$(safe)'"
+  _ml_real_backtick=$'echo \'inert `text`\'\nrm -rf `cat /tmp/target`'
+  _nested_then_real="echo 'it'\\''s' && rm -rf \`cat /tmp/t\`"
+  expect_allow shell "$_ml_backtick" "backtick text inside a single-quoted span crossing a newline"
+  expect_allow shell "$_ml_subst" "substitution text inside a single-quoted span crossing a newline"
+  expect_allow shell "$_nested_backtick" "backtick text after the '\\'' escape idiom"
+  expect_allow shell "$_nested_subst" "substitution text after the '\\'' escape idiom"
+  expect_block shell "$_ml_real_backtick" "real backtick subst on a later line of a multi-line command"
+  expect_block shell "$_nested_then_real" "real backtick subst following the '\\'' escape idiom"
+  expect_block shell 'echo "`rm -rf /`"' "backtick subst inside double quotes still executes"
+  expect_block shell 'rm -rf "$(cat /tmp/target)"' "command subst inside double quotes still executes"
+
   # --- .env.example is sample material: reads AND writes are allowed. Real
   # .env* files stay blocked in both directions; redirects that merely dup or
   # discard stderr are still reads. ---

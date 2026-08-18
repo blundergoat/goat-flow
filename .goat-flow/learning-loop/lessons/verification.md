@@ -1,9 +1,23 @@
 ---
 category: verification
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, and [verification-gruff.md](verification-gruff.md) for the analyzer.
+
+## Lesson: Read a validator's pattern before reshaping text to satisfy it
+
+**Status:** active | **Created:** 2026-08-18
+**Decision changed:** On a validator rejection, open the assertion and read its pattern before editing the input a second time.
+**Trigger phase:** VERIFY
+
+**What happened:** `plans check --strict` rejected an M01 `Actual:` line with `measured Actual reason must name receipt <seconds> recorded-unpaused seconds`. The line already contained that exact phrase, so I assumed the trailing clause I had appended needed reordering, moved it ahead of the phrase, and reran. It failed identically. Only then did I read the rule: `src/cli/plans-check.ts` (search: `recorded-unpaused seconds`) anchors the reason with `/^receipt\s+(\d+)\s+recorded-unpaused seconds$/u`, so the reason must be that string and nothing else. Two edits and two runs were spent on a guess the source answered in one read.
+
+**Root cause:** The error message named a required substring, and I read "must name" as "must contain". An anchored regex was the likelier reading for a machine-parsed field, and the file was one grep away.
+
+**Prevention:** When a validator rejects text that appears to satisfy its message, grep the emitting message in source and read the pattern before the next edit. Error copy describes intent, not grammar; only the pattern is authoritative. Where the caveat is genuinely worth keeping, put it in adjacent prose the validator does not parse rather than bending the pinned field - here the split caveat moved into the milestone's Timing Receipt section.
+
+---
 
 ## Lesson: I edited a dead code path because I assumed one implementation
 

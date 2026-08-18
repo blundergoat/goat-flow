@@ -249,7 +249,7 @@ describe("mergeQualityConfig", () => {
     const config = cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
     assert.equal(profileMaxForSubtype(config, "workflow"), 100);
     assert.equal(profileMaxForSubtype(config, "dispatcher"), 70);
-    assert.equal(profileMaxForSubtype(config, "report"), 85);
+    assert.equal(profileMaxForSubtype(config, "report"), 95);
     assert.equal(profileMaxForSubtype(config, "playbook"), 80);
     assert.equal(profileMaxForSubtype(config, "meta"), 50);
     assert.equal(profileMaxForSubtype(config, "index"), 60);
